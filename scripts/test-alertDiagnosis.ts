@@ -12,6 +12,8 @@
 //              periods of rows to compare; a dataset with nothing to break the
 //              change down by fires without one too
 //   post       the Slack / Teams note is the sentence followed by the line
+//   withheld   the line leaves the app, so it never names a member of a column
+//              marked personal or financial (the Why drawer, in the app, still does)
 //
 //   npm run build:ts && node scripts/test-alertDiagnosis.js
 
@@ -30,6 +32,8 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const drivers: typeof import('../src/ipc/drivers') = require('../src/ipc/drivers');
 const posts: typeof import('../src/server/subscriptions/alertPosts') = require('../src/server/subscriptions/alertPosts');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+const dx: typeof import('../src/ipc/alertDiagnosis') = require('../src/ipc/alertDiagnosis');
 
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
 
@@ -94,6 +98,13 @@ async function main(): Promise<void> {
   const noteOf = (e: typeof ev) => JSON.stringify(posts.alertMessageModel(pid, period, e));
   ok('post: the sentence, then the line', noteOf(ev).includes(JSON.stringify(`${ev.message} ${ev.diagnosis}`).slice(1, -1)), noteOf(ev));
   ok('post: an event without one posts its sentence alone', !!lv && noteOf(lv).includes(JSON.stringify(lv.message).slice(1, -1)) && !noteOf(lv).includes('Safari'));
+
+  // ── withheld (NV-27) ───────────────────────────────────────────────────
+  await catalog.setColumn(pid, ds.id, 'browser', { sensitivity: 'personal' });
+  const marked = await dx.diagnoseAlert(pid, period);
+  ok('withheld: once browser is marked personal, the line names no browser', !marked || !marked.includes('Safari'), show(marked));
+  const inApp = spec ? await drivers.driversFor(pid, spec) : null;
+  ok('withheld: …while the Why drawer, inside the app, still breaks it down by browser (control)', !!inApp && inApp.ok && inApp.caption.includes('Safari'), show(inApp));
 }
 
 main()

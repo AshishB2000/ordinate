@@ -435,7 +435,7 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
   storageVersion?: string;
 };
 
-export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
+export async function getDatasetMeta(projectId: string, id: string, strict = false): Promise<DatasetMeta | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
@@ -458,7 +458,8 @@ export async function getDatasetMeta(projectId: string, id: string): Promise<Dat
     delete (meta as Partial<Dataset>).source;
     if (data.source && Array.isArray(data.source.columns)) meta.sourceColumns = data.source.columns;
     return meta;
-  } catch (_) {
+  } catch (err) {
+    if (strict && (err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err; // the Share policy: unreadable is not missing
     return null;
   }
 }

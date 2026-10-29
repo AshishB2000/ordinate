@@ -127,6 +127,25 @@ async function main(): Promise<void> {
   const sens = await share.sensitiveColumns(pid, did);
   ok('marked columns are sensitive', sens.get('email') === 'personal' && sens.get('card') === 'financial' && sens.size === 2);
 
+  // ── Fails closed: marks that cannot be READ refuse the share (NV-29) ─────
+  const refused = (p: Promise<unknown>): Promise<boolean> => p.then(() => false, () => true);
+  const catFile = path.join(tmpUserData, 'projects', pid, 'catalog.json');
+  const catBytes = fs.readFileSync(catFile);
+  fs.writeFileSync(catFile, '{ corrupt'); // as a records row that fails JSON.parse, a pg timeout or ERECORDTOOLARGE would
+  ok('unreadable catalog: the lenient reader sees nothing documented (control: the hazard is real)', Object.keys(await catalog.getColumns(pid, did)).length === 0);
+  ok('unreadable catalog: a table export refuses instead of passing raw values', await refused(share.applyToTable(pid, did, { columns: COLS, rows: ROWS }, 'export')));
+  ok('unreadable catalog: a chart reply refuses', await refused(share.applyToChart(pid, did, { category: 'email', values: [{ column: 'amount', aggregation: 'sum' }] }, { ok: true, data: { labels: ['grace@example.com'], series: [] } }, 'export')));
+  ok('unreadable catalog: the Assistant\'s withheld columns refuse', (await refused(share.withheldColumns(pid, did))) && (await refused(share.assistantColumnDocs(pid, did))));
+  ok('unreadable catalog: a column edit refuses rather than saving over it', await refused(catalog.setColumn(pid, did, 'amount', { description: 'x' })));
+  fs.writeFileSync(catFile, catBytes);
+  ok('…so every mark survives once the catalog reads again', (await share.sensitiveColumns(pid, did)).size === 2);
+  const dsFile = path.join(tmpUserData, 'projects', pid, 'datasets', did + '.json');
+  const dsBytes = fs.readFileSync(dsFile);
+  fs.writeFileSync(dsFile, '{ corrupt');
+  ok('unreadable dataset record: the policy refuses, never "no columns"', (await refused(share.sensitiveColumns(pid, did))) && (await refused(share.withheldColumns(pid, did))));
+  fs.writeFileSync(dsFile, dsBytes);
+  ok('a dataset that does not exist still has no sensitive columns', (await share.sensitiveColumns(pid, ghost)).size === 0);
+
   // ── Summaries ─────────────────────────────────────────────────────────────
   const sum = await call('privacy:summary', { projectId: pid, path: 'export', datasetIds: [did] });
   ok('summary: "2 sensitive columns will be masked"', sum.ok && sum.count === 2 && sum.line === '2 sensitive columns will be masked', JSON.stringify(sum));
@@ -188,6 +207,69 @@ async function main(): Promise<void> {
   await store.setPolicy(pid, { export: 'mask', report: 'mask' });
   const copied = await call('privacy:shareReply', { projectId: pid, datasetId: did, encoding: byEmail, reply: { ok: true, data: inApp.data }, path: 'export' });
   ok('Copy data: a reply the renderer holds comes back masked', copied.ok && copied.data.labels.every((l: string) => /^#/.test(l)));
+
+  // ── 3b'. Maps: every column a map writes VALUES of (NV-26) ──────────────
+  const geoDs = await datasets.saveDataset(pid, { name: 'Trips', sourceKind: 'csv', columns: [
+    ...['store_lat', 'store_lon', 'dest_lat', 'dest_lon', 'home_lat', 'home_lon', 'lat', 'lon', 'qty', 'amount'].map((name) => ({ name, type: 'number' as const })),
+    { name: 'customer', type: 'text' as const }, { name: 'email', type: 'text' as const },
+  ], rows: [
+    [40.7, -74.0, 40.75, -73.95, 40.8, -73.9, 40.71, -74.01, 1, 100, 'Ann Lee', 'ann@example.com'],
+    [34.0, -118.2, 34.05, -118.25, 34.1, -118.3, 34.01, -118.21, 2, 200, 'Bo Kim', 'bo@example.com'],
+    [41.9, -87.6, 41.95, -87.65, 42.0, -87.7, 41.91, -87.61, 3, 300, 'Cy Day', 'cy@example.com'],
+  ] });
+  const gid = geoDs!.id;
+  for (const c of ['home_lat', 'home_lon', 'lat', 'lon', 'customer', 'email']) await catalog.setColumn(pid, gid, c, { sensitivity: 'personal' });
+  await catalog.setColumn(pid, gid, 'amount', { sensitivity: 'financial' });
+  const qty = [{ column: 'qty', aggregation: 'count' }]; // an UNMARKED measure: only the geo role under test is sensitive
+  const store2 = { lat: 'store_lat', lon: 'store_lon' };
+  const maps: Record<string, unknown> = {
+    'point colour': { category: '', values: qty, geo: { level: 'point', ...store2, color: 'email' } },
+    'flow destination': { category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'home_lat', lon2: 'home_lon' } },
+    'flow end names': { category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'dest_lat', lon2: 'dest_lon', from: 'customer', to: 'email' } },
+    'point, coordinates found by name': { category: '', values: qty, geo: { level: 'point' } },
+  };
+  const mapReq = (encoding: unknown, share?: string) => call('visual:data', { projectId: pid, datasetId: gid, encoding, ...(share ? { share } : {}) });
+  const rawGeo = JSON.stringify((await mapReq(maps['point colour'])).data);
+  ok('map, control: in the app a point map coloured by email carries the raw emails', rawGeo.includes('ann@example.com'), rawGeo.slice(0, 200));
+  for (const action of ['mask', 'drop'] as const) {
+    await store.setPolicy(pid, { export: action });
+    for (const [name, encoding] of Object.entries(maps)) {
+      const r = await mapReq(encoding, 'export');
+      ok(`map/${action}: ${name} on a marked column is hidden`, r.ok === false && r.hiddenByPolicy === true, JSON.stringify(r).slice(0, 200));
+    }
+  }
+  await store.setPolicy(pid, { export: 'mask' });
+  const sized = await mapReq({ category: '', values: [{ column: 'amount', aggregation: 'sum' }], geo: { level: 'point', ...store2 } }, 'export');
+  ok('map/mask: a point\'s size is its row\'s own cell, so a marked size column hides the map', sized.hiddenByPolicy === true, JSON.stringify(sized).slice(0, 200));
+  const openMap = await mapReq({ category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'dest_lat', lon2: 'dest_lon' } }, 'export');
+  ok('map/mask: a map over unmarked columns only is untouched (control)', openMap.ok === true, JSON.stringify(openMap).slice(0, 200));
+  await datasets.deleteDataset(pid, gid);
+
+  // ── 3b''. A drivers tile is judged by the column it DREW (NV-28) ─────────
+  const salesDs = await datasets.saveDataset(pid, { name: 'Sales', sourceKind: 'csv', columns: [
+    { name: 'day', type: 'date' }, { name: 'region', type: 'text' }, { name: 'rep', type: 'text' }, { name: 'revenue', type: 'number' },
+  ], rows: [
+    ['2024-01-15', 'East', 'Ann', 100], ['2024-01-15', 'East', 'Bob', 100], ['2024-01-15', 'West', 'Cy', 100],
+    ['2024-02-15', 'East', 'Ann', 20], ['2024-02-15', 'East', 'Bob', 90], ['2024-02-15', 'West', 'Cy', 100],
+  ] });
+  const sid = salesDs!.id;
+  await catalog.setColumn(pid, sid, 'rep', { sensitivity: 'personal' });
+  const tile = { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }], drivers: { metric: { column: 'revenue', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, path: [] } };
+  const eastOnly = [{ type: 'filter', column: 'region', op: '=', value: 'East' }];
+  const tileReq = (share: string | undefined, filters: unknown[] = eastOnly) =>
+    call('visual:data', { projectId: pid, datasetId: sid, encoding: tile, filters, ...(share ? { share } : {}) });
+  const fellBack = await tileReq(undefined);
+  ok('drivers tile, fixture: one region left, so the tile draws rep instead (in the app: raw)', fellBack.ok && fellBack.data.labels.includes('Ann'), JSON.stringify(fellBack.data ? fellBack.data.labels : fellBack));
+  const tileMasked = await tileReq('report');
+  const tl: string[] = tileMasked.ok ? tileMasked.data.labels : [];
+  ok('drivers tile/mask: the fallback column\'s members are tokens', tileMasked.ok && !tl.includes('Ann') && !tl.includes('Bob') && tl.includes(mask.maskToken(salt, 'Ann')), JSON.stringify(tl));
+  ok('drivers tile/mask: …and its totals bars keep the labels its override marks', tl[0] === 'Previous total' && tl[tl.length - 1] === 'Current total', JSON.stringify(tl));
+  const ownDim = await tileReq('report', []);
+  ok('drivers tile/mask: drawn by its own unmarked dimension, the labels stay raw (control)', ownDim.ok && ownDim.data.labels.includes('East'), JSON.stringify(ownDim.data ? ownDim.data.labels : ownDim));
+  await store.setPolicy(pid, { report: 'drop' });
+  ok('drivers tile/drop: hidden', (await tileReq('report')).hiddenByPolicy === true);
+  await store.setPolicy(pid, { report: 'mask' });
+  await datasets.deleteDataset(pid, sid);
 
   // A column masked in Prepare is not masked again, and not counted.
   const stepped = await datasets.updateSteps(pid, did, [{ type: 'mask_hash', column: 'email' }]);

@@ -11,6 +11,7 @@
 //   5. Caches: east, the editor, west, east again — each its own answer.
 //   6. Live: east's figure ≡ the East subset's; the profile sample is refused.
 //   7. MCP: the same doors for a token, the same refusals.
+//   8. A joined answer served from the cache still gates and records its related dataset.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicyFanOut.js
 
@@ -340,6 +341,40 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
       const r = await tool(name, args);
       ok(`MCP: ${name} refuses, with the sentence and no West value`, r.includes('isError":true') && /row access rules|your access/.test(r) && !H.leaks(r), r.slice(0, 200));
     }
+
+    // ── 8. A cached JOINED answer still gates and records its related dataset (NV-18) ──
+    // Facts (no rules) take a chart's labels and a KPI's column from Dim through a relationship. A hit in the
+    // answer cache never reaches the storage net, so the door itself gates (and records) Dim inside a publish.
+    const doors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');
+    const dim = await W.as('boss', async () => (await datasets.saveDataset(P, { name: 'Dim', sourceKind: 'csv',
+      columns: [{ name: 'key', type: 'text' }, { name: 'region', type: 'text' }, { name: 'segment', type: 'text' }, { name: 'score', type: 'number' }],
+      rows: Array.from({ length: 6 }, (_, i) => [`k${i}`, i < 3 ? 'East' : 'West', `seg${i % 2}`, i]) }))!.id);
+    const facts = await W.as('boss', async () => (await datasets.saveDataset(P, { name: 'Facts', sourceKind: 'csv',
+      columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: Array.from({ length: 24 }, (_, i) => [`k${i % 6}`, i]) }))!.id);
+    const rel = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: facts, column: 'key' }, to: { datasetId: dim, column: 'key' }, cardinality: 'many_to_one' } });
+    const joinedVis = await W.call('boss', 'visual:save', { projectId: P, datasetId: facts, name: 'By segment', chartType: 'bar',
+      encoding: { category: 'segment', categoryDatasetId: dim, values: [{ column: 'amount', aggregation: 'sum' }] } });
+    const joinedBoard = await W.call('boss', 'analysis:create', { projectId: P, name: 'Joined', sheets: [{ name: 'One', cards: [
+      { id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId: String(joinedVis.body?.visual?.id ?? joinedVis.body?.id) },
+      { id: crypto.randomUUID(), type: 'metric', layout: { x: 6, y: 0, w: 3, h: 4 }, metric: { datasetId: facts, column: 'score', aggregation: 'sum', label: 'Score' } },
+    ] }] });
+    const joined = target(String(joinedBoard.body?.id ?? joinedBoard.body?.analysis?.id));
+    const first = await W.call('ed', 'publish:run', joined);
+    ok('related, control: published while Dim has no rules, the build records Dim (and its answers are now cached)',
+      rel.status === 200 && first.body?.ok === true && first.body.site.datasetIds.includes(dim), `${show(rel)} | ${show(first)}`);
+    await policy(dim, [{ teamId: W.team, values: ['East'] }]);
+    doors.setRelatedGateForTest(false);
+    try {
+      const leaky = await W.call('ed', 'publish:run', joined);
+      ok('NEGATIVE CONTROL: with the door\'s related gate off, the cached answers re-publish with Dim unrecorded',
+        leaky.body?.ok === true && !leaky.body.site.datasetIds.includes(dim), show(leaky));
+    } finally {
+      doors.setRelatedGateForTest(true);
+    }
+    const again = await W.call('ed', 'publish:run', joined);
+    ok('related: Dim gains rules, and re-publishing the same answers from the cache is refused', H.refused(again, 'fanout'), show(again));
+    ok('related: …and so is its plan', H.refused(await W.call('ed', 'publish:plan', joined), 'fanout'));
+    await policy(dim, null);
   } finally {
     await W.close();
   }

@@ -19,7 +19,9 @@
 // mask step in the dataset's own pipeline (those columns already are what
 // leaves; masking a token again would only rename it).
 //
-// Everything fails CLOSED: if the salt cannot be had, a mask becomes a drop.
+// Everything fails CLOSED: if the salt cannot be had, a mask becomes a drop;
+// a catalog or dataset record that cannot be read THROWS (the share is
+// refused), never reads as "nothing is marked".
 //
 // PUBLISH is built elsewhere and calls in through three functions:
 //   applyToChart(projectId, datasetId, encoding, reply, 'publish')
@@ -75,7 +77,7 @@ export interface PolicySummary {
  * only looked names up would let the renamed column leave unmasked.
  */
 async function markedLevels(projectId: string, datasetId: string, steps: unknown): Promise<Map<string, SensitiveLevel>> {
-  const docs = await catalog.getColumns(projectId, datasetId);
+  const docs = await catalog.getColumns(projectId, datasetId, true);
   const out = new Map<string, SensitiveLevel>();
   for (const k of Object.keys(docs)) {
     const s = docs[k].sensitivity;
@@ -94,7 +96,7 @@ async function markedLevels(projectId: string, datasetId: string, steps: unknown
 export async function markedColumns(
   projectId: string, datasetId: string,
 ): Promise<Array<{ column: string; level: SensitiveLevel; maskedInPrepare: boolean }>> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   if (!meta) return [];
   const levels = await markedLevels(projectId, datasetId, meta.steps);
   const masked = maskedColumns(meta.steps);
@@ -118,7 +120,7 @@ export async function sensitiveColumns(projectId: string, datasetId: string): Pr
  * to reason about than an exception).
  */
 export async function withheldColumns(projectId: string, datasetId: string): Promise<Set<string>> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   return new Set((await markedLevels(projectId, datasetId, meta ? meta.steps : [])).keys());
 }
 
@@ -128,8 +130,8 @@ export async function withheldColumns(projectId: string, datasetId: string): Pro
  * rename step carried a mark to — so its values are withheld under its new name.
  */
 export async function assistantColumnDocs(projectId: string, datasetId: string): Promise<Record<string, catalog.ColumnDoc>> {
-  const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId));
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId, true));
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   for (const [name, level] of await markedLevels(projectId, datasetId, meta ? meta.steps : [])) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
       docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
@@ -222,6 +224,8 @@ export interface ChartReplyLike {
   data?: {
     labels?: (string | number)[];
     series?: { name: string; role?: string }[];
+    /** A drivers tile's: the column its labels are members of (ipc/drivers.ts driversVizData). */
+    labelColumn?: string;
     geo?: unknown;
     pivot?: { rowHeaders: string[][]; colHeaders: string[][] };
     facets?: unknown;
@@ -265,11 +269,20 @@ export async function applyToChart<R extends ChartReplyLike>(
     const hide = labelish.some(Boolean) || (action === 'drop' && valueish.some(Boolean));
     return hide ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
   }
-  const catS = await sens(encoding.categoryDatasetId, encoding.category);
+  // A drivers tile draws the members of whichever column it could rank, not always its saved dimension.
+  const drivers = !!encoding.drivers;
+  const catS = await sens(encoding.categoryDatasetId, (drivers && reply.data.labelColumn) || encoding.category);
   const serS = await sens(encoding.seriesDatasetId, encoding.series);
   const rowDims = encoding.pivot ? await Promise.all(encoding.pivot.rows.map((d) => sens(datasetId, d.column))) : [];
   const colDims = encoding.pivot ? await Promise.all(encoding.pivot.columns.map((d) => sens(datasetId, d.column))) : [];
-  const geoS = encoding.geo ? (await sens(datasetId, encoding.geo.lat)) || (await sens(datasetId, encoding.geo.lon)) : false;
+  // Every column a map writes VALUES of into its reply: the coordinates it drew (a point map finds its own by
+  // name when the encoding's do not resolve), the destination, the route names, the colour — and a point's size,
+  // which is its row's own cell, not an aggregate.
+  const g = encoding.geo;
+  const drew = (reply.data.geo || {}) as { lat?: unknown; lon?: unknown };
+  const size = g && g.level === 'point' && encoding.values?.[0]?.aggregation !== 'count' ? encoding.values?.[0]?.column : undefined;
+  const geoCols = g ? [g.lat, g.lon, g.lat2, g.lon2, g.from, g.to, g.color, drew.lat, drew.lon, size] : [];
+  const geoS = (await Promise.all(geoCols.map((c) => sens(datasetId, typeof c === 'string' ? c : undefined)))).some(Boolean);
   const labelUse = catS || serS || rowDims.some(Boolean) || colDims.some(Boolean);
   const valueUse = (await Promise.all([
     ...(encoding.values || []).map((m) => sens(datasetId, m.column)),
@@ -288,7 +301,11 @@ export async function applyToChart<R extends ChartReplyLike>(
   const data = { ...reply.data };
   const pivotRows = rowDims.some(Boolean);
   const pivotCols = colDims.some(Boolean);
-  if (Array.isArray(data.labels) && (catS || pivotRows)) data.labels = data.labels.map(tok);
+  if (Array.isArray(data.labels) && (catS || pivotRows)) {
+    const last = data.labels.length - 1;
+    // A drivers tile's first and last bars are its fixed totals, which its stored override marks by label.
+    data.labels = data.labels.map((v, i) => (drivers && (i === 0 || i === last) ? v : tok(v)));
+  }
   if (Array.isArray(data.series) && (serS || pivotCols)) {
     data.series = data.series.map((s) => (s && s.role !== 'overlay' ? { ...s, name: String(tok(s.name)) } : s));
   }
