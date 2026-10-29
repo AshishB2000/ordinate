@@ -20,10 +20,12 @@ import { requireExtract } from '../data/liveDataset';
 import { valueCountsJs } from '../data/dataSearch';
 import { MAX_CLUSTERS, MAX_DISTINCT, clusterValues } from '../data/valueClusters';
 import { suggestValueGroups } from '../ai/valueGroups';
+import { aiColumnWithheld } from '../ai/aiMessages';
+import { withheldColumns } from '../app/sharePolicy';
 
-/** The table a step at `index` would receive (index < 0 or past the end: after every step). */
+/** The table a step at `index` would receive (index < 0 or past the end: after every step), and the steps after it. */
 export async function inputAt(projectId: string, datasetId: string, index: number, extra: TransformStep): Promise<{
-  input: TableData; ctx: PipelineContext;
+  input: TableData; ctx: PipelineContext; after: TransformStep[];
 } | null> {
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return null;
@@ -34,7 +36,7 @@ export async function inputAt(projectId: string, datasetId: string, index: numbe
   const ctx = { salt: await saltForSteps(projectId, prefix), ...(await loadStepRefs(projectId, datasetId, [...prefix, extra])) };
   // ponytail: a full fold per preview; the resident path could serve the prefix if a big dataset makes this slow
   const input = prefix.length ? await applyPipelineAsync(source, prefix, ctx) : source;
-  return { input: { columns: input.columns, rows: input.rows }, ctx };
+  return { input: { columns: input.columns, rows: input.rows }, ctx, after: steps.slice(prefix.length) };
 }
 
 function pct(part: number, whole: number): number {
@@ -87,7 +89,13 @@ export async function similarValues(projectId: string, datasetId: string, index:
   if (ci < 0 || at.input.columns[ci].type !== 'text') return { ok: false, error: 'Pick a text column to look for similar values in.' };
   const counts = valueCountsJs(at.input.rows, ci, MAX_DISTINCT);
   if (!counts) return { ok: false, error: `"${column}" has more than ${MAX_DISTINCT.toLocaleString('en-US')} different values — too many to compare.` };
-  const asked = assistant ? await suggestValueGroups(column, counts) : null;
+  // A marked column's values never go to the model — under the name it has later in the pipeline too (NV-30).
+  let later = column;
+  for (const s of at.after) if (s.type === 'rename_column' && s.from === later) later = s.to.trim();
+  const marks = assistant ? await withheldColumns(projectId, datasetId) : new Set<string>();
+  const asked = !assistant ? null
+    : marks.has(column) || marks.has(later) ? { ok: false as const, error: aiColumnWithheld() }
+    : await suggestValueGroups(column, counts);
   const clusters = clusterValues(counts, asked && asked.ok ? asked.groups : []);
   return {
     ok: true,

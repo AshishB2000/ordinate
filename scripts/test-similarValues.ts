@@ -16,6 +16,9 @@
 //   input      the scan reads the step's real INPUT — after the steps before it
 //   refuse     a number column, a column the table does not have
 //   assistant  no model configured → the clusters still come back, with why
+//   withheld   a column marked personal/financial — under any later name — is
+//              never sent to the model (model stubbed at its one door);
+//              NEGATIVE CONTROL: an unmarked column is (NV-30)
 //
 //   npm run build:ts && node scripts/test-similarValues.js
 
@@ -33,6 +36,9 @@ const vc: typeof import('../src/data/valueClusters') = require('../src/data/valu
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const prepare: typeof import('../src/ipc/preparePower') = require('../src/ipc/preparePower');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 
 type Any = any; // any: the channel's reply, read field by field below
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 500);
@@ -114,6 +120,37 @@ async function endToEnd(): Promise<void> {
   // ── assistant ───────────────────────────────────────────────────────────
   const asked = (await prepare.similarValues(pid, ds.id, 0, 'company', true)) as Any;
   ok('assistant: no model → the clusters still come back, with why', asked.ok === true && show(asked.clusters) === show(plain) && asked.assistant && asked.assistant.notReady === true, show(asked));
+
+  // ── withheld ────────────────────────────────────────────────────────────
+  const real = { dispatch: analyze.dispatch, ready: execConfig.executionReady };
+  let sent = '';
+  const askAt = async (column: string, index: number): Promise<Any> => {
+    sent = '';
+    return prepare.similarValues(pid, ds.id, index, column, true);
+  };
+  try {
+    (execConfig as Any).executionReady = async () => true;
+    (analyze as Any).dispatch = async (_system: string, messages: Any[]) => {
+      sent += String(messages[0].text);
+      return { rawText: '[]' };
+    };
+    const open = await askAt('company', 0);
+    ok('withheld NEGATIVE CONTROL: an unmarked column\'s values go to the model', open.ok === true && sent.includes('Google LLC'), sent.slice(0, 200));
+    await catalog.setColumn(pid, ds.id, 'company', { sensitivity: 'personal' });
+    const w = await askAt('company', 0);
+    ok('withheld: a column marked personal → no model call; the clusters still come back, with why', sent === '' && w.ok === true
+      && show(w.clusters) === show(plain) && typeof w.assistant?.error === 'string' && !w.assistant.notReady, show(w));
+    await datasets.updateSteps(pid, ds.id, [step, { type: 'rename_column', from: 'company', to: 'client' } as Any]);
+    ok('withheld: …and under the name a later rename gives it', (await askAt('client', -1)).ok === true && sent === '');
+    await catalog.setColumn(pid, ds.id, 'company', { sensitivity: 'none' });
+    await catalog.setColumn(pid, ds.id, 'client', { sensitivity: 'financial' });
+    ok('withheld: marked under its later name, asked about before the rename', (await askAt('company', 0)).ok === true && sent === '');
+    await catalog.setColumn(pid, ds.id, 'client', { sensitivity: 'none' });
+    ok('withheld NEGATIVE CONTROL: unmarked again, it is sent again', (await askAt('company', 0)).ok === true && sent.includes('Google LLC'));
+  } finally {
+    (analyze as Any).dispatch = real.dispatch;
+    (execConfig as Any).executionReady = real.ready;
+  }
 }
 
 endToEnd()

@@ -42,3 +42,13 @@ export function aiNeedsBaseUrl(): string {
 export function aiNeedsGatewayModel(): string {
   return t('aiMessages.enter_a_model_id_to_test');
 }
+
+/** ai:connect moving a stored key to another base URL without the key itself: it goes only where it was entered for. */
+export function aiKeyForNewEndpoint(): string {
+  return t('aiMessages.enter_the_api_key_again_to');
+}
+
+/** prepare:similarValues asking the model about a column marked personal or financial. */
+export function aiColumnWithheld(): string {
+  return t('aiMessages.this_column_is_marked_personal_or');
+}
