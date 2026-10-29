@@ -85,7 +85,7 @@ from these tables, or when a table names one that no code reads.
 | `MAX_RPC_BODY_KB` | Cap on every JSON request body, in KB. Larger bodies get 413. | `1024` | — | no |
 | `RPC_TIMEOUT_SECONDS` | A call running longer gets 504, and its DuckDB queries are interrupted. | `60` | — | no |
 | `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. Calls of [refresh URLs](live-data.md#refresh-url) get a bucket of their own of the same size. | `60` | — | no |
-| `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
+| `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls, and uploads (`POST /api/files`), per signed-in user, across all their tabs and tokens. | `1200` | — | no |
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
 | `RATE_LIMIT_EMBED_PER_MINUTE` | Views of one [embed](embedding.md) link (one signed token) per minute, counted across every pod. Embed views per client IP also share a bucket the size of `RATE_LIMIT_RPC_IP_PER_MINUTE`. | `120` | — | no |
 | `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | [Embed](embedding.md) views per organization per minute, every token together, counted across every pod. | `1200` | — | no |

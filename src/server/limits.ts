@@ -7,6 +7,8 @@
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
 //   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
 //                                                        runs the same handlers, so it spends the same budget
+//   uploads   POST /api/files                            the per-user RPC bucket (NV-43), after sign-in
+//                                                        (./files.ts also caps uploads in flight per user)
 //   embed     GET /embed/<token>                         per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE, its own bucket,
 //                                                        before any query; per token and per org in ./embed/route.ts
 //                                                        (RATE_LIMIT_EMBED_PER_MINUTE, RATE_LIMIT_EMBED_ORG_PER_MINUTE)

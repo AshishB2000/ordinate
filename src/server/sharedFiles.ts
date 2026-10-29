@@ -13,6 +13,11 @@
 // download, keeps its file (≤ LOCAL_COPY_MAX) so a take on THIS pod needs no
 // GET. An open handle holds its copy (refs); the 60 s timer drops a copy that
 // has expired or whose row was taken elsewhere or is gone.
+//
+// A USER'S SHARE. Each issue evicts the user's oldest files still waiting past
+// fileTokens.MAX_WAITING / MAX_WAITING_BYTES (NV-43, NV-55): their rows, this
+// pod's copies, their bytes. So exports nobody fetches and uploads nobody uses
+// cannot fill the staging area (a pod's emptyDir, or the shared volume).
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -73,7 +78,10 @@ export async function issue(kind: 'upload' | 'download', file: string, name: str
   const place = staging.here(path.basename(file));
   const token = randomBytes(32).toString('base64url');
   await tokens.insert(token, { org: org.id, user: user.email, kind, key: place.name, name, size, ttlMs });
-  if (!staging.isS3()) return token;
+  if (!staging.isS3()) {
+    await evictOlder(place.org, user.email, token);
+    return token;
+  }
   try {
     const hash = sha256 ?? await sha256File(file);
     try {
@@ -89,11 +97,37 @@ export async function issue(kind: 'upload' | 'download', file: string, name: str
     throw err;
   }
   // The hour runs from when the bytes are there to fetch, not from before a long PUT (review L2).
-  await tokens.restartExpiry(place.org, tokens.hashOf(token), ttlMs);
+  if (!(await tokens.restartExpiry(place.org, tokens.hashOf(token), ttlMs))) {
+    // Evicted while its bytes went up (the user's newer files took its place): nothing may name these bytes now.
+    await staging.remove(place).catch((err: unknown) => log.warn({ err }, 'file token: the bytes of an evicted upload could not be deleted'));
+    await fs.promises.rm(file, { force: true }).catch(() => undefined);
+    throw new NoToken();
+  }
   const hex = tokens.hashOf(token).toString('hex');
   if (size <= LOCAL_COPY_MAX) copies.set(hex, { file, org: place.org, expires: Date.now() + ttlMs, refs: 0 });
   else void fs.promises.rm(file, { force: true }).catch(() => undefined);
+  await evictOlder(place.org, user.email, token);
   return token;
+}
+
+/** The user's oldest waiting files past their share (`token`'s never): rows, this pod's copies, then bytes. Never throws. */
+async function evictOlder(org: string, user: string, token: string): Promise<void> {
+  let gone: { hash: Buffer; key: string }[];
+  try {
+    gone = await tokens.evictWaiting(org, user, tokens.hashOf(token));
+  } catch (err) {
+    log.warn({ err }, 'file token: older waiting files could not be evicted');
+    return;
+  }
+  for (const g of gone) {
+    const hex = g.hash.toString('hex');
+    const c = copies.get(hex);
+    if (c && c.refs === 0) {
+      copies.delete(hex);
+      await fs.promises.rm(c.file, { force: true }).catch(() => undefined);
+    }
+    await staging.remove(staging.placeIn(org, g.key)).catch((err: unknown) => log.warn({ err }, 'file token: an evicted file could not be deleted'));
+  }
 }
 
 /** THE TAKE, for the current request's org and user. Throws NoToken. */

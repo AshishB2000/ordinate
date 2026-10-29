@@ -502,7 +502,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
 
   // Uploads and downloads (./files.ts) — the open and save dialogs' replacement.
   // MAX_UPLOAD_MB is the ceiling; an org admin may set a lower cap (Admin → Settings).
-  registerFileRoutes(app, cfg.maxUploadMb, () => uploadCapMb(pool, ctx().org.id, cfg.maxUploadMb));
+  registerFileRoutes(app, cfg.maxUploadMb, () => uploadCapMb(pool, ctx().org.id, cfg.maxUploadMb), limits.perUser);
 
   // MCP for programs, signed in with a personal API token (T3.4).
   registerMcpRoute(app, () => pool, limits.perUser);

@@ -8,7 +8,12 @@
 //   3. a failed PUT deletes its row;
 //   4. local copies: one whose token was taken on another pod is dropped by the
 //      60 s pass; one held by an open Upload is kept even past its expiry, and goes
-//      when its holder finishes; control: one still waiting is kept.
+//      when its holder finishes; control: one still waiting is kept;
+//   5. a user's share of waiting files (NV-43, NV-55): past MAX_WAITING their
+//      oldest waiting rows go, with their objects and this pod's copies; a token a
+//      take already won stays; another user's are untouched (control); one evicted
+//      while its PUT was in flight leaves no object; the same in file mode, where
+//      the row's file is the bytes.
 //
 // Needs DATABASE_URL and DuckDB's aws extension (the S3 credential chain); else one skip line.
 //
@@ -181,6 +186,62 @@ function fakeS3() {
     ok('past its expiry an unheld copy goes, but one held by an open Upload stays (refcount)', !fs.existsSync(c.file) && held.l.held && fs.existsSync(b.file));
     shared.finish(held.t, held.l);
     ok('…and goes once its holder finishes', await H.until(() => !fs.existsSync(b.file), 2_000));
+
+    // 5. A user's share of waiting files (NV-43, NV-55).
+    const W = tokens.MAX_WAITING;
+    const asU = <T>(user: string, fn: () => Promise<T>): Promise<T> => context.runInContext({ user: { email: user, role: 'admin' as const }, org: { id: 'acme' } }, 't', fn);
+    const waitingOf = async (user: string): Promise<number> =>
+      Number((await db.pool.query(`SELECT count(*) AS n FROM file_tokens WHERE user_email = $1 AND used_at IS NULL AND expires_at > now()`, [user])).rows[0].n);
+    const u1Before = await waitingOf('u1@acme.test');
+    const mine: { file: string; token: string }[] = [];
+    for (let i = 0; i < W; i++) {
+      const x = newFile();
+      mine.push({ file: x.file, token: await asU('u2@acme.test', () => shared.issue('upload', x.file, `w${i}.csv`, x.body.length, 3_600_000, sha(x.body))) });
+    }
+    await asU('u2@acme.test', async () => { await shared.take(mine[0].token, 'upload'); }); // the oldest is taken (being used)
+    const extra: { file: string; token: string }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const x = newFile();
+      extra.push({ file: x.file, token: await asU('u2@acme.test', () => shared.issue('download', x.file, `x${i}.zip`, x.body.length, 3_600_000, sha(x.body))) });
+    }
+    const all = [...mine, ...extra];
+    const gone = all.filter((x, i) => i >= 1 && i <= 2); // the oldest two still WAITING: mine[1], mine[2]
+    ok(`share: past ${W} waiting files the user's oldest waiting ones go — rows, objects, this pod's copies`,
+      (await waitingOf('u2@acme.test')) === W && (await Promise.all(gone.map((x) => rowUsed(x.token)))).every((r) => r === 'gone')
+        && gone.every((x) => !hasObject(x.file) && !fs.existsSync(x.file)), JSON.stringify(await Promise.all(all.map((x) => rowUsed(x.token)))));
+    ok('share: the newest stay whole (row, object, copy)', all.slice(3).every((x) => hasObject(x.file) && fs.existsSync(x.file)) && (await Promise.all(all.slice(3).map((x) => rowUsed(x.token)))).every((r) => r === null));
+    ok('share: a token a take already won is never evicted', (await rowUsed(mine[0].token)) instanceof Date && hasObject(mine[0].file));
+    ok('share NEGATIVE CONTROL: another user\'s waiting files are untouched', (await waitingOf('u1@acme.test')) === u1Before, `${await waitingOf('u1@acme.test')} vs ${u1Before}`);
+
+    s3.state.putDelayMs = 1_000;
+    const inFlight = newFile();
+    const pending = asU('u3@acme.test', () => shared.issue('upload', inFlight.file, 'slow.csv', inFlight.body.length, 3_600_000, sha(inFlight.body)))
+      .then(() => 'issued', (e: unknown) => (e instanceof shared.NoToken ? 'NoToken' : String(e)));
+    await new Promise((r) => setTimeout(r, 200)); // its row is in, its PUT on the way
+    for (let i = 0; i < W; i++) {
+      const x = newFile();
+      await asU('u3@acme.test', () => shared.issue('upload', x.file, `n${i}.csv`, x.body.length, 3_600_000, sha(x.body)));
+    }
+    const outcome = await pending;
+    const slowRows = Number((await db.pool.query(`SELECT count(*) AS n FROM file_tokens WHERE name = 'slow.csv' AND user_email = 'u3@acme.test'`)).rows[0].n);
+    ok('share: evicted while its PUT was in flight → that offer fails and leaves no row, no object, no file',
+      outcome === 'NoToken' && slowRows === 0 && (await H.until(() => !hasObject(inFlight.file), 2_000)) && !fs.existsSync(inFlight.file), JSON.stringify({ outcome, slowRows, object: hasObject(inFlight.file) }));
+
+    storage.configure(DATA, null, 0); // file mode: the row's file IS the bytes
+    const local: { file: string; token: string }[] = [];
+    for (let i = 0; i < W + 1; i++) {
+      const x = newFile();
+      local.push({ file: x.file, token: await asU('u4@acme.test', () => shared.issue('upload', x.file, `f${i}.csv`, x.body.length, 3_600_000)) });
+    }
+    ok('share, file mode: the oldest waiting row and its file go, the newest stay',
+      (await rowUsed(local[0].token)) === 'gone' && !fs.existsSync(local[0].file) && local.slice(1).every((x) => fs.existsSync(x.file)) && (await waitingOf('u4@acme.test')) === W);
+    const GB = 1024 ** 3;
+    const sized = async (size: number) => { const x = newFile(); return { file: x.file, token: await asU('u5@acme.test', () => shared.issue('download', x.file, 'big.zip', size, 3_600_000)) }; };
+    const b1 = await sized(Math.floor(0.6 * GB));
+    const b2 = await sized(Math.floor(0.6 * GB));
+    ok('share, bytes: past MAX_WAITING_BYTES the older goes', (await rowUsed(b1.token)) === 'gone' && !fs.existsSync(b1.file) && (await rowUsed(b2.token)) === null);
+    const b3 = await sized(2 * GB);
+    ok('share, bytes: one file over the cap alone stays (the newest always does), the older goes', (await rowUsed(b3.token)) === null && (await rowUsed(b2.token)) === 'gone' && !fs.existsSync(b2.file));
   } finally {
     tokens.useFileTokenDb(null);
     storage.configure(DATA, null, 0);
