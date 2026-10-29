@@ -1,10 +1,10 @@
-// The app frame: one 40px top bar across the window, the section rail on the
-// left, the routed page on the right — the desktop hub's layout (.hub-topbar,
-// .app-sidebar, .ws-panel). Every page renders inside <Outlet/>, under its own
+// The app frame: the section rail down the left edge (icons; the names slide
+// out over the page on hover), a 40px top bar beside it, the routed page under
+// that — the desktop hub's layout (.hub-topbar, .app-sidebar, .ws-panel). Every page renders inside <Outlet/>, under its own
 // Suspense (lazy chunk) and error boundary (routes.tsx), so a broken page
 // never takes the nav down with it.
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { nav } from '../api/client';
 import { useDatasetFreshness } from '../api/freshness';
@@ -40,12 +40,13 @@ const HELP_ITEMS: MenuEntry[] = [
   { label: 'Source on GitHub', icon: 'external-link', onSelect: openLink(REPO) },
 ];
 
-function NavEntry({ item }: { item: NavItem }) {
+function NavEntry({ item, onPick }: { item: NavItem; onPick: () => void }) {
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
       className={({ isActive }) => (isActive ? `${s.navItem} ${s.active}` : s.navItem)}
+      onClick={onPick}
     >
       <Icon name={item.icon} size={20} />
       <span className={s.navLabel}>{item.label}</span>
@@ -131,6 +132,40 @@ function UserMenu() {
   );
 }
 
+/** The rail: the project switcher and the sections, icons only until the
+ * pointer rests on it or keyboard focus enters, then the names slide out OVER
+ * the page (Shell.module.css). Each label stays in the DOM, so every link keeps its name. */
+function Rail({ groups, bottom }: { groups: { label: string; items: NavItem[] }[]; bottom: NavItem[] }) {
+  // Picking a section folds the names away at once, even with the pointer still on
+  // the rail; they come back once it has left and returned.
+  const [picked, setPicked] = useState(false);
+  const pick = () => setPicked(true);
+  return (
+    <div className={s.rail} data-picked={picked || undefined} onPointerLeave={() => setPicked(false)}>
+      <ProjectSwitcher />
+      <nav className={s.sections} aria-label="Sections">
+        <div className={s.nav}>
+          {groups.map((g) => (
+            <div key={g.label} className={s.group} role="group" aria-labelledby={`nav-${g.label}`}>
+              <span className={s.groupLabel} id={`nav-${g.label}`}>
+                {g.label}
+              </span>
+              {g.items.map((n) => (
+                <NavEntry key={n.to} item={n} onPick={pick} />
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className={s.bottom}>
+          {bottom.map((n) => (
+            <NavEntry key={n.to} item={n} onPick={pick} />
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
 export function Shell() {
   useWorkspacePrefs();
   // A refreshed dataset redraws every figure on screen that reads it (L0.1).
@@ -156,10 +191,9 @@ export function Shell() {
         <a className={s.skip} href="#main">
           Skip to content
         </a>
+        <Rail groups={groups} bottom={bottom} />
         <header className={s.topbar}>
-          <div className={s.side}>
-            <ProjectSwitcher />
-          </div>
+          <div className={s.side} />
           <div className={s.search} role="search">
             <Icon name="search" />
             <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" aria-haspopup="dialog" readOnly onClick={openPalette} onKeyDown={(e) => (e.key === 'Enter' || e.key.length === 1) && openPalette(e)} />
@@ -173,25 +207,6 @@ export function Shell() {
           </div>
         </header>
         <div className={s.body}>
-          <nav className={s.rail} aria-label="Sections">
-            <div className={s.nav}>
-              {groups.map((g) => (
-                <div key={g.label} className={s.group} role="group" aria-labelledby={`nav-${g.label}`}>
-                  <span className={s.groupLabel} id={`nav-${g.label}`}>
-                    {g.label}
-                  </span>
-                  {g.items.map((n) => (
-                    <NavEntry key={n.to} item={n} />
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className={s.bottom}>
-              {bottom.map((n) => (
-                <NavEntry key={n.to} item={n} />
-              ))}
-            </div>
-          </nav>
           <main id="main" className={s.stage} tabIndex={-1}>
             <Suspense fallback={<PageSkeleton />}>
               <Outlet />

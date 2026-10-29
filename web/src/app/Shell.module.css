@@ -3,12 +3,17 @@
    web/src/ui. */
 
 /* Two planes: the top bar and the rail sit on --chrome, and the page sits on
-   --bg, a canvas raised off it by a hairline and a step of lightness. */
+   --bg, a canvas raised off it by a hairline and a step of lightness. The rail
+   is laid over the window's left edge (below), so the window keeps its width
+   free: opening the rail never moves the page. */
 .win {
+  --rail: 64px;
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-left: var(--rail);
   background: var(--chrome);
 }
 
@@ -27,7 +32,7 @@
   top: var(--sp-8);
 }
 
-/* ── top bar: 40px, equal-flex sides so the search centres on the window ── */
+/* ── top bar: 40px, equal-flex sides so the search centres over the page ── */
 .topbar {
   flex: 0 0 40px;
   display: flex;
@@ -54,13 +59,14 @@
   background: var(--border);
 }
 
+/* The project switcher heads the rail: closed, only its initial shows. */
 .project {
   display: flex;
   align-items: center;
   gap: var(--ctl-gap);
-  max-width: 216px;
+  width: 100%;
   height: var(--ctl-md);
-  padding: 0 var(--sp-8);
+  padding: 0 9px; /* centres the 22px initial on the 64px rail */
   border: none;
   border-radius: var(--r-md);
   background: transparent;
@@ -85,6 +91,9 @@
   color: var(--accent);
 }
 .projectName {
+  /* Its own width even while the rail is closed, so it is uncovered, never squeezed. */
+  flex: none;
+  max-width: 140px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -145,23 +154,74 @@
   color: var(--muted);
 }
 
-/* ── body: rail + stage ── */
+/* ── body: the page and the dock ── */
 .body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-/* The rail sits on the chrome plane beside the canvas; the ACTIVE row is a
-   card lifted off it with a 2px accent bar, hover is a lightening. */
+/* ── the rail: icons only; the names slide out OVER the page ──
+   Closed, it is 64px of icons and each group's heading is a hairline. With the
+   pointer resting on it (120ms first, so one crossing it on the way to the page
+   does not pop it out) or keyboard focus inside, it widens to 236px over the
+   page with a shadow; opening waits, closing does not. Picking a section closes
+   it until the pointer leaves (Shell.tsx). The labels fade, never leave the
+   DOM, so every link keeps its name. The ACTIVE row is a card lifted off the
+   chrome with a 2px accent bar, hover is a lightening. */
 .rail {
-  width: 232px;
-  flex: 0 0 232px;
+  --names: 0;
+  --wait: 0s;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* Over the page (its own layers stop at 5), under the skip link (10) and a
+     dashboard or story presenting full window (40, 60). */
+  z-index: 8;
+  width: var(--rail);
   display: flex;
   flex-direction: column;
-  padding: var(--sp-8);
+  gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-12) var(--sp-8);
   background: var(--chrome);
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none; /* a scrollbar would eat the 64px; a short window still scrolls it */
+  transition:
+    width var(--dur-menu) var(--ease-out) var(--wait),
+    box-shadow var(--dur-menu) var(--ease-out) var(--wait);
+}
+.rail:hover:not([data-picked]),
+.rail:has(:focus-visible) {
+  --names: 1;
+  --wait: 120ms;
+  width: 236px;
+  box-shadow: 1px 0 0 var(--border-hairline), var(--shadow-lg);
+}
+.navLabel,
+.groupLabel,
+.projectName,
+.project > svg {
+  opacity: var(--names);
+  transition: opacity var(--dur-fast) var(--ease-out) var(--wait);
+}
+/* Reduced motion: no slide, but still the wait — a pointer crossing the rail
+   must not flash it open (base.css zeroes every delay). */
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .navLabel,
+  .groupLabel,
+  .projectName,
+  .project > svg,
+  .group::before {
+    transition-delay: var(--wait) !important;
+  }
+}
+.sections {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 .nav {
   display: flex;
@@ -170,9 +230,22 @@
 }
 /* A group of sections (navGroups.ts) under its small label. */
 .group {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+/* Closed, the label gives way to a hairline, 18px from the row above and the row below. */
+.group::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: var(--sp-8);
+  right: var(--sp-8);
+  height: 1px;
+  background: var(--border-2);
+  opacity: calc(1 - var(--names));
+  transition: opacity var(--dur-fast) var(--ease-out) var(--wait);
 }
 .groupLabel {
   display: flex;
@@ -183,6 +256,7 @@
   font-weight: 600;
   letter-spacing: var(--tr-label);
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--muted);
 }
 .bottom {
@@ -198,10 +272,11 @@
   align-items: center;
   gap: var(--ctl-gap);
   height: var(--ctl-md);
-  padding: 0 var(--sp-8);
+  padding: 0 10px; /* centres the 20px icon on the 64px rail */
   border-radius: var(--r-sm);
   color: var(--muted);
   font-weight: 500;
+  white-space: nowrap;
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
@@ -243,35 +318,8 @@
   outline: none;
 }
 
-/* Narrow windows: the rail folds to its icons. The label stays in the
-   accessibility tree (visually hidden), so each link keeps its name. */
+/* Narrow windows: the sides stop sharing the width equally, the search takes what is left. */
 @media (max-width: 900px) {
-  .rail {
-    width: 56px;
-    flex-basis: 56px;
-  }
-  .navItem {
-    justify-content: center;
-    padding: 0;
-  }
-  .navLabel,
-  .groupLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  /* Folded to icons, a group is told from the next by a hairline. */
-  .group + .group {
-    padding-top: var(--sp-12);
-    border-top: 1px solid var(--border-hairline);
-  }
-  .projectName {
-    display: none;
-  }
-  /* The sides stop sharing the width equally: the search takes what is left. */
   .side {
     flex: 0 0 auto;
   }
@@ -285,8 +333,11 @@
    600px, where the dashboard is phone-wide whether or not they are there — so
    hiding them can never widen it back across the line. */
 @media (max-width: 599px) {
+  .win:has([data-phone]) {
+    padding-left: 0;
+  }
   .win:has([data-phone]) > .topbar,
-  .win:has([data-phone]) .rail {
+  .win:has([data-phone]) > .rail {
     display: none;
   }
   .win:has([data-phone]) .stage {
