@@ -1,11 +1,35 @@
 {
   "name": "ordinate",
   "description": "Build dashboards and answer data questions in your Ordinate server through its MCP endpoint. Every figure comes from the server, never from the model.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Ordinate",
     "url": "https://github.com/AshishB2000/ordinate"
   },
   "homepage": "https://github.com/AshishB2000/ordinate/tree/develop/plugins/ordinate",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "server_url": {
+      "type": "string",
+      "title": "Ordinate address",
+      "description": "Your Ordinate server's address, with no trailing slash, e.g. https://bi.example.com",
+      "required": true
+    },
+    "api_token": {
+      "type": "string",
+      "title": "Personal API token",
+      "description": "An ord_… token from Ordinate's API tokens page (/tokens). It acts as you, with your current role.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "mcpServers": {
+    "ordinate": {
+      "type": "http",
+      "url": "${user_config.server_url}/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.api_token}"
+      }
+    }
+  }
 }

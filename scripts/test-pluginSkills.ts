@@ -8,7 +8,9 @@
 //   • build-dashboard's chart-type list is exactly the app's CHART_TYPE_IDS.
 //   • answer-data-questions' example calls run, and the figures it quotes are
 //     the ones those calls return (formatted as the skill says to).
-//   • The manifests parse, and every skill's `name:` is its folder name.
+//   • The manifests parse, the MCP server is declared inline in plugin.json
+//     with the token as a sensitive userConfig value, and every skill's
+//     `name:` is its folder name.
 //
 //   npm run build:ts && node scripts/test-pluginSkills.js
 
@@ -63,9 +65,12 @@ async function main(): Promise<void> {
   ok('marketplace: lists the ordinate plugin at plugins/ordinate', entry && path.resolve(__dirname, '..', entry.source) === PLUGIN);
   const manifest = JSON.parse(fs.readFileSync(path.join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8'));
   ok('plugin.json: named ordinate', manifest.name === 'ordinate');
-  const mcp = JSON.parse(fs.readFileSync(path.join(PLUGIN, '.mcp.json'), 'utf8'));
-  ok('.mcp.json: HTTP to ${ORDINATE_URL}/api/mcp with the token from the environment',
-    mcp.ordinate.type === 'http' && mcp.ordinate.url === '${ORDINATE_URL}/api/mcp' && mcp.ordinate.headers.Authorization === 'Bearer ${ORDINATE_TOKEN}');
+  // The server is declared inline: a `.mcp.json` file can't be checked out under the Claude Code sandbox.
+  const mcp = manifest.mcpServers?.ordinate;
+  ok('plugin.json: HTTP to <server_url>/api/mcp, with the token from userConfig in a header',
+    mcp?.type === 'http' && mcp.url === '${user_config.server_url}/api/mcp' && mcp.headers?.Authorization === 'Bearer ${user_config.api_token}');
+  ok('plugin.json: the token is a sensitive userConfig value (kept in the credential store)', manifest.userConfig?.api_token?.sensitive === true);
+  ok('no .mcp.json in the plugin', !fs.existsSync(path.join(PLUGIN, '.mcp.json')));
   for (const dir of fs.readdirSync(path.join(PLUGIN, 'skills'))) {
     ok(`skill ${dir}: name matches its folder`, new RegExp(`^---\\nname: ${dir}\\n`).test(skill(dir)));
   }
