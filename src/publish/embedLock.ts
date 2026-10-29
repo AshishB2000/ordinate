@@ -10,9 +10,10 @@
 //   - a tile that cannot honour every lock is REFUSED, never drawn: the
 //     pipeline SKIPS a filter on a column its dataset lacks (transforms.ts
 //     stepFilter), which would draw the unscoped figure. So: a visual, KPI or
-//     statistics tile over a dataset without the column; a visual whose labels
-//     come from a related dataset, or whose measure is a saved formula metric
-//     (both read another dataset); a KPI over a formula metric; and the
+//     statistics tile over a dataset without the column; a visual or KPI that
+//     reads a related dataset — labels, a series, a measure or a filter column
+//     a relationship supplies (that dataset's stored values, which may have
+//     been computed across every customer), or a saved formula metric; and the
 //     Summary card (its facts — insights, quality, alerts — are about the
 //     whole dataset); and a tile over a dataset whose prepare steps STORE a
 //     value computed across rows — a LOD field, a window (running total, rank,
@@ -37,24 +38,35 @@ import type { CardControl } from '../analysis/dashboards';
 import { vizDataFor } from '../ipc/visuals';
 import { embedControlLocked } from '../server/embedMessages';
 import type { Lock } from '../data/rowLock';
+import type { FilterStep } from '../data/transforms';
+import { chartReads, metricReads } from '../ipc/relationships';
 
 // The lock itself (steps, cross-row rule, coverage) is shared with row access rules: ../data/rowLock.ts.
 export { lockStep, makeLock, storesCrossRow } from '../data/rowLock';
 export type { Lock, LockValue } from '../data/rowLock';
 
-/** May a visual tile be drawn under `lock`? */
-export async function visualAllowed(lock: Lock, projectId: string, datasetId: string, enc: VizEncoding): Promise<boolean> {
+/** Does a KPI's column or a filter resolve to a related dataset? It is read there, past the lock (NV-19). */
+async function metricReadsOther(projectId: string, datasetId: string | undefined, column: string | undefined, filters: FilterStep[]): Promise<boolean> {
+  return !!datasetId && (await metricReads(projectId, datasetId, column ?? '', filters)).length > 0;
+}
+
+/** May a visual tile be drawn under `lock`? `filters`: every filter it is drawn with. Only its own dataset is read. */
+export async function visualAllowed(lock: Lock, projectId: string, datasetId: string, enc: VizEncoding, filters: FilterStep[] = []): Promise<boolean> {
   if (hasMetricMeasure(enc)) return false; // a saved formula metric reads its own datasets
-  for (const other of [enc.categoryDatasetId, enc.seriesDatasetId]) if (other && other !== datasetId) return false;
+  const named = [enc.categoryDatasetId, enc.seriesDatasetId, ...(Array.isArray(enc.values) ? enc.values.map((v) => v && v.datasetId) : [])];
+  for (const other of named) if (other && other !== datasetId) return false;
+  if ((await chartReads(projectId, datasetId, enc, filters)).length) return false;
   return lock.covers(projectId, datasetId);
 }
 
-/** May a KPI tile be drawn under `lock`? A saved metric must be a plain one over a covered dataset. */
-export async function metricAllowed(lock: Lock, projectId: string, m: { datasetId?: string; metricId?: string }): Promise<boolean> {
+/** May a KPI tile be drawn under `lock`? A saved metric must be a plain one over a covered dataset; nothing related is read. */
+export async function metricAllowed(lock: Lock, projectId: string, m: { datasetId?: string; metricId?: string; column?: string }, filters: FilterStep[] = []): Promise<boolean> {
   if (m.metricId) {
     const def = await metrics.getMetric(projectId, m.metricId);
-    if (def && (metrics.isFormulaDefinition(def.definition) || !(await lock.covers(projectId, def.datasetId)))) return false;
+    if (def && (metrics.isFormulaDefinition(def.definition) || !(await lock.covers(projectId, def.datasetId))
+      || (await metricReadsOther(projectId, def.datasetId, def.definition.column, filters)))) return false;
   }
+  if (await metricReadsOther(projectId, m.datasetId, m.column, filters)) return false;
   return lock.covers(projectId, m.datasetId);
 }
 

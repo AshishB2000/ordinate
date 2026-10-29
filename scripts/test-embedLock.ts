@@ -16,7 +16,11 @@
 //                 `region`, a KPI over a formula metric, the Summary card and
 //                 a metric tree with a formula in it or over that dataset
 //                 are refused, not drawn — NEGATIVE CONTROL: unlocked, the same
-//                 tiles draw (the pipeline would have skipped the filter)
+//                 tiles draw (the pipeline would have skipped the filter); so
+//                 are a chart whose measure and a KPI whose column a RELATED
+//                 dataset supplies (its stored per-channel totals were computed
+//                 over every region, NV-19) — NEGATIVE CONTROL: unlocked, they
+//                 draw those totals
 //   no leak       nothing of North, South or West — a label, a figure, an
 //                 option — is anywhere in the built page; NEGATIVE CONTROL:
 //                 the unlocked page has them
@@ -47,6 +51,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const hosted: typeof import('../src/publish/hosted') = require('../src/publish/hosted');
 const dd: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const lockMod: typeof import('../src/publish/embedLock') = require('../src/publish/embedLock');
@@ -77,6 +82,9 @@ function dataBlock(html: string): any { // any: the page's JSON, read field by f
 // Region figures that never coincide, so a leaked one is recognisable anywhere: West's amounts end in 7.
 const REGIONS: Array<[string, number]> = [['North', 1000], ['South', 2000], ['East', 3000], ['West', 4007]];
 const CHANNEL: Record<string, string[]> = { North: ['Web', 'Store'], South: ['Web', 'Store'], East: ['Web', 'Store'], West: ['Partner'] };
+/** A related dataset's STORED per-channel totals, computed over every region: none may reach an East embed. */
+const TOTALS: Array<[string, number]> = [['Web', 515151], ['Store', 525252], ['Partner', 535353]];
+const totalsFigure = /5[1-3]5[1-3]5[1-3]/;
 
 async function seed(projectId: string) {
   return context.runInContext(ALICE, 'seed', async () => {
@@ -94,13 +102,20 @@ async function seed(projectId: string) {
       columns: [{ name: 'team', type: 'text' }, { name: 'target', type: 'number' }],
       rows: [['Alpha', 91], ['Beta', 92]],
     });
-    if (!orders || !targets) throw new Error('seed datasets');
+    const totals = await datasets.saveDataset(projectId, {
+      name: 'Channel totals', sourceKind: 'csv',
+      columns: [{ name: 'channel', type: 'text' }, { name: 'total', type: 'number' }],
+      rows: TOTALS,
+    });
+    if (!orders || !targets || !totals) throw new Error('seed datasets');
+    if (!(await rels.saveRelationship(projectId, { from: { datasetId: orders.id, column: 'channel' }, to: { datasetId: totals.id, column: 'channel' }, cardinality: 'many_to_one' }))) throw new Error('seed relationship');
     const enc = (category: string, column: string, aggregation: string, extra: object = {}) => ({ category, values: [{ column, aggregation }], ...extra });
     const byRegion = await visuals.saveVisual(projectId, { name: 'Sales by region', datasetId: orders.id, chartType: 'bar', encoding: enc('region', 'amount', 'sum'), filters: [] } as never);
     const byChannel = await visuals.saveVisual(projectId, { name: 'Sales by channel', datasetId: orders.id, chartType: 'pie', encoding: enc('channel', 'amount', 'sum'), filters: [] } as never);
     const byMonth = await visuals.saveVisual(projectId, { name: 'Monthly', datasetId: orders.id, chartType: 'line', encoding: enc('day', 'amount', 'avg', { grain: 'month' }), filters: [] } as never);
     const table = await visuals.saveVisual(projectId, { name: 'Detail', datasetId: orders.id, chartType: 'table', encoding: { category: 'region', series: 'channel', values: [{ column: 'amount', aggregation: 'max' }] }, filters: [] } as never);
     const teams = await visuals.saveVisual(projectId, { name: 'Targets by team', datasetId: targets.id, chartType: 'bar', encoding: enc('team', 'target', 'sum'), filters: [] } as never);
+    const related = await visuals.saveVisual(projectId, { name: 'Channel totals', datasetId: orders.id, chartType: 'bar', encoding: { category: 'channel', values: [{ column: 'total', aggregation: 'max', datasetId: totals.id }] }, filters: [] } as never);
     const revenue = await metrics.saveMetric(projectId, { name: 'Revenue', datasetId: orders.id, definition: { column: 'amount', aggregation: 'sum' }, format: { kind: 'number', decimals: 0 } } as never);
     const ratio = await metrics.saveMetric(projectId, { name: 'Ratio', datasetId: orders.id, definition: { formula: '[Revenue] / 2' }, format: { kind: 'number', decimals: 0 } } as never);
     // Metric trees (docs/metric-tree): a plain metric split by channel may be drawn under the lock; a tree
@@ -109,7 +124,7 @@ async function seed(projectId: string) {
     const ratioTree = ratio ? await metrics.updateMetric(projectId, ratio.id, { tree: { split: 'channel' } }) : null;
     const targetTree = await metrics.saveMetric(projectId, { name: 'Target total', datasetId: targets.id, definition: { column: 'target', aggregation: 'sum' }, format: { kind: 'number', decimals: 0 }, tree: { split: 'team' } } as never);
     if (!amount?.tree || !ratioTree?.tree || !targetTree?.tree) throw new Error('seed trees');
-    if (!byRegion || !byChannel || !byMonth || !table || !teams || !revenue) throw new Error('seed visuals');
+    if (!byRegion || !byChannel || !byMonth || !table || !teams || !related || !revenue) throw new Error('seed visuals');
     let x = 0;
     const card = (type: string, extra: object) => ({ id: crypto.randomUUID(), type, layout: { x: (x++ % 4) * 3, y: Math.floor(x / 4) * 4, w: 3, h: 4 }, ...extra });
     const control = (label: string, datasetId: string, column: string) => card('control', { control: { kind: 'dropdown', label, datasetId, column } });
@@ -122,10 +137,12 @@ async function seed(projectId: string) {
       vMonth: card('visual', { visualId: byMonth.id }),
       vTable: card('visual', { visualId: table.id }),
       vTeams: card('visual', { visualId: teams.id }),
+      vRelated: card('visual', { visualId: related.id }),
       kSum: card('metric', { metric: { datasetId: orders.id, column: 'amount', aggregation: 'sum', label: 'Total' } }),
       kRevenue: card('metric', { metric: { datasetId: orders.id, column: 'amount', aggregation: 'sum', metricId: revenue.id } }),
       kRatio: card('metric', { metric: { datasetId: orders.id, column: 'amount', aggregation: 'sum', metricId: ratio?.id ?? crypto.randomUUID(), label: 'Ratio' } }),
       kTarget: card('metric', { metric: { datasetId: targets.id, column: 'target', aggregation: 'sum', label: 'Target' } }),
+      kRelated: card('metric', { metric: { datasetId: orders.id, column: 'total', aggregation: 'max', label: 'Top channel total' } }),
       stats: card('stats', { stats: { kind: 'distribution', datasetId: orders.id, columns: ['amount'], view: 'table' } }),
       statsTeams: card('stats', { stats: { kind: 'distribution', datasetId: targets.id, columns: ['target'], view: 'table' } }),
       summary: card('summary', {}),
@@ -168,7 +185,7 @@ async function main(): Promise<void> {
 
     const inOrg = <T>(fn: () => Promise<T>) => context.runAsPublished(ALICE, 'embed-test', () => recordFs.withReadMemo(fn));
     const defs = await inOrg(() => hosted.getDefs(site.id));
-    ok('definition: the publish kept the dashboard and its visuals', !!defs && !!defs[s.aid] && Object.keys(defs[s.aid].visuals).length === 5, show(defs && Object.keys(defs)));
+    ok('definition: the publish kept the dashboard and its visuals', !!defs && !!defs[s.aid] && Object.keys(defs[s.aid].visuals).length === 6, show(defs && Object.keys(defs)));
     const def = defs![s.aid];
     const lock = lockMod.makeLock({ region: ['East'] });
     const outgoing = undefined;
@@ -194,6 +211,11 @@ async function main(): Promise<void> {
       ok(`fail closed: NEGATIVE CONTROL — unlocked, ${label} is drawn`, !refused(unlocked, id), show(tile(unlocked, id)));
     }
     if (s.formulaMetric) ok('fail closed: a KPI over a formula metric is refused under the lock', refused(locked, C.kRatio.id), show(tile(locked, C.kRatio.id)));
+    for (const [label, id] of [['a chart whose measure a related dataset supplies', C.vRelated.id], ['a KPI whose column a related dataset supplies', C.kRelated.id]] as const) {
+      ok(`fail closed: ${label} is refused under the lock`, refused(locked, id), show(tile(locked, id)));
+      const drawn = tile(unlocked, id);
+      ok(`fail closed: NEGATIVE CONTROL — unlocked, ${label} draws the related totals`, !refused(unlocked, id) && totalsFigure.test(JSON.stringify(drawn.payloads)), show(drawn));
+    }
     for (const [label, id] of [['a metric tree with a formula in it', C.tRatio.id], ['a metric tree over Targets', C.tTarget.id]] as const) {
       ok(`fail closed: ${label} is refused under the lock`, refused(locked, id), show(tile(locked, id)));
       ok(`fail closed: NEGATIVE CONTROL — unlocked, ${label} is drawn`, !refused(unlocked, id), show(tile(unlocked, id)));
@@ -238,9 +260,10 @@ async function main(): Promise<void> {
     ok('page: built, a dashboard page with its pinned CSP', !!block && block.kind === 'dashboard' && /script-src 'sha256-/.test(html));
     ok('no leak: no other region\'s name anywhere in the page', !/North|South|West/.test(JSON.stringify(block)), (JSON.stringify(block).match(/.{40}(North|South|West).{40}/) || [''])[0]);
     ok('no leak: no West figure, no Partner option', !westFigure.test(noIds(JSON.stringify(block))) && !JSON.stringify(block).includes('Partner'), (noIds(JSON.stringify(block)).match(/.{30}\b40[1-6]\d\b.{30}/) || [''])[0]);
+    ok('no leak: no related total computed over every region', !totalsFigure.test(noIds(JSON.stringify(block))));
     const open = await inOrg(() => embedPage.embedHtml(site, s.aid, { ...claims, params: {} }));
     const openBlock = 'html' in open ? JSON.stringify(dataBlock(open.html)) : '';
-    ok('no leak: NEGATIVE CONTROL — the unlocked embed has them', /West/.test(openBlock) && openBlock.includes('Partner') && westFigure.test(noIds(openBlock)));
+    ok('no leak: NEGATIVE CONTROL — the unlocked embed has them', /West/.test(openBlock) && openBlock.includes('Partner') && westFigure.test(noIds(openBlock)) && totalsFigure.test(noIds(openBlock)));
 
     // ── Saved views under the lock ──────────────────────────────────────
     const viewNames = (b: any) => (b?.dashboard?.views ?? []).map((v: { name: string }) => v.name); // any: the page's JSON
