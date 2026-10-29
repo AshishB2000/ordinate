@@ -19,6 +19,8 @@
 // NO DATA. A dataset that had no data yet at that time resolves to 'none': its
 // reads return null, and `withAsOf` answers the whole request with
 // "No data as of <time>" rather than a figure — never silently the latest.
+// A snapshot kept before a mask or drop step was added resolves to 'withheld'
+// the same way: it still holds the values the step takes away (NV-23).
 //
 // A WRITE inside a scope is refused (datasets.persist calls assertWritable): an
 // as-of read hydrates snapshot rows, and persisting those as the current table
@@ -36,6 +38,7 @@ import * as parquetStore from '../engine/parquetStore';
 type Resolved =
   | { kind: 'current' }
   | { kind: 'none' }
+  | { kind: 'withheld' }
   | { kind: 'snapshot'; meta: DatasetMeta; snap: SnapshotInfo };
 
 interface Scope {
@@ -44,6 +47,8 @@ interface Scope {
   iso: string;
   picks: Map<string, Promise<Resolved>>;
   missing: Set<string>;
+  /** A dataset whose snapshot predates a mask or drop step (NV-23): no data, and a sentence that says why. */
+  withheld: boolean;
 }
 
 const als = new AsyncLocalStorage<Scope>();
@@ -80,6 +85,7 @@ async function resolveNow(scope: Scope, projectId: string, id: string): Promise<
   const pick = pickAsOf(list.map((s) => s.stamp), Date.parse(cur.lastRefreshedAt || cur.updatedAt), scope.at);
   if (pick.kind !== 'snapshot') return pick;
   const snap = list.find((s) => s.stamp === pick.stamp) as SnapshotInfo;
+  if (!snapshots.derivedUnderSteps(snap, cur.steps)) return { kind: 'withheld' };
   const meta: DatasetMeta = {
     ...cur, columns: snap.columns, rowCount: snap.rowCount,
     updatedAt: snap.at, lastRefreshedAt: snap.at, resident: true,
@@ -98,7 +104,8 @@ async function resolve(projectId: string, id: string): Promise<{ scope: Scope; r
     scope.picks.set(id, p);
   }
   const r = await p;
-  if (r.kind === 'none') scope.missing.add(id);
+  if (r.kind === 'none' || r.kind === 'withheld') scope.missing.add(id);
+  if (r.kind === 'withheld') scope.withheld = true;
   return { scope, r };
 }
 
@@ -107,7 +114,7 @@ async function resolve(projectId: string, id: string): Promise<{ scope: Scope; r
 export async function metaHook(projectId: string, id: string): Promise<DatasetMeta | null | undefined> {
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
-  return x.r.kind === 'none' ? null : structuredClone(x.r.meta);
+  return x.r.kind === 'snapshot' ? structuredClone(x.r.meta) : null;
 }
 
 export async function residentHook(
@@ -116,14 +123,14 @@ export async function residentHook(
 ): Promise<{ parquetPath: string; columns: DatasetMeta['columns'] } | null | undefined> {
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
-  if (x.r.kind === 'none' || !parquetStore.isSupported()) return null;
+  if (x.r.kind !== 'snapshot' || !parquetStore.isSupported()) return null;
   return { parquetPath: x.r.snap.parquetPath, columns: structuredClone(x.r.snap.columns) };
 }
 
 export async function datasetHook(projectId: string, id: string): Promise<Dataset | null | undefined> {
   const x = await resolve(projectId, id);
   if (!x || x.r.kind === 'current') return undefined;
-  if (x.r.kind === 'none') return null;
+  if (x.r.kind !== 'snapshot') return null;
   const { meta, snap } = x.r;
   const table = await parquetStore.readTableAsync(snap.parquetPath, snap.columns);
   if (!table) return null;
@@ -140,10 +147,10 @@ export async function datasetHook(projectId: string, id: string): Promise<Datase
 // ── Running a read as of a time ──────────────────────────────────────────────
 
 /** Run `fn` with every dataset read as of `at` (ms). `missing` = something had no data yet. */
-export async function runAsOf<T>(projectId: string, at: number, fn: () => Promise<T>): Promise<{ value: T; missing: boolean }> {
-  const scope: Scope = { projectId, at, iso: new Date(at).toISOString(), picks: new Map(), missing: new Set() };
+export async function runAsOf<T>(projectId: string, at: number, fn: () => Promise<T>): Promise<{ value: T; missing: boolean; withheld: boolean }> {
+  const scope: Scope = { projectId, at, iso: new Date(at).toISOString(), picks: new Map(), missing: new Set(), withheld: false };
   const value = await als.run(scope, fn);
-  return { value, missing: scope.missing.size > 0 };
+  return { value, missing: scope.missing.size > 0, withheld: scope.withheld };
 }
 
 /**
@@ -157,5 +164,8 @@ export async function withAsOf<T>(projectId: unknown, asOf: unknown, fn: () => P
   if (!isValidId(projectId)) return fn(); // no project: nothing to resolve, the handler reports it
   const r = await runAsOf(projectId, at, fn);
   if (!r.missing) return r.value;
-  return { ok: false, error: `No data as of ${asOfLabel(at)}`, asOfMissing: new Date(at).toISOString() };
+  const error = r.withheld
+    ? `Data from before a column was masked or removed in Prepare isn’t shown (as of ${asOfLabel(at)}).`
+    : `No data as of ${asOfLabel(at)}`;
+  return { ok: false, error, asOfMissing: new Date(at).toISOString() };
 }

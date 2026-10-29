@@ -145,7 +145,7 @@ export function datasetFacts(
   // arrives as a finished, app-authored sentence; `sealLedger` below harvests
   // its numbers exactly as it already does for the quality notes, so the
   // fidelity guard covers these figures like any other.
-  insights: { detail: string }[] = [],
+  insights: { detail: string; column?: string; facts?: Record<string, unknown> }[] = [],
   // The project's DEFINED metrics on this dataset, already resolved by
   // src/ipc/metrics.ts. Optional and defaulted, so every existing caller — and
   // every existing test — produces a byte-identical block without them.
@@ -202,10 +202,14 @@ export function datasetFacts(
       fromAppText(ledger, `quality: ${i.kind}`, i.detail, 'datasetStats.quality');
     });
   }
-  if (insights.length > 0) {
+  // An insight's sentence names values of its column (a mover, the largest
+  // category, a dominant value) and of its date column: one about a withheld
+  // column is left out whole rather than half-masked (NV-31).
+  const told = insights.filter((i) => ![i.column, i.facts?.dateColumn].some((c) => typeof c === 'string' && withheld.has(c)));
+  if (told.length > 0) {
     lines.push('');
     lines.push('What the app found (every figure below is app-computed):');
-    insights.forEach((i) => lines.push(`- ${i.detail}`));
+    told.forEach((i) => lines.push(`- ${i.detail}`));
   }
   const sample = ds.rows.slice(0, SAMPLE_ROWS);
   if (sample.length > 0) {
@@ -245,6 +249,8 @@ export function datasetFacts(
 export function visualFacts(
   v: Visual, datasetName: string, viz: VizDataResult, columnDocs: Record<string, FactColumnDoc> = {},
   analytics: ResolvedOverlay[] = [],
+  // A related dataset's column docs, by dataset id, for a category or series drawn from it.
+  relatedDocs: Record<string, Record<string, FactColumnDoc>> = {},
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   lines.push(`Visual: "${v.name}" — a ${v.chartType} chart over dataset "${datasetName}".`);
@@ -259,16 +265,26 @@ export function visualFacts(
   const ledger: LedgerEntry[] = [];
   const data = viz && viz.data ? viz.data : { labels: [], series: [] };
   // A label drawn from a withheld column is a VALUE of it: the marks keep their
-  // figures (and their ledger entries) but lose their names.
+  // figures (and their ledger entries) but lose their names. Labels join every
+  // pivot row dimension and series names every pivot column dimension and a
+  // facet's panel title; a related dataset's field is marked in its own catalog
+  // (as sharePolicy.applyToChart reads them, NV-32).
   const withheld = withheldColumns(columnDocs);
-  const hideCat = withheld.has(v.encoding.category);
-  const hideSer = !!v.encoding.series && withheld.has(v.encoding.series);
+  const enc = v.encoding;
+  const marked = (col: string | undefined, ds?: string): boolean => !!col
+    && (withheld.has(col) || (!!ds && ds !== v.datasetId && withheldColumns(relatedDocs[ds] || {}).has(col)));
+  const catFrom = [enc.category, ...(enc.pivot ? enc.pivot.rows.map((d) => d.column) : [])]
+    .filter((c, k) => marked(c, k === 0 ? enc.categoryDatasetId : undefined));
+  const serFrom = [enc.series, ...(enc.pivot ? enc.pivot.columns.map((d) => d.column) : []), enc.facet?.rows, enc.facet?.cols]
+    .filter((c, k): c is string => marked(c, k === 0 ? enc.seriesDatasetId : undefined));
+  const hideCat = catFrom.length > 0;
+  const hideSer = serFrom.length > 0;
   const labels = (Array.isArray(data.labels) ? data.labels : []).map((l) => (hideCat ? WITHHELD : l));
   const series = (Array.isArray(data.series) ? data.series : []).map((s) => (hideSer && s.role !== 'overlay' ? { ...s, name: WITHHELD } : s));
   if (labels.length > 0 && series.length > 0) {
     lines.push('');
     if (hideCat || hideSer) {
-      lines.push(`(Labels from ${[hideCat ? v.encoding.category : '', hideSer ? v.encoding.series : ''].filter(Boolean).join(' and ')} are withheld — marked personal or financial data.)`);
+      lines.push(`(Labels from ${[...new Set([...catFrom, ...serFrom])].join(' and ')} are withheld — marked personal or financial data.)`);
     }
     lines.push('Computed chart values (app-computed):');
     series.forEach((s) => {

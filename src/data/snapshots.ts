@@ -28,12 +28,15 @@ import * as names from './snapshotNames';
 import type { ParsedColumn } from './parse';
 import * as recordFs from '../app/recordFs';
 import { logger } from '../app/logger';
+import { isMaskStep } from './maskSteps';
 
 export interface SnapshotMeta {
   rowCount: number;
   columns: ParsedColumn[];
   /** The prepare source's columns, when a `.source.parquet` was kept with it. */
   sourceColumns?: ParsedColumn[];
+  /** The mask and drop steps (as JSON) the kept table was derived under — absent on an older entry. */
+  withholds?: string[];
 }
 
 export interface SnapshotInfo extends SnapshotMeta {
@@ -59,6 +62,26 @@ export interface Keepable {
   updatedAt: string;
   origin?: { kind?: string };
   autoRefresh?: unknown;
+  steps?: unknown;
+}
+
+/** The steps that take values away from a reader: a mask, or a dropped column. */
+function withholdingSteps(steps: unknown): string[] {
+  return (Array.isArray(steps) ? steps : [])
+    .filter((s) => isMaskStep(s) || (s && typeof s === 'object' && (s as { type?: unknown }).type === 'drop_column'))
+    .map((s) => JSON.stringify(s));
+}
+
+/**
+ * True when every mask and drop step in `steps` (the dataset's pipeline now)
+ * was already in force when this snapshot's table was derived. A table kept
+ * before such a step still holds what the step takes away, so reading it would
+ * hand a reader the raw column (NV-23). An older index entry recorded nothing:
+ * it passes only a pipeline with no such step.
+ */
+export function derivedUnderSteps(snap: SnapshotMeta, steps: unknown): boolean {
+  const kept = new Set(snap.withholds || []);
+  return withholdingSteps(steps).every((s) => kept.has(s));
 }
 
 // ── The index file ───────────────────────────────────────────────────────────
@@ -83,6 +106,7 @@ function sanitizeIndex(raw: any): Index { // ponytail: untrusted JSON off disk, 
     const meta: SnapshotMeta = { rowCount: Math.floor(m.rowCount), columns };
     const src = sanitizeColumns(m.sourceColumns);
     if (src) meta.sourceColumns = src;
+    if (Array.isArray(m.withholds) && m.withholds.every((x: unknown) => typeof x === 'string')) meta.withholds = m.withholds;
     idx.items[stamp] = meta;
   }
   return idx;
@@ -199,6 +223,7 @@ async function begin(projectId: string, rec: Keepable): Promise<Pending | null> 
   }
   const meta: SnapshotMeta = { rowCount: rec.rowCount, columns: rec.columns.map((c) => ({ name: c.name, type: c.type })) };
   if (hasSource && rec.source) meta.sourceColumns = rec.source.columns.map((c) => ({ name: c.name, type: c.type }));
+  meta.withholds = withholdingSteps(rec.steps);
 
   const commit = (): Promise<void> => recordFs.locked(indexPath(projectId, id), async () => {
     for (const [tmp, fin] of moves) await recordFs.rename(tmp, fin);
@@ -256,6 +281,7 @@ export async function list(projectId: string, id: string): Promise<SnapshotInfo[
       sourcePath: hasSource ? path.join(dir, names.sourceName(id, m.stamp)) : null,
     };
     if (hasSource && meta.sourceColumns) info.sourceColumns = meta.sourceColumns;
+    if (meta.withholds) info.withholds = meta.withholds;
     out.push(info);
   }
   out.sort((a, b) => (a.stamp < b.stamp ? 1 : a.stamp > b.stamp ? -1 : 0));

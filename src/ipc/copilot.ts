@@ -238,7 +238,12 @@ export async function buildFacts(
       const overlays = v.analytics && v.analytics.length
         ? await resolveChartOverlays(projectId, viz.data, viz.category, v.analytics, v.filters) : [];
       if (overlays.length) emit({ kind: 'compute', label: 'Resolved ' + plural(overlays.length, 'overlay'), count: overlays.length });
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays);
+      // A category or series drawn from a related dataset is marked in THAT dataset's catalog (NV-32).
+      const relatedDocs: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {};
+      for (const rid of [v.encoding.categoryDatasetId, v.encoding.seriesDatasetId]) {
+        if (rid && rid !== v.datasetId && !relatedDocs[rid]) relatedDocs[rid] = await catalogColumns(projectId, rid);
+      }
+      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs);
     }
   }
 

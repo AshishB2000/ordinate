@@ -20,6 +20,10 @@
 //   rls        as an ordinary role: the wrong org sees nothing
 //   setModels  an unconnected provider, a missing default and a duplicate are
 //              refused; two defaults are refused by the database itself
+//   endpoint   a new base URL without the key is refused, and the other host
+//              never sees the stored key (ai:connect, byok:saveProvider, then
+//              byok:test / providerModels); NEGATIVE CONTROL: the same URL
+//              without a key still connects (NV-8)
 //
 // Needs a Postgres it may CREATE DATABASE (and ROLE) on; without DATABASE_URL
 // it prints one skip line.
@@ -108,6 +112,16 @@ const provider = http.createServer((req, res) => {
   });
 });
 
+// ── A second host an admin might point the stored key at: records what reaches it ──
+const elsewhere = { calls: 0, seen: '' };
+const other = http.createServer((req, res) => {
+  elsewhere.calls++;
+  elsewhere.seen += JSON.stringify(req.headers) + req.url;
+  req.resume();
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', data: [] }));
+});
+
 let appLog = '';
 let wireSeen = '';
 const logSink = () => new Writable({ write(c: Buffer, _e, cb) { appLog += c.toString(); cb(); } });
@@ -131,6 +145,8 @@ function allFiles(dir: string): string {
   }
   await new Promise<void>((r) => provider.listen(0, '127.0.0.1', r));
   const stubUrl = `http://127.0.0.1:${(provider.address() as AddressInfo).port}`;
+  await new Promise<void>((r) => other.listen(0, '127.0.0.1', r));
+  const otherUrl = `http://127.0.0.1:${(other.address() as AddressInfo).port}`;
   const dbName = `ordinate_ai1_${process.pid}_${Date.now()}`;
   const scratch = new URL(adminUrl);
   scratch.pathname = '/' + dbName;
@@ -228,6 +244,18 @@ function allFiles(dir: string): string {
     await boss('ai:disconnect', { provider: 'gateway' });
     const listed = await boss('ai:providerModels', { provider: 'anthropic' });
     ok('providerModels: the provider\'s live list, through the stored key', listed.body.ok === true && listed.body.models.map((m: { id: string }) => m.id).join() === 'claude-sonnet-a,claude-haiku-b', show(listed.body));
+
+    // ── Endpoint: the stored key never follows a new base URL (NV-8) ────────
+    const moved = await boss('ai:connect', { provider: 'anthropic', baseUrl: otherUrl });
+    const moved2 = await boss('byok:saveProvider', { provider: 'anthropic', fields: { baseUrl: otherUrl } });
+    await boss('byok:test', { provider: 'anthropic' });
+    await boss('ai:providerModels', { provider: 'anthropic' });
+    ok('endpoint: a new base URL without the key is refused (ai:connect, byok:saveProvider)', moved.body.ok === false && moved2.body.ok === false
+      && /API key again/.test(String(moved.body.error)), show([moved.body, moved2.body]));
+    ok('endpoint: …the other host was never called, the key never sent there', elsewhere.calls === 0 && !leaks(elsewhere.seen), String(elsewhere.calls));
+    ok('endpoint: …and the stored endpoint is unchanged', (await q<{ base_url: string }>(`SELECT base_url FROM org_ai_providers WHERE org_id = 'acme' AND provider = 'anthropic'`))[0]?.base_url === stubUrl);
+    const same = await boss('ai:connect', { provider: 'anthropic', baseUrl: stubUrl });
+    ok('endpoint NEGATIVE CONTROL: the same base URL without the key still connects', same.body.ok === true, show(same.body));
 
     // ── setModels: the allow-list's rules ───────────────────────────────────
     const two = [{ provider: 'anthropic', model: 'claude-sonnet-a', label: 'Claude Stub A' }, { provider: 'anthropic', model: 'claude-haiku-b', label: 'Claude Stub B' }];
@@ -371,6 +399,7 @@ function allFiles(dir: string): string {
     await root.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
     await root.end();
     provider.close();
+    other.close();
     for (const d of [DATA_A, DATA_B]) fs.rmSync(d, { recursive: true, force: true });
   }
   finish();

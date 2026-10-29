@@ -229,6 +229,10 @@ export async function connect(
   if (why) return { ok: false, error: why };
   const before = await credentials(provider);
   if (provider !== 'gateway' && !input.apiKey && !before.apiKey) return { ok: false, error: msg.aiNeedsKey() };
+  // A stored key goes only to the endpoint it was entered for: moving it needs the key again (NV-8).
+  if (!input.apiKey && before.apiKey && input.baseUrl !== undefined && input.baseUrl !== before.baseUrl) {
+    return { ok: false, error: msg.aiKeyForNewEndpoint() };
+  }
   if (provider === 'gateway' && !(input.baseUrl || (before.saved && before.baseUrl))) return { ok: false, error: msg.aiNeedsBaseUrl() };
   const model = await testModel(provider, input.model);
   if (!model) return { ok: false, error: msg.aiNeedsGatewayModel() };
