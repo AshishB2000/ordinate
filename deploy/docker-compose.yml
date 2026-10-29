@@ -101,6 +101,8 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
       OIDC_EMAIL_VERIFIED: ${OIDC_EMAIL_VERIFIED:-}
+      # The address people open; required in header mode (the only host name it answers).
+      ORDINATE_PUBLIC_URL: ${ORDINATE_PUBLIC_URL:-}
       # Prometheus on its own port, not published: scrape it from the compose network (ordinate:9464).
       METRICS_PORT: "9464"
     ports:

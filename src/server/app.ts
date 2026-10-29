@@ -172,7 +172,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // every response, the CSRF check on every non-GET, the per-IP rate limits —
   // all three refuse without a database query.
   registerSecurityHeaders(app, cfg.env === 'prod');
-  registerCsrf(app, { cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride });
+  registerCsrf(app, {
+    cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride,
+    pinHost: cfg.auth.mode === 'dev' || cfg.auth.mode === 'header', publicHost: cfg.auth.publicHost, // DNS rebinding (./csrf.ts)
+  });
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
   // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
   registerRequestMetrics(app);

@@ -254,7 +254,8 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     ok('audit: no session id, cookie, code or token in any row', [...secrets, ...idp.issued].every((s) => !s || !trailText.includes(s)));
 
     // ── Header mode ────────────────────────────────────────────────────────
-    const hcfg = (cidrs: string) => envMod.parseEnv({ LOG_LEVEL: 'trace', DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: cidrs, ORDINATE_ORG: 'acme' });
+    const hcfg = (cidrs: string, extra: Record<string, string> = {}) =>
+      envMod.parseEnv({ LOG_LEVEL: 'trace', DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: cidrs, ORDINATE_ORG: 'acme', ...extra });
     const happ = appMod.buildApp(hcfg('10.0.0.0/8, fd00::/8'), sink);
     apps.push(happ);
     await happ.ready();
@@ -273,6 +274,19 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     const hm = (await hreq('fd00::7', dana, '/api/auth/me')).json() as { user: { email: string; role: string } | null; mode: string };
     ok('header: me is the asserted user, auto-provisioned as viewer', hm.user?.email === 'dana@acme.test' && hm.user.role === 'viewer' && hm.mode === 'header', JSON.stringify(hm));
     ok('header: trusted peer without the header → 401', (await hreq('10.1.2.3', {})).statusCode === 401);
+    // NV-6: a DNS-rebinding page in a browser on the proxy's host arrives FROM the trusted peer, its own name as Host.
+    const rebound = { host: 'rebind.attacker.test:8080', 'x-forwarded-email': 'rebound@acme.test' };
+    const rme = await hreq('10.1.2.3', rebound, '/api/auth/me');
+    ok('header: a trusted peer with a foreign Host → 421 before any identity', rme.statusCode === 421 && !rme.body.includes('rebound'), `${rme.statusCode} ${rme.body}`);
+    ok('header: …its RPC too, CSRF pair and same-origin Origin or not', (await hreq('10.1.2.3', { ...rebound, origin: 'http://rebind.attacker.test:8080' })).statusCode === 421);
+    ok('header: …and nothing was provisioned for the asserted address', (await pool.query(`SELECT 1 FROM users WHERE email = 'rebound@acme.test'`)).rowCount === 0);
+    const papp = appMod.buildApp(hcfg('10.0.0.0/8', { ORDINATE_PUBLIC_URL: 'https://bi.acme.test' }), sink);
+    apps.push(papp);
+    await papp.ready();
+    const viaProxy = (host: string) => papp.inject({ method: 'POST', url: '/api/rpc/no:such', remoteAddress: '10.1.2.3', headers: withCsrf({ host, 'x-forwarded-email': 'dana2@acme.test' }) });
+    ok('header (NEGATIVE CONTROL): the proxy passing the public Host (ORDINATE_PUBLIC_URL) → passes the gate', (await viaProxy('bi.acme.test')).statusCode === 404);
+    ok('header (NEGATIVE CONTROL): …or an IP Host (a proxy that sets its own) → passes', (await viaProxy('10.0.0.5:8080')).statusCode === 404);
+    ok('header: …while any other name is still refused there', (await viaProxy('evil.acme.test')).statusCode === 421);
     ok('header: a disabled user is refused even from the proxy', await (async () => {
       await pool.query(`UPDATE users SET disabled_at = now() WHERE email = 'dana@acme.test'`);
       return (await hreq('10.1.2.3', dana)).statusCode === 401;

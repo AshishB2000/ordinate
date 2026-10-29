@@ -70,7 +70,8 @@ const sink = new Writable({
 
   // ── 2–5. The app, without Postgres ────────────────────────────────────────
   let identified = 0;
-  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'trace', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }), sink, () => {
+  // ORDINATE_PUBLIC_URL: dev mode answers only its own Host (src/server/csrf.ts ownHost), and HOST is a name.
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'trace', RATE_LIMIT_LOGIN_PER_MINUTE: '3', ORDINATE_PUBLIC_URL: `http://${HOST}` }), sink, () => {
     identified++;
     return { user: { email: 'dev@local', role: 'admin' }, org: { id: 'default' } };
   });

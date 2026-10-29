@@ -220,7 +220,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
     sock.on('close', () => resolve({ status: Number(/^HTTP\/1\.1 (\d{3})/.exec(head)?.[1]) || null, sent, rssGrowth: rssPeak - rssBefore }));
     const frame = (b: Buffer | string) => `${Buffer.byteLength(b).toString(16)}\r\n`;
     void (async () => {
-      sock.write(`POST /api/files HTTP/1.1\r\nHost: x\r\nx-test-org: org-a\r\ncookie: ordinate_csrf=${CSRF_TOKEN}\r\nx-csrf-token: ${CSRF_TOKEN}\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
+      sock.write(`POST /api/files HTTP/1.1\r\nHost: 127.0.0.1\r\nx-test-org: org-a\r\ncookie: ordinate_csrf=${CSRF_TOKEN}\r\nx-csrf-token: ${CSRF_TOKEN}\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
       const first = `--${B}\r\nContent-Disposition: form-data; name="file"; filename="big.csv"\r\n\r\n`;
       sock.write(frame(first) + first + '\r\n');
       while (sent < TOTAL && !sock.destroyed && sock.writable) {

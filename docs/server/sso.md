@@ -157,6 +157,14 @@ IdP, and put TLS in front of the proxy. With Compose, the app port stays on `127
 default `TRUSTED_PROXY_CIDRS=172.30.80.1/32` is the Compose network's gateway: whatever connects
 from this host. See [quick-start.md](quick-start.md#3-sign-in).
 
+**Set `ORDINATE_PUBLIC_URL`** to the address people open (`https://ordinate.example.com`); prod
+refuses to start in header mode without it. Header mode answers only a request whose `Host` is that
+name, an IP address or `localhost`, and anything else gets 421. A web page in a browser on the
+proxy's host could otherwise point its own domain at `127.0.0.1` (DNS rebinding), connect from the
+trusted address and set `X-Forwarded-Email` itself. oauth2-proxy passes the browser's `Host`
+upstream by default, which is the public name. A proxy that sets its own `Host` sends
+`127.0.0.1:8080`, which is accepted too.
+
 **On Kubernetes, the proxy's address is a pod IP**, so `TRUSTED_PROXY_CIDRS` ends up naming a pod
 range. Every other pod in that range could then claim any email by connecting to Ordinate's Service
 directly. Header mode on Kubernetes is safe only when nothing but the proxy can reach the app port:
@@ -165,6 +173,7 @@ directly. Header mode on Kubernetes is safe only when nothing but the proxy can 
 config:
   AUTH_MODE: header
   TRUSTED_PROXY_CIDRS: "10.244.0.0/16"   # your pod CIDR
+  ORDINATE_PUBLIC_URL: https://ordinate.example.com
 ingress:
   enabled: false                          # the Ingress routes to oauth2-proxy instead
 networkPolicy:

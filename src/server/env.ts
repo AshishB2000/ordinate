@@ -156,6 +156,8 @@ export interface AuthEnv {
   readonly groupsFrom: GroupsFrom;
   /** API_TOKEN_MAX_DAYS: the longest a personal API token lives. */
   readonly apiTokenMaxDays: number;
+  /** ORDINATE_PUBLIC_URL's host name: the one DNS name a header- or dev-mode request may carry as Host (../csrf.ts ownHost). */
+  readonly publicHost: string | null;
 }
 
 const AUTH_MODES: readonly AuthMode[] = ['password', 'oidc', 'header', 'dev'];
@@ -508,6 +510,12 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
   const trustedProxies = csv(src.TRUSTED_PROXY_CIDRS);
   if (mode === 'header' && trustedProxies.length === 0) throw new EnvError('TRUSTED_PROXY_CIDRS is required when AUTH_MODE=header');
   proxyList(trustedProxies);
+  // Header mode answers only its own Host (../csrf.ts): a page in a browser on the proxy's host that re-resolves
+  // its own domain to this server (DNS rebinding) would otherwise assert any X-Forwarded-Email from a trusted peer.
+  const pub = publicOrigin(src.ORDINATE_PUBLIC_URL);
+  if (mode === 'header' && env === 'prod' && !pub) {
+    throw new EnvError('ORDINATE_PUBLIC_URL is required when AUTH_MODE=header and ORDINATE_ENV=prod: the address people open Ordinate at, for example https://bi.example.com (a request for any other host name is refused)');
+  }
   // IdP groups and token lifetimes (./idpEnv.ts): a groups variable in a mode that cannot read it is refused.
   const groups = groupsFrom(mode, src.OIDC_GROUPS_CLAIM, src.TRUSTED_GROUPS_HEADER);
   if (mode !== 'oidc') extraScopes(mode, src.OIDC_EXTRA_SCOPES);
@@ -523,6 +531,7 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
     trustedProxies: Object.freeze(trustedProxies),
     groupsFrom: groups,
     apiTokenMaxDays: apiTokenMaxDays(src.API_TOKEN_MAX_DAYS),
+    publicHost: pub ? new URL(pub).hostname : null,
   });
 }
 

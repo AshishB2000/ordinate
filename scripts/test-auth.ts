@@ -84,6 +84,11 @@ const KEY = { ORDINATE_MASTER_KEY: '0'.repeat(64) };
 envFails('prod with an http:// issuer', { ...OIDC, ...KEY, ORDINATE_ENV: 'prod', DATA_DIR: '/srv', OIDC_ISSUER: 'http://idp.local' }, 'OIDC_ISSUER');
 ok('env: dev accepts an http:// issuer (a local mock IdP)', envMod.parseEnv({ ...OIDC, OIDC_ISSUER: 'http://127.0.0.1:9999' }).auth.oidc?.issuer === 'http://127.0.0.1:9999');
 envFails('header without TRUSTED_PROXY_CIDRS', { AUTH_MODE: 'header', DATABASE_URL: DB }, 'TRUSTED_PROXY_CIDRS');
+// NV-6: header mode answers only its own Host (src/server/csrf.ts), so in prod it must know its public name.
+const HEADER_PROD = { AUTH_MODE: 'header', DATABASE_URL: DB, TRUSTED_PROXY_CIDRS: '172.30.80.1/32', ORDINATE_ENV: 'prod', DATA_DIR: '/srv', ...KEY };
+envFails('header in prod without ORDINATE_PUBLIC_URL', HEADER_PROD, 'ORDINATE_PUBLIC_URL');
+ok('env: header in prod with ORDINATE_PUBLIC_URL → its host name is the one pinned', envMod.parseEnv({ ...HEADER_PROD, ORDINATE_PUBLIC_URL: 'https://BI.example.com' }).auth.publicHost === 'bi.example.com');
+ok('env: header in dev may leave it unset (IPs and loopback names only)', envMod.parseEnv({ ...HEADER_PROD, ORDINATE_ENV: 'dev' }).auth.publicHost === null);
 envFails('TRUSTED_PROXY_CIDRS of commas only', { AUTH_MODE: 'header', DATABASE_URL: DB, TRUSTED_PROXY_CIDRS: ' , ' }, 'TRUSTED_PROXY_CIDRS');
 for (const bad of ['10.0.0.0/33', 'fd00::/129', 'proxy.internal', '10.0.0.0/8/1', '10.0.0/8', '10.0.0.0/x', '::1/-1']) {
   envFails(`TRUSTED_PROXY_CIDRS=${bad}`, { AUTH_MODE: 'header', DATABASE_URL: DB, TRUSTED_PROXY_CIDRS: bad }, 'TRUSTED_PROXY_CIDRS');

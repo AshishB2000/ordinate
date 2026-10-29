@@ -18,6 +18,8 @@
 //    under MAX_UPLOAD_MB passes.
 // 5. TIMEOUT: an RPC past RPC_TIMEOUT_SECONDS → 504, and its DuckDB query is
 //    interrupted (the org's worker answers the next query at once).
+// 6. HOST: dev mode answers only an IP, a loopback name or ORDINATE_PUBLIC_URL's
+//    name (421 otherwise, no cookie) — a DNS-rebinding page is not the admin.
 //
 // Session fixation and logout-everywhere need Postgres: scripts/test-auth-db.ts.
 // Real bearer tokens on RPC without a CSRF pair: scripts/test-tokens-db.ts.
@@ -51,6 +53,8 @@ type Hdrs = Record<string, string | string[] | number | undefined>;
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t62-'));
 const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t62-web-'));
 const HOST = 'ordinate.test';
+// Dev mode answers only its own Host (src/server/csrf.ts ownHost): HOST is this server's public name here.
+const PUB = { ORDINATE_PUBLIC_URL: `http://${HOST}` };
 const JSON_H = { 'content-type': 'application/json', host: HOST };
 const HTML = { accept: 'text/html,application/xhtml+xml', host: HOST };
 const BOUNDARY = 'b0undary';
@@ -102,7 +106,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   // ── The real app, dev sign-in, server mode ────────────────────────────────
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4' });
+  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4', ...PUB });
   const app = appMod.buildApp(cfg);
   // The built web app when present, else a stand-in dist (CI's test job does not build web/).
   let asset = '/assets/index-t62.js';
@@ -225,8 +229,27 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     ok('mcp: exempt by route (it accepts nothing but a bearer token)', (await bare.inject({ method: 'POST', url: '/api/mcp' })).statusCode === 200);
     await bare.close();
 
+    // ── 6. DNS rebinding: a page whose own name re-resolves to 127.0.0.1 is same-origin with itself ──
+    const REBIND = 'rebind.attacker.test:8080';
+    const hosts: [string | undefined, boolean][] = [
+      ['127.0.0.1:8080', true], ['localhost:5173', true], ['[::1]:8080', true], ['10.1.2.3', true], [HOST, true], ['ORDINATE.test:443', true],
+      [REBIND, false], ['127.0.0.1.nip.io', false], ['localhost.attacker.test', false], ['app.localhost', false], ['', false], [undefined, false],
+    ];
+    for (const [h, want] of hosts) ok(`host: ownHost(${JSON.stringify(h)}) → ${want}`, csrf.ownHost(h, HOST) === want);
+    ok('host: with no ORDINATE_PUBLIC_URL a name is never this server', !csrf.ownHost(HOST, null));
+    const rme = await app.inject({ url: '/api/auth/me', headers: { host: REBIND } });
+    ok('host: a rebinding name asking /api/auth/me → 421, no identity, no CSRF cookie to read', rme.statusCode === 421 && !rme.body.includes('dev@local') && !csrfCookie(rme), `${rme.statusCode} ${rme.body}`);
+    const rebound = (h: string) => app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json', host: h, origin: `http://${h}` }), payload: wire.encode({ args: [] }) });
+    const rrpc = await rebound(REBIND);
+    ok('host: …its same-origin RPC with the CSRF pair → 421, the handler never runs', rrpc.statusCode === 421 && rrpc.json().error === 'host', `${rrpc.statusCode} ${rrpc.body}`);
+    ok('host: …and its page navigation → 421', (await app.inject({ url: '/', headers: { ...HTML, host: REBIND } })).statusCode === 421);
+    for (const h of ['127.0.0.1:8080', 'localhost:8080']) {
+      const r = await rebound(h);
+      ok(`host (NEGATIVE CONTROL): the same RPC at ${h} → 200`, r.statusCode === 200, `${r.statusCode} ${r.body}`);
+    }
+
     // ── Prod: HSTS and the __Host- cookie ─────────────────────────────────────
-    const prod = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined,
+    const prod = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent', ...PUB }), undefined,
       () => ({ user: { email: 'p@test', role: 'admin' }, org: { id: 'default' } }));
     await prod.ready();
     const pme = await prod.inject({ url: '/api/auth/me', headers: { host: HOST } });
@@ -268,7 +291,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
 
   // ── 3. Rate limits ─────────────────────────────────────────────────────────
   // RPC per user and per IP, on the real app (identity from a test header).
-  const rl = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }),
+  const rl = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3', ...PUB }),
     undefined, (h) => ({ user: { email: String(h['x-test-user'] ?? 'u1'), role: 'admin' }, org: { id: 'default' }, ...(h['x-test-token'] ? { via: 'token' as const } : {}) }));
   await rl.ready();
   const call = (user: string, ip: string) =>
