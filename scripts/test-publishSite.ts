@@ -470,6 +470,35 @@ async function main(): Promise<void> {
   ok('kpi subtitle: a filter\'s literal and a formula\'s text appear nowhere in the published page (canary)', !wordsHtml.includes(CANARY) && !wordsHtml.includes('[Ana sales]'));
   const forMembers = await resolveMetric(proj.id, filtered!.id);
   ok('…while the app still describes the metric to its members, literal and all (control: the canary is real)', !!forMembers && forMembers.ok && forMembers.definitionText.includes(CANARY));
+
+  // The filter bar's options are VALUES of their column, so the policy shapes them as it does a chart's labels:
+  // tokens that still filter by the raw value server-side, or the control left out (NV-25). Region is marked here.
+  const { maskToken } = require('../src/data/maskSteps') as typeof import('../src/data/maskSteps');
+  const rawRegions = ['region0', 'region1', 'region2'];
+  const regionBar = (d: any) => d.dashboard.controls.find((c: any) => c.label === 'Region'); // any: a published page
+  const boardFile = path.join(out, 'renamed-board.html');
+  await pub.publishSite(cfg);
+  const barPage = dataBlock(fs.readFileSync(boardFile, 'utf8'));
+  const bar = regionBar(barPage);
+  ok('policy: a control on a marked column lists tokens, never the values',
+    !!bar && JSON.stringify(bar.options) === JSON.stringify(['All', ...rawRegions.map((r) => maskToken(String(salt), r))]), JSON.stringify(bar && bar.options));
+  ok('policy: …and no raw value of it is anywhere in the page', !rawRegions.some((r) => fs.readFileSync(boardFile, 'utf8').includes(r)));
+  const k1 = barPage.dashboard.keys.indexOf('1');
+  const barChart = barPage.dashboard.sheets[0].cards.find((c: any) => c.kind === 'chart'); // any: a published card
+  const direct1: any = await vizDataFor(proj.id, ds!.id, sanitizeEncoding(v!.encoding), [{ type: 'filter', column: 'region', op: '=', value: 'region0' }] as any); // any: FilterStep literal
+  ok('policy: a token option still filters by its raw value (differential)', k1 >= 0 && JSON.stringify(barChart.payloads[barChart.variants[k1]].series[0].values) === JSON.stringify(direct1.data.series[0].values));
+  const { planDashboard } = require('../src/publish/dashboardData') as typeof import('../src/publish/dashboardData');
+  const exportPlan = await planDashboard(proj.id, dash!.id, 256, {}, pub.policyOutgoing(proj.id, 'export')); // dashboardPageHtml's hook
+  ok('policy: the export path\'s bar is masked too', JSON.stringify(exportPlan!.specs[0].domain.options) === JSON.stringify(bar.options), JSON.stringify(exportPlan!.specs[0].domain.options));
+  await privacy.setPolicy(proj.id, { publish: 'drop' });
+  await pub.publishSite(cfg);
+  ok('policy/drop: the control is left out of the bar', !regionBar(dataBlock(fs.readFileSync(boardFile, 'utf8'))));
+  const dropPlan = await pub.planPublish(cfg);
+  ok('policy/drop: …and the plan says why', JSON.stringify(dropPlan.pages[0].unlisted) === JSON.stringify([{ control: 'Region', reason: 'Hidden by the share policy' }]), JSON.stringify(dropPlan.pages[0]));
+  await privacy.setPolicy(proj.id, { publish: 'include' });
+  await pub.publishSite(cfg);
+  ok('policy/include: the values are listed (control)', JSON.stringify(regionBar(dataBlock(fs.readFileSync(boardFile, 'utf8'))).options) === JSON.stringify(['All', ...rawRegions]));
+  await privacy.setPolicy(proj.id, { publish: 'mask' });
   await catalog.setColumn(proj.id, ds!.id, 'region', { sensitivity: 'none' } as any); // any: as above
 
   await pub.storeConfig(cfg);

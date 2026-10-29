@@ -254,7 +254,7 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
   const saving: Array<{ text: string; bytes: number }> = [];
   const maxCombos = config.options.maxCombos || DEFAULT_MAX_COMBOS;
   for (const id of config.dashboardIds) {
-    const planned = await planDashboard(config.projectId, id, maxCombos);
+    const planned = await planDashboard(config.projectId, id, maxCombos, {}, outgoing);
     if (!planned) continue;
     const one = await buildDashboard(config.projectId, id, maxCombos, {}, outgoing, { defaultOnly: true });
     const perCombo = one ? Buffer.byteLength(JSON.stringify(one.sheets)) : 0;
