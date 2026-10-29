@@ -36,7 +36,8 @@ import type {
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
-import { checkHost, guardOn, type PinnedHost } from './ssrf';
+import { checkHost, guardOn, withPinnedLookups, type PinnedHost } from './ssrf';
+import { walletRefused } from './connectorMessages';
 
 /**
  * Every host an Oracle connect string can dial: each `(HOST=…)` and
@@ -381,10 +382,8 @@ async function withConnection<T>(
   fn: (conn: OracleConnection) => Promise<T>,
 ): Promise<T> {
   const oracledb = loadOracle();
-  // ponytail: an ADB connect string is CHECKED, not pinned — TLS matches the
-  // certificate against the host in the string. ADB hosts are Oracle's own.
-  if (v.autonomous && guardOn()) for (const h of connectStringHosts(str(ctx.values.connectString))) await checkHost(h);
-  const conn = await oracledb.getConnection(buildConnAttrs(v, ctx));
+  const attrs = buildConnAttrs(v, ctx);
+  const conn = v.autonomous && guardOn() ? await connectAdb(oracledb, attrs) : await oracledb.getConnection(attrs);
   try {
     // Server-side bound on a single round trip, in MILLISECONDS.
     conn.callTimeout = Math.max(1, Math.floor(ctx.timeoutMs));
@@ -392,6 +391,26 @@ async function withConnection<T>(
   } finally {
     await conn.close().catch(() => { /* connection already gone */ });
   }
+}
+
+/**
+ * Server (T6.1): every host of an ADB connect string is checked AND pinned
+ * (NV-13). The thin driver resolves them itself, so its lookups answer from the
+ * checked addresses; an https_proxy, which http.request would resolve again, is
+ * rewritten to its address (a CONNECT proxy has no TLS name to keep). A wallet
+ * is a path on this server's disk, which a connection may not name (F1, NV-14):
+ * the driver reads it before connecting and its error describes the disk.
+ */
+async function connectAdb(oracledb: OracleDb, attrs: OracleConnAttrs): Promise<OracleConnection> {
+  if (attrs.walletLocation || /wallet_location|my_wallet_directory/i.test(attrs.connectString)) throw new Error(walletRefused());
+  const pins = new Map<string, PinnedHost>();
+  for (const h of connectStringHosts(attrs.connectString)) {
+    const pin = await checkHost(h);
+    pins.set(h.toLowerCase(), pin).set(pin.host, pin);
+  }
+  const connectString = attrs.connectString.replace(/(https_proxy\s*=\s*)([^)&\s]+)/gi,
+    (_m, key: string, h: string) => key + (pins.get(h.toLowerCase())?.address ?? h));
+  return withPinnedLookups(async (h) => pins.get(h.toLowerCase()) ?? checkHost(h), () => oracledb.getConnection({ ...attrs, connectString }));
 }
 
 interface ExecOut {

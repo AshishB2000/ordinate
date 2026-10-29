@@ -13,3 +13,8 @@ export function adminRoleWarning(role: string): string {
 export function encryptionDeclined(): string {
   return t('connectorMessages.the_server_did_not_agree_to');
 }
+
+/** Oracle Autonomous on the server: a wallet folder (or a wallet in the connect string) names a server path. */
+export function walletRefused(): string {
+  return t('connectorMessages.a_wallet_folder_is_a_path');
+}

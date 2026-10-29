@@ -189,6 +189,7 @@
   "common.total": "Total",
   "common.value": "Valeur",
   "common.vs_previous": "vs précédent",
+  "connectorMessages.a_wallet_folder_is_a_path": null,
   "connectorMessages.the_server_did_not_agree_to": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, et {p1} de plus",
