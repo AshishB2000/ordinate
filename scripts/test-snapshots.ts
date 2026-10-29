@@ -34,6 +34,7 @@ const restore: typeof import('../src/data/snapshotRestore') = require('../src/da
 const answerKey: typeof import('../src/data/answerKey') = require('../src/data/answerKey');
 const trash: typeof import('../src/app/trash') = require('../src/app/trash');
 const { computeCardMetric }: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const { diffSnapshot }: typeof import('../src/ipc/snapshots') = require('../src/ipc/snapshots');
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const OTHER = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
@@ -58,6 +59,14 @@ async function importCsv(projectId: string, name: string, file: string) {
 }
 
 function pureChecks(): void {
+  const legacy = { rowCount: 1, columns: [] };
+  const mask = { type: 'mask_hash', column: 'email' };
+  ok('derivedUnderSteps: an entry that recorded nothing passes a pipeline with no mask or drop step',
+    snapshots.derivedUnderSteps(legacy, [{ type: 'filter', column: 'x', op: '>', value: 1 }]));
+  ok('derivedUnderSteps: …and fails one with a mask (fail closed)', !snapshots.derivedUnderSteps(legacy, [mask]));
+  ok('derivedUnderSteps: a drop step counts too', !snapshots.derivedUnderSteps(legacy, [{ type: 'drop_column', column: 'email' }]));
+  ok('derivedUnderSteps NEGATIVE CONTROL: a table derived under the same mask passes',
+    snapshots.derivedUnderSteps({ ...legacy, withholds: [JSON.stringify(mask)] }, [mask]));
   // ── Stamps: format ⇄ parse, strictly ─────────────────────────────────────
   ok('stamp: an ISO time formats without colons', names.stampOf('2026-09-26T21:44:03.123Z') === '2026-09-26T21-44-03-123Z');
   ok('stamp: parses back to the same ISO time', names.parseStamp('2026-09-26T21-44-03-123Z') === '2026-09-26T21:44:03.123Z');
@@ -237,6 +246,25 @@ async function main(): Promise<void> {
   const pAfter = await datasets.getDataset(pid, piped.id);
   ok('pipeline: restore re-derives from the kept source (3 source rows, 2 after the filter)', pr.ok
     && pAfter?.source?.rows.length === 3 && pAfter.rows.length === 2 && (pAfter.steps || []).length === 1);
+
+  // ── A mask or drop step added later: the tables kept before it are not served (NV-23) ──
+  const [pre] = await snapshots.list(pid, piped.id); // derived under the filter alone: raw cities
+  await datasets.updateSteps(pid, piped.id, [...(pAfter!.steps || []), { type: 'mask_redact', column: 'city', keep: 0 } as any]);
+  ok('mask fixture: the current table is masked', (await datasets.getDataset(pid, piped.id))!.rows.every((r) => !/^c\d/.test(String(r[0]))));
+  const pre1 = await asOf.runAsOf(pid, Date.parse(pre.at), () => datasets.getDataset(pid, piped.id));
+  ok('mask added: an as-of read of a table kept before it hydrates nothing', pre1.value === null && pre1.missing && pre1.withheld, JSON.stringify(pre1.value?.rows));
+  ok('…nor hands out its file to the resident path', (await asOf.runAsOf(pid, Date.parse(pre.at), () => datasets.residentSource(pid, piped.id))).value === null);
+  const why = await asOf.withAsOf(pid, pre.at, () => computeCardMetric(pid, piped.id, sum, []));
+  ok('…and withAsOf says why instead of a figure', (why as any).ok === false && /masked or removed/.test((why as any).error), JSON.stringify(why));
+  ok('…and snapshots:diff refuses it', !(await diffSnapshot(pid, piped.id, pre.stamp, 'city', 10)).ok);
+  csv('piped.csv', 6);
+  await sleep(5);
+  await refresh.refreshDataset(pid, piped.id);
+  const [post] = await snapshots.list(pid, piped.id); // derived under the mask
+  const post1 = await asOf.runAsOf(pid, Date.parse(post.at), () => datasets.getDataset(pid, piped.id));
+  ok('NEGATIVE CONTROL: a table kept after the mask is served as of its time, masked', post1.value !== null && !post1.missing
+    && post1.value.rows.length > 0 && post1.value.rows.every((r) => !/^c\d/.test(String(r[0]))), JSON.stringify(post1.value?.rows));
+  ok('NEGATIVE CONTROL: …and diffs', (await diffSnapshot(pid, piped.id, post.stamp, 'city', 10)).ok);
 
   // ── Trash carries the snapshots, and brings them back ────────────────────
   const kept = fs.readdirSync(dir).filter((n) => names.matchName(ds.id, n) || n === names.indexName(ds.id));

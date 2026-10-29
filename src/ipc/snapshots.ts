@@ -42,6 +42,10 @@ export async function diffSnapshot(
 ): Promise<{ ok: true; diff: DiffResult; at: string } | { ok: false; error: string }> {
   const snap = await snapshots.get(projectId, datasetId, stamp);
   if (!snap) return fail('That snapshot is no longer kept.');
+  // Its old cells would sit beside the masked new ones (NV-23).
+  if (!snapshots.derivedUnderSteps(snap, (await datasets.getDatasetMeta(projectId, datasetId))?.steps)) {
+    return fail('That snapshot was kept before a column was masked or removed in Prepare, so it can’t be compared.');
+  }
   const cur = await datasets.residentSource(projectId, datasetId);
   if (!cur) return fail('The current table cannot be read for a comparison.');
   const old = { parquetPath: snap.parquetPath, columns: snap.columns };
