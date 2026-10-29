@@ -137,13 +137,13 @@ async function cliCodes(): Promise<void> {
   ok('tool names unique and snake_case', new Set(tools).size === tools.length && tools.every((t) => /^[a-z]+(_[a-z]+)*$/.test(t)));
   ok('CLI names unique', new Set(clis).size === clis.length);
   const want = ['list_datasets', 'describe_dataset', 'aggregate', 'query_sql', 'list_metrics', 'metric_value', 'insights',
-    'create_visual', 'create_dashboard', 'export_dashboard', 'run_report'];
+    'create_visual', 'create_dashboard', 'publish_dashboard', 'unpublish_dashboard', 'export_dashboard', 'run_report'];
   ok('every tool the spec names exists', want.every((t) => tools.includes(t)), want.filter((t) => !tools.includes(t)).join());
   const wantCli = ['projects list', 'datasets list', 'datasets describe', 'datasets import', 'datasets refresh', 'query',
     'metrics list', 'metrics value', 'insights', 'dashboards list', 'dashboards export', 'reports run', 'publish'];
   ok('every CLI command the spec names exists', wantCli.every((c) => clis.includes(c)));
-  ok('read-only everywhere except the two creators (among tools)',
-    reg.COMMANDS.filter((c) => c.tool && !c.readOnly).map((c) => c.tool).sort().join() === 'create_dashboard,create_visual');
+  ok('read-only everywhere except the two creators and publish / unpublish (among tools)',
+    reg.COMMANDS.filter((c) => c.tool && !c.readOnly).map((c) => c.tool).sort().join() === 'create_dashboard,create_visual,publish_dashboard,unpublish_dashboard');
   ok('no connection tool is exposed', !tools.some((t) => /conn|secret|config|key/.test(t)));
   let shaped = true;
   for (const c of reg.COMMANDS) {

@@ -42,9 +42,15 @@ with the reason. Results carry the JSON as text, and as `structuredContent` when
 
 ### Security
 
-- Every tool is **read-only** except `create_visual` and `create_dashboard`, which save a visual or a
-  dashboard RECORD — never data — and are validated by the same validator the Assistant's plans go
-  through. A plan's calculated fields are refused: they would add a column to a dataset.
+- Every tool is **read-only** except four that save RECORDS, never data: `create_visual` and
+  `create_dashboard`, validated by the same validator the Assistant's plans go through (a plan's
+  calculated fields are refused: they would add a column to a dataset), and `publish_dashboard` /
+  `unpublish_dashboard`.
+- A dashboard `create_dashboard` makes is a **draft**: only the project's editors and admins see it.
+  `publish_dashboard` makes it visible to everyone in the project, viewers included, through the same
+  write as the app's Publish (`analysis:publish`, without its `base`: no tool returns a dashboard's
+  content, so the draft as stored is what goes live); `unpublish_dashboard` takes it away from viewers.
+  Both need editor on the project; a viewer's token is refused with a sentence that says so.
 - Connections are not exposed. No output ever contains config, API keys, connection passwords or
   tokens. A dataset's origin is reported by KIND only (`file`, `url`, `sql`…) — never its path, URL,
   query or connection id.
@@ -96,7 +102,9 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `reports run` | `run_report` | read | Generate a saved report (PDF, PPTX or DOCX) through the app's own report renderer. |
 | `publish` | — | writes files | Publish dashboards to a static folder from a publish config file (runs as a publish job). |
 | — | `create_visual` | writes records | Save a new visual. Validated exactly as the app validates a chart; writes a record, never data. Logged in Jobs. |
-| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs. |
+| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs. |
+| — | `publish_dashboard` | writes records | Publish a dashboard: its draft as it is now becomes the version EVERYONE in the project sees, viewers included, until someone publishes again. Layout, filters and charts freeze; figures stay live. Only publish when the user asks you to. Publishing a dashboard already in sync is fine (it re-freezes its charts). Editors and admins only. Writes records, never data. |
+| — | `unpublish_dashboard` | writes records | Unpublish a dashboard: it disappears for the project's viewers; the draft stays, for editors and admins. Only unpublish when the user asks you to. Editors and admins only. Writes records, never data. |
 
 ### projects list
 
@@ -272,10 +280,32 @@ Save a new visual. Validated exactly as the app validates a chart; writes a reco
 
 MCP only · MCP tool `create_dashboard` · **writes records**
 
-Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs.
+Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 | `plan` | object | yes | A dashboard plan: { name, sheets:[{ name, metrics?, visuals?, texts?, controls? }] }. Visuals are { dataset, name, chartType, encoding, filters? } or { visual: <saved visual name or id> }; metrics are { dataset, column, aggregation, label? }; texts are { heading?, text? }. Calculated fields are refused. |
+
+### publish_dashboard
+
+MCP only · MCP tool `publish_dashboard` · **writes records**
+
+Publish a dashboard: its draft as it is now becomes the version EVERYONE in the project sees, viewers included, until someone publishes again. Layout, filters and charts freeze; figures stay live. Only publish when the user asks you to. Publishing a dashboard already in sync is fine (it re-freezes its charts). Editors and admins only. Writes records, never data.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
+| `dashboard` | string | yes | Dashboard id or exact name. |
+
+### unpublish_dashboard
+
+MCP only · MCP tool `unpublish_dashboard` · **writes records**
+
+Unpublish a dashboard: it disappears for the project's viewers; the draft stays, for editors and admins. Only unpublish when the user asks you to. Editors and admins only. Writes records, never data.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
+| `dashboard` | string | yes | Dashboard id or exact name. |
 

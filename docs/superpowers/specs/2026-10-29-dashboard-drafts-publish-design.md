@@ -174,8 +174,11 @@ What the builder decided where the design left it open (the user's decisions abo
   every other key byte for byte; idempotent; a failed write still reads as published.
 - **Publish takes `base`** (the editor's tag): a draft that moved since is refused 409 — what goes
   live is what the editor saw.
-- **No MCP publish tool.** `create_dashboard` makes a draft and says so; `list_dashboards` carries
-  `status`; a viewer's token lists published ones only.
+- **No MCP publish tool** in part 1. `create_dashboard` makes a draft and says so; `list_dashboards`
+  carries `status`; a viewer's token lists published ones only. A follow-up (branch
+  `feat/mcp-publish-dashboard`) adds `publish_dashboard` / `unpublish_dashboard`: the same writes
+  (`publishDashboard.ts`), editor only, without `base` — no tool returns a dashboard's content or tag,
+  so the draft as stored is what goes live — and the plugin skill publishes only when the user asks.
 - **Ready switch.** Kept as a stopgap that publishes / unpublishes, so the app and its e2e keep
   working until part 3 replaces it with Preview / Publish.
 - **Not done here:** a viewer's mention rows written before this release still show their snippet;

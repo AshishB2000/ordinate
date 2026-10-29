@@ -191,6 +191,7 @@
   "common.vs_previous": "対前",
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}、ほか{p1}件",
+  "draftMessages.only_the_project_s_editors_and": null,
   "draftMessages.this_dashboard_has_not_been_published": null,
   "driverPointMessages.a_change_is_explained_between_two": "変化は 2 つの期間の間で説明されるため、軸に日付があるグラフが必要です。",
   "driverPointMessages.a_change_is_explained_from_today": "変化は現在のデータから説明されますが、このダッシュボードは過去のスナップショットを表示しています。説明するには「As of」を現在に戻してください。",

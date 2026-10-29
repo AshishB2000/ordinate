@@ -11,9 +11,14 @@
 // differs, so the reference cannot drift from what the binary accepts.
 //
 // ── What is exposed, and what never is ─────────────────────────────────────
-// Everything is READ-ONLY except `create_visual` and `create_dashboard`, which
-// write RECORDS (a visual, an analysis) and never data — a plan's calculated
-// fields are refused because they would add a column to a dataset. The two CLI
+// Everything is READ-ONLY except `create_visual`, `create_dashboard`,
+// `publish_dashboard` and `unpublish_dashboard`, which write RECORDS (a visual,
+// an analysis) and never data — a plan's calculated fields are refused because
+// they would add a column to a dataset. Publish and unpublish are the app's own
+// (analysis/publishDashboard.ts, as `analysis:publish` / `analysis:unpublish`
+// call it), with no `base`: no tool returns a dashboard's content or edit tag,
+// so the draft as stored — what the user looked at in the app — is what goes
+// live, as the channel does without one. The two CLI
 // commands that do change data (`datasets import`, `datasets refresh`) are the
 // user's own shell acting on their own files, and are not MCP tools. No
 // connection, config, key or secret is reachable from here: there is no
@@ -21,6 +26,7 @@
 // stored record.
 
 import { CHART_TYPE_IDS } from '../analysis/analysisPlan';
+import { onlyEditorsPublish } from '../analysis/draftMessages';
 import * as h from './handlers';
 import { AutomationError } from './errors';
 
@@ -91,6 +97,8 @@ export interface Command {
   readOnly: boolean;
   /** What a non-read-only command changes, for the docs and the Settings list. */
   writes?: 'data' | 'files' | 'records';
+  /** The sentence a caller without access is told (server only), when the generic one would not say enough. */
+  denied?: () => string;
   run: (args: Args, ctx: Ctx) => Promise<unknown>;
 }
 
@@ -265,7 +273,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     tool: 'create_dashboard', readOnly: false, writes: 'records',
-    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project\'s editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs.',
+    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project\'s editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.',
     args: {
       plan: {
         type: 'object',
@@ -279,6 +287,22 @@ export const COMMANDS: readonly Command[] = [
     },
     required: ['plan'],
     run: (a, ctx) => h.createDashboard(ctx, a.plan),
+  },
+  {
+    tool: 'publish_dashboard', readOnly: false, writes: 'records',
+    summary: 'Publish a dashboard: its draft as it is now becomes the version EVERYONE in the project sees, viewers included, until someone publishes again. Layout, filters and charts freeze; figures stay live. Only publish when the user asks you to. Publishing a dashboard already in sync is fine (it re-freezes its charts). Editors and admins only. Writes records, never data.',
+    args: { dashboard: { type: 'string', description: 'Dashboard id or exact name.' } },
+    required: ['dashboard'],
+    denied: onlyEditorsPublish,
+    run: (a, ctx) => h.dashboardsPublish(ctx, String(a.dashboard)),
+  },
+  {
+    tool: 'unpublish_dashboard', readOnly: false, writes: 'records',
+    summary: 'Unpublish a dashboard: it disappears for the project\'s viewers; the draft stays, for editors and admins. Only unpublish when the user asks you to. Editors and admins only. Writes records, never data.',
+    args: { dashboard: { type: 'string', description: 'Dashboard id or exact name.' } },
+    required: ['dashboard'],
+    denied: onlyEditorsPublish,
+    run: (a, ctx) => h.dashboardsUnpublish(ctx, String(a.dashboard)),
   },
 ];
 
@@ -357,7 +381,7 @@ export async function dispatch(
   const scope = opts.scope;
   const projectId = cmd.project === false ? '' : (await h.resolveProject(args.project as string | undefined, scope?.canRead)).id;
   if (scope && projectId && !(await scope.allow(cmd, projectId))) {
-    throw new AutomationError('usage', `${cmd.tool || cmd.cli} needs ${cmd.readOnly ? 'viewer' : 'editor'} access to this project.`);
+    throw new AutomationError('usage', cmd.denied ? cmd.denied() : `${cmd.tool || cmd.cli} needs ${cmd.readOnly ? 'viewer' : 'editor'} access to this project.`);
   }
   return cmd.run(args, {
     ...(scope ? { canRead: (id: string) => scope.canRead(id) } : {}),

@@ -5,3 +5,8 @@ import { t } from '../app/i18n';
 export function nothingPublished(): string {
   return t('draftMessages.this_dashboard_has_not_been_published');
 }
+
+/** An MCP token without editor on the project asking publish_dashboard / unpublish_dashboard (src/automation/registry.ts). */
+export function onlyEditorsPublish(): string {
+  return t('draftMessages.only_the_project_s_editors_and');
+}
