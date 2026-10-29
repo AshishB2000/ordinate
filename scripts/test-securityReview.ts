@@ -194,7 +194,7 @@ async function serverPart(base: string): Promise<void> {
     const escaped = await editedBundle(alive, (entries) => {
       const e = entries.find((x) => x.name === `connections/${aliveId}.json`);
       if (!e) return;
-      const esc = [...aliveId].map((ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+      const esc = aliveId.split('').map((ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')).join('');
       e.data = Buffer.from(JSON.stringify(JSON.parse(e.data.toString('utf8'))).replace(`"${aliveId}"`, `"${esc}"`));
     });
     ok('control: the escaped body still decodes to the live connection\'s id', (await bundle.readZipAsync(escaped)).some((e) =>
