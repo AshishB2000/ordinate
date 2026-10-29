@@ -356,6 +356,21 @@ async function main(): Promise<void> {
     exact.ok === true ? `${exact.rows.length} rows, truncated=${exact.truncated}` : exact.error);
   ok('exactly-at-the-cap does not cancel', state.canceled === false);
 
+  // NV-40: past MAX_RESULT_BYTES of cell text the read stops, truncated, like the row cap.
+  const { MAX_RESULT_BYTES } = require('../src/connectors/types') as typeof import('../src/connectors/types');
+  resetState();
+  state.rowsToEmit = 10;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const heavy = await sqlserver.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('a result past MAX_RESULT_BYTES keeps the rows under it and says truncated',
+    heavy.ok === true && heavy.rows.length === 2 && heavy.truncated === true && state.canceled === true,
+    heavy.ok === true ? `${heavy.rows.length} rows, truncated=${heavy.truncated}` : heavy.error);
+  resetState();
+  state.rowsToEmit = 2;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const fits = await sqlserver.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('negative control: the same rows under the ceiling are whole', fits.ok === true && fits.rows.length === 2 && fits.truncated === false);
+
   // ── listTables ─────────────────────────────────────────────────────────────
   resetState();
   state.rowsToEmit = 2;

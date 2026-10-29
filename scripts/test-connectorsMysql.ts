@@ -247,6 +247,29 @@ async function main(): Promise<void> {
   ok('the TLS help no longer says the certificate goes unchecked',
     CONNECTORS.every((c) => !/not verified/i.test(String(c.fields.find((f) => f.key === 'ssl')?.help))));
 
+  // NV-40: the run streams rows and holds them to the cap and to MAX_RESULT_BYTES.
+  const { EventEmitter }: typeof import('events') = require('events');
+  const fakeConn = (rows: unknown[][]) => ({
+    connection: {
+      query: () => {
+        const q = new EventEmitter();
+        setImmediate(() => {
+          q.emit('fields', [{ name: 's', columnType: 253 }]);
+          for (const r of rows) q.emit('result', r);
+          q.emit('end');
+        });
+        return q;
+      },
+    },
+  }) as unknown as import('mysql2/promise').Connection;
+  const half = 'x'.repeat(connTypes.MAX_RESULT_BYTES / 2 - 64);
+  const heavy = await mysqlConn.streamRows(fakeConn(Array(5).fill([half])), 'select 1', 100);
+  ok('past MAX_RESULT_BYTES: the rows under it, reported truncated', heavy.rows.length === 2 && heavy.truncated === true, heavy.rows.length);
+  const fits = await mysqlConn.streamRows(fakeConn(Array(2).fill([half])), 'select 1', 100);
+  ok('negative control: the same rows under the ceiling are whole', fits.rows.length === 2 && fits.truncated === false);
+  const probe = await mysqlConn.streamRows(fakeConn([[1], [2], [3], [4]]), 'select 1', 3);
+  ok('the probe row past the cap is dropped and reported', probe.rows.length === 3 && probe.truncated === true && probe.columns[0]?.type === 'VAR_STRING');
+
   ok(
     'planetscale lists tables via SHOW TABLES (some plans hide information_schema)',
     ps.listVia === 'show_tables',

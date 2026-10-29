@@ -38,12 +38,17 @@ interface FakeState {
   lastAttrs: Record<string, unknown> | null;
   lastSql: string;
   lastBinds: unknown[];
-  lastOptions: { outFormat?: number; maxRows?: number; fetchTypeHandler?: (m: unknown) => unknown } | null;
+  lastOptions: { outFormat?: number; resultSet?: boolean; fetchTypeHandler?: (m: unknown) => unknown } | null;
   callTimeout: number;
   rowsAvailable: number;
   connectError: Error | null;
   executeError: Error | null;
   closed: boolean;
+  /** Rows handed out by getRows, and whether the result set was closed. */
+  fetched: number;
+  rsClosed: boolean;
+  /** The NAME cell of every row, when set (a byte-budget check). */
+  cell: string | null;
 }
 
 const state: FakeState = {
@@ -56,6 +61,9 @@ const state: FakeState = {
   connectError: null,
   executeError: null,
   closed: false,
+  fetched: 0,
+  rsClosed: false,
+  cell: null,
 };
 
 function resetState(): void {
@@ -68,6 +76,9 @@ function resetState(): void {
   state.connectError = null;
   state.executeError = null;
   state.closed = false;
+  state.fetched = 0;
+  state.rsClosed = false;
+  state.cell = null;
 }
 
 const fakeConnection = {
@@ -80,24 +91,29 @@ const fakeConnection = {
   async execute(
     sql: string,
     binds: unknown[],
-    options: { outFormat?: number; maxRows?: number; fetchTypeHandler?: (m: unknown) => unknown },
-  ): Promise<{ metaData: { name: string; dbTypeName: string }[]; rows: unknown[][] }> {
+    options: { outFormat?: number; resultSet?: boolean; fetchTypeHandler?: (m: unknown) => unknown },
+  ) {
     state.lastSql = sql;
     state.lastBinds = binds;
     state.lastOptions = options;
     if (state.executeError) throw state.executeError;
-    // The real driver stops fetching at maxRows; the fake must too, or the
-    // client-side half of the cap would go untested.
-    const max = options.maxRows === undefined || options.maxRows === 0 ? state.rowsAvailable : options.maxRows;
-    const n = Math.min(state.rowsAvailable, max);
-    const rows: unknown[][] = [];
-    for (let i = 0; i < n; i++) rows.push([i, 'n' + i]);
+    // A result set, as the real driver returns one: rows only as getRows asks,
+    // so the client-side half of the cap is what stops the read.
     return {
-      metaData: [
-        { name: 'ID', dbTypeName: 'NUMBER' },
-        { name: 'NAME', dbTypeName: 'VARCHAR2' },
-      ],
-      rows,
+      resultSet: {
+        metaData: [
+          { name: 'ID', dbTypeName: 'NUMBER' },
+          { name: 'NAME', dbTypeName: 'VARCHAR2' },
+        ],
+        async getRows(n: number): Promise<unknown[][]> {
+          const rows: unknown[][] = [];
+          for (; rows.length < n && state.fetched < state.rowsAvailable; state.fetched++) rows.push([state.fetched, state.cell ?? 'n' + state.fetched]);
+          return rows;
+        },
+        async close(): Promise<void> {
+          state.rsClosed = true;
+        },
+      },
     };
   },
   async close(): Promise<void> {
@@ -284,7 +300,8 @@ async function main(): Promise<void> {
     ok('values are positional scalars', capped.rows[0][0] === 0 && capped.rows[0][1] === 'n0');
   }
   ok('the server-side cap asked for rowLimit + 1', /FETCH FIRST 5 ROWS ONLY/.test(state.lastSql), state.lastSql);
-  ok('maxRows caps the driver client-side too', state.lastOptions?.maxRows === 5, state.lastOptions?.maxRows);
+  ok('the result set is read client-side, one batch at most, and closed',
+    state.lastOptions?.resultSet === true && state.fetched <= 1000 && state.rsClosed === true, state.fetched);
   ok('rows are fetched positionally (OUT_FORMAT_ARRAY)', state.lastOptions?.outFormat === 4001);
   ok('callTimeout is set from ctx.timeoutMs, in milliseconds', state.callTimeout === 30_000, state.callTimeout);
   ok('the connection was closed', state.closed === true);
@@ -300,6 +317,21 @@ async function main(): Promise<void> {
   const exact = await ora.run(ctxFor({ rowLimit: 5 }), 'select * from sales');
   ok('exactly-at-the-cap keeps 5 rows and is NOT truncated',
     exact.ok === true && exact.rows.length === 5 && exact.truncated === false);
+
+  // NV-40: past MAX_RESULT_BYTES of cell text the read stops, truncated, like the row cap.
+  const { MAX_RESULT_BYTES } = require('../src/connectors/types') as typeof import('../src/connectors/types');
+  resetState();
+  state.rowsAvailable = 10;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const heavy = await ora.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('a result past MAX_RESULT_BYTES keeps the rows under it and says truncated',
+    heavy.ok === true && heavy.rows.length === 2 && heavy.truncated === true && state.rsClosed === true,
+    heavy.ok === true ? `${heavy.rows.length} rows, truncated=${heavy.truncated}` : heavy.error);
+  resetState();
+  state.rowsAvailable = 2;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const fits = await ora.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('negative control: the same rows under the ceiling are whole', fits.ok === true && fits.rows.length === 2 && fits.truncated === false);
 
   resetState();
   state.rowsAvailable = 0;

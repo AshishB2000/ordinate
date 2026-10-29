@@ -28,7 +28,7 @@ import type {
   ConnectorSchema,
   ConnectorTables,
 } from './types';
-import { safeError } from './types';
+import { MAX_RESULT_BYTES, rowBytes, safeError } from './types';
 import { encryptionDeclined } from './connectorMessages';
 import { connect as netConnect, type Socket } from 'net';
 import { checkHost, guardOn, type PinnedHost } from './ssrf';
@@ -501,7 +501,7 @@ function execSql(
   return new Promise<ExecResult>((resolve, reject) => {
     let columns: { name: string; type: string }[] = [];
     const rows: (string | number | boolean | null)[][] = [];
-    let seen = 0;
+    let bytes = 0;
     let canceled = false;
     let settled = false;
 
@@ -513,7 +513,7 @@ function execSql(
         reject(err);
         return;
       }
-      resolve({ columns, rows, truncated: seen > cap });
+      resolve({ columns, rows, truncated: canceled });
     });
 
     // tedious types the payload as ColumnMetadata[] OR a name-keyed object
@@ -533,15 +533,16 @@ function execSql(
     });
 
     req.on('row', (cols: TdsColumnValue[]) => {
-      seen++;
-      if (seen > cap) {
-        if (!canceled) {
-          canceled = true;
-          try { conn.cancel(); } catch (_) { /* request already finished */ }
-        }
+      if (canceled) return;
+      const row = (cols || []).map((c) => cellToValue(c?.value));
+      bytes += rowBytes(row);
+      // The probe row past the cap, or past MAX_RESULT_BYTES (NV-40): stop the server streaming.
+      if (rows.length >= cap || bytes > MAX_RESULT_BYTES) {
+        canceled = true;
+        try { conn.cancel(); } catch (_) { /* request already finished */ }
         return;
       }
-      rows.push((cols || []).map((c) => cellToValue(c?.value)));
+      rows.push(row);
     });
 
     if (addParams) addParams(req);

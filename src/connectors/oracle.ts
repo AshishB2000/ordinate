@@ -35,7 +35,7 @@ import type {
   ConnectorSchema,
   ConnectorTables,
 } from './types';
-import { safeError } from './types';
+import { MAX_RESULT_BYTES, rowBytes, safeError } from './types';
 import { checkHost, guardOn, withPinnedLookups, type PinnedHost } from './ssrf';
 import { walletRefused } from './connectorMessages';
 
@@ -68,13 +68,17 @@ interface OracleMetaData {
   /** Source type name verbatim, e.g. 'NUMBER', 'VARCHAR2', 'TIMESTAMP'. */
   dbTypeName?: string;
 }
-interface OracleResult {
+interface OracleResultSet {
   metaData?: OracleMetaData[];
-  rows?: unknown[][];
+  getRows(n: number): Promise<unknown[][]>;
+  close(): Promise<void>;
+}
+interface OracleResult {
+  resultSet: OracleResultSet;
 }
 interface OracleExecOptions {
   outFormat: number;
-  maxRows: number;
+  resultSet: true;
   fetchTypeHandler?: (meta: OracleMetaData) => { type: unknown } | undefined;
 }
 interface OracleConnection {
@@ -413,6 +417,8 @@ async function connectAdb(oracledb: OracleDb, attrs: OracleConnAttrs): Promise<O
   return withPinnedLookups(async (h) => pins.get(h.toLowerCase()) ?? checkHost(h), () => oracledb.getConnection({ ...attrs, connectString }));
 }
 
+const FETCH_BATCH = 1_000;
+
 interface ExecOut {
   columns: { name: string; type: string }[];
   rows: (string | number | boolean | null)[][];
@@ -427,17 +433,34 @@ async function execute(conn: OracleConnection, sql: string, binds: unknown[], ca
     // Positional rows: a `select *` join with duplicate column names would
     // collide in an object.
     outFormat: oracledb.OUT_FORMAT_ARRAY,
-    maxRows: cap + 1, // client-side cap; always applies, whatever the SQL says
+    // Fetched in batches and held client-side to the cap AND to MAX_RESULT_BYTES
+    // (NV-40), whatever the SQL says; `maxRows` would buffer every row first.
+    resultSet: true,
     // A CLOB otherwise arrives as a Lob stream object we would have to read
     // asynchronously mid-row. Fetch it as a string instead.
     fetchTypeHandler: (meta: OracleMetaData) =>
       meta && meta.dbTypeName === 'CLOB' ? { type: oracledb.STRING } : undefined,
   });
-  const all = res.rows || [];
-  const truncated = all.length > cap;
-  const rows = (truncated ? all.slice(0, cap) : all).map((r) => (r || []).map(cellToValue));
+  const rs = res.resultSet;
+  const rows: ExecOut['rows'] = [];
+  let bytes = 0;
+  let truncated = false;
+  try {
+    while (!truncated) {
+      const batch = await rs.getRows(FETCH_BATCH);
+      if (batch.length === 0) break;
+      for (const r of batch) {
+        const row = (r || []).map(cellToValue);
+        bytes += rowBytes(row);
+        if (rows.length >= cap || bytes > MAX_RESULT_BYTES) { truncated = true; break; }
+        rows.push(row);
+      }
+    }
+  } finally {
+    await rs.close();
+  }
   return {
-    columns: (res.metaData || []).map((m) => ({
+    columns: (rs.metaData || []).map((m) => ({
       name: String(m.name ?? ''),
       // Source type verbatim — mapping to a ColumnType is the caller's job.
       type: String(m.dbTypeName ?? ''),

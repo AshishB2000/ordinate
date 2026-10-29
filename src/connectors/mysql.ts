@@ -22,7 +22,10 @@
 
 import { connect as netConnect } from 'net';
 import { createConnection, Connection, ConnectionOptions, FieldPacket } from 'mysql2/promise';
+import type { Connection as CoreConnection } from 'mysql2';
 import {
+  MAX_RESULT_BYTES,
+  rowBytes,
   ConnectorContext,
   ConnectorDef,
   ConnectorError,
@@ -497,18 +500,37 @@ async function run(variant: MysqlVariant, ctx: ConnectorContext, sql: string): P
   if (!inner) return { ok: false, error: 'No query specified' };
   const cap = effectiveRowLimit(ctx.rowLimit);
 
-  return withConnection(variant, ctx, async (conn, plan) => {
-    const [rows, fields] = await conn.query<RawRows>(plan.prefix + wrapSelect(inner, cap));
-    const all = Array.isArray(rows) ? rows : [];
-    // The probe row proves the cap clipped. Report it; never trim silently.
-    const truncated = all.length > cap;
-    const body = truncated ? all.slice(0, cap) : all;
-    return {
-      ok: true as const,
-      columns: (fields || []).map((f: FieldPacket) => ({ name: str(f.name), type: columnTypeName(f) })),
-      rows: body.map((r: unknown[]) => (Array.isArray(r) ? r.map(normalizeCell) : [normalizeCell(r)])),
-      truncated,
-    };
+  return withConnection(variant, ctx, (conn, plan) => streamRows(conn, plan.prefix + wrapSelect(inner, cap), cap));
+}
+
+/** The capped query, STREAMED: conn.query would buffer the whole result first.
+ *  Rows are narrowed as they arrive and kept up to the cap and MAX_RESULT_BYTES
+ *  (NV-40); past either the rest is read and dropped (the LIMIT and the server
+ *  timeout bound that) and the result is reported truncated — the probe row is
+ *  how the cap proves it clipped. */
+export function streamRows(conn: Connection, sql: string, cap: number): Promise<ConnectorRows> {
+  const core = (conn as unknown as { connection: CoreConnection }).connection;
+  return new Promise((resolve, reject) => {
+    let fields: FieldPacket[] = [];
+    const rows: ConnectorRows['rows'] = [];
+    let bytes = 0;
+    let truncated = false;
+    core.query(sql)
+      .on('fields', (f: FieldPacket[]) => { fields = f; })
+      .on('result', (r: unknown) => {
+        if (truncated) return;
+        const row = Array.isArray(r) ? r.map(normalizeCell) : [normalizeCell(r)];
+        bytes += rowBytes(row);
+        if (rows.length >= cap || bytes > MAX_RESULT_BYTES) truncated = true;
+        else rows.push(row);
+      })
+      .on('error', reject)
+      .on('end', () => resolve({
+        ok: true,
+        columns: (fields || []).map((f) => ({ name: str(f.name), type: columnTypeName(f) })),
+        rows,
+        truncated,
+      }));
   });
 }
 
