@@ -13,13 +13,15 @@
 //   1. Read the record (metadata only) and apply the pure due rule
 //      (./freshOnAskRule.ts): off · fresh · full → answer from the copy now.
 //   2. `due`: start ONE pull for the pod (`pulls`), then for every pod:
-//        CLAIM the window — under a short advisory lock of its own (the
-//        refresh lock's primitive on the key `fresh-on-ask:<id>`, never the
-//        refresh lock itself), re-read the record, and unless another pod
-//        stamped `freshOnAsk.triggeredAt` inside this window (or the rows
-//        landed meanwhile), stamp it. With Postgres the record is a `records`
-//        row and the lock is cross-pod, so exactly one pod claims a window;
-//        without it there is one process, and `pulls` + the record suffice.
+//        CLAIM the window — one write under the record's own lock
+//        (./freshOnAskRecord.ts `claimWindow`): re-read the record, and unless
+//        another pod stamped `freshOnAsk.triggeredAt` inside this window (or
+//        the rows landed meanwhile), stamp it. With Postgres the record is a
+//        `records` row and its lock is cross-pod, so exactly one pod claims a
+//        window; without it there is one process, and `pulls` + the record
+//        suffice. The claim holds ONE pooled client, and at most recordFs's
+//        per-pod holds of them run at once: a dashboard of 100 due datasets
+//        cannot take every client of the pod's pool (NV-41).
 //        Then `startRefresh(…, { incrementalOnly })` — L0.4's single-flight
 //        door: a refresh already running anywhere (a ↻, the schedule, another
 //        pod) starts nothing, and is waited for instead.
@@ -37,8 +39,8 @@
 // WHY THE RECORD, AND NOT A TABLE OF ITS OWN, for the window. The record is
 // already the cross-pod truth every check reads (it is the row the due rule
 // needs anyway), so the stamp costs no extra read on the hot path and no
-// migration; the claim lock turns its read-modify-write into a compare-and-set
-// across pods. This pod also remembers its own starts (`triggered`, orgKey'd),
+// migration; the record's lock turns its read-modify-write into a
+// compare-and-set across pods. This pod also remembers its own starts (`triggered`, orgKey'd),
 // so a stamp that could not be written still holds the window here.
 //
 // THE PULL RUNS DETACHED from the request that started it: as the system, in
@@ -55,19 +57,16 @@ import { dataAt } from './figureAsOf';
 import { asOfIso } from './asOf';
 import { fullReason } from './incrementalRefresh';
 import { refreshRunning, startRefresh } from './refreshJob';
-import { ageMs, freshOnAskVerdict } from './freshOnAskRule';
-import { stampTriggered } from './freshOnAskRecord';
+import { freshOnAskVerdict } from './freshOnAskRule';
+import { claimWindow } from './freshOnAskRecord';
 import { memoKey, podKey, pulls, requestMemo, type Memo, type Outcome, type PullEnd, type RequestMemo } from './freshOnAskState';
 import { isValidId } from '../app/ids';
 import { ctx, runInContext, type Identity } from '../server/context';
-import { withRefreshLock } from '../server/jobs/refreshLock';
 import { freshOnAskWaitMs } from '../server/env';
 import { trackWork } from '../server/lifecycle';
 
 /** How often a wait for ANOTHER pod's refresh looks at the lock. */
 export const POLL_MS = 200;
-/** The advisory-lock key prefix of a window's claim (src/server/jobs/refreshLock.ts `lockKey`). */
-export const CLAIM_PREFIX = 'fresh-on-ask:';
 
 const QUIET: Outcome = { refreshing: false };
 
@@ -167,7 +166,7 @@ function detached<T>(org: Identity['org'], fn: () => Promise<T>): Promise<T> {
 
 async function pull(projectId: string, id: string, windowMs: number): Promise<PullEnd> {
   try {
-    if (!(await claim(projectId, id, windowMs))) return 'elsewhere';
+    if (!(await claimWindow(projectId, id, windowMs))) return 'elsewhere';
     const started = await startRefresh(projectId, id, { incrementalOnly: true });
     if (started.status === 'already_running') return 'elsewhere';
     const r = await started.done;
@@ -179,21 +178,6 @@ async function pull(projectId: string, id: string, windowMs: number): Promise<Pu
   } catch {
     return 'failed';
   }
-}
-
-/** Claim this window for this pod — the cross-pod compare-and-set described above. */
-async function claim(projectId: string, id: string, windowMs: number): Promise<boolean> {
-  const got = await withRefreshLock(CLAIM_PREFIX + id, async () => {
-    const meta = await datasets.getDatasetMeta(projectId, id);
-    const fo = meta?.freshOnAsk;
-    if (!meta || !fo) return false;
-    const now = Date.now();
-    if (ageMs(meta.lastRefreshedAt, now) < windowMs) return false; // landed meanwhile
-    const prev = fo.triggeredAt ? Date.parse(fo.triggeredAt) : NaN;
-    if (Number.isFinite(prev) && now - prev < windowMs) return false; // another pod claimed this window
-    return stampTriggered(projectId, id, new Date(now).toISOString());
-  });
-  return got.ran && got.value;
 }
 
 /**

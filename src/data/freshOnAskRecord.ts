@@ -1,6 +1,6 @@
 // Fresh on ask in the dataset record (docs/live-data/00-plan.md L3.1) — the two
 // METADATA-ONLY writes: the setting (`dataset:update`'s `freshOnAsk`), and the
-// stamp of a pull's start (src/data/freshOnAsk.ts). MAIN PROCESS ONLY.
+// claim of a pull's window (src/data/freshOnAsk.ts). MAIN PROCESS ONLY.
 //
 // Both read-modify-write the record's raw JSON through datasetRecord's
 // `serialized` chain, like the quality and incremental writers: no table is
@@ -13,7 +13,7 @@ import { isValidId } from '../app/ids';
 import { datasetFilePath, serialized } from './datasetRecord';
 import { sanitizeOrigin } from './datasetOrigin';
 import { sanitizeIncremental } from './incremental';
-import { parseMaxStaleness, sanitizeFreshOnAsk } from './freshOnAskRule';
+import { ageMs, parseMaxStaleness, sanitizeFreshOnAsk } from './freshOnAskRule';
 import type { FreshOnAsk } from './freshOnAskRule';
 import { freshOnAskNeedsIncremental, freshOnAskNotForLive, freshOnAskNotSet, freshOnAskRange } from './freshOnAskMessages';
 
@@ -61,15 +61,23 @@ export async function setFreshOnAsk(
 }
 
 /**
- * Record that a pull started at `at` (ISO). False — nothing written that
- * matters — when fresh on ask is no longer on for the record.
+ * CLAIM the pull window of `windowMs` that starts `now` — the cross-pod
+ * compare-and-set: under the record's own lock (recordFs.locked, every pod),
+ * stamp `triggeredAt` unless the rows landed inside the window or another pod
+ * stamped it. One read-modify-write on the lock's one client — never a second
+ * client held while it waits for a third (NV-41), and capped per pod by
+ * recordFs's holds. False — nothing written that matters — when it is claimed
+ * elsewhere, fresh, or fresh on ask is no longer on for the record.
  */
-export async function stampTriggered(projectId: string, id: string, at: string): Promise<boolean> {
+export async function claimWindow(projectId: string, id: string, windowMs: number, now = Date.now()): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const res = await serialized(datasetFilePath(projectId, id), (raw) => {
     const { fo } = current(raw);
     if (!fo) return false;
-    raw.freshOnAsk = { maxStalenessSec: fo.maxStalenessSec, triggeredAt: at };
+    if (ageMs(typeof raw.lastRefreshedAt === 'string' ? raw.lastRefreshedAt : undefined, now) < windowMs) return false; // landed meanwhile
+    const prev = fo.triggeredAt ? Date.parse(fo.triggeredAt) : NaN;
+    if (Number.isFinite(prev) && now - prev < windowMs) return false; // another pod claimed this window
+    raw.freshOnAsk = { maxStalenessSec: fo.maxStalenessSec, triggeredAt: new Date(now).toISOString() };
     return true;
   });
   return res === true;
