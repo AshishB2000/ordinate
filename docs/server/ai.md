@@ -35,6 +35,7 @@ OpenAI-compatible gateway on a private address needs `SSRF_ALLOW` for its range.
      is sent, and no reply, log line or page ever contains the key again.
    - For the gateway, also give its base URL (for example `https://gateway.example.com/v1`) and a
      model id to test with. Other providers have a base URL under **Advanced**, for a proxy.
+     Changing a saved base URL needs the key again: a stored key is only sent where it was entered for.
    - **Connect** saves the key and makes one small real call. The provider shows *Connected* only
      if that call passes. If it fails, the provider's error appears under the form, the key stays
      saved, and the provider stays off until a test passes.
