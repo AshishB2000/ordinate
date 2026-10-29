@@ -208,6 +208,43 @@ async function main(): Promise<void> {
   const copied = await call('privacy:shareReply', { projectId: pid, datasetId: did, encoding: byEmail, reply: { ok: true, data: inApp.data }, path: 'export' });
   ok('Copy data: a reply the renderer holds comes back masked', copied.ok && copied.data.labels.every((l: string) => /^#/.test(l)));
 
+  // ── 3b'. Maps: every column a map writes VALUES of (NV-26) ──────────────
+  const geoDs = await datasets.saveDataset(pid, { name: 'Trips', sourceKind: 'csv', columns: [
+    ...['store_lat', 'store_lon', 'dest_lat', 'dest_lon', 'home_lat', 'home_lon', 'lat', 'lon', 'qty', 'amount'].map((name) => ({ name, type: 'number' as const })),
+    { name: 'customer', type: 'text' as const }, { name: 'email', type: 'text' as const },
+  ], rows: [
+    [40.7, -74.0, 40.75, -73.95, 40.8, -73.9, 40.71, -74.01, 1, 100, 'Ann Lee', 'ann@example.com'],
+    [34.0, -118.2, 34.05, -118.25, 34.1, -118.3, 34.01, -118.21, 2, 200, 'Bo Kim', 'bo@example.com'],
+    [41.9, -87.6, 41.95, -87.65, 42.0, -87.7, 41.91, -87.61, 3, 300, 'Cy Day', 'cy@example.com'],
+  ] });
+  const gid = geoDs!.id;
+  for (const c of ['home_lat', 'home_lon', 'lat', 'lon', 'customer', 'email']) await catalog.setColumn(pid, gid, c, { sensitivity: 'personal' });
+  await catalog.setColumn(pid, gid, 'amount', { sensitivity: 'financial' });
+  const qty = [{ column: 'qty', aggregation: 'count' }]; // an UNMARKED measure: only the geo role under test is sensitive
+  const store2 = { lat: 'store_lat', lon: 'store_lon' };
+  const maps: Record<string, unknown> = {
+    'point colour': { category: '', values: qty, geo: { level: 'point', ...store2, color: 'email' } },
+    'flow destination': { category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'home_lat', lon2: 'home_lon' } },
+    'flow end names': { category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'dest_lat', lon2: 'dest_lon', from: 'customer', to: 'email' } },
+    'point, coordinates found by name': { category: '', values: qty, geo: { level: 'point' } },
+  };
+  const mapReq = (encoding: unknown, share?: string) => call('visual:data', { projectId: pid, datasetId: gid, encoding, ...(share ? { share } : {}) });
+  const rawGeo = JSON.stringify((await mapReq(maps['point colour'])).data);
+  ok('map, control: in the app a point map coloured by email carries the raw emails', rawGeo.includes('ann@example.com'), rawGeo.slice(0, 200));
+  for (const action of ['mask', 'drop'] as const) {
+    await store.setPolicy(pid, { export: action });
+    for (const [name, encoding] of Object.entries(maps)) {
+      const r = await mapReq(encoding, 'export');
+      ok(`map/${action}: ${name} on a marked column is hidden`, r.ok === false && r.hiddenByPolicy === true, JSON.stringify(r).slice(0, 200));
+    }
+  }
+  await store.setPolicy(pid, { export: 'mask' });
+  const sized = await mapReq({ category: '', values: [{ column: 'amount', aggregation: 'sum' }], geo: { level: 'point', ...store2 } }, 'export');
+  ok('map/mask: a point\'s size is its row\'s own cell, so a marked size column hides the map', sized.hiddenByPolicy === true, JSON.stringify(sized).slice(0, 200));
+  const openMap = await mapReq({ category: '', values: qty, geo: { level: 'flow', ...store2, lat2: 'dest_lat', lon2: 'dest_lon' } }, 'export');
+  ok('map/mask: a map over unmarked columns only is untouched (control)', openMap.ok === true, JSON.stringify(openMap).slice(0, 200));
+  await datasets.deleteDataset(pid, gid);
+
   // A column masked in Prepare is not masked again, and not counted.
   const stepped = await datasets.updateSteps(pid, did, [{ type: 'mask_hash', column: 'email' }]);
   ok('fixture: a Prepare hash step on email', !!stepped);

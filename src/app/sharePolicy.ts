@@ -271,7 +271,14 @@ export async function applyToChart<R extends ChartReplyLike>(
   const serS = await sens(encoding.seriesDatasetId, encoding.series);
   const rowDims = encoding.pivot ? await Promise.all(encoding.pivot.rows.map((d) => sens(datasetId, d.column))) : [];
   const colDims = encoding.pivot ? await Promise.all(encoding.pivot.columns.map((d) => sens(datasetId, d.column))) : [];
-  const geoS = encoding.geo ? (await sens(datasetId, encoding.geo.lat)) || (await sens(datasetId, encoding.geo.lon)) : false;
+  // Every column a map writes VALUES of into its reply: the coordinates it drew (a point map finds its own by
+  // name when the encoding's do not resolve), the destination, the route names, the colour — and a point's size,
+  // which is its row's own cell, not an aggregate.
+  const g = encoding.geo;
+  const drew = (reply.data.geo || {}) as { lat?: unknown; lon?: unknown };
+  const size = g && g.level === 'point' && encoding.values?.[0]?.aggregation !== 'count' ? encoding.values?.[0]?.column : undefined;
+  const geoCols = g ? [g.lat, g.lon, g.lat2, g.lon2, g.from, g.to, g.color, drew.lat, drew.lon, size] : [];
+  const geoS = (await Promise.all(geoCols.map((c) => sens(datasetId, typeof c === 'string' ? c : undefined)))).some(Boolean);
   const labelUse = catS || serS || rowDims.some(Boolean) || colDims.some(Boolean);
   const valueUse = (await Promise.all([
     ...(encoding.values || []).map((m) => sens(datasetId, m.column)),
