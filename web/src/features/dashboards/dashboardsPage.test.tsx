@@ -47,47 +47,8 @@ async function openMore() {
   await screen.findByRole('menuitem', { name: 'Export HTML' });
 }
 
-describe('Dashboards page', () => {
-  it('opens on the Ready dashboards, each a link to its view page; a dashboard not Ready is not listed', async () => {
-    serve('admin');
-    renderApp(`/dashboards?project=${P}`);
-    const card = await screen.findByRole('link', { name: /Ready board/ });
-    expect(card.getAttribute('href')).toBe(`/dashboards/${P}/${A1}`);
-    expect(screen.queryByText('Draft board')).toBeNull();
-    // No tabs: the Ready dashboards are the page.
-    expect(screen.queryByRole('tab', { name: 'Shared links' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Dashboards' })).toBeNull();
-  });
-
-  it('with none Ready, says what Ready means — an editor gets the way to Analyses, and Create dashboard in the header', async () => {
-    serve('admin', { 'analysis:gallery': { body: [board(A2, 'Draft board')] } });
-    renderApp(`/dashboards?project=${P}`);
-    await screen.findByRole('heading', { name: 'No dashboards are Ready yet' });
-    expect(screen.getByText(/switch Ready on at the top of one/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Go to Analyses' }).getAttribute('href')).toBe(`/analyses?project=${P}`);
-    expect(screen.getAllByRole('link', { name: 'Create dashboard' })).toHaveLength(1); // the header's, not repeated
-  });
-
-  it('NEGATIVE CONTROL: a viewer’s empty state offers nothing to create', async () => {
-    serve('viewer', { 'analysis:gallery': { body: [] } });
-    renderApp(`/dashboards?project=${P}`);
-    await screen.findByText(/once an editor of this project marks it Ready/);
-    expect(screen.queryByRole('link', { name: 'Create dashboard' })).toBeNull();
-  });
-
-  it('the published list keeps its address but no tab: &dashboard= opens Publish on it, and closing stays on the list', async () => {
-    const calls = serve('admin');
-    const router = renderApp(`/dashboards?project=${P}&dashboard=${A1}`);
-    await screen.findByRole('dialog', { name: 'Publish' });
-    expect(screen.queryByRole('tab', { name: 'Shared links', hidden: true })).toBeNull();
-    expect(calls.some((c) => c.channel === 'analysis:gallery')).toBe(false); // the Ready list is never asked for
-    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Publish' }), { key: 'Escape' });
-    await waitFor(() => expect(router.state.location.search).toBe(`?project=${P}&tab=links`));
-    await screen.findByRole('heading', { name: 'Nothing published yet' });
-  });
-});
-
-describe('The view page', () => {
+// First in the file now (the list moved to list/dashboardList.test.tsx), so it pays the lazy routes' first load.
+describe('The view page', { timeout: 30_000 }, () => {
   it('is the canvas with no editing tool: Dashboards / project back to the list, no badge, no Edit, no Present, and Copy link in ⋯ for an editor too', async () => {
     serve('admin');
     renderApp(`/dashboards/${P}/${A1}`);

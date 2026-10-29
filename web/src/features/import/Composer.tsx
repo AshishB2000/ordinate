@@ -100,7 +100,7 @@ export function Composer({ projectId, start, onBack }: { projectId: string; star
       void client.invalidateQueries({ queryKey: ['dataset:list', projectId] });
       void client.invalidateQueries({ queryKey: ['captureDataset:list', projectId] });
       void client.invalidateQueries({ queryKey: ['captureDataset:get', projectId] });
-      void navigate(start.next === 'analysis' ? `/analyses?project=${projectId}&new=1&dataset=${r.dataset.id}` : `/data/${projectId}/${r.dataset.id}`);
+      void navigate(start.next === 'analysis' ? `/dashboards?project=${projectId}&new=1&dataset=${r.dataset.id}` : `/data/${projectId}/${r.dataset.id}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'The dataset could not be saved.', { kind: 'error' });
     } finally {

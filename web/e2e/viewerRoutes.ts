@@ -161,8 +161,8 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/data', url: (s) => `/data?project=${s.pid}`, editor: { role: 'link', name: 'Import file' } },
   { pattern: '/visuals', url: (s) => `/visuals?project=${s.pid}`, editor: { role: 'button', name: 'New visual' } },
   { pattern: '/analyses', url: (s) => `/analyses?project=${s.pid}`, editor: { role: 'button', name: 'Create dashboard' } },
-  // The Ready dashboards (no tabs), and the published list still at its address (`&tab=links`, linked from nowhere).
-  { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}`, editor: { role: 'link', name: 'Create dashboard' } },
+  // The dashboards (an editor's Published and Drafts tabs), and the published links still at their address (`&tab=links`, linked from nowhere).
+  { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}`, editor: { role: 'button', name: 'Create dashboard' } },
   { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}&tab=links`, editor: { role: 'button', name: 'Publish…' } },
   // A question by link (docs/explore): an editor may save it; a viewer explores and shares it, and keeps Copy link.
   {

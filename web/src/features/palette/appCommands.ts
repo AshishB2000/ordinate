@@ -56,7 +56,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'create.capture', title: 'New dataset from a screenshot', group: 'Create', icon: 'camera', when: canEdit, run: () => d.go('/data/captures') },
     { id: 'create.connect', title: 'New dataset from a connection', group: 'Create', icon: 'plug', when: canEdit, run: () => d.go('/connections') },
     // The dashboard wizard (T2.8). The desktop's ⌘N is the browser's own new window here, so no chord.
-    { id: 'create.dashboard', title: 'New dashboard', group: 'Create', icon: 'layout-dashboard', when: canEdit, run: () => d.go('/analyses?new=1') },
+    { id: 'create.dashboard', title: 'New dashboard', group: 'Create', icon: 'layout-dashboard', when: canEdit, run: () => d.go('/dashboards?new=1') },
     {
       id: 'ai.toggle',
       title: d.dockOpen ? 'Close the Assistant' : 'Open the Assistant',

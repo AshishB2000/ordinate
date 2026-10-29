@@ -1,13 +1,13 @@
-// Analyses and authoring (T2.8) against the real server:
+// Dashboards and authoring (T2.8) against the real server:
 //
-//   the dashboards list with live previews → the create wizard (choose data,
+//   the dashboards list (its Drafts) with live previews → the create wizard (choose data,
 //   start from a blank sheet) → the empty sheet → add a text card and a KPI
 //   picked from the project's metrics (the server's figure) → a parameter
 //   whose value the text card shows → move a card from the keyboard → the
 //   autosave survives a reload → the phone layout (hide a card, the tray,
 //   show it) → the sample dashboard drawn on the canvas, a filter control
 //   narrows a KPI (a SECOND figure from the server), Properties, undo.
-//   And the AI draft with no model says how to connect one.
+//   And Draft with AI, with no model, says how to connect one.
 //
 //   npm --prefix web run e2e
 
@@ -33,13 +33,13 @@ async function saved(page: Page): Promise<void> {
 
 e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → keyboard move → saved → phone layout', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
-  const list = page.getByRole('list', { name: 'Dashboards' });
+  // The sample dashboard is a draft, and nothing is published: the page opens on Drafts.
+  const list = page.getByRole('list', { name: 'Draft dashboards' });
   await list.getByText('Retail overview').waitFor();
-  await page.getByText('1 dashboard').waitFor();
   // The previews are the first sheet's charts, drawn from the server's figures.
-  await page.waitForFunction(() => document.querySelectorAll('ul[aria-label="Dashboards"] canvas').length >= 1);
+  await page.waitForFunction(() => document.querySelectorAll('ul[aria-label="Draft dashboards"] canvas').length >= 1);
   await screens(page, 'analyses-list');
   // Measured: RPCs for the list's load, then for the wizard (steps 1–2, no URL change).
   const listRpcs = rpc.loads.at(-1)?.rpcs ?? 0;
@@ -148,7 +148,7 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
 
 e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, Properties, undo', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   await page.getByRole('link', { name: /Retail overview/ }).click();
   await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
@@ -211,7 +211,7 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
 });
 
 e2e('the rail’s "Calculated field" opens the dialog in place, over the selected card’s dataset', async ({ page, server }) => {
-  await page.goto(`/analyses?project=${server.sample.projectId}`);
+  await page.goto(`/dashboards?project=${server.sample.projectId}`);
   await settled(page);
   await page.getByRole('link', { name: /Retail overview/ }).click();
   await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
@@ -231,12 +231,12 @@ e2e('the rail’s "Calculated field" opens the dialog in place, over the selecte
   await calc.waitFor({ state: 'detached' });
 });
 
-e2e('draft with the Assistant, no model: the door is shut and says why', async ({ page, server }) => {
-  await page.goto(`/analyses?project=${server.sample.projectId}`);
+e2e('draft with AI, no model: the door is shut and says why', async ({ page, server }) => {
+  await page.goto(`/dashboards?project=${server.sample.projectId}`);
   await settled(page);
-  const draft = page.getByRole('button', { name: 'Draft with the Assistant' });
+  const draft = page.getByRole('button', { name: 'Draft with AI' });
   await page.waitForFunction(() => {
-    const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.includes('Draft with the Assistant'));
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.includes('Draft with AI'));
     return !!b && b.disabled && /AI isn’t set up for your organization/.test(b.title);
   });
   assert.equal(await draft.isDisabled(), true);
@@ -259,7 +259,7 @@ const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000002000000010802000
 
 e2e('card kinds: a statistics card recomputed by the server, an uploaded image, a navigation strip', async ({ page, server }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
   const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;

@@ -196,6 +196,6 @@ e2e('Home → New → Dashboard opens the new-dashboard wizard, in Home\'s proje
   await page.getByRole('menu', { name: 'New' }).getByRole('menuitem', { name: 'Dashboard' }).click();
   await page.getByRole('dialog', { name: 'Create dashboard' }).waitFor();
   const url = new URL(page.url());
-  assert.equal(url.pathname, '/analyses');
+  assert.equal(url.pathname, '/dashboards');
   assert.equal(url.searchParams.get('project'), server.sample.projectId);
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { buildParam } from './ParamDialog';
 
@@ -11,7 +11,6 @@ afterEach(() => {
 const PID = '11111111-1111-4111-8111-111111111111';
 const DID = '22222222-2222-4222-8222-222222222222';
 const A1 = '33333333-3333-4333-8333-333333333333';
-const A2 = '44444444-4444-4444-8444-444444444444';
 const M1 = '55555555-5555-4555-8555-555555555555';
 const ME = { user: { email: 'dev@local', role: 'admin' }, org: 'default', mode: 'dev', canSignOut: false };
 const PROJECT = { id: PID, name: 'Sales', updatedAt: '2026-10-01T10:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 2, sample: false };
@@ -45,66 +44,11 @@ const base = (extra: Record<string, Reply> = {}) => ({
   ...extra,
 });
 
-const board = (id: string, name: string) => ({ id, name, sheetCount: 1, updatedAt: '2026-10-01T10:00:00Z', previews: [], sheets: [{ id: A1, name: 'Overview' }] });
-
-describe('Analyses list', () => {
-  it('shows each dashboard’s catalog tags and narrows the grid to one tag', async () => {
-    serve(base({ 'analysis:gallery': { body: [board(A1, 'Revenue board'), board(A2, 'Ops board')] } }));
-    renderApp(`/analyses?project=${PID}`);
-    const list = await screen.findByRole('list', { name: 'Dashboards' });
-    expect(within(list).getByText('Ops board')).toBeTruthy();
-    const bar = await screen.findByRole('toolbar', { name: 'Filter by tag' });
-    fireEvent.click(within(bar).getByRole('button', { name: 'finance' }));
-    expect(within(screen.getByRole('list', { name: 'Dashboards' })).queryByText('Ops board')).toBeNull();
-    expect(within(screen.getByRole('list', { name: 'Dashboards' })).getByText('Revenue board')).toBeTruthy();
-  });
-
-  it('shuts the Assistant’s doors with no model, and sends an admin to Admin → AI', async () => {
-    serve(base({ 'analysis:gallery': { body: [] } }));
-    renderApp(`/analyses?project=${PID}`);
-    await screen.findByRole('heading', { name: 'No dashboards yet' });
-    await screen.findByText(/AI isn’t set up for your organization yet/);
-    for (const b of screen.getAllByRole('button', { name: 'Draft with the Assistant' })) expect((b as HTMLButtonElement).disabled).toBe(true);
-    expect((await screen.findByRole('link', { name: /Set up AI/ })).getAttribute('href')).toBe('/admin?tab=ai');
-  });
-
-  it('shows a viewer the dashboards without Create, Rename or Delete — and an editor all three', async () => {
-    const gallery = { 'analysis:gallery': { body: [board(A1, 'Revenue board')] } };
-    serve(base({ ...gallery, 'projects:roles': { body: { [PID]: 'viewer' } } }));
-    renderApp(`/analyses?project=${PID}`);
-    await screen.findByRole('list', { name: 'Dashboards' });
-    await screen.findByRole('link', { name: /Metrics/ });
-    expect(screen.queryByRole('button', { name: 'Create dashboard' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Draft with the Assistant' })).toBeNull();
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Dashboard options' }), { button: 0, ctrlKey: false });
-    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'History', 'Lineage']);
-    cleanup();
-    serve(base(gallery)); // the base role is admin
-    renderApp(`/analyses?project=${PID}`);
-    expect(await screen.findByRole('button', { name: 'Create dashboard' })).toBeTruthy();
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Dashboard options' }), { button: 0, ctrlKey: false });
-    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'Rename', 'History', 'Lineage', 'Delete']);
-  });
-
-  it('a viewer following a “New dashboard” link gets no wizard, and is told who can build one', async () => {
-    serve(base({ 'analysis:gallery': { body: [] }, 'projects:roles': { body: { [PID]: 'viewer' } } }));
-    renderApp(`/analyses?project=${PID}&new=1&dataset=${DID}`);
-    expect(await screen.findByText(/An editor of this project can build dashboards/)).toBeTruthy();
-    expect(screen.queryByRole('dialog', { name: 'Create dashboard' })).toBeNull();
-  });
-
-  it('opens the wizard on “Start from” for a dataset named in the URL (a dataset page’s New dashboard)', async () => {
-    serve(base({ 'analysis:gallery': { body: [] }, 'template:list': { body: { ok: true, datasetId: DID, datasetName: 'Orders', columns: [], templates: [] } } }));
-    renderApp(`/analyses?project=${PID}&new=1&dataset=${DID}`);
-    const wiz = await screen.findByRole('dialog', { name: 'Create dashboard' });
-    expect(await within(wiz).findByRole('radiogroup', { name: 'Layouts' })).toBeTruthy();
-    // No template fits these columns: said, not left blank.
-    expect(await within(wiz).findByText(/No template fits this dataset/)).toBeTruthy();
-  });
-
+// The list itself is the Dashboards page now (dashboards/list/dashboardList.test.tsx); its wizard is still this feature's.
+describe('the new-dashboard wizard, from the list', () => {
   it('a failed dataset list is an error with a retry, not “no datasets yet”', async () => {
     serve(base({ 'analysis:gallery': { body: [] }, 'dataset:list': { status: 500, body: { error: 'boom' } } }));
-    renderApp(`/analyses?project=${PID}&new=1`);
+    renderApp(`/dashboards?project=${PID}&new=1`);
     const wiz = await screen.findByRole('dialog', { name: 'Create dashboard' });
     expect(await within(wiz).findByRole('heading', { name: 'Datasets could not be loaded' })).toBeTruthy();
     expect(within(wiz).queryByText(/no datasets yet/)).toBeNull();
