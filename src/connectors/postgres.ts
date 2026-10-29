@@ -476,6 +476,9 @@ async function withClient<T>(
 ): Promise<T | ConnectorError> {
   const startedAt = Date.now();
   const client = new Client(clientConfig(v, ctx));
+  // NV-12: a peer-driven 'error' (an ErrorResponse with no query running, a reset socket) is emitted
+  // from a socket callback; unlistened it throws and ends the pod. A running query still rejects with it.
+  client.on('error', () => {});
   try {
     await client.connect();
     await applyGuards(v, client, ctx, startedAt);
@@ -719,6 +722,7 @@ export function redshiftBound(
 async function cancelBackend(v: PgVariant, ctx: ConnectorContext, pid: unknown): Promise<void> {
   if (typeof pid !== 'number' || !Number.isInteger(pid)) return;
   const client = new Client(clientConfig(v, { ...ctx, timeoutMs: 5_000 }));
+  client.on('error', () => {}); // NV-12, as in withClient
   try {
     await client.connect();
     await queryArray(client, 'select pg_cancel_backend($1)', [pid]);

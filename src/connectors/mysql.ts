@@ -278,6 +278,9 @@ async function withConnection<T extends { ok: true } | ConnectorError>(
   let backstop: NodeJS.Timeout | null = null;
   try {
     conn = await createConnection(connectionOptions(variant, ctx));
+    // NV-12: createConnection's own 'error' listener is one-shot; a second connection-level error
+    // (a reset after an ERR packet) would be unlistened, throw from a socket callback and end the pod.
+    conn.on('error', () => {});
     const live = conn;
     backstop = setTimeout(() => {
       try { live.destroy(); } catch (_) { /* already gone */ }

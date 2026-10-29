@@ -54,13 +54,16 @@ let clients: FakeClient[] = [];
 let connectImpl: () => Promise<void> = async () => {};
 let queryImpl: (text: string, values?: unknown[]) => Promise<FakeResult> = async () => ({ fields: [], rows: [] });
 
-class FakeClient {
+const { EventEmitter }: typeof import('events') = require('events');
+
+class FakeClient extends EventEmitter {
   config: Record<string, unknown>;
   queries: Recorded[] = [];
   connects = 0;
   ends = 0;
 
   constructor(config: Record<string, unknown>) {
+    super();
     this.config = config || {};
     clients.push(this);
   }
@@ -288,6 +291,8 @@ async function main(): Promise<void> {
     /^\s*set\b/i.test(text) ? {} : { fields: [{ name: 'n', dataTypeID: 23 }], rows: [[1], [2], [3]] };
   r = await byId('postgres').run(makeCtx({ rowLimit: 3 }), 'select n from exact');
   ok('an EXACT fit is not falsely reported as truncated', r.ok === true && r.truncated === false, r);
+  ok('NV-12: the client keeps an error listener, so a peer-driven error cannot end the pod',
+    clients[0]?.listenerCount('error') === 1, clients[0]?.listenerCount('error'));
 
   reset();
   await byId('postgres').run(makeCtx({ rowLimit: 5 }), 'select 1;   ');
