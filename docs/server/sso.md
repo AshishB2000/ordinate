@@ -159,7 +159,8 @@ from this host. See [quick-start.md](quick-start.md#3-sign-in).
 
 **Set `ORDINATE_PUBLIC_URL`** to the address people open (`https://ordinate.example.com`); prod
 refuses to start in header mode without it. Header mode answers only a request whose `Host` is that
-name, an IP address or `localhost`, and anything else gets 421. A web page in a browser on the
+name, an IP address or `localhost`, and anything else gets 421 (`/healthz` and `/readyz` answer any
+`Host`, so probes can call the Service by name). A web page in a browser on the
 proxy's host could otherwise point its own domain at `127.0.0.1` (DNS rebinding), connect from the
 trusted address and set `X-Forwarded-Email` itself. oauth2-proxy passes the browser's `Host`
 upstream by default, which is the public name. A proxy that sets its own `Host` sends

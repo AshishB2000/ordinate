@@ -245,6 +245,12 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     const rrpc = await rebound(REBIND);
     ok('host: …its same-origin RPC with the CSRF pair → 421, the handler never runs', rrpc.statusCode === 421 && rrpc.json().error === 'host', `${rrpc.statusCode} ${rrpc.body}`);
     ok('host: …and its page navigation → 421', (await app.inject({ url: '/', headers: { ...HTML, host: REBIND } })).statusCode === 421);
+    // An in-cluster probe calls by Service name (helm's kind e2e: Host `ordinate:8080`); probes carry no data.
+    for (const url of ['/healthz', '/readyz', '/readyz?x=1']) {
+      const r = await app.inject({ url, headers: { host: 'ordinate:8080' } });
+      ok(`host: ${url} answers a Service-name Host (not 421)`, r.statusCode === 200, `${r.statusCode} ${r.body}`);
+    }
+    ok('host (NEGATIVE CONTROL): …a lookalike path is still pinned', (await app.inject({ url: '/readyz/x', headers: { host: 'ordinate:8080' } })).statusCode === 421);
     for (const h of ['127.0.0.1:8080', 'localhost:8080']) {
       const r = await rebound(h);
       ok(`host (NEGATIVE CONTROL): the same RPC at ${h} → 200`, r.statusCode === 200, `${r.statusCode} ${r.body}`);

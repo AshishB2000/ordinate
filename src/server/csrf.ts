@@ -50,6 +50,8 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Routes that refuse ambient credentials themselves. */
 const BEARER_ONLY = new Set(['/api/mcp', HOOK_ROUTE]);
+/** Probes answer any Host: in-cluster callers use a Service name, and these return no data or identity to rebind for. */
+const HEALTH = new Set(['/healthz', '/readyz']);
 
 /** Origin header → is it this server, by host (scheme and port as the browser saw them). */
 export function sameOrigin(origin: string, host: string | undefined): boolean {
@@ -96,7 +98,9 @@ export interface CsrfOptions {
 /** Registers the check and the cookie. Registered before sign-in's hook (app.ts). */
 export function registerCsrf(app: FastifyInstance, o: CsrfOptions): void {
   app.addHook('onRequest', (req, reply, done) => {
-    if (o.pinHost && !ownHost(req.headers.host, o.publicHost ?? null)) return void reply.code(421).send({ error: 'host' });
+    if (o.pinHost && !HEALTH.has(req.routeOptions.url ?? '') && !ownHost(req.headers.host, o.publicHost ?? null)) {
+      return void reply.code(421).send({ error: 'host' });
+    }
     const bearer = o.bearerDecides && hasBearer(req.headers.authorization);
     const token = cookieToken(req, o.cookie);
     const path = req.url.split('?')[0];

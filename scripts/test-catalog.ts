@@ -159,8 +159,9 @@ async function main(): Promise<void> {
   fs.writeFileSync(corruptPath, '{ this is not json');
   const c = await catalog.load(other!.id);
   ok('a corrupt catalog.json reads as empty', Object.keys(c.records).length === 0 && Object.keys(c.tags).length === 0);
-  ok('…and the next write replaces it cleanly', !!(await catalog.setDoc(other!.id, dsRef, { owner: 'Cy' }))
-    && (await catalog.load(other!.id)).records[dsRef].owner === 'Cy');
+  // NV-29: a write over an unreadable catalog would erase every mark in it, so it is refused and the file kept.
+  ok('…and the next write is refused, the file left as it was', await catalog.setDoc(other!.id, dsRef, { owner: 'Cy' }).then(() => false, () => true)
+    && fs.readFileSync(corruptPath, 'utf8') === '{ this is not json');
 
   // Concurrent writes (the popover saves on blur AND Enter) must both land.
   await Promise.all([

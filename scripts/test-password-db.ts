@@ -325,12 +325,24 @@ const sessionOf = (r: Inject) => {
     ok('rate limit: RATE_LIMIT_LOGIN_PER_MINUTE covers the password routes (4th try → 429)', tries.join() === '200,200,200,429', tries.join());
 
     // NV-39: fresh emails from fresh addresses pass the lockout and the per-IP limit, so this pod caps the scrypts it runs at once.
-    const burst = await Promise.all(Array.from({ length: 12 }, (_, i) => post('login', { email: `stranger${i}@acme.test`, password: 'guess-a-password' }, undefined, `198.51.100.${100 + i}`)));
+    // A lock on `users` holds every sign-in that took a slot inside it (its credentials read waits), so all 12
+    // overlap however slowly they arrive: a free slot here would mean the cap let a fifth one in.
+    const lock = await pool.connect();
+    await lock.query('BEGIN');
+    await lock.query('LOCK TABLE users IN ACCESS EXCLUSIVE MODE');
+    let answered = 0;
+    const pending = Array.from({ length: 12 }, (_, i) =>
+      post('login', { email: `stranger${i}@acme.test`, password: 'guess-a-password' }, undefined, `198.51.100.${100 + i}`).then((r) => (answered++, r)));
+    for (const t0 = Date.now(); answered < 8 && Date.now() - t0 < 15_000; ) await new Promise((res) => setTimeout(res, 20));
+    const whileHeld = answered;
+    await lock.query('ROLLBACK');
+    lock.release();
+    const burst = await Promise.all(pending);
     const codes = burst.map((r) => (r.statusCode === 200 ? String(r.json().error) : String(r.statusCode)));
     const busy = burst.filter((r) => refused(r, 'busy'));
     ok('busy: 12 sign-ins at once → some `busy` with Retry-After, the rest refused as usual, never a 5xx',
       busy.length > 0 && busy.every((r) => r.headers['retry-after'] === '1') && codes.every((c) => c === 'busy' || c === 'invalid'), codes.join());
-    ok('busy: …at most 4 hashed at once (the rest answered without a scrypt)', burst.length - busy.length <= 4, codes.join());
+    ok('busy: …exactly 4 hashed at once, the other 8 answered `busy` without a scrypt', busy.length === 8 && whileHeld === 8, `${codes.join()} (${whileHeld} answered while held)`);
     ok('busy (NEGATIVE CONTROL): once they finish, a sign-in hashes again', accepted(await post('login', { email: 'boss@acme.test', password: BOSS })));
 
     // ── After a move to SSO a leftover temporary password holds nobody ─────

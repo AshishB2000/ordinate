@@ -35,7 +35,8 @@ export function failureCount(): number {
  * The bridge is read from the require cache, so this module loads nothing.
  */
 export function finish(): void {
-  const code = failures ? 1 : 0;
+  // A suite's own `process.exitCode = 1` (its harness threw) stands: no failed check must not read as green.
+  const code = failures || Number(process.exitCode ?? 0) ? 1 : 0;
   process.exitCode = code; // the verdict even if the process ends on its own (a wedged worker let go)
   const duck = require.cache[require.resolve('../src/engine/duckdb')]?.exports as typeof import('../src/engine/duckdb') | undefined;
   if (!duck) process.exit(code);

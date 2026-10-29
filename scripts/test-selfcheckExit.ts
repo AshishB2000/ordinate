@@ -70,5 +70,10 @@ ok("finish() with a query in flight in an org's pool worker (routeByOrg): waits 
 const bare = run('bare');
 ok('negative control: a bare process.exit() around the query aborts, its worker still alive', bare.code !== 0 && bare.aborted && bare.alive === 1, JSON.stringify(bare));
 
+// A harness that threw sets exitCode 1 with no failed check: finish() must keep it (it once reset it to 0).
+const verdict = (pre: string) => spawnSync(process.execPath, ['-e', `${pre}; require('./scripts/selfcheck.js').finish();`], { cwd: root, encoding: 'utf8' }).status;
+ok('finish(): a harness that threw (exitCode 1, no failed check) still exits 1', verdict('process.exitCode = 1') === 1);
+ok('finish() (NEGATIVE CONTROL): nothing failed → exit 0', verdict('') === 0);
+
 fs.rmSync(dataDir, { recursive: true, force: true });
 finish();
