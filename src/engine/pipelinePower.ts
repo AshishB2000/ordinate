@@ -118,15 +118,14 @@ export async function planPower(schema: SqlColumn[], steps: TransformStep[], opt
   if (gen.sql === null) return null;
 
   if (!steps.length) return { gen, counts: [] };
-  const parts = ['(SELECT CAST(count(*) AS DOUBLE) FROM "t") AS n0'];
-  const params: Param[] = [];
-  for (let k = 1; k <= steps.length; k += 1) {
-    const g = k === steps.length ? gen : generateSql('t', schema, steps.slice(0, k), opts);
-    if (g.sql === null) return null;
-    parts.push(`(SELECT CAST(count(*) AS DOUBLE) FROM (${g.sql}) AS q${k}) AS n${k}`);
-    params.push(...g.params);
-  }
-  const row = (await run(`SELECT ${parts.join(', ')}`, params))[0] || {};
+  // Every count from the ONE chain: the relation after step k is a CTE of `gen`
+  // itself, so the statement is the pipeline once plus a count per step. A copy
+  // of each prefix pipeline per step was O(steps² × width) on the request
+  // thread — 200 steps over 2,000 columns built ~280 MB of SQL (NV-51).
+  const tail = /\nSELECT [^\n]* FROM s\d+ ORDER BY __ord$/.exec(gen.sql);
+  if (!tail || !gen.rels || gen.rels.length !== steps.length) return null;
+  const parts = ['s0', ...gen.rels].map((rel, k) => `(SELECT CAST(count(*) AS DOUBLE) FROM ${rel}) AS n${k}`);
+  const row = (await run(`${gen.sql.slice(0, tail.index)}\nSELECT ${parts.join(', ')}`, gen.params))[0] || {};
   const n = (k: number): number => Number(row['n' + k]);
   return { gen, counts: steps.map((_, k) => ({ before: n(k), after: n(k + 1) })) };
 }

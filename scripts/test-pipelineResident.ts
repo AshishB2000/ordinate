@@ -214,3 +214,28 @@ test('the table is never hydrated: no rows are read into JS to run the pipeline'
     parquetStore.readTableAsync = realRead;
   }
 });
+
+// NV-51: the per-step row counts come from ONE chain — the statement grows with
+// steps × width, not steps² × width. Negative control: the old construction (a
+// regenerated prefix pipeline per step) quadruples when the steps double.
+test('the step-count statement is linear in the step count', async () => {
+  const { planPower } = require('../src/engine/pipelinePower');
+  const { generateSql } = require('../src/engine/sqlGen');
+  const schema = Array.from({ length: 200 }, (_, i) => ({ physical: `c${i}`, name: `a${i}`, type: 'text' }));
+  const steps = (k: number): any[] => Array.from({ length: k }, () => ({ type: 'trim', column: 'a0' }));
+  const longest = async (k: number): Promise<number> => {
+    let max = 0;
+    const out = await planPower(schema, steps(k), {}, async (sql: string) => { max = Math.max(max, sql.length); return [{}]; });
+    assert.ok(out !== null && out.counts.length === k, 'planPower declined');
+    return max;
+  };
+  const oldStyle = (k: number): number => {
+    let len = 0;
+    for (let j = 1; j <= k; j++) len += generateSql('t', schema, steps(k).slice(0, j)).sql.length;
+    return len;
+  };
+  const [a, b] = [await longest(50), await longest(100)];
+  assert.ok(b / a < 2.2, `count statement grew ${(b / a).toFixed(2)}x when the steps doubled (${a} → ${b} chars)`);
+  const [oa, ob] = [oldStyle(50), oldStyle(100)];
+  assert.ok(ob / oa > 3.5, `negative control: the per-prefix statement grew only ${(ob / oa).toFixed(2)}x`);
+});

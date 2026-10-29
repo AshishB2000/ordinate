@@ -326,6 +326,15 @@ async function main(): Promise<void> {
   const again = await datasets.updateSteps(pid, a.id, [lookup]);
   ok('a deleted reference skips the step with a warning, never throws',
     again !== null && /not found/.test(again.output.warnings.join()) && again.output.columns.length === T.columns.length);
+
+  // NV-51: a step list may grow to MAX_STEPS (200) and no further.
+  const trims = (k: number) => Array.from({ length: k }, () => ({ type: 'trim', column: 'sku' }));
+  const at200 = await datasets.updateSteps(pid, a.id, trims(200));
+  ok('negative control: 200 steps are kept', at200 !== null && (at200.dataset.steps || []).length === 200);
+  const past = await datasets.updateSteps(pid, a.id, trims(201)).then(() => 'saved', (e: Error) => e.message);
+  ok('a 201st step is refused with the cap sentence', /at most 200 prepare steps/.test(past), past);
+  const stored = await datasets.getDatasetMeta(pid, a.id);
+  ok('…and the stored list is untouched', ((stored && stored.steps) || []).length === 200);
 }
 
 main()

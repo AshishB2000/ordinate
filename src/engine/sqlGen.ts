@@ -64,6 +64,9 @@ export interface GenResult {
   warnings: string[]; // byte-identical to what transforms.ts would emit
   retypeColumns: string[]; // physical names whose type must be re-derived in TS
   unsupported?: string; // why sql is null
+  // The relation after each step — its own CTE, or the one before when it emitted
+  // none. engine/pipelinePower counts every step's rows from these in ONE chain.
+  rels?: string[];
 }
 
 // The hidden ordinal. Never appears in `columns`; stripped at the outer SELECT.
@@ -193,6 +196,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
   const retyped = new Set<string>();
   const powerRetype = new Set<string>(); // the subset a power step typed (sqlGenPower.ts)
   const ctes: string[] = [];
+  const rels: string[] = [];
 
   const bail = (reason: string): GenResult => ({
     sql: null,
@@ -568,6 +572,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
         break;
       }
     }
+    rels.push(cur);
   }
 
   // A SELECT with an empty select list is a DuckDB PARSER error (06 §4 G7), and
@@ -578,5 +583,5 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
     `WITH ${ctes.join(',\n     ')}\n` +
     `SELECT ${cols.map((c) => c.physical).join(', ')} FROM ${cur} ORDER BY ${ORD}`;
 
-  return { sql, params, columns: cols, warnings, retypeColumns: retype };
+  return { sql, params, columns: cols, warnings, retypeColumns: retype, rels };
 }

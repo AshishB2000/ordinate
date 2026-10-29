@@ -33,7 +33,8 @@ import { summarize } from './datasetSummary';
 import type { DatasetSummary } from './datasetSummary';
 import { sanitizeQuality } from '../analysis/qualityRules';
 import type { DatasetQuality } from '../analysis/qualityRules';
-import type { StepCount } from './stepTypes';
+import { MAX_STEPS, type StepCount } from './stepTypes';
+import { tooManySteps } from './workBudgetMessages';
 import { loadStepRefs } from './stepRefs';
 import { sanitizeInputBlock } from './inputTable/columns';
 import type { InputBlock } from './inputTable/columns';
@@ -735,6 +736,8 @@ export async function updateSteps(
   if (!existing) return null;
 
   const steps: TransformStep[] = transforms.sanitizeSteps(rawSteps);
+  // NV-51: add-a-step and plan apply append; past MAX_STEPS a list may only shrink.
+  if (steps.length > MAX_STEPS && steps.length > (existing.steps || []).length) throw new Error(tooManySteps(String(MAX_STEPS)));
   // Snapshot the current data as the immutable source the first time steps exist.
   const source: TableData = existing.source ?? {
     columns: existing.columns.map((c) => ({ ...c })),
