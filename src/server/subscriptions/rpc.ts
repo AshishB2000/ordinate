@@ -159,7 +159,7 @@ export function register(): void {
   registry.handle('subscription:preview', async (_e, { projectId, draft, id }: { projectId: string; draft: Draft; id?: string }) => {
     const schedule = sanitizeSubSchedule(draft.schedule);
     const timezone = sanitizeTimeZone(draft.timezone);
-    const a = await analysis.getAnalysis(projectId, draft.analysisId);
+    const a = await analysis.getAudienceAnalysis(projectId, draft.analysisId); // the cards the send can carry: its own
     if (!a) return { ok: false as const, error: say.runText('dashboard_gone') };
     const frame = {
       scheduleText: say.scheduleText(schedule, timezone),

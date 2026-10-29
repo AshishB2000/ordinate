@@ -3,7 +3,7 @@
 // narrowed by hand as in web/src/api/projects.ts — contracts carry inputs only.
 
 import { useContext } from 'react';
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditorCtx } from './editor/context';
 import { rpc, RpcError, type RpcInput } from '../../api/client';
 import type { ChartDataShape } from '../../charts/types';
@@ -99,8 +99,20 @@ export interface Analysis {
   views?: SavedView[];
   defaultViewId?: string;
   updatedAt: string;
-  /** Listed on the Dashboards page (analysis:setReady); absent = not. */
-  ready?: true;
+}
+
+// ── Drafts and Publish (src/analysis/publishedCopy.ts) ───────────────────
+// Every dashboard is a draft only editors and admins see; Publish freezes it
+// (layout, filters, text, KPIs and each chart's definition) as the published
+// copy viewers read until the next Publish. Figures stay live.
+
+/** never published · published, the draft is what was published · published, with edits not live yet. */
+export type DashboardStatus = 'draft' | 'published' | 'edited';
+/** About the published copy — never its sheets. `versionKey`: the version recorded at Publish (`versions:diff` from it to now); absent once unknown. */
+export interface PublishedMeta {
+  publishedAt: string;
+  publishedBy?: string;
+  versionKey?: string;
 }
 
 // ── Saved views (src/analysis/savedViews.ts) ─────────────────────────────
@@ -148,13 +160,17 @@ export interface GalleryItem {
   name: string;
   sheetCount: number;
   updatedAt: string;
-  /** Listed on the Dashboards page (analysis:setReady). */
-  ready?: true;
+  status: DashboardStatus;
+  publishedAt?: string;
+  publishedBy?: string;
   previews: VisualDef[];
   sheets: { id: string; name: string }[];
 }
 
-/** `analysis:gallery` — every dashboard with its first sheet's first two visuals. */
+/**
+ * `analysis:gallery` — every dashboard with its first sheet's first two visuals and its status. A viewer's holds
+ * published ones only (status `published`), each card built from the published copy.
+ */
 export const galleryQuery = (projectId: string) => ({
   queryKey: ['analysis:gallery', projectId],
   queryFn: async () => (await rpc('analysis:gallery', { projectId })) as GalleryItem[],
@@ -163,17 +179,71 @@ export function useGallery(projectId: string) {
   return useQuery(galleryQuery(projectId));
 }
 
-/** `tag`: the record's content tag, the editor's first base (src/app/editConflict.ts). */
-export type OpenReply = { ok: true; analysis: Analysis; visuals: VisualDef[]; tag?: string } | { ok: false; error: string };
+/**
+ * `tag`: the record's content tag, the editor's first base (src/app/editConflict.ts). `showing`: which one `analysis`
+ * is — the draft, or the published copy (its cards' charts frozen: `visuals` are those definitions). A viewer's is
+ * always the copy, with `status` `published`.
+ */
+export type OpenReply =
+  | { ok: true; analysis: Analysis; visuals: VisualDef[]; tag?: string; status: DashboardStatus; showing: 'draft' | 'published'; published?: PublishedMeta }
+  | { ok: false; error: string };
 
-/** `analysis:open` — the record and every visual it could show. Never refetched under an open editor. */
-export function useOpenAnalysis(projectId: string, id: string) {
+/** The query key of a dashboard's open reply: the draft's, or (`published`) the published copy's. */
+export const openKey = (projectId: string, id: string, published = false) => (published ? ['analysis:open', projectId, id, 'published'] : ['analysis:open', projectId, id]);
+
+/**
+ * `analysis:open` — the record and every visual it could show. Never refetched under an open editor. `published`:
+ * the published copy (the view page) — an editor gets the draft when there is none yet (`showing: 'draft'`, a
+ * Preview); a viewer gets the copy whatever is asked, and a draft never published is a refusal.
+ */
+export function useOpenAnalysis(projectId: string, id: string, opts: { published?: boolean } = {}) {
+  const published = opts.published === true;
   return useQuery({
-    queryKey: ['analysis:open', projectId, id],
-    queryFn: async () => (await rpc('analysis:open', { projectId, id })) as OpenReply,
+    queryKey: openKey(projectId, id, published),
+    queryFn: async () => (await rpc('analysis:open', { projectId, id, ...(published ? { published } : {}) })) as OpenReply,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+}
+
+export type PublishReply = { ok: true; status: DashboardStatus; published: PublishedMeta };
+export type UnpublishReply = { ok: true; status: DashboardStatus };
+/** The restored draft and its tag (the editor's next base). */
+export type DiscardReply = { ok: true; analysis: Analysis; tag: string; status: DashboardStatus; published: PublishedMeta };
+
+async function done<T>(p: Promise<unknown>, fallback: string): Promise<T> {
+  const r = (await p) as { ok?: boolean };
+  if (!r || r.ok !== true) throw new Error(failure(r, fallback));
+  return r as T;
+}
+
+/**
+ * Publish, Unpublish and Discard edits for one dashboard (editors: the channels are `write`). Each keeps the
+ * gallery and the published copy's open reply current, and the draft's open reply's status — never refetching the
+ * draft under an open editor. `publish(base)`: the editor's tag; a draft that moved since is a 409 (RpcError).
+ * Discard's reply carries the restored draft and its tag for the editor to adopt.
+ */
+export function useDraftActions(projectId: string, id: string) {
+  const client = useQueryClient();
+  const settle = (patch: Partial<Extract<OpenReply, { ok: true }>>) => {
+    client.setQueryData<OpenReply>(openKey(projectId, id), (o) => (o && o.ok ? { ...o, ...patch } : o));
+    void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
+    void client.invalidateQueries({ queryKey: openKey(projectId, id, true) });
+  };
+  return {
+    publish: useMutation({
+      mutationFn: (base?: string) => done<PublishReply>(rpc('analysis:publish', { projectId, id, ...(base ? { base } : {}) }), 'The dashboard could not be published.'),
+      onSuccess: (r) => settle({ status: r.status, published: r.published }),
+    }),
+    unpublish: useMutation({
+      mutationFn: () => done<UnpublishReply>(rpc('analysis:unpublish', { projectId, id }), 'The dashboard could not be unpublished.'),
+      onSuccess: (r) => settle({ status: r.status, published: undefined }),
+    }),
+    discard: useMutation({
+      mutationFn: () => done<DiscardReply>(rpc('analysis:discard', { projectId, id }), 'The edits could not be discarded.'),
+      onSuccess: (r) => settle({ analysis: r.analysis, tag: r.tag, status: r.status, published: r.published }),
+    }),
+  };
 }
 
 // ── Tiles ────────────────────────────────────────────────────────────────

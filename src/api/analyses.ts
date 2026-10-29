@@ -108,9 +108,14 @@ export const analyses = {
     project: byProjectId,
   }),
   'analysis:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
-  // Ready: whether the dashboard is listed on the Dashboards page. Not content — never part of `analysis:update`, no
-  // version, `updatedAt` and the edit-conflict tag untouched (analysis.ts setReady), so it cannot clash with an open editor.
-  'analysis:setReady': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, ready: z.boolean() }), project: byProjectId }),
+  // Drafts and Publish (analysis/publishedCopy.ts, docs/analysis/00-model.md): every dashboard is a draft only
+  // editors see; Publish freezes the draft (charts too) as the copy viewers read until the next Publish. Each
+  // records a version. Publish leaves the draft's `updatedAt` and edit tag alone; `base` is the editor's tag — a
+  // draft that moved since is refused, 409 record_changed. Discard edits puts the copy back as the draft (an edit
+  // of it: the reply's `tag` is the editor's next base) and never writes to Visuals.
+  'analysis:publish': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, base: Base.optional() }), project: byProjectId }),
+  'analysis:unpublish': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  'analysis:discard': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   // One edit to a dashboard's SAVED VIEWS (savedViews.ts applyViewOp) — shared by
   // everyone who reads it, so `write`; a viewer lists and applies them from
   // `analysis:open`. Never part of `analysis:update`: the autosave sends the whole
@@ -198,11 +203,16 @@ export const analyses = {
   // ── Server only (src/ipc/analysesServer.ts) ─────────────────────────────
   // The list page in one call: every dashboard's summary plus the definitions
   // of the first sheet's first two visuals (its preview), so the browser does
-  // not read each analysis and the visual store per card.
+  // not read each analysis and the visual store per card. Each says its
+  // `status` (draft / published / edited) — a viewer's lists published ones
+  // only, built from the published copy.
   'analysis:gallery': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   // The editor in one call: the analysis and the definition of every visual
   // in the project (the cards resolve theirs; the Add-visual picker lists them).
-  'analysis:open': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // `published`: the published copy instead of the draft (the view page), with
+  // each card's frozen chart as its definition. A viewer always gets the copy —
+  // and a draft never published is "could not be loaded", as a missing id is.
+  'analysis:open': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid, published: z.boolean().optional() }), project: byProjectId }),
   // A page of tiles in one call, each answered by the SAME handler that answers
   // it alone — `visual:data`, `metric:value` / `dashboard:metric`,
   // `metric:compare` — with the sheet's parameters (an array, which the

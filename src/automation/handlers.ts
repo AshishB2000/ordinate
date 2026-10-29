@@ -227,6 +227,7 @@ export async function dashboardsList(ctx: Ctx): Promise<unknown> {
     name: a.name,
     sheets: a.sheetCount,
     updatedAt: a.updatedAt,
+    status: a.status,
     reports: reports.filter((r) => r.analysisId === a.id).map((r) => ({ id: r.id, name: r.name, format: r.format })),
   }));
 }

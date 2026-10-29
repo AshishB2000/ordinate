@@ -196,8 +196,11 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   ids in `web/src/charts/vizLabels.ts` (`VIZ_LABELS` = 39). Pivot/cohort/event funnel are `<table>`
   grids computed BESIDE it; **pivot subtotals are recomputed from the source, never folded from the
   cells above**. Dashboard metric numbers are computed on the fly, never stored.
-- **Analyses** — analysis = mutable authoring surface, dashboard = published read-only snapshot,
-  copied **by value** on publish. Spec: `docs/analysis/00-model.md`.
+- **Dashboards** (`analysis` records) — every dashboard is a **draft** only editors/admins see;
+  **Publish** freezes a copy inside the record (charts too, as `card.visual`) that viewers read until
+  the next Publish — figures stay live. A viewer gets the copy or nothing from `getAnalysis` /
+  `listAnalyses` (caller-aware); a reader that bypasses them guards itself and joins
+  `test-dashboardDraftsViewer`. Spec: `docs/analysis/00-model.md`.
 - **AI (optional, `not_ready` without a model)** — API-key providers only, keys per org in the
   secrets store, calls via `src/ai/providerFetch.ts` (SSRF-guarded). Admin → AI approves exact models;
   each member's pick and the rest of the setup are in Postgres (`src/server/aiConfig.ts`, `docs/ai-models/`).

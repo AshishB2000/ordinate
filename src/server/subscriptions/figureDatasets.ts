@@ -66,7 +66,7 @@ export type FigureSource = { kind: 'test' } | Pick<Extract<Delivery, { kind: 'da
 export async function figureDatasets(d: FigureSource): Promise<string[]> {
   if (d.kind === 'test') return [];
   const root = d.kind === 'dashboard'
-    ? await analysis.getAnalysis(d.projectId, d.analysisId)
+    ? await analysis.getAudienceAnalysis(d.projectId, d.analysisId) // what the send renders (run.ts buildMessage)
     : (await alertStore.load(d.projectId)).rules.find((r) => r.id === d.ruleId) ?? null;
   if (!root) throw new Error('the dashboard or alert rule this send is from is gone');
   return datasetsOfRoot(d.projectId, d.kind, d.kind === 'dashboard' ? d.analysisId : d.ruleId, root);

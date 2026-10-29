@@ -58,6 +58,8 @@ const totalsOf = (r: H.Reply): string[] =>
     const made = await W.call('boss', 'analysis:create', { projectId: P, name: 'Board', sheets: [{ name: 'One', cards: [card({ visualId: wf })] }] });
     const dash = String(made.body?.id ?? made.body?.analysis?.id ?? '');
     await W.call('boss', 'analysis:update', { projectId: P, id: dash, sheets: [{ name: 'One', cards: [card({ visualId: wf }), card({ visualId: wf, visual: inline })] }] });
+    // Published, so its viewers read it: their copy carries each card's chart frozen as an inline card.visual.
+    await W.call('boss', 'analysis:publish', { projectId: P, id: dash });
     ok('setup: the visuals and the dashboard', [wf, dual, drv, dash].every((x) => /^[0-9a-f-]{36}$/.test(x)), [wf, dual, drv, dash].join(' '));
     const storedInline = await W.as('boss', async () => JSON.stringify(await (require('../src/analysis/analysis') as typeof import('../src/analysis/analysis')).getAnalysis(P, dash)));
     ok('setup: the dashboard stores an inline card.visual with a West label (sanitizeCard keeps it)', storedInline.includes(canary(0)));

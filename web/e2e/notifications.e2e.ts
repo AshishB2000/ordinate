@@ -76,6 +76,8 @@ if (!adminUrl) {
       sheets: [{ name: 'Overview', cards: [{ id: crypto.randomUUID(), type: 'text', layout: { x: 0, y: 0, w: 12, h: 2 }, heading: 'This week', text: 'Revenue against the plan, by week.' }] }],
     });
     assert.ok(board.id, JSON.stringify(board));
+    // Published: B, a viewer, reads published dashboards only (a mention on a draft goes to its editors alone).
+    assert.equal((await call(ADMIN, 'analysis:publish', { projectId: pid, id: board.id })).ok, true);
 
     // B's tab, on Home, before anything happens.
     const b = await openSession();

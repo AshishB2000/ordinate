@@ -217,7 +217,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     cli: 'dashboards list', tool: 'list_dashboards', readOnly: true,
-    summary: 'List dashboards with their sheets and the reports built on them.',
+    summary: 'List dashboards with their sheets, status (draft, published, edited: published with edits not live yet) and the reports built on them. A viewer\'s token lists published dashboards only.',
     args: {},
     run: (_a, ctx) => h.dashboardsList(ctx),
   },
@@ -265,7 +265,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     tool: 'create_dashboard', readOnly: false, writes: 'records',
-    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. Writes records, never data. Logged in Jobs.',
+    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project\'s editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs.',
     args: {
       plan: {
         type: 'object',

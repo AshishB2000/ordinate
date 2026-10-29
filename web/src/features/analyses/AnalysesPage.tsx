@@ -61,7 +61,7 @@ function Card({ projectId, item, tags, onRename, onDelete, onLineage, canEdit }:
         <span className={s.meta}>
           {sheets} · Updated {ago(item.updatedAt)}
           {/* Listed on the Dashboards page: the editing screen's Ready switch. */}
-          {item.ready && (
+          {item.status !== 'draft' && (
             <span className={s.readyMark}>
               <Badge tone="ok" icon="check">
                 Ready

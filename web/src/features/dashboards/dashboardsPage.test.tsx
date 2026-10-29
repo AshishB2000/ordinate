@@ -2,8 +2,8 @@
 // with no tabs, and opens them in view mode; the published list keeps only its address (`&tab=links`); the view page is
 // the editing canvas with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet), its own
 // header (Dashboards / project, then Compare, Subscribe, Expand and ⋯ with Copy link — the live in-app address, for
-// everyone — and no Present); the editing screen has no Publish…, and its Ready switch writes `analysis:setReady` and
-// nothing else.
+// everyone — and no Present); the editing screen has no Publish…, and its Ready switch (a stopgap over Publish) writes
+// `analysis:publish` / `analysis:unpublish` and nothing else.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -19,10 +19,11 @@ const P = '11111111-1111-4111-8111-111111111111';
 const A1 = '33333333-3333-4333-8333-333333333333';
 const A2 = '44444444-4444-4444-8444-444444444444';
 const PROJECT = { id: P, name: 'Sales', updatedAt: '2026-10-01T10:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 2, sample: false };
-const board = (id: string, name: string, ready?: true) => ({ id, name, sheetCount: 2, updatedAt: '2026-10-01T10:00:00Z', previews: [], sheets: [], ...(ready ? { ready } : {}) });
-const analysis = (ready?: true) => ({
-  id: A1, projectId: P, name: 'Board', sheets: [{ id: 's1', name: 'Sheet 1', cards: [] }], filters: [], style: {}, parameters: [], views: [], defaultViewId: '', updatedAt: '', ...(ready ? { ready } : {}),
+const board = (id: string, name: string, ready?: true) => ({ id, name, sheetCount: 2, updatedAt: '2026-10-01T10:00:00Z', previews: [], sheets: [], status: ready ? 'published' : 'draft' });
+const analysis = () => ({
+  id: A1, projectId: P, name: 'Board', sheets: [{ id: 's1', name: 'Sheet 1', cards: [] }], filters: [], style: {}, parameters: [], views: [], defaultViewId: '', updatedAt: '',
 });
+const opened = (status: 'draft' | 'published' = 'draft') => ({ ok: true, analysis: analysis(), visuals: [], tag: 'T1', status, showing: 'draft' });
 
 function serve(role: 'admin' | 'viewer', extra: Record<string, RpcReply> = {}) {
   return serveRpc({
@@ -33,7 +34,7 @@ function serve(role: 'admin' | 'viewer', extra: Record<string, RpcReply> = {}) {
     'publish:sites': { body: { sites: [], publicLinks: false } },
     'publish:targets': { body: { dashboards: [{ id: A1, name: 'Ready board' }], stories: [], scorecards: [] } },
     'publish:plan': { body: { ok: true, plan: { pages: [], bytes: 0, combos: 0, tooBig: false } } },
-    'analysis:open': { body: { ok: true, analysis: analysis(), visuals: [], tag: 'T1' } },
+    'analysis:open': { body: opened() },
     ...extra,
   });
 }
@@ -190,20 +191,20 @@ describe('The view page', () => {
 });
 
 describe('The Ready switch', () => {
-  it('writes analysis:setReady alone — no autosave — and reads what it wrote', async () => {
-    const calls = serve('admin', { 'analysis:setReady': { body: { ok: true, ready: true } } });
+  it('writes analysis:publish alone — no autosave — and reads what it wrote', async () => {
+    const calls = serve('admin', { 'analysis:publish': { body: { ok: true, status: 'published', published: { publishedAt: '2026-10-29T10:00:00Z' } } } });
     renderApp(`/analyses/${P}/${A1}`);
     const sw = await screen.findByRole('switch', { name: 'Ready' });
     expect((sw as HTMLInputElement).checked).toBe(false);
     fireEvent.click(sw);
-    await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:setReady')?.payload).toEqual({ projectId: P, id: A1, ready: true }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:publish')?.payload).toEqual({ projectId: P, id: A1 }));
     expect((sw as HTMLInputElement).checked).toBe(true);
     await new Promise((r) => setTimeout(r, 800)); // past the 600 ms autosave
     expect(calls.some((c) => c.channel === 'analysis:update')).toBe(false);
   });
 
   it('a refused write puts the switch back and says why', async () => {
-    serve('admin', { 'analysis:open': { body: { ok: true, analysis: analysis(true), visuals: [], tag: 'T1' } }, 'analysis:setReady': { body: { ok: false, error: 'That dashboard is gone.' } } });
+    serve('admin', { 'analysis:open': { body: opened('published') }, 'analysis:unpublish': { body: { ok: false, error: 'That dashboard is gone.' } } });
     renderApp(`/analyses/${P}/${A1}`);
     const sw = await screen.findByRole('switch', { name: 'Ready' });
     expect((sw as HTMLInputElement).checked).toBe(true);

@@ -188,6 +188,7 @@
   "common.vs_previous": "vs previous",
   "connectorMessages.this_connection_signs_in_with_the": "This connection signs in with the {role} role, which can change data and account settings. Ordinate only reads, but give it a read-only role instead.",
   "dashShare.and_more": "{p0}, and {p1} more",
+  "draftMessages.this_dashboard_has_not_been_published": "This dashboard has not been published, so there is no published version to go back to.",
   "driverPointMessages.a_change_is_explained_between_two": "A change is explained between two periods, so this needs a chart with a date on its axis.",
   "driverPointMessages.a_change_is_explained_from_today": "A change is explained from today’s data, and this dashboard is showing an earlier snapshot. Switch “As of” back to now to explain it.",
   "driverPointMessages.average_of": "Average of {column}",

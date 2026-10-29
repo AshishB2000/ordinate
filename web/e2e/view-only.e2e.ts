@@ -110,6 +110,8 @@ if (!adminUrl) {
     });
     const aid: string = dash.id;
     assert.match(aid, /^[0-9a-f-]{36}$/, JSON.stringify(dash));
+    // Published: the viewer reads published dashboards only.
+    assert.equal((await rpc(ADMIN, 'analysis:publish', { projectId: pid, id: aid })).ok, true);
 
     // ── …and shares it: one viewer, one editor ────────────────────────────
     await rpc(VIEWER, 'projects:list'); // a first header-mode request provisions the account (an org viewer)

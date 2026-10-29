@@ -87,8 +87,8 @@ export async function seedViewer(rpc: Rpc, admin: string, members: { viewer: str
   const view = await rpc(admin, 'analysis:view', { projectId: pid, id: aid, op: { op: 'create', name: 'West only', state: {} } });
   assert.equal(view.ok, true, JSON.stringify(view).slice(0, 300));
   const viewId: string = view.viewId;
-  // Ready: the Dashboards page lists it, so the walk reads a card there rather than the empty state.
-  assert.equal((await rpc(admin, 'analysis:setReady', { projectId: pid, id: aid, ready: true })).ok, true);
+  // Published: the Dashboards page lists it and the viewer can open it, so the walk reads a card there rather than the empty state.
+  assert.equal((await rpc(admin, 'analysis:publish', { projectId: pid, id: aid })).ok, true);
 
   // A metric with a tree (the sample's Revenue = Orders × Avg order value).
   const metrics = (await rpc(admin, 'metric:list', { projectId: pid })).metrics as { id: string; name: string }[];

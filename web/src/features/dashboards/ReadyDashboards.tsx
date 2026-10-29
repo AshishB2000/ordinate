@@ -30,7 +30,7 @@ export function ReadyDashboards({ projectId }: { projectId: string }) {
     );
   }
   if (q.isError) return <ErrorState title="Dashboards could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
-  const ready = q.data.filter((d) => d.ready);
+  const ready = q.data.filter((d) => d.status !== 'draft'); // published (a viewer's list holds nothing else)
   if (!ready.length) {
     return (
       <EmptyState
