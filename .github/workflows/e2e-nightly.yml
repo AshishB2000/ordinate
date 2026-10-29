@@ -36,8 +36,33 @@ jobs:
       - run: npm --prefix web ci
       - name: Build the web app
         run: npm --prefix web run build
+      # --with-deps apt-installs the browser's system packages: 181 (117 MB) for
+      # WebKit. On some runners the Ubuntu mirror trickles at ~40 KB/s, and that
+      # download alone passed the 30-minute limit (Oct 26 and 27). The .debs come
+      # from the Actions cache instead, one entry per runner image; apt fetches
+      # only the versions the cache lacks. Saved right after the install, so a
+      # failing spec later in the job does not skip the save.
+      - id: image
+        run: echo "version=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - id: apt
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-archives
+          key: apt-${{ matrix.browser }}-${{ steps.image.outputs.version }}
+          restore-keys: apt-${{ matrix.browser }}-
       - name: Install ${{ matrix.browser }} for Playwright
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: |
+          mkdir -p ~/apt-archives
+          sudo find ~/apt-archives -name '*.deb' -exec mv -t /var/cache/apt/archives {} +
+          npx playwright install --with-deps ${{ matrix.browser }}
+          # Drop .debs the mirror no longer offers, so the cache holds one set.
+          sudo apt-get autoclean -qq
+          cp /var/cache/apt/archives/*.deb ~/apt-archives/
+      - if: steps.apt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/apt-archives
+          key: ${{ steps.apt.outputs.cache-primary-key }}
       - name: e2e (${{ matrix.browser }})
         run: npm --prefix web run e2e
         env:
