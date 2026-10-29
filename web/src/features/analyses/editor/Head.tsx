@@ -1,7 +1,8 @@
 // The editor's top strip (legacy dashboards.ts .dash-editor-head, moved above
 // the workbench by authoring.ts anMountTopStrip): Back, the name (the rename
 // control), the save state, the sheet tabs, the add row, undo / redo, the
-// layout size, and ⋯ — History and Publish.
+// layout size, and ⋯ — History, Lineage, Style, export and print. Ready is the
+// one switch that puts a dashboard in front of readers; there is no Publish here.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -129,16 +130,6 @@ export function Head() {
   const ro = ed.readOnly;
   // Opened from the Dashboards page (ed.viewing), back goes there and no badge says what the page is for.
   const back = ed.viewing ? { to: `/dashboards?project=${ed.projectId}`, label: 'Dashboards' } : { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
-  // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
-  const publish = () => {
-    // Changed elsewhere: what would be published is the other version, without these edits — not until it is settled.
-    if (ed.save.changed) {
-      toast('Not published: this dashboard was changed in another tab or by someone else, and your changes are not saved. Choose Reload or Save mine as a copy in the banner first.', { kind: 'error' });
-      return;
-    }
-    ed.save.retry();
-    void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`);
-  };
   return (
     <div className={s.head}>
       <PageHead
@@ -172,7 +163,8 @@ export function Head() {
             )}
             <ViewsMenu />
             <ViewControls />
-            <SizeSwitch />
+            {/* The view page reads like /p/<id>/: the layout preview, History and Lineage are authoring tools. */}
+            {!ed.viewing && <SizeSwitch />}
             <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
             <SubscribeButton />
             <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
@@ -183,64 +175,70 @@ export function Head() {
               align="end"
               trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
               items={[
-                { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
-                { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
+                ...(ed.viewing
+                  ? []
+                  : [
+                      { label: 'History', icon: 'history' as const, onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
+                      { label: 'Lineage', icon: 'lineage' as const, onSelect: () => setLineage(true) },
+                    ]),
                 ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
                 { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
                 { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
-                ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
               ]}
             />
             {ed.viewing && <ViewActions />}
           </>
         }
       />
-      <div className={s.headRow}>
-        <SheetTabs />
-        <span className={s.grow} />
-        {!ro && (
-          <div className={s.adds} role="group" aria-label="Add to the sheet">
-            <Button size="sm" icon="plus" onClick={() => ed.openAdd('visual')}>
-              Visual
-            </Button>
-            <Button size="sm" icon="plus" onClick={() => ed.openAdd('kpi')}>
-              KPI
-            </Button>
-            <Button size="sm" icon="plus" onClick={() => ed.openAdd('text')}>
-              Text
-            </Button>
-            <Menu
-              label="Add a control"
-              trigger={
-                <Button size="sm" icon="filter" iconEnd="chevron-down">
-                  Control
-                </Button>
-              }
-              items={[
-                { label: 'Filter control…', icon: 'filter', onSelect: () => ed.openAdd('control') },
-                { label: 'Parameter…', icon: 'sliders', onSelect: () => ed.openAdd('param') },
-              ]}
-            />
-            <Menu
-              label="Add more"
-              trigger={
-                <Button size="sm" iconEnd="chevron-down">
-                  More
-                </Button>
-              }
-              items={[
-                { label: 'Image…', icon: 'camera', onSelect: addImage },
-                { label: 'Navigation', icon: 'arrow-right', onSelect: () => void addNav() },
-                { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
-                { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
-                { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
-                { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
-                { label: 'Metric tree…', icon: 'lineage', onSelect: () => ed.openAdd('tree') },
-              ]}
-            />
-          </div>
-        )}
-      </div>
+      {/* A reader with one sheet gets no tabs row, like PhoneHead and /p/<id>/. */}
+      {(!ro || ed.doc.sheets.length > 1) && (
+        <div className={s.headRow}>
+          <SheetTabs />
+          <span className={s.grow} />
+          {!ro && (
+            <div className={s.adds} role="group" aria-label="Add to the sheet">
+              <Button size="sm" icon="plus" onClick={() => ed.openAdd('visual')}>
+                Visual
+              </Button>
+              <Button size="sm" icon="plus" onClick={() => ed.openAdd('kpi')}>
+                KPI
+              </Button>
+              <Button size="sm" icon="plus" onClick={() => ed.openAdd('text')}>
+                Text
+              </Button>
+              <Menu
+                label="Add a control"
+                trigger={
+                  <Button size="sm" icon="filter" iconEnd="chevron-down">
+                    Control
+                  </Button>
+                }
+                items={[
+                  { label: 'Filter control…', icon: 'filter', onSelect: () => ed.openAdd('control') },
+                  { label: 'Parameter…', icon: 'sliders', onSelect: () => ed.openAdd('param') },
+                ]}
+              />
+              <Menu
+                label="Add more"
+                trigger={
+                  <Button size="sm" iconEnd="chevron-down">
+                    More
+                  </Button>
+                }
+                items={[
+                  { label: 'Image…', icon: 'camera', onSelect: addImage },
+                  { label: 'Navigation', icon: 'arrow-right', onSelect: () => void addNav() },
+                  { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
+                  { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
+                  { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
+                  { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
+                  { label: 'Metric tree…', icon: 'lineage', onSelect: () => ed.openAdd('tree') },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      )}
       {styling && <StyleDialog onClose={() => setStyling(false)} />}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}
