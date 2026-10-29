@@ -177,6 +177,33 @@ async function partOne(): Promise<void> {
     ok('gallery: each dashboard\'s sheets (id, name) for a navigation target, nothing more',
       JSON.stringify(board.sheets.map((p: { name: string }) => p.name)) === '["Overview","Second"]' && board.sheets.every((p: object) => Object.keys(p).join() === 'id,name'));
 
+    // ── template:list carries no org-store template (NV-33, NV-57) ──────────
+    // User templates are ONE org-wide store with dashboard screenshots; a
+    // project reader must not receive them, nor every call load the store.
+    const templateStore: typeof import('../src/app/userTemplateStore') = require('../src/app/userTemplateStore');
+    const { sanitizeUserTemplate }: typeof import('../src/analysis/userTemplateFile') = require('../src/analysis/userTemplateFile');
+    const THUMB = 'data:image/png;base64,QUFBQUFB';
+    const planted = sanitizeUserTemplate({ name: 'Other project only', description: 'from elsewhere', roles: [], body: {}, thumbnail: THUMB }, () => crypto.randomUUID());
+    const inStore = await context.runInContext(dev, 'tpl', async () => (await templateStore.adoptTemplates([planted!])) === 1
+      && (await templateStore.listTemplates()).some((t) => t.thumbnail === THUMB));
+    ok('control: the org template store holds a template with a thumbnail', inStore);
+    const tl = await call('template:list', { projectId: pid, datasetId: s.ds });
+    const tlText = JSON.stringify(tl.body);
+    ok('NV-33: template:list answers the built-in catalogue, no org-store template',
+      tl.body.ok && tl.body.templates.length > 0 && tl.body.templates.every((t: { group: string; user?: boolean }) => t.group !== 'Yours' && !t.user) && !tlText.includes('Other project only'), tlText.slice(0, 300));
+    ok('NV-57: …and no thumbnail bytes', !tlText.includes(THUMB) && !tlText.includes('data:image'));
+    const capDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-tplcap-'));
+    templateStore._setStoreDir(capDir);
+    try {
+      for (let i = 0; i < templateStore.MAX_TEMPLATES - 1; i++) fs.writeFileSync(path.join(capDir, `${crypto.randomUUID()}.json`), '{}');
+      const one = (name: string) => templateStore.saveTemplate(sanitizeUserTemplate({ name, roles: [], body: {} }, () => crypto.randomUUID())!);
+      ok('control: the store takes a template below its cap', !!(await one('499th')));
+      ok('NV-57: the cap is counted off the file names (no template parsed to count)', (await one('501st')) === null);
+    } finally {
+      templateStore._setStoreDir('');
+      fs.rmSync(capDir, { recursive: true, force: true });
+    }
+
     // ── analysis:open ─────────────────────────────────────────────────────
     const op = await call('analysis:open', { projectId: pid, id: s.aid });
     const stored = await context.runInContext(dev, 'a', () => analysis.getAnalysis(pid, s.aid));
