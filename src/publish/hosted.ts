@@ -26,6 +26,7 @@ import * as recordFs from '../app/recordFs';
 import { isValidId } from '../app/recordKinds';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
+import { visualOfCard } from '../analysis/publishedCopy';
 import { ctx, runInContext, serverDataDir } from '../server/context';
 import { buildPages, policyOutgoing, sanitizePublishConfig, type PublishConfig, type PublishProgress } from './publish';
 import type { PublishedDef } from './dashboardData';
@@ -148,13 +149,13 @@ export async function getDefs(id: string): Promise<Record<string, PublishedDef> 
 async function definitions(projectId: string, ids: readonly string[]): Promise<Record<string, PublishedDef>> {
   const out: Record<string, PublishedDef> = {};
   for (const id of ids) {
-    const a = await analysis.getAnalysis(projectId, id);
+    const a = await analysis.getAudienceAnalysis(projectId, id); // what viewers see: the published copy, charts frozen
     if (!a) continue;
     const vis: Record<string, Visual> = {};
     for (const card of a.sheets.flatMap((p) => p.cards)) {
       const vid = card && (card as { visualId?: string }).visualId;
       if (!vid || vis[vid]) continue;
-      const v = await visuals.getVisual(projectId, vid);
+      const v = visualOfCard(projectId, card, a.updatedAt) ?? (await visuals.getVisual(projectId, vid));
       if (v) vis[vid] = v;
     }
     out[id] = { analysis: a, visuals: vis };
@@ -283,11 +284,11 @@ async function datasetsOf(site: HostedSite): Promise<Set<string> | null> {
   if (site.config.storyIds.length || site.config.scorecardIds.length) return null;
   const out = new Set<string>();
   for (const id of site.config.dashboardIds) {
-    const a = await analysis.getAnalysis(site.projectId, id);
+    const a = await analysis.getAudienceAnalysis(site.projectId, id);
     for (const card of a ? a.sheets.flatMap((p) => p.cards) : []) {
-      const c = card as unknown as { metric?: { datasetId?: string }; control?: { datasetId?: string }; stats?: { datasetId?: string }; visualId?: string };
-      for (const d of [c.metric?.datasetId, c.control?.datasetId, c.stats?.datasetId]) if (d) out.add(d);
-      if (c.visualId) {
+      const c = card as unknown as { metric?: { datasetId?: string }; control?: { datasetId?: string }; stats?: { datasetId?: string }; visualId?: string; visual?: { datasetId?: string } };
+      for (const d of [c.metric?.datasetId, c.control?.datasetId, c.stats?.datasetId, c.visual?.datasetId]) if (d) out.add(d);
+      if (c.visualId && !c.visual) {
         const v = await visuals.getVisual(site.projectId, c.visualId);
         if (v) out.add(v.datasetId);
       }

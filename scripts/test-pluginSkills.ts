@@ -10,7 +10,8 @@
 //     the ones those calls return (formatted as the skill says to).
 //   • The manifests parse, the MCP server is declared inline in plugin.json
 //     with the token as a sensitive userConfig value, and every skill's
-//     `name:` is its folder name.
+//     `name:` is its folder name; the tools build-dashboard's description
+//     names exist.
 //
 //   npm run build:ts && node scripts/test-pluginSkills.js
 
@@ -74,6 +75,11 @@ async function main(): Promise<void> {
   for (const dir of fs.readdirSync(path.join(PLUGIN, 'skills'))) {
     ok(`skill ${dir}: name matches its folder`, new RegExp(`^---\\nname: ${dir}\\n`).test(skill(dir)));
   }
+  // The tools a skill's description names (its trigger) are tools the registry has.
+  const named = (/MCP tools \(([a-z_, ]+)\)/.exec(skill('build-dashboard')) ?? [])[1]?.split(', ') ?? [];
+  ok('build-dashboard: every tool its description names exists, publish_dashboard among them',
+    named.length > 0 && named.includes('publish_dashboard') && named.every((t) => reg.findTool(t)), named);
+  ok('negative control: a tool that does not exist is not found', reg.findTool('publish_board') === null);
 
   // ── build-dashboard ──
   const build = skill('build-dashboard');

@@ -195,6 +195,8 @@
   "connectorMessages.the_server_did_not_agree_to": "Le serveur n’a pas accepté de chiffrer la connexion : le mot de passe n’a donc pas été envoyé. Vérifiez que TLS est activé sur le serveur.",
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, et {p1} de plus",
+  "draftMessages.only_the_project_s_editors_and": null,
+  "draftMessages.this_dashboard_has_not_been_published": null,
   "driverPointMessages.a_change_is_explained_between_two": "Une variation s’explique entre deux périodes : il faut donc un graphique avec une date sur son axe.",
   "driverPointMessages.a_change_is_explained_from_today": "Une variation s’explique à partir des données d’aujourd’hui, et ce tableau de bord affiche un instantané antérieur. Remettez « As of » sur maintenant pour l’expliquer.",
   "driverPointMessages.average_of": "Moyenne de {column}",

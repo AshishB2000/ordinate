@@ -1,6 +1,7 @@
 import { ipcMain } from './bus';
 import * as catalog from '../app/catalog';
 import * as catalogIndex from '../app/catalogIndex';
+import * as analysis from '../analysis/analysis';
 import * as datasets from '../data/datasets';
 
 // Catalog IPC — descriptions, tags, owners and column docs (src/app/catalog.ts)
@@ -13,6 +14,9 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export function register(): void {
   ipcMain.handle('catalog:get', async (_e, { projectId, ref }: any = {}) => {
+    // A dashboard's details are a viewer's only once it is published: a draft is "Unknown record", as a missing one.
+    const dash = /^analysis:(.+)$/.exec(str(ref));
+    if (dash && !(await analysis.getAnalysis(str(projectId), dash[1]))) return { ok: false, error: 'Unknown record.' };
     const doc = await catalogIndex.getDoc(str(projectId), str(ref));
     return doc ? { ok: true, doc } : { ok: false, error: 'Unknown record.' };
   });

@@ -68,7 +68,7 @@ function NewReport({ projectId, onClose }: { projectId: string; onClose: () => v
       ) : q.isError ? (
         <ErrorState compact heading={3} title="Dashboards could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />
       ) : q.data.length === 0 ? (
-        <EmptyState compact heading={3} icon="layout-dashboard" title="No dashboards yet" actions={<Link to={`/analyses?project=${projectId}`}>Create a dashboard</Link>}>
+        <EmptyState compact heading={3} icon="layout-dashboard" title="No dashboards yet" actions={<Link to={`/dashboards?project=${projectId}`}>Create a dashboard</Link>}>
           A report prints a dashboard. Build one first.
         </EmptyState>
       ) : (

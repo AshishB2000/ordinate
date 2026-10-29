@@ -1,6 +1,6 @@
 ---
 name: build-dashboard
-description: Use when asked to build, make, draft or set up a dashboard, KPI board, report page or set of charts in Ordinate, or to turn an Ordinate dataset into charts, through the Ordinate MCP tools (create_dashboard, create_visual).
+description: Use when asked to build, make, draft or set up a dashboard, KPI board, report page or set of charts in Ordinate, or to turn an Ordinate dataset into charts, through the Ordinate MCP tools (create_dashboard, create_visual, publish_dashboard).
 ---
 
 # Build a dashboard in Ordinate
@@ -15,23 +15,35 @@ number. Every figure on the dashboard is computed by the server when it is drawn
 1. **Find the data.** `list_datasets` (pass `project` if the user named one), then
    `describe_dataset` for each candidate. Note each column's declared `type` (`number`, `text`,
    `date`). Use the exact dataset and column names it returns.
-2. **See what exists.** `list_dashboards` gives names only, not tiles, so if one sounds like
-   what the user asked for, name it in your reply. `list_metrics` lists the project's saved KPI
+2. **See what exists.** `list_dashboards` gives names and each one's `status` (`draft`,
+   `published`, or `edited`: published with edits not live yet), not tiles, so if one sounds like
+   what the user asked for, name it in your reply. A viewer's token lists published dashboards
+   only. `list_metrics` lists the project's saved KPI
    definitions. `insights` on the main dataset shows trends, movers and concentration worth a
    chart.
 3. **Write the plan** (shape and choices below). The example is a shape to adapt to the
    user's question, not a finished dashboard.
-4. **Call `create_dashboard` once.** Each call makes a new dashboard. Read `dropped` in the
+4. **Call `create_dashboard` once.** Each call makes a new dashboard, as a **draft**: only the
+   project's editors and admins see it until one of them publishes it. Read `dropped` in the
    reply: each entry names what was removed and why. Do not quietly call it again to fix a
    drop. Report it, and rebuild only if the user wants that.
 5. **Tell the user**:
    - the dashboard's name, its sheets and tiles, and anything dropped (with the reason given);
-   - where to find it: by name under **Analyses** in Ordinate. No tool returns the server's
-     address, so give the path `/analyses/<project id>/<dashboard id>` only when the user gave
-     you the address (the project id comes from `list_projects`);
-   - that it opens as an editable analysis, which they publish from Ordinate when it's right.
+   - where to find it: by name under **Dashboards** in Ordinate, among the drafts. No tool
+     returns the server's address, so give the path `/analyses/<project id>/<dashboard id>`
+     (where it is edited) only when the user gave you the address (the project id comes from
+     `list_projects`);
+   - that it is a draft: nobody with view-only access sees it yet. Ask them to look at it (and
+     preview it) in Ordinate, and whether to publish it. Do not tell them it is live.
 
    If you quote any figure, follow the `answer-data-questions` skill.
+6. **Publish only when the user says so.** `publish_dashboard` (the dashboard's `id` from
+   `create_dashboard`) makes it visible to **everyone in the project**, viewers included. Its
+   layout, filters and charts freeze; figures stay live. Later edits, theirs or yours, stay in the
+   draft until it is published again. Never publish on your own initiative, and never as part of
+   building. A reply of `status: "published"` with `publishedAt` means it is live. If the user's
+   token is view-only the tool refuses, saying an editor or admin must do it: pass that on.
+   `unpublish_dashboard` takes it away from viewers (the draft stays); also only when asked.
 
 ## Plan shape
 
@@ -118,4 +130,6 @@ Other valid types: `clustered_bar`, `pct_stacked_column`, `pct_stacked_bar`, `li
 | A column or dataset name that's close but not exact | dropped | copy the names `describe_dataset` returned |
 | A figure written into a note or the dashboard name | wrong after the next refresh | a KPI tile |
 | Calling `create_dashboard` again after a drop | a second, near-duplicate dashboard | report the drop and ask |
+| Telling the user the dashboard is shared or live | viewers see nothing: it is a draft | say it is a draft, and ask whether to publish |
+| Calling `publish_dashboard` right after building, unasked | a half-checked dashboard goes to every viewer | show the draft first, publish when the user says so |
 | Eight charts on one sheet | a crowded wall of charts | 2 to 5 per sheet, more sheets |

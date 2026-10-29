@@ -1,0 +1,215 @@
+/* The Dashboards page's own parts (the card grid itself is Analyses.module.css, which the preview shares):
+   Create dashboard's split arrow, the tabs' spacing, and the empty panels. Tokens only, so both themes follow. */
+
+/* Create dashboard + its arrow, one control. The arrow is styled here rather than as a second primary Button:
+   a page header holds one primary (PageHead counts them). */
+.split {
+  display: inline-flex;
+}
+.split > button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.splitArrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  padding: 0;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--accent-ink) 30%, transparent);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.splitArrow:hover,
+.splitArrow[data-state='open'] {
+  background: var(--accent-2);
+}
+.splitArrow:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The grid under the tabs, clear of their underline. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding-top: var(--sp-16);
+}
+
+/* ── Empty: a full-width panel, its content centred in it ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  min-height: 460px;
+  padding: var(--sp-48) var(--sp-32);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.emptyTab {
+  min-height: 300px;
+}
+/* A dashboard in miniature: four tiles, the first one lit. */
+.art {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+  width: 220px;
+  height: 120px;
+  margin-bottom: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.artSmall {
+  width: 160px;
+  height: 88px;
+  padding: var(--sp-8);
+}
+.art > span {
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.art > span:first-child {
+  border-style: solid;
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.title {
+  margin: 0;
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.emptyTab .title {
+  font-size: var(--t-15);
+}
+.lead {
+  max-width: 460px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
+}
+.quiet {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.quiet a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.quiet a:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.aiHint {
+  max-width: 520px;
+  margin-top: var(--sp-8);
+}
+.chipsHead {
+  margin: var(--sp-16) 0 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 100%;
+  height: 28px;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+/* A long dataset name ends in an ellipsis on one line: wrapped, it ran out of the 28px pill. */
+.chip > svg {
+  flex: none;
+}
+.chipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── A phone (under 600px, the app's phone line: Dialog.module.css, Shell.module.css) ──
+   Every control here a thumb presses gets the phone dashboard's 44px (docs/phone-dashboards). The header's two ways
+   in no longer fit side by side, so each takes the full width, stacked; the same for the first-dashboard panel's. */
+@media (max-width: 599px) {
+  button.draft,
+  .split,
+  .split > button:first-child,
+  .actions > button {
+    flex: 1 1 auto;
+  }
+  button.draft,
+  .split > button:first-child,
+  .actions > button,
+  .tabs [role='tab'] {
+    height: 44px;
+  }
+  .splitArrow {
+    width: 44px;
+    height: 44px;
+  }
+  /* The card's ⋯ (or Copy link) is drawn at 28px; its hit area is 44px, as the phone dashboard's dots are. */
+  .cardMenu button {
+    position: relative;
+  }
+  .cardMenu button::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .chip {
+    height: 40px;
+  }
+  .empty {
+    padding: var(--sp-32) var(--sp-16);
+  }
+}

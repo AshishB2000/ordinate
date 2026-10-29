@@ -28,6 +28,8 @@ import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
 import { describeDefinitionShort } from '../analysis/metricFormat';
 import * as analysis from '../analysis/analysis';
+import * as drafts from '../analysis/publishDashboard';
+import { dashboardGone } from '../analysis/savedViewMessages';
 import * as reportSpec from '../analysis/reportSpec';
 import * as publishing from '../publish/publish';
 import { resolveMetric } from '../ipc/metrics';
@@ -227,8 +229,25 @@ export async function dashboardsList(ctx: Ctx): Promise<unknown> {
     name: a.name,
     sheets: a.sheetCount,
     updatedAt: a.updatedAt,
+    status: a.status,
     reports: reports.filter((r) => r.analysisId === a.id).map((r) => ({ id: r.id, name: r.name, format: r.format })),
   }));
+}
+
+/** `analysis:publish`'s write, without `base` (registry.ts says why). The dispatch gate already required editor. */
+export async function dashboardsPublish(ctx: Ctx, ref: string): Promise<unknown> {
+  const a = pick(await analysis.listAnalyses(ctx.projectId), ref, 'dashboard');
+  const r = await drafts.publish(ctx.projectId, a.id);
+  if (!r) throw new AutomationError('not_found', dashboardGone());
+  return { id: a.id, name: r.analysis.name, status: r.status, publishedAt: r.analysis.published?.publishedAt ?? null };
+}
+
+/** `analysis:unpublish`'s write: viewers stop seeing it, the draft stays. */
+export async function dashboardsUnpublish(ctx: Ctx, ref: string): Promise<unknown> {
+  const a = pick(await analysis.listAnalyses(ctx.projectId), ref, 'dashboard');
+  const r = await drafts.unpublish(ctx.projectId, a.id);
+  if (!r) throw new AutomationError('not_found', dashboardGone());
+  return { id: a.id, name: r.analysis.name, status: r.status };
 }
 
 export async function dashboardsExport(ctx: Ctx, ref: string, format: string, out: string): Promise<unknown> {

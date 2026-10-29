@@ -42,11 +42,14 @@ const HELP_ITEMS: MenuEntry[] = [
 ];
 
 function NavEntry({ item, onPick }: { item: NavItem; onPick: () => void }) {
+  // A dashboard's editing screen (/analyses/<p>/<id>) belongs to Dashboards: Analyses has no item of its own.
+  const { pathname } = useLocation();
+  const editing = item.to === '/dashboards' && pathname.startsWith('/analyses/');
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
-      className={({ isActive }) => (isActive ? `${s.navItem} ${s.active}` : s.navItem)}
+      className={({ isActive }) => (isActive || editing ? `${s.navItem} ${s.active}` : s.navItem)}
       onClick={onPick}
     >
       <Icon name={item.icon} size={20} />

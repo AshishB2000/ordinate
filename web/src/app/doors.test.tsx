@@ -83,7 +83,7 @@ describe('Dashboards: Create dashboard beside Publish…', () => {
     renderApp(`/dashboards?project=${P}&tab=links`);
     await screen.findByRole('heading', { name: 'Nothing published yet' }, LAZY);
     const links = main().getAllByRole('link', { name: 'Create dashboard' });
-    expect(links.map((a) => a.getAttribute('href'))).toEqual([`/analyses?project=${P}&new=1`, `/analyses?project=${P}&new=1`]);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([`/dashboards?project=${P}&new=1`, `/dashboards?project=${P}&new=1`]);
     expect(main().getByRole('button', { name: 'Publish…' })).toBeTruthy();
   });
 
@@ -105,7 +105,9 @@ describe('Home → New → Dashboard', () => {
     act(() => trigger.focus());
     fireEvent.keyDown(trigger, { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Dashboard' }));
-    await waitFor(() => expect(router.state.location.pathname + router.state.location.search).toBe(`/analyses?project=${P}&new=1`));
+    // The list takes the ask (`&new=1`) and strips it once the wizard is open.
+    await screen.findByRole('dialog', { name: 'Create dashboard' }, LAZY);
+    expect(router.state.location.pathname + router.state.location.search).toBe(`/dashboards?project=${P}`);
   });
 
   it('a viewer has no New menu (control)', async () => {
@@ -117,11 +119,10 @@ describe('Home → New → Dashboard', () => {
 });
 
 describe('one door, never none (review round)', () => {
-  it('Analyses keeps its Metrics link with no dashboards; Create dashboard shows once, in the empty state', async () => {
+  it('Dashboards with none yet: Create dashboard shows once, in the empty state', async () => {
     serve('editor', { 'analysis:gallery': [] });
-    renderApp(`/analyses?project=${P}`);
-    await screen.findByRole('heading', { name: 'No dashboards yet' }, LAZY);
-    expect(href('Metrics')).toBe(`/data/metrics?project=${P}`);
+    renderApp(`/dashboards?project=${P}`);
+    await screen.findByRole('heading', { name: 'Start your first dashboard' }, LAZY);
     expect(main().getAllByRole('button', { name: 'Create dashboard' })).toHaveLength(1);
   });
 
@@ -139,12 +140,12 @@ describe('one door, never none (review round)', () => {
     expect(href('Data')).toBe(`/data/${P}?tab=captures`);
   });
 
-  it('?new=1 opens the wizard when Analyses is already on screen (the palette\'s New dashboard)', async () => {
+  it('?new=1 opens the wizard when Dashboards is already on screen (the palette\'s New dashboard)', async () => {
     serve('editor', { 'analysis:gallery': [] });
-    const router = renderApp(`/analyses?project=${P}`);
-    await screen.findByRole('heading', { name: 'No dashboards yet' }, LAZY);
+    const router = renderApp(`/dashboards?project=${P}`);
+    await screen.findByRole('heading', { name: 'Start your first dashboard' }, LAZY);
     expect(screen.queryByRole('dialog', { name: 'Create dashboard' })).toBeNull();
-    await act(() => router.navigate(`/analyses?project=${P}&new=1`));
+    await act(() => router.navigate(`/dashboards?project=${P}&new=1`));
     expect(await screen.findByRole('dialog', { name: 'Create dashboard' }, LAZY)).toBeTruthy();
     await waitFor(() => expect(router.state.location.search).toBe(`?project=${P}`));
   });

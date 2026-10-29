@@ -106,7 +106,7 @@ describe('a capture’s page', () => {
     serve({ ...VIEW, datasetId: D });
     open();
     expect(await screen.findByRole('heading', { name: 'Want an analysis built from this?' }, { timeout: LAZY })).toBeTruthy();
-    expect(href('Build an analysis')).toBe(`/analyses?project=${P}&new=1&dataset=${D}`);
+    expect(href('Build an analysis')).toBe(`/dashboards?project=${P}&new=1&dataset=${D}`);
     expect(href('Open the dataset')).toBe(`/data/${P}/${D}`);
     expect(screen.queryByRole('link', { name: 'Just save as dataset' })).toBeNull();
   });

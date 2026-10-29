@@ -33,6 +33,7 @@
 
 import { randomUUID } from 'crypto';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
+import { sanitizeOverlays } from './analytics';
 import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
@@ -164,13 +165,12 @@ export interface CardMetric {
  * published dashboard shows current data through a frozen definition.
  *
  * Derived with `Pick<Visual, …>` on purpose: if `Visual` grows a field, this
- * type does not silently acquire it. This inline-snapshot shape is vestigial —
- * nothing populates `card.visual` now that publishing is gone — but the
- * sanitizer keeps handling it defensively so an old on-disk record never throws.
+ * type does not silently acquire it. Publish (analysis/publishedCopy.ts) writes
+ * it on the published copy's visual cards; a draft's cards do not carry it.
  */
 export type CardVisual = Pick<
   Visual,
-  'datasetId' | 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters'
+  'datasetId' | 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters' | 'analytics'
 >;
 
 export interface Card {
@@ -306,6 +306,8 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
   if (!datasetId) return null;
   const chartType = sanitizeChartType(o.chartType);
   const encoding = sanitizeEncoding(o.encoding);
+  // The Analytics pane's overlays are part of what the chart draws: frozen with it, absent when none.
+  const analytics = sanitizeOverlays(o.analytics);
   return {
     datasetId,
     name: typeof o.name === 'string' ? o.name : '',
@@ -313,6 +315,7 @@ export function sanitizeCardVisual(raw: unknown): CardVisual | null {
     encoding,
     overrides: sanitizeOverrides(o.overrides, { chartType, encoding }),
     filters: sanitizeFilters(o.filters),
+    ...(analytics.length ? { analytics } : {}),
   };
 }
 

@@ -371,6 +371,7 @@ export const MAIN_FILES = [
   'src/analysis/metricTreeMessages.ts',
   'src/app/recordLockMessages.ts',
   'src/analysis/savedViewMessages.ts',
+  'src/analysis/draftMessages.ts',
   'src/data/rowAccessMessages.ts',
   'src/app/editConflictMessages.ts',
   'src/publish/publishMessages.ts',

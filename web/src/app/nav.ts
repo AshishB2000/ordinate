@@ -15,7 +15,6 @@ export const NAV: readonly NavItem[] = [
   { to: '/', label: 'Home', icon: 'home' },
   { to: '/data', label: 'Data', icon: 'database' },
   { to: '/visuals', label: 'Visuals', icon: 'chart-bar' },
-  { to: '/analyses', label: 'Analyses', icon: 'layers' },
   { to: '/dashboards', label: 'Dashboards', icon: 'layout-dashboard' },
   { to: '/explore', label: 'Explore', icon: 'trending-up' },
   { to: '/reports', label: 'Reports', icon: 'file-text' },

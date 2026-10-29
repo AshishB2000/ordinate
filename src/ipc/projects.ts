@@ -6,6 +6,7 @@ import * as appPaths from '../app/paths';
 import { orgKey, serverDataDir } from '../server/context';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
 import * as projects from '../app/projects';
+import * as analysis from '../analysis/analysis';
 import * as bundle from '../app/bundle';
 import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
@@ -135,7 +136,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
       lastOpenedAt: p.lastOpenedAt || null,
       archived: !!p.archivedAt,
       datasets: await count(p.id, 'datasets'),
-      dashboards: await count(p.id, 'analyses'),
+      // A viewer counts the published dashboards they can open (docs/analysis/00-model.md); anyone else, every file.
+      dashboards: (await analysis.readsPublishedOnly(p.id)) ? (await analysis.listAnalyses(p.id)).length : await count(p.id, 'analyses'),
       // The badge lasts as long as the sample does: remove it, and this is
       // just the user's project again.
       sample: !!sample && sample.projectId === p.id

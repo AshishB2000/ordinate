@@ -307,22 +307,33 @@ async function partOne(): Promise<void> {
     const rn = await call('analysis:rename', { projectId: pid, id: made.body.id, name: 'Renamed' });
     ok('rename: ok', rn.body.ok && rn.body.analysis.name === 'Renamed');
 
-    // ── Ready (the Dashboards page lists it): not content ─────────────────
+    // ── Publish (analysis/publishedCopy.ts): drafts, a published copy, not content ──
     const row = async (id: string) => (await call('analysis:gallery', { projectId: pid })).body.find((x: { id: string }) => x.id === id);
     const opened = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
-    const on = await call('analysis:setReady', { projectId: pid, id: made.body.id, ready: true });
+    ok('publish: a new dashboard is a draft, in the gallery and the open reply', (await row(made.body.id))?.status === 'draft'
+      && opened.status === 'draft' && opened.showing === 'draft' && !('published' in opened) && !('published' in opened.analysis), JSON.stringify(opened).slice(0, 200));
+    const on = await call('analysis:publish', { projectId: pid, id: made.body.id, base: opened.tag });
     const onOpen = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
-    ok('ready: on — the record and the gallery carry it', on.body.ok && onOpen.analysis.ready === true && (await row(made.body.id))?.ready === true, JSON.stringify(on.body));
-    ok('ready: not content — the edit-conflict tag and updatedAt do not move', onOpen.tag === opened.tag && onOpen.analysis.updatedAt === opened.analysis.updatedAt, JSON.stringify([opened.tag, onOpen.tag]));
+    ok('publish: published and in sync; the gallery says when; the reply names the version it recorded', on.body.ok && on.body.status === 'published'
+      && onOpen.status === 'published' && (await row(made.body.id))?.publishedAt === on.body.published.publishedAt && /^\d{4}-/.test(on.body.published.versionKey), JSON.stringify(on.body));
+    ok('publish: not content — the edit-conflict tag and updatedAt do not move, and the draft reply carries no copy', onOpen.tag === opened.tag
+      && onOpen.analysis.updatedAt === opened.analysis.updatedAt && !('published' in onOpen.analysis), JSON.stringify([opened.tag, onOpen.tag]));
     const autosave = await call('analysis:update', { projectId: pid, id: made.body.id, base: opened.tag, name: 'Renamed again' });
-    ok('ready: an open editor\'s autosave on the tag it opened with lands, and keeps Ready', autosave.status === 200 && autosave.body.ok && autosave.body.analysis.ready === true, JSON.stringify(autosave.body).slice(0, 200));
-    const off = await call('analysis:setReady', { projectId: pid, id: made.body.id, ready: false });
-    const offOpen = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
-    ok('ready: off — absent again (never `false`), in the record and the gallery', off.body.ok && !('ready' in offOpen.analysis) && !('ready' in (await row(made.body.id))), JSON.stringify(offOpen.analysis).slice(0, 120));
-    ok('NEGATIVE CONTROL: a dashboard never marked carries no ready', !('ready' in (await row(s.aid))));
-    const lostReady = await call('analysis:setReady', { projectId: pid, id: crypto.randomUUID(), ready: true });
-    ok('ready: an unknown dashboard is a refusal with a reason; a missing flag is a 400', lostReady.body.ok === false && typeof lostReady.body.error === 'string'
-      && (await call('analysis:setReady', { projectId: pid, id: made.body.id })).status === 400);
+    ok('publish: an open editor\'s autosave on the tag it opened with lands; the draft now has edits not live', autosave.status === 200 && autosave.body.ok
+      && (await row(made.body.id))?.status === 'edited', JSON.stringify(autosave.body).slice(0, 200));
+    const stale = await call('analysis:publish', { projectId: pid, id: made.body.id, base: opened.tag });
+    const pubOpen = (await call('analysis:open', { projectId: pid, id: made.body.id, published: true })).body;
+    ok('publish: a base older than the draft is refused, 409 record_changed, and nothing is published', stale.status === 409 && JSON.stringify(stale.body).includes('record_changed')
+      && pubOpen.showing === 'published' && pubOpen.analysis.name === 'Renamed' && pubOpen.status === 'edited', JSON.stringify([stale.status, stale.body, pubOpen.analysis?.name]));
+    const off = await call('analysis:unpublish', { projectId: pid, id: made.body.id });
+    ok('unpublish: a draft again, the draft as it was', off.body.ok && off.body.status === 'draft' && (await row(made.body.id))?.status === 'draft'
+      && (await call('analysis:open', { projectId: pid, id: made.body.id })).body.analysis.name === 'Renamed again', JSON.stringify(off.body));
+    const draftOpen = (await call('analysis:open', { projectId: pid, id: made.body.id, published: true })).body;
+    ok('open published on a draft: an editor gets the draft, marked so (the view page\'s Preview)', draftOpen.ok && draftOpen.showing === 'draft' && draftOpen.analysis.name === 'Renamed again');
+    const lostDash = await call('analysis:publish', { projectId: pid, id: crypto.randomUUID() });
+    ok('publish: an unknown dashboard is a refusal with a reason; a missing id is a 400', lostDash.body.ok === false && typeof lostDash.body.error === 'string'
+      && (await call('analysis:publish', { projectId: pid })).status === 400);
+    ok('NEGATIVE CONTROL: analysis:setReady is gone (404)', (await call('analysis:setReady', { projectId: pid, id: made.body.id, ready: true })).status === 404);
     const del = await call('analysis:delete', { projectId: pid, id: made.body.id });
     const inTrash = (await call('trash:list', { projectId: pid })).body;
     ok('delete: to the Trash (restorable), gone from the gallery', del.body.ok && JSON.stringify(inTrash).includes(made.body.id)
@@ -333,10 +344,9 @@ async function partOne(): Promise<void> {
     ok('edge: analysis:list / analysis:get stay uncontracted (404)', (await call('analysis:list', { projectId: pid })).status === 404
       && (await call('analysis:get', { projectId: pid, id: s.aid })).status === 404);
 
-    // ── Publish copies BY VALUE (docs/analysis/00-model.md §0, §3) ─────────
-    // The single-artifact model has no `analysis:publish`: what leaves the app
-    // is a snapshot the publisher BUILDS from the dashboard (src/publish).
-    ok('publish: no analysis:publish channel (404)', (await call('analysis:publish', { projectId: pid, id: s.aid })).status === 404);
+    // ── A /p/ page copies BY VALUE (docs/analysis/00-model.md §0, §3) ──────
+    // What leaves the app is a snapshot the publisher BUILDS from the dashboard
+    // (src/publish) — from its published copy, or, as here, a draft never published.
     const build = () => context.runInContext(dev, 'publish', () => dashData.buildDashboard(pid, s.aid, 1));
     const snap = await build();
     const before = JSON.stringify(snap);
@@ -448,8 +458,10 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['analysis:rename', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],
       // Saved views are shared: a viewer applies them, only an editor saves one.
       ['analysis:view', () => ({ projectId: pid, id: s.aid, op: { op: 'default', viewId: '' } }), 'write'],
-      // What the Dashboards page lists is an editor's call; a viewer reads the list.
-      ['analysis:setReady', () => ({ projectId: pid, id: s.aid, ready: false }), 'write'],
+      // What viewers see is an editor's call; a viewer reads the published copy.
+      ['analysis:publish', () => ({ projectId: pid, id: crypto.randomUUID() }), 'write'],
+      ['analysis:unpublish', () => ({ projectId: pid, id: crypto.randomUUID() }), 'write'],
+      ['analysis:discard', () => ({ projectId: pid, id: crypto.randomUUID() }), 'write'],
       ['analysis:buildPlan', () => ({ projectId: pid, plan }), 'write'],
       ['analysis:starterCards', () => ({ projectId: pid, kind: 'kpis', datasetId: s.ds }), 'write'],
       ['metric:ensureDefaults', () => ({ projectId: pid }), 'write'],

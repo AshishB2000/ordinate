@@ -116,7 +116,7 @@ describe('the wizard’s layouts', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
     expect(calls.filter((c) => c.channel === 'analysis:draft').map((c) => c.payload)).toEqual([{ projectId: PID, datasetId: DID, intent: 'revenue by region', kind: 'overview', clarify: true }]);
     // The name follows the dataset until it is typed, so the draft's own name stands.
-    fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
+    fireEvent.click(within(review).getByRole('button', { name: 'Create draft' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Orders' }, style: 'executive' }));
   });
 

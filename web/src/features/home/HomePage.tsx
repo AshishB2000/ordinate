@@ -61,7 +61,7 @@ function NewMenu({ projectId }: { projectId: string | undefined }) {
       }
       items={[
         // The wizard, as the palette's "New dashboard" (the Dashboards section lists published pages).
-        { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate(projectId ? `/analyses?project=${projectId}&new=1` : '/analyses?new=1') },
+        { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate(projectId ? `/dashboards?project=${projectId}&new=1` : '/dashboards?new=1') },
         { label: 'Visual', icon: 'chart-bar', onSelect: () => void navigate('/visuals') },
         { kind: 'separator' },
         { kind: 'heading', label: 'Add data' },

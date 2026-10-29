@@ -1,9 +1,7 @@
-// /dashboards?project=<id> — the project's live dashboards: every dashboard an
-// editor marked Ready, one click from opening inside the app (ReadyDashboards).
-// No tabs. The published snapshots (T2.9, served at /p/<id>/) still have their
-// list at `&tab=links` (or `&dashboard=<id>`, which opens Publish on it): each
-// link, who may open it, and the way to copy, publish again, change access or
-// take it down. Nothing in the app links there any more; the address is kept
+// /dashboards?project=<id> — the project's one list of dashboards: drafts and published ones for an editor, the
+// published ones for everyone else (list/DashboardList). The published snapshots (T2.9, served at /p/<id>/) still have
+// their list at `&tab=links` (or `&dashboard=<id>`, which opens Publish on it): each link, who may open it, and the way
+// to copy, publish again, change access or take it down. Nothing in the app links there any more; the address is kept
 // for the /p/ and embed flows.
 
 import { useState } from 'react';
@@ -20,7 +18,7 @@ import { useCanEdit } from '../projects/api';
 import { reason, siteUrl, usePublishActions, useSites, type HostedSite } from './api';
 import { PublishDialog } from './PublishDialog';
 import { EmbedDialog } from './EmbedDialog';
-import { ReadyDashboards } from './ReadyDashboards';
+import { DashboardList } from './list/DashboardList';
 import p from './Publish.module.css';
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -102,10 +100,10 @@ function SiteRow({ site, projectId, publicLinks, onRepublish, onEmbed, canEdit }
   );
 }
 
-/** The new-dashboard wizard (Analyses, `?new=1`): what is published here is made there. */
+/** The new-dashboard wizard (the list's `?new=1`): what is published here is made there. */
 function CreateDashboard({ projectId }: { projectId: string }) {
   return (
-    <Link className={buttonClass('secondary')} to={`/analyses?project=${projectId}&new=1`}>
+    <Link className={buttonClass('secondary')} to={`/dashboards?project=${projectId}&new=1`}>
       <Icon name="plus" />
       <span>Create dashboard</span>
     </Link>
@@ -188,9 +186,10 @@ function Board({ projectId }: { projectId: string }) {
       },
       { replace: true },
     );
+  if (!links) return <DashboardList projectId={projectId} />;
   return (
-    <Page title="Dashboards" sub={links ? 'The links that share this project’s dashboards.' : 'The dashboards this project reads.'} actions={canEdit && <CreateDashboard projectId={projectId} />}>
-      {links ? <SharedLinks projectId={projectId} preselect={preselect} onClosePreselect={dropPreselect} /> : <ReadyDashboards projectId={projectId} />}
+    <Page title="Dashboards" sub="The links that share this project’s dashboards." actions={canEdit && <CreateDashboard projectId={projectId} />}>
+      <SharedLinks projectId={projectId} preselect={preselect} onClosePreselect={dropPreselect} />
     </Page>
   );
 }

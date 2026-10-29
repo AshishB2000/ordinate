@@ -44,12 +44,12 @@ export function hitHref(h: Pick<SearchHit, 'kind' | 'id' | 'projectId' | 'parent
     case 'analysis':
       return `/analyses/${h.projectId}/${h.id}`;
     case 'view':
-      return h.parentId ? `/analyses/${h.projectId}/${h.parentId}?view=${h.id}` : '/analyses';
+      return h.parentId ? `/analyses/${h.projectId}/${h.parentId}?view=${h.id}` : '/dashboards';
     case 'report':
     case 'story':
       return '/reports';
     default:
-      return '/analyses';
+      return '/dashboards';
   }
 }
 

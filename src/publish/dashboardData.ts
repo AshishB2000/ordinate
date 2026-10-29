@@ -336,7 +336,8 @@ async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: U
 
 /** The plan without computing a single tile — for the dialog's summary line. `outgoing`: the Share policy, for the option labels. */
 export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}, outgoing?: Outgoing) {
-  const a = scope.def ? (scope.def.analysis.id === analysisId ? scope.def.analysis : null) : await analysis.getAnalysis(projectId, analysisId);
+  // A page or an export leaves the app: the published copy (./publishedCopy.ts), or a draft never published.
+  const a = scope.def ? (scope.def.analysis.id === analysisId ? scope.def.analysis : null) : await analysis.getAudienceAnalysis(projectId, analysisId);
   if (!a) return null;
   const unlisted: Unlisted[] = [];
   const specs = await controlSpecs(projectId, a, unlisted, scope.lock, outgoing);

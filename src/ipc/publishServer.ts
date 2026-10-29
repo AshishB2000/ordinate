@@ -119,8 +119,9 @@ export function register(pool: () => Pool | null): void {
 
   // Export HTML: the dashboard as one self-contained page (the published
   // renderer, its data, its pinned CSP), under the Share policy's EXPORT path.
+  // The page is the published copy (or a draft never published): the file leaves the app, as a /p/ page does.
   ipcMain.handle('dashboard:exportHtml', async (_e, { projectId, id }: { projectId: string; id: string }) => {
-    const a = await analysis.getAnalysis(projectId, id);
+    const a = await analysis.getAudienceAnalysis(projectId, id);
     if (!a) return { ok: false, error: 'That dashboard could not be loaded.' };
     // An export (docs/row-policy D11): refused to a caller row access rules restrict; editors export as before.
     const html = (await exportScope(() => dashboardPageHtml(projectId, id))).value;

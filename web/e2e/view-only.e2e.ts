@@ -3,8 +3,8 @@
 // makes a project with a dataset, a visual and a dashboard over RPC, and grants
 // one person Viewer and another Editor. Then, signed in as each:
 //
-//   the viewer   Home, Data, a dataset, Visuals, the builder, Analyses, the
-//                open dashboard and Dashboards show NO control that changes
+//   the viewer   Home, Data, a dataset, Visuals, the builder, Dashboards, the
+//                open dashboard and the published links show NO control that changes
 //                the project — and the dashboard still draws its tiles, its
 //                figure from the server, and takes no edit from the keyboard.
 //                Not one call is refused on the way (a 403 is a console error,
@@ -50,7 +50,7 @@ if (!adminUrl) {
   });
 
   /** Is the control there? Roles arrive after the page: a present control is waited for, an absent one is counted once the page has settled. */
-  const count = (page: Page, role: 'button' | 'link' | 'group', name: string | RegExp) => page.getByRole(role, { name, exact: typeof name === 'string' }).count();
+  const count = (page: Page, role: 'button' | 'link' | 'group' | 'tab', name: string | RegExp) => page.getByRole(role, { name, exact: typeof name === 'string' }).count();
 
   e2e('view-only: a viewer reads everything and is offered nothing that changes it; an editor is', async ({ page, server }) => {
     // Any GET hands the context its CSRF cookie (T6.2); a non-GET repeats it in X-CSRF-Token, as the app does.
@@ -110,6 +110,8 @@ if (!adminUrl) {
     });
     const aid: string = dash.id;
     assert.match(aid, /^[0-9a-f-]{36}$/, JSON.stringify(dash));
+    // Published: the viewer reads published dashboards only.
+    assert.equal((await rpc(ADMIN, 'analysis:publish', { projectId: pid, id: aid })).ok, true);
 
     // ── …and shares it: one viewer, one editor ────────────────────────────
     await rpc(VIEWER, 'projects:list'); // a first header-mode request provisions the account (an org viewer)
@@ -182,10 +184,13 @@ if (!adminUrl) {
     await page.locator('canvas').first().waitFor();
     assert.equal(await count(page, 'button', 'Save visual'), 0, 'builder: no Save visual');
 
-    await open(`/analyses?project=${pid}`);
+    await open(`/dashboards?project=${pid}`);
     await page.getByRole('list', { name: 'Dashboards' }).getByText('Weekly review').waitFor();
-    await page.getByRole('link', { name: 'Metrics' }).waitFor();
-    assert.equal(await count(page, 'button', 'Create dashboard'), 0, 'Analyses: no Create dashboard');
+    await page.getByRole('button', { name: 'Copy link to Weekly review' }).waitFor();
+    assert.equal(await count(page, 'button', 'Create dashboard'), 0, 'Dashboards: no Create dashboard');
+    assert.equal(await page.getByRole('tab').count(), 0, 'Dashboards: no Published / Drafts tabs');
+    assert.equal(await count(page, 'button', 'Weekly review options'), 0, 'Dashboards: no card menu');
+    await screens(page, 'dashboards-list-viewer');
 
     await open(`/analyses/${pid}/${aid}`);
     const kpi = await tiles();
@@ -276,8 +281,10 @@ if (!adminUrl) {
     await open(`/visuals/${pid}/${vid}`);
     await page.getByRole('button', { name: 'Save visual' }).waitFor();
 
-    await open(`/analyses?project=${pid}`);
+    await open(`/dashboards?project=${pid}`);
     await page.getByRole('button', { name: 'Create dashboard' }).waitFor();
+    await page.getByRole('tab', { name: /^Published/ }).waitFor();
+    await page.getByRole('button', { name: 'Weekly review options' }).waitFor();
 
     await open(`/analyses/${pid}/${aid}`);
     await tiles();

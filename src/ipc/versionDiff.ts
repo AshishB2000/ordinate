@@ -208,6 +208,8 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   if (!versions.isVersionType(type)) return { ok: false, error: M.versionGone() };
   // A dataset's versions are its whole table (row-policy D9). A visual's diff never words its overrides' values.
   if (type === 'dataset') await gateRows(projectId, id);
+  // A dashboard's history is its draft's: a viewer reads none of it (docs/analysis/00-model.md), as for a missing one.
+  if (type === 'dashboard' && (await analysis.readsPublishedOnly(projectId))) return { ok: false, error: M.versionGone() };
   const keys: [string, string] = [String(input.from || ''), String(input.to || '')];
   const [a, b] = await Promise.all(keys.map((k) => versions.get(projectId, type, id, k)));
   if (!a || !b) return { ok: false, error: M.versionGone() };

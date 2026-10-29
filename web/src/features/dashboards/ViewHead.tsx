@@ -1,15 +1,19 @@
 // The view page's header (/dashboards/<p>/<id>), in place of the authoring strip: it reads like a published page.
-// "Dashboards / <project>" back to the list, the name, how fresh the figures are (once, not on every card), and four
-// actions: Compare (with As of and the currency when there is one), Subscribe, Expand and ⋯ (Copy link, Comments,
-// Export HTML, Print). More than one sheet: underlined sheet tabs under it. Saved views sit in the filter box.
+// "Dashboards / <project>" back to the list, the name, how fresh the figures are (once, not on every card) and when it
+// was published, and four actions: Compare (with As of and the currency when there is one), Subscribe, Expand and ⋯
+// (Copy link, Comments, Export HTML, Print). An editor on the published copy also gets Edit, and — while the draft
+// holds edits viewers do not see — a line saying so, with the way to it. More than one sheet: underlined sheet tabs
+// under it. Saved views sit in the filter box.
 
 import { Link } from 'react-router';
-import { IconButton } from '../../ui/Button';
+import { buttonClass, IconButton } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
 import { Menu } from '../../ui/Menu';
 import { toast } from '../../ui/Toast';
 import { useEditor } from '../analyses/editor/context';
-import { useOverview } from '../projects/api';
+import { useCanEdit, useOverview } from '../projects/api';
 import { SubscribeButton, ViewControls, exportHtml, useDashFreshness } from './DashboardChrome';
+import { publishedDay, useOpened } from './drafts/state';
 import s from './ViewHead.module.css';
 
 /** This page's live in-app address, which anyone in the project can open. */
@@ -32,6 +36,12 @@ export function ViewHead() {
   const warn = !ed.view.asOf && latest?.tone === 'warn';
   const { expanded, setExpanded } = ed.view;
   const sheets = ed.doc.sheets;
+  // The published copy (not a Preview): when it went live, and for an editor the way to the draft.
+  const opened = useOpened(ed);
+  const copy = opened?.showing === 'published' ? opened : undefined;
+  const editor = useCanEdit(ed.projectId) && !!copy;
+  const draftPath = `/analyses/${ed.projectId}/${ed.analysisId}`;
+  const when = publishedDay(copy?.published?.publishedAt);
   return (
     <header className={s.head}>
       <div className={s.row}>
@@ -48,15 +58,35 @@ export function ViewHead() {
             )}
           </nav>
           <h1 className={s.name}>{ed.doc.name}</h1>
-          {stamp && (
+          {(stamp || when) && (
             <p className={warn ? `${s.stamp} ${s.warn}` : s.stamp} title={ed.view.asOf ? undefined : latest?.title}>
-              {stamp}
+              {[
+                stamp,
+                when && `Published ${when}`,
+                editor && copy?.status === 'edited' && (
+                  <span className={s.edits}>
+                    You have edits that aren’t live yet. <Link to={draftPath}>Open the draft</Link>
+                  </span>
+                ),
+              ]
+                .filter(Boolean)
+                .map((part, i) => (
+                  <span key={i} className={s.part}>
+                    {part}
+                  </span>
+                ))}
             </p>
           )}
         </div>
         <div className={s.actions}>
           <ViewControls />
           <SubscribeButton />
+          {editor && (
+            <Link className={buttonClass('secondary', 'sm')} to={draftPath}>
+              <Icon name="pencil" />
+              <span>Edit</span>
+            </Link>
+          )}
           <IconButton
             icon={expanded ? 'minimize' : 'maximize'}
             size="sm"

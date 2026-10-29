@@ -99,7 +99,8 @@ function underView(a: analysis.Analysis, view: SavedView | null): PageAnalysis {
  * compose.
  */
 export async function buildMessage(projectId: string, def: Definition): Promise<Built | { code: 'dashboard_gone' | 'no_content' }> {
-  const a = def.analysisId ? await analysis.getAnalysis(projectId, def.analysisId) : null;
+  // A send reaches viewers: the published copy (a draft never published only for its editors' own sends).
+  const a = def.analysisId ? await analysis.getAudienceAnalysis(projectId, def.analysisId) : null;
   if (!a) return { code: 'dashboard_gone' };
   // A view that was deleted since falls back to the dashboard as saved, rather than failing the send.
   const view = (def.viewId && (a.views || []).find((v) => v.id === def.viewId)) || null;

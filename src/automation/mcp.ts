@@ -67,7 +67,8 @@ export function createHandler(opts: McpOptions, schemaOf: (c: Command) => unknow
           serverInfo: { name: 'ordinate', title: 'Ordinate', version: opts.version },
           instructions: 'Ordinate is a local BI workspace. Start with list_datasets and describe_dataset; '
             + 'use aggregate or query_sql for numbers (the app computes every figure). Every tool is read-only '
-            + 'except create_visual and create_dashboard, which save records and never change data.',
+            + 'except create_visual, create_dashboard, publish_dashboard and unpublish_dashboard, which save records and '
+            + 'never change data. A new dashboard is a draft; publish it only when the user asks — viewers then see it.',
         });
       }
       case 'ping':

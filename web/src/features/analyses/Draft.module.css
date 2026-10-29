@@ -47,6 +47,23 @@
   color: var(--muted);
   font-size: var(--t-12);
 }
+/* Above Create draft: who will see what it creates. */
+.draftNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.draftNote > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
 .dropped {
   margin: 0;
   padding: 0;

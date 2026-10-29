@@ -9,14 +9,14 @@ itself live in `.claude/skills/` at the repo root.
 
 | Skill | Use it for |
 |---|---|
-| `build-dashboard` | "Build me a sales dashboard": finds the data, writes a plan, builds it with `create_dashboard`, and reports anything Ordinate dropped. |
+| `build-dashboard` | "Build me a sales dashboard": finds the data, writes a plan, builds it as a draft with `create_dashboard`, reports anything Ordinate dropped, and publishes it with `publish_dashboard` only when you say so. |
 | `answer-data-questions` | "Which region is most profitable?": picks the tool that computes the answer, and quotes the server's figures without changing them. |
 
 ## Install (Claude Code)
 
 1. In Ordinate, open **API tokens** (`/tokens`) and make a personal token (`ord_…`). It acts as
    you, with your current role: the agent sees only the projects you can read, and can only
-   create visuals and dashboards where you are an editor.
+   create visuals and dashboards, and publish or unpublish dashboards, where you are an editor.
 2. In Claude Code:
 
    ```
@@ -31,7 +31,9 @@ itself live in `.claude/skills/` at the repo root.
 
 The plugin's `plugin.json` connects to `<address>/api/mcp` with `Authorization: Bearer <token>`.
 The tools are listed in [`docs/automation.md`](../../docs/automation.md). They are read-only
-except `create_visual` and `create_dashboard`, which save records, never data.
+except `create_visual`, `create_dashboard`, `publish_dashboard` and `unpublish_dashboard`, which
+save records, never data. A dashboard the agent builds is a draft until it is published, which
+makes it visible to everyone in the project.
 
 ## Other agents
 

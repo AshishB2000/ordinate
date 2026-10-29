@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type Rea
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { failure, type Analysis, type OpenReply, type SavedView, type Step, type VisualDef } from '../api';
+import { failure, openKey, type Analysis, type DashboardStatus, type OpenReply, type SavedView, type Step, type VisualDef } from '../api';
 import { mergeFilters } from '../VisualTile';
 import { AddDialogs, type Adding } from './AddDialogs';
 import { Canvas } from './Canvas';
@@ -27,6 +27,8 @@ import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/Dash
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 import { PhoneHead } from '../../dashboards/phone/PhoneHead';
 import { ViewHead } from '../../dashboards/ViewHead';
+import { ChangesStrip } from '../../dashboards/drafts/ChangesStrip';
+import { PreviewStrip } from '../../dashboards/drafts/PreviewStrip';
 import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
 import { ConflictBanner, LeaveGuard } from '../../editConflicts/ConflictBanner';
 import { useEditGuard } from '../../editConflicts/useEditGuard';
@@ -82,9 +84,13 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
           if (!ok) return;
           landed.current = v;
           void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
-          // The name as saved, for whoever reads this page's record without owning it (the Assistant's header). The
-          // editor took its document at mount and reads the record no further, so this reseeds nothing.
-          client.setQueryData<OpenReply>(['analysis:open', projectId, id], (o) => (o?.ok ? { ...o, analysis: { ...o.analysis, name: d.name } } : o));
+          // A new version: the header's "not live yet" summary diffs to the newest one.
+          void client.invalidateQueries({ queryKey: ['versions:list', projectId, 'dashboard', id] });
+          // The name as saved, and whether it now differs from what viewers see, for whoever reads this page's record
+          // without owning it (the Assistant's header, the draft's status). The editor took its document at mount and
+          // reads the record no further, so this reseeds nothing — and the tag is left alone: the page keys its editor by it.
+          const status = (r as { status?: DashboardStatus }).status;
+          client.setQueryData<OpenReply>(openKey(projectId, id), (o) => (o?.ok ? { ...o, analysis: { ...o.analysis, name: d.name }, ...(status ? { status } : {}) } : o));
         },
         () => setState('error'),
       );
@@ -130,7 +136,7 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
   }, [write, unsaved]);
 
   // Only what the server does not have: a read-only page (the view page, a viewer's Export or Subscribe) never writes.
-  return { state, retry: () => void (unsaved() && write()), flush, queue, changed, unsaved };
+  return { state, retry: () => void (unsaved() && write()), flush, queue, send: guarded, changed, unsaved };
 }
 
 export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false, viewing = false }: {
@@ -272,6 +278,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
     undo: () => dispatch({ type: 'undo' }),
     redo: () => dispatch({ type: 'redo' }),
     save,
+    reload: conflict.reload,
     sheet: sheetIndex,
     setSheet: (i) => {
       setSheetRaw(i);
@@ -385,7 +392,9 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
         data-viewing={viewing ? '' : undefined}
       >
         <DashboardChrome />
+        {!view.presenting && viewing && <PreviewStrip />}
         {!view.presenting && (phone ? <PhoneHead /> : viewing ? <ViewHead /> : <Head />)}
+        {!view.presenting && !viewing && <ChangesStrip />}
         {save.changed && !readOnly && (
           <div className={s.conflict}>
             <ConflictBanner noun="dashboard" onReload={conflict.reload} onCopy={conflict.copy} />

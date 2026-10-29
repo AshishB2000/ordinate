@@ -98,7 +98,7 @@ function Ask({ projectId, view }: { projectId: string; view: CaptureView }) {
           <p className={s.askBody}>This capture is already saved as a dataset. Start an analysis on it — a draft from the assistant, a template or a blank layout.</p>
         </div>
         <div className={s.askActs}>
-          <Link className={buttonClass('primary')} to={`/analyses?project=${projectId}&new=1&dataset=${view.datasetId}`}>
+          <Link className={buttonClass('primary')} to={`/dashboards?project=${projectId}&new=1&dataset=${view.datasetId}`}>
             <Icon name="layout-dashboard" />
             <span>Build an analysis</span>
           </Link>

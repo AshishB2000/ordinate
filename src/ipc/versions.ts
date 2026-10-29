@@ -65,10 +65,13 @@ export async function writeBack(projectId: string, type: string, id: string, rec
 
 export function register(): void {
   versionDiff.register();
+  // A dashboard's history is its draft's: a viewer gets none of it — the replies of a record with no history.
+  const draftHistory = async (projectId: unknown, type: unknown) => type === 'dashboard' && analysis.readsPublishedOnly(String(projectId || ''));
   ipcMain.handle('versions:list', async (_e, { projectId, type, id }: any = {}) =>
-    versions.list(String(projectId || ''), String(type || ''), String(id || '')));
+    (await draftHistory(projectId, type)) ? [] : versions.list(String(projectId || ''), String(type || ''), String(id || '')));
 
   ipcMain.handle('versions:get', async (_e, { projectId, type, id, key }: any = {}) => {
+    if (await draftHistory(projectId, type)) return null;
     // An input table's version is its whole table: refused like its rows (row-policy D9).
     if (type === 'dataset') await gateRows(String(projectId || ''), String(id || ''));
     const v = await versions.get(String(projectId || ''), String(type || ''), String(id || ''), String(key || ''));

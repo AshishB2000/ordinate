@@ -56,6 +56,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       const metricId = String(m.body?.metric?.id ?? m.body?.id ?? '');
       const a = await W.call('boss', 'analysis:create', { projectId: P, name: 'Board', sheets: [{ name: 'One', cards: [{ id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId }] }] });
       recs[d] = { visualId, metricId, dash: String(a.body?.id ?? a.body?.analysis?.id ?? '') };
+      await W.call('boss', 'analysis:publish', { projectId: P, id: recs[d].dash }); // a viewer reads published dashboards only
     }
     ok('setup: a visual, a metric and a dashboard on each twin', [orders, east].every((d) => /^[0-9a-f-]{36}$/.test(recs[d].visualId) && /^[0-9a-f-]{36}$/.test(recs[d].metricId) && /^[0-9a-f-]{36}$/.test(recs[d].dash)), JSON.stringify(recs));
 

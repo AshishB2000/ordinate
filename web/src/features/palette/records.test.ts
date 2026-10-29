@@ -19,7 +19,7 @@ describe('a ⌘K hit’s route', () => {
   });
 
   it('NEGATIVE CONTROL: a view hit with no dashboard named lands on the list, not a broken route', () => {
-    expect(hitHref({ kind: 'view', id: V, projectId: P })).toBe('/analyses');
+    expect(hitHref({ kind: 'view', id: V, projectId: P })).toBe('/dashboards');
   });
 
   it('other kinds are unchanged', () => {
