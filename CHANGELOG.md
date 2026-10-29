@@ -9,6 +9,23 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Sign-in hardening
+
+- **OIDC needs a verified email.** An ID token's `email_verified` must be `true`; an absent claim or a
+  string is refused with `email`. **Entra ID never sends the claim: set `OIDC_EMAIL_VERIFIED=optional`**
+  before upgrading, or every sign-in is refused (the log line names the variable).
+- **Header mode answers only its own host.** `ORDINATE_PUBLIC_URL` is now **required** with
+  `AUTH_MODE=header` in prod, and a request whose `Host` is neither that name, an IP address nor
+  `localhost` gets 421 (dev mode too), so a DNS-rebinding page cannot act through the trusted proxy's
+  address or a dev server's loopback admin. Compose passes `ORDINATE_PUBLIC_URL` through now.
+- **Password changes and resets revoke API tokens**, and an admin's API token can no longer add a
+  person, reset a password or generate the embed signing secret.
+- **Fixed error replies.** A route that throws answers `500 {"error":"server error"}`; the database
+  address or Postgres text it used to echo goes to the log only.
+- **Sign-in load.** A pod checks at most 4 password sign-ins at once (`busy` past it). The server warns
+  once when an untrusted peer sends `X-Forwarded-For`, and the Helm chart when the Ingress is on and
+  `TRUSTED_PROXY_CIDRS` is empty: every client would share one rate-limit bucket.
+
 ### Audit log
 
 - **Retention, and an `audit` log line.** `AUDIT_RETENTION_DAYS` deletes audit rows older than that many
