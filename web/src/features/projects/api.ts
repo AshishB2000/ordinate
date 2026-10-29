@@ -86,7 +86,9 @@ export function byRecent(list: readonly ProjectRow[]): ProjectRow[] {
 }
 
 export function useOverview() {
-  return useQuery({ queryKey: [OVERVIEW], queryFn: async () => (await rpc(OVERVIEW)) as ProjectRow[] });
+  // staleTime: an observer mounted after the shell's reply (Home's mentions) reads it instead of
+  // asking again. Creating, opening, renaming, archiving and deleting a project invalidate it.
+  return useQuery({ queryKey: [OVERVIEW], queryFn: async () => (await rpc(OVERVIEW)) as ProjectRow[], staleTime: 30_000 });
 }
 
 /**

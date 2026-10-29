@@ -101,6 +101,9 @@ export function useAiStatus(enabled = true) {
     queryKey: ['ai:status'],
     queryFn: async () => (await rpc('ai:status')) as AiStatus,
     enabled,
+    // A surface mounted after the first reply (Home's ask bar beside the dock) reads it instead of
+    // asking again. A change is pushed (`key:changed`) or invalidated by the door that made it.
+    staleTime: 30_000,
   });
 }
 
@@ -113,6 +116,9 @@ export function useHistory(projectId: string | null, threadId: string) {
   return useQuery({
     queryKey: ['copilot:history', projectId, threadId],
     enabled: !!projectId,
+    // The dock seeds a new conversation's key from copilot:ask's reply (setTurns); without this
+    // it fetched those same turns again the moment it switched to that key.
+    staleTime: 30_000,
     queryFn: async () => {
       const r = (await rpc('copilot:history', { projectId: projectId as string, ...(threadId ? { threadId } : {}) })) as
         | { ok: true; turns: Turn[]; threadId: string | null; title?: string | null }
