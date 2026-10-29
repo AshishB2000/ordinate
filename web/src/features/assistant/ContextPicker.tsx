@@ -32,7 +32,7 @@ function Choices({ projectId, onPick }: { projectId: string; onPick: (c: DockCon
   const lists = [
     { kind: 'dataset' as const, label: 'Datasets', q: datasets },
     { kind: 'visual' as const, label: 'Visuals', q: visuals },
-    { kind: 'analysis' as const, label: 'Analyses', q: analyses },
+    { kind: 'analysis' as const, label: 'Dashboards', q: analyses },
   ];
   const groups = lists.map((l) => ({ ...l, items: ((l.q.data ?? []) as Mentionable[]).filter((m) => m.name.toLowerCase().includes(needle)) })).filter((g) => g.items.length > 0);
   const loading = lists.some((l) => l.q.isPending);

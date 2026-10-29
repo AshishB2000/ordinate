@@ -85,7 +85,7 @@ e2e(
     // ── The app's chrome steps aside; the dashboard's own header has the way back ──
     assert.equal(await page.getByRole('navigation', { name: 'Sections' }).isVisible(), false, 'the rail is hidden on a phone dashboard');
     assert.equal(await page.getByRole('search').isVisible(), false, 'the top bar is hidden on a phone dashboard');
-    await page.getByRole('link', { name: 'Back to Analyses' }).waitFor();
+    await page.getByRole('link', { name: 'Back to Dashboards' }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Present' }).count(), 0, 'no desktop head');
     assert.equal(await page.getByRole('toolbar').count() + (await page.getByRole('group', { name: 'Add to the sheet' }).count()), 0, 'no authoring tools');
 

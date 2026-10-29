@@ -50,11 +50,7 @@ export function PhoneHead() {
   return (
     <header className={s.head}>
       <div className={s.bar}>
-        {ed.viewing ? (
-          <BackLink iconOnly className={s.tap} to={`/dashboards?project=${ed.projectId}`} label="Dashboards" />
-        ) : (
-          <BackLink iconOnly className={s.tap} to={`/analyses?project=${ed.projectId}`} label="Analyses" />
-        )}
+        <BackLink iconOnly className={s.tap} to={`/dashboards?project=${ed.projectId}`} label="Dashboards" />
         <div className={s.ident}>
           <h1 className={s.name}>{ed.doc.name}</h1>
           {(stamp || viewOnly) && (

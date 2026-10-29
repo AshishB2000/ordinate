@@ -132,8 +132,10 @@ describe('the draft flow', () => {
     expect(drafts()).toHaveLength(2);
     expect(within(review).getByText('Sales overview')).toBeTruthy();
     expect(calls.some((c) => c.channel === 'analysis:buildPlan')).toBe(false); // nothing is created until the click
+    // What it creates is a draft, and the review says who sees one.
+    expect(within(review).getByText('It is saved as a draft that only editors and admins see. Viewers see it once you publish it.')).toBeTruthy();
 
-    fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
+    fireEvent.click(within(review).getByRole('button', { name: 'Create draft' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: PLAN.plan, style: 'dark' });
     // The look went to the build only: no draft was told it.
@@ -160,7 +162,7 @@ describe('the draft flow', () => {
     const review = await screen.findByRole('dialog', { name: REVIEW });
     expect(screen.queryByRole('dialog', { name: 'A few questions first' })).toBeNull();
     expect(drafts()).toEqual([{ projectId: PID, intent: 'revenue by region', kind: 'explore', clarify: true }]);
-    fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
+    fireEvent.click(within(review).getByRole('button', { name: 'Create draft' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Mine' } });
   });
@@ -172,7 +174,7 @@ describe('the draft flow', () => {
     const review = await screen.findByRole('dialog', { name: REVIEW });
     expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
     expect(drafts()).toEqual([{ projectId: PID, datasetId: DID, intent: 'sales', kind: 'report', clarify: true }]);
-    fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
+    fireEvent.click(within(review).getByRole('button', { name: 'Create draft' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: PLAN.plan, style: 'executive' });
   });
@@ -185,12 +187,12 @@ describe('the draft flow', () => {
     expect(screen.queryByRole('status')).toBeNull(); // the brief is not a loading state
     fireEvent.click(await screen.findByRole('button', { name: 'Draft dashboard' }));
     expect((await screen.findByRole('status')).getAttribute('aria-label')).toBe('The Assistant is planning your dashboard');
-    expect(screen.queryByRole('button', { name: 'Create dashboard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create draft' })).toBeNull();
     first(QUESTIONS);
     fireEvent.click(await screen.findByRole('button', { name: 'Skip — just build it' }));
     expect((await screen.findByRole('status')).getAttribute('aria-label')).toBe('The Assistant is drafting your dashboard');
     second(PLAN);
-    await screen.findByRole('button', { name: 'Create dashboard' });
+    await screen.findByRole('button', { name: 'Create draft' });
     expect(screen.queryByRole('status')).toBeNull();
   });
 

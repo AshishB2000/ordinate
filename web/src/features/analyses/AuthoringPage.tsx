@@ -3,7 +3,9 @@
 // visuals in one call, then hands them to the editor, which owns them until
 // the page is left; the cached copy is dropped on the way out so the next
 // open reads what was saved. `viewing`: the same page opened from the
-// Dashboards page (dashboards/DashboardViewPage), read-only for everyone.
+// Dashboards page (dashboards/DashboardViewPage), read-only for everyone —
+// `published`: on the published copy (a dashboard never published opens as
+// its draft, a Preview).
 
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router';
@@ -13,7 +15,7 @@ import { buttonClass } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { useRoles } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
-import { useOpenAnalysis } from './api';
+import { openKey, useOpenAnalysis } from './api';
 import { Editor } from './editor/Editor';
 import { useReload } from '../editConflicts/useEditGuard';
 import s from './editor/Editor.module.css';
@@ -43,19 +45,19 @@ function Loading() {
   );
 }
 
-export default function AuthoringPage({ viewing = false }: { viewing?: boolean }) {
+export default function AuthoringPage({ viewing = false, published = false }: { viewing?: boolean; published?: boolean }) {
   const { projectId = '', analysisId = '' } = useParams();
   useAdoptProject(projectId);
-  const q = useOpenAnalysis(projectId, analysisId);
+  const q = useOpenAnalysis(projectId, analysisId, { published });
   // After a conflict, Reload: the record read again, in a new editor.
-  const { gen, reload } = useReload(['analysis:open', projectId, analysisId]);
+  const { gen, reload } = useReload(openKey(projectId, analysisId, published));
   // The caller's role decides whether this opens to edit or to read; wait for it, so the tools never flash.
   const roles = useRoles();
   const client = useQueryClient();
   useEffect(() => () => client.removeQueries({ queryKey: ['analysis:open', projectId, analysisId] }), [client, projectId, analysisId]);
   const back = (
-    <Link className={buttonClass('primary')} to={`/${viewing ? 'dashboards' : 'analyses'}?project=${projectId}`}>
-      Back to {viewing ? 'Dashboards' : 'Analyses'}
+    <Link className={buttonClass('primary')} to={`/dashboards?project=${projectId}`}>
+      Back to Dashboards
     </Link>
   );
 
@@ -79,7 +81,8 @@ export default function AuthoringPage({ viewing = false }: { viewing?: boolean }
   const role = roles.data?.[projectId];
   return (
     <Editor
-      key={`${analysisId}:${gen}`}
+      // A new editor for a new reply: a Reload, the copy in place of the draft, a draft Discard edits restored (its tag).
+      key={`${analysisId}:${gen}:${q.data.showing}:${q.data.tag ?? ''}`}
       projectId={projectId}
       analysis={q.data.analysis}
       visuals={q.data.visuals}

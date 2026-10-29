@@ -87,6 +87,25 @@
   color: var(--error);
   cursor: pointer;
 }
+/* "Edits not live · published Oct 27": the badge says it, the date beside it in the page's quiet type. */
+.notLive {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.publishedOn {
+  font-size: var(--t-12);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* Sets Preview / Publish apart from the tools before them. */
+.headRule {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--sp-4);
+  background: var(--border);
+}
 .sheets {
   display: flex;
   align-items: flex-end;

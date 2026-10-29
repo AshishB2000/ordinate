@@ -1,8 +1,8 @@
 // The editor's top strip (legacy dashboards.ts .dash-editor-head, moved above
-// the workbench by authoring.ts anMountTopStrip): Back, the name (the rename
-// control), the save state, the sheet tabs, the add row, undo / redo, the
-// layout size, and ⋯ — History, Lineage, Style, export and print. Ready is the
-// one switch that puts a dashboard in front of readers; there is no Publish here.
+// the workbench by authoring.ts anMountTopStrip): back to Dashboards, the name
+// (the rename control), where the draft stands and the save state, the sheet
+// tabs, the add row, undo / redo, the layout size, ⋯ — History, Lineage, Style,
+// export and print — and Preview / Publish (./DraftControls).
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -22,7 +22,7 @@ import s from './Editor.module.css';
 import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
 import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
-import { ReadySwitch } from '../../dashboards/ReadySwitch';
+import { useDraftControls } from './DraftControls';
 
 function SaveChip() {
   const { save } = useEditor();
@@ -125,10 +125,11 @@ export function Head() {
   const [renaming, setRenaming] = useState(false);
   const [lineage, setLineage] = useState(false);
   const [styling, setStyling] = useState(false);
+  const draft = useDraftControls();
   const { past, future } = ed.history;
   const ro = ed.readOnly;
   // The view page (ed.viewing) has its own header, dashboards/ViewHead.
-  const back = { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
+  const back = { to: `/dashboards?project=${ed.projectId}`, label: 'Dashboards' };
   return (
     <div className={s.head}>
       <PageHead
@@ -148,14 +149,16 @@ export function Head() {
               <Badge icon="eye">View only</Badge>
             </span>
           ) : (
-            <SaveChip />
+            <>
+              {draft.status}
+              <SaveChip />
+            </>
           )
         }
         actions={
           <>
             {!ro && (
               <>
-                <ReadySwitch />
                 <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
                 <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
               </>
@@ -173,13 +176,16 @@ export function Head() {
               align="end"
               trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
               items={[
+                ...draft.menuTop,
                 { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
                 { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
                 ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
                 { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
                 { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
+                ...draft.menuEnd,
               ]}
             />
+            {draft.buttons}
           </>
         }
       />
@@ -232,6 +238,7 @@ export function Head() {
           )}
         </div>
       )}
+      {draft.dialogs}
       {styling && <StyleDialog onClose={() => setStyling(false)} />}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}

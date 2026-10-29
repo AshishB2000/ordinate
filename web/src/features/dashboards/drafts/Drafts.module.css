@@ -1,0 +1,138 @@
+/* Drafts and Publish: the Publish dialog's points and summary, the Preview strip over the view page, and the
+   "not live yet" strip under the editor's header. Tokens only, so both themes follow. */
+
+/* ── Publish dialog ── */
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.point {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+}
+.pointIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pointTitle {
+  display: block;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.pointText {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: var(--sp-4) 0 0;
+  padding: var(--sp-12) 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.refusal {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  line-height: var(--lh-body);
+}
+.refusal > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+/* ── The strips: full width, between the header and the sheet ── */
+.preview,
+.changes {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-8) var(--sp-24);
+  font-size: var(--t-13);
+}
+.preview > svg,
+.changes > svg {
+  flex: 0 0 auto;
+}
+.preview {
+  min-height: calc(var(--ctl-sm) + var(--sp-16));
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent-line);
+  color: var(--accent-text);
+}
+.previewText,
+.changesText {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  line-height: var(--lh-body);
+}
+.previewText {
+  color: var(--text);
+}
+.previewText strong {
+  font-weight: 600;
+  color: var(--accent-text);
+}
+.stripActions {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+}
+.changes {
+  padding-inline: var(--sp-16);
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--border);
+  color: var(--warn-text);
+}
+.changesText {
+  flex: 0 1 auto;
+}
+.changes a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.changes a:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}

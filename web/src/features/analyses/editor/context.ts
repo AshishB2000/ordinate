@@ -22,6 +22,12 @@ export interface Save {
   flush(): Promise<void>;
   /** Run `write` after every write queued so far. */
   queue<T>(write: () => Promise<T>): Promise<T>;
+  /**
+   * A write that moves the draft or must not have it moved under it (Publish, Discard edits): after every write queued
+   * so far, given the tag the last save reached; a reply's `tag` becomes the next one. Null, unsent, once `changed` —
+   * and a 409 `record_changed` sets `changed` and resolves null (editConflicts/useEditGuard `save`).
+   */
+  send<T>(write: (base: string | undefined) => Promise<T>): Promise<T | null>;
   /** Another tab or person saved first (editConflicts): nothing more is written until the dashboard is reloaded. */
   changed: boolean;
   /** The document on screen holds edits no save has landed. */
@@ -65,6 +71,8 @@ export interface EditorApi {
   undo(): void;
   redo(): void;
   save: Save;
+  /** Read the record again into a new editor (the conflict banner's Reload). */
+  reload(): void;
 
   sheet: number;
   setSheet(i: number): void;

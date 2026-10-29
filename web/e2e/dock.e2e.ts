@@ -465,7 +465,7 @@ if (!dbUrl) {
     assert.doesNotMatch(draftAsk, /How should the regions be compared/, 'a question left unanswered is not sent');
     assert.doesNotMatch(draftCalls.map((c) => c.facts).join('\n'), /dark/i, 'the look never goes to the model');
     await shots('dock-draft');
-    await review.getByRole('button', { name: 'Create dashboard' }).click();
+    await review.getByRole('button', { name: 'Create draft' }).click();
     await page.waitForURL(/\/analyses\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
     await page.getByText('Revenue by region', { exact: true }).first().waitFor(); // the dashboard it built, open
     // …in the look the brief picked, which went to the build and nowhere else.

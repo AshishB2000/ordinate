@@ -1,9 +1,8 @@
-// The Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md): it lists only Ready dashboards,
-// with no tabs, and opens them in view mode; the published list keeps only its address (`&tab=links`); the view page is
-// the editing canvas with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet), its own
-// header (Dashboards / project, then Compare, Subscribe, Expand and ⋯ with Copy link — the live in-app address, for
-// everyone — and no Present); the editing screen has no Publish…, and its Ready switch (a stopgap over Publish) writes
-// `analysis:publish` / `analysis:unpublish` and nothing else.
+// The view page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md, and on the published copy since
+// 2026-10-29-dashboard-drafts-publish-design.md): the editing canvas with no editing tool (no layout size, History,
+// Lineage, or sheet tabs for one sheet), its own header (Dashboards / project, then Compare, Subscribe, Edit for an
+// editor, Expand and ⋯ with Copy link — the live in-app address, for everyone — and no Present); the editing screen has
+// no Publish… (its Publish is a header button: drafts/drafts.test.tsx). The list is list/dashboardList.test.tsx.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -23,7 +22,11 @@ const board = (id: string, name: string, ready?: true) => ({ id, name, sheetCoun
 const analysis = () => ({
   id: A1, projectId: P, name: 'Board', sheets: [{ id: 's1', name: 'Sheet 1', cards: [] }], filters: [], style: {}, parameters: [], views: [], defaultViewId: '', updatedAt: '',
 });
-const opened = (status: 'draft' | 'published' = 'draft') => ({ ok: true, analysis: analysis(), visuals: [], tag: 'T1', status, showing: 'draft' });
+/** `analysis:open`: the editing screen gets the draft, the view page the published copy. */
+const opened: RpcReply = (payload) => {
+  const copy = (payload as { published?: boolean }).published === true;
+  return { body: { ok: true, analysis: analysis(), visuals: [], tag: 'T1', status: 'published', showing: copy ? 'published' : 'draft', published: { publishedAt: '2026-10-27T10:00:00Z' } } };
+};
 
 function serve(role: 'admin' | 'viewer', extra: Record<string, RpcReply> = {}) {
   return serveRpc({
@@ -34,7 +37,7 @@ function serve(role: 'admin' | 'viewer', extra: Record<string, RpcReply> = {}) {
     'publish:sites': { body: { sites: [], publicLinks: false } },
     'publish:targets': { body: { dashboards: [{ id: A1, name: 'Ready board' }], stories: [], scorecards: [] } },
     'publish:plan': { body: { ok: true, plan: { pages: [], bytes: 0, combos: 0, tooBig: false } } },
-    'analysis:open': { body: opened() },
+    'analysis:open': opened,
     ...extra,
   });
 }
@@ -49,7 +52,7 @@ async function openMore() {
 
 // First in the file now (the list moved to list/dashboardList.test.tsx), so it pays the lazy routes' first load.
 describe('The view page', { timeout: 30_000 }, () => {
-  it('is the canvas with no editing tool: Dashboards / project back to the list, no badge, no Edit, no Present, and Copy link in ⋯ for an editor too', async () => {
+  it('is the canvas with no editing tool: Dashboards / project back to the list, no badge, Edit for an editor, no Present, and Copy link in ⋯', async () => {
     serve('admin');
     renderApp(`/dashboards/${P}/${A1}`);
     await screen.findByRole('heading', { level: 1, name: 'Board' });
@@ -59,7 +62,7 @@ describe('The view page', { timeout: 30_000 }, () => {
     for (const tool of ['Add sheet', 'Nothing to undo', 'Ready']) expect(screen.queryByRole('button', { name: tool }) ?? screen.queryByRole('switch', { name: tool })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Add to the sheet' })).toBeNull();
     expect(screen.queryByText('View only')).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
+    expect((await screen.findByRole('link', { name: 'Edit' })).getAttribute('href')).toBe(`/analyses/${P}/${A1}`); // to the draft
     expect(screen.queryByRole('group', { name: 'Layout size' })).toBeNull();
     expect(screen.queryByRole('tablist', { name: 'Sheets' })).toBeNull(); // one sheet: nothing to switch between
     expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
@@ -110,7 +113,7 @@ describe('The view page', { timeout: 30_000 }, () => {
       await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/dashboards/${P}/${A1}`));
       expect(router.state.location.pathname).toBe(`/dashboards/${P}/${A1}`);
       expect(screen.queryByRole('dialog', { name: 'Publish' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Edit' }) !== null).toBe(role === 'admin'); // an editor's way to the draft
       expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
       if (role === 'viewer') expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
     });
@@ -142,42 +145,11 @@ describe('The view page', { timeout: 30_000 }, () => {
     await openMore();
     expect(screen.getByRole('menuitem', { name: 'History' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Lineage' })).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: 'Publish…' })).toBeNull(); // Ready is the switch that puts it in front of readers
+    expect(screen.queryByRole('menuitem', { name: 'Publish…' })).toBeNull(); // Publish is the header's button, not the /p/ dialog
   });
 
   it('links to another dashboard stay on the view page while viewing, and on the editing screen while editing', () => {
     expect(boardPath({ projectId: P, viewing: true }, A2)).toBe(`/dashboards/${P}/${A2}`);
     expect(boardPath({ projectId: P, viewing: false }, A2)).toBe(`/analyses/${P}/${A2}`);
-  });
-});
-
-describe('The Ready switch', () => {
-  it('writes analysis:publish alone — no autosave — and reads what it wrote', async () => {
-    const calls = serve('admin', { 'analysis:publish': { body: { ok: true, status: 'published', published: { publishedAt: '2026-10-29T10:00:00Z' } } } });
-    renderApp(`/analyses/${P}/${A1}`);
-    const sw = await screen.findByRole('switch', { name: 'Ready' });
-    expect((sw as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(sw);
-    await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:publish')?.payload).toEqual({ projectId: P, id: A1 }));
-    expect((sw as HTMLInputElement).checked).toBe(true);
-    await new Promise((r) => setTimeout(r, 800)); // past the 600 ms autosave
-    expect(calls.some((c) => c.channel === 'analysis:update')).toBe(false);
-  });
-
-  it('a refused write puts the switch back and says why', async () => {
-    serve('admin', { 'analysis:open': { body: opened('published') }, 'analysis:unpublish': { body: { ok: false, error: 'That dashboard is gone.' } } });
-    renderApp(`/analyses/${P}/${A1}`);
-    const sw = await screen.findByRole('switch', { name: 'Ready' });
-    expect((sw as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(sw);
-    await screen.findByText('That dashboard is gone.');
-    expect((sw as HTMLInputElement).checked).toBe(true);
-  });
-
-  it('NEGATIVE CONTROL: a viewer on the editing screen has no Ready switch', async () => {
-    serve('viewer');
-    renderApp(`/analyses/${P}/${A1}`);
-    await screen.findByText('View only');
-    expect(screen.queryByRole('switch', { name: 'Ready' })).toBeNull();
   });
 });

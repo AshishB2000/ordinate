@@ -445,7 +445,7 @@ describe('the dock', () => {
     fireEvent.click(within(brief).getByRole('button', { name: 'Draft dashboard' }));
     const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
     expect(await within(review).findByText('Population overview')).toBeTruthy();
-    expect(within(review).getByRole('button', { name: 'Create dashboard' })).toBeTruthy();
+    expect(within(review).getByRole('button', { name: 'Create draft' })).toBeTruthy();
     expect(calls.find((c) => c.channel === 'analysis:draft')?.payload).toEqual({ projectId: PID, intent: 'population by state', kind: 'report', clarify: true });
     expect(calls.some((c) => c.channel === 'analysis:buildPlan')).toBe(false); // nothing is created until the click
   });
