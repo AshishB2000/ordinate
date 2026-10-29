@@ -67,9 +67,18 @@ function daysIn(y: number, m: number): number {
   return [4, 6, 9, 11].includes(m) ? 30 : 31;
 }
 
-/** Only ASCII space/tab is trimmed — the same class the SQL side strips. */
+/**
+ * Only ASCII space/tab is trimmed — the same class the SQL side strips. An index
+ * scan, not /^[ \t]+|[ \t]+$/g: that regex retries its second branch at every
+ * position of an interior run, so 'x' + 100k spaces + 'x' cost ~n² (NV-50).
+ */
 export function trimSpaceTab(s: string): string {
-  return s.replace(/^[ \t]+|[ \t]+$/g, '');
+  const ws = (c: string): boolean => c === ' ' || c === '\t';
+  let a = 0;
+  let b = s.length;
+  while (a < b && ws(s[a])) a += 1;
+  while (b > a && ws(s[b - 1])) b -= 1;
+  return s.slice(a, b);
 }
 
 /** One cell → ISO text, or null when it does not match the format or the calendar. */

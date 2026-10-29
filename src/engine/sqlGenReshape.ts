@@ -6,7 +6,7 @@ import { ORD, sqlEmpty } from './sqlGen';
 import type { PivotStep, SplitColumnStep, UnpivotStep } from '../data/stepTypes';
 import { colIndex } from '../data/transforms';
 import {
-  pivotCapWarning, pivotClash, pivotProblem, splitNames, splitProblem, splitWidth, unpivotNameProblem,
+  pivotCapWarning, pivotClash, pivotProblem, splitNames, splitProblem, splitWidth, unpivotNameProblem, unpivotSizeProblem,
 } from '../data/stepsReshape';
 import { checkRegex, re2Source } from '../data/regexSubset';
 import type { PowerSqlCtx, PowerSqlOut } from './sqlGenPower';
@@ -90,6 +90,11 @@ export function genUnpivot(s: UnpivotStep, ctx: PowerSqlCtx): PowerSqlOut {
   const keep = ctx.cols.filter((_, k) => !idx.includes(k));
   const problem = unpivotNameProblem(keep.map((c) => c.name), attr, val);
   if (problem) return skipWith(ctx, ...warnings, problem);
+  // The fold's cell budget needs the rows into this step: a fact about the data (pipelinePower).
+  const rows = ctx.opts.rows && ctx.opts.rows[ctx.index];
+  if (rows === undefined) return { bail: `need-rows:${ctx.index}` };
+  const big = unpivotSizeProblem(rows, idx.length, keep.length);
+  if (big) return skipWith(ctx, ...warnings, big);
   if (idx.some((k) => ctx.retyped.has(ctx.cols[k].physical))) {
     return { bail: 'unpivot over a column typed from data by an earlier step' };
   }

@@ -22,14 +22,16 @@
 
 import { FormulaError, tokenize, type Tok } from './formulaTokens';
 import { Parser, type LodSpec } from './formulaParse';
+import { isFormulaBudgetError } from './formulaBudget';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export type FValue = number | string | boolean | null;
 
 export interface Compiled {
-  // Evaluate against a single row. Never throws — degrades to null on any
-  // runtime issue (unknown column, div-by-zero, non-numeric operand).
+  // Evaluate against a single row. Degrades to null on any runtime issue
+  // (unknown column, div-by-zero, non-numeric operand); throws only
+  // FormulaBudgetError, inside an evaluation that ran out of work budget.
   evaluate(row: Record<string, FValue>): FValue;
   // Column names referenced by the expression, so transforms.ts can warn when a
   // formula references a column that does not exist.
@@ -38,6 +40,8 @@ export interface Compiled {
    *  `evaluate` reads each one's value from `row[lod.key]`; formula/lod.ts
    *  computes those over the whole table. Without it they read as null. */
   lods: LodSpec[];
+  /** The expression's token count — what one row costs the work budget (formulaBudget.ts). */
+  cost?: number;
 }
 
 /** Where an error is, in SOURCE OFFSETS — `expression.slice(start, end)` is the
@@ -114,11 +118,13 @@ export function compileTokens(tokens: Tok[], src: string): CompileResult {
     const compiled: Compiled = {
       refs,
       lods: parser.lods,
+      cost: tokens.length,
       evaluate(row: Record<string, FValue>): FValue {
         try {
           const v = fn(row);
           return v === undefined ? null : v;
-        } catch (_) {
+        } catch (e) {
+          if (isFormulaBudgetError(e)) throw e; // the whole evaluation stops, not this row
           return null; // per-row degrade — never throw
         }
       },

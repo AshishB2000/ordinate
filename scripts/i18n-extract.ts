@@ -378,6 +378,7 @@ export const MAIN_FILES = [
   'src/server/lifecycleMessages.ts',
   'src/app/bundleMessages.ts',
   'src/server/idpMessages.ts',
+  'src/data/workBudgetMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

@@ -667,5 +667,11 @@
   "wordCloudRender.no_words_to_draw_every_value": "Aucun mot à tracer — chaque valeur est vide ou nulle",
   "wordCloudRender.not_fit": "{p0}{n, plural, one { mot plus petit ne tenait} other { mots plus petits ne tenaient}} pas",
   "wordCloudRender.word_cloud": "Nuage de mots : {p0}{p1, select, true {, …} other {}}",
-  "wordCloudRender.word_cloud_no_words_to_draw": "Nuage de mots : aucun mot à tracer"
+  "wordCloudRender.word_cloud_no_words_to_draw": "Nuage de mots : aucun mot à tracer",
+  "workBudgetMessages.a_dataset_holds_at_most_prepare": null,
+  "workBudgetMessages.this_excel_file_cannot_be_imported": null,
+  "workBudgetMessages.this_excel_file_cannot_be_imported_2": null,
+  "workBudgetMessages.this_formula_does_more_work_than": null,
+  "workBudgetMessages.this_sheet_spans_rows_by_columns": null,
+  "workBudgetMessages.unpivot_skipped_it_would_make_cells": null
 }

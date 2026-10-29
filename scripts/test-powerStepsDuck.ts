@@ -134,6 +134,21 @@ async function main(): Promise<void> {
   await same('unpivot two number columns', [{ type: 'unpivot', columns: ['units', 'price'] }]);
   await same('unpivot mixed types (re-detected)', [{ type: 'unpivot', columns: ['units', 'sku'], attribute: 'field', value: 'v' }]);
   await same('unpivot: unknown and clashing names', [{ type: 'unpivot', columns: ['nope', 'units'], attribute: 'city' }]);
+  // NV-52: past the cell budget (rows × chosen × (kept + 2)) both sides skip with the
+  // same sentence — SQL learns the rows into the step from planPower (need-rows).
+  {
+    const wide = (rows: number): TableData => ({
+      columns: Array.from({ length: 200 }, (_, k) => ({ name: `c${k}`, type: 'text' as const })),
+      rows: Array.from({ length: rows }, (_, r) => Array.from({ length: 200 }, (_, k) => `${r}:${k}`)),
+    });
+    const chosen = Array.from({ length: 100 }, (_, k) => `c${k}`);
+    const step: TransformStep[] = [{ type: 'filter', column: 'c0', op: '!=', value: 'none' }, { type: 'unpivot', columns: chosen }];
+    await same('unpivot past the cell budget skips (3,000 rows × 100 × 102)', step, wide(3000));
+    await resident('unpivot past the cell budget skips', step, wide(3000));
+    const js = applyPipeline(wide(3000), step);
+    ok('…with the budget sentence', js.rowCount === 3000 && /^Unpivot skipped: it would make 30,600,000 cells/.test(js.warnings[0] || ''), JSON.stringify(js.warnings));
+    await same('negative control: the same unpivot on 10 rows runs', step, wide(10));
+  }
 
   // ── pivot ───────────────────────────────────────────────────────────────────
   for (const fn of ['sum', 'avg', 'count', 'min', 'max'] as const) {

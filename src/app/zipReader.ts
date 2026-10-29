@@ -1,4 +1,5 @@
-// A zip read from a FILE, for input nobody vouches for — MAIN PROCESS ONLY
+// A zip read from a FILE, for input nobody vouches for — MAIN PROCESS, and the
+// compute worker for an .xlsx (src/data/xlsxGuard.ts)
 // (docs/pod-lifecycle/00-design.md §3.4). A bundle import or a backup restore
 // is an upload: this module never holds it whole in memory and never inflates
 // a byte before the whole structure has been checked.
@@ -11,7 +12,10 @@
 //   • a directory that does not end exactly where the end record starts, or
 //     that the walk does not consume exactly;
 //   • any flag but UTF-8 and the deflate-level hints — so encryption and DATA
-//     DESCRIPTORS (the one case where a local header may disagree) are refused;
+//     DESCRIPTORS (the one case where a local header may disagree) are refused,
+//     unless the policy takes data descriptors (an .xlsx from a streaming
+//     writer); then the directory's sizes and CRC are the only ones, as every
+//     other reader takes them, and the streamed check below holds them;
 //   • a method other than stored (0) or deflate (8);
 //   • a name that is not valid UTF-8 (or not ASCII without the UTF-8 flag), that
 //     the caller's policy refuses, or that repeats another (NFC, case-folded);
@@ -58,6 +62,8 @@ export interface ZipPolicy {
   maxEntries: number;
   /** Every entry's declared size together. */
   maxTotal: number;
+  /** Accept data descriptors (flag 0x8): the local header's CRC and sizes are then not compared. */
+  dataDescriptors?: boolean;
 }
 
 /** A file this module opens and closes, or a range of a handle the caller owns (a stored inner zip). */
@@ -70,8 +76,8 @@ export interface ZipReader {
   read(e: ZipEntryInfo, signal?: AbortSignal): Promise<Buffer>;
   /** The entry streamed to `dest` (created, never overwritten), size and CRC checked; deleted on failure. */
   extract(e: ZipEntryInfo, dest: string, signal?: AbortSignal): Promise<void>;
-  /** A stored entry's CRC, streamed. */
-  verify(e: ZipEntryInfo, signal?: AbortSignal): Promise<void>;
+  /** A stored entry's CRC, streamed — each inflated chunk handed to `onChunk` (which may throw ZipRefused). */
+  verify(e: ZipEntryInfo, signal?: AbortSignal, onChunk?: (chunk: Buffer) => void): Promise<void>;
   /** A stored entry as a source of its own: an inner zip read in place. */
   range(e: ZipEntryInfo): ZipSource;
   close(): Promise<void>;
@@ -82,6 +88,7 @@ const CENTRAL = 0x02014b50;
 const LOCAL = 0x04034b50;
 const ZIP64_LOCATOR = 0x07064b50;
 const ALLOWED_FLAGS = 0x0800 | 0x0006; // UTF-8 names; deflate-level hints
+const DATA_DESCRIPTOR = 0x0008;
 const MAX_CD_BYTES = 16 * 1024 * 1024;
 const MAX_NAME_BYTES = 1024;
 
@@ -159,7 +166,7 @@ async function directory(fh: fs.promises.FileHandle, base: number, size: number,
     const next = p + 46 + nameLen + extraLen + commentLen;
     if (next > cdSize || nameLen > MAX_NAME_BYTES) throw new ZipRefused(msg.damagedDirectory());
     if (flags & 0x1) throw new ZipRefused(msg.encrypted());
-    if (flags & ~ALLOWED_FLAGS) throw new ZipRefused(msg.unsupportedFeature());
+    if (flags & ~(ALLOWED_FLAGS | (policy.dataDescriptors ? DATA_DESCRIPTOR : 0))) throw new ZipRefused(msg.unsupportedFeature());
     if (method !== 0 && method !== 8) throw new ZipRefused(msg.unsupportedMethod());
     if (csize === 0xffffffff || usize === 0xffffffff || localOffset === 0xffffffff || diskStart !== 0) throw new ZipRefused(msg.unsupportedFeature());
     const nameBytes = Buffer.from(cd.subarray(p + 46, p + 46 + nameLen));
@@ -188,9 +195,10 @@ async function directory(fh: fs.promises.FileHandle, base: number, size: number,
   for (const e of out) {
     if (e.localOffset + 30 + e.nameBytes.length > cdOffset) throw new ZipRefused(msg.damagedEntry(shown(e.name)));
     const lh = await pread(e.localOffset, 30 + e.nameBytes.length);
+    const sizes = (e.flags & DATA_DESCRIPTOR) !== 0 // only reachable when the policy takes them
+      || (lh.readUInt32LE(14) === e.crc && lh.readUInt32LE(18) === e.csize && lh.readUInt32LE(22) === e.usize);
     const same = lh.readUInt32LE(0) === LOCAL && lh.readUInt16LE(6) === e.flags && lh.readUInt16LE(8) === e.method
-      && lh.readUInt32LE(14) === e.crc && lh.readUInt32LE(18) === e.csize && lh.readUInt32LE(22) === e.usize
-      && lh.readUInt16LE(26) === e.nameBytes.length && lh.subarray(30).equals(e.nameBytes);
+      && sizes && lh.readUInt16LE(26) === e.nameBytes.length && lh.subarray(30).equals(e.nameBytes);
     if (!same) throw new ZipRefused(msg.damagedEntry(shown(e.name)));
     (e as { dataStart: number }).dataStart = e.localOffset + 30 + e.nameBytes.length + lh.readUInt16LE(28);
     if (e.dataStart + e.csize > cdOffset) throw new ZipRefused(msg.damagedEntry(shown(e.name)));
@@ -282,8 +290,13 @@ function reader(fh: fs.promises.FileHandle, own: boolean, base: number, entries:
         throw err;
       }
     },
-    async verify(e, signal) {
-      await stream(e, new Writable({ write(_chunk, _enc, cb) { cb(); } }), signal);
+    async verify(e, signal, onChunk) {
+      await stream(e, new Writable({
+        write(chunk: Buffer, _enc, cb) {
+          try { if (onChunk) onChunk(chunk); } catch (err) { return cb(err as Error); }
+          cb();
+        },
+      }), signal);
     },
     range(e) {
       return { fh, offset: base + e.dataStart, length: e.csize };

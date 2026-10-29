@@ -11,6 +11,7 @@
 import type { FValue } from './formula';
 import { haversineKm, validCoord } from '../analysis/geo/haversine';
 import { isServerMode } from '../server/mode';
+import { MAX_FORMULA_TEXT, PIECE_UNITS, spend } from './formulaBudget';
 
 // ── Evaluation helpers ───────────────────────────────────────────────────────
 
@@ -383,7 +384,12 @@ export const FUNCTIONS: Record<string, (args: FValue[]) => FValue> = {
   ltrim: str1((s) => s.replace(/^\s+/, '')),
   rtrim: str1((s) => s.replace(/\s+$/, '')),
   len: str1((s) => s.length),
-  proper: str1((s) => s.replace(/[A-Za-z0-9]+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())),
+  proper: str1((s) => {
+    let words = 0;
+    const out = s.replace(/[A-Za-z0-9]+/g, (w) => { words += 1; return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); });
+    spend(words * PIECE_UNITS);
+    return out;
+  }),
   ascii: str1((s) => (s.length ? s.charCodeAt(0) : null)),
   char: (a) => {
     const n = num(a[0]);
@@ -445,13 +451,19 @@ export const FUNCTIONS: Record<string, (args: FValue[]) => FValue> = {
     if (a[0] == null || a[1] == null || a[2] == null) return null;
     const sub = String(a[1]);
     if (sub === '') return String(a[0]);
-    return String(a[0]).split(sub).join(String(a[2])); // replace ALL, literal
+    const s = String(a[0]);
+    const rep = String(a[2]);
+    const parts = s.split(sub); // replace ALL, literal
+    spend(parts.length * PIECE_UNITS);
+    // Measured before it is built: nested replaces multiply (formulaBudget.MAX_FORMULA_TEXT).
+    return s.length + (parts.length - 1) * (rep.length - sub.length) > MAX_FORMULA_TEXT ? null : parts.join(rep);
   },
   split: (a) => {
     if (a[0] == null || a[1] == null) return null;
     const n = num(a[2]);
     if (n === null || n === 0) return null;
     const parts = String(a[0]).split(String(a[1]));
+    spend(parts.length * PIECE_UNITS);
     const idx = n > 0 ? Math.trunc(n) - 1 : parts.length + Math.trunc(n); // negative = from end
     return idx >= 0 && idx < parts.length ? parts[idx] : null;
   },
@@ -478,7 +490,16 @@ export const FUNCTIONS: Record<string, (args: FValue[]) => FValue> = {
   regexp_replace: (a) => {
     if (a[0] == null || a[1] == null || a[2] == null) return null;
     const re = getRe(String(a[1]), 'g');
-    return re ? String(a[0]).replace(re, String(a[2])) : null;
+    if (!re) return null;
+    const s = String(a[0]);
+    const rep = String(a[2]);
+    // The longest it could be, before it is built: each match adds the replacement, and
+    // each `$` in it (a $&, $`, $' reference) at most the whole input. '' matches at every gap.
+    const dollars = rep.split('$').length - 1;
+    const most = (matches: number): number => s.length + matches * (rep.length + dollars * s.length);
+    if (most(s.length + 1) > MAX_FORMULA_TEXT && most((s.match(re) || []).length) > MAX_FORMULA_TEXT) return null;
+    spend(s.length / 2); // a match can start at any character: priced as if dense
+    return s.replace(re, rep);
   },
 
   // ── Date ────────────────────────────────────────────────────────────────
@@ -562,7 +583,10 @@ export const FUNCTIONS: Record<string, (args: FValue[]) => FValue> = {
   str: (a) => (a[0] == null ? null : String(a[0])),
 
   // ── Logical / misc ────────────────────────────────────────────────────────
-  concat: (a) => a.map((v) => (v == null ? '' : String(v))).join(''),
+  concat: (a) => {
+    const parts = a.map((v) => (v == null ? '' : String(v)));
+    return parts.reduce((n, p) => n + p.length, 0) > MAX_FORMULA_TEXT ? null : parts.join('');
+  },
   if: (a) => (truthy(a[0]) ? a[1] ?? null : a[2] ?? null), // if(cond, then, else) call form
   iif: (a) => {
     if (a[0] === null && a.length > 3) return a[3] ?? null; // explicit unknown branch

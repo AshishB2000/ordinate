@@ -667,5 +667,11 @@
   "wordCloudRender.no_words_to_draw_every_value": "No hay palabras que dibujar: todos los valores están vacíos o son cero",
   "wordCloudRender.not_fit": "{n, plural, one {{p0} palabra más pequeña no cupo} other {{p0} palabras más pequeñas no cupieron}}",
   "wordCloudRender.word_cloud": "Nube de palabras: {p0}{p1, select, true {, …} other {}}",
-  "wordCloudRender.word_cloud_no_words_to_draw": "Nube de palabras: no hay palabras que dibujar"
+  "wordCloudRender.word_cloud_no_words_to_draw": "Nube de palabras: no hay palabras que dibujar",
+  "workBudgetMessages.a_dataset_holds_at_most_prepare": null,
+  "workBudgetMessages.this_excel_file_cannot_be_imported": null,
+  "workBudgetMessages.this_excel_file_cannot_be_imported_2": null,
+  "workBudgetMessages.this_formula_does_more_work_than": null,
+  "workBudgetMessages.this_sheet_spans_rows_by_columns": null,
+  "workBudgetMessages.unpivot_skipped_it_would_make_cells": null
 }

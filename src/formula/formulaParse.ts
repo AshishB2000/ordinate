@@ -9,6 +9,7 @@
 
 import { FormulaError, type Tok } from './formulaTokens';
 import { type EvalFn, arith, compareOp, looseEq, num, truthy, FUNCTIONS } from './formulaEval';
+import { spendCall } from './formulaBudget';
 
 // ── Parser (recursive descent) ───────────────────────────────────────────────
 //
@@ -52,6 +53,8 @@ export interface LodSpec {
   argCol: string | null;
   /** True when the argument itself contains an LOD. */
   nested: boolean;
+  /** The argument's token count — what one row of it costs the work budget (formulaBudget.ts). */
+  cost?: number;
   /** Source offsets of the whole `{…}`. */
   start: number;
   end: number;
@@ -396,6 +399,7 @@ export class Parser {
       key, kind: kind as LodKind, dims, agg: agg as LodAgg, arg,
       argCol: bare ? only.value : null,
       nested: this.lods.length > before,
+      cost: this.pos - argAt,
       start: open.start,
       end: close ? close.end : open.end,
     });
@@ -416,6 +420,11 @@ export class Parser {
       }
     }
     this.expectPunc(')');
-    return (row) => fn(args.map((a) => a(row)));
+    return (row) => {
+      const vals = args.map((a) => a(row));
+      const out = fn(vals);
+      spendCall(vals, out); // formulaBudget.ts: the text a call reads and writes is the author's to choose
+      return out;
+    };
   }
 }

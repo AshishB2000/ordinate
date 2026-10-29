@@ -228,6 +228,10 @@ async function main(): Promise<void> {
   const huge = await ask('1 + '.repeat(2000) + '1');
   ok('an over-long expression is refused, not run', huge.ok === false && /too long/i.test(huge.error || ''),
     JSON.stringify(huge.error));
+  // NV-42: even eight sample rows run under the work budget — 88 replaces a row building 1M characters each.
+  const heavy = await ask(Array.from({ length: 88 }, () => "len(replace(space(100000),' ','0123456789'))").join('+'));
+  ok('a formula past the work budget answers with the sentence, not a stall', heavy.ok === false && /more work than one calculation may/.test(heavy.error || ''),
+    JSON.stringify(heavy.error));
   const nonsense = await check(null, {});
   ok('a call with no arguments answers rather than throwing', nonsense && nonsense.ok === false,
     JSON.stringify(nonsense && nonsense.error));

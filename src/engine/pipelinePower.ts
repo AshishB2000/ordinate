@@ -1,9 +1,10 @@
 // The data-dependent half of generating a pipeline's SQL — MAIN PROCESS.
 //
-// sqlGen is a pure string builder, and three things a power pipeline needs are
+// sqlGen is a pure string builder, and four things a power pipeline needs are
 // facts about the DATA: a pivot's keys (its output columns), a lookup's count
-// of repeated right keys (its warning), and the row count after every step
-// (the step list's "1,250 → 1,180 rows"). `planPower` asks DuckDB for each with
+// of repeated right keys (its warning), the rows into an unpivot (its cell
+// budget), and the row count after every step (the step list's
+// "1,250 → 1,180 rows"). `planPower` asks DuckDB for each with
 // one small query over the same relations, feeds the answers back to
 // generateSql through its opts, and returns the finished GenResult plus counts.
 //
@@ -26,7 +27,7 @@ export type RunSql = (sql: string, params: Param[]) => Promise<DuckRow[]>;
 
 /** A generateSql bail that planPower can satisfy with a query. */
 export function isNeed(reason: string | undefined): boolean {
-  return /^need-(pivot|dupes):\d+$/.test(reason || '');
+  return /^need-(pivot|dupes|rows):\d+$/.test(reason || '');
 }
 
 /**
@@ -72,6 +73,14 @@ async function pivotKeys(schema: SqlColumn[], steps: TransformStep[], i: number,
   return { keys: rows.map((r) => String(r.k)), distinct: rows.length ? Number(rows[0].n) : 0 };
 }
 
+/** The rows into step `i` — an unpivot's cell budget (stepsReshape.unpivotSizeProblem). */
+async function rowsInto(schema: SqlColumn[], steps: TransformStep[], i: number, opts: PowerSqlOpts, run: RunSql): Promise<number | null> {
+  const prefix = generateSql('t', schema, steps.slice(0, i), opts);
+  if (prefix.sql === null) return null;
+  const rows = await run(`SELECT CAST(count(*) AS DOUBLE) AS n FROM (${prefix.sql}) AS q`, prefix.params);
+  return Number(rows[0] ? rows[0].n : 0);
+}
+
 /**
  * The finished SQL for `steps`, and the per-step row counts — or null when the
  * pipeline is not expressible even with the data's answers (the caller folds).
@@ -92,26 +101,31 @@ export async function planPower(schema: SqlColumn[], steps: TransformStep[], opt
 
   let gen = generateSql('t', schema, steps, opts);
   for (let guard = 0; gen.sql === null && guard < steps.length; guard += 1) {
-    const need = /^need-pivot:(\d+)$/.exec(gen.unsupported || '');
+    const need = /^need-(pivot|rows):(\d+)$/.exec(gen.unsupported || '');
     if (!need) return null;
-    const i = Number(need[1]);
-    const resolved = await pivotKeys(schema, steps, i, opts, run);
-    if (!resolved) return null;
-    opts.pivots = { ...(opts.pivots || {}), [i]: resolved };
+    const i = Number(need[2]);
+    if (need[1] === 'rows') {
+      const rows = await rowsInto(schema, steps, i, opts, run);
+      if (rows === null) return null;
+      opts.rows = { ...(opts.rows || {}), [i]: rows };
+    } else {
+      const resolved = await pivotKeys(schema, steps, i, opts, run);
+      if (!resolved) return null;
+      opts.pivots = { ...(opts.pivots || {}), [i]: resolved };
+    }
     gen = generateSql('t', schema, steps, opts);
   }
   if (gen.sql === null) return null;
 
   if (!steps.length) return { gen, counts: [] };
-  const parts = ['(SELECT CAST(count(*) AS DOUBLE) FROM "t") AS n0'];
-  const params: Param[] = [];
-  for (let k = 1; k <= steps.length; k += 1) {
-    const g = k === steps.length ? gen : generateSql('t', schema, steps.slice(0, k), opts);
-    if (g.sql === null) return null;
-    parts.push(`(SELECT CAST(count(*) AS DOUBLE) FROM (${g.sql}) AS q${k}) AS n${k}`);
-    params.push(...g.params);
-  }
-  const row = (await run(`SELECT ${parts.join(', ')}`, params))[0] || {};
+  // Every count from the ONE chain: the relation after step k is a CTE of `gen`
+  // itself, so the statement is the pipeline once plus a count per step. A copy
+  // of each prefix pipeline per step was O(steps² × width) on the request
+  // thread — 200 steps over 2,000 columns built ~280 MB of SQL (NV-51).
+  const tail = /\nSELECT [^\n]* FROM s\d+ ORDER BY __ord$/.exec(gen.sql);
+  if (!tail || !gen.rels || gen.rels.length !== steps.length) return null;
+  const parts = ['s0', ...gen.rels].map((rel, k) => `(SELECT CAST(count(*) AS DOUBLE) FROM ${rel}) AS n${k}`);
+  const row = (await run(`${gen.sql.slice(0, tail.index)}\nSELECT ${parts.join(', ')}`, gen.params))[0] || {};
   const n = (k: number): number => Number(row['n' + k]);
   return { gen, counts: steps.map((_, k) => ({ before: n(k), after: n(k + 1) })) };
 }

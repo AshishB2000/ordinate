@@ -17,7 +17,8 @@
 //
 // Data-dependent inputs (a pivot's keys, a lookup's duplicate count) cannot be
 // known by a string builder: the step bails with `need-pivot:<i>` /
-// `need-dupes:<i>` and engine/pipelinePower.ts runs the small query and retries.
+// `need-dupes:<i>` / `need-rows:<i>` and engine/pipelinePower.ts runs the small
+// query and retries.
 
 import type { TransformStep } from '../data/transforms';
 import type { SqlColumn } from './sqlGen';
@@ -40,6 +41,8 @@ export interface PowerSqlOpts {
   pivots?: Record<number, { keys: string[]; distinct: number }>;
   /** A lookup step's repeated right-key count, by step index. */
   dupes?: Record<number, number>;
+  /** The rows INTO an unpivot step (its cell budget), resolved by pipelinePower, by step index. */
+  rows?: Record<number, number>;
 }
 
 export interface PowerSqlCtx {
