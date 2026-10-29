@@ -127,6 +127,25 @@ async function main(): Promise<void> {
   const sens = await share.sensitiveColumns(pid, did);
   ok('marked columns are sensitive', sens.get('email') === 'personal' && sens.get('card') === 'financial' && sens.size === 2);
 
+  // ── Fails closed: marks that cannot be READ refuse the share (NV-29) ─────
+  const refused = (p: Promise<unknown>): Promise<boolean> => p.then(() => false, () => true);
+  const catFile = path.join(tmpUserData, 'projects', pid, 'catalog.json');
+  const catBytes = fs.readFileSync(catFile);
+  fs.writeFileSync(catFile, '{ corrupt'); // as a records row that fails JSON.parse, a pg timeout or ERECORDTOOLARGE would
+  ok('unreadable catalog: the lenient reader sees nothing documented (control: the hazard is real)', Object.keys(await catalog.getColumns(pid, did)).length === 0);
+  ok('unreadable catalog: a table export refuses instead of passing raw values', await refused(share.applyToTable(pid, did, { columns: COLS, rows: ROWS }, 'export')));
+  ok('unreadable catalog: a chart reply refuses', await refused(share.applyToChart(pid, did, { category: 'email', values: [{ column: 'amount', aggregation: 'sum' }] }, { ok: true, data: { labels: ['grace@example.com'], series: [] } }, 'export')));
+  ok('unreadable catalog: the Assistant\'s withheld columns refuse', (await refused(share.withheldColumns(pid, did))) && (await refused(share.assistantColumnDocs(pid, did))));
+  ok('unreadable catalog: a column edit refuses rather than saving over it', await refused(catalog.setColumn(pid, did, 'amount', { description: 'x' })));
+  fs.writeFileSync(catFile, catBytes);
+  ok('…so every mark survives once the catalog reads again', (await share.sensitiveColumns(pid, did)).size === 2);
+  const dsFile = path.join(tmpUserData, 'projects', pid, 'datasets', did + '.json');
+  const dsBytes = fs.readFileSync(dsFile);
+  fs.writeFileSync(dsFile, '{ corrupt');
+  ok('unreadable dataset record: the policy refuses, never "no columns"', (await refused(share.sensitiveColumns(pid, did))) && (await refused(share.withheldColumns(pid, did))));
+  fs.writeFileSync(dsFile, dsBytes);
+  ok('a dataset that does not exist still has no sensitive columns', (await share.sensitiveColumns(pid, ghost)).size === 0);
+
   // ── Summaries ─────────────────────────────────────────────────────────────
   const sum = await call('privacy:summary', { projectId: pid, path: 'export', datasetIds: [did] });
   ok('summary: "2 sensitive columns will be masked"', sum.ok && sum.count === 2 && sum.line === '2 sensitive columns will be masked', JSON.stringify(sum));

@@ -19,7 +19,9 @@
 // mask step in the dataset's own pipeline (those columns already are what
 // leaves; masking a token again would only rename it).
 //
-// Everything fails CLOSED: if the salt cannot be had, a mask becomes a drop.
+// Everything fails CLOSED: if the salt cannot be had, a mask becomes a drop;
+// a catalog or dataset record that cannot be read THROWS (the share is
+// refused), never reads as "nothing is marked".
 //
 // PUBLISH is built elsewhere and calls in through three functions:
 //   applyToChart(projectId, datasetId, encoding, reply, 'publish')
@@ -75,7 +77,7 @@ export interface PolicySummary {
  * only looked names up would let the renamed column leave unmasked.
  */
 async function markedLevels(projectId: string, datasetId: string, steps: unknown): Promise<Map<string, SensitiveLevel>> {
-  const docs = await catalog.getColumns(projectId, datasetId);
+  const docs = await catalog.getColumns(projectId, datasetId, true);
   const out = new Map<string, SensitiveLevel>();
   for (const k of Object.keys(docs)) {
     const s = docs[k].sensitivity;
@@ -94,7 +96,7 @@ async function markedLevels(projectId: string, datasetId: string, steps: unknown
 export async function markedColumns(
   projectId: string, datasetId: string,
 ): Promise<Array<{ column: string; level: SensitiveLevel; maskedInPrepare: boolean }>> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   if (!meta) return [];
   const levels = await markedLevels(projectId, datasetId, meta.steps);
   const masked = maskedColumns(meta.steps);
@@ -118,7 +120,7 @@ export async function sensitiveColumns(projectId: string, datasetId: string): Pr
  * to reason about than an exception).
  */
 export async function withheldColumns(projectId: string, datasetId: string): Promise<Set<string>> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   return new Set((await markedLevels(projectId, datasetId, meta ? meta.steps : [])).keys());
 }
 
@@ -128,8 +130,8 @@ export async function withheldColumns(projectId: string, datasetId: string): Pro
  * rename step carried a mark to — so its values are withheld under its new name.
  */
 export async function assistantColumnDocs(projectId: string, datasetId: string): Promise<Record<string, catalog.ColumnDoc>> {
-  const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId));
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId, true));
+  const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   for (const [name, level] of await markedLevels(projectId, datasetId, meta ? meta.steps : [])) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
       docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
