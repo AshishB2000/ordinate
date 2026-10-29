@@ -474,16 +474,21 @@ async function main(): Promise<void> {
   // The filter bar's options are VALUES of their column, so the policy shapes them as it does a chart's labels:
   // tokens that still filter by the raw value server-side, or the control left out (NV-25). Region is marked here.
   const { maskToken } = require('../src/data/maskSteps') as typeof import('../src/data/maskSteps');
-  const rawRegions = ['region0', 'region1', 'region2'];
+  const rawRegions = ['region1', 'region0', 'region2']; // the saved view's pick leads the list
   const regionBar = (d: any) => d.dashboard.controls.find((c: any) => c.label === 'Region'); // any: a published page
   const boardFile = path.join(out, 'renamed-board.html');
+  const { applyViewOp } = require('../src/analysis/savedViews') as typeof import('../src/analysis/savedViews');
+  const board0 = (await analysis.getAnalysis(proj.id, dash!.id))!;
+  const withView = applyViewOp(board0, { op: 'create', name: 'Region 1', state: { controls: { [board0.sheets[0].cards[0].id]: { value: 'region1' } } } }, board0, new Date().toISOString(), randomUUID);
+  ok('fixture: a saved view picking region1', withView.ok === true && !!(await analysis.updateAnalysis(proj.id, dash!.id, { views: withView.views, defaultViewId: withView.defaultViewId } as any))); // any: a partial patch
   await pub.publishSite(cfg);
   const barPage = dataBlock(fs.readFileSync(boardFile, 'utf8'));
   const bar = regionBar(barPage);
   ok('policy: a control on a marked column lists tokens, never the values',
     !!bar && JSON.stringify(bar.options) === JSON.stringify(['All', ...rawRegions.map((r) => maskToken(String(salt), r))]), JSON.stringify(bar && bar.options));
   ok('policy: …and no raw value of it is anywhere in the page', !rawRegions.some((r) => fs.readFileSync(boardFile, 'utf8').includes(r)));
-  const k1 = barPage.dashboard.keys.indexOf('1');
+  ok('policy: a saved view still lands on its (masked) option', JSON.stringify(barPage.dashboard.views.map((x: any) => bar.options[x.picks[0]])) === JSON.stringify([maskToken(String(salt), 'region1')]), JSON.stringify(barPage.dashboard.views)); // any: a published view
+  const k1 = barPage.dashboard.keys.indexOf(String(bar.options.indexOf(maskToken(String(salt), 'region0'))));
   const barChart = barPage.dashboard.sheets[0].cards.find((c: any) => c.kind === 'chart'); // any: a published card
   const direct1: any = await vizDataFor(proj.id, ds!.id, sanitizeEncoding(v!.encoding), [{ type: 'filter', column: 'region', op: '=', value: 'region0' }] as any); // any: FilterStep literal
   ok('policy: a token option still filters by its raw value (differential)', k1 >= 0 && JSON.stringify(barChart.payloads[barChart.variants[k1]].series[0].values) === JSON.stringify(direct1.data.series[0].values));
@@ -492,7 +497,8 @@ async function main(): Promise<void> {
   ok('policy: the export path\'s bar is masked too', JSON.stringify(exportPlan!.specs[0].domain.options) === JSON.stringify(bar.options), JSON.stringify(exportPlan!.specs[0].domain.options));
   await privacy.setPolicy(proj.id, { publish: 'drop' });
   await pub.publishSite(cfg);
-  ok('policy/drop: the control is left out of the bar', !regionBar(dataBlock(fs.readFileSync(boardFile, 'utf8'))));
+  const dropPage = dataBlock(fs.readFileSync(boardFile, 'utf8'));
+  ok('policy/drop: the control is left out of the bar, and the view that picks it with it (it would show the wrong figures)', !regionBar(dropPage) && dropPage.dashboard.views.length === 0, JSON.stringify(dropPage.dashboard.views));
   const dropPlan = await pub.planPublish(cfg);
   ok('policy/drop: …and the plan says why', JSON.stringify(dropPlan.pages[0].unlisted) === JSON.stringify([{ control: 'Region', reason: 'Hidden by the share policy' }]), JSON.stringify(dropPlan.pages[0]));
   await privacy.setPolicy(proj.id, { publish: 'include' });
