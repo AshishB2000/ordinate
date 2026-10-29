@@ -26,6 +26,7 @@ import { useViewer } from '../../dashboards/useViewer';
 import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/DashboardChrome';
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 import { PhoneHead } from '../../dashboards/phone/PhoneHead';
+import { ViewHead } from '../../dashboards/ViewHead';
 import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
 import { ConflictBanner, LeaveGuard } from '../../editConflicts/ConflictBanner';
 import { useEditGuard } from '../../editConflicts/useEditGuard';
@@ -375,9 +376,16 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
 
   return (
     <EditorCtx.Provider value={api}>
-      <div className={`${s.editor} ${styleClass(doc.style, view.presenting)}`} style={styleVars} data-print-root="" data-phone={phone ? '' : undefined}>
+      <div
+        className={`${s.editor} ${styleClass(doc.style, view.presenting)}${view.expanded && !view.presenting ? ` ${s.expanded}` : ''}`}
+        style={styleVars}
+        data-print-root=""
+        data-phone={phone ? '' : undefined}
+        // The view page reads like a published page: its own header, cards titled in small capitals (Cards.module.css).
+        data-viewing={viewing ? '' : undefined}
+      >
         <DashboardChrome />
-        {!view.presenting && (phone ? <PhoneHead /> : <Head />)}
+        {!view.presenting && (phone ? <PhoneHead /> : viewing ? <ViewHead /> : <Head />)}
         {save.changed && !readOnly && (
           <div className={s.conflict}>
             <ConflictBanner noun="dashboard" onReload={conflict.reload} onCopy={conflict.copy} />

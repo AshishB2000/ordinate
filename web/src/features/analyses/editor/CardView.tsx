@@ -212,8 +212,8 @@ export function CardView({
           />
         )}
         <Title card={card} title={title} />
-        {/* A phone's header says how fresh the dashboard is once; a card says it again only when its own figure is stale. */}
-        {asOf && (!phone || asOfView(asOf)?.tone === 'warn') && <AsOfCaption asOf={asOf} className={s.asOf} />}
+        {/* A phone's header, and the view page's, say how fresh the dashboard is once; a card says it again only when its own figure is stale. */}
+        {asOf && (!(phone || ed.viewing) || asOfView(asOf)?.tone === 'warn') && <AsOfCaption asOf={asOf} className={s.asOf} />}
         {/* Present: a reading view, no card controls (dashShare.ts). */}
         {!ed.view.presenting && (
         <span className={s.ctrls} onPointerDown={(e) => e.stopPropagation()}>

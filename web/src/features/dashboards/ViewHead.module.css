@@ -1,0 +1,119 @@
+/* The view page's header: one surface with the sheet under it (the page's own
+   --bg, not a white strip), a hairline below, the sheet tabs underlined. The
+   sheet scrolls under it, so it stays put. */
+
+.head {
+  flex: 0 0 auto;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  padding: var(--sp-16) var(--sp-24) var(--sp-12);
+}
+.ident {
+  min-width: 0;
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.crumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+.crumbs a:hover {
+  color: var(--text-strong);
+}
+.crumbs a:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.slash {
+  color: var(--border-2);
+}
+.name {
+  margin: 0;
+  font-size: var(--t-20);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+}
+/* How fresh the figures are, once for the page: a green dot, or the warning one when a figure is stale or old. */
+.stamp {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.stamp::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 16%, transparent);
+}
+.warn::before {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 16%, transparent);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  padding-top: var(--sp-12);
+}
+/* Expand and ⋯ sit beside bordered buttons, so they wear the same border. */
+.boxed {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.boxed:hover {
+  border-color: var(--border-2);
+}
+.tabs {
+  display: flex;
+  gap: var(--sp-24);
+  padding: 0 var(--sp-24);
+  overflow-x: auto;
+}
+.tab {
+  flex: 0 0 auto;
+  margin-bottom: -1px;
+  padding: var(--sp-8) 0 var(--sp-12);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text-strong);
+}
+.on {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}
+.tab:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--r-sm);
+}

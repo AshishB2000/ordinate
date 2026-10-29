@@ -5,7 +5,7 @@
 //           its preview
 //   view    one click opens it inside the app at /dashboards/<p>/<id>: the editing canvas with the server's figures
 //           ($5.2M), clean like /p/<id>/ (no editing tool, no Edit, no layout size, no History or Lineage, no sheet
-//           tabs for its one sheet), in the app's light and dark → Copy link copies the live address, no Publish
+//           tabs for its one sheet, no Present), in the app’s light and dark → ⋯ Copy link copies the live address, no Publish
 //           dialog, no Share link → Ready off, on the editing screen in Analyses, empties the page again
 //
 //   npm --prefix web run e2e
@@ -70,8 +70,10 @@ e2e('dashboards in the app: Ready, the Dashboards page, the view page, Copy link
   }
   assert.equal(await page.getByRole('link', { name: 'Edit', exact: true }).count(), 0, 'no Edit: editing is in Analyses');
   assert.equal(await page.getByText('View only', { exact: true }).count(), 0, 'no badge: viewing is the point of the page');
-  await page.getByRole('main').getByRole('link', { name: 'Dashboards' }).waitFor();
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Dashboards' }).waitFor();
   await page.getByRole('button', { name: 'Subscribe' }).waitFor(); // a reader's own write: an editor keeps it here
+  await page.getByRole('button', { name: 'Expand' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Present' }).count(), 0, 'no Present: Expand takes its place');
   await page.getByRole('button', { name: 'More dashboard actions' }).click();
   const exportHtml = page.getByRole('menuitem', { name: 'Export HTML' });
   await exportHtml.waitFor();
@@ -82,7 +84,8 @@ e2e('dashboards in the app: Ready, the Dashboards page, the view page, Copy link
 
   // ── Copy link: the live in-app address, for an editor too — no Publish dialog, no leaving the page ──
   assert.equal(await page.getByRole('button', { name: 'Share link' }).count(), 0, 'no Share link: the live link is the one to share');
-  await page.getByRole('button', { name: 'Copy link' }).click();
+  await page.getByRole('button', { name: 'More dashboard actions' }).click();
+  await page.getByRole('menuitem', { name: 'Copy link' }).click();
   // Either toast: whether a headless browser grants the clipboard is the browser's call, not the page's.
   await page.getByText(/^(Link copied|The clipboard is not available here\.)$/).first().waitFor();
   assert.equal(await page.getByRole('dialog', { name: 'Publish' }).count(), 0, 'no Publish dialog');

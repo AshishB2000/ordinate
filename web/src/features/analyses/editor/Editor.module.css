@@ -12,6 +12,14 @@
   background: var(--bg);
 }
 
+/* Expand (the view page): the dashboard over the whole window, the app's sidebar and search bar under it; its own
+   header stays. Under the dialogs and menus (z-index 100+), as Present is. */
+.expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
 /* ── head ── */
 .head {
   flex: 0 0 auto;

@@ -284,6 +284,17 @@ export function DashboardChrome() {
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [presenting, setPresenting]);
+  // Expanded (the view page): Esc gives the window back, once the reader's click-filters are cleared (the editor's own Esc).
+  const { expanded, setExpanded } = ed.view;
+  const clicked = ed.view.clicks.length > 0;
+  useEffect(() => {
+    if (!expanded || clicked) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('[role="dialog"], [role="menu"]')) setExpanded(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [expanded, clicked, setExpanded]);
   return (
     <>
       {presenting && (

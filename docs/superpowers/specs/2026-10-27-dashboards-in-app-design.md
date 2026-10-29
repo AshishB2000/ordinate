@@ -25,10 +25,16 @@ with the sidebar, today's numbers and the app's own light/dark.
    app links to; the ⋯ Publish… item on the editing screen is gone too.)
 2. **A dashboard opened from that page** (`/dashboards/<projectId>/<dashboardId>`): the dashboard
    in view mode inside the app — the same canvas as the editing screen with every editing tool
-   hidden. The header has: back to Dashboards, the name, the reader's tools (sheet tabs only when
-   there is more than one sheet, filters, Views, Comments, Subscribe, Present, ⋯ Export / Print) and
-   **Copy link** for everyone (the live in-app address). It reads like `/p/<id>/`: no Edit,
-   no layout size switch, no History or Lineage — authoring stays in Analyses (amended 2026-10-28).
+   hidden. Its own header (`dashboards/ViewHead.tsx`, amended 2026-10-28): "Dashboards / <project>"
+   back to the list, the name, how fresh the figures are (once — a card repeats it only when its own
+   figure is stale), then Compare, Subscribe, **Expand** (the dashboard over the whole window, its
+   header kept; Esc gives the window back) and ⋯ (**Copy link** for everyone — the live in-app
+   address — Comments, Export HTML, Print); no Present. Underlined sheet tabs only when there is more
+   than one sheet. The filters sit in one box, as on `/p/<id>/`: each label over its widget, then the
+   saved views (picked and linked only; they are saved and edited in Analyses) and Reset. The "Click
+   to filter" row is gone: a clickable chart says so in its tooltip. Card titles are small capitals
+   with no rule under them, on one background with the header. It reads like `/p/<id>/`: no Edit,
+   no layout size switch, no History or Lineage — authoring stays in Analyses.
    No "View only" badge on this page — viewing is the point of it.
 3. **Ready switch** on the editing screen's header (editors and admins only): on means the
    dashboard is on the Dashboards page; off takes it off. Nothing else changes; nothing is deleted.

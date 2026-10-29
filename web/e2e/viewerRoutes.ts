@@ -244,6 +244,6 @@ export const ROUTES: readonly RouteCase[] = [
     pattern: '/dashboards/:projectId/:analysisId',
     url: (s) => `/dashboards/${s.pid}/${s.aid}`,
     editor: { role: 'button', name: 'Subscribe' },
-    viewer: [{ role: 'button', name: 'Copy link' }, { role: 'button', name: 'Present' }],
+    viewer: [{ role: 'button', name: 'Expand' }, { role: 'button', name: 'More dashboard actions' }], // Copy link is in ⋯
   },
 ];

@@ -5,6 +5,8 @@
 // live on the dashboard and reach /p/, embeds, subscriptions and reports), so a
 // viewer lists, applies and links them and nothing else: the write items are
 // not drawn for them, and the menu is not drawn at all while there is no view.
+// `boxed`: the view page's filter box (FilterBar) — "Saved view" over the view on screen, picked and linked only,
+// as that page writes nothing; saving and editing views stays in the editor.
 
 import { useState } from 'react';
 import { Button } from '../../../ui/Button';
@@ -26,12 +28,12 @@ async function copyLink(href: string): Promise<void> {
   }
 }
 
-export function ViewsMenu() {
+export function ViewsMenu({ boxed = false }: { boxed?: boolean }) {
   const ed = useEditor();
   const v = useSavedViews();
   const [naming, setNaming] = useState<'create' | 'rename' | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const writer = ed.writer;
+  const writer = ed.writer && !boxed;
   if (!writer && v.list.length === 0) return null;
   const cur = v.list.find((x) => x.id === v.applied) ?? null;
 
@@ -53,6 +55,26 @@ export function ViewsMenu() {
     { label: 'Copy link', icon: 'link', onSelect: () => void copyLink(viewHref(window.location.origin, ed.projectId, ed.analysisId, cur?.id ?? '')) },
   ];
 
+  if (boxed) {
+    const name = cur ? cur.name : 'As authored';
+    return (
+      <div className={s.field}>
+        <span className={s.label} aria-hidden="true">
+          Saved view
+        </span>
+        <Menu
+          label="Views"
+          align="end"
+          items={items}
+          trigger={
+            <Button size="sm" iconEnd="chevron-down" className={s.picker} aria-label={`Saved view: ${name}`}>
+              <span className={s.name}>{name}</span>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
   return (
     <>
       <Menu

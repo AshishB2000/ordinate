@@ -365,3 +365,15 @@
 :global([data-phone]) [data-kind='metric'] .metricLabel {
   display: none;
 }
+
+/* The view page reads like a published page (/p/'s .pub-card-title): the card's
+   name in small capitals over its figure, no rule between them. */
+:global([data-viewing]) .head {
+  border-bottom: 0;
+}
+:global([data-viewing]) .title {
+  font-size: var(--t-11);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}

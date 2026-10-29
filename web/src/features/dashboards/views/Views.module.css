@@ -7,3 +7,22 @@
   white-space: nowrap;
   vertical-align: bottom;
 }
+
+/* The view page's filter box: "Saved view" over a picker the size of the box's other widgets (FilterBar.module.css .box). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.picker {
+  height: var(--ctl-md);
+  min-width: 180px;
+  justify-content: space-between;
+}

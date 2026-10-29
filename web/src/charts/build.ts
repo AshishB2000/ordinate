@@ -288,6 +288,14 @@ export function buildChart(
   else if (!isMatrix && !isTreemap && !isFunnel && !isSankey && !isGauge && !isCandlestick && !isBoxplot) {
     tcTooltip(series, tooltipConfig, fmt);
   }
+  // What a click on the mark does, under its figures (the dashboard view page's click-to-filter, CardRuntime).
+  if (typeof overrides.tooltipHint === 'string' && overrides.tooltipHint) {
+    const hint: string = overrides.tooltipHint;
+    tooltipConfig.callbacks.footer = () => hint;
+    tooltipConfig.footerColor = textColor;
+    tooltipConfig.footerFont = { family: fontFamily, size: 11, weight: 'normal' };
+    tooltipConfig.footerMarginTop = 8;
+  }
 
   // Tooltip reach: line/area families default to intersect:true in Chart.js, so the
   // popup only appears on an exact-pixel point hit — which is why bars (fat targets)
