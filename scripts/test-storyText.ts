@@ -84,4 +84,67 @@ ok('pages: prose before the first heading is a page with no heading', lead[0].he
 ok('pages: an empty story still has one page to present', S.storyPages([]).length === 1 && S.storyPages([])[0].heading === '');
 ok('pages: a heading with no body is still a page', S.storyPages([{ id: 'z', kind: 'text', text: '## Empty section' }])[0].items.length === 0);
 
+
+// ── NV-56: linear on hostile text, same tokens as the regexes it replaced ────
+// The reference is the parser as it was (one alternation, (.*) line rules, the
+// edge-trim regex): agreement is checked on a seeded corpus of marker soup.
+const OLD_INLINE = /(\*\*([^*]+?)\*\*)|(`([^`]+?)`)|(\[([^\]]+?)\]\(([^)\s]+?)\))|(\*([^*\s][^*]*?)\*)|(_([^_\s][^_]*?)_)/;
+function oldInline(src: string): Array<{ t: string; text: string; href?: string }> {
+  const out: Array<{ t: string; text: string; href?: string }> = [];
+  let rest = String(src || '');
+  while (rest) {
+    const m = OLD_INLINE.exec(rest);
+    if (!m) { out.push({ t: 'text', text: rest }); break; }
+    if (m.index > 0) out.push({ t: 'text', text: rest.slice(0, m.index) });
+    if (m[1]) out.push({ t: 'b', text: m[2] });
+    else if (m[3]) out.push({ t: 'code', text: m[4] });
+    else if (m[5]) out.push({ t: 'link', text: m[6], href: /^https?:\/\//i.test(m[7]) ? m[7] : '' });
+    else if (m[8]) out.push({ t: 'i', text: m[9] });
+    else out.push({ t: 'i', text: m[11] });
+    rest = rest.slice(m.index + m[0].length);
+  }
+  return out.reduce((acc: Array<{ t: string; text: string; href?: string }>, x) => {
+    const last = acc[acc.length - 1];
+    if (last && last.t === 'text' && x.t === 'text') last.text += x.text;
+    else acc.push({ ...x });
+    return acc;
+  }, []);
+}
+const OLD_LINE = [/^(#{1,3})\s+(.*)$/, /^\s*[-*]\s+(.*)$/, /^\s*\d+[.)]\s+(.*)$/];
+const NEW_LINE = [/^(#{1,3})\s+(\S.*|)$/, /^\s*[-*]\s+(\S.*|)$/, /^\s*\d+[.)]\s+(\S.*|)$/];
+let seed = 56;
+const rnd = (n: number): number => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+const SOUP = ['[', ']', '(', ')', '*', '**', '_', '`', ' ', 'a', 'b', 'https://x.io/', '\r', ' ', '\t', '#', '-', '1.', '\n'];
+let inlineSame = 0;
+let lineSame = 0;
+const CASES = 4000;
+for (let c = 0; c < CASES; c++) {
+  let t = '';
+  for (let k = 1 + rnd(24); k > 0; k--) t += SOUP[rnd(SOUP.length)];
+  if (JSON.stringify(S.mdInline(t)) === JSON.stringify(oldInline(t))) inlineSame++;
+  const line = t.replace(/\n/g, '');
+  if (OLD_LINE.every((re, i) => JSON.stringify(re.exec(line)) === JSON.stringify(NEW_LINE[i].exec(line)))) lineSame++;
+}
+ok(`NV-56: mdInline gives the old regex's tokens on ${CASES} marker-soup lines`, inlineSame === CASES, `${CASES - inlineSame} differ`);
+ok('NV-56: the heading / bullet / number rules match exactly what they matched', lineSame === CASES, `${CASES - lineSame} differ`);
+ok('NV-56: a link inside marker soup still parses', JSON.stringify(S.mdInline('[[x](https://a.io) *[b](c*')) === JSON.stringify(oldInline('[[x](https://a.io) *[b](c*')));
+
+const ms = (fn: () => unknown): number => { const t0 = process.hrtime.bigint(); fn(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+const N = 20_000; // MAX_TEXT, one block's worst case
+const hostile: Array<[string, () => unknown]> = [
+  ["'['.repeat(n)", () => S.mdInline('['.repeat(N))],
+  ["'[a](x'.repeat(n/5)", () => S.mdInline('[a](x'.repeat(N / 5))],
+  ["'*[a](b'.repeat(n/7) + ')'", () => S.mdInline('*[a](b'.repeat(N / 7) + ')')],
+  ['a run of blank lines inside a page', () => S.storyPages([{ id: 'b', kind: 'text', text: 'x' + '\n'.repeat(N) + 'x' }])],
+  ['a heading with a \\r after its spaces', () => S.mdParse('# ' + ' '.repeat(N) + 'a\rb')],
+  ['a bullet with a U+2028 after its spaces', () => S.mdParse('- ' + ' '.repeat(N) + 'a b')],
+];
+for (const [label, fn] of hostile) {
+  const took = ms(fn);
+  ok(`NV-56: ${label} at ${N} characters parses in well under a second`, took < 100, `${took.toFixed(1)} ms`);
+}
+const fresh = ms(() => S.mdInline('['.repeat(N)));
+const control = ms(() => oldInline('['.repeat(N)));
+ok("NV-56 control: the old regex on '['.repeat(n) is the n² case — many times slower", control > 10 * fresh, `${control.toFixed(1)} ms vs ${fresh.toFixed(2)} ms`);
+
 finish();
