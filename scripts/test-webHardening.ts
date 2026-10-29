@@ -20,6 +20,7 @@
 //    interrupted (the org's worker answers the next query at once).
 // 6. HOST: dev mode answers only an IP, a loopback name or ORDINATE_PUBLIC_URL's
 //    name (421 otherwise, no cookie) — a DNS-rebinding page is not the admin.
+// 7. ERRORS: a route that throws answers a fixed 500, never the error's text.
 //
 // Session fixation and logout-everywhere need Postgres: scripts/test-auth-db.ts.
 // Real bearer tokens on RPC without a CSRF pair: scripts/test-tokens-db.ts.
@@ -263,9 +264,27 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     ok('prod: an un-prefixed cookie (plantable by a sibling subdomain) does not', pDev.statusCode === 403, pDev.statusCode);
     await prod.close();
 
+    // ── 7. A route that throws: the message goes to the log, never the wire ──
+    const boomLog: string[] = [];
+    const boomSink = new (require('stream') as typeof import('stream')).Writable({ write(c: Buffer, _e, cb) { boomLog.push(c.toString('utf8')); cb(); } });
+    const boom = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'error' }), boomSink, async () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 10.9.8.7:5432'), { code: 'ECONNREFUSED' }); // pg-pool hands this through as is
+    });
+    await boom.ready();
+    const b500 = await boom.inject({ url: '/api/auth/me' });
+    ok('errors: /api/auth/me whose lookup throws → 500 with a fixed body: no address, no code, no message', b500.statusCode === 500 && b500.json().error === 'server error' && !/10\.9\.8\.7|ECONNREFUSED|message/.test(b500.body), `${b500.statusCode} ${b500.body}`);
+    headersOk('a 500', b500.headers, headers.API_CSP);
+    ok('errors: …the operator log has it', boomLog.some((l) => l.includes('request failed') && l.includes('ECONNREFUSED')), boomLog.join(''));
+    await boom.close();
+    const calm = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined, async () => null);
+    await calm.ready();
+    const c200 = await calm.inject({ url: '/api/auth/me' });
+    ok('errors (NEGATIVE CONTROL): the same route whose lookup answers → 200, signed out', c200.statusCode === 200 && c200.json().user === null, `${c200.statusCode} ${c200.body}`);
+    await calm.close();
+
     // ── 4. Body caps: JSON separate from uploads ─────────────────────────────
     const big = await app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf(JSON_H), payload: `{"args":[],"pad":"${'x'.repeat(5 * 1024)}"}` });
-    ok('body: an RPC body over MAX_RPC_BODY_KB (4) → 413', big.statusCode === 413, `${big.statusCode} ${big.body}`);
+    ok('body: an RPC body over MAX_RPC_BODY_KB (4) → 413, Fastify\'s own 4xx reply kept by the error handler', big.statusCode === 413 && big.json().code === 'FST_ERR_CTP_BODY_TOO_LARGE', `${big.statusCode} ${big.body}`);
     headersOk('a 413', big.headers, headers.API_CSP);
     const under = await app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf(JSON_H), payload: `{"args":[],"pad":"${'x'.repeat(3 * 1024)}"}` });
     ok('body: …one under it is read (200)', under.statusCode === 200, `${under.statusCode} ${under.body}`);
