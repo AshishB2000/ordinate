@@ -46,7 +46,8 @@ e2e('subscriptions (no database): empty list → Subscribe dialog, four steps an
   await settled(page);
   await page.getByRole('list', { name: 'Dashboards' }).getByText('Retail overview').click();
   await page.waitForURL(new RegExp(`/analyses/${pid}/[0-9a-f-]{36}$`));
-  await page.getByRole('button', { name: 'Subscribe' }).click();
+  await page.getByRole('button', { name: 'More dashboard actions' }).click(); // the editor keeps Subscribe in ⋯
+  await page.getByRole('menuitem', { name: 'Subscribe…' }).click();
   const dlg = page.getByRole('dialog', { name: 'Subscribe to Retail overview' });
   await dlg.waitFor();
   const before = rpc.loads.at(-1)?.rpcs ?? 0;

@@ -158,7 +158,7 @@ export default function RebuildPage() {
 
   const title = 'Rebuild a dashboard from a screenshot';
   const sub = 'Drop a screenshot of a Tableau, Power BI, Looker or Metabase dashboard. The model reads its layout — never its numbers — and Ordinate rebuilds it on your data.';
-  const back: Back = { to: `/analyses?project=${projectId}`, label: 'Analyses' };
+  const back: Back = { to: `/dashboards?project=${projectId}`, label: 'Dashboards' };
 
   if (status.isPending || sets.isPending) return <PageSkeleton />;
   if (status.isError) {
@@ -192,7 +192,7 @@ export default function RebuildPage() {
           title="You can view this project, not add to it"
           actions={
             <Link className={buttonClass('secondary')} to={back.to}>
-              Back to Analyses
+              Back to Dashboards
             </Link>
           }
         >

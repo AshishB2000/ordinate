@@ -1,7 +1,8 @@
 // The AI draft (legacy anDraft.ts): a REVIEWED plan that lands on a dashboard.
 // The model proposes structure only; the server validates the envelope and
 // computed every figure in the previews. What the app REFUSED is shown first
-// and never collapsed. Nothing is created until "Create dashboard".
+// and never collapsed. Nothing is created until "Create draft" — and what it
+// creates is a draft only editors and admins see until someone publishes it.
 //
 // It ASKS FIRST. The brief — what kind, which look (DraftBrief.tsx) — then, if
 // the model has questions about the request, those (DraftClarify.tsx), once;
@@ -16,6 +17,7 @@ import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
+import { Icon } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
 import { setDockOpen } from '../assistant/dockState';
 import { failure, type Analysis, type BuildReply, type DraftAnswer, type DraftReply, type LookId, type PlanPreview, type PreviewVisual } from './api';
@@ -282,11 +284,19 @@ export function DraftFlow({
       );
     }
   } else {
-    body = <Review draft={reply} projectId={projectId} />;
+    body = (
+      <>
+        <Review draft={reply} projectId={projectId} />
+        <p className={s.draftNote}>
+          <Icon name="info" />
+          <span>It is saved as a draft that only editors and admins see. Viewers see it once you publish it.</span>
+        </p>
+      </>
+    );
     close = 'Discard';
     actions = (
       <Button variant="primary" loading={building} autoFocus onClick={() => void create()}>
-        Create dashboard
+        Create draft
       </Button>
     );
   }

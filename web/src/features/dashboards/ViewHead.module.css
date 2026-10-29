@@ -52,6 +52,7 @@
 /* How fresh the figures are, once for the page: a green dot, or the warning one when a figure is stale or old. */
 .stamp {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-8);
   margin: var(--sp-8) 0 0;
@@ -70,6 +71,26 @@
 .warn::before {
   background: var(--warn);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 16%, transparent);
+}
+/* "As of … · Published Oct 27 · …": the parts of the stamp, a middle dot between them. */
+.part + .part::before {
+  content: '·';
+  margin-right: var(--sp-8);
+}
+/* An editor's: the draft holds edits viewers do not see yet. */
+.edits {
+  color: var(--warn-text);
+}
+.edits a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.edits a:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
 }
 .actions {
   display: flex;
