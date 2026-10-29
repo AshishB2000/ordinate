@@ -432,7 +432,7 @@ export async function buildDashboard(
           continue;
         }
         const enc = sanitizeEncoding(v.encoding);
-        if (lock && !(await visualAllowed(lock, projectId, v.datasetId, enc))) {
+        if (lock && !(await visualAllowed(lock, projectId, v.datasetId, enc, scopes.flatMap((sc) => mergeDashboardFilters(sc.filters, v.filters))))) {
           cards.push(refuse(base, substituteText(v.name || 'Visual', defaults)));
           done += plan.keys.length;
           continue;
@@ -462,7 +462,7 @@ export async function buildDashboard(
       if (card.type === 'metric' && card.metric) {
         const m = card.metric;
         let title = m.label || `${m.aggregation} of ${m.column}`;
-        if (lock && !(await metricAllowed(lock, projectId, m))) {
+        if (lock && !(await metricAllowed(lock, projectId, m, scopes.flatMap((sc) => sc.filters)))) {
           cards.push(refuse(base, title));
           done += plan.keys.length;
           continue;

@@ -17,7 +17,7 @@
 // these same sentences and is audited against their ledger.
 
 import { ipcMain } from './bus';
-import { gateRows } from '../data/rowAccess';
+import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
@@ -212,11 +212,22 @@ async function alertFact(projectId: string, ids: string[], analysisId: string, t
   const file = await alertStore.load(projectId);
   const open = await alertCandidate(projectId, file.events, scope);
   const cutoff = asOfIso();
-  const ev = file.events
+  const candidates = file.events
     // Quality alerts have their own sentence; an "as of" view sees only what had fired by then.
     .filter((e) => open(e) && e.ruleName !== 'Data quality' && (ids.includes(e.datasetId) || (!!analysisId && e.analysisId === analysisId)))
     .filter((e) => !cutoff || e.at <= cutoff)
-    .sort((a, b) => b.at.localeCompare(a.at))[0];
+    .sort((a, b) => b.at.localeCompare(a.at));
+  let ev: AlertEvent | undefined;
+  for (const e of candidates) {
+    // Found through the analysis id, its dataset was not gated with the tiles': skipped when closed to the
+    // caller (its figures are whole-dataset), else recorded as read, so a publish remembers it (NV-17).
+    if (!ids.includes(e.datasetId)) {
+      if (await closedToCaller(projectId, e.datasetId)) continue;
+      await gateRows(projectId, e.datasetId);
+    }
+    ev = e;
+    break;
+  }
   if (!ev) return null;
   const rule = file.rules.find((r) => r.id === ev.ruleId);
   return alertSentence({
