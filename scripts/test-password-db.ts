@@ -19,6 +19,7 @@
 //               reset, an address outside ALLOWED_EMAIL_DOMAINS, any mode but
 //               password, and an admin's API token (a browser session only)
 //   tokens      a password change or reset revokes the person's API tokens
+//   busy        sign-ins hashing at once on a pod are capped (`busy` past it)
 //   audit+logs  sign-ins and password changes are audit rows; no password, hash,
 //               session id or (outside its one startup line) setup code is ever
 //               logged or audited
@@ -322,6 +323,15 @@ const sessionOf = (r: Inject) => {
         headers: withCsrf({ 'content-type': 'application/json' }), payload: JSON.stringify({ email: 'boss@acme.test', password: BOSS }) })).statusCode);
     }
     ok('rate limit: RATE_LIMIT_LOGIN_PER_MINUTE covers the password routes (4th try → 429)', tries.join() === '200,200,200,429', tries.join());
+
+    // NV-39: fresh emails from fresh addresses pass the lockout and the per-IP limit, so this pod caps the scrypts it runs at once.
+    const burst = await Promise.all(Array.from({ length: 12 }, (_, i) => post('login', { email: `stranger${i}@acme.test`, password: 'guess-a-password' }, undefined, `198.51.100.${100 + i}`)));
+    const codes = burst.map((r) => (r.statusCode === 200 ? String(r.json().error) : String(r.statusCode)));
+    const busy = burst.filter((r) => refused(r, 'busy'));
+    ok('busy: 12 sign-ins at once → some `busy` with Retry-After, the rest refused as usual, never a 5xx',
+      busy.length > 0 && busy.every((r) => r.headers['retry-after'] === '1') && codes.every((c) => c === 'busy' || c === 'invalid'), codes.join());
+    ok('busy: …at most 4 hashed at once (the rest answered without a scrypt)', burst.length - busy.length <= 4, codes.join());
+    ok('busy (NEGATIVE CONTROL): once they finish, a sign-in hashes again', accepted(await post('login', { email: 'boss@acme.test', password: BOSS })));
 
     // ── After a move to SSO a leftover temporary password holds nobody ─────
     const store: typeof import('../src/server/auth/store') = require('../src/server/auth/store');
