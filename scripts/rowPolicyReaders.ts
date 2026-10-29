@@ -42,7 +42,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'comment:reopen': 'META',
   'comment:reply': 'META',
   'comment:resolve': 'META',
-  'connections:list': 'META',
+  'connections:list': 'REDACT', // lastError where a connection feeds a dataset closed to the caller (N2)
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
   'copilot:ask': 'EXPLICIT',
