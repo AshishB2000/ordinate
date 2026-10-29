@@ -16,19 +16,13 @@
 
 import type * as ExcelJSNamespace from 'exceljs';
 import { finalizeTable, ParseResult } from './parse';
-import { checkXlsx } from './xlsxGuard';
+import { checkXlsx, MAX_XLSX_CELLS } from './xlsxGuard';
 import { formatNumber } from '../app/format';
 import { xlsxTooManyCells } from './workBudgetMessages';
 
 // Mirror of parse.ts's MAX_ROWS (not exported there). Only used to bound our own
 // row materialization; finalizeTable re-applies the authoritative cap + warning.
 const MAX_ROWS = 1_000_000; // mirror of parse.ts
-/**
- * Cells of the used range read into the table — a million rows of twenty
- * columns. The range runs to the farthest cell present, so ONE cell at XFD2000
- * in a few-KB file is 33 million cells (NV-49); the body is that rectangle.
- */
-export const MAX_XLSX_CELLS = 20_000_000;
 
 // Convert a single exceljs cell to a lossless display string. cell.text renders
 // numbers, dates (per the sheet's format), and formula results as the user sees

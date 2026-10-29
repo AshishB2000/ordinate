@@ -14,8 +14,8 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const zlib: typeof import('zlib') = require('zlib');
 
-const { parseXlsx, MAX_XLSX_CELLS }: typeof import('../src/data/parseXlsx') = require('../src/data/parseXlsx');
-const { MAX_XLSX_UNPACKED }: typeof import('../src/data/xlsxGuard') = require('../src/data/xlsxGuard');
+const { parseXlsx }: typeof import('../src/data/parseXlsx') = require('../src/data/parseXlsx');
+const { MAX_XLSX_CELLS, MAX_XLSX_UNPACKED }: typeof import('../src/data/xlsxGuard') = require('../src/data/xlsxGuard');
 
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-xlsx-'));
 process.on('exit', () => { try { fs.rmSync(DIR, { recursive: true, force: true }); } catch (_) { /* temp */ } });
@@ -66,7 +66,7 @@ function zip(entries: Entry[], comment = Buffer.alloc(0)): Buffer {
 const x = (s: string): Buffer => Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${s}`);
 const NS = 'http://schemas.openxmlformats.org';
 /** A minimal workbook of one sheet whose cells are `[address, number]`. */
-function workbook(cells: Array<[string, number]>, extra: Entry[] = [], descriptor = false): Entry[] {
+function workbook(cells: Array<[string, number]>, extra: Entry[] = [], descriptor = false, tail = ''): Entry[] {
   const rows = new Map<number, string[]>();
   for (const [ref, v] of cells) {
     const r = Number(/\d+$/.exec(ref)![0]);
@@ -78,7 +78,7 @@ function workbook(cells: Array<[string, number]>, extra: Entry[] = [], descripto
     { name: '_rels/.rels', data: x(`<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
     { name: 'xl/workbook.xml', data: x(`<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>`) },
     { name: 'xl/_rels/workbook.xml.rels', data: x(`<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`) },
-    { name: 'xl/worksheets/sheet1.xml', data: x(`<worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData>${sheetData}</sheetData></worksheet>`) },
+    { name: 'xl/worksheets/sheet1.xml', data: x(`<worksheet xmlns="${NS}/spreadsheetml/2006/main">${tail.startsWith('<cols') ? tail : ''}<sheetData>${sheetData}</sheetData>${tail.startsWith('<cols') ? '' : tail}</worksheet>`) },
     ...extra,
   ].map((e) => ({ ...e, descriptor }));
 }
@@ -145,6 +145,23 @@ async function main(): Promise<void> {
   ok('negative control: a sparse range inside the budget parses, gaps empty',
     (await outcome(zip(workbook([['A1', 1], ['Z100', 2]])))) === 'rows=99 cols=26');
   ok('the budget is the table cap\'s shape', MAX_XLSX_CELLS === 20_000_000);
+
+  // ── NV-49, inside exceljs: ranges it expands one object per cell while it loads ──
+  const ranges = /^This Excel file cannot be imported: its merged cells, data validation or column settings cover more than 20,000,000 cells/;
+  const sheet = (tail: string) => outcome(zip(workbook(CELLS, [], false, tail)));
+  const t1 = Date.now();
+  const merge = await sheet('<mergeCells count="1"><mergeCell ref="A1:XFD2000"/></mergeCells>');
+  ok('a merge of A1:XFD2000 (33M cells) is refused before exceljs loads it', ranges.test(merge) && Date.now() - t1 < 5000, merge);
+  ok('negative control: an ordinary merge parses', (await sheet('<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>')) === 'rows=1 cols=2');
+  ok('a data validation over the whole sheet is refused', ranges.test(await sheet(
+    '<dataValidations count="1"><dataValidation type="whole" sqref="C3 A1:XFD1048576"><formula1>1</formula1></dataValidation></dataValidations>')));
+  ok('…and through a sheet-qualified range', ranges.test(await sheet(
+    "<dataValidations count=\"1\"><dataValidation type=\"whole\" sqref=\"'My Sheet'!A1:XFD1048576\"><formula1>1</formula1></dataValidation></dataValidations>")));
+  ok('negative control: a validation down one column parses', (await sheet(
+    '<dataValidations count="1"><dataValidation type="whole" sqref="A2:A10000"><formula1>1</formula1></dataValidation></dataValidations>')) === 'rows=1 cols=2');
+  ok('a column run to two billion is refused', ranges.test(await sheet('<cols><col min="1" max="2000000000" width="9"/></cols>')));
+  ok('negative control: ordinary column widths parse', (await sheet('<cols><col min="1" max="5" width="9"/></cols>')) === 'rows=1 cols=2');
+  ok('an entity inside a range is refused, never decoded twice', ranges.test(await sheet('<mergeCells count="1"><mergeCell ref="A1&#58;B2"/></mergeCells>')));
 }
 
 main()

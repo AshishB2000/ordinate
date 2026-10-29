@@ -76,8 +76,8 @@ export interface ZipReader {
   read(e: ZipEntryInfo, signal?: AbortSignal): Promise<Buffer>;
   /** The entry streamed to `dest` (created, never overwritten), size and CRC checked; deleted on failure. */
   extract(e: ZipEntryInfo, dest: string, signal?: AbortSignal): Promise<void>;
-  /** A stored entry's CRC, streamed. */
-  verify(e: ZipEntryInfo, signal?: AbortSignal): Promise<void>;
+  /** A stored entry's CRC, streamed — each inflated chunk handed to `onChunk` (which may throw ZipRefused). */
+  verify(e: ZipEntryInfo, signal?: AbortSignal, onChunk?: (chunk: Buffer) => void): Promise<void>;
   /** A stored entry as a source of its own: an inner zip read in place. */
   range(e: ZipEntryInfo): ZipSource;
   close(): Promise<void>;
@@ -290,8 +290,13 @@ function reader(fh: fs.promises.FileHandle, own: boolean, base: number, entries:
         throw err;
       }
     },
-    async verify(e, signal) {
-      await stream(e, new Writable({ write(_chunk, _enc, cb) { cb(); } }), signal);
+    async verify(e, signal, onChunk) {
+      await stream(e, new Writable({
+        write(chunk: Buffer, _enc, cb) {
+          try { if (onChunk) onChunk(chunk); } catch (err) { return cb(err as Error); }
+          cb();
+        },
+      }), signal);
     },
     range(e) {
       return { fh, offset: base + e.dataStart, length: e.csize };

@@ -24,6 +24,11 @@ export function xlsxTooManyCells(rows: string, columns: string, limit: string): 
   return t('workBudgetMessages.this_sheet_spans_rows_by_columns', { rows, columns, limit });
 }
 
+/** Merges, data validation or column ranges exceljs would expand cell by cell (src/data/xlsxGuard.ts). */
+export function xlsxRangesTooLarge(limit: string): string {
+  return t('workBudgetMessages.this_excel_file_cannot_be_imported_2', { limit });
+}
+
 /** A step list growing past the cap (src/data/datasets.ts updateSteps). */
 export function tooManySteps(limit: string): string {
   return t('workBudgetMessages.a_dataset_holds_at_most_prepare', { limit });

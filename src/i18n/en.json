@@ -661,6 +661,7 @@
   "wordCloudRender.word_cloud_no_words_to_draw": "Word cloud: no words to draw",
   "workBudgetMessages.a_dataset_holds_at_most_prepare": "A dataset holds at most {limit} prepare steps. Remove one before adding another.",
   "workBudgetMessages.this_excel_file_cannot_be_imported": "This Excel file cannot be imported: it is damaged, or it unpacks to more than {limitMb} MB. Save it again from Excel, or export the sheet as CSV.",
+  "workBudgetMessages.this_excel_file_cannot_be_imported_2": "This Excel file cannot be imported: its merged cells, data validation or column settings cover more than {limit} cells. Remove them, or export the sheet as CSV.",
   "workBudgetMessages.this_formula_does_more_work_than": "This formula does more work than one calculation may on this table. Simplify it, or filter the rows first.",
   "workBudgetMessages.this_sheet_spans_rows_by_columns": "This sheet spans {rows} rows by {columns} columns, more than the {limit} cells an Excel import reads. Delete the unused rows and columns, or export the sheet as CSV.",
   "workBudgetMessages.unpivot_skipped_it_would_make_cells": "Unpivot skipped: it would make {cells} cells; the limit is {limit}"
