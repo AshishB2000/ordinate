@@ -193,6 +193,24 @@ async function main(): Promise<void> {
     ok('leap years are the proleptic Gregorian rule', clean.parseDateCell('2000-02-29', ymd) === '2000-02-29' &&
       clean.parseDateCell('1900-02-29', ymd) === null && clean.parseDateCell('2024-2-9', ymd) === null &&
       clean.parseDateCell(' 2024-02-09\t', ymd) === '2024-02-09');
+    // NV-50: the trim is an index scan. It agrees with the regex it replaced on every
+    // shape, and an interior space run costs linear time where the regex cost ~n².
+    const oldTrim = (s: string): string => s.replace(/^[ \t]+|[ \t]+$/g, '');
+    const shapes = ['', ' ', '\t \t', 'a', ' a', 'a ', ' \ta b\t ', 'a  b', ' a ', ' \n a \n ', 'x' + ' '.repeat(50) + 'x'];
+    ok('trimSpaceTab agrees with the regex it replaced', shapes.every((s) => Object.is(clean.trimSpaceTab(s), oldTrim(s))));
+    const run1 = (n: number, f: (s: string) => string): number => {
+      const s = 'x' + ' '.repeat(n) + 'x';
+      const t0 = performance.now();
+      f(s);
+      return performance.now() - t0;
+    };
+    const fast = run1(200_000, clean.trimSpaceTab);
+    const slow = run1(10_000, oldTrim); // negative control: the old regex, at a twentieth of the length
+    ok('an interior run of 200k spaces trims in linear time (old regex: slower at 10k)', fast < 50 && slow > fast, `${fast.toFixed(1)} ms vs ${slow.toFixed(1)} ms`);
+    const t0 = performance.now();
+    const big = clean.parseDatePreview({ columns: [{ name: 'd', type: 'text' }], rows: [['x' + ' '.repeat(200_000) + 'x']] },
+      { type: 'parse_date', column: 'd', format: 'YYYY-MM-DD' });
+    ok('…through the preview too', big.failed === 1 && performance.now() - t0 < 100);
   }
 
   // ── 5. the other steps' semantics ─────────────────────────────────────────
