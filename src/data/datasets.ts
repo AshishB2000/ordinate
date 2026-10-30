@@ -383,8 +383,9 @@ export async function init(): Promise<void> {
   // Intentionally empty — per-project datasets/ dirs are created on demand.
 }
 
-// Return summaries for a project's datasets, newest-updated first. Skips
-// corrupt/missing files quietly (ENOENT silent; real damage logged).
+/** One stored record → its summary, or null for one the list skips: listDatasets's and ⌘K's index's (0022) one parser. */
+export const summaryOf = (projectId: string, raw: string): DatasetSummary | null => { const d = JSON.parse(raw); return isValidDataset(d) ? summarize(normalize(d, projectId)) : null; };
+// Summaries, newest-updated first. Skips corrupt/missing files (ENOENT silent; real damage logged).
 export async function listDatasets(projectId: string): Promise<DatasetSummary[]> {
   if (!isValidId(projectId)) return [];
   const dir = datasetsDir(projectId);
@@ -401,10 +402,8 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
-      if (!isValidDataset(data)) continue;
-      out.push(summarize(normalize(data, projectId)));
+      const s = summaryOf(projectId, await recordFs.readFile(datasetFilePath(projectId, id), 'utf8'));
+      if (s) out.push(s);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
         logger.error('[datasets] Skipping corrupt or unreadable dataset:', id, err.message);

@@ -412,12 +412,16 @@ export async function readAll(projectId: string): Promise<Report[]> {
   return out;
 }
 
+/** One stored record → the report, or null for one the list skips: getReport's and ⌘K's index's (0022) one parser. */
+export function reportOf(projectId: string, raw: string): Report | null {
+  const data = JSON.parse(raw);
+  return data && typeof data.id === 'string' && data.id ? normalize(data, projectId) : null;
+}
+
 export async function getReport(projectId: string, id: string): Promise<Report | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const data = JSON.parse(await recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
-    if (!data || typeof data.id !== 'string' || !data.id) return null;
-    return normalize(data, projectId);
+    return reportOf(projectId, await recordFs.readFile(reportFilePath(projectId, id), 'utf8'));
   } catch (_) {
     return null;
   }
