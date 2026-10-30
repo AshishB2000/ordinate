@@ -42,8 +42,9 @@ export function register(): void {
     try {
       const q = await quality.listQuality(projectId, datasetId);
       if (!q) return { ok: false, error: 'Dataset not found' };
-      // A run's results hold whole failing rows and whole-table counts: not for a caller row access rules restrict (REDACT).
-      if (await closedToCaller(projectId, datasetId)) return { ok: true, rules: q.rules, latest: null, history: [] };
+      // A run's results hold whole failing rows and whole-table counts, and a rule's args can name values (an
+      // allowed set, a whole-table min/max): neither is for a caller row access rules restrict (REDACT, NV-21).
+      if (await closedToCaller(projectId, datasetId)) return { ok: true, rules: q.rules.map((r) => ({ ...r, args: {} })), latest: null, history: [] };
       return { ok: true, rules: q.rules, latest: q.latest || null, history: q.history || [] };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read the rules' };

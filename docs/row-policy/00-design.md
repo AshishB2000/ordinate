@@ -172,7 +172,8 @@ would otherwise serve snapshot rows first) and above `recordFs.memoRead` (a publ
 would otherwise serve a hydrated table without asking). For an unrestricted caller it costs the
 memoised role check; for a restricted one it reads the CURRENT record's policy (raw, via
 `datasetRecord` — never through the as-of hooks, which swap in a snapshot's metadata) once per
-request. Both storage doors are gated, so a reader whose `residentSource(…).catch(() => null)` falls
+request. A dataset in the Trash is read from its trash entry: its rules travel with it, so its
+versions, its capture and every dataset built from it stay governed until it is purged (NV-16). Both storage doors are gated, so a reader whose `residentSource(…).catch(() => null)` falls
 back to `getDataset` (`scorecards.ts:343`, `drivers.ts:204`, `qualityRun.ts:65`, …) still refuses.
 Inside a fan-out scope the gate reads the policy of every dataset it is asked for, whoever the
 caller is (once per dataset per build, memoised in the scope), and records the id.
@@ -355,12 +356,12 @@ Handler paths are under `src/`.
 | `visual:suggest` | `ipc/visuals.ts:700` | `residentSource` + whole-table summaries → a model |
 | **EXPLICIT** | | |
 | `insights:list` | `ipc/insights.ts:190` | `insightsForDataset` → the `insights` cache (insights.ts:70, key has no filter and no user) → scan; refused at the top of `insightsForDataset`, BEFORE the cache; the project walk skips policy datasets |
-| `captureDataset:get` | `ipc/captureDataset.ts:113` | stored capture thread: the full extracted table, chart data, headline (captureUpload.ts:106) |
+| `captureDataset:get` | `ipc/captureDataset.ts:113` | stored capture thread: the full extracted table, chart data, headline (captureUpload.ts:106) — gated on the capture's link AND every dataset whose origin names the capture (a composer save with joins writes no link; a second save moves it, NV-20) |
 | `captureDataset:image` | `ipc/captureDataset.ts:122` | the stored screenshot of the table |
 | `snapshots:diff` | `ipc/snapshots.ts:154` | snapshot Parquet by path (`snap.parquetPath`, snapshots.ts:46/51), never `residentSource` |
 | `quality:failingRows` | `ipc/quality.ts:91` | `failingRowFilter` computes its row filter over the whole table and a referenced dataset (qualityRun.ts:273) → refused, not locked |
 | `formula:check` | `ipc/formula.ts:191` | 8 sample rows via `pageFor` + `lodPreview` (whole-table LOD values): an authoring check — refused whole, typed |
-| `summary:compute` | `ipc/summary.ts:255` | insights cache, stored quality results and alert events, `driversFor`: refused when any dataset it reads has a policy (the embed lock refuses the Summary card the same way) |
+| `summary:compute` | `ipc/summary.ts:255` | insights cache, stored quality results and alert events, `driversFor`: refused when any dataset it reads has a policy (the embed lock refuses the Summary card the same way); an alert event found through the request's `analysisId` names a dataset no tile was gated on, so it is skipped when that dataset is closed to the caller (NV-17) |
 | `summary:rewrite` | `ipc/summary.ts:275` | same facts, then a model |
 | `copilot:ask` | `ipc/copilot.ts:459` | `buildFacts`: a dataset or capture context over a policy dataset refuses (whole-dataset summaries, sample rows, insights, a Live sample); visual, analysis and scorecard contexts are door figures (locked); stats, drivers and scenario contexts refuse through the net; the plain-ask inventory drops a policy dataset's Live sample notes; the ledger carries only facts that were allowed |
 | `versions:get` | `ipc/versions.ts:66` | stored version file: an input table's version carries the full table (inputTable/store.ts:102) → refused for `type:'dataset'` on a policy dataset |
@@ -369,7 +370,7 @@ Handler paths are under `src/`.
 | `dataSearch:query` | `ipc/dataSearch.ts:20` | `runSearch`: `tablePath` + the stored `<id>.search.json` value index (dataSearchRun.ts:99-101) — policy datasets are skipped for a restricted caller; the withheld-columns catch fails closed |
 | **REDACT** | | |
 | `alerts:list` | `ipc/alerts.ts:116` | stored `alerts.json`: events' value/previous/delta/message/diagnosis and rules' lastValue/history/firedPeriod → stripped for a policy dataset (ids, rule name and time stay) |
-| `quality:list` | `ipc/quality.ts:39` | record `quality.latest.results[].sample` (up to 5 whole failing rows) and counts → results stripped for a policy dataset |
+| `quality:list` | `ipc/quality.ts:39` | record `quality.latest.results[].sample` (up to 5 whole failing rows) and counts, and each rule's `args` (an allowed set, a whole-table min/max: values) → results stripped and every rule's `args` emptied for a policy dataset (NV-21) |
 | `incremental:get` | `ipc/incremental.ts:15` | record `incremental.highWater` and `log[].highWater` (a row value) → stripped |
 | `dataset:liveSchema` | `ipc/liveProfile.ts:236` | record `live.profile` sample values and counts → stripped (column names and types stay) |
 | `captureDataset:list` | `ipc/captureDataset.ts:106` | stored `thumb` (an image of the table) → stripped for a capture linked to a policy dataset |
@@ -407,7 +408,7 @@ Handler paths are under `src/`.
 | `comment:reopen` | `ipc/comments.ts:101` | as comment:add |
 | `comment:reply` | `ipc/comments.ts:95` | as comment:add |
 | `comment:resolve` | `ipc/comments.ts:99` | as comment:add |
-| `connections:list` | `ipc/connections.ts:251` | connection metadata, secretSet flags |
+| `connections:list` | `ipc/connections.ts:251` | connection metadata, secretSet flags; `lastError` (a refresh failure's text, which can quote a value — N2) → withheld from a restricted caller on a connection that feeds a dataset closed to them (NV-22) |
 | `connectors:catalog` | `ipc/connections.ts:238` | static form shapes |
 | `connectors:logos` | `ipc/connections.ts:471` | static glyphs |
 | `copilot:deleteThread` | `ipc/copilot.ts:434` | own thread |

@@ -38,9 +38,20 @@ const FAKE: Record<string, string[]> = {
 // rebind.ssrf.test counts across a redirect; once.ssrf.test is reset per driver.
 let rebindCount = 0;
 let onceCount = 0;
+// *.hang.ssrf.test: a resolver that answers only when the test says so (NV-54).
+const hung: (() => void)[] = [];
+let hangStarted = 0;
 const realLookup = dns.promises.lookup;
 const fakeLookup = async (host: string, opts?: unknown): Promise<dns.LookupAddress[]> => {
   const h = host.toLowerCase();
+  if (h.endsWith('.hang.ssrf.test')) {
+    hangStarted += 1;
+    return new Promise((resolve) => {
+      const answer = (): void => resolve([{ address: '93.184.216.34', family: 4 }]);
+      hung.push(answer);
+      setTimeout(answer, 5000).unref(); // a regression fails the checks below instead of hanging the suite
+    });
+  }
   if (h === 'rebind.ssrf.test') return [{ address: rebindCount++ === 0 ? '127.0.0.1' : '10.255.255.1', family: 4 }];
   if (h === 'once.ssrf.test') return [{ address: onceCount++ === 0 ? '127.0.0.1' : '10.255.255.1', family: 4 }];
   if (FAKE[h]) return FAKE[h].map((address) => ({ address, family: net.isIP(address) }));
@@ -189,6 +200,19 @@ async function main(): Promise<void> {
     JSON.stringify([['adb.us-ashburn-1.oraclecloud.com'], ['169.254.169.254'], ['h1.example.com', '::1', '10.0.0.1']]));
   const adbRes = await run.listTables('oracle-autonomous', { connectString: adb[1], user: 'u' }, { password: 'p' }, QUICK);
   ok('server: Oracle ADB connect string to metadata refused', !adbRes.ok && /^Refused/.test(adbRes.error), JSON.stringify(adbRes));
+  // NV-14: a wallet names a path on this server — refused before the driver reads it (192.0.2.1 is never dialed).
+  const WALLETS: Record<string, unknown>[] = [
+    { connectString: 'tcps://192.0.2.1:1522/x', walletLocation: '/etc' },
+    { connectString: 'tcps://192.0.2.1:1522/x?wallet_location=/etc' },
+    { connectString: '(description=(address=(protocol=tcps)(host=192.0.2.1)(port=1522))(security=(MY_WALLET_DIRECTORY=/etc))(connect_data=(service_name=x)))' },
+  ];
+  for (const w of WALLETS) {
+    const res = await run.listTables('oracle-autonomous', { user: 'u', ...w }, { password: 'p' }, QUICK);
+    ok(`server: an Oracle wallet path is refused, the path unechoed (${JSON.stringify(w).slice(0, 60)})`,
+      !res.ok && /wallet folder is a path on this server/.test(res.error) && !res.error.includes('/etc'), JSON.stringify(res));
+  }
+  const noWallet = await run.listTables('oracle-autonomous', { user: 'u', connectString: 'tcps://192.0.2.1:1522/x' }, { password: 'p' }, QUICK);
+  ok('negative control: without a wallet the same string reaches the host check', !noWallet.ok && /reserved/.test(noWallet.error), JSON.stringify(noWallet));
 
   process.env[saasHttp.FIXTURE_ENV] = `http://127.0.0.1:${ch.port}`;
   const ctx = run.buildContext({}, {}, QUICK);
@@ -205,6 +229,26 @@ async function main(): Promise<void> {
     const res = await run.listTables(id, dbValues(id, 'once.ssrf.test', tcp.port), {}, QUICK);
     ok(`allowlisted: ${id} dials the PINNED address, never a second DNS answer`, tcp.conns > before && onceCount === 1 && !res.ok, `conns+${tcp.conns - before} lookups=${onceCount} ${JSON.stringify(res)}`);
   }
+  // NV-13: Oracle ADB names its hosts in a connect string, and the thin driver resolves them itself.
+  const ADB_TCP = [`tcp://once.ssrf.test:${tcp.port}/svc`,
+    `(description=(address=(protocol=tcp)(host=ONCE.ssrf.test)(port=${tcp.port}))(connect_data=(service_name=svc)))`];
+  for (const cs of ADB_TCP) {
+    const before = tcp.conns;
+    onceCount = 0;
+    const res = await run.listTables('oracle-autonomous', { connectString: cs, user: 'u' }, { password: 'p' }, QUICK);
+    ok(`allowlisted: oracle-autonomous dials the PINNED address (${cs.slice(0, 14)}…)`, tcp.conns > before && onceCount === 1 && !res.ok,
+      `conns+${tcp.conns - before} lookups=${onceCount} ${JSON.stringify(res)}`);
+  }
+  // Its https_proxy is dialled by http.request, which would resolve again: rewritten to the pin.
+  const beforeProxy = tcp.conns;
+  onceCount = 0;
+  const viaProxy = await run.listTables('oracle-autonomous',
+    { connectString: `tcps://pinned.ssrf.test:1522/svc?https_proxy=once.ssrf.test&https_proxy_port=${tcp.port}`, user: 'u' }, { password: 'p' }, QUICK);
+  ok('allowlisted: an ADB https_proxy is dialled at its PINNED address', tcp.conns > beforeProxy && onceCount === 1 && !viaProxy.ok,
+    `conns+${tcp.conns - beforeProxy} lookups=${onceCount} ${JSON.stringify(viaProxy)}`);
+  onceCount = 0;
+  ok('outside the connect, a lookup is the real one again', (await dns.promises.lookup('once.ssrf.test', { all: true }))[0]?.address === '127.0.0.1' && onceCount === 1);
+
   ch.hits.length = 0;
   await run.listTables('clickhouse', { host: 'pinned.ssrf.test', port: ch.port, insecureHttp: true }, {}, QUICK);
   ok('allowlisted: HTTP engine dials the pinned address, Host header keeps the name', ch.hits.length === 1 && ch.hits[0].host === `pinned.ssrf.test:${ch.port}`, JSON.stringify(ch.hits));
@@ -260,6 +304,32 @@ async function main(): Promise<void> {
   a.hits.length = 0;
   await ssrf.safeFetch(`${base}/see-other`, { method: 'POST', body: '{"q":1}', headers: { 'content-type': 'application/json' } });
   ok('303 after POST continues as a body-less GET', a.hits[1]?.method === 'GET' && a.hits[1]?.body === '');
+
+  // ── 6. resolution is bounded (NV-54) ───────────────────────────────────────
+  // getaddrinfo holds a libuv pool thread until the resolver answers: two at a
+  // time on the pod, one per org, and a caller stops waiting at the deadline.
+  ssrf.LOOKUPS.waitMs = 150;
+  const inOrg = <T>(org: string, fn: () => Promise<T>): Promise<T> =>
+    context.runInContext({ user: { email: 'e@x.test', role: 'admin' }, org: { id: org } }, `r-${org}`, fn);
+  hangStarted = 0;
+  const t0 = Date.now();
+  const waits = [['a', 'a1'], ['a', 'a2'], ['b', 'b1'], ['c', 'c1']].map(([org, n]) =>
+    inOrg(org, () => refusal(ssrf.checkHost(`${n}.hang.ssrf.test`))));
+  const literal = await inOrg('c', () => ssrf.checkHost('93.184.216.34'));
+  await new Promise((r) => setTimeout(r, 20));
+  ok('one lookup per org and two per pod run: a1 and b1, while a2 and c1 wait', hangStarted === 2, hangStarted);
+  ok('an IP literal needs no lookup and never waits', literal.address === '93.184.216.34');
+  const gaveUp = await Promise.all(waits);
+  ok('every caller gives up at the deadline, queued or in flight', gaveUp.every((m) => /in time/.test(m)) && Date.now() - t0 < 2000 && hangStarted === 2, `${JSON.stringify(gaveUp)} ${Date.now() - t0}ms`);
+  const stillHeld = await inOrg('d', () => refusal(ssrf.checkHost('d0.hang.ssrf.test')));
+  ok('a slot stays taken while its getaddrinfo still runs', /in time/.test(stillHeld) && hangStarted === 2, stillHeld);
+  hung.splice(0).forEach((answer) => answer()); // the resolver answers at last
+  await new Promise((r) => setTimeout(r, 10));
+  const d1 = inOrg('d', () => ssrf.checkHost('d1.hang.ssrf.test'));
+  await new Promise((r) => setTimeout(r, 10));
+  hung.shift()?.();
+  ok('freed slots are used again', (await d1).address === '93.184.216.34' && hangStarted === 3);
+  ssrf.LOOKUPS.waitMs = 10_000;
 
   // a real Postgres, when one is configured: refused, then allowlisted and working through the pin
   if (process.env.DATABASE_URL) {

@@ -3,7 +3,6 @@ import { loadPlanContext } from '../analysis/analysisPlan';
 import { mapRoles, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
 import * as metrics from '../analysis/metrics';
 import { TEMPLATES, templateById } from '../analysis/templates';
-import * as userTemplates from '../app/userTemplateStore'; // r7:templates
 
 // TEMPLATES IPC — the gallery's two channels. NOT an AI path: both work with no
 // model configured, because a template is app code reading app-computed column
@@ -71,21 +70,14 @@ export function register() {
           reason: reasonFor(missingRequired),
         };
       });
-      // r7:templates — the user's own templates, FIRST, through the same mapper.
-      // `tiles` is the card count, the denominator of "N skipped".
-      const yours = (await userTemplates.listTemplates()).map((t) => {
-        const { matches, missingRequired } = mapRoles(t.roles, ds, geoHits, defined);
-        return {
-          id: t.id, group: 'Yours', user: true, name: t.name, blurb: t.description, thumb: '', thumbnail: t.thumbnail,
-          roles: t.roles.map((r) => ({ id: r.id, label: r.label, kind: r.kind, required: r.required })),
-          matches, missingRequired, reason: reasonFor(missingRequired),
-          tiles: t.body.sheets.reduce((n: number, p) => n + (((p as { cards?: unknown[] }).cards) || []).length, 0),
-        };
-      });
+      // The built-in catalogue only. r7:templates' user templates are one ORG-wide
+      // store (with dashboard screenshots), not this project's, and the web offers
+      // none of them (utpl:* is not on the server): listing them showed other
+      // projects' dashboards to any reader and loaded the whole store per call (NV-33, NV-57).
       // The COLUMNS the mapping step's selects offer, with their declared type
       // for the glyph. Names and types only — no rows, no summaries, no values.
       const columns = ds.columns.map((c) => ({ name: c.name, type: c.type }));
-      return { ok: true, datasetId: ds.id, datasetName: ds.name, columns, templates: [...yours, ...templates] };
+      return { ok: true, datasetId: ds.id, datasetName: ds.name, columns, templates };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the templates' };
     }

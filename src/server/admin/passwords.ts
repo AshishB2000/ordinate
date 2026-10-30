@@ -1,8 +1,10 @@
 // Admin → People under password sign-in (AUTH_MODE=password): add someone with
 // a temporary password, or give someone a new one. Either way they must change
 // it at their next sign-in (src/server/auth/password.ts), and a reset signs
-// them out everywhere. The route has already checked the caller is an org
-// admin; every statement is confined to the caller's org.
+// them out everywhere: sessions, event streams and personal API tokens. The
+// route has already checked the caller is an org admin; every statement is
+// confined to the caller's org. Both need a browser session: a leaked admin
+// API token must not mint a sign-in that outlives its own revocation.
 //
 // The admin tells the person the password themselves: Ordinate sends no email.
 
@@ -33,6 +35,7 @@ export function register(pool: () => Pool | null, mode: () => AuthMode, allowedD
   };
 
   registry.handle('admin:addUser', async (_e, { email, role, password }: { email: string; role: Role; password: string }): Promise<Result> => {
+    if (ctx().via === 'token') return { ok: false, error: 'session' };
     const no = refusal(mode(), password);
     if (no) return no;
     const e = email.trim().toLowerCase();
@@ -48,6 +51,7 @@ export function register(pool: () => Pool | null, mode: () => AuthMode, allowedD
   });
 
   registry.handle('admin:resetPassword', async (_e, { userId, password }: { userId: string; password: string }): Promise<Result> => {
+    if (ctx().via === 'token') return { ok: false, error: 'session' };
     const no = refusal(mode(), password);
     if (no) return no;
     const org = ctx().org.id;
@@ -55,9 +59,11 @@ export function register(pool: () => Pool | null, mode: () => AuthMode, allowedD
     const self = await db().query('SELECT 1 FROM users WHERE org_id = $1 AND id = $2 AND email = $3', [org, userId, ctx().user.email]);
     if (self.rowCount === 1) return { ok: false, error: 'self-password' };
     if (!(await setPassword(db(), org, userId, await hashPassword(password), true))) return { ok: false, error: 'unknown' };
-    // Whoever held a session on the old password is out now — their open event streams too, on every pod.
+    // Whoever held a session on the old password is out now — any API token minted from one, and their open event streams too, on every pod.
     const r = await db().query<{ email: string }>(
-      'WITH s AS (DELETE FROM sessions WHERE user_id = $2) SELECT email FROM users WHERE org_id = $1 AND id = $2', [org, userId]);
+      `WITH s AS (DELETE FROM sessions WHERE user_id = $2),
+            t AS (UPDATE api_tokens SET revoked_at = now() WHERE user_id = $2 AND revoked_at IS NULL)
+       SELECT email FROM users WHERE org_id = $1 AND id = $2`, [org, userId]);
     if (r.rows[0]) closeStreamsOf(org, r.rows[0].email);
     return { ok: true };
   });

@@ -11,7 +11,9 @@ import type { Cell, TableData, AggFn } from './transforms';
 import { colIndex, cellToString, isEmptyCell, retypeColumn } from './transforms';
 import type { ParsedColumn } from './parse';
 import type { PivotStep, SplitColumnStep, UnpivotStep } from './stepTypes';
-import { MAX_PIVOT_COLUMNS } from './stepTypes';
+import { MAX_PIVOT_COLUMNS, MAX_UNPIVOT_CELLS } from './stepTypes';
+import { formatNumber } from '../app/format';
+import { unpivotTooLarge } from './workBudgetMessages';
 import { checkRegex, regexSplitter } from './regexSubset';
 import type { RegexMemo } from './regexMemo';
 import { inlineRegexRefused, regexRefusedWarning } from './regexMemo';
@@ -117,6 +119,12 @@ export function unpivotNameProblem(kept: string[], attr: string, val: string): s
   return dup === undefined ? null : `Unpivot skipped: "${dup}" is already a column name`;
 }
 
+/** Why an unpivot of `rows` rows would build too many cells, or null — the SQL twin asks it with the row count planPower reads. */
+export function unpivotSizeProblem(rows: number, chosen: number, kept: number): string | null {
+  const cells = rows * chosen * (kept + 2);
+  return cells > MAX_UNPIVOT_CELLS ? unpivotTooLarge(formatNumber(cells), formatNumber(MAX_UNPIVOT_CELLS)) : null;
+}
+
 export function applyUnpivot(t: TableData, s: UnpivotStep): PowerResult {
   const warnings: string[] = [];
   const idx: number[] = [];
@@ -129,7 +137,8 @@ export function applyUnpivot(t: TableData, s: UnpivotStep): PowerResult {
   const attr = (s.attribute || 'attribute').trim() || 'attribute';
   const val = (s.value || 'value').trim() || 'value';
   const keep = t.columns.map((_, k) => k).filter((k) => !idx.includes(k));
-  const problem = unpivotNameProblem(keep.map((k) => t.columns[k].name), attr, val);
+  const problem = unpivotNameProblem(keep.map((k) => t.columns[k].name), attr, val)
+    ?? unpivotSizeProblem(t.rows.length, idx.length, keep.length);
   if (problem) return { table: t, warnings: [...warnings, problem] };
   // One declared type across the unpivoted columns is kept as-is; a mix is
   // re-detected from the values, exactly as a derived column always is.

@@ -18,6 +18,10 @@
 //    under MAX_UPLOAD_MB passes.
 // 5. TIMEOUT: an RPC past RPC_TIMEOUT_SECONDS → 504, and its DuckDB query is
 //    interrupted (the org's worker answers the next query at once).
+// 6. HOST: dev mode answers only an IP, a loopback name or ORDINATE_PUBLIC_URL's
+//    name (421 otherwise, no cookie) — a DNS-rebinding page is not the admin.
+// 7. ERRORS: a route that throws answers a fixed 500, never the error's text;
+//    and X-Forwarded-For from an untrusted peer is logged once.
 //
 // Session fixation and logout-everywhere need Postgres: scripts/test-auth-db.ts.
 // Real bearer tokens on RPC without a CSRF pair: scripts/test-tokens-db.ts.
@@ -51,6 +55,8 @@ type Hdrs = Record<string, string | string[] | number | undefined>;
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t62-'));
 const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t62-web-'));
 const HOST = 'ordinate.test';
+// Dev mode answers only its own Host (src/server/csrf.ts ownHost): HOST is this server's public name here.
+const PUB = { ORDINATE_PUBLIC_URL: `http://${HOST}` };
 const JSON_H = { 'content-type': 'application/json', host: HOST };
 const HTML = { accept: 'text/html,application/xhtml+xml', host: HOST };
 const BOUNDARY = 'b0undary';
@@ -102,7 +108,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   // ── The real app, dev sign-in, server mode ────────────────────────────────
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4' });
+  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4', ...PUB });
   const app = appMod.buildApp(cfg);
   // The built web app when present, else a stand-in dist (CI's test job does not build web/).
   let asset = '/assets/index-t62.js';
@@ -225,8 +231,33 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     ok('mcp: exempt by route (it accepts nothing but a bearer token)', (await bare.inject({ method: 'POST', url: '/api/mcp' })).statusCode === 200);
     await bare.close();
 
+    // ── 6. DNS rebinding: a page whose own name re-resolves to 127.0.0.1 is same-origin with itself ──
+    const REBIND = 'rebind.attacker.test:8080';
+    const hosts: [string | undefined, boolean][] = [
+      ['127.0.0.1:8080', true], ['localhost:5173', true], ['[::1]:8080', true], ['10.1.2.3', true], [HOST, true], ['ORDINATE.test:443', true],
+      [REBIND, false], ['127.0.0.1.nip.io', false], ['localhost.attacker.test', false], ['app.localhost', false], ['', false], [undefined, false],
+    ];
+    for (const [h, want] of hosts) ok(`host: ownHost(${JSON.stringify(h)}) → ${want}`, csrf.ownHost(h, HOST) === want);
+    ok('host: with no ORDINATE_PUBLIC_URL a name is never this server', !csrf.ownHost(HOST, null));
+    const rme = await app.inject({ url: '/api/auth/me', headers: { host: REBIND } });
+    ok('host: a rebinding name asking /api/auth/me → 421, no identity, no CSRF cookie to read', rme.statusCode === 421 && !rme.body.includes('dev@local') && !csrfCookie(rme), `${rme.statusCode} ${rme.body}`);
+    const rebound = (h: string) => app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json', host: h, origin: `http://${h}` }), payload: wire.encode({ args: [] }) });
+    const rrpc = await rebound(REBIND);
+    ok('host: …its same-origin RPC with the CSRF pair → 421, the handler never runs', rrpc.statusCode === 421 && rrpc.json().error === 'host', `${rrpc.statusCode} ${rrpc.body}`);
+    ok('host: …and its page navigation → 421', (await app.inject({ url: '/', headers: { ...HTML, host: REBIND } })).statusCode === 421);
+    // An in-cluster probe calls by Service name (helm's kind e2e: Host `ordinate:8080`); probes carry no data.
+    for (const url of ['/healthz', '/readyz', '/readyz?x=1']) {
+      const r = await app.inject({ url, headers: { host: 'ordinate:8080' } });
+      ok(`host: ${url} answers a Service-name Host (not 421)`, r.statusCode === 200, `${r.statusCode} ${r.body}`);
+    }
+    ok('host (NEGATIVE CONTROL): …a lookalike path is still pinned', (await app.inject({ url: '/readyz/x', headers: { host: 'ordinate:8080' } })).statusCode === 421);
+    for (const h of ['127.0.0.1:8080', 'localhost:8080']) {
+      const r = await rebound(h);
+      ok(`host (NEGATIVE CONTROL): the same RPC at ${h} → 200`, r.statusCode === 200, `${r.statusCode} ${r.body}`);
+    }
+
     // ── Prod: HSTS and the __Host- cookie ─────────────────────────────────────
-    const prod = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined,
+    const prod = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent', ...PUB }), undefined,
       () => ({ user: { email: 'p@test', role: 'admin' }, org: { id: 'default' } }));
     await prod.ready();
     const pme = await prod.inject({ url: '/api/auth/me', headers: { host: HOST } });
@@ -240,9 +271,27 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     ok('prod: an un-prefixed cookie (plantable by a sibling subdomain) does not', pDev.statusCode === 403, pDev.statusCode);
     await prod.close();
 
+    // ── 7. A route that throws: the message goes to the log, never the wire ──
+    const boomLog: string[] = [];
+    const boomSink = new (require('stream') as typeof import('stream')).Writable({ write(c: Buffer, _e, cb) { boomLog.push(c.toString('utf8')); cb(); } });
+    const boom = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'error' }), boomSink, async () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 10.9.8.7:5432'), { code: 'ECONNREFUSED' }); // pg-pool hands this through as is
+    });
+    await boom.ready();
+    const b500 = await boom.inject({ url: '/api/auth/me' });
+    ok('errors: /api/auth/me whose lookup throws → 500 with a fixed body: no address, no code, no message', b500.statusCode === 500 && b500.json().error === 'server error' && !/10\.9\.8\.7|ECONNREFUSED|message/.test(b500.body), `${b500.statusCode} ${b500.body}`);
+    headersOk('a 500', b500.headers, headers.API_CSP);
+    ok('errors: …the operator log has it', boomLog.some((l) => l.includes('request failed') && l.includes('ECONNREFUSED')), boomLog.join(''));
+    await boom.close();
+    const calm = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined, async () => null);
+    await calm.ready();
+    const c200 = await calm.inject({ url: '/api/auth/me' });
+    ok('errors (NEGATIVE CONTROL): the same route whose lookup answers → 200, signed out', c200.statusCode === 200 && c200.json().user === null, `${c200.statusCode} ${c200.body}`);
+    await calm.close();
+
     // ── 4. Body caps: JSON separate from uploads ─────────────────────────────
     const big = await app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf(JSON_H), payload: `{"args":[],"pad":"${'x'.repeat(5 * 1024)}"}` });
-    ok('body: an RPC body over MAX_RPC_BODY_KB (4) → 413', big.statusCode === 413, `${big.statusCode} ${big.body}`);
+    ok('body: an RPC body over MAX_RPC_BODY_KB (4) → 413, Fastify\'s own 4xx reply kept by the error handler', big.statusCode === 413 && big.json().code === 'FST_ERR_CTP_BODY_TOO_LARGE', `${big.statusCode} ${big.body}`);
     headersOk('a 413', big.headers, headers.API_CSP);
     const under = await app.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf(JSON_H), payload: `{"args":[],"pad":"${'x'.repeat(3 * 1024)}"}` });
     ok('body: …one under it is read (200)', under.statusCode === 200, `${under.statusCode} ${under.body}`);
@@ -268,7 +317,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
 
   // ── 3. Rate limits ─────────────────────────────────────────────────────────
   // RPC per user and per IP, on the real app (identity from a test header).
-  const rl = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }),
+  const rl = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3', ...PUB }),
     undefined, (h) => ({ user: { email: String(h['x-test-user'] ?? 'u1'), role: 'admin' }, org: { id: 'default' }, ...(h['x-test-token'] ? { via: 'token' as const } : {}) }));
   await rl.ready();
   const call = (user: string, ip: string) =>
@@ -302,7 +351,8 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   await rl.close();
 
   // Login + callback share one bucket; X-Forwarded-For only from a trusted proxy.
-  const bare = fastify();
+  const warns: string[] = [];
+  const bare = fastify({ logger: { level: 'warn', stream: new (require('stream') as typeof import('stream')).Writable({ write(c: Buffer, _e, cb) { warns.push(c.toString('utf8')); cb(); } }) } });
   const proxies = envMod.proxyList(['10.0.0.0/8']);
   limits.registerLimits(bare, { loginPerMinute: 2, rpcUserPerMinute: 99, rpcIpPerMinute: 99, jsonBodyBytes: 1024, rpcTimeoutMs: 1000, refreshHookMinIntervalSec: 60, embedPerMinute: 99, embedOrgPerMinute: 99 }, proxies);
   bare.get('/api/auth/login', async () => 'login');
@@ -318,6 +368,9 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   ok('xff: …the proxy-named client is limited on its own', (await g('/api/auth/login', '10.1.1.1', '198.51.100.9')).statusCode === 429);
   const spoof = [await g('/api/auth/login', '192.0.2.50', '1.1.1.1'), await g('/api/auth/login', '192.0.2.50', '2.2.2.2'), await g('/api/auth/login', '192.0.2.50', '3.3.3.3')];
   ok('xff: from an untrusted peer X-Forwarded-For is ignored (rotating it does not escape)', spoof[2].statusCode === 429, spoof.map((r) => r.statusCode).join());
+  const xffWarns = warns.filter((l) => l.includes('TRUSTED_PROXY_CIDRS'));
+  ok('xff: …and logged ONCE, naming that peer (a proxy missing from TRUSTED_PROXY_CIDRS pools every client); the trusted proxy\'s never',
+    xffWarns.length === 1 && xffWarns[0].includes('192.0.2.50'), warns.join(''));
   const req = (peer: string, xff?: string) => ({ socket: { remoteAddress: peer }, headers: xff ? { 'x-forwarded-for': xff } : {} }) as unknown as Parameters<typeof limits.clientIp>[0];
   ok('clientIp: right-most untrusted hop, trusted hops skipped', limits.clientIp(req('10.0.0.1', '6.6.6.6, 198.51.100.4, 10.0.0.9'), proxies) === '198.51.100.4');
   ok('clientIp: untrusted peer → the peer', limits.clientIp(req('192.0.2.9', '10.0.0.1'), proxies) === '192.0.2.9');

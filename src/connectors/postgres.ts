@@ -46,7 +46,7 @@
 //     never by assuming.
 
 import { isIP } from 'net';
-import { Client, types as pgTypes } from 'pg';
+import { Client } from 'pg';
 import type {
   ConnectorColumn,
   ConnectorContext,
@@ -60,6 +60,7 @@ import type {
   LiveParam,
 } from './types';
 import { safeError } from './types';
+import { queryArray, typeName } from './pgRows';
 import { checkParams, isParamError } from './liveParams';
 
 // ── Bounds ───────────────────────────────────────────────────────────────────
@@ -453,21 +454,6 @@ async function applyGuards(v: PgVariant, client: Client, ctx: ConnectorContext, 
   }
 }
 
-/** The rowMode:'array' result shape. @types/pg's overloads do not line up with
- *  a `{text, rowMode, values}` object literal, so the cast is confined here. */
-interface ArrayResult {
-  fields?: { name: string; dataTypeID: number }[];
-  rows?: unknown[][];
-}
-
-async function queryArray(client: Client, text: string, values?: unknown[]): Promise<ArrayResult> {
-  // queryMode 'extended' (T6.3): ONE statement per call. Without values pg uses
-  // the simple protocol, which runs `select 1 ) x; commit; begin read write;
-  // delete …` as four statements — past the read-only session and the LIMIT.
-  const cfg = { text, rowMode: 'array', values, queryMode: 'extended' } as unknown as Parameters<Client['query']>[0];
-  return (await client.query(cfg)) as unknown as ArrayResult;
-}
-
 /** Connect, run `fn`, and close the client — ALWAYS, on every path. */
 async function withClient<T>(
   v: PgVariant,
@@ -476,6 +462,9 @@ async function withClient<T>(
 ): Promise<T | ConnectorError> {
   const startedAt = Date.now();
   const client = new Client(clientConfig(v, ctx));
+  // NV-12: a peer-driven 'error' (an ErrorResponse with no query running, a reset socket) is emitted
+  // from a socket callback; unlistened it throws and ends the pod. A running query still rejects with it.
+  client.on('error', () => {});
   try {
     await client.connect();
     await applyGuards(v, client, ctx, startedAt);
@@ -486,42 +475,6 @@ async function withClient<T>(
     return { ok: false, error: safeError(e, ctx.secrets) };
   } finally {
     await client.end().catch(() => {});
-  }
-}
-
-// ── Column types ─────────────────────────────────────────────────────────────
-
-let oidNames: Map<number, string> | null = null;
-
-/** The SOURCE's type name, verbatim — read out of `pg`'s own builtin OID table
- *  rather than a hand-copied list, so it cannot drift. An OID we do not know
- *  (an extension type, or a pgwire engine's own) reports `oid_<n>`: honest and
- *  useless beats plausible and wrong, because the caller maps this to a
- *  ColumnType and `007` must stay text. */
-function typeName(oid: number): string {
-  if (!oidNames) {
-    oidNames = new Map<number, string>();
-    const builtins = (pgTypes as unknown as { builtins?: Record<string, unknown> } | undefined)?.builtins;
-    for (const [k, val] of Object.entries(builtins || {})) {
-      if (typeof val === 'number' && !oidNames.has(val)) oidNames.set(val, k.toLowerCase());
-    }
-  }
-  return oidNames.get(oid) || `oid_${oid}`;
-}
-
-/** Narrow a driver value to what ConnectorRows allows. Dates become ISO strings
- *  and structured values become JSON, matching `connectionRun.cellToString`;
- *  a bigint becomes a string because a JS number would silently lose digits. */
-function cellValue(v: unknown): string | number | boolean | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
-  if (v instanceof Date) return v.toISOString();
-  if (typeof v === 'bigint') return v.toString();
-  if (v instanceof Buffer) return v.toString('base64');
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
   }
 }
 
@@ -612,9 +565,8 @@ async function run(v: PgVariant, ctx: ConnectorContext, sql: string): Promise<Co
       type: typeName(Number(f.dataTypeID)),
     }));
     const raw = res.rows || [];
-    const truncated = raw.length > cap;
-    const rows = (truncated ? raw.slice(0, cap) : raw).map((row) => row.map(cellValue));
-    return { ok: true, columns, rows, truncated };
+    const truncated = res.truncated === true || raw.length > cap;
+    return { ok: true, columns, rows: raw.length > cap ? raw.slice(0, cap) : raw, truncated };
   });
 }
 
@@ -719,6 +671,7 @@ export function redshiftBound(
 async function cancelBackend(v: PgVariant, ctx: ConnectorContext, pid: unknown): Promise<void> {
   if (typeof pid !== 'number' || !Number.isInteger(pid)) return;
   const client = new Client(clientConfig(v, { ...ctx, timeoutMs: 5_000 }));
+  client.on('error', () => {}); // NV-12, as in withClient
   try {
     await client.connect();
     await queryArray(client, 'select pg_cancel_backend($1)', [pid]);
@@ -750,8 +703,7 @@ async function runBound(v: PgVariant, ctx: ConnectorContext, sql: string, params
       const res = await queryArray(client, bound.text, bound.values);
       const columns: ConnectorColumn[] = (res.fields || []).map((f) => ({ name: String(f.name), type: typeName(Number(f.dataTypeID)) }));
       const raw = res.rows || [];
-      const truncated = raw.length > cap;
-      return { ok: true, columns, rows: (truncated ? raw.slice(0, cap) : raw).map((row) => row.map(cellValue)), truncated };
+      return { ok: true, columns, rows: raw.length > cap ? raw.slice(0, cap) : raw, truncated: res.truncated === true || raw.length > cap };
     } catch (e) {
       if (!cancel.done) throw e;
       await cancel.done; // the statement's own error is "canceling statement due to user request"

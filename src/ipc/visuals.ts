@@ -307,6 +307,9 @@ function markStep(
  */
 const EXPORT_CHUNK = MAX_LIMIT;
 
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+const NUMERIC_TEXT = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
 /**
  * One CSV record, RFC-4180.
  *
@@ -320,12 +323,18 @@ const EXPORT_CHUNK = MAX_LIMIT;
  * U+FEFF from every string it returns and `datasetPage` already repairs that on
  * projection, so cells arrive here correct; prepending a BOM for a spreadsheet's
  * benefit would corrupt a cell that legitimately starts with one.
+ *
+ * A text cell a spreadsheet would run as a formula (= + - @ tab CR first; values
+ * and column names come from sources less trusted than the person exporting)
+ * gets a leading ' so it opens as text (NV-35). A number, or a numeric string
+ * like -2, is written as it is.
  */
 export function csvLine(cells: readonly Cell[]): string {
   return cells
     .map((c) => {
       if (c == null) return '';
-      const s = String(c);
+      let s = String(c);
+      if (typeof c !== 'number' && FORMULA_LEAD.test(s) && !NUMERIC_TEXT.test(s)) s = "'" + s;
       return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     })
     .join(',');

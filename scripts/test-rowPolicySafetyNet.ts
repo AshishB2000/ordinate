@@ -168,11 +168,45 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const header = await W.call('east', 'dataset:columns', { projectId: P, id: orders });
     ok('scoped: the grid header says so too', header.body?.scoped === true);
     await W.call('boss', 'quality:save', { projectId: P, datasetId: orders, rule: { kind: 'not_null', column: 'region', severity: 'fail' } });
+    // A rule's args can name values — an allowed set, a whole-table min/max (NV-21).
+    await W.call('boss', 'quality:save', { projectId: P, datasetId: orders, rule: { kind: 'in_set', column: 'customer', args: { values: ['c0', `${H.W_CANARY}_0`] }, severity: 'warn' } });
+    await W.call('boss', 'quality:save', { projectId: P, datasetId: orders, rule: { kind: 'range', column: 'sales', args: { min: 0, max: 100 }, severity: 'warn' } });
     const q = await W.call('east', 'quality:list', { projectId: P, datasetId: orders });
     const qEd = await W.call('ed', 'quality:list', { projectId: P, datasetId: orders });
     eastReplies.push(q.text);
-    ok('redact: east reads the rules but no run (its sample rows are every region\'s)', q.body?.ok === true && q.body.latest === null && q.body.rules.length === 1);
-    ok('NEGATIVE CONTROL: the editor reads the run', qEd.body?.latest !== null);
+    ok('redact: east reads the rules but no run (its sample rows are every region\'s) and no rule\'s args', q.body?.ok === true && q.body.latest === null && q.body.rules.length === 3
+      && (q.body.rules as { kind: string; args: unknown }[]).every((r) => r.kind && JSON.stringify(r.args) === '{}'), q.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor reads the run and the rules\' args', qEd.body?.latest !== null && qEd.text.includes(`${H.W_CANARY}_0`) && /"max":100/.test(JSON.stringify(qEd.body)));
+
+    // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
+    const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+    await W.as('boss', () => alertStore.recordEvents(P, [{ id: crypto.randomUUID(), ruleId: crypto.randomUUID(), ruleName: 'Sales watch', datasetId: orders, at: new Date().toISOString(),
+      value: 987654, previous: 881834, delta: 105820, deltaPct: 12, message: `Sales rose 12% to 987,654 on ${H.W_CANARY}_1`, seen: false, analysisId: recs[orders].dash }]));
+    const byAnalysis = { projectId: P, analysisId: recs[orders].dash, pages: [] };
+    const sumEast = await W.call('east', 'summary:compute', byAnalysis);
+    const sumEd = await W.call('ed', 'summary:compute', byAnalysis);
+    eastReplies.push(sumEast.text);
+    ok('skip: summary:compute names no alert on Orders for east, through the analysis id', sumEast.body?.ok === true && !sumEast.text.includes('987,654'), sumEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s Summary names it', sumEd.body?.ok === true && sumEd.text.includes('987,654'), sumEd.text.slice(0, 200));
+
+    // A connection's last refresh failure can quote a value: withheld where it feeds a dataset closed to east (N2, NV-22).
+    const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+    const datasetsSave: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const feed = async (name: string, lastError: string) => W.as('boss', async () => {
+      const c = await conns.saveConnection(P, { name, connectorId: 'postgres', lastStatus: 'error', lastError });
+      const d = await datasetsSave.saveDataset(P, { name, sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: c!.id, table: 'orders' } });
+      return { conn: c!.id, ds: d!.id };
+    });
+    const closedFeed = await feed('Closed feed', `invalid input syntax for type integer: "${H.W_CANARY}_2"`);
+    const openFeed = await feed('Open feed', 'OPEN_FEED_ERROR');
+    const ruled = await W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: closedFeed.ds, policy: { column: 'region', rules: H.RULES(W.team, W.uid.west) } });
+    const connsEast = await W.call('east', 'connections:list', { projectId: P });
+    const connsEd = await W.call('ed', 'connections:list', { projectId: P });
+    eastReplies.push(connsEast.text);
+    const lastError = (r: H.Reply, id: string) => (r.body as { id: string; lastError: string | null }[]).find((c) => c.id === id)?.lastError;
+    ok('redact: connections:list withholds the failure text of a connection feeding a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === null, connsEast.text.slice(0, 200));
+    ok('…and keeps it where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === 'OPEN_FEED_ERROR');
+    ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY));
     await W.call('boss', 'format:colors:assign', { projectId: P, column: 'customer', values: [`${H.W_CANARY}_1`] });
     const colors = await W.call('east', 'format:colors:get', { projectId: P });
     eastReplies.push(colors.text);

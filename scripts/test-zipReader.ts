@@ -139,6 +139,15 @@ async function main(): Promise<void> {
   // ── Flags and methods ─────────────────────────────────────────────────────
   await refuses('an encrypted entry (flag bit 0)', build(good({ flags: 0x0801 })), m.encrypted());
   await refuses('a data descriptor (flag bit 3)', build(good({ flags: 0x0808 })), m.unsupportedFeature());
+  {
+    // An .xlsx policy takes data descriptors (src/data/xlsxGuard.ts): the local header's zeros are not compared,
+    // the directory's sizes are, through the streamed counter — and a name that disagrees is still refused.
+    const DD = { ...rules.BUNDLE_POLICY, dataDescriptors: true };
+    const zeros = { flags: 0x0808, local: { crc: 0, csize: 0, usize: 0 } };
+    ok('CONTROL: with dataDescriptors, a streaming writer\'s entry reads', (await outcome(build(good(zeros)), DD)) === 'READ');
+    await refuses('with dataDescriptors, a directory size the data passes', build(good({ ...zeros, usize: 3 })), m.inflatesPast(JSON_NAME), DD);
+    await refuses('with dataDescriptors, a local name that disagrees', build(good({ flags: 0x0808, local: { crc: 0, csize: 0, usize: 0, name: Buffer.from(JSON_NAME.replace('d', 'D')) } })), m.damagedEntry(JSON_NAME), DD);
+  }
   await refuses('masked headers (flag bit 13)', build(good({ flags: 0x2800 })), m.unsupportedFeature());
   await refuses('method 12 (bzip2)', build(good({ method: 12, body: Buffer.from('x') })), m.unsupportedMethod());
   await refuses('method 99 (AES)', build(good({ method: 99, body: Buffer.from('x') })), m.unsupportedMethod());

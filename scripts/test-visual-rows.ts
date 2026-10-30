@@ -447,6 +447,12 @@ async function main(): Promise<void> {
       'csvLine: quotes only what needs it, doubles embedded quotes, null → empty',
       line === 'plain,"has,comma","has""quote","has\nnewline",,,0,007',
     );
+    // NV-35: a cell (or a column name, which goes through the same line) that a
+    // spreadsheet would evaluate opens as text; numbers, even negative, do not change.
+    const risky = ipcVisuals.csvLine(['=HYPERLINK("https://x.test/","x")', '+1+1', '@SUM(1)', '-2+3', '\tcmd', '\rcmd']);
+    ok('NV-35: a formula-leading text cell gets a leading quote', risky === `"'=HYPERLINK(""https://x.test/"",""x"")",'+1+1,'@SUM(1),'-2+3,'\tcmd,"'\rcmd"`, risky);
+    const plainNums = ipcVisuals.csvLine([-2, '-2', '+1.5e3', '-.5', '1e-3', 'a=b', 'x-1']);
+    ok('NV-35 control: numbers and numeric text are written as they are', plainNums === "-2,-2,+1.5e3,-.5,1e-3,a=b,x-1", plainNums);
   }
 
   // ── 9. A missing dataset is an error, never an empty "available" answer ────

@@ -324,8 +324,12 @@ function deliver(byProject: Map<string, AlertEvent[]>): void {
  * One pass. Exported so a test — and the real-app walk — can force it without
  * waiting a minute. Returns the outcomes of the SERIAL (full) refreshes; the
  * incremental ones it queued report through `onRefreshed` as each lands.
+ * Past `stopAt` (epoch ms; the server's runner passes its run budget) it begins
+ * no further full refresh: those are not stamped, so they are still due — and
+ * most overdue — next time, and one org's slow sources never hold the pod's
+ * scheduler slot for long (src/server/jobs/runner.ts, NV-45).
  */
-export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
+export async function tickNow(now = Date.now(), stopAt = Infinity): Promise<AutoRefreshOutcome[]> {
   const outcomes: AutoRefreshOutcome[] = [];
   const byProject = new Map<string, AlertEvent[]>();
   if (running) return outcomes; // the previous tick is still working
@@ -352,6 +356,7 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
     // Full refreshes: one after another, each awaited with all it triggers.
     for (const m of due) {
       if (m.incremental) continue;
+      if (Date.now() >= stopAt) break;
       const run = await begin(m, now);
       const f = run && (await run.settled);
       if (!f) continue;

@@ -11,6 +11,10 @@
 // The row is written BEFORE the bytes go up and deleted only AFTER they are
 // gone, so a row always names every object that may exist; the sweep
 // (`sweep`, the `shared:sweep` job) is the backstop for both orders failing.
+// The one exception is an EVICTION (`evictWaiting`, NV-43/NV-55): a user may
+// keep only MAX_WAITING files, MAX_WAITING_BYTES in all, waiting for their take
+// — past that their oldest waiting rows are deleted first, as a staged import's
+// are (src/data/stageStore.ts), and the caller deletes the bytes.
 
 import { createHash } from 'crypto';
 import type { Pool } from 'pg';
@@ -35,6 +39,11 @@ function pool(): Pool {
 
 export const hashOf = (token: string): Buffer => createHash('sha256').update(token, 'utf8').digest();
 
+/** Files one user may have waiting for their take at once, uploads and downloads together (NV-43, NV-55)… */
+export const MAX_WAITING = 8;
+/** …and the bytes they may hold. Past either the oldest go; the newest always stays, so one file at the upload cap still works. */
+export const MAX_WAITING_BYTES = 1024 ** 3;
+
 export interface NewRow {
   readonly org: string;
   readonly user: string;
@@ -53,12 +62,33 @@ export async function insert(token: string, r: NewRow): Promise<void> {
   ));
 }
 
-/** Starts a token's hour over from now — once its bytes have landed (an S3 PUT can take a while). */
-export async function restartExpiry(org: string, hash: Buffer, ttlMs: number): Promise<void> {
-  await inOrg(pool(), org, (c) => c.query(
+/** Starts a token's hour over from now — once its bytes have landed (an S3 PUT can take a while). False: the row is gone (evicted meanwhile). */
+export async function restartExpiry(org: string, hash: Buffer, ttlMs: number): Promise<boolean> {
+  const r = await inOrg(pool(), org, (c) => c.query(
     `UPDATE file_tokens SET expires_at = now() + $3 * interval '1 millisecond' WHERE org_id = $1 AND token_hash = $2`,
     [org, hash, ttlMs],
   ));
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Deletes `user`'s waiting rows (unused, unexpired) past the newest MAX_WAITING, or past MAX_WAITING_BYTES
+ * counted newest first — never `keep`'s, the one just issued. Returns what each named: deleting the bytes
+ * is the caller's. A row a take already won is untouched (`used_at IS NULL` is re-checked on the row).
+ */
+export async function evictWaiting(org: string, user: string, keep: Buffer): Promise<{ hash: Buffer; key: string }[]> {
+  const r = await inOrg(pool(), org, (c) => c.query<{ token_hash: Buffer; storage_key: string }>(
+    `DELETE FROM file_tokens WHERE org_id = $1 AND used_at IS NULL AND token_hash IN (
+       SELECT token_hash FROM (
+         SELECT token_hash, row_number() OVER w AS n, sum(size) OVER w AS bytes
+           FROM file_tokens
+          WHERE org_id = $1 AND user_email = $2 AND used_at IS NULL AND expires_at > now()
+         WINDOW w AS (ORDER BY token_hash = $3 DESC, created_at DESC, token_hash ROWS UNBOUNDED PRECEDING)) r
+        WHERE n > 1 AND (n > $4 OR bytes > $5))
+     RETURNING token_hash, storage_key`,
+    [org, user, keep, MAX_WAITING, MAX_WAITING_BYTES],
+  ));
+  return r.rows.map((x) => ({ hash: x.token_hash, key: x.storage_key }));
 }
 
 export interface TakenRow {

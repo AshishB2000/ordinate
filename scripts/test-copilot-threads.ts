@@ -295,6 +295,30 @@ async function main(): Promise<void> {
     ok('clearHistory leaves loadHistory empty', (await copilot.loadHistory(proj.id)).length === 0);
     ok('clearHistory rejects a traversal projectId', (await copilot.clearHistory('..')) === false);
   }
+
+  // ── 10. NV-34: the cap is per member — another member's threads never evict yours ──
+  {
+    const context: typeof import('../src/server/context') = require('../src/server/context');
+    const serverDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-copilot-owners-'));
+    context.enterServerMode(serverDir); // last: there is no way back to the desktop
+    const as = (email: string) => <T>(fn: () => T): T => context.runInContext({ user: { email, role: 'viewer' }, org: { id: 'acme' } }, 'nv34', fn);
+    const boss = as('boss@acme.test');
+    const vic = as('vic@acme.test');
+    const p = await boss(() => projects.createProject('Shared project'));
+    const mine = (await boss(() => copilot.createThread(p.id)))!;
+    await boss(() => copilot.appendTurn(p.id, { role: 'user', text: 'boss question' }, mine.id));
+    for (let i = 0; i < 50; i += 1) await vic(() => copilot.createThread(p.id));
+    ok('NV-34: 50 new threads by another member leave the owner\'s conversation',
+      (await boss(() => copilot.listThreads(p.id))).some((t) => t.id === mine.id)
+        && (await boss(() => copilot.loadHistory(p.id, mine.id))).map((t) => t.text).join() === 'boss question');
+    const vicFirst = (await vic(() => copilot.listThreads(p.id))).at(-1)!.id;
+    await vic(() => copilot.createThread(p.id));
+    const vicNow = await vic(() => copilot.listThreads(p.id));
+    ok('NV-34 control: a member\'s own 51st thread still evicts their own oldest', vicNow.length === 50 && !vicNow.some((t) => t.id === vicFirst));
+    ok('NV-34: …and the file keeps both members\' conversations after a reload',
+      (await boss(() => copilot.loadThreads(p.id))).length === 51);
+    fs.rmSync(serverDir, { recursive: true, force: true });
+  }
 }
 
 main()

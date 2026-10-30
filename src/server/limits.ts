@@ -7,6 +7,8 @@
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
 //   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
 //                                                        runs the same handlers, so it spends the same budget
+//   uploads   POST /api/files                            the per-user RPC bucket (NV-43), after sign-in
+//                                                        (./files.ts also caps uploads in flight per user)
 //   embed     GET /embed/<token>                         per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE, its own bucket,
 //                                                        before any query; per token and per org in ./embed/route.ts
 //                                                        (RATE_LIMIT_EMBED_PER_MINUTE, RATE_LIMIT_EMBED_ORG_PER_MINUTE)
@@ -24,7 +26,9 @@
 // The client IP is the TCP peer — unless the peer is a proxy in
 // TRUSTED_PROXY_CIDRS, then the right-most X-Forwarded-For entry that is not
 // one of them. Behind an ingress without TRUSTED_PROXY_CIDRS every caller
-// shares the ingress's address, and so one per-IP bucket: set it there.
+// shares the ingress's address, and so one per-IP bucket that one anonymous
+// client can spend for everyone: set it there. The first X-Forwarded-For an
+// untrusted peer sends is logged once, at warn, naming that peer.
 //
 // Per pod ON PURPOSE (threat model R8): these buckets protect this pod's CPU, so
 // they live in this process (@fastify/rate-limit's LRU store, 5,000 keys per
@@ -82,7 +86,14 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
   // global: false — nothing is limited unless asked below. The limiters are
   // made on first use: the plugin's decorator exists once it has loaded.
   void app.register(rateLimit, { global: false });
-  const ipKey = (prefix: string) => (req: FastifyRequest) => prefix + normalizeIP(clientIp(req, proxies));
+  let warned = false;
+  const ipKey = (prefix: string) => (req: FastifyRequest) => {
+    if (!warned && req.headers['x-forwarded-for'] !== undefined && !trusted(proxies, req.socket.remoteAddress)) {
+      warned = true;
+      req.log.warn({ peer: req.socket.remoteAddress }, 'X-Forwarded-For from a peer outside TRUSTED_PROXY_CIDRS: if it is your proxy, every client behind it shares its rate-limit buckets — add it to TRUSTED_PROXY_CIDRS');
+    }
+    return prefix + normalizeIP(clientIp(req, proxies));
+  };
   let signIn: Limiter | null = null;
   let rpcIp: Limiter | null = null;
   let rpcUser: Limiter | null = null;

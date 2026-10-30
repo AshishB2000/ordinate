@@ -33,7 +33,7 @@ have not each been run against a live tenant.
 | Application type | Web application with a client secret (a confidential client), authorization code flow. Implicit and hybrid flows are not needed. |
 | Redirect (callback) URI | `https://<your host>/api/auth/callback`, exactly. The same string goes in `OIDC_REDIRECT_URL`. |
 | Scopes requested | `openid email profile` |
-| Claims used | `email` (required) and `email_verified`. If `email_verified` is present and `false`, sign-in is refused. If it is absent, sign-in is accepted. |
+| Claims used | `email` (required) and `email_verified`, which must be the JSON value `true`: the email is the whole identity (and `ORDINATE_ADMIN_EMAIL`'s is admin). `false`, a string such as `"true"`, or no claim at all refuses the sign-in with `email`. For an IdP that never sends the claim (Entra ID), set `OIDC_EMAIL_VERIFIED=optional`: an absent claim is then accepted, a present one must still be `true`. |
 | PKCE | S256, always sent. IdPs that require PKCE for confidential clients are fine. |
 | Token endpoint authentication | `client_secret_post`: the secret goes in the form body. If the IdP enforces a method per client, choose POST. |
 | Sign-out URL | None. Sign-out ends the Ordinate session only, not the IdP session. |
@@ -73,7 +73,7 @@ name and code, never a token:
 | `expired` | The 10-minute login cookie was missing. The user took too long, or a proxy dropped the cookie. |
 | `denied` | The IdP answered `access_denied`, for example because the user is not assigned to the app. |
 | `failed` | The code exchange or token check failed. Check the client secret, the redirect URI, the token endpoint method and the server clock. |
-| `email` | The ID token carried no email, or `email_verified: false`. |
+| `email` | The ID token carried no email, or its `email_verified` was not `true` (absent, without `OIDC_EMAIL_VERIFIED=optional`). The server log says which. |
 | `domain` | The domain is not in `ALLOWED_EMAIL_DOMAINS`. |
 | `disabled` | An admin disabled this user. |
 
@@ -99,8 +99,9 @@ name and code, never a token:
 3. Set `OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0` and `OIDC_CLIENT_ID` to the
    application (client) ID. Use your tenant ID. The multi-tenant `common` and `organizations`
    endpoints were not tested, and a deployment has one org anyway.
-4. Entra ID sends no `email_verified`, so Ordinate accepts the `email` claim as Entra ID gives it.
-   Set `ALLOWED_EMAIL_DOMAINS` to your verified domains, and use **Enterprise applications →
+4. Entra ID sends no `email_verified`, so set `OIDC_EMAIL_VERIFIED=optional`: without it every
+   sign-in is refused with `email`. Ordinate then accepts the `email` claim as Entra ID gives it, so
+   set `ALLOWED_EMAIL_DOMAINS` to your verified domains, and use **Enterprise applications →
    Properties → Assignment required** to choose who may sign in.
 
 ## Google (Workspace)
@@ -156,6 +157,15 @@ IdP, and put TLS in front of the proxy. With Compose, the app port stays on `127
 default `TRUSTED_PROXY_CIDRS=172.30.80.1/32` is the Compose network's gateway: whatever connects
 from this host. See [quick-start.md](quick-start.md#3-sign-in).
 
+**Set `ORDINATE_PUBLIC_URL`** to the address people open (`https://ordinate.example.com`); prod
+refuses to start in header mode without it. Header mode answers only a request whose `Host` is that
+name, an IP address or `localhost`, and anything else gets 421 (`/healthz` and `/readyz` answer any
+`Host`, so probes can call the Service by name). A web page in a browser on the
+proxy's host could otherwise point its own domain at `127.0.0.1` (DNS rebinding), connect from the
+trusted address and set `X-Forwarded-Email` itself. oauth2-proxy passes the browser's `Host`
+upstream by default, which is the public name. A proxy that sets its own `Host` sends
+`127.0.0.1:8080`, which is accepted too.
+
 **On Kubernetes, the proxy's address is a pod IP**, so `TRUSTED_PROXY_CIDRS` ends up naming a pod
 range. Every other pod in that range could then claim any email by connecting to Ordinate's Service
 directly. Header mode on Kubernetes is safe only when nothing but the proxy can reach the app port:
@@ -164,6 +174,7 @@ directly. Header mode on Kubernetes is safe only when nothing but the proxy can 
 config:
   AUTH_MODE: header
   TRUSTED_PROXY_CIDRS: "10.244.0.0/16"   # your pod CIDR
+  ORDINATE_PUBLIC_URL: https://ordinate.example.com
 ingress:
   enabled: false                          # the Ingress routes to oauth2-proxy instead
 networkPolicy:
@@ -264,6 +275,13 @@ lasts at most one session and one token:
   open event streams on every pod within a second (a 30-second sweep catches a missed message). Signing
   out everywhere, and a password reset, close streams too. A refresh URL a disabled person made stops
   while they are disabled and works again if they are enabled; revoke it in the dataset's panel.
+- **A password change or reset revokes API tokens.** Under password sign-in, changing your password
+  or an admin's **Reset password** revokes every API token of that account, as a token may have been
+  made by whoever knew the old password. Make new ones after.
+- **Some admin actions need a browser session.** An admin's API token cannot add a person, reset a
+  password, or generate the embed signing secret (each would outlive the token), the same as it cannot
+  make another token or a refresh URL. It answers `ok: false` with `session`, or a sentence for the
+  embed secret.
 
 ## Password sign-in (for trying Ordinate out)
 
@@ -292,7 +310,7 @@ password (**Generate** makes a random 16-character one). The admin hands it over
 Ordinate sends no email. At the first sign-in the person has to choose their own password: until
 then every page goes to `/change-password` and every API call except `/api/auth/*` answers 403. A
 forgotten password is the same flow, through **Reset password** in the person's row menu. A reset
-also signs them out everywhere.
+also signs them out everywhere and revokes their API tokens.
 
 **What the server enforces:**
 
@@ -300,8 +318,8 @@ also signs them out everywhere.
 |---|---|
 | Storage | scrypt (N=2^15, r=8, p=1, 16-byte salt), from Node's own `crypto`. A password is never stored, logged or audited. |
 | Length | 10 to 256 characters. |
-| Wrong passwords | A wrong email and a wrong password get the same answer. Ten attempts per account in 15 minutes may be checked, counted across every pod and charged before the password is checked; the next is refused (`locked`, with `Retry-After`) until the window ends, and a right password clears the count. `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. |
-| Changing a password | Asks for the current one, and signs out every other session of the account. |
+| Wrong passwords | A wrong email and a wrong password get the same answer. Ten attempts per account in 15 minutes may be checked, counted across every pod and charged before the password is checked; the next is refused (`locked`, with `Retry-After`) until the window ends, and a right password clears the count. `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. A pod checks at most 4 sign-ins at once (each is a 32 MiB scrypt on Node's shared thread pool); past that a sign-in is refused (`busy`, `Retry-After: 1`). |
+| Changing a password | Asks for the current one, signs out every other session of the account and revokes its API tokens. |
 | Sessions | The same session cookie as `oidc`, rotated at every sign-in, under `SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`. |
 | Audit | Sign-ins (`login`), password changes (`password_change`), and the admin's `admin:addUser` / `admin:resetPassword` calls. |
 

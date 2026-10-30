@@ -8,6 +8,8 @@ config:
   # the pod's own loopback: that is the "proxy" allowed to assert X-Forwarded-Email.
   AUTH_MODE: header
   TRUSTED_PROXY_CIDRS: "127.0.0.1/32,::1/128"
+  # Required in prod header mode: the one host name it answers (the e2e uses 127.0.0.1, an IP, also answered).
+  ORDINATE_PUBLIC_URL: http://ordinate.ci.test
   ORDINATE_ADMIN_EMAIL: admin@ci.test
   STORAGE_URL: s3://ordinate
   S3_ENDPOINT: http://minio:9000

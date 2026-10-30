@@ -52,3 +52,8 @@ export function liveFxRefused(): string {
 export function liveDailyLimit(limit: string): string {
   return t('liveQueryMessages.this_organization_has_used_today_s', { limit });
 }
+
+/** The asker used their share of LIVE_DAILY_QUERY_LIMIT for today and nothing was cached (NV-47). `share` is formatted. */
+export function liveMemberDailyLimit(share: string): string {
+  return t('liveQueryMessages.you_have_used_your_share_of', { share });
+}

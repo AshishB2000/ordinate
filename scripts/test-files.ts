@@ -6,7 +6,10 @@
 //   exists with the right rows → the token is dead and its file gone; tokens are
 //   org- and user-bound and expire; an oversize upload is 413 and cut off before
 //   the client finishes sending; a download works once with safe headers; no
-//   token ever reaches the log.
+//   token ever reaches the log. A user's files waiting for their take are capped
+//   (count and bytes; the oldest go, never another user's), an upload spends the
+//   per-user rate bucket, and a user streams at most two uploads at once
+//   (NV-43, NV-55).
 //
 //   npm run build:ts && node scripts/test-files.js
 
@@ -63,10 +66,10 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   const base = `http://127.0.0.1:${port}`;
   const hdr = (org: string, user?: string) => withCsrf({ 'x-test-org': org, ...(user ? { 'x-test-user': user } : {}) });
 
-  const upload = async (org: string, name: string, body: string) => {
+  const upload = async (org: string, name: string, body: string, user?: string) => {
     const form = new FormData();
     form.append('file', new Blob([body], { type: 'text/csv' }), name);
-    const res = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers: hdr(org) });
+    const res = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers: hdr(org, user) });
     return { status: res.status, json: (await res.json()) as { fileToken: string; name: string; size: number } };
   };
   const call = async (org: string, channel: string, payload: unknown, user?: string) => {
@@ -178,6 +181,68 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   await settle();
   ok('download: second fetch 404, and the file is deleted', (await dl('org-a')).status === 404 && !fs.existsSync(produced.p));
 
+  // ── A user's waiting files are capped (NV-43, NV-55) ──────────────────────
+  const fileTokens0: typeof import('../src/server/fileTokens') = require('../src/server/fileTokens');
+  const W = fileTokens0.MAX_WAITING;
+  const other = await upload('org-c', 'other.csv', CSV, 'olga@test');
+  const hoard: string[] = [];
+  for (let i = 0; i < W + 3; i++) hoard.push((await upload('org-c', `h${i}.csv`, CSV, 'hal@test')).json.fileToken);
+  await settle();
+  ok(`waiting: ${W + 3} unused uploads by one user leave ${W} of theirs on disk (+ another user's 1)`, uploadsIn('org-c').length === W + 1, uploadsIn('org-c').length);
+  const useAs = async (tok: string, user: string) => (await call('org-c', 'dataset:pickAndParse', { fileToken: tok }, user)).body.ok === true;
+  ok('waiting: the oldest three are gone (refused)', !(await useAs(hoard[0], 'hal@test')) && !(await useAs(hoard[2], 'hal@test')));
+  ok('waiting: the newest are still usable', (await useAs(hoard[3], 'hal@test')) && (await useAs(hoard[W + 2], 'hal@test')));
+  ok('waiting NEGATIVE CONTROL: another user\'s waiting upload is untouched', await useAs(other.json.fileToken, 'olga@test'));
+  const offer = (user: string, n: string, size: number) => context.runInContext(as('org-c', user), 'export', async () => {
+    const p = path.join(appPaths.temp(), `export-${n}.bin`);
+    fs.writeFileSync(p, '');
+    fs.truncateSync(p, size); // sparse: the size counts, the disk does not fill
+    return { p, ...(await files.offerDownload(p, `${n}.csv`)) };
+  });
+  const dls = [];
+  for (let i = 0; i < W + 2; i++) dls.push(await offer('vic@test', `d${i}`, 10));
+  await settle();
+  ok('waiting: downloads nobody fetches are capped the same way, oldest deleted from disk',
+    !fs.existsSync(dls[0].p) && !fs.existsSync(dls[1].p) && dls.slice(2).every((d) => fs.existsSync(d.p)), dls.map((d) => fs.existsSync(d.p) ? 1 : 0).join(''));
+  const GB = 1024 ** 3;
+  const big1 = await offer('bea@test', 'b1', Math.floor(0.6 * GB));
+  const big2 = await offer('bea@test', 'b2', Math.floor(0.6 * GB));
+  await settle();
+  ok('waiting bytes: past MAX_WAITING_BYTES the older file goes', !fs.existsSync(big1.p) && fs.existsSync(big2.p));
+  const big3 = await offer('bea@test', 'b3', 2 * GB);
+  await settle();
+  ok('waiting bytes: one file over the cap alone is kept (the newest always is), the rest go', fs.existsSync(big3.p) && !fs.existsSync(big2.p));
+  for (const d of [...dls, big3]) fs.rmSync(d.p, { force: true });
+
+  // ── At most MAX_UPLOADS_IN_FLIGHT per user at once (NV-43) ────────────────
+  const held = (user: string) => {
+    const B = 'xHOLDx';
+    const req = http.request(`${base}/api/files`, { method: 'POST', headers: { ...hdr('org-d', user), 'content-type': `multipart/form-data; boundary=${B}` } });
+    const status = new Promise<number | null>((r) => {
+      req.on('response', (res) => { res.resume(); r(res.statusCode ?? null); });
+      req.on('error', () => r(null));
+    });
+    req.write(`--${B}\r\nContent-Disposition: form-data; name="file"; filename="slow.csv"\r\nContent-Type: text/csv\r\n\r\nzip\n007\n`);
+    return { status, end: () => req.end(`\r\n--${B}--\r\n`) };
+  };
+  const slow = Array.from({ length: files.MAX_UPLOADS_IN_FLIGHT }, () => held('sam@test'));
+  await new Promise((r) => setTimeout(r, 300));
+  const third = await upload('org-d', 'third.csv', CSV, 'sam@test');
+  ok('in flight: a third upload while two stream → 429', third.status === 429, third.status);
+  ok('in flight NEGATIVE CONTROL: another user uploads meanwhile', (await upload('org-d', 'mine.csv', CSV, 'tia@test')).status === 200);
+  slow.forEach((u) => u.end());
+  ok('in flight: the two finish 200', (await Promise.all(slow.map((u) => u.status))).every((st) => st === 200));
+  ok('in flight: once they are done the user uploads again', (await upload('org-d', 'after.csv', CSV, 'sam@test')).status === 200);
+
+  // ── An upload spends the per-user rate bucket (NV-43) ─────────────────────
+  const tight = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, MAX_UPLOAD_MB: String(MAX_MB), RATE_LIMIT_RPC_PER_MINUTE: '2' }), undefined, (h) =>
+    typeof h['x-test-org'] === 'string' ? as(h['x-test-org'], typeof h['x-test-user'] === 'string' ? h['x-test-user'] : undefined) : null);
+  const tightUp = async (user: string) => (await tight.inject({ method: 'POST', url: '/api/files', headers: { ...hdr('org-d', user), 'content-type': 'text/plain' }, payload: 'x' })).statusCode;
+  const firstTwo = [await tightUp('rex@test'), await tightUp('rex@test')];
+  ok('rate: past RATE_LIMIT_RPC_PER_MINUTE a user\'s next upload is a 429 before its body is read', firstTwo.every((st) => st === 400) && (await tightUp('rex@test')) === 429, firstTwo.join(','));
+  ok('rate NEGATIVE CONTROL: another user is not limited by it', (await tightUp('uma@test')) === 400);
+  await tight.close();
+
   // Oversize, streamed from a generator with no Content-Length (so only the
   // byte count can stop it). A browser stops sending once the 413 arrives; a
   // hostile client (a raw half-open socket, chunked) ignores the 413 and the
@@ -220,7 +285,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
     sock.on('close', () => resolve({ status: Number(/^HTTP\/1\.1 (\d{3})/.exec(head)?.[1]) || null, sent, rssGrowth: rssPeak - rssBefore }));
     const frame = (b: Buffer | string) => `${Buffer.byteLength(b).toString(16)}\r\n`;
     void (async () => {
-      sock.write(`POST /api/files HTTP/1.1\r\nHost: x\r\nx-test-org: org-a\r\ncookie: ordinate_csrf=${CSRF_TOKEN}\r\nx-csrf-token: ${CSRF_TOKEN}\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
+      sock.write(`POST /api/files HTTP/1.1\r\nHost: 127.0.0.1\r\nx-test-org: org-a\r\ncookie: ordinate_csrf=${CSRF_TOKEN}\r\nx-csrf-token: ${CSRF_TOKEN}\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
       const first = `--${B}\r\nContent-Disposition: form-data; name="file"; filename="big.csv"\r\n\r\n`;
       sock.write(frame(first) + first + '\r\n');
       while (sent < TOTAL && !sock.destroyed && sock.writable) {

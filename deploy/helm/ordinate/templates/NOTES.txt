@@ -16,6 +16,12 @@ one is missing on the others. Use STORAGE_URL=s3://… (or a ReadWriteMany claim
 {{- end }}
 {{- end }}
 {{- if .Values.ingress.enabled }}
+{{- if not .Values.config.TRUSTED_PROXY_CIDRS }}
+
+WARNING: config.TRUSTED_PROXY_CIDRS is empty, so every request reaches a pod from the ingress's own address
+and every person shares ONE per-IP rate-limit bucket: one client can spend the sign-in and RPC limits for
+everyone. Set it to your ingress controller's pod CIDR (or your load balancer's subnets).
+{{- end }}
 
 Open: http{{ if .Values.ingress.tls }}s{{ end }}://{{ (first .Values.ingress.hosts).host }}/
 {{- else }}

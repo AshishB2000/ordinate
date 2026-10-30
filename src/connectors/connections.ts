@@ -331,7 +331,10 @@ function isValidConnection(data: unknown): data is Record<string, unknown> {
 
 // Coerce a parsed object into a well-formed Connection, migrating v1 on the way.
 // String fields are copied only when they are strings — never trusts disk JSON.
-function normalize(data: Record<string, unknown>, projectId: string): Connection {
+// `id` is the FILE's: the body's own id is never believed, since secrets are
+// keyed by it org-wide and an imported body can name another project's
+// connection, escaped past the import's re-id (NV-9, threat model F2).
+function normalize(data: Record<string, unknown>, projectId: string, id: string): Connection {
   const createdAt = typeof data.createdAt === 'string' ? data.createdAt : new Date().toISOString();
   const legacy = isLegacyRecord(data);
   const connectorId = legacy
@@ -347,7 +350,7 @@ function normalize(data: Record<string, unknown>, projectId: string): Connection
   const status = STATUSES.has(String(data.lastStatus)) ? String(data.lastStatus) : 'untested';
 
   const c: Connection = {
-    id: String(data.id),
+    id,
     projectId,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled connection',
     connectorId,
@@ -451,7 +454,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
       const raw = await recordFs.readFile(connectionFilePath(projectId, id), 'utf8');
       const data = JSON.parse(raw);
       if (!isValidConnection(data)) continue;
-      out.push(normalize(data, projectId));
+      out.push(normalize(data, projectId, id));
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
         logger.error('[connections] Skipping corrupt or unreadable connection:', id, err.message);
@@ -471,7 +474,7 @@ export async function getConnection(projectId: string, id: string): Promise<Conn
     const raw = await recordFs.readFile(connectionFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidConnection(data)) return null;
-    return normalize(data, projectId);
+    return normalize(data, projectId, id);
   } catch (_) {
     return null;
   }

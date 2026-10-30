@@ -280,9 +280,10 @@ export { recall };
 
 /**
  * The whole answer for one sanitized question. EXPORTED for the facts builder,
- * the waterfall tile and scripts/test-drivers.ts.
+ * the waterfall tile and scripts/test-drivers.ts. `withhold`: columns never
+ * offered as a dimension, at either level — an alert post's (./alertDiagnosis).
  */
-export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown, opts: { remember?: boolean } = {}): Promise<DriversReply> {
+export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown, opts: { remember?: boolean; withhold?: Set<string> } = {}): Promise<DriversReply> {
   // The renderer's payload, or values a caller already resolved (a tile's render).
   const params: ParamValues = rawParams instanceof Map ? (rawParams as ParamValues) : paramValues(rawParams);
   const src = await sourceFor(projectId, spec.datasetId);
@@ -298,7 +299,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   const scopes = spec.compare.mode === 'latest' ? await latestScopes(projectId, spec, spec.compare.column) : periodScopes(spec, src.columns);
   if ('reason' in scopes) return { ok: false, error: scopes.reason };
 
-  const exclude = new Set(spec.path.map((p) => p.column).concat([scopes.column]));
+  const exclude = new Set(spec.path.map((p) => p.column).concat([scopes.column], [...(opts.withhold || [])]));
   const top = await level(projectId, spec.datasetId, src, shape, scopes.a, scopes.b, exclude);
   const totals: Totals = top ? top.totals : { a: null, b: null, delta: null };
   const ranked = top ? top.ranked : [];
@@ -340,7 +341,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
       const deeper = spec.path.concat([{ column: selectedDim.column, value: lead.key }]);
       const inner = await level(projectId, spec.datasetId, src, shape,
         scopes.a.concat(pathSteps(deeper.slice(-1))), scopes.b.concat(pathSteps(deeper.slice(-1))),
-        new Set(deeper.map((p) => p.column).concat([scopes.column])));
+        new Set(deeper.map((p) => p.column).concat([scopes.column], [...exclude])));
       const best = inner && inner.ranked[0];
       const sub = best ? leadMember(best.members, totals.delta) : null;
       if (sub) next = { label: sub.label, deltaText: f.change(sub.delta) };
@@ -481,7 +482,7 @@ export const TILE_END = 'Current total';
  */
 export async function driversVizData(
   projectId: string, datasetId: string, enc: { drivers?: unknown; category?: string }, filters: FilterStep[], params?: unknown,
-): Promise<{ ok: true; data: { labels: string[]; series: Array<{ name: string; values: Array<number | null> }> }; recommendedShape: string; warnings: string[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: { labels: string[]; series: Array<{ name: string; values: Array<number | null> }>; labelColumn: string }; recommendedShape: string; warnings: string[] } | { ok: false; error: string }> {
   const d = enc.drivers && typeof enc.drivers === 'object' ? (enc.drivers as Record<string, unknown>) : null;
   if (!d) return { ok: false, error: 'Not a drivers tile' };
   const spec = sanitizeDriversSpec({ ...d, datasetId, dimension: enc.category }, filters);
@@ -495,7 +496,9 @@ export async function driversVizData(
   if (w.other.count > 0) { labels.push(`Other (${w.other.count})`); values.push(w.other.delta); }
   labels.push(TILE_END);
   values.push(w.end);
-  return { ok: true, data: { labels, series: [{ name: r.metric.name, values }] }, recommendedShape: 'categorical', warnings: [] };
+  // `labelColumn`: the column the labels are members of — not always enc.category, which driversFor passes over
+  // when the scope leaves it unrankable (one value left, say). The Share policy judges the labels by it.
+  return { ok: true, data: { labels, series: [{ name: r.metric.name, values }], labelColumn: r.selected.column }, recommendedShape: 'categorical', warnings: [] };
 }
 
 async function addTile(projectId: string, spec: DriversSpec, name: string): Promise<{ ok: true; visual: any } | { ok: false; error: string }> {

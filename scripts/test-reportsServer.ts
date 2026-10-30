@@ -12,6 +12,9 @@
 //     story:figures     equal visual:data (NOT shaped — on screen) and metric:value
 //     story:export      a page per heading; charts on the share path
 //     scorecard:compute the new display strings and tallies follow the figures
+//     narrative         five narrative pages in one preview are ONE model call
+//                       (copilot:ask stubbed); none once the request is aborted
+//                       (NV-38); NEGATIVE CONTROL: other captions, another call
 //     paths             no local path in any reply; the path channels are 404
 //   Part 2 (DATABASE_URL): header sign-in on a scratch database — every new
 //     channel by project role; a denied call never reaches its handler; the
@@ -168,6 +171,29 @@ async function partOne(): Promise<void> {
     ok('preview: page=3 resolves only that page', one.body.pages.length === 1 && one.body.pages[0].kind === 'tile' && same(one.body.pages[0].chart.data, want.data));
     const stored = await context.runInContext(dev, 'r', () => reportSpec.getReport(pid, rid));
     ok('preview: a draft is never saved', stored!.name !== 'Draft name' && stored!.pages.length !== pages.length);
+
+    // ── the narrative: one model call per preview, however many pages ask (NV-38) ──
+    const realAsk = rpc.handlers.get('copilot:ask');
+    let asks = 0;
+    rpc.registry.removeHandler('copilot:ask');
+    rpc.registry.handle('copilot:ask', async () => { asks++; return { ok: true, answer: 'Two short paragraphs.' }; });
+    try {
+      const narr = Array.from({ length: 5 }, () => ({ id: crypto.randomUUID(), kind: 'narrative', include: true, layout: 'full' }));
+      const np = await call('report:preview', { projectId: pid, id: rid, draft: { pages: narr } });
+      ok('narrative: five narrative pages render…', np.body.ok && np.body.pages.length === 5 && np.body.pages.every((p: { body: string }) => p.body === 'Two short paragraphs.'), JSON.stringify(np.body).slice(0, 300));
+      ok('narrative: …from ONE model call', asks === 1, String(asks));
+      const reportsServer: typeof import('../src/ipc/reportsServer') = require('../src/ipc/reportsServer');
+      const gone = new AbortController();
+      gone.abort();
+      const late = await context.runInContext(dev, 'gone', () => reportsServer.pageDeps({}, pid).narrative(s.aid, ['A caption.']), undefined, gone.signal);
+      ok('narrative: none once the request is aborted', late === '' && asks === 1, String(asks));
+      const deps = context.runInContext(dev, 'two', () => reportsServer.pageDeps({}, pid));
+      await context.runInContext(dev, 'two', async () => { await deps.narrative(s.aid, ['A caption.']); await deps.narrative(s.aid, ['Another caption.']); });
+      ok('narrative NEGATIVE CONTROL: different captions (another view) are another call', asks === 3, String(asks));
+    } finally {
+      rpc.registry.removeHandler('copilot:ask');
+      if (realAsk) rpc.registry.handle('copilot:ask', realAsk);
+    }
 
     // ── the Share policy decides what leaves ──────────────────────────────
     await call('privacy:decide', { projectId: pid, datasetId: s.ds, column: 'region', level: 'personal' });

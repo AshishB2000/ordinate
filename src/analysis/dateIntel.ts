@@ -39,7 +39,7 @@
 import { daysFromCivil, civilFromDays } from './categoryKey';
 import type { CivilDate, DateGrain } from './categoryKey';
 import {
-  CALENDAR_TYPES, bucketStartOf, ordinalOf, ordinalStart, sameDayLastYear, setActiveWeekCal, unitOfGrain,
+  CALENDAR_TYPES, bucketStartOf, ordinalOf, ordinalStart, sameDayLastYear, scopeWeekCal, setActiveWeekCal, unitOfGrain,
   weekCalOf, weekLabel, weekLabelStart, weekPos, yearStart as weekYearStart,
 } from './retailCalendar';
 import type { CalendarType, WeekCal, WeekUnit, YearEndRule } from './retailCalendar';
@@ -329,7 +329,7 @@ function shiftWeekCal(r: DateRange, mode: 'previous_period' | 'previous_year', w
  * else moves back by its length in days. An open-ended range has no length,
  * so it has no previous period (null). A week calendar: see `shiftWeekCal`.
  */
-export function shiftRange(r: DateRange, mode: 'previous_period' | 'previous_year', cal: CalendarPrefs = calendar): DateRange | null {
+export function shiftRange(r: DateRange, mode: 'previous_period' | 'previous_year', cal: CalendarPrefs = calendarNow()): DateRange | null {
   const wc = weekCalOf(cal);
   if (wc) return shiftWeekCal(r, mode, wc);
   const f = daysFromIso(r.from);
@@ -422,15 +422,25 @@ export function describeCompare(mode: CompareMode): string {
 // asking for "today" means their today — unless ORDINATE_TODAY pins it, which
 // is how the smoke gets a date inside the bundled sample's two years.
 
-let calendar: CalendarPrefs = { ...DEFAULT_CALENDAR };
+let own: CalendarPrefs = { ...DEFAULT_CALENDAR };
+let slot: { get(): CalendarPrefs; set(c: CalendarPrefs): void } = { get: () => own, set: (c) => { own = c; } };
+
+/** The server keeps one calendar per org (src/app/orgAmbient.ts, NV-1); elsewhere this module's own. */
+export function scopeCalendar(wrap: <T>(s: { get(): T; set(v: T): void }) => { get(): T; set(v: T): void }): void {
+  slot = wrap(slot);
+  scopeWeekCal(wrap);
+}
+
+const calendarNow = (): CalendarPrefs => slot.get();
 
 export function setCalendar(c: unknown): void {
-  calendar = sanitizeCalendar(c);
-  setActiveWeekCal(calendar);
+  const cal = sanitizeCalendar(c);
+  slot.set(cal);
+  setActiveWeekCal(cal);
 }
 
 export function getCalendar(): CalendarPrefs {
-  return { ...calendar };
+  return { ...calendarNow() };
 }
 
 export function todayIso(now: Date = new Date()): string {
@@ -441,7 +451,7 @@ export function todayIso(now: Date = new Date()): string {
 
 /** Resolve against the app's clock and calendar — what every evaluator calls. */
 export function resolvePeriodNow(spec: PeriodSpec): DateRange | null {
-  return resolvePeriod(spec, todayIso(), calendar);
+  return resolvePeriod(spec, todayIso(), calendarNow());
 }
 
 // ── Labels on a date axis ───────────────────────────────────────────────────
@@ -455,7 +465,7 @@ export function resolvePeriodNow(spec: PeriodSpec): DateRange | null {
  */
 export function shiftBucketLabel(label: string, grain: DateGrain): string | null {
   const s = String(label);
-  const wc = grain === 'day' ? null : weekCalOf(calendar);
+  const wc = grain === 'day' ? null : weekCalOf(calendarNow());
   if (wc) {
     const unit = unitOfGrain(grain)!;
     const start = weekLabelStart(s, unit, wc);

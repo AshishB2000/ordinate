@@ -11,10 +11,14 @@
 // worksheet iteration are used; the write/writeBuffer (archiver) path is never
 // exercised. `npm audit` flags on exceljs come entirely from its write-side
 // transitive deps (archiver/zip-stream/uuid), which this code path never loads.
-// Input is a local file the user explicitly picked, not network data.
+// Input is an UPLOAD from any editor: the container is checked before exceljs
+// opens it (./xlsxGuard.ts) and the sheet's used range against a cell budget.
 
 import type * as ExcelJSNamespace from 'exceljs';
 import { finalizeTable, ParseResult } from './parse';
+import { checkXlsx, MAX_XLSX_CELLS } from './xlsxGuard';
+import { formatNumber } from '../app/format';
+import { xlsxTooManyCells } from './workBudgetMessages';
 
 // Mirror of parse.ts's MAX_ROWS (not exported there). Only used to bound our own
 // row materialization; finalizeTable re-applies the authoritative cap + warning.
@@ -42,6 +46,7 @@ export async function parseXlsx(filePath: string, sheetName?: string): Promise<P
   // Lazy require so parse.ts's pure test path never loads exceljs.
   const ExcelJS = require('exceljs') as typeof ExcelJSNamespace;
   const workbook = new ExcelJS.Workbook();
+  await checkXlsx(filePath);
   await workbook.xlsx.readFile(filePath);
 
   const sheetNames = workbook.worksheets.map((w) => w.name);
@@ -61,10 +66,17 @@ export async function parseXlsx(filePath: string, sheetName?: string): Promise<P
     return { columns: [], rows: [], rowCount: 0, sheetNames, warnings: ['Sheet is empty'] };
   }
 
+  const readRows = Math.min(rowCount, MAX_ROWS + 2);
+  if (readRows * colCount > MAX_XLSX_CELLS) {
+    throw new Error(xlsxTooManyCells(formatNumber(rowCount), formatNumber(colCount), formatNumber(MAX_XLSX_CELLS)));
+  }
+
+  // findRow/findCell, never getRow/getCell: those CREATE a Row or Cell for every
+  // gap, so a sparse sheet would materialise its whole range as exceljs objects.
   const readRow = (rowNumber: number): string[] => {
-    const row = ws.getRow(rowNumber);
+    const row = ws.findRow(rowNumber);
     const cells: string[] = [];
-    for (let c = 1; c <= colCount; c += 1) cells.push(cellToString(row.getCell(c)));
+    for (let c = 1; c <= colCount; c += 1) cells.push(cellToString(row && row.findCell(c)));
     return cells;
   };
 
@@ -76,8 +88,7 @@ export async function parseXlsx(filePath: string, sheetName?: string): Promise<P
   // `body` only to have finalizeTable trim to MAX_ROWS is a needless memory spike.
   // Header is row 1, so read one extra body row past the cap (rows 2..MAX_ROWS+2)
   // so finalizeTable still sees > MAX_ROWS and emits its "row cap reached" warning.
-  const lastRow = Math.min(rowCount, MAX_ROWS + 2);
-  for (let r = 2; r <= lastRow; r += 1) body.push(readRow(r));
+  for (let r = 2; r <= readRows; r += 1) body.push(readRow(r));
 
   const res = finalizeTable(header, body);
   res.sheetNames = sheetNames;

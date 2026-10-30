@@ -26,6 +26,12 @@
 // Each pod runs claimed jobs ONE AT A TIME: refreshScheduler.tickNow is strictly
 // serial per process (its `running` flag would skip a second org's tick and the
 // row would be rescheduled as if it had run). N pods = N jobs in parallel.
+// So no run may hold that slot for long (NV-45): a run gets a deadline,
+// RUN_BUDGET_MS on, past which a kind with many items (the tick's full
+// refreshes, the due subscriptions) starts no new one and returns true. Its row
+// is then due again AT ONCE but behind every row already due (ORDER BY
+// next_run_at): another org's tick, a sweep, runs first; nothing is lost, as
+// what was not started is still due.
 //
 // ROWS. A kind is declared in code (`defineJob`); every pod inserts the row for
 // each org it can see under DATA_DIR/orgs × each kind it knows, ON CONFLICT DO
@@ -51,8 +57,11 @@ import { isDraining } from '../lifecycle';
 export interface JobKind {
   /** Interval between the end of one run and the next. */
   readonly everyMs: number;
-  /** Runs inside the org's context: `ctx().org.id` is the row's org, `ctx().client` a no-op. */
-  run(target: string): Promise<void>;
+  /**
+   * Runs inside the org's context: `ctx().org.id` is the row's org, `ctx().client` a no-op. Past
+   * `stopAt` (epoch ms) it should start no new item; true = it stopped there with work left.
+   */
+  run(target: string, stopAt: number): Promise<void | boolean>;
 }
 
 export interface Claim {
@@ -64,11 +73,15 @@ export interface Claim {
 
 let pollMs = 5_000;
 let leaseMs = 60_000;
+/** How long one run keeps starting new items (see above). */
+export const RUN_BUDGET_MS = 60_000;
+let runBudgetMs = RUN_BUDGET_MS;
 
-/** Test hook: shorter poll and lease, for runners started after this call. */
-export function setTimingForTest(t: { pollMs?: number; leaseMs?: number }): void {
+/** Test hook: shorter poll, lease and run budget, for runners started after this call. */
+export function setTimingForTest(t: { pollMs?: number; leaseMs?: number; runBudgetMs?: number }): void {
   pollMs = t.pollMs ?? pollMs;
   leaseMs = t.leaseMs ?? leaseMs;
+  runBudgetMs = t.runBudgetMs ?? runBudgetMs;
 }
 
 /** This process, as it appears in lease_owner (hostname is the pod name under Kubernetes). */
@@ -131,10 +144,12 @@ export async function runClaim(pool: Pool, c: Claim, log: FastifyBaseLogger): Pr
     );
   }, Math.max(100, Math.floor(leaseMs / 3)));
   let error: string | null = null;
+  let more = false;
   try {
     if (!def) throw new Error(`unknown job kind ${c.kind}`);
     await orgConfig.fresh(c.orgId);
-    await runInContext(systemIdentity(c.orgId), `job:${c.kind}:${c.orgId}`, () => def.run(c.target));
+    const stopAt = Date.now() + runBudgetMs;
+    more = (await runInContext(systemIdentity(c.orgId), `job:${c.kind}:${c.orgId}`, () => def.run(c.target, stopAt))) === true;
     await orgConfig.flushed(c.orgId);
   } catch (err) {
     error = (err instanceof Error ? err.message : String(err)).slice(0, ERROR_MAX);
@@ -148,7 +163,7 @@ export async function runClaim(pool: Pool, c: Claim, log: FastifyBaseLogger): Pr
   if (error !== null && isDraining()) return;
   const counted = `${c.kind}\n${error === null ? 'ok' : 'error'}`;
   runs.set(counted, (runs.get(counted) ?? 0) + 1);
-  const every = def ? def.everyMs : 60_000;
+  const every = more ? 0 : def ? def.everyMs : 60_000; // stopped on its budget: due again now, behind older rows
   const r = await pool.query(
     `UPDATE jobs SET next_run_at = now() + $5 * interval '1 millisecond', lease_owner = NULL, lease_until = NULL,
             runs = runs + 1, last_finished_at = now(), last_error = $6

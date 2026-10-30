@@ -235,13 +235,27 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   await recordFs.rename(tmp, file);
 }
 
-/** The whole file. Missing or corrupt → empty; never throws. */
-export async function load(projectId: string): Promise<CatalogFile> {
+/**
+ * The whole file; missing → empty, anything else THROWS. For the Share policy,
+ * whose marks must fail closed, and for a write, which must never save over a
+ * catalog it could not read (that would erase every mark).
+ */
+export async function loadStrict(projectId: string): Promise<CatalogFile> {
   if (!isValidId(projectId)) return emptyCatalog();
   try {
     return sanitizeCatalog(JSON.parse(await recordFs.readFile(catalogPath(projectId), 'utf8')));
   } catch (err: any) {
-    if (err && err.code !== 'ENOENT') logger.error('[catalog] unreadable catalog, treating as empty:', err.message);
+    if (err && err.code === 'ENOENT') return emptyCatalog();
+    throw err;
+  }
+}
+
+/** The whole file. Missing or corrupt → empty; never throws. */
+export async function load(projectId: string): Promise<CatalogFile> {
+  try {
+    return await loadStrict(projectId);
+  } catch (err: any) {
+    logger.error('[catalog] unreadable catalog, treating as empty:', err && err.message);
     return emptyCatalog();
   }
 }
@@ -252,7 +266,7 @@ export async function load(projectId: string): Promise<CatalogFile> {
 // ponytail: one lock per project file; per-record files if write volume ever matters.
 function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promise<T> {
   return recordFs.locked(catalogPath(projectId), async () => {
-    const file = await load(projectId);
+    const file = await loadStrict(projectId);
     const result = fn(file);
     await fs.promises.mkdir(path.dirname(catalogPath(projectId)), { recursive: true });
     await writeJsonAtomic(catalogPath(projectId), file);
@@ -303,9 +317,10 @@ export async function setDoc(projectId: string, ref: string, patch: DocPatch): P
 
 // ── Columns ──────────────────────────────────────────────────────────────────
 
-export async function getColumns(projectId: string, datasetId: string): Promise<Record<string, ColumnDoc>> {
+/** `strict`: an unreadable catalog THROWS instead of reading as "nothing documented" (`loadStrict`). */
+export async function getColumns(projectId: string, datasetId: string, strict = false): Promise<Record<string, ColumnDoc>> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return dict();
-  const file = await load(projectId);
+  const file = await (strict ? loadStrict : load)(projectId);
   return own(file.columns, datasetId) ? file.columns[datasetId] : dict();
 }
 

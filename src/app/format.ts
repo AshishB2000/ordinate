@@ -117,14 +117,22 @@ export function sanitizeFormatPrefs(raw: unknown): FormatPrefs {
   };
 }
 
-let prefs: FormatPrefs = { ...FORMAT_DEFAULTS };
+let own: FormatPrefs = { ...FORMAT_DEFAULTS };
+let slot: { get(): FormatPrefs; set(p: FormatPrefs): void } = { get: () => own, set: (p) => { own = p; } };
+
+/** The server keeps one prefs per org (src/app/orgAmbient.ts, NV-1); a browser or a desktop, this module's own. */
+export function scopeFormatPrefs(wrap: (s: typeof slot) => typeof slot): void {
+  slot = wrap(slot);
+}
+
+const prefsNow = (): FormatPrefs => slot.get();
 
 export function setFormatPrefs(p: unknown): void {
-  prefs = sanitizeFormatPrefs(p);
+  slot.set(sanitizeFormatPrefs(p));
 }
 
 export function getFormatPrefs(): FormatPrefs {
-  return { ...prefs };
+  return { ...prefsNow() };
 }
 
 function localeOf(p: FormatPrefs): string | undefined {
@@ -182,8 +190,8 @@ function compactText(v: number, maxFd: number, fixed: boolean, p: FormatPrefs): 
 /** A plain number: grouped, at most `maxDecimals` (default 2). */
 export function formatNumber(v: number | null | undefined, opts: { decimals?: number; maxDecimals?: number } = {}): string {
   if (v == null || !Number.isFinite(v)) return '';
-  if (typeof opts.decimals === 'number') return digits(v, opts.decimals, opts.decimals, prefs);
-  return digits(v, 0, typeof opts.maxDecimals === 'number' ? opts.maxDecimals : 2, prefs);
+  if (typeof opts.decimals === 'number') return digits(v, opts.decimals, opts.decimals, prefsNow());
+  return digits(v, 0, typeof opts.maxDecimals === 'number' ? opts.maxDecimals : 2, prefsNow());
 }
 
 /**
@@ -193,8 +201,9 @@ export function formatNumber(v: number | null | undefined, opts: { decimals?: nu
  */
 export function formatCompact(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '';
-  if (!prefs.compact) return digits(v, 0, 2, prefs);
-  return compactText(v, 1, true, prefs);
+  const p = prefsNow();
+  if (!p.compact) return digits(v, 0, 2, p);
+  return compactText(v, 1, true, p);
 }
 
 // The renderer's DISPLAY currency when a project or an open dashboard converts
@@ -209,13 +218,13 @@ export function setCurrencyOverride(code: string | null): void {
 
 /** The currency money is shown in: the override, else the workspace's. */
 function activeCurrency(): string {
-  return currencyOverride || prefs.currency;
+  return currencyOverride || prefsNow().currency;
 }
 
 /** The workspace currency's symbol: $, €, £, ¥, ₹ — or CHF where there is no glyph. */
 export function currencySymbol(code: string = activeCurrency()): string {
   try {
-    const part = new Intl.NumberFormat(localeOf(prefs), { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
+    const part = new Intl.NumberFormat(localeOf(prefsNow()), { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
       .formatToParts(1).find((x) => x.type === 'currency');
     return part ? part.value : code;
   } catch (_) {
@@ -235,17 +244,18 @@ function withSymbol(body: string, symbol: string, position: CurrencyPosition): s
 /** Money in the workspace currency: $5.2M, 5,2 M €, -£1,200. */
 export function formatCurrency(v: number | null | undefined, opts: { decimals?: number; compact?: boolean } = {}): string {
   if (v == null || !Number.isFinite(v)) return '';
-  const compact = opts.compact === undefined ? prefs.compact : opts.compact;
+  const p = prefsNow();
+  const compact = opts.compact === undefined ? p.compact : opts.compact;
   const body = compact && Math.abs(v) >= 1000
-    ? compactText(v, Math.max(1, opts.decimals ?? 1), false, prefs)
-    : digits(v, opts.decimals ?? 0, opts.decimals ?? 0, prefs);
-  return withSymbol(body, currencySymbol(), prefs.currencyPosition);
+    ? compactText(v, Math.max(1, opts.decimals ?? 1), false, p)
+    : digits(v, opts.decimals ?? 0, opts.decimals ?? 0, p);
+  return withSymbol(body, currencySymbol(), p.currencyPosition);
 }
 
 /** A ratio as a percent: 0.132 → 13.2%. */
 export function formatPercent(ratio: number | null | undefined, decimals = 1, opts: { maxOnly?: boolean } = {}): string {
   if (ratio == null || !Number.isFinite(ratio)) return '';
-  return digits(ratio * 100, opts.maxOnly ? 0 : decimals, decimals, prefs) + '%';
+  return digits(ratio * 100, opts.maxOnly ? 0 : decimals, decimals, prefsNow()) + '%';
 }
 
 /**
@@ -258,8 +268,8 @@ export function formatValue(v: unknown, mode?: string): string {
   if (typeof v !== 'number') return String(v);
   if (!Number.isFinite(v)) return '';
   switch (mode) {
-    case 'plain': return digits(v, 0, 3, prefs);
-    case 'thousands': return digits(Math.round(v), 0, 0, prefs);
+    case 'plain': return digits(v, 0, 3, prefsNow());
+    case 'thousands': return digits(Math.round(v), 0, 0, prefsNow());
     case 'percent': return formatPercent(v, 2, { maxOnly: true });
     case 'currency': return formatCurrency(v, { decimals: 0, compact: false });
     default: return formatCompact(v);
@@ -304,12 +314,12 @@ export function formatMetric(value: number | null | undefined, f: MetricFormatLi
   if (f.kind === 'duration') body = formatDuration(value);
   // A compact number keeps ONE fraction digit at minimum: 5,194,598 with
   // decimals 0 would otherwise read "5M" and throw away the digit compact exists to show.
-  else if (f.compact && Math.abs(scaled) >= 1000) body = compactText(scaled, Math.max(1, f.decimals), false, prefs);
-  else if (f.compact) body = digits(scaled, 0, Math.max(1, f.decimals), prefs);
-  else body = digits(scaled, f.decimals, f.decimals, prefs);
+  else if (f.compact && Math.abs(scaled) >= 1000) body = compactText(scaled, Math.max(1, f.decimals), false, prefsNow());
+  else if (f.compact) body = digits(scaled, 0, Math.max(1, f.decimals), prefsNow());
+  else body = digits(scaled, f.decimals, f.decimals, prefsNow());
 
   const suffix = (f.suffix || '') + (f.kind === 'percent' ? '%' : '');
-  if (f.kind === 'currency' && !f.prefix) return withSymbol(body, currencySymbol(currency || activeCurrency()), prefs.currencyPosition) + suffix;
+  if (f.kind === 'currency' && !f.prefix) return withSymbol(body, currencySymbol(currency || activeCurrency()), prefsNow().currencyPosition) + suffix;
   const prefix = f.prefix || '';
   // The minus sign leads, always: "-$1,200", never "$-1,200".
   if (prefix && body.startsWith('-')) return '-' + prefix + body.slice(1) + suffix;
@@ -333,7 +343,7 @@ export function asMonthLabels<T>(labels: T[], locale?: string): Array<T | string
   const parsed = labels.map((l) => (typeof l === 'string' ? FIRST_OF_MONTH_RE.exec(l.trim()) : null));
   if (parsed.some((m) => !m)) return labels;
   return parsed.map((m) => new Date(Date.UTC(Number(m![1]), Number(m![2]) - 1, 1))
-    .toLocaleDateString(locale || localeOf(prefs), { month: 'short', year: 'numeric', timeZone: 'UTC' }));
+    .toLocaleDateString(locale || localeOf(prefsNow()), { month: 'short', year: 'numeric', timeZone: 'UTC' }));
 }
 
 
@@ -344,7 +354,7 @@ const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
  * 2026) or ISO (2026-09-24). Read in UTC from the ISO date, so no timezone can
  * move the day. Anything that is not an ISO date is returned as it is.
  */
-export function formatDate(iso: string | null | undefined, style: DateStyle = prefs.dateFormat, withYear = true): string {
+export function formatDate(iso: string | null | undefined, style: DateStyle = prefsNow().dateFormat, withYear = true): string {
   const m = ISO_DAY.exec(String(iso || ''));
   if (!m) return String(iso || '');
   if (style === 'iso') return withYear ? `${m[1]}-${m[2]}-${m[3]}` : `${m[2]}-${m[3]}`;
@@ -353,15 +363,16 @@ export function formatDate(iso: string | null | undefined, style: DateStyle = pr
     ? { month: 'numeric', day: 'numeric', timeZone: 'UTC' }
     : { month: 'short', day: 'numeric', timeZone: 'UTC' };
   if (withYear) o.year = 'numeric';
-  return d.toLocaleDateString(localeOf(prefs), o);
+  return d.toLocaleDateString(localeOf(prefsNow()), o);
 }
 
 /** Two ISO bounds → "Sep 1 – Sep 30, 2026" in one year, both years otherwise. */
 export function formatDateRange(from?: string, to?: string): string {
   if (from && to) {
     if (from === to) return formatDate(from);
-    const sameYear = from.slice(0, 4) === to.slice(0, 4) && prefs.dateFormat !== 'iso';
-    return formatDate(from, prefs.dateFormat, !sameYear) + ' – ' + formatDate(to);
+    const style = prefsNow().dateFormat;
+    const sameYear = from.slice(0, 4) === to.slice(0, 4) && style !== 'iso';
+    return formatDate(from, style, !sameYear) + ' – ' + formatDate(to);
   }
   if (from) return 'From ' + formatDate(from);
   if (to) return 'Until ' + formatDate(to);

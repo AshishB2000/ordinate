@@ -39,6 +39,7 @@ import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
 import { figureAsk } from '../analysis/figureAsk';
 import { visualForCaller } from './rowDoors';
+import { ctx } from '../server/context';
 
 /** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -59,6 +60,7 @@ const NARRATIVE_MS = 30_000;
 export function pageDeps(event: unknown, projectId: string, share = true): PageDeps & { datasets: Set<string> } {
   const datasets = new Set<string>();
   const visualCache = new Map<string, Promise<VisualRec | null>>();
+  const narratives = new Map<string, Promise<string>>();
   return {
     datasets,
     visual: (id) => {
@@ -99,13 +101,22 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       const r = await call(event, 'summary:compute', { projectId, analysisId: a.id, name: a.name, pages: a.sheets, filters, params, asOf: null, outbound: true });
       return r && r.ok && Array.isArray(r.sentences) ? r.sentences.map((x: { text: unknown }) => String(x.text)) : [];
     },
-    narrative: async (analysisId, captions) => {
-      const question = t('reportRender.write_exactly_two_short_paragraphs', { p0: captions.map((c) => '- ' + c).join('\n') });
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), NARRATIVE_MS); });
-      const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question }), late]);
-      clearTimeout(timer);
-      return r && r.ok !== false && typeof r.answer === 'string' ? r.answer.trim() : '';
+    // ONE model call per distinct narrative in a request, however many times a
+    // page list repeats the page (up to 200) — and none once the caller has gone
+    // or the request timed out (NV-38). Each saved view's captions differ, so
+    // "every view" still writes one per view.
+    narrative: (analysisId, captions) => {
+      if (ctx().signal?.aborted) return Promise.resolve('');
+      const key = analysisId + '\n' + captions.join('\n');
+      if (!narratives.has(key)) narratives.set(key, (async () => {
+        const question = t('reportRender.write_exactly_two_short_paragraphs', { p0: captions.map((c) => '- ' + c).join('\n') });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), NARRATIVE_MS); });
+        const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question }), late]);
+        clearTimeout(timer);
+        return r && r.ok !== false && typeof r.answer === 'string' ? r.answer.trim() : '';
+      })());
+      return narratives.get(key) as Promise<string>;
     },
     scorecard: (id) => scorecardSnapshot(projectId, id),
     // A report leaves the app, so its discussion is what a viewer could read: no thread on a dashboard's draft, and

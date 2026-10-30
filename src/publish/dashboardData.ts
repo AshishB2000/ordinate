@@ -106,10 +106,11 @@ export interface PublishedView { name: string; sheet: number; picks: number[]; d
  * "one filter at a time" site, two filters moved) is left out rather than
  * shown on the wrong figures.
  */
-function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, lock?: Lock | null): PublishedView[] {
+function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan): PublishedView[] {
   const out: PublishedView[] = [];
-  // Under an embed's lock a view that sets a control the bar left out is dropped: its NAME may be another customer's.
-  const left = lock ? a.sheets.flatMap((s) => s.cards).filter((c) => c && c.type === 'control' && !specs.some((x) => x.card.id === c.id)) : [];
+  // A view that sets a control the bar left out (the Share policy dropped it, say) is dropped: the page cannot apply its
+  // pick, and under an embed's lock its NAME may be another customer's.
+  const left = a.sheets.flatMap((s) => s.cards).filter((c) => c && c.type === 'control' && !specs.some((x) => x.card.id === c.id));
   for (const v of a.views || []) {
     if (left.some((c) => viewControlValue(v, c) !== null)) continue;
     const picks = specs.map((s, i) => viewPick(a, v, s, plan.domains[i]));
@@ -229,7 +230,7 @@ async function distinct(projectId: string, datasetId: string, column: string): P
   return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, req).values.map((v) => String(v)) : [];
 }
 
-async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null): Promise<ControlSpec | null> {
+async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null, outgoing?: Outgoing): Promise<ControlSpec | null> {
   const control = card.control;
   if (!control) return null;
   const id = card.id;
@@ -250,9 +251,17 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
     const def = control.default as any; // ControlValue union, narrowed by kind here
     const want = control.kind === 'dropdown' ? def && def.value : def && Array.isArray(def.values) ? def.values[0] : undefined;
     const idx = typeof want === 'string' ? values.indexOf(want) : -1;
+    // The options are VALUES of the column, so the Share policy shapes them as it does a chart's labels: tokens
+    // (each state keeps its raw value — it filters here, never leaves), or the control left out.
+    let shown = values;
+    if (outgoing) {
+      const shaped = await outgoing(control.datasetId, { category: control.column, values: [] }, { labels: values, series: [] });
+      if ('hidden' in shaped) { unlisted.push({ control: label, reason: shaped.hidden }); return null; }
+      shown = shaped.labels.map(String);
+    }
     return {
       card, control,
-      domain: { id, label, options: ['All', ...values], defaultIndex: idx >= 0 ? idx + 1 : 0 },
+      domain: { id, label, options: ['All', ...shown], defaultIndex: idx >= 0 ? idx + 1 : 0 },
       states: [null, ...values.map((v) => (control.kind === 'dropdown' ? { value: v } : { values: [v] }))],
     };
   }
@@ -313,25 +322,25 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
 
 export interface Unlisted { control: string; reason: string } // a control a page cannot offer (a Live column with no list of values), and why
 /** Every control card on every sheet, in reading order; the ones left out go onto `unlisted`. */
-async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null): Promise<ControlSpec[]> {
+async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null, outgoing?: Outgoing): Promise<ControlSpec[]> {
   const out: ControlSpec[] = [];
   for (const sheet of a.sheets) {
     for (const card of sheet.cards) {
       if (!card || card.type !== 'control') continue;
-      const spec = await controlSpec(projectId, card, a, unlisted, lock);
+      const spec = await controlSpec(projectId, card, a, unlisted, lock, outgoing);
       if (spec) out.push(spec);
     }
   }
   return out;
 }
 
-/** The plan without computing a single tile — for the dialog's summary line. */
-export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}) {
+/** The plan without computing a single tile — for the dialog's summary line. `outgoing`: the Share policy, for the option labels. */
+export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}, outgoing?: Outgoing) {
   // A page or an export leaves the app: the published copy (./publishedCopy.ts), or a draft never published.
   const a = scope.def ? (scope.def.analysis.id === analysisId ? scope.def.analysis : null) : await analysis.getAudienceAnalysis(projectId, analysisId);
   if (!a) return null;
   const unlisted: Unlisted[] = [];
-  const specs = await controlSpecs(projectId, a, unlisted, scope.lock);
+  const specs = await controlSpecs(projectId, a, unlisted, scope.lock, outgoing);
   const plan = planCombos(specs.map((s) => s.domain), maxCombos);
   const tiles = a.sheets.reduce((n, s) => n + s.cards.filter((c) => c && c.type !== 'control').length, 0);
   return { id: a.id, name: a.name, plan, tiles, analysis: a, specs, unlisted };
@@ -394,7 +403,7 @@ export async function buildDashboard(
   outgoing?: Outgoing,
   opts: { defaultOnly?: boolean } & BuildScope = {},
 ): Promise<PublishedDashboard | null> {
-  const planned = await planDashboard(projectId, analysisId, maxCombos, opts);
+  const planned = await planDashboard(projectId, analysisId, maxCombos, opts, outgoing);
   const lock = opts.lock ?? null;
   if (!planned) return null;
   const { analysis: a, specs } = planned;
@@ -433,7 +442,7 @@ export async function buildDashboard(
           continue;
         }
         const enc = sanitizeEncoding(v.encoding);
-        if (lock && !(await visualAllowed(lock, projectId, v.datasetId, enc))) {
+        if (lock && !(await visualAllowed(lock, projectId, v.datasetId, enc, scopes.flatMap((sc) => mergeDashboardFilters(sc.filters, v.filters))))) {
           cards.push(refuse(base, substituteText(v.name || 'Visual', defaults)));
           done += plan.keys.length;
           continue;
@@ -463,7 +472,7 @@ export async function buildDashboard(
       if (card.type === 'metric' && card.metric) {
         const m = card.metric;
         let title = m.label || `${m.aggregation} of ${m.column}`;
-        if (lock && !(await metricAllowed(lock, projectId, m))) {
+        if (lock && !(await metricAllowed(lock, projectId, m, scopes.flatMap((sc) => sc.filters)))) {
           cards.push(refuse(base, title));
           done += plan.keys.length;
           continue;
@@ -601,6 +610,6 @@ export async function buildDashboard(
     sheets,
     geoLevels: [...geoLevels],
     boundaryIds: [...boundaryIds],
-    views: publishedViews(a, specs, plan, lock),
+    views: publishedViews(a, specs, plan),
   };
 }

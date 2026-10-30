@@ -20,6 +20,7 @@ import { compile } from '../formula/formula';
 import type { Compiled, FValue } from '../formula/formula';
 import type { LodSpec } from '../formula/formulaParse';
 import { isLodExpression, lodGroupDims, lodValues } from '../formula/lod';
+import { isFormulaBudgetError } from '../formula/formulaBudget';
 import { lodMetricResident, lodValuesResident } from '../engine/lodResident';
 import type { ResidentLod } from '../engine/lodResident';
 import type { ResidentSource } from '../engine/residentQuery';
@@ -62,8 +63,13 @@ export async function lodVizFor(
   }
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
-  const r = lodVizData(ds.columns, ds.rows, ds.steps, encoding, filters);
-  return { ok: true, data: r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category };
+  try {
+    const r = lodVizData(ds.columns, ds.rows, ds.steps, encoding, filters);
+    return { ok: true, data: r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category };
+  } catch (e) {
+    if (isFormulaBudgetError(e)) return { ok: false, error: e.message }; // an LOD field past its work budget: no chart, the reason
+    throw e;
+  }
 }
 
 /** The KPI path's per-call target — see ipc/dashboards `MetricTarget`. */
@@ -101,7 +107,12 @@ export async function lodMetricFor(
   if (target.ds === undefined) target.ds = await datasets.getDataset(projectId, datasetId);
   const ds = target.ds;
   if (!ds) return { ok: false, value: null };
-  return { ok: true, value: lodMetricValue(ds.columns, ds.rows, ds.steps, spec, filters) };
+  try {
+    return { ok: true, value: lodMetricValue(ds.columns, ds.rows, ds.steps, spec, filters) };
+  } catch (e) {
+    if (isFormulaBudgetError(e)) return { ok: false, value: null }; // past the work budget: no figure, never a partial one
+    throw e;
+  }
 }
 
 /**

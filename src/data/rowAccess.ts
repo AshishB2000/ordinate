@@ -23,6 +23,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { ctx } from '../server/context';
 import { callerOn } from '../server/authz/caller';
 import * as recordFs from '../app/recordFs';
+import { entryPath } from '../app/trashStore';
 import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
 import { datasetFilePath, storedRowPolicy, withFirstWritePolicy } from './datasetRecord';
@@ -81,6 +82,11 @@ export function exportScope<T>(fn: () => Promise<T>): Promise<{ value: T; datase
   return outgoing('export', fn);
 }
 
+/** Inside a fan-out build? Its doors gate (and record) every dataset a question reads, for every caller. */
+export function inFanOut(): boolean {
+  return scopes.getStore()?.out?.kind === 'fanout';
+}
+
 // ── The record, raw ─────────────────────────────────────────────────────────
 
 type Raw = Record<string, unknown>;
@@ -103,29 +109,36 @@ function memoOf<T>(m: WeakMap<object, Map<string, T>>): Map<string, T> {
 /** What a record that does not parse reads as: rules that do not sanitize, so CLOSED (rowPolicy.policyFromRecord). */
 const CORRUPT: Raw = Object.freeze({ rowPolicy: '\u0000unparseable' });
 
+/** A file's text, or null when it is not there (ENOENT); any other failure rejects. */
+function textOrNull(file: string): Promise<string | null> {
+  if (!file) return Promise.resolve(null);
+  return recordFs.readFile(file, 'utf8').catch((err: unknown) => {
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return null;
+    throw err;
+  });
+}
+
 /**
- * The record as stored. A record that is not there (ENOENT) has no rules: null. One that does not parse is
- * CLOSED. Any other failure REJECTS — never "no rules" — and is not remembered, so the next ask reads again.
+ * The record as stored — live, else its Trash entry (NV-16): a trashed dataset keeps its rules, restorable,
+ * so its versions, its capture and what was built from it stay governed. A record in neither place has no
+ * rules: null (a purge forgets them, as removing the rules would). One that does not parse is CLOSED.
+ * Any other failure REJECTS — never "no rules" — and is not remembered, so the next ask reads again.
  */
 function readRaw(projectId: string, id: string): Promise<Raw | null> {
   const memo = memoOf(reads);
   const key = `${projectId}\0${id}`;
   let hit = memo.get(key);
   if (!hit) {
-    hit = recordFs.readFile(datasetFilePath(projectId, id), 'utf8').then(
-      (text) => {
-        try {
-          const raw: unknown = JSON.parse(text);
-          return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
-        } catch {
-          return CORRUPT;
-        }
-      },
-      (err: unknown) => {
-        if ((err as { code?: unknown } | null)?.code === 'ENOENT') return null;
-        throw err;
-      },
-    );
+    hit = (async (): Promise<Raw | null> => {
+      const text = (await textOrNull(datasetFilePath(projectId, id))) ?? (await textOrNull(entryPath(projectId, 'dataset', id)));
+      if (text === null) return null;
+      try {
+        const raw: unknown = JSON.parse(text);
+        return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
+      } catch {
+        return CORRUPT;
+      }
+    })();
     memo.set(key, hit);
     hit.catch(() => memo.delete(key));
   }

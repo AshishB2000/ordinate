@@ -193,6 +193,24 @@ async function main(): Promise<void> {
     ok('leap years are the proleptic Gregorian rule', clean.parseDateCell('2000-02-29', ymd) === '2000-02-29' &&
       clean.parseDateCell('1900-02-29', ymd) === null && clean.parseDateCell('2024-2-9', ymd) === null &&
       clean.parseDateCell(' 2024-02-09\t', ymd) === '2024-02-09');
+    // NV-50: the trim is an index scan. It agrees with the regex it replaced on every
+    // shape, and an interior space run costs linear time where the regex cost ~n².
+    const oldTrim = (s: string): string => s.replace(/^[ \t]+|[ \t]+$/g, '');
+    const shapes = ['', ' ', '\t \t', 'a', ' a', 'a ', ' \ta b\t ', 'a  b', ' a ', ' \n a \n ', 'x' + ' '.repeat(50) + 'x'];
+    ok('trimSpaceTab agrees with the regex it replaced', shapes.every((s) => Object.is(clean.trimSpaceTab(s), oldTrim(s))));
+    const run1 = (n: number, f: (s: string) => string): number => {
+      const s = 'x' + ' '.repeat(n) + 'x';
+      const t0 = performance.now();
+      f(s);
+      return performance.now() - t0;
+    };
+    const fast = run1(200_000, clean.trimSpaceTab);
+    const slow = run1(10_000, oldTrim); // negative control: the old regex, at a twentieth of the length
+    ok('an interior run of 200k spaces trims in linear time (old regex: slower at 10k)', fast < 50 && slow > fast, `${fast.toFixed(1)} ms vs ${slow.toFixed(1)} ms`);
+    const t0 = performance.now();
+    const big = clean.parseDatePreview({ columns: [{ name: 'd', type: 'text' }], rows: [['x' + ' '.repeat(200_000) + 'x']] },
+      { type: 'parse_date', column: 'd', format: 'YYYY-MM-DD' });
+    ok('…through the preview too', big.failed === 1 && performance.now() - t0 < 100);
   }
 
   // ── 5. the other steps' semantics ─────────────────────────────────────────
@@ -204,6 +222,15 @@ async function main(): Promise<void> {
     ok('split into rows keeps a null cell as one row', rows.rowCount === 7 && JSON.stringify(rows.stepCounts) === '[{"before":4,"after":7}]');
     const u = run([{ type: 'unpivot', columns: ['units', 'tags'] }]);
     ok('unpivot is row-major and keeps nulls', u.rowCount === 8 && JSON.stringify(col(u, 'attribute').slice(0, 2)) === '["units","tags"]');
+    // NV-52: one row of 9,000 columns, half chosen, would build 4,500 rows × 4,502 cells.
+    const names = Array.from({ length: 9000 }, (_, k) => `c${k}`);
+    const wide: TableData = { columns: names.map((name) => ({ name, type: 'text' as const })), rows: [names.slice()] };
+    const t0 = performance.now();
+    const wu = run([{ type: 'unpivot', columns: names.slice(0, 4500) }], wide);
+    ok('an unpivot past the cell budget is skipped before it builds a row', wu.rowCount === 1 &&
+      /^Unpivot skipped: it would make 20,259,000 cells; the limit is 20,000,000$/.test(wu.warnings[0] || '') && performance.now() - t0 < 500, JSON.stringify(wu.warnings));
+    const fits = run([{ type: 'unpivot', columns: names.slice(0, 2) }], wide);
+    ok('negative control: a small unpivot of the same table runs', fits.rowCount === 2 && fits.warnings.length === 0);
     const pv = run([{ type: 'pivot', key: 'region', value: 'units', fn: 'count', groupBy: ['sku'] }]);
     ok('pivot: first-seen keys, one row per group, missing combinations null',
       pv.columns.map((c) => c.name).join() === 'sku,East,West,North' && JSON.stringify(pv.rows[0]) === '["007",2,null,null]', JSON.stringify(pv));
@@ -299,6 +326,15 @@ async function main(): Promise<void> {
   const again = await datasets.updateSteps(pid, a.id, [lookup]);
   ok('a deleted reference skips the step with a warning, never throws',
     again !== null && /not found/.test(again.output.warnings.join()) && again.output.columns.length === T.columns.length);
+
+  // NV-51: a step list may grow to MAX_STEPS (200) and no further.
+  const trims = (k: number) => Array.from({ length: k }, () => ({ type: 'trim', column: 'sku' }));
+  const at200 = await datasets.updateSteps(pid, a.id, trims(200));
+  ok('negative control: 200 steps are kept', at200 !== null && (at200.dataset.steps || []).length === 200);
+  const past = await datasets.updateSteps(pid, a.id, trims(201)).then(() => 'saved', (e: Error) => e.message);
+  ok('a 201st step is refused with the cap sentence', /at most 200 prepare steps/.test(past), past);
+  const stored = await datasets.getDatasetMeta(pid, a.id);
+  ok('…and the stored list is untouched', ((stored && stored.steps) || []).length === 200);
 }
 
 main()

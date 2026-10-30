@@ -24,6 +24,19 @@
 //                                     `message`; the org's first refusal of the
 //                                     day tells its admins (../../server/live/
 //                                     limitNotice.ts). L2.7.
+//                                     ONE MEMBER'S SHARE (NV-47): no one asker
+//                                     — a signed-in member, the scheduled jobs,
+//                                     every anonymous /p/ or embed viewer
+//                                     together — may spend more than
+//                                     MEMBER_SHARE of it in a day, counted
+//                                     across pods (../../server/counters.ts),
+//                                     before the org's count; so one viewer's
+//                                     batched tiles cannot leave every other
+//                                     project without Live figures. With
+//                                     Postgres and real sign-in only: in memory
+//                                     or under AUTH_MODE=dev there is one
+//                                     identity, and a share would only halve
+//                                     the limit.
 //   noteCall(ticket, bytes)           the bytes the warehouse reported billing
 //                                     for an admitted statement (BigQuery; null
 //                                     elsewhere), added to its usage row. L2.7.
@@ -36,7 +49,8 @@
 // in front of every warehouse call, and the daily limit is what bounds the
 // bill org-wide. N pods allow N × LIVE_MAX_CONCURRENT at once.
 
-import { isPublishedRequest } from '../../server/context';
+import { ctx, isPublishedRequest } from '../../server/context';
+import * as counters from '../../server/counters';
 import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec } from '../../server/liveEnv';
 import * as usage from '../../server/live/usageStore';
 import type { Ticket, UsageKey } from '../../server/live/usageStore';
@@ -146,6 +160,10 @@ export interface UsageOf extends UsageKey {
   readonly datasetId: string;
 }
 
+/** The part of LIVE_DAILY_QUERY_LIMIT one asker may spend in a UTC day (see above). */
+export const MEMBER_SHARE = 0.5;
+const DAY_MS = 86_400_000;
+
 /** Admitted (and counted: `ticket` takes its bytes), or refused with a catalog sentence for the viewer. */
 export type DailyCheck = { ok: true; ticket?: Ticket } | { ok: false; message: string };
 
@@ -170,7 +188,14 @@ export function dailyLimit(): number {
 export async function checkDaily(use: UsageOf): Promise<DailyCheck> {
   if (dailyOverride) return dailyOverride(use.org, use.datasetId);
   const limit = dailyLimit();
-  const a = await usage.admit(usage.liveUsageDb()?.pool ?? null, use, limit);
+  const db = usage.liveUsageDb();
+  if (limit > 0 && db && !db.devAuth) {
+    const share = Math.max(1, Math.floor(limit * MEMBER_SHARE));
+    // The day is in the key: a new UTC day is a new count, as the org's is.
+    const mine = await counters.take(use.org, [{ key: `live:${usage.utcDay()}:${ctx().user.email}`, limit: share, windowMs: DAY_MS }]);
+    if (!mine.ok) return { ok: false, message: msg.liveMemberDailyLimit(share.toLocaleString('en-US')) };
+  }
+  const a = await usage.admit(db?.pool ?? null, use, limit);
   if (a.admitted) return { ok: true, ticket: a.ticket };
   if (a.first) {
     // Lazy: the push loads server delivery, which a plain self-check of the executor never needs.

@@ -46,7 +46,7 @@ type Any = any; // any: each channel's own reply shape, read field by field belo
   const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
   const formula: typeof import('../src/formula/formula') = require('../src/formula/formula');
 
-  const { projectId, datasetId, urlId, reviewsId, pointsId } = await inOrg(async () => {
+  const { projectId, datasetId, urlId, reviewsId, pointsId, peopleId } = await inOrg(async () => {
     await projects.init();
     const pid = String((await sample.seedSampleProject()).projectId);
     const did = (await datasets.listDatasets(pid))[0].id;
@@ -64,7 +64,11 @@ type Any = any; // any: each channel's own reply shape, read field by field belo
       name: 'Points', sourceKind: 'csv', columns: [{ name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }],
       rows: [[30.27, -97.74], [40.71, -74.0], [0, -30], [null, null]],
     } as never);
-    return { projectId: pid, datasetId: did, urlId: u!.id, reviewsId: r!.id, pointsId: p!.id };
+    const pe = await datasets.saveDataset(pid, {
+      name: 'People', sourceKind: 'csv', columns: [{ name: 'email', type: 'text' }],
+      rows: [['a@x.com'], ['A@x.com'], ['b@y.com']],
+    } as never);
+    return { projectId: pid, datasetId: did, urlId: u!.id, reviewsId: r!.id, pointsId: p!.id, peopleId: pe!.id };
   });
 
   const post = async (channel: string, payload?: unknown): Promise<{ status: number; body: string; json: Any }> => {
@@ -156,6 +160,18 @@ type Any = any; // any: each channel's own reply shape, read field by field belo
   const sp = (await post('geo:spatialPreview', { projectId, datasetId: pointsId, index: -1, step: { type: 'spatial_join', lat: 'lat', lng: 'lng', boundary: 'us_state', as: 'region' } })).json;
   ok('geo:spatialPreview: matched share and "outside" from the server',
     sp.ok && sp.stats.total === 4 && sp.stats.matched === 2 && sp.stats.pct === 50 && sp.stats.noCoords === 1 && sp.stats.outside === 1, JSON.stringify(sp));
+  // A stored mask_hash step: the previews fold it WITH the key, as the stored table was (NV-24).
+  ok('mask fixture: the hash step lands', (await post('dataset:addStep', { projectId, datasetId: peopleId, step: { type: 'mask_hash', column: 'email' } })).json.ok === true);
+  const masked = await post('dataset:page', { projectId, datasetId: peopleId, offset: 0, limit: 10 });
+  ok('mask fixture: the stored table holds tokens', masked.json.rows.every((r: Any[]) => /^#[0-9a-f]{12}$/.test(String(r[0]))), masked.body.slice(0, 200));
+  const pdm = await post('prepare:stepPreview', { projectId, datasetId: peopleId, index: -1, step: { type: 'parse_date', column: 'email', format: 'YYYY-MM-DD' } });
+  ok('prepare:stepPreview after the hash: the failing samples are tokens, never a raw email', pdm.json.ok && pdm.json.parseDate.samples.length > 0
+    && pdm.json.parseDate.samples.every((v: string) => /^#[0-9a-f]{12}$/.test(v)) && !pdm.body.includes('@'), pdm.body.slice(0, 300));
+  const svm = await post('prepare:similarValues', { projectId, datasetId: peopleId, index: -1, column: 'email' });
+  ok('prepare:similarValues after the hash: no raw email', svm.json.ok === true && svm.json.distinct === 3 && !svm.body.includes('@'), svm.body.slice(0, 300));
+  const pd0 = await post('prepare:stepPreview', { projectId, datasetId: peopleId, index: 0, step: { type: 'parse_date', column: 'email', format: 'YYYY-MM-DD' } });
+  ok('NEGATIVE CONTROL: the input BEFORE the hash step is the raw source', pd0.json.ok && pd0.body.includes('a@x.com'), pd0.body.slice(0, 300));
+
   const sources = (await post('geo:boundarySources', { projectId })).json;
   ok('geo:boundarySources: the bundled three', sources.ok && sources.bundled.length >= 3);
 

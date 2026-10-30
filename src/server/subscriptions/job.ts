@@ -32,7 +32,14 @@ export function wireSubscriptions(pool: Pool, cfg: Pick<ServerEnv, 'auth' | 'mai
   wireMail(cfg.mail, pool, cfg.auth.allowedDomains, log);
   if (defined) return; // a second app in one process (tests) shares the kind
   defined = true;
-  defineJob('subscriptions', { everyMs: SUBSCRIPTIONS_EVERY_MS, run: async () => { await tickSubscriptions(); } });
+  // Out of budget: due subscriptions may be left (their slots unstamped); the runner runs the row again soon.
+  defineJob('subscriptions', {
+    everyMs: SUBSCRIPTIONS_EVERY_MS,
+    run: async (_target, stopAt) => {
+      await tickSubscriptions(Date.now(), stopAt);
+      return Date.now() >= stopAt;
+    },
+  });
 }
 
 /** On close: nothing reads a pool or a store that has gone. */

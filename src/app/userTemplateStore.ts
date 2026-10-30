@@ -37,14 +37,17 @@ async function writeAtomic(file: string, obj: unknown): Promise<void> {
   await recordFs.rename(tmp, file);
 }
 
-/** Every template, newest first. */
-export async function listTemplates(): Promise<UserTemplate[]> {
+/** The ids of the stored templates, read off the file names alone. */
+async function templateIds(): Promise<string[]> {
   let names: string[] = [];
   try { names = await recordFs.readdir(dir()); } catch (_) { return []; }
+  return names.map((n) => (n.endsWith('.json') ? n.slice(0, -5) : '')).filter((id) => UUID_RE.test(id)); // temp files, strays out
+}
+
+/** Every template, newest first. */
+export async function listTemplates(): Promise<UserTemplate[]> {
   const out: UserTemplate[] = [];
-  for (const n of names) {
-    const id = n.endsWith('.json') ? n.slice(0, -5) : '';
-    if (!UUID_RE.test(id)) continue; // temp files, strays
+  for (const id of await templateIds()) {
     const t = await getTemplate(id);
     if (t) out.push(t);
   }
@@ -66,7 +69,8 @@ export async function getTemplate(id: unknown): Promise<UserTemplate | null> {
 export async function saveTemplate(t: UserTemplate): Promise<UserTemplate | null> {
   const clean = sanitizeUserTemplate(t, randomUUID);
   if (!clean) return null;
-  if (!(await getTemplate(clean.id)) && (await listTemplates()).length >= MAX_TEMPLATES) return null;
+  // Counted by name: loading every template (thumbnails up to 3 MiB each) per save made adopting a bundle's quadratic (NV-57).
+  if (!(await getTemplate(clean.id)) && (await templateIds()).length >= MAX_TEMPLATES) return null;
   await writeAtomic(fileOf(clean.id), clean);
   return clean;
 }

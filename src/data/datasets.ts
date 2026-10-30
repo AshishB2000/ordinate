@@ -33,7 +33,8 @@ import { summarize } from './datasetSummary';
 import type { DatasetSummary } from './datasetSummary';
 import { sanitizeQuality } from '../analysis/qualityRules';
 import type { DatasetQuality } from '../analysis/qualityRules';
-import type { StepCount } from './stepTypes';
+import { MAX_STEPS, type StepCount } from './stepTypes';
+import { tooManySteps } from './workBudgetMessages';
 import { loadStepRefs } from './stepRefs';
 import { sanitizeInputBlock } from './inputTable/columns';
 import type { InputBlock } from './inputTable/columns';
@@ -435,7 +436,7 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
   storageVersion?: string;
 };
 
-export async function getDatasetMeta(projectId: string, id: string): Promise<DatasetMeta | null> {
+export async function getDatasetMeta(projectId: string, id: string, strict = false): Promise<DatasetMeta | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
@@ -458,7 +459,8 @@ export async function getDatasetMeta(projectId: string, id: string): Promise<Dat
     delete (meta as Partial<Dataset>).source;
     if (data.source && Array.isArray(data.source.columns)) meta.sourceColumns = data.source.columns;
     return meta;
-  } catch (_) {
+  } catch (err) {
+    if (strict && (err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err; // the Share policy: unreadable is not missing
     return null;
   }
 }
@@ -735,6 +737,8 @@ export async function updateSteps(
   if (!existing) return null;
 
   const steps: TransformStep[] = transforms.sanitizeSteps(rawSteps);
+  // NV-51: add-a-step and plan apply append; past MAX_STEPS a list may only shrink.
+  if (steps.length > MAX_STEPS && steps.length > (existing.steps || []).length) throw new Error(tooManySteps(String(MAX_STEPS)));
   // Snapshot the current data as the immutable source the first time steps exist.
   const source: TableData = existing.source ?? {
     columns: existing.columns.map((c) => ({ ...c })),

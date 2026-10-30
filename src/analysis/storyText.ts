@@ -38,25 +38,78 @@ export interface StoryPage<B extends StoryBlockLike = StoryBlockLike> {
   items: StoryPageItem<B>[];
 }
 
-const INLINE_RE = /(\*\*([^*]+?)\*\*)|(`([^`]+?)`)|(\[([^\]]+?)\]\(([^)\s]+?)\))|(\*([^*\s][^*]*?)\*)|(_([^_\s][^_]*?)_)/;
+// **bold**, `code`, *italic*, _italic_. Each scan stops at the next marker of
+// its own kind, so one pass over a line is linear however many markers it holds.
+const MARK_RE = /(\*\*([^*]+?)\*\*)|(`([^`]+?)`)|(\*([^*\s][^*]*?)\*)|(_([^_\s][^_]*?)_)/g;
+const WS_RE = /\s/;
+
+interface LinkHit { index: number; end: number; text: string; href: string }
+
+/**
+ * [text](url), found exactly as /\[([^\]]+?)\]\(([^)\s]+?)\)/ would — that regex
+ * rescans to the end of the line from every '[' (n² on '['.repeat(n), NV-56).
+ * Tables of the next '[', ']' and ')'-or-space make each '[' an O(1) check, and
+ * every '[' before one ']' shares its fate, so finding links is one pass.
+ */
+function linkFinder(s: string): (from: number) => LinkHit | null {
+  const n = s.length;
+  const nextOpen = new Int32Array(n + 1).fill(-1);
+  const nextClose = new Int32Array(n + 1).fill(-1);
+  const nextStop = new Int32Array(n + 1).fill(-1);
+  for (let i = n - 1; i >= 0; i--) {
+    const c = s[i];
+    nextOpen[i] = c === '[' ? i : nextOpen[i + 1];
+    nextClose[i] = c === ']' ? i : nextClose[i + 1];
+    nextStop[i] = c === ')' || WS_RE.test(c) ? i : nextStop[i + 1];
+  }
+  return (from) => {
+    for (let i = nextOpen[from]; i !== -1; ) {
+      const j = nextClose[i + 1];
+      if (j === -1) return null;
+      if (j > i + 1 && s[j + 1] === '(') {
+        const k = nextStop[j + 2];
+        if (k > j + 2 && s[k] === ')') return { index: i, end: k + 1, text: s.slice(i + 1, j), href: s.slice(j + 2, k) };
+      }
+      i = nextOpen[j + 1]; // every '[' before j reads the same ']', '(' and url: they fail too
+    }
+    return null;
+  };
+}
 
 /** One line of inline Markdown → tokens. Unmatched markers stay literal. */
 export function mdInline(src: string): Inl[] {
+  const s = String(src || '');
   const out: Inl[] = [];
-  let rest = String(src || '');
-  while (rest) {
-    const m = INLINE_RE.exec(rest);
-    if (!m) {
-      out.push({ t: 'text', text: rest });
+  const linkFrom = s.includes('[') ? linkFinder(s) : (): null => null;
+  // The leftmost marker and the leftmost link from `pos`; kept while still ahead of it.
+  let mark: RegExpExecArray | null | undefined;
+  let link: LinkHit | null | undefined;
+  let pos = 0;
+  while (pos < s.length) {
+    if (mark === undefined || (mark && mark.index < pos)) {
+      MARK_RE.lastIndex = pos;
+      mark = MARK_RE.exec(s);
+    }
+    if (link === undefined || (link && link.index < pos)) link = linkFrom(pos);
+    if (!mark && !link) {
+      out.push({ t: 'text', text: s.slice(pos) });
       break;
     }
-    if (m.index > 0) out.push({ t: 'text', text: rest.slice(0, m.index) });
-    if (m[1]) out.push({ t: 'b', text: m[2] });
-    else if (m[3]) out.push({ t: 'code', text: m[4] });
-    else if (m[5]) out.push({ t: 'link', text: m[6], href: /^https?:\/\//i.test(m[7]) ? m[7] : '' });
-    else if (m[8]) out.push({ t: 'i', text: m[9] });
-    else out.push({ t: 'i', text: m[11] });
-    rest = rest.slice(m.index + m[0].length);
+    // Never a tie: a link starts with '[', every marker with another character.
+    const hit = link && (!mark || link.index < mark.index) ? link : null;
+    const at = hit ? hit.index : (mark as RegExpExecArray).index;
+    if (at > pos) out.push({ t: 'text', text: s.slice(pos, at) });
+    if (hit) {
+      out.push({ t: 'link', text: hit.text, href: /^https?:\/\//i.test(hit.href) ? hit.href : '' });
+      pos = hit.end;
+    } else {
+      const m = mark as RegExpExecArray;
+      if (m[1]) out.push({ t: 'b', text: m[2] });
+      else if (m[3]) out.push({ t: 'code', text: m[4] });
+      else if (m[5]) out.push({ t: 'i', text: m[6] });
+      else out.push({ t: 'i', text: m[8] });
+      pos = m.index + m[0].length;
+    }
   }
   // Merge neighbouring plain runs so a renderer draws one text node per run.
   return out.reduce((acc: Inl[], x) => {
@@ -67,9 +120,11 @@ export function mdInline(src: string): Inl[] {
   }, []);
 }
 
-const HEADING_RE = /^(#{1,3})\s+(.*)$/;
-const BULLET_RE = /^\s*[-*]\s+(.*)$/;
-const NUMBER_RE = /^\s*\d+[.)]\s+(.*)$/;
+// `(\S.*|)`, not `(.*)`: the same matches, but a \r or U+2028 inside a line fails
+// at once instead of retrying (.*) from every space before it (n², NV-56).
+const HEADING_RE = /^(#{1,3})\s+(\S.*|)$/;
+const BULLET_RE = /^\s*[-*]\s+(\S.*|)$/;
+const NUMBER_RE = /^\s*\d+[.)]\s+(\S.*|)$/;
 const QUOTE_RE = /^\s*>\s?(.*)$/;
 
 /** A text block's source → block-level tokens. */
@@ -162,7 +217,7 @@ export function storyPages<B extends StoryBlockLike>(blocks: readonly B[]): Stor
     }
     let buf: string[] = [];
     const flush = (): void => {
-      const text = buf.join('\n').replace(/^\n+|\n+$/g, '');
+      const text = trimNewlines(buf.join('\n'));
       if (text.trim()) {
         cur = cur || open('', 0);
         cur.items.push({ block: b, text });
@@ -182,6 +237,15 @@ export function storyPages<B extends StoryBlockLike>(blocks: readonly B[]): Stor
   }
   // A story with no content at all still has one (empty) page to present.
   return pages.length ? pages : [{ heading: '', level: 0, items: [] }];
+}
+
+/** Leading and trailing newlines off; by index — /^\n+|\n+$/g is n² on a run of blank lines inside (NV-56). */
+function trimNewlines(s: string): string {
+  let a = 0;
+  let b = s.length;
+  while (a < b && s[a] === '\n') a++;
+  while (b > a && s[b - 1] === '\n') b--;
+  return s.slice(a, b);
 }
 
 /** A text item's Markdown → the paragraphs a report page prints (lists as bullets). storyPresent.ts stPlainParagraphs. */

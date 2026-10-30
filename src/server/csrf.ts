@@ -29,8 +29,17 @@
 // Neither is handed a CSRF cookie either: nothing there would ever echo it.
 // Every other mode is checked, dev included: a dev server answers every
 // caller on loopback as an admin, which a page in the same browser can reach.
+//
+// Host, first of all, in the two modes whose identity is where the request
+// comes FROM — dev (loopback is the admin) and header (a trusted peer's
+// X-Forwarded-Email): a page whose own domain re-resolves to this server (DNS
+// rebinding) is same-origin with itself, so it passes both checks above. It
+// cannot send an IP address or a loopback name as Host, nor ORDINATE_PUBLIC_URL's
+// name, so any other Host → 421 before a cookie or an identity (`ownHost`).
+// Session modes need no pin: the rebinding origin has its own, empty cookie jar.
 
 import { randomBytes, timingSafeEqual } from 'crypto';
+import { isIP } from 'net';
 import fastifyCookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { hasBearer } from './auth/tokens';
@@ -41,6 +50,8 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Routes that refuse ambient credentials themselves. */
 const BEARER_ONLY = new Set(['/api/mcp', HOOK_ROUTE]);
+/** Probes answer any Host: in-cluster callers use a Service name, and these return no data or identity to rebind for. */
+const HEALTH = new Set(['/healthz', '/readyz']);
 
 /** Origin header → is it this server, by host (scheme and port as the browser saw them). */
 export function sameOrigin(origin: string, host: string | undefined): boolean {
@@ -49,6 +60,12 @@ export function sameOrigin(origin: string, host: string | undefined): boolean {
   } catch {
     return false; // includes the literal "null" origin of sandboxed and file: pages
   }
+}
+
+/** Host header → is it a name only this server's own users send: an IP address, a loopback name, or `publicHost`. */
+export function ownHost(host: string | undefined, publicHost: string | null): boolean {
+  const name = (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/^\[(.*)\]$/, '$1');
+  return name !== '' && (name === publicHost || isIP(name) !== 0 || name === 'localhost');
 }
 
 /** 256 random bits, base64url (43 chars). */
@@ -72,11 +89,18 @@ export interface CsrfOptions {
   readonly secure: boolean;
   /** A bearer token alone decides who is asking (Postgres is configured and no test identify overrides it). */
   readonly bearerDecides: boolean;
+  /** Dev and header modes: a Host that is not `ownHost` → 421. */
+  readonly pinHost?: boolean;
+  /** ORDINATE_PUBLIC_URL's host name (lower-case), the one DNS name a pinned Host may be. */
+  readonly publicHost?: string | null;
 }
 
 /** Registers the check and the cookie. Registered before sign-in's hook (app.ts). */
 export function registerCsrf(app: FastifyInstance, o: CsrfOptions): void {
   app.addHook('onRequest', (req, reply, done) => {
+    if (o.pinHost && !HEALTH.has(req.routeOptions.url ?? '') && !ownHost(req.headers.host, o.publicHost ?? null)) {
+      return void reply.code(421).send({ error: 'host' });
+    }
     const bearer = o.bearerDecides && hasBearer(req.headers.authorization);
     const token = cookieToken(req, o.cookie);
     const path = req.url.split('?')[0];

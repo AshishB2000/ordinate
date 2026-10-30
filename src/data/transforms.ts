@@ -19,6 +19,7 @@ import { detectColumnType, coerceValue } from './parse';
 import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
 import { evaluateTable, lodDimProblem } from '../formula/lod';
+import { isFormulaBudgetError, newFormulaBudget, type FormulaBudget } from '../formula/formulaBudget';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
 import { sanitizePeriod, resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
@@ -41,7 +42,7 @@ import type { RadiusSpec } from '../analysis/geo/radius';
  * for a mask_hash step (maskSteps.ts) and the other datasets' tables a union /
  * lookup step reads (stepsPower.ts, loaded in main by stepRefs.ts).
  */
-export type PipelineCtx = MaskCtx & Partial<PipelineContext>;
+export type PipelineCtx = MaskCtx & Partial<PipelineContext> & { budget?: FormulaBudget };
 
 /** The power steps' half of the context — only when tables were loaded. */
 function powerCtx(ctx: PipelineCtx): PipelineContext | undefined {
@@ -246,6 +247,7 @@ function skip(t: TableData, warning: string): StepResult {
 // fold is called synchronously from every request (T4.2). The Parquet-resident
 // twin (pipelineDuck.runResidentPipeline) is tried by datasets.updateSteps.
 export function applyPipeline(source: TableData, steps: TransformStep[], ctx: PipelineCtx = {}): ApplyResult {
+  if (!ctx.budget) ctx = { ...ctx, budget: newFormulaBudget() }; // ONE formula work budget for the whole fold (NV-42)
   let table = cloneTable(source);
   const warnings: string[] = [];
   const list = Array.isArray(steps) ? steps : [];
@@ -276,7 +278,7 @@ export function foldStep(t: TableData, step: TransformStep, ctx: PipelineCtx, me
 function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: RegexMemo): StepResult {
   switch (step.type) {
     case 'calculated_field':
-      return stepCalculatedField(t, step);
+      return stepCalculatedField(t, step, ctx.budget);
     case 'filter':
       return stepFilter(t, step);
     case 'group_aggregate':
@@ -301,7 +303,7 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: Re
       return applyPowerStep(t, step, powerCtx(ctx), memo);
     case 'conditional_column': {
       const calc = conditionalAsCalc(t.columns, step);
-      return typeof calc === 'string' ? skip(t, calc) : stepCalculatedField(t, calc);
+      return typeof calc === 'string' ? skip(t, calc) : stepCalculatedField(t, calc, ctx.budget);
     }
     case 'segment':
       return applySegmentStep(t, step);
@@ -314,7 +316,7 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: Re
 
 // ── Per-step implementations (each pure: builds a new table, never mutates t) ──
 
-function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
+function stepCalculatedField(t: TableData, s: CalculatedFieldStep, budget?: FormulaBudget): StepResult {
   const name = typeof s.name === 'string' ? s.name.trim() : '';
   if (!name) return skip(t, 'Calculated field skipped: blank column name');
   if (colIndex(t.columns, name) >= 0) {
@@ -341,7 +343,13 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
 
   // Evaluate per row against a {colName: value} map — LODs filled over the
   // whole table first (formula/lod.ts), at no visual's dimensions.
-  const results: FValue[] = evaluateTable(compiled.fn, columns, rows);
+  let results: FValue[];
+  try {
+    results = evaluateTable(compiled.fn, columns, rows, { budget });
+  } catch (e) {
+    if (isFormulaBudgetError(e)) return skip(t, `Calculated field "${name}" skipped: ${e.message}`);
+    throw e;
+  }
 
   // Append the new column, then type it. retypeColumn keeps a computed double a
   // number and still sends text results through the strict-number path.

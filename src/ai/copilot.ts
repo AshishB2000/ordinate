@@ -127,7 +127,7 @@ export interface CopilotFacts {
 // Ring-cap so one conversation can't grow unbounded.
 const MAX_TURNS = 200;
 
-// Ring-cap on conversations per project. 50 is deliberate, not a round number
+// Ring-cap on conversations per project, per member. 50 is deliberate, not a round number
 // pulled from the air: the whole file is read and rewritten on EVERY append, so
 // the cost that matters is the worst-case file, not the common one. 50 threads ×
 // 200 turns × ~1 KB of text is a ~10 MB read+parse+write per turn — already the
@@ -290,7 +290,22 @@ export function normalize(data: any): CopilotThread[] {
     });
   }
   // Defensive cap on load too, in case a file predates a lower MAX_THREADS.
-  return threads.length > MAX_THREADS ? threads.slice(threads.length - MAX_THREADS) : threads;
+  return capThreads(threads);
+}
+
+// The newest MAX_THREADS of EACH owner, in stored (recency) order. One cap over
+// the whole file let any member's new threads evict everyone else's (NV-34).
+// The desktop's threads have no owner: one bucket, the old cap.
+function capThreads(threads: CopilotThread[]): CopilotThread[] {
+  const kept = new Map<string, number>();
+  const out: CopilotThread[] = [];
+  for (let i = threads.length - 1; i >= 0; i--) {
+    const n = kept.get(threads[i].owner ?? '') ?? 0;
+    if (n >= MAX_THREADS) continue;
+    kept.set(threads[i].owner ?? '', n + 1);
+    out.push(threads[i]);
+  }
+  return out.reverse();
 }
 
 // No-op stub kept for symmetry with projects.init()/datasets.init() — the file is
@@ -319,7 +334,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
 // On the server every read and write below sees only the CALLER's threads: the
 // file is per project, the conversations are per person. The desktop has one
 // person, so it sees them all. A pre-server thread (no owner) belongs to nobody
-// on the server. ponytail: MAX_THREADS still caps the project's file as a whole.
+// on the server. MAX_THREADS caps each owner's (capThreads).
 function ownerNow(): string | undefined {
   return serverDataDir() === null ? undefined : ctx().user.email;
 }
@@ -387,12 +402,12 @@ export async function createThread(projectId: string): Promise<CopilotThreadSumm
   return { id: thread.id, title: thread.title, updatedAt: thread.updatedAt, turnCount: 0 };
 }
 
-// Cap to the newest MAX_THREADS and atomic-write the whole file. The array is kept
+// Cap to the newest MAX_THREADS of each owner and atomic-write the whole file. The array is kept
 // in recency order (appendTurn moves what it touched to the end), so the ones that
 // drop are the LEAST RECENTLY USED — a conversation you came back to last week is
 // not the one to evict just because you started it first.
 async function writeThreads(projectId: string, threads: CopilotThread[]): Promise<CopilotThread[]> {
-  const capped = threads.length > MAX_THREADS ? threads.slice(threads.length - MAX_THREADS) : threads;
+  const capped = capThreads(threads);
   const file: CopilotFile = { projectId, threads: capped, schemaVersion: 2 };
   await fs.promises.mkdir(path.join(getProjectsBase(), projectId), { recursive: true });
   await writeJsonAtomic(copilotFilePath(projectId), file);

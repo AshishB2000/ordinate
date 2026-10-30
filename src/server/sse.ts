@@ -38,6 +38,12 @@
 // targeted publish, and jobs tagged with it reach that tab the same way.
 // Without a fan-out (desktop, a server without DATABASE_URL) none of this runs.
 //
+// PER USER, at most MAX_STREAMS_PER_USER streams on a pod (NV-53): one more is
+// refused with 429, never made room for by closing an older one — an evicted tab
+// reconnects and would evict the next, round and round. The tab's EventSource
+// then backs off (web/src/api/events.ts) and tries again; reopening an id the
+// user already holds replaces it, so it never counts twice.
+//
 // CLOSING (docs/sso-lifecycle §3.9, R5). `closeStreamsOf(org, email)` ends every
 // stream of that user, on this pod and — as the reserved channel CLOSE over the
 // same fan-out — on every other: a disable, logout-everywhere, a password reset
@@ -57,6 +63,8 @@ import { encode } from './wire';
 import { POD_ID } from './podCommands';
 
 export const MAX_QUEUED = 256;
+/** Open streams one user (org + email) may hold on this pod — far past a browser's tabs. */
+export const MAX_STREAMS_PER_USER = 32;
 let heartbeatMs = 20_000;
 
 /** Test hook: the heartbeat interval for streams opened after this call. */
@@ -302,9 +310,13 @@ export function registerEvents(app: FastifyInstance, credentialOf: (req: Fastify
     const key = (req.query as { client?: unknown }).client;
     if (!isValidId(key)) return reply.code(400).send({ error: 'invalid client id' });
     const who = ctx();
+    const owner = ownerOf(who);
     const old = byKey.get(key);
-    if (old && old.owner !== ownerOf(who)) return reply.code(403).send({ error: 'client id in use' });
+    if (old && old.owner !== owner) return reply.code(403).send({ error: 'client id in use' });
     old?.close();
+    let held = 0;
+    for (const s of byKey.values()) if (s.owner === owner) held++;
+    if (held >= MAX_STREAMS_PER_USER) return reply.code(429).header('retry-after', 30).send({ error: 'too many event streams' });
     reply.hijack();
     // The security headers set at onRequest (./headers.ts) — writeHead bypasses Fastify's own.
     reply.raw.writeHead(200, { ...(reply.getHeaders() as import('http').OutgoingHttpHeaders), ...HEADERS });

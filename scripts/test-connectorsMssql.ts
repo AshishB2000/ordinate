@@ -32,6 +32,9 @@ interface FakeState {
   canceled: boolean;
   closed: boolean;
   emitted: number;
+  /** The 'name' cell of every emitted row, when set (a byte-budget check). */
+  cell: string | null;
+  lastConn: FakeConnection | null;
 }
 
 const state: FakeState = {
@@ -44,6 +47,8 @@ const state: FakeState = {
   canceled: false,
   closed: false,
   emitted: 0,
+  cell: null,
+  lastConn: null,
 };
 
 function resetState(): void {
@@ -56,6 +61,8 @@ function resetState(): void {
   state.canceled = false;
   state.closed = false;
   state.emitted = 0;
+  state.cell = null;
+  state.lastConn = null;
 }
 
 class FakeRequest extends EventEmitter {
@@ -75,6 +82,11 @@ class FakeConnection extends EventEmitter {
   constructor(cfg: Record<string, unknown>) {
     super();
     state.lastConfig = cfg;
+    state.lastConn = this;
+  }
+  // tedious's own hook between PRELOGIN and LOGIN7 — what requireTls wraps (NV-11).
+  performTlsNegotiation(_prelogin: { encryptionString?: string }, _signal?: AbortSignal): Promise<void> {
+    return Promise.resolve();
   }
   connect(cb: (err?: Error) => void): void {
     setImmediate(() => {
@@ -105,7 +117,7 @@ class FakeConnection extends EventEmitter {
         state.emitted++;
         req.emit('row', [
           { metadata: { colName: 'id' }, value: i },
-          { metadata: { colName: 'name' }, value: 'n' + i },
+          { metadata: { colName: 'name' }, value: state.cell ?? 'n' + i },
         ]);
       }
       if (state.canceled) req.userCallback(new Error('Canceled.'));
@@ -226,13 +238,15 @@ async function main(): Promise<void> {
 
   // ── the row cap wrapper ────────────────────────────────────────────────────
   const plain = mssql.capTsql('select * from sales', 100);
-  ok('plain query is wrapped with TOP (n)', /^SELECT TOP \(100\) \* FROM \( select \* from sales \) AS _ord_cap$/.test(plain), plain);
+  ok('plain query is wrapped with TOP (n), its text on its own line', plain === 'SELECT TOP (100) * FROM (\nselect * from sales\n) AS _ord_cap', plain);
+  const commented = mssql.capTsql('select * from sales -- note', 100);
+  ok('a trailing -- comment cannot swallow the wrapper', /-- note\n\) AS _ord_cap$/.test(commented), commented);
   ok('T-SQL cap never emits LIMIT', !/\bLIMIT\b/i.test(plain));
 
   const ordered = mssql.capTsql('select * from sales order by amount desc', 50);
   ok('an ORDER BY query is NOT wrapped (SQL Server error 1033)', !/_ord_cap/.test(ordered), ordered);
   ok('an ORDER BY query gets OFFSET/FETCH appended instead',
-    /order by amount desc OFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY$/.test(ordered), ordered);
+    /order by amount desc\nOFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY$/.test(ordered), ordered);
 
   const cte = mssql.capTsql('with t as (select 1 as a) select * from t', 7);
   ok('a CTE is not wrapped (WITH is illegal in a derived table)', !/_ord_cap/.test(cte), cte);
@@ -260,12 +274,54 @@ async function main(): Promise<void> {
     'select * into backup_sales from sales',
     'with t as (select 1 a) delete from sales',
     'select 1; drop table sales',
+    // NV-37: T-SQL runs a batch with no ';', and not every side effect is DML/DDL.
+    'select 1 as a dbcc freeproccache select 1 as b order by b',
+    'select 1 as a) as x disable trigger trg on t select * from (select 1 as b',
+    'select 1 as a kill 53',
+    'select 1 as a end conversation @h',
+    'select 1 as a fetch next from c',
+    'select 1 as a declare @x int set @x = 1',
+    'select * from openquery(lnk, \'delete from t\')',
+    'select 1 as a) as x insert t values (1) select * from (select 1',
+    'select (1',
   ];
   for (const w of writes) {
     const r = await sqlserver.run(ctxFor(), w);
-    ok('rejects: ' + w, r.ok === false && /read-only|single statement|Only SELECT/i.test(r.ok === false ? r.error : ''),
+    ok('rejects: ' + w, r.ok === false && /read-only|single statement|Only SELECT|parenthes/i.test(r.ok === false ? r.error : ''),
       r.ok === false ? r.error : 'ACCEPTED');
   }
+
+  // Negative controls: real reads that use those words in their own role.
+  const reads = [
+    'select * from sales order by 1',
+    "select case when a > 0 then 'p' else 'n' end as s, case when b is null then 0 end from t",
+    'select * from sales order by id offset 10 rows fetch next 5 rows only',
+    'with t as (select 1 a) select * from t',
+    "select [set], [open] from t where note <> 'dbcc kill'",
+    'select (case when 1 = 1 then 1 end) as x',
+  ];
+  for (const q of reads) {
+    resetState();
+    const r = await sqlserver.run(ctxFor(), q);
+    ok('still allowed: ' + q, r.ok === true, r.ok === false ? r.error : '');
+  }
+
+  // ── TLS before the login (NV-11) ───────────────────────────────────────────
+  resetState();
+  await sqlserver.run(ctxFor(), 'select 1');
+  const tds = state.lastConn;
+  if (!tds) throw new Error('the fake tedious made no connection');
+  const negotiate = tds.performTlsNegotiation.bind(tds);
+  const declined = await Promise.all(['NOT_SUP', 'OFF', undefined].map((e) =>
+    negotiate({ encryptionString: e }).then(() => 'went on', (err: Error) => err.message)));
+  ok('encrypt:true stops the login when PRELOGIN declines TLS (NOT_SUP, OFF, absent)',
+    declined.every((m) => /password was not sent/.test(String(m))), JSON.stringify(declined));
+  ok('…and goes on when the server agrees (ON, REQ)',
+    (await Promise.all(['ON', 'REQ'].map((e) => negotiate({ encryptionString: e }).then(() => 'went on')))).every((m) => m === 'went on'));
+  resetState();
+  await sqlserver.run(ctxFor({ values: { host: 'h', database: 'd', user: 'u', encrypt: false } }), 'select 1');
+  ok('negative control: encrypt unticked leaves tedious alone',
+    !Object.prototype.hasOwnProperty.call(state.lastConn ?? {}, 'performTlsNegotiation'));
 
   // ── running, capping, cancelling ───────────────────────────────────────────
   resetState();
@@ -299,6 +355,21 @@ async function main(): Promise<void> {
     exact.ok === true && exact.rows.length === 5 && exact.truncated === false,
     exact.ok === true ? `${exact.rows.length} rows, truncated=${exact.truncated}` : exact.error);
   ok('exactly-at-the-cap does not cancel', state.canceled === false);
+
+  // NV-40: past MAX_RESULT_BYTES of cell text the read stops, truncated, like the row cap.
+  const { MAX_RESULT_BYTES } = require('../src/connectors/types') as typeof import('../src/connectors/types');
+  resetState();
+  state.rowsToEmit = 10;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const heavy = await sqlserver.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('a result past MAX_RESULT_BYTES keeps the rows under it and says truncated',
+    heavy.ok === true && heavy.rows.length === 2 && heavy.truncated === true && state.canceled === true,
+    heavy.ok === true ? `${heavy.rows.length} rows, truncated=${heavy.truncated}` : heavy.error);
+  resetState();
+  state.rowsToEmit = 2;
+  state.cell = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  const fits = await sqlserver.run(ctxFor({ rowLimit: 100 }), 'select * from sales');
+  ok('negative control: the same rows under the ceiling are whole', fits.ok === true && fits.rows.length === 2 && fits.truncated === false);
 
   // ── listTables ─────────────────────────────────────────────────────────────
   resetState();

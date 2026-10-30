@@ -1,6 +1,7 @@
 // Background jobs (src/app/jobs.ts): the state machine, the concurrency rules
-// (three overall, one per dataset), cancel in both states, `interrupted`
-// after a crash, and a queued job running as whoever SUBMITTED it.
+// (three overall, one per dataset, a fair share per org), cancel in both
+// states, `interrupted` after a crash, and a queued job running as whoever
+// SUBMITTED it.
 //
 //   npm run build:ts && node scripts/test-jobs.js
 
@@ -86,6 +87,39 @@ void (async () => {
   ok('dataset: the waiting job starts once the first finishes', jobs.get(r2.id)?.state === 'running');
   g2.release(); g3.release();
   await Promise.all([r2.done, r3.done]);
+
+  // ── Fair share per org (NV-44) ─────────────────────────────────────────────
+  // Org A fills every slot and queues a backlog; org B's one job starts at the
+  // NEXT slot that frees, not after A's whole backlog.
+  jobs.reset();
+  const ctxMod: typeof import('../src/server/context') = require('../src/server/context');
+  const asOrg = <T>(org: string, fn: () => T): T => ctxMod.runInContext({ user: { email: 'u@' + org, role: 'admin' }, org: { id: org } }, 'fair', fn);
+  const fa = Array.from({ length: 30 }, () => gate());
+  const flood = fa.map((gg, i) => asOrg('org-a', () => jobs.submit({ kind: 'compute', label: 'A' + i, run: async () => gg.p })));
+  const gb = gate();
+  const fromB = asOrg('org-b', () => jobs.submit({ kind: 'compute', label: 'B', run: async () => gb.p }));
+  await tick();
+  ok('fair: org A holds every slot, org B\'s job waits', jobs.snapshot().active.filter((j) => j.state === 'running').length === jobs.MAX_RUNNING && jobs.get(fromB.id)?.state === 'queued');
+  fa[0].release();
+  await flood[0].done;
+  await tick();
+  ok('fair: the next free slot goes to org B, ahead of A\'s 27 queued', jobs.get(fromB.id)?.state === 'running' && jobs.get(flood[3].id)?.state === 'queued');
+  fa[1].release();
+  await flood[1].done;
+  await tick();
+  ok('fair NEGATIVE CONTROL: within one org the queue stays FIFO (A\'s 4th starts next, not a later one)', jobs.get(flood[3].id)?.state === 'running' && jobs.get(flood[4].id)?.state === 'queued');
+  const gc = gate();
+  const fromC = asOrg('org-c', () => jobs.submit({ kind: 'compute', label: 'C', datasetId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', run: async () => gc.p }));
+  const gc2 = gate();
+  const fromC2 = asOrg('org-c', () => jobs.submit({ kind: 'compute', label: 'C2', datasetId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', run: async () => gc2.p }));
+  fa[2].release();
+  await flood[2].done;
+  await tick();
+  ok('fair: a third org\'s job takes the next slot; its second (same dataset) still waits on it',
+    jobs.get(fromC.id)?.state === 'running' && jobs.get(fromC2.id)?.state === 'queued' && jobs.get(flood[4].id)?.state === 'queued');
+  gb.release(); gc.release(); gc2.release();
+  fa.forEach((gg) => gg.release());
+  await Promise.all([fromB.done, fromC.done, fromC2.done, ...flood.map((f) => f.done)]);
 
   // ── A queued job runs in its SUBMITTER's async context ─────────────────────
   // It is started by whichever job finishes first — inside THAT job's context.

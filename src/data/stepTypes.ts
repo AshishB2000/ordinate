@@ -205,6 +205,14 @@ export const MAX_SPLIT_PARTS = 50;
 export const MAX_PIVOT_COLUMNS = 100;
 export const MAX_RULES = 100;
 export const MAX_WINDOW_OFFSET = 1000;
+/**
+ * Cells an unpivot may produce (rows × chosen × (kept + 2)) — a million rows of
+ * twenty columns. Its output is quadratic in width, so one step on a wide table
+ * could otherwise build hundreds of millions of cells on the request thread (NV-52).
+ */
+export const MAX_UNPIVOT_CELLS = 20_000_000;
+/** Steps one dataset holds — the same 200 as src/api/contract.ts `Steps` (NV-51). */
+export const MAX_STEPS = 200;
 
 /** Why a union/lookup reference is not usable, or null when its table is loaded. */
 export function refProblem(ctx: PipelineContext | undefined, id: string): string | null {
