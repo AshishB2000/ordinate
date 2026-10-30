@@ -8,7 +8,7 @@ see a key or a connect form.
 
 Ordinate's numbers never come from a model. A model only narrates figures the app computed, or
 reads the table out of a screenshot for you to check. See the core principle in the repository's
-`CLAUDE.md`.
+`AGENTS.md`.
 
 ## What the server needs
 

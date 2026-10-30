@@ -5,11 +5,11 @@ description: Use when reviewing a diff, branch, commit or pull request in the Or
 
 # Ordinate review
 
-The rules are CLAUDE.md, `.claude/rules/` and the design docs they point to. This skill does not
-restate them. It makes sure a review **covers every rule family**, **runs the checks**, and
-**says plainly what it did not verify**. Reviewers here reliably catch the loud problems and
-skip the quiet ones: a hard-coded server sentence, a reader without the row lock, an e2e test
-that should be a unit test, checks never run.
+The rules are AGENTS.md (which CLAUDE.md imports), the area guides in `.claude/rules/` and the
+design docs they point to. This skill does not restate them. It makes sure a review **covers every
+rule family**, **runs the checks**, and **says plainly what it did not verify**. Reviewers here
+reliably catch the loud problems and skip the quiet ones: a hard-coded server sentence, a reader
+without the row lock, an e2e test that should be a unit test, checks never run.
 
 ## How to review
 
@@ -28,22 +28,22 @@ that should be a unit test, checks never run.
 
 | Rule family | Look for | Rule lives in | Guard |
 |---|---|---|---|
-| Figures | the web sums, averages, rounds or derives a figure; a model writes a number; a new figure path that skips `vizDataFor` / `computeCardMetric` / `computeCard` | CLAUDE.md core principle; Live § doors | differential tests, `test-liveRoute` |
-| Org isolation | an in-memory cache not keyed with `orgKey()`; a key missing an input that changes the answer; no invalidation on refresh or `epoch` | CLAUDE.md § Request context | — |
+| Figures | the web sums, averages, rounds or derives a figure; a model writes a number; a new figure path that skips `vizDataFor` / `computeCardMetric` / `computeCard` | AGENTS.md core principle; `live-data.md` § doors | differential tests, `test-liveRoute` |
+| Org isolation | an in-memory cache not keyed with `orgKey()`; a key missing an input that changes the answer; no invalidation on refresh or `epoch` | `server.md` § Request context | — |
 | Row access | a reader that returns rows, labels or figures without the row-policy lock (`withLockOf`, `src/ipc/rowDoors.ts`); a new `read` contract not classified in `scripts/rowPolicyReaders.ts` | `docs/row-policy/00-design.md` | `test-rowPolicySafetyNet` (needs `DATABASE_URL`) |
-| Live datasets | a row reader that would compute on zero rows or hydrate a Live dataset; a catch that turns `LiveDatasetError` into `[]`/`null`; a new row-reading channel missing from the safety net | CLAUDE.md § Live datasets | `test-liveSafetyNet`, `test-liveRoute` |
-| Resident layer | cast on the declared type only; ordinal at the end of every `ORDER BY`; the explicit empty class; `CAST(… AS DOUBLE)` on aggregates; `CASE WHEN` not `FILTER`; `null` on failure; JS reference plus an `Object.is` differential test plus `residentTrace` | CLAUDE.md § resident-query layer | the module's differential test |
-| Contracts and access | a handler with no `src/api/` contract; `access` wider than needed; a loose zod input; ids not `Uuid`; missing `project`/`org` scope; append-only files that lost entries | CLAUDE.md § RPC | `node scripts/check-contracts.js`, `tsc` |
-| Server text | a user-facing server sentence not written as `t('key', …)`; a figure formatted after `t()`; a hand-edited `en.json` | CLAUDE.md § Conventions | `test-i18n` |
-| Untrusted input | SQL text or identifiers built from input; a user regex on the request thread; a child process with `shell: true` or a command string; a socket without the SSRF guard; a record id used in a path without `UUID_RE` | CLAUDE.md § DuckDB, Workspace, Conventions | lint (partly) |
-| Secrets | a secret logged, sent to the browser or put in `config.json`; a new secret field with no canary test | CLAUDE.md § Secrets | `test-secrets` |
-| Event loop | sync DuckDB, `execSync` or sync fs on a request path | CLAUDE.md § DuckDB | `test-asyncReach` (sync DuckDB only) |
-| Migrations | not additive (DROP, rename, type change, NOT NULL with no default); an applied file edited; a per-org table without RLS forced; a number another open PR takes | CLAUDE.md § Postgres | `test-db-migrate`, CI `migrations` |
-| Web | designed empty, loading and error states in both themes; a `<button>`, not a clickable `div`; `alt` and labels; heavy code lazy-loaded; no inline script or style (CSP) | CLAUDE.md § Web app | `npm --prefix web run size`, the screen's e2e |
-| Tests | differential, not hand-written values; a negative control for every guard; golden fixtures never re-recorded to pass | CLAUDE.md § Testing | — |
-| E2E or unit | for each new or changed e2e test: does it need the real server's data, real rendering it interacts with, or routing across screens? If not, it belongs in Vitest + Testing Library. Extend the screen's existing spec rather than adding one | CLAUDE.md § Testing | `rpcBudget`, `failOnConsoleError` |
+| Live datasets | a row reader that would compute on zero rows or hydrate a Live dataset; a catch that turns `LiveDatasetError` into `[]`/`null`; a new row-reading channel missing from the safety net | `live-data.md` | `test-liveSafetyNet`, `test-liveRoute` |
+| Resident layer | cast on the declared type only; ordinal at the end of every `ORDER BY`; the explicit empty class; `CAST(… AS DOUBLE)` on aggregates; `CASE WHEN` not `FILTER`; `null` on failure; JS reference plus an `Object.is` differential test plus `residentTrace` | `engine.md` § resident-query layer | the module's differential test |
+| Contracts and access | a handler with no `src/api/` contract; `access` wider than needed; a loose zod input; ids not `Uuid`; missing `project`/`org` scope; append-only files that lost entries | `server.md` § RPC and contracts | `node scripts/check-contracts.js`, `tsc` |
+| Server text | a user-facing server sentence not written as `t('key', …)`; a figure formatted after `t()`; a hand-edited `en.json` | AGENTS.md § Conventions | `test-i18n` |
+| Untrusted input | SQL text or identifiers built from input; a user regex on the request thread; a child process with `shell: true` or a command string; a socket without the SSRF guard; a record id used in a path without `UUID_RE` | AGENTS.md § Rules; `engine.md`, `workspace.md` | lint (partly) |
+| Secrets | a secret logged, sent to the browser or put in `config.json`; a new secret field with no canary test | `server.md` § Secrets | `test-secrets` |
+| Event loop | sync DuckDB, `execSync` or sync fs on a request path | `engine.md` § DuckDB | `test-asyncReach` (sync DuckDB only) |
+| Migrations | not additive (DROP, rename, type change, NOT NULL with no default); an applied file edited; a per-org table without RLS forced; a number another open PR takes | `server.md` § Postgres | `test-db-migrate`, CI `migrations` |
+| Web | designed empty, loading and error states in both themes; a `<button>`, not a clickable `div`; `alt` and labels; heavy code lazy-loaded; no inline script or style (CSP) | `web.md` | `npm --prefix web run size`, the screen's e2e |
+| Tests | differential, not hand-written values; a negative control for every guard; golden fixtures never re-recorded to pass | AGENTS.md § Testing | — |
+| E2E or unit | for each new or changed e2e test: does it need the real server's data, real rendering it interacts with, or routing across screens? If not, it belongs in Vitest + Testing Library. Extend the screen's existing spec rather than adding one | `web.md` § Tests | `rpcBudget`, `failOnConsoleError` |
 | Size | a file over 500 lines (smell) or 800 (must split); the size allowlist edited to admit a file | `.claude/rules/file-size.md` | `test-file-size` |
-| Dependencies | a new runtime dependency (needs the user's OK first) | CLAUDE.md § Out of scope | `audit` CI job |
+| Dependencies | a new runtime dependency (needs the user's OK first) | AGENTS.md § Rules | `audit` CI job |
 
 ## Checks
 

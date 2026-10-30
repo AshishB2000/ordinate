@@ -6,8 +6,8 @@ description: Use when starting new work in the Ordinate repo, or when about to b
 # Feature branch workflow
 
 The trunk is **`develop`**. Every change gets its own worktree off `origin/develop`, then a PR to
-`develop`, then CI green, then merge, then the worktree is removed. CLAUDE.md's **Git** section
-is the rule; this is the exact sequence.
+`develop`, then CI green, then merge, then the worktree is removed. AGENTS.md's **Shipping a change**
+section is the rule; this is the exact sequence.
 
 **Never run `git checkout` or `git switch` in the main checkout** (`/Users/…/ordinate` itself).
 Other sessions work in that clone at the same time, and moving its branch moves their files.
@@ -43,7 +43,7 @@ One to three plain lines on what changed and why a reader would care.
 ```
 
 - Title in the imperative, about 50 characters: "Add X", not "update" or "fix stuff".
-- **No `Co-Authored-By` or any AI co-author trailer**, ever (CLAUDE.md).
+- **No `Co-Authored-By` or any AI co-author trailer**, ever (AGENTS.md).
 - Before committing, run what is quick: `npm run lint` (blocking in CI) and the suites you
   touched (`node scripts/test-<name>.js` after `npm run build:ts`). Skip `npm run smoke` and the
   full e2e run locally; CI runs them on the PR.

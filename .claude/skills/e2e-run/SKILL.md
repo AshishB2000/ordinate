@@ -81,7 +81,7 @@ After the assertion error, `e2e()` prints two blocks. Read them before the stack
 
 | Failure | Usually means | Fix |
 |---|---|---|
-| `RPC budget: 31 RPCs on …/dashboards (budget 25)` | the screen calls the API once per tile or row, or repeats a call the shell already made. The count covers everything from one navigation to the next, dialogs included | compare the spec's `rpc` lines with an `origin/develop` worktree, then drop the duplicate or batch the calls into one channel (CLAUDE.md: batch an endpoint before raising a budget). A per-test `{ rpcBudget }` only for calls that can't be avoided, with the reason beside it; never the default of 25 |
+| `RPC budget: 31 RPCs on …/dashboards (budget 25)` | the screen calls the API once per tile or row, or repeats a call the shell already made. The count covers everything from one navigation to the next, dialogs included | compare the spec's `rpc` lines with an `origin/develop` worktree, then drop the duplicate or batch the calls into one channel (`.claude/rules/web.md`: batch an endpoint before raising a budget). A per-test `{ rpcBudget }` only for calls that can't be avoided, with the reason beside it; never the default of 25 |
 | `console error: …` or `page error: …` | the app logged or threw an error | fix the app. Failing on it is the fixture's job |
 | `CSP violation: style-src-elem blocked inline …` | an inline style or script (the policy is `'self'` only) | move it into a CSS module or a file |
 | `locator.waitFor: Timeout …` | the element never appeared: renamed, a state the spec didn't wait for, or the app failed first | read the page problems; screenshot just before the line |
