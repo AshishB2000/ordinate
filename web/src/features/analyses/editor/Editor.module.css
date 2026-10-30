@@ -47,7 +47,7 @@
    padding and border are paid back), click to rename. */
 .name {
   display: block;
-  max-width: 40ch;
+  max-width: min(40ch, 100%);
   margin-left: calc(-1 * (var(--sp-8) + 1px));
   padding: var(--sp-4) var(--sp-8);
   border: 1px solid transparent;
@@ -64,6 +64,14 @@
 }
 .name:hover {
   border-color: var(--border);
+}
+/* PageHead's title row wraps; here it holds one line, so a long name (or a wide fallback font) shrinks the name to
+   its ellipsis instead of pushing where the draft stands and Saved under it (web/e2e/editor-head.e2e.ts). */
+.head div:has(> h1) {
+  flex-wrap: nowrap;
+}
+.head h1 ~ * {
+  flex-shrink: 0;
 }
 .name:focus-visible {
   outline: var(--focus-ring-w) solid var(--focus-ring);
