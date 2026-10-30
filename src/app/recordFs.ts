@@ -412,6 +412,27 @@ export async function readMany(paths: readonly string[]): Promise<Map<string, st
 }
 
 /**
+ * One fingerprint per path, of the record rows AT it (a `.json` file) or UNDER it (a directory): md5 over each
+ * row's path and updated_at, so any save, delete or rename there changes it. One statement for every path, and no
+ * body is read. Null without the DB: files have no cheap stamp, so the caller reads the records instead.
+ */
+export async function stampOf(paths: readonly string[]): Promise<string[] | null> {
+  const as = paths.map(at);
+  if (!as.length || as.some((a) => !a)) return null;
+  // A file's range holds the file alone: U+0001 is the least character that can follow its name.
+  const ranges = (as as At[]).map((a) => (JSON_NAME.test(a.rel) ? [a.rel, a.rel + '\u0001'] : under(a.rel)));
+  const r = await sql(
+    as[0] as At,
+    `SELECT md5(coalesce(string_agg(r.path || '@' || (extract(epoch FROM r.updated_at) * 1000000)::bigint, '|' ORDER BY r.path), '')) AS stamp
+     FROM unnest($2::text[], $3::text[]) WITH ORDINALITY AS q(lo, hi, i)
+     LEFT JOIN records r ON r.org_id = $1 AND r.path >= q.lo AND r.path < q.hi
+     GROUP BY q.i ORDER BY q.i`,
+    [ranges.map((x) => x[0]), ranges.map((x) => x[1])],
+  );
+  return r.rows.map((x: { stamp: string }) => x.stamp);
+}
+
+/**
  * A JSON record past its kind's byte cap, or a project record holding more than
  * MAX_JSON_VALUES values (./jsonBudget.ts: a parse's heap is its values, not its
  * bytes). Counted only above 1 MiB, where it can matter.
