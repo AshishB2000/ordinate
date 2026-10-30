@@ -1,85 +1,188 @@
-// The ⌘K name search's index at rest (0022_search_index.sql) — the SQL only. What goes in, in what order, and
-// when a source is rebuilt is src/ipc/search.ts. Every statement runs in inOrg (forced RLS) and names its org
-// anyway. Everything here returns null, or does nothing, without a database.
+// The ⌘K name search's index at rest (0022_search_index.sql): the SQL, and the two moments it changes.
+//
+//   ON WRITE   recordFs calls onRecordWrite / onRangeDelete inside the write's own transaction. A
+//              searched record's rows are replaced there, under a SHARED advisory lock per
+//              (org, project, source), in a SAVEPOINT: if anything fails, the source's marker is
+//              dropped instead and the save goes on — the index can never fail a save.
+//   ON SEARCH  a source with no marker at INDEX_VERSION is rebuilt from the records first, in one
+//              transaction under that lock EXCLUSIVE, so no write of that source lands mid-build
+//              (writers wait; their own rows are written after it, and win).
+//
+// What a record's rows ARE comes from `describe`, registered by src/ipc/search.ts (the stores'
+// own parsers — this module may not import them: recordFs imports this one). Without it, a write
+// drops the marker, and the next search that has one rebuilds.
 
+import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
+import { SOURCES, isAboveProjects, sourceOf, sourceRel, projectIn, projectOfDir } from '../app/searchSources';
+import type { RecordSource, SourceKey } from '../app/searchSources';
+import { tsqueryOf, wordsOf } from '../app/searchMatch';
+import { logger } from '../app/logger';
 
-/** One row a search can return: a record (or a dashboard's saved view) by its name. */
-export interface IndexEntry {
+/** Bump when what a record describes to changes: every marker is then stale, and each source rebuilds once. */
+export const INDEX_VERSION = 1;
+/** Records read per statement while rebuilding: bodies can be large (a v2 dataset holds its rows). */
+const REBUILD_BATCH = 100;
+
+export type Audience = 'all' | 'editor' | 'viewer';
+
+/** One row a record contributes: a record, a dashboard's saved view, or one alert rule. */
+export interface IndexRow {
+  audience: Audience;
+  /** Its place in the record: a dashboard 0, its views after; the rules of alerts.json in order. */
+  ord: number;
+  /** The record's id — the order's tie-break. */
+  rec: string;
+  updated: string;
   kind: string;
   id: string;
-  /** A saved view's dashboard id. */
   parentId?: string;
   name: string;
-  /** The dim second line the palette shows. */
   sub: string;
 }
 
-/** The stamp each source was last built from, by source; null without a database. */
-export async function storedStamps(projectId: string, sources: readonly string[]): Promise<Map<string, string> | null> {
+export type Describe = (where: RecordSource, body: string) => IndexRow[];
+export type RowsUnder = (c: PoolClient, org: string, rel: string, after: string, limit: number) => Promise<Array<{ rel: string; body: string }>>;
+
+let describe: Describe | null = null;
+/** src/ipc/search.ts registers the stores' parsers; null puts writes back to dropping markers. */
+export function useDescriber(d: Describe | null): void {
+  describe = d;
+}
+
+const lockKeyOf = (org: string, projectId: string, source: SourceKey): string => `search:${org}:${projectId}:${source}`;
+
+let warned = false;
+function warnOnce(what: string, err: unknown): void {
+  if (warned) return;
+  warned = true;
+  // A code, never a message: a record's name could ride along in one.
+  logger.warn(`[search] ${what} (${String((err as { code?: unknown })?.code ?? 'error')}); the next search rebuilds what it needs. Further failures are not logged.`);
+}
+
+/** `fn` in a savepoint: true when it held, false when it was rolled back (the transaction goes on). */
+async function guarded(c: PoolClient, fn: () => Promise<void>): Promise<boolean> {
+  await c.query('SAVEPOINT search_ix');
+  try {
+    await fn();
+    await c.query('RELEASE SAVEPOINT search_ix');
+    return true;
+  } catch (err) {
+    await c.query('ROLLBACK TO SAVEPOINT search_ix; RELEASE SAVEPOINT search_ix');
+    warnOnce('the search index could not follow a write', err);
+    return false;
+  }
+}
+
+async function insertRows(c: PoolClient, org: string, projectId: string, srcOrd: number, rows: ReadonlyArray<IndexRow & { path: string }>): Promise<void> {
+  if (!rows.length) return;
+  await c.query(
+    `INSERT INTO search_entries (org_id, project_id, path, audience, ord, src_ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub)
+     SELECT $1, $2, u.path, u.audience, u.ord, $3, u.rec, u.kind, u.id, u.parent_id, u.name, u.name_lc, array_to_tsvector(string_to_array(u.words, ' ')), u.updated, u.sub
+     FROM unnest($4::text[], $5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::text[], $15::text[])
+       AS u(path, audience, ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub)`,
+    [
+      org, projectId, srcOrd,
+      rows.map((r) => r.path), rows.map((r) => r.audience), rows.map((r) => r.ord), rows.map((r) => r.rec), rows.map((r) => r.kind),
+      rows.map((r) => r.id), rows.map((r) => r.parentId ?? null), rows.map((r) => r.name), rows.map((r) => r.name.toLowerCase()),
+      rows.map((r) => wordsOf(r.name).join(' ')), rows.map((r) => r.updated), rows.map((r) => r.sub),
+    ],
+  );
+}
+
+const dropMarkers = (c: PoolClient, org: string, projectId: string, sources: readonly SourceKey[] = SOURCES) =>
+  c.query('DELETE FROM search_sources WHERE org_id = $1 AND project_id = $2 AND source = ANY($3::text[])', [org, projectId, sources]);
+
+/** A record at `rel` was written (`body`) or removed (null), in transaction `c`. Never throws but on a dead connection. */
+export async function onRecordWrite(c: PoolClient, org: string, rel: string, body: string | null): Promise<void> {
+  const where = sourceOf(rel);
+  if (!where) return;
+  const d = describe;
+  const held = await guarded(c, async () => {
+    await c.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))', [lockKeyOf(org, where.projectId, where.source)]);
+    await c.query('DELETE FROM search_entries WHERE org_id = $1 AND path = $2', [org, rel]);
+    if (!d) {
+      await dropMarkers(c, org, where.projectId, [where.source]); // a script without the stores: rebuilt on the next search
+      return;
+    }
+    if (body !== null) await insertRows(c, org, where.projectId, where.srcOrd, d(where, body).map((r) => ({ ...r, path: rel })));
+  });
+  if (!held) await guarded(c, async () => { await dropMarkers(c, org, where.projectId, [where.source]); });
+}
+
+/** Every record under directory `rel` was removed, in transaction `c`: their rows go, and a whole project's markers. */
+export async function onRangeDelete(c: PoolClient, org: string, rel: string): Promise<void> {
+  const project = projectIn(rel);
+  const above = isAboveProjects(rel);
+  if (!project && !above) return; // outside every project: nothing searched lives there
+  const [lo, hi] = rel ? [rel + '/', rel + '0'] : ['', '\u{10FFFF}'];
+  const forget = async (): Promise<void> => {
+    if (above) await c.query('DELETE FROM search_sources WHERE org_id = $1', [org]);
+    else if (projectOfDir(rel)) await dropMarkers(c, org, project as string);
+  };
+  const held = await guarded(c, async () => {
+    if (project) await c.query('SELECT pg_advisory_xact_lock_shared(hashtextextended(k, 0)) FROM unnest($1::text[]) AS k', [SOURCES.map((s) => lockKeyOf(org, project, s))]);
+    await c.query('DELETE FROM search_entries WHERE org_id = $1 AND path >= $2 AND path < $3', [org, lo, hi]);
+    await forget();
+  });
+  if (!held) await guarded(c, async () => { await (project ? dropMarkers(c, org, project) : forget()); });
+}
+
+/** The sources of `projectId` the index does not hold completely; null without a database. */
+export async function unbuilt(projectId: string): Promise<SourceKey[] | null> {
   if (!orgDb()) return null;
   return inOrg(async (c, org) => {
-    const r = await c.query('SELECT source, stamp FROM search_sources WHERE org_id = $1 AND project_id = $2 AND source = ANY($3::text[])', [org, projectId, sources]);
-    return new Map(r.rows.map((x: { source: string; stamp: string }) => [x.source, x.stamp]));
+    const r = await c.query('SELECT source FROM search_sources WHERE org_id = $1 AND project_id = $2 AND version = $3', [org, projectId, INDEX_VERSION]);
+    const built = new Set(r.rows.map((x: { source: string }) => x.source));
+    return SOURCES.filter((s) => !built.has(s));
   });
 }
 
-/**
- * Replace one source's rows and its stamp, in one transaction. The advisory lock makes two pods rebuilding the same
- * source take turns (else the second insert meets the first's keys). `stamp` is the one read BEFORE `entries` were
- * listed, so a save landing mid-build leaves an old stamp behind and the next search builds again.
- */
-export async function replaceSource(projectId: string, source: string, srcOrd: number, stamp: string, entries: readonly IndexEntry[]): Promise<void> {
-  if (!orgDb()) return;
+/** Rebuild one source from its records (read by `rowsUnder`, recordFs's), then mark it built. */
+export async function rebuild(projectId: string, source: SourceKey, rowsUnder: RowsUnder): Promise<void> {
+  const d = describe;
+  if (!d) throw new Error('search index: no describer registered');
+  const srcOrd = SOURCES.indexOf(source);
   await inOrg(async (c, org) => {
-    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`search:${org}:${projectId}:${source}`]);
-    await c.query('DELETE FROM search_entries WHERE org_id = $1 AND project_id = $2 AND source = $3', [org, projectId, source]);
-    if (entries.length) {
-      await c.query(
-        `INSERT INTO search_entries (org_id, project_id, source, ord, src_ord, kind, id, parent_id, name, name_lc, sub)
-         SELECT $1, $2, $3, u.ord, $4, u.kind, u.id, u.parent_id, u.name, u.name_lc, u.sub
-         FROM unnest($5::int[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[]) AS u(ord, kind, id, parent_id, name, name_lc, sub)`,
-        [
-          org, projectId, source, srcOrd,
-          entries.map((_, i) => i), entries.map((e) => e.kind), entries.map((e) => e.id), entries.map((e) => e.parentId ?? null),
-          entries.map((e) => e.name), entries.map((e) => e.name.toLowerCase()), entries.map((e) => e.sub),
-        ],
-      );
+    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKeyOf(org, projectId, source)]);
+    const done = await c.query('SELECT 1 FROM search_sources WHERE org_id = $1 AND project_id = $2 AND source = $3 AND version = $4', [org, projectId, source, INDEX_VERSION]);
+    if (done.rowCount) return; // another pod built it while this one waited for the lock
+    await c.query('DELETE FROM search_entries WHERE org_id = $1 AND project_id = $2 AND src_ord = $3', [org, projectId, srcOrd]);
+    for (let after = ''; ;) {
+      const batch = await rowsUnder(c, org, sourceRel(projectId, source), after, REBUILD_BATCH);
+      if (!batch.length) break;
+      const rows: Array<IndexRow & { path: string }> = [];
+      for (const b of batch) {
+        const where = sourceOf(b.rel);
+        if (where && where.projectId === projectId && where.source === source) for (const r of d(where, b.body)) rows.push({ ...r, path: b.rel });
+      }
+      await insertRows(c, org, projectId, srcOrd, rows);
+      after = batch[batch.length - 1].rel;
     }
     await c.query(
-      `INSERT INTO search_sources (org_id, project_id, source, stamp) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (org_id, project_id, source) DO UPDATE SET stamp = EXCLUDED.stamp, built_at = now()`,
-      [org, projectId, source, stamp],
+      `INSERT INTO search_sources (org_id, project_id, source, version) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (org_id, project_id, source) DO UPDATE SET version = EXCLUDED.version, built_at = now()`,
+      [org, projectId, source, INDEX_VERSION],
     );
   });
 }
 
 /**
- * Entries whose name contains `needle` (already trimmed and lower-cased by JS), best first: exact, then prefix, then
- * contains (data/dataSearch.ts rankOf), each in source then list order — the JS path's order. Null without a database.
+ * The rows of `projectId` an `audiences` caller may see whose words start with every one of `typed`,
+ * best first (src/app/searchMatch.ts: rank, newest, section, record, place). Null without a database.
  */
-// shortcut: strpos scans the project's rows (fine into the tens of thousands); add a pg_trgm GIN index past that.
-export async function queryEntries(projectId: string, sources: readonly string[], needle: string, limit: number): Promise<IndexEntry[] | null> {
+export async function query(projectId: string, typed: readonly string[], needle: string, audiences: readonly Audience[], limit: number): Promise<Array<Pick<IndexRow, 'kind' | 'id' | 'parentId' | 'name' | 'sub'>> | null> {
   if (!orgDb()) return null;
   return inOrg(async (c, org) => {
     const r = await c.query(
       `SELECT kind, id, parent_id, name, sub FROM search_entries
-       WHERE org_id = $1 AND project_id = $2 AND source = ANY($3::text[]) AND strpos(name_lc, $4) > 0
-       ORDER BY CASE WHEN name_lc = $4 THEN 0 WHEN strpos(name_lc, $4) = 1 THEN 1 ELSE 2 END, src_ord, ord
-       LIMIT $5`,
-      [org, projectId, sources, needle, limit],
+       WHERE org_id = $1 AND project_id = $2 AND audience = ANY($3::text[]) AND words @@ $4::tsquery
+       ORDER BY CASE WHEN name_lc = $5 THEN 0 WHEN starts_with(name_lc, $5) THEN 1 ELSE 2 END, updated DESC, src_ord, rec, ord
+       LIMIT $6`,
+      [org, projectId, audiences, tsqueryOf(typed), needle, limit],
     );
     return r.rows.map((x: { kind: string; id: string; parent_id: string | null; name: string; sub: string }) => ({
       kind: x.kind, id: x.id, ...(x.parent_id ? { parentId: x.parent_id } : {}), name: x.name, sub: x.sub,
     }));
-  });
-}
-
-/** A deleted project's rows go with it: they hold its record names. */
-export async function forgetProject(projectId: string): Promise<void> {
-  if (!orgDb()) return;
-  await inOrg(async (c, org) => {
-    await c.query('DELETE FROM search_entries WHERE org_id = $1 AND project_id = $2', [org, projectId]);
-    await c.query('DELETE FROM search_sources WHERE org_id = $1 AND project_id = $2', [org, projectId]);
   });
 }

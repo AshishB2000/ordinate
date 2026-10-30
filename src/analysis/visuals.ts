@@ -509,6 +509,14 @@ export async function init(): Promise<void> {
 
 // Return summaries for a project's visuals, newest-updated first. Skips
 // corrupt/missing files quietly (ENOENT silent; real damage logged).
+/** One stored record → its summary, or null for one the list skips: listVisuals's and ⌘K's index's (0022) one parser. */
+export function summaryOf(projectId: string, raw: string): VisualSummary | null {
+  const data = JSON.parse(raw);
+  if (!isValidVisual(data)) return null;
+  const v = normalize(data, projectId);
+  return { id: v.id, name: v.name, chartType: v.chartType, datasetId: v.datasetId, updatedAt: v.updatedAt, favorite: v.favorite };
+}
+
 export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
   if (!isValidId(projectId)) return [];
   const dir = visualsDir(projectId);
@@ -525,14 +533,8 @@ export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await recordFs.readFile(visualFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
-      if (!isValidVisual(data)) continue;
-      const v = normalize(data, projectId);
-      out.push({
-        id: v.id, name: v.name, chartType: v.chartType, datasetId: v.datasetId,
-        updatedAt: v.updatedAt, favorite: v.favorite,
-      });
+      const v = summaryOf(projectId, await recordFs.readFile(visualFilePath(projectId, id), 'utf8'));
+      if (v) out.push(v);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         logger.error('[visuals] Skipping corrupt or unreadable visual:', id, err.message);

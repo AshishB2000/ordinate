@@ -57,6 +57,7 @@ import { recordBusy, recordNotSaved, recordTooLarge } from './recordLockMessages
 import { recordLimitOf } from './bundleRules';
 import { countJsonValues, MAX_JSON_VALUES } from './jsonBudget';
 import { logger } from './logger';
+import { onRangeDelete, onRecordWrite } from '../server/searchIndex'; // ⌘K's index follows every write (0022)
 
 /** What a listing with `withFileTypes` returns — `fs.Dirent` satisfies it. */
 export interface Dirent {
@@ -159,12 +160,12 @@ export function memoRead<T>(key: string, read: () => Promise<T>): Promise<T> {
   return got;
 }
 
-/** One statement for `a.org`, in a transaction that sets the RLS org — or, inside `locked`, the hold's. `$1` is always the org. */
-async function sql(a: At, text: string, params: unknown[] = []): Promise<QueryResult> {
+/** `fn` on one client, in a transaction that sets the RLS org — or, inside `locked`, the hold's. Statements pass `a.org` as `$1`. */
+async function inTx<T>(a: At, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   const h = holds.getStore();
   if (h && h.open && h.client && h.org === a.org && h.pool === a.pool) {
     try {
-      return await h.client.query(text, [a.org, ...params]);
+      return await fn(h.client);
     } catch (err) {
       h.failed = true; // the transaction is aborted now, whoever catches this
       throw err;
@@ -175,15 +176,20 @@ async function sql(a: At, text: string, params: unknown[] = []): Promise<QueryRe
   try {
     // a.org passed ORG_RE above: it cannot close this literal.
     await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true)`);
-    const r = await c.query(text, [a.org, ...params]);
+    const out = await fn(c);
     await c.query('COMMIT');
-    return r;
+    return out;
   } catch (err) {
     await c.query('ROLLBACK').catch((e: Error) => { broken = e; });
     throw err;
   } finally {
     c.release(broken);
   }
+}
+
+/** One statement for `a.org` (`$1` is always the org), through inTx. */
+function sql(a: At, text: string, params: unknown[] = []): Promise<QueryResult> {
+  return inTx(a, (c) => c.query(text, [a.org, ...params]));
 }
 
 // ── locked(): one read-modify-write at a time per (org, path) ───────────────
@@ -328,22 +334,31 @@ async function readRow(a: At): Promise<string | undefined> {
   return memoRead('row\0' + keyOf(a), () => selectRow(a));
 }
 
+/** What the search index may read of a record: nothing past its limits, as readFile refuses it. */
+const indexable = (rel: string, body: string): string | null => (overLimit(path.join(appPaths.userData(), rel), body) ? null : body);
+
 async function writeRow(a: At, body: string): Promise<void> {
   if (isTmp(a.rel)) {
     staged.set(keyOf(a), body);
     return;
   }
-  await sql(
-    a,
-    `INSERT INTO records (org_id, path, body) VALUES ($1, $2, $3)
-     ON CONFLICT (org_id, path) DO UPDATE SET body = EXCLUDED.body, updated_at = now()`,
-    [a.rel, body],
-  );
+  await inTx(a, async (c) => {
+    await c.query(
+      `INSERT INTO records (org_id, path, body) VALUES ($1, $2, $3)
+       ON CONFLICT (org_id, path) DO UPDATE SET body = EXCLUDED.body, updated_at = now()`,
+      [a.org, a.rel, body],
+    );
+    await onRecordWrite(c, a.org, a.rel, indexable(a.rel, body));
+  });
 }
 
 async function deleteRow(a: At): Promise<boolean> {
   if (isTmp(a.rel)) return staged.delete(keyOf(a));
-  return ((await sql(a, 'DELETE FROM records WHERE org_id = $1 AND path = $2', [a.rel])).rowCount ?? 0) > 0;
+  return inTx(a, async (c) => {
+    const gone = ((await c.query('DELETE FROM records WHERE org_id = $1 AND path = $2', [a.org, a.rel])).rowCount ?? 0) > 0;
+    if (gone) await onRecordWrite(c, a.org, a.rel, null);
+    return gone;
+  });
 }
 
 async function dirHasRows(a: At): Promise<boolean> {
@@ -412,24 +427,20 @@ export async function readMany(paths: readonly string[]): Promise<Map<string, st
 }
 
 /**
- * One fingerprint per path, of the record rows AT it (a `.json` file) or UNDER it (a directory): md5 over each
- * row's path and updated_at, so any save, delete or rename there changes it. One statement for every path, and no
- * body is read. Null without the DB: files have no cheap stamp, so the caller reads the records instead.
+ * The search index's rebuild (src/server/searchIndex.ts): the record rows AT `rel` (a `.json` file) or UNDER it (a
+ * directory), in path order, `limit` after `after`, read with `c` — the rebuild's own transaction, its RLS org set.
+ * A row past its limits is left out, as readFile refuses it.
  */
-export async function stampOf(paths: readonly string[]): Promise<string[] | null> {
-  const as = paths.map(at);
-  if (!as.length || as.some((a) => !a)) return null;
+export async function rowsUnder(c: PoolClient, org: string, rel: string, after: string, limit: number): Promise<Array<{ rel: string; body: string }>> {
   // A file's range holds the file alone: U+0001 is the least character that can follow its name.
-  const ranges = (as as At[]).map((a) => (JSON_NAME.test(a.rel) ? [a.rel, a.rel + '\u0001'] : under(a.rel)));
-  const r = await sql(
-    as[0] as At,
-    `SELECT md5(coalesce(string_agg(r.path || '@' || (extract(epoch FROM r.updated_at) * 1000000)::bigint, '|' ORDER BY r.path), '')) AS stamp
-     FROM unnest($2::text[], $3::text[]) WITH ORDINALITY AS q(lo, hi, i)
-     LEFT JOIN records r ON r.org_id = $1 AND r.path >= q.lo AND r.path < q.hi
-     GROUP BY q.i ORDER BY q.i`,
-    [ranges.map((x) => x[0]), ranges.map((x) => x[1])],
+  const [lo, hi] = JSON_NAME.test(rel) ? [rel, rel + '\u0001'] : under(rel);
+  const r = await c.query(
+    'SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND path > $4 ORDER BY path LIMIT $5',
+    [org, lo, hi, after, limit],
   );
-  return r.rows.map((x: { stamp: string }) => x.stamp);
+  return (r.rows as Array<{ path: string; body: string }>)
+    .filter((x) => !overLimit(path.join(appPaths.userData(), x.path), x.body))
+    .map((x) => ({ rel: x.path, body: x.body }));
 }
 
 /**
@@ -472,14 +483,20 @@ export async function rename(from: string, to: string): Promise<void> {
       if ((await readRow(a)) === undefined) throw enoent('rename', from);
       return;
     }
-    const r = await sql(
-      a,
-      `WITH gone AS (DELETE FROM records WHERE org_id = $1 AND path = $2 RETURNING body)
-       INSERT INTO records (org_id, path, body) SELECT $1, $3, body FROM gone
-       ON CONFLICT (org_id, path) DO UPDATE SET body = EXCLUDED.body, updated_at = now()`,
-      [a.rel, b.rel],
-    );
-    if (!r.rowCount) throw enoent('rename', from);
+    const moved = await inTx(a, async (c) => {
+      const r = await c.query(
+        `WITH gone AS (DELETE FROM records WHERE org_id = $1 AND path = $2 RETURNING body)
+         INSERT INTO records (org_id, path, body) SELECT $1, $3, body FROM gone
+         ON CONFLICT (org_id, path) DO UPDATE SET body = EXCLUDED.body, updated_at = now()
+         RETURNING body`,
+        [a.org, a.rel, b.rel],
+      );
+      if (!r.rowCount) return false;
+      await onRecordWrite(c, a.org, a.rel, null);
+      await onRecordWrite(c, a.org, b.rel, indexable(b.rel, r.rows[0].body as string));
+      return true;
+    });
+    if (!moved) throw enoent('rename', from);
     return;
   }
   // Across the boundary (a record renamed to a non-record name, or into a tmp).
@@ -541,7 +558,11 @@ export async function rm(p: string, opts?: fs.RmOptions): Promise<void> {
   let rows = 0;
   if (opts?.recursive) {
     const [lo, hi] = under(a.rel);
-    rows = (await sql(a, 'DELETE FROM records WHERE org_id = $1 AND path >= $2 AND path < $3', [lo, hi])).rowCount ?? 0;
+    rows = await inTx(a, async (c) => {
+      const n = (await c.query('DELETE FROM records WHERE org_id = $1 AND path >= $2 AND path < $3', [a.org, lo, hi])).rowCount ?? 0;
+      if (n) await onRangeDelete(c, a.org, a.rel);
+      return n;
+    });
   }
   if (diskErr && !(rows > 0 && (diskErr as NodeJS.ErrnoException).code === 'ENOENT')) throw diskErr;
 }

@@ -80,6 +80,17 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
  * error — most projects have no alerts and must not pay for a try/catch at every
  * call site.
  */
+/** The rules of a parsed alerts.json, sanitized and capped: load's and ⌘K's index's (0022) one reading. */
+export function rulesOf(raw: any): AlertRule[] { // any: the parsed file, sanitized here
+  const rules: AlertRule[] = [];
+  for (const r of Array.isArray(raw?.rules) ? raw.rules : []) {
+    const clean = alerts.sanitizeRule(r);
+    if (clean) rules.push(clean);
+    if (rules.length >= alerts.MAX_RULES) break;
+  }
+  return rules;
+}
+
 export async function load(projectId: string): Promise<AlertFile> {
   if (!UUID_RE.test(String(projectId || ''))) return empty();
   let raw: any;
@@ -88,12 +99,7 @@ export async function load(projectId: string): Promise<AlertFile> {
   } catch (_) {
     return empty(); // missing, unreadable or corrupt — never fatal
   }
-  const rules: AlertRule[] = [];
-  for (const r of Array.isArray(raw?.rules) ? raw.rules : []) {
-    const clean = alerts.sanitizeRule(r);
-    if (clean) rules.push(clean);
-    if (rules.length >= alerts.MAX_RULES) break;
-  }
+  const rules = rulesOf(raw);
   const events: AlertEvent[] = [];
   for (const e of Array.isArray(raw?.events) ? raw.events : []) {
     const clean = alerts.sanitizeEvent(e);

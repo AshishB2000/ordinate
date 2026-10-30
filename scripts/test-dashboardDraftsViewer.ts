@@ -117,7 +117,7 @@ void (async () => {
       ['catalog:sensitivity D', 'catalog:sensitivity', { projectId: P, analysisId: D }],
       ['subscription:preview D', 'subscription:preview', { projectId: P, draft: subDraft(D) }],
       ['subscription:preview E', 'subscription:preview', { projectId: P, draft: subDraft(E) }],
-      ['search:query', 'search:query', { projectId: P, query: 'canary' }],
+      ['search:query', 'search:query', { projectId: P, query: 'draftcanary' }], // ⌘K matches word starts (src/app/searchMatch.ts), not mid-word
       ['search:query board', 'search:query', { projectId: P, query: 'board' }],
     ];
     const walk = async (who: Identity, rank: number | null) => {

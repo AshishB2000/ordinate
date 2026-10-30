@@ -264,6 +264,31 @@ export async function init(): Promise<void> {
   // Intentionally empty — per-project analyses/ dirs are created on demand.
 }
 
+/**
+ * One stored record (parsed, past migrateReady) → its summary AS `publishedOnly` reads it, or null for one the list
+ * skips: listAnalyses's and ⌘K's index's (0022) one parser. The index reads a `ready` record as it is, as a list does
+ * when its migration fails; the next list read migrates it, and that write updates the index.
+ */
+export function summaryOf(projectId: string, data: any, publishedOnly: boolean): AnalysisSummary | null { // any: the parsed record
+  if (!isValidAnalysis(data)) return null;
+  const stored = normalize(data, projectId);
+  // A viewer lists the published copy, by its own name and sheets; a draft is not listed to them at all.
+  const a = publishedOnly ? asPublished(stored) : stored;
+  if (!a) return null;
+  // From the record already read: no second file, no figure.
+  const previewIds = (a.sheets[0]?.cards ?? []).flatMap((c) => (c.type === 'visual' && c.visualId ? [c.visualId] : [])).slice(0, 2);
+  return {
+    id: a.id,
+    name: a.name,
+    sheetCount: a.sheets.length,
+    updatedAt: a.updatedAt,
+    views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
+    ...(previewIds.length ? { previewIds } : {}),
+    status: publishedOnly ? 'published' : statusOf(stored),
+    ...(stored.published ? { publishedAt: stored.published.publishedAt, ...(stored.published.publishedBy ? { publishedBy: stored.published.publishedBy } : {}) } : {}),
+  };
+}
+
 // Return summaries for a project's analyses, newest-updated first. Skips
 // corrupt/missing files quietly (ENOENT silent; real damage logged).
 export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]> {
@@ -284,24 +309,8 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
       const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
-      const data = await migrateReady(projectId, id, JSON.parse(raw));
-      if (!isValidAnalysis(data)) continue;
-      const stored = normalize(data, projectId);
-      // A viewer lists the published copy, by its own name and sheets; a draft is not listed to them at all.
-      const a = publishedOnly ? asPublished(stored) : stored;
-      if (!a) continue;
-      // From the record already read: no second file, no figure.
-      const previewIds = (a.sheets[0]?.cards ?? []).flatMap((c) => (c.type === 'visual' && c.visualId ? [c.visualId] : [])).slice(0, 2);
-      out.push({
-        id: a.id,
-        name: a.name,
-        sheetCount: a.sheets.length,
-        updatedAt: a.updatedAt,
-        views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
-        ...(previewIds.length ? { previewIds } : {}),
-        status: publishedOnly ? 'published' : statusOf(stored),
-        ...(stored.published ? { publishedAt: stored.published.publishedAt, ...(stored.published.publishedBy ? { publishedBy: stored.published.publishedBy } : {}) } : {}),
-      });
+      const a = summaryOf(projectId, await migrateReady(projectId, id, JSON.parse(raw)), publishedOnly);
+      if (a) out.push(a);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         logger.error('[analysis] Skipping corrupt or unreadable analysis:', id, err.message);

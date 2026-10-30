@@ -435,6 +435,12 @@ export async function init(): Promise<void> {
 // Return a project's connections, newest-updated first. Skips corrupt/missing
 // files quietly (ENOENT silent; real damage logged). v1 records are migrated in
 // memory here — reading never rewrites a file.
+/** One stored record → the connection, or null for one the list skips: listConnections's and ⌘K's index's (0022) one parser. */
+export function connectionOf(projectId: string, id: string, raw: string): Connection | null {
+  const data = JSON.parse(raw);
+  return isValidConnection(data) ? normalize(data, projectId, id) : null;
+}
+
 export async function listConnections(projectId: string): Promise<Connection[]> {
   if (!isValidId(projectId)) return [];
   const dir = connectionsDir(projectId);
@@ -451,10 +457,8 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await recordFs.readFile(connectionFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
-      if (!isValidConnection(data)) continue;
-      out.push(normalize(data, projectId, id));
+      const c = connectionOf(projectId, id, await recordFs.readFile(connectionFilePath(projectId, id), 'utf8'));
+      if (c) out.push(c);
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
         logger.error('[connections] Skipping corrupt or unreadable connection:', id, err.message);

@@ -269,6 +269,12 @@ export async function init(): Promise<void> {
  * reader can scan. Skips corrupt/missing files quietly (ENOENT silent; real
  * damage logged), exactly as listVisuals does.
  */
+/** One stored record → its summary, or null for one the list skips: listMetrics's and ⌘K's index's (0022) one parser. */
+export function summaryOf(projectId: string, raw: string): MetricSummary | null {
+  const data = JSON.parse(raw);
+  return isValidMetric(data) ? toSummary(normalize(data, projectId)) : null;
+}
+
 export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
   if (!isValidId(projectId)) return [];
   let dirents;
@@ -284,10 +290,8 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
     const id = dirent.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
-      const raw = await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
-      if (!isValidMetric(data)) continue;
-      out.push(toSummary(normalize(data, projectId)));
+      const m = summaryOf(projectId, await recordFs.readFile(metricFilePath(projectId, id), 'utf8'));
+      if (m) out.push(m);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         logger.error('[metrics] Skipping corrupt or unreadable metric:', id, err.message);

@@ -13,7 +13,6 @@ import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
 import * as recordFs from './recordFs';
 import { removeBlobsUnder } from './blobStore';
-import { forgetProject } from '../server/searchIndex';
 import { logger } from './logger';
 
 export interface Project {
@@ -66,7 +65,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-export function projectDir(id: string): string {
+function projectDir(id: string): string {
   return path.join(getProjectsDir(), id);
 }
 
@@ -298,7 +297,6 @@ export async function deleteProject(id: string): Promise<boolean> {
     if (st && st.isSymbolicLink()) await recordFs.unlink(projectDir(id));
     else await recordFs.rm(projectDir(id), { recursive: true, force: true });
     await removeBlobsUnder(projectDir(id)); // its Image-card pictures (./blobStore.ts)
-    await forgetProject(id).catch((err: Error) => logger.warn('[projects] Could not drop the search index rows:', err.message)); // its record names
     return true;
   } catch (_) {
     return false;
