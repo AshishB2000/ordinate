@@ -10,7 +10,7 @@
 //      `jsAgg` (a fold over the round-tripped rows), compared field by field
 //      with `Object.is`. Every fixture below is integer-valued on purpose:
 //      parallel float summation differs from a JS left-fold by ~1e-13 (see the
-//      known divergences in CLAUDE.md), and this suite must fail on a WRONG
+//      known divergences in .claude/rules/engine.md), and this suite must fail on a WRONG
 //      figure, not on that.
 //
 //   npm run build:ts && node scripts/test-insights.js

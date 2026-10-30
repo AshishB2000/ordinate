@@ -11,7 +11,7 @@ as ratios and orders of magnitude, not as guarantees for your hardware.
 
 | Limit | Value | Where |
 |---|---|---|
-| Rows per dataset | 1,000,000 | `CLAUDE.md`, enforced on import |
+| Rows per dataset | 1,000,000 | `AGENTS.md`, enforced on import |
 | Upload size | `MAX_UPLOAD_MB`, 200 MB by default | [configuration.md](configuration.md#limits-and-egress) |
 | One RPC | `RPC_TIMEOUT_SECONDS` (60 s); one DuckDB query, `DUCKDB_QUERY_TIMEOUT_SECONDS` (60 s) | same |
 | Postgres connections per pod | `DATABASE_POOL_MAX` (10 by default), plus 1 for the cross-pod event bus | size `max_connections` ≥ pods × (`DATABASE_POOL_MAX` + 1) + the migration Job + your sessions; `ordinate_pg_pool_clients{state="waiting"}` above 0 says the pool is too small ([monitoring](monitoring.md#postgres-pool-waiting)). A running dataset refresh holds one of the pool's connections for its length — the lock that keeps two pods from refreshing one dataset at once — at most 3 per pod (the job limit). A save of a record (a comment, an alert rule, a project's settings, an input table…) holds one for the save, in one transaction with the record's lock — at most 4 per pod; an input-table save on S3 storage takes a second one briefly. Keep `idle_in_transaction_session_timeout` at 60 s or more (an input-table save writes its table inside that transaction). A save that waits over 15 s for another's lock is refused with "try again" (HTTP 409 `record_busy`) — [record locks](../record-locks/00-design.md) |

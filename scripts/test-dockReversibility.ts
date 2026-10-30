@@ -50,7 +50,7 @@ const threeSteps: TransformStep[] = [
 // gone) is what proves the append landed, not just that the array grew.
 const proposedStep: TransformStep = { type: 'drop_column', column: 'sku' } as TransformStep;
 
-// Deep, Object.is-based comparison — not JSON.stringify. CLAUDE.md documents
+// Deep, Object.is-based comparison — not JSON.stringify. .claude/rules/engine.md documents
 // float summation and quantile interpolation as sources of genuine divergence
 // between two runs of "the same" computation; Object.is is what a byte-for-
 // byte reversibility claim actually has to survive, and it also treats NaN

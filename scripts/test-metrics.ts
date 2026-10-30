@@ -298,8 +298,8 @@ const REGIONS = ['North', 'South', 'East', 'West'];
 /**
  * INTEGER measures, deliberately.
  *
- * The resident path sums in parallel and the JS path folds left, and CLAUDE.md
- * pins the resulting ~1e-13 disagreement on floats as a known divergence. Whole
+ * The resident path sums in parallel and the JS path folds left, and
+ * .claude/rules/engine.md pins the resulting ~1e-13 disagreement on floats as a known divergence. Whole
  * numbers below 2^53 sum exactly on both, so `Object.is` here is testing the
  * metrics layer rather than re-litigating float addition.
  */

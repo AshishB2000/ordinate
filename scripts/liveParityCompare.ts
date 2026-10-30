@@ -8,7 +8,7 @@
 //   - labels and every non-sum value: `Object.is`;
 //   - sum and avg values (and so "Other" and every roll-up built from them): the
 //     documented float-summation divergence only — parallel summation differs
-//     from a JS left fold by ~1e-13 relative (CLAUDE.md, the resident layer). The
+//     from a JS left fold by ~1e-13 relative (.claude/rules/engine.md). The
 //     largest deviation seen is recorded so the log can quote it;
 //   - order: NOT compared across paths — each path is checked against its own
 //     rule (extract: first-seen; live: dates/bins ascending, text by value).

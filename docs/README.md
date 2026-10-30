@@ -1,7 +1,7 @@
 # Docs
 
 New here? Start with the [README](../README.md). To run Ordinate, go to the
-[operator docs](server/README.md). To work on the code, read [CLAUDE.md](../CLAUDE.md).
+[operator docs](server/README.md). To work on the code, read [AGENTS.md](../AGENTS.md).
 
 ## Current
 

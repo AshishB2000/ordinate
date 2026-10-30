@@ -288,7 +288,7 @@ vulnerability, see [SECURITY.md](SECURITY.md); please don't open a public issue 
 | Look up a setting | [Every environment variable](docs/server/configuration.md) |
 | Keep it safe and current | [Backup and restore](docs/server/backup-restore.md) · [upgrades](docs/server/upgrade.md) |
 | Automate it | [The MCP endpoint and commands](docs/automation.md) |
-| Understand the code | [CLAUDE.md](CLAUDE.md) · [all docs](docs/README.md) |
+| Understand the code | [AGENTS.md](AGENTS.md) · [all docs](docs/README.md) |
 
 <details>
 <summary><b>🛠️ How it's built</b></summary>
@@ -313,7 +313,7 @@ flowchart LR
 | **Live updates and jobs** | Server-sent events, plus a Postgres job queue shared across pods. |
 | **Packaging** | One image for amd64 and arm64, a Compose stack, a Helm chart, and Prometheus `/metrics` on its own port. |
 
-Architecture and conventions are in [CLAUDE.md](CLAUDE.md). The decisions and the measurements
+Architecture and conventions are in [AGENTS.md](AGENTS.md). The decisions and the measurements
 behind them are in [docs/](docs/README.md).
 
 </details>
