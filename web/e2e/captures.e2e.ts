@@ -155,7 +155,7 @@ e2e('capture: upload → read on the server → correct a cell → save → Capt
   await card.getByRole('link', { name: /Regional sales/ }).click();
   await page.getByRole('heading', { level: 1, name: 'Regional sales' }).waitFor();
   // Already a dataset: "Build an analysis" needs no second cell check — the wizard opens on it.
-  assert.match((await page.getByRole('link', { name: 'Build an analysis' }).getAttribute('href')) ?? '', new RegExp(`^/analyses\\?project=${pid}&new=1&dataset=[0-9a-f-]{36}$`));
+  assert.match((await page.getByRole('link', { name: 'Build an analysis' }).getAttribute('href')) ?? '', new RegExp(`^/dashboards\\?project=${pid}&new=1&dataset=[0-9a-f-]{36}$`));
   assert.equal(model.calls, 1, 'opening a stored capture asks no model');
 
   // Delete it: with none left, the way to make one is the empty state.
@@ -239,7 +239,7 @@ e2e('capture: upload on the Captures tab → its page, the analysis beside the s
   await wizard.waitFor();
   // "Start from" is the wizard's second step: it opens there only with a dataset of this project picked.
   await wizard.getByText('Start from a template built for your data, a plain layout, or let a model design it.').waitFor();
-  assert.equal(new URL(page.url()).pathname, '/analyses');
+  assert.equal(new URL(page.url()).pathname, '/dashboards');
   assert.equal(model.calls, before + 1, 'the composer and the wizard open without a model call');
 
   // Back on Captures there is one now: the button opens the same zone in place.
