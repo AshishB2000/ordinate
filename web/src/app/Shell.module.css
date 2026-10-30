@@ -187,6 +187,19 @@
   width: 236px;
   box-shadow: 1px 0 0 var(--border-hairline), var(--shadow-lg);
 }
+/* Home: the rail stays open BESIDE the page, names showing, and hovering it
+   changes nothing. Narrow windows keep the icons there too. */
+@media (min-width: 901px) {
+  .win[data-home] {
+    --rail: 236px;
+  }
+  .win[data-home] > .rail {
+    --names: 1;
+    --wait: 0s;
+    width: var(--rail);
+    box-shadow: none;
+  }
+}
 .navLabel,
 .groupLabel,
 .brandName {

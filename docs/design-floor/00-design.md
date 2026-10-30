@@ -306,7 +306,8 @@ All four are an editor's: hidden, not disabled, for a viewer, and never seeded f
 
 The rail renders each group under a small label (11px, uppercase, tracked, `--muted`) in a
 `role="group"` named by it. The rail is icons only at every width and slides its names out over
-the page on hover or keyboard focus; closed, each label gives way to a hairline. A test
+the page on hover or keyboard focus; closed, each label gives way to a hairline. Home is the
+exception: wider than 900px, the rail stays open beside the page with its names, and hover does nothing. A test
 fails if a main `NAV` entry is in no group or in two, or a group names a route `NAV` does not have
 (negative control: a planted entry).
 
