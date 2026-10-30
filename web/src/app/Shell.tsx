@@ -205,7 +205,8 @@ export function Shell() {
   if (me.data?.user?.mustChangePassword) return <Navigate to={changePasswordPath(here.pathname + here.search)} replace />;
   return (
     <ProjectProvider>
-      <div className={s.win}>
+      {/* Home keeps the rail open with its names (Shell.module.css). */}
+      <div className={s.win} data-home={here.pathname === '/' || undefined}>
         <a className={s.skip} href="#main">
           Skip to content
         </a>

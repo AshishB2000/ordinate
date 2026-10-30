@@ -8,6 +8,7 @@
    free: opening the rail never moves the page. */
 .win {
   --rail: 64px;
+  --rail-open: 184px; /* the longest name (Connections) plus a little air */
   position: relative;
   height: 100%;
   display: flex;
@@ -152,7 +153,7 @@
 /* ── the rail: icons only; the names slide out OVER the page ──
    Closed, it is 64px of icons and each group's heading is a hairline. With the
    pointer resting on it (120ms first, so one crossing it on the way to the page
-   does not pop it out) or keyboard focus inside, it widens to 236px over the
+   does not pop it out) or keyboard focus inside, it widens to --rail-open over the
    page with a shadow; opening waits, closing does not. Picking a section closes
    it until the pointer leaves (Shell.tsx). The labels fade, never leave the
    DOM, so every link keeps its name. The ACTIVE row is a card lifted off the
@@ -184,8 +185,21 @@
 .rail:has(:focus-visible) {
   --names: 1;
   --wait: 120ms;
-  width: 236px;
+  width: var(--rail-open);
   box-shadow: 1px 0 0 var(--border-hairline), var(--shadow-lg);
+}
+/* Home: the rail stays open BESIDE the page, names showing, and hovering it
+   changes nothing. Narrow windows keep the icons there too. */
+@media (min-width: 901px) {
+  .win[data-home] {
+    --rail: var(--rail-open);
+  }
+  .win[data-home] > .rail {
+    --names: 1;
+    --wait: 0s;
+    width: var(--rail);
+    box-shadow: none;
+  }
 }
 .navLabel,
 .groupLabel,
@@ -229,7 +243,7 @@
 .brandName {
   /* Its own width even while the rail is closed, so opening uncovers it, never squeezes it. */
   flex: none;
-  max-width: 164px; /* what the open rail leaves beside the mark */
+  max-width: calc(var(--rail-open) - 72px); /* what the open rail leaves beside the mark */
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 600;

@@ -61,6 +61,16 @@ describe('shell', () => {
     expect(rail.hasAttribute('data-picked')).toBe(false);
   });
 
+  it('keeps the rail open on Home only', async () => {
+    stubFetch(200, []);
+    renderApp('/');
+    const win = screen.getByRole('navigation', { name: 'Sections' }).parentElement!.parentElement!;
+    expect(win.hasAttribute('data-home')).toBe(true);
+    fireEvent.click(screen.getByRole('link', { name: 'Data' }));
+    await screen.findByRole('heading', { level: 1, name: 'Data' });
+    expect(win.hasAttribute('data-home')).toBe(false);
+  });
+
   // The project switcher sits in the top bar, so it shows whether the rail is open or not.
   it('keeps the project switcher in the top bar, out of the rail', () => {
     stubFetch(200, []);
