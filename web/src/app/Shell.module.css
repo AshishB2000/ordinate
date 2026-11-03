@@ -122,6 +122,10 @@
   outline: none;
   color: var(--text);
 }
+/* Same tie as Field.module.css: base.css's global ring would draw a square ring inside the pill's. */
+.searchInput:focus-visible {
+  outline: none;
+}
 .searchInput::placeholder {
   color: var(--text-dim);
 }
