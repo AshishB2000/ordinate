@@ -70,7 +70,7 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
   const id = node.ref ? node.ref.id : '';
   switch (node.kind) {
     case 'source':
-      return { ok: true, note: 'A source — the datasets after it fetch from it.' };
+      return { ok: true, note: 'A source: the datasets after it fetch from it.' };
     case 'dataset': {
       const meta = await datasets.getDatasetMeta(projectId, id);
       if (!meta) return { ok: false, error: 'The dataset is gone.', retryable: false };
@@ -85,7 +85,7 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
         const after = await datasets.getDatasetMeta(projectId, id);
         return r.ok ? { ok: true, rows: after ? after.rowCount : before, rowsBefore: before } : { ok: false, error: 'Its steps could not be re-run.' };
       }
-      return { ok: true, rows: before, note: 'Nothing to fetch — its rows were typed or imported once.' };
+      return { ok: true, rows: before, note: 'Nothing to fetch: its rows were typed or imported once.' };
     }
     case 'quality': {
       const { submitQualityRun } = require('../ipc/quality');
@@ -98,7 +98,7 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
       const warns = q.latest.results.filter((r) => !r.passed && warnIds.has(r.ruleId)).length;
       const warnings = warns ? [`${plural(warns, 'warning rule')} failing`] : [];
       const passed = q.latest.results.filter((r) => r.passed).length;
-      if (failing) return { ok: false, retryable: false, rows: meta.rowCount, warnings, error: `${plural(failing, 'FAIL rule')} failing — what is built from it was stopped.` };
+      if (failing) return { ok: false, retryable: false, rows: meta.rowCount, warnings, error: `${plural(failing, 'FAIL rule')} failing, so what is built from it was stopped.` };
       return { ok: true, rows: meta.rowCount, warnings, note: `${passed} of ${q.latest.results.length} rules passed.` };
     }
     case 'alert': {
@@ -108,14 +108,14 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
       if (!rule.enabled) return { ok: true, note: 'The rule is off, so it was not checked.' };
       const fired: AlertEvent[] = await asJob({ kind: 'compute', label: 'Alert check · ' + node.name, projectId },
         () => require('../ipc/alerts').evaluateAndDeliver(projectId, rule.datasetId));
-      return { ok: true, note: fired.some((e) => e.ruleId === id) ? 'Fired.' : 'Checked — it did not fire.' };
+      return { ok: true, note: fired.some((e) => e.ruleId === id) ? 'Fired.' : 'Checked. It did not fire.' };
     }
     // A report and a publish-to-folder step were drawn and written by the desktop
     // app (a hidden window, a folder on that machine); both went with it (T8.1).
     case 'report':
-      return { ok: false, retryable: false, error: 'Scheduled report files were written by the desktop app, which is gone — generate the report from its page.' };
+      return { ok: false, retryable: false, error: 'Scheduled report files were written by the desktop app, which is gone. Generate the report from its page.' };
     case 'publish':
-      return { ok: false, retryable: false, error: 'Publishing to a folder was the desktop app’s, which is gone — publish the dashboard to a link instead.' };
+      return { ok: false, retryable: false, error: 'Publishing to a folder was the desktop app’s, which is gone. Publish the dashboard to a link instead.' };
   }
   return { ok: false, error: 'Unknown step.' };
 }
@@ -137,7 +137,7 @@ async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: 
       at,
       value: blocked,
       previous: null, delta: null, deltaPct: null,
-      message: `Pipeline: "${n.name}" failed — ${(o.result && o.result.error) || 'it did not finish'}`
+      message: `Pipeline "${n.name}" failed: ${(o.result && o.result.error) || 'it did not finish'}`
         + (blocked ? ` ${plural(blocked, 'step')} after it ${blocked === 1 ? 'was' : 'were'} stopped.` : ''),
       seen: false,
     };
@@ -239,7 +239,7 @@ async function runLocked(projectId: string, start: string[], trigger: 'manual' |
           ...(r && typeof r.rows === 'number' ? { rows: r.rows } : {}),
           ...(r && typeof r.rowsBefore === 'number' ? { rowsBefore: r.rowsBefore } : {}),
           warnings: (r && r.warnings) || [], errors,
-          ...(o.status === 'paused' ? { note: 'Paused — stepped over.' } : r && r.note ? { note: r.note } : {}),
+          ...(o.status === 'paused' ? { note: 'Paused, so it was stepped over.' } : r && r.note ? { note: r.note } : {}),
         }]).then(() => changed(projectId)));
       },
     });

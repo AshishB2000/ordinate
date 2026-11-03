@@ -75,7 +75,7 @@ const at = (marks: ReturnType<typeof E.eventsOnAxis>): string => J(marks.map((m)
   const mover: Insight = {
     id: `${A}:mover:region:revenue:West:2023-11`, kind: 'mover',
     title: 'West revenue rose 18% in 2023-11',
-    detail: 'revenue for "West" rose from 100 in 2023-10 to 118 in 2023-11 — a change of 18 (18%).',
+    detail: 'revenue for "West" rose from 100 in 2023-10 to 118 in 2023-11, a change of 18 (18%).',
     severity: 'info', datasetId: A, column: 'region', periodKey: '2023-11',
     facts: { category: 'West', measure: 'revenue', pctChange: 0.18 },
     chart: { type: 'line', encoding: {} as any, filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] }, // any: the encoding is not read here
@@ -84,7 +84,7 @@ const at = (marks: ReturnType<typeof E.eventsOnAxis>): string => J(marks.map((m)
   const [named, untouched] = E.attributeInsights([mover, trend], [campaign]);
   ok('attribution: the title names the event', named.title === "West revenue rose 18% in 2023-11, during 'Holiday campaign'", named.title);
   ok('attribution: the detail says when it ran',
-    named.detail === 'revenue for "West" rose from 100 in 2023-10 to 118 in 2023-11 — a change of 18 (18%). It falls during \'Holiday campaign\' (Nov 24 – Dec 31, 2023).', named.detail);
+    named.detail === 'revenue for "West" rose from 100 in 2023-10 to 118 in 2023-11, a change of 18 (18%). It falls during \'Holiday campaign\' (Nov 24 – Dec 31, 2023).', named.detail);
   ok('attribution: the facts carry it for the dock', named.facts.event === 'Holiday campaign' && named.facts.eventKind === 'campaign' && named.facts.eventWhen === 'Nov 24 – Dec 31, 2023');
   ok('attribution: the cached original is not mutated', mover.title === 'West revenue rose 18% in 2023-11' && !('event' in mover.facts));
   ok('attribution: a trend is not a change point', untouched === trend);

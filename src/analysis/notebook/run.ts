@@ -174,9 +174,9 @@ function blocked(ctx: Ctx, id: string): string | null {
   if (own && own.error) return own.error;
   for (const up of upstreamOf(ctx.graph, id)) {
     const u = ctx.info.get(up);
-    if (u && u.error) return `${label(u)} has a problem — ${u.error}`;
+    if (u && u.error) return `${label(u)} has a problem: ${u.error}`;
     const c = ctx.cells.get(up);
-    if (c && c.kind === 'param' && c.value === null) return `[[${c.name}]] has no value yet — set it in its parameter cell.`;
+    if (c && c.kind === 'param' && c.value === null) return `[[${c.name}]] has no value yet. Set it in its parameter cell.`;
   }
   return null;
 }
@@ -242,7 +242,7 @@ async function wholeTable(ctx: Ctx, id: string): Promise<Table & { deps: string[
     const res = await abortable(sqlDatasets.runSql(ctx.projectId, plan.sql, plan.params, ROW_LIMIT, plan.views), ctx.signal);
     if (!res.ok) throw new CellError(res.error);
     if (res.truncated) {
-      throw new CellError(`${label(ctx.info.get(id))} returns more than ${ROW_LIMIT.toLocaleString('en-US')} rows — the most one result can hold. Filter or aggregate it.`);
+      throw new CellError(`${label(ctx.info.get(id))} returns more than ${ROW_LIMIT.toLocaleString('en-US')} rows, the most one result can hold. Filter or aggregate it.`);
     }
     out = { columns: res.columns, rows: res.rows, deps: res.deps };
   } else if (cell.kind === 'formula') {

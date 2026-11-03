@@ -73,7 +73,7 @@ export function EventEditor({
       open
       onOpenChange={(o) => !o && onClose()}
       title={name}
-      description="Charts with a date axis mark it at their own grain — a day, week, month, quarter or year — and findings that change during it name it."
+      description="Charts with a date axis mark it at their own grain (a day, week, month, quarter or year), and findings that change during it name it."
       footer={
         <>
           <DialogClose asChild>

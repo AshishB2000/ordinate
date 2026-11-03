@@ -207,7 +207,7 @@ export async function buildReportPages(
       for (const card of sheet.cards || []) {
         if (!card || card.type !== 'visual') continue;
         const tv = await tileFor(card);
-        if (tv && tv.caption && !tv.note) allCaptions.push((tv.title ? tv.title + ' — ' : '') + tv.caption);
+        if (tv && tv.caption && !tv.note) allCaptions.push((tv.title ? tv.title + ': ' : '') + tv.caption);
       }
     }
   }

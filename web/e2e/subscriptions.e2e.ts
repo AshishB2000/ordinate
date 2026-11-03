@@ -57,7 +57,7 @@ e2e('subscriptions (no database): empty list → Subscribe dialog, four steps an
   await slack.waitFor({ timeout: 30_000 });
   await slack.getByText('Retail overview', { exact: true }).waitFor();
   await slack.getByText('$5.2M').first().waitFor();
-  assert.match((await slack.innerText()).replace(/\s+/g, ' '), /Sent by Ordinate · Retail overview — weekdays · Every weekday at 08:00/);
+  assert.match((await slack.innerText()).replace(/\s+/g, ' '), /Sent by Ordinate · Retail overview, weekdays · Every weekday at 08:00/);
   assert.match(await dlg.getByText(/of 50 blocks/).innerText(), /^\d+ of 50 blocks · \d+(\.\d+)? (B|KB)$/);
   await screensInPlace(page, 'subscribe-what');
 

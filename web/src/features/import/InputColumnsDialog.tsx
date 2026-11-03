@@ -111,7 +111,7 @@ export function InputColumnsDialog({ projectId, mode, datasetId, columns = [], o
       title={creating ? 'New input table' : 'Edit columns'}
       description={
         creating
-          ? 'A small table you type into — targets, a budget, a mapping. It is an ordinary dataset: chart it, join it, alert on it.'
+          ? 'A small table you type into, for targets, a budget or a mapping. It is an ordinary dataset: chart it, join it, alert on it.'
           : 'Rename, retype or add columns. Values move with their column; anything that no longer fits its type is kept and flagged.'
       }
       footer={

@@ -57,7 +57,7 @@ export function FreshOnAskPicker({ projectId, d, onChanged, wide }: { projectId:
     <span className={wide ? `${s.fresh} ${s.wide}` : s.fresh} title={on ? EXPLAIN : WHY_OFF}>
       <Select
         size="sm"
-        aria-label={on ? `Fresh on ask for ${d.name}` : `Fresh on ask for ${d.name} — ${NEEDS_INCREMENTAL}`}
+        aria-label={on ? `Fresh on ask for ${d.name}` : `Fresh on ask for ${d.name} (${NEEDS_INCREMENTAL})`}
         className={s.select}
         value={on && stored !== undefined ? String(stored) : 'off'}
         options={freshOptions(stored)}

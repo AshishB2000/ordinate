@@ -177,7 +177,7 @@ export function OverlayEditor({ ov, res, labels, series, onChange }: { ov: Overl
           )}
         </>
       )}
-      {ov.kind === 'trend' && res?.text && <p className={s.note}>{String(res.text)} — least squares; R² is the share of the variation the line explains.</p>}
+      {ov.kind === 'trend' && res?.text && <p className={s.note}>{String(res.text)} (least squares). R² is the share of the variation the line explains.</p>}
       <label className={s.colorField}>
         <span>Colour</span>
         <input type="color" aria-label="Overlay colour" value={typeof ov.color === 'string' ? ov.color : '#6366f1'} onChange={(e) => set({ color: e.target.value })} />

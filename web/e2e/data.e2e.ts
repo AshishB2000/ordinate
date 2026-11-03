@@ -320,7 +320,7 @@ e2e('fresh on ask and incremental refresh: set them beside the schedule, and see
   // Without incremental refresh: there, disabled, the reason in words beside it.
   await page.goto(`/data/${pid}/${ids.snapshotId}`);
   await settled(page);
-  const off = page.getByRole('combobox', { name: 'Fresh on ask for Orders snapshot — needs incremental refresh' });
+  const off = page.getByRole('combobox', { name: 'Fresh on ask for Orders snapshot (needs incremental refresh)' });
   await off.waitFor();
   assert.equal(await off.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
   await page.getByText('needs incremental refresh', { exact: true }).waitFor();

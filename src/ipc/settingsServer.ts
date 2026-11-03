@@ -146,7 +146,7 @@ export async function restoreBackupFile(file: string, j: JobContext): Promise<{ 
     const files = outer.entries.map((e) => e.name).filter((n) => n !== MANIFEST);
     const listed = new Set(manifest.projects.map((p) => (p && typeof p.file === 'string' ? p.file : '')));
     const same = listed.size === manifest.projects.length && listed.size === files.length && files.every((n) => listed.has(n));
-    if (!same) throw new Error('The backup does not match its own list of projects — it was refused as a whole.');
+    if (!same) throw new Error('The backup does not match its own list of projects, so it was refused as a whole.');
 
     const at = new Date(manifest.exportedAt);
     const when = Number.isFinite(at.getTime()) ? at : new Date();
@@ -203,7 +203,7 @@ export function register(): void {
     if (!up) return EXPIRED;
     try {
       const st = await fs.promises.stat(up.path);
-      if (st.size > LOGO_MAX_BYTES) return { ok: false, error: `That logo is ${Math.round(st.size / 1024)} KB — the limit is ${LOGO_MAX_BYTES / 1024} KB.` };
+      if (st.size > LOGO_MAX_BYTES) return { ok: false, error: `That logo is ${Math.round(st.size / 1024)} KB. The limit is ${LOGO_MAX_BYTES / 1024} KB.` };
       const saved = await saveLogo(appPaths.userData(), 'workspace', await fs.promises.readFile(up.path));
       if (!saved.ok) return saved;
       config.save({ branding: { ...config.get().branding, logo: saved.kind } });

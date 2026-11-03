@@ -87,7 +87,7 @@ export function TextBody({ projectId, text, params, filters }: { projectId: stri
   const byName = new Map((list.data ?? []).map((m) => [m.name.toLowerCase(), m.id]));
   const ids = unresolved.map((n) => byName.get(n.toLowerCase())).filter((x): x is string => !!x);
   const values = useMetricValues(projectId, ids, filters, params);
-  if (!text.trim()) return <p className={s.mdEmpty}>Empty text — write Markdown in Properties.</p>;
+  if (!text.trim()) return <p className={s.mdEmpty}>Empty text. Write Markdown in Properties.</p>;
   const token: Token = (name) => {
     const p = substitute(`{{${name}}}`, params);
     if (p !== `{{${name}}}`) return { text: p };

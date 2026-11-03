@@ -99,7 +99,7 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   budget('dashboard open');
   await page.getByRole('button', { name: 'Day: All' }).click();
   const values = page.getByRole('group', { name: 'Day values' });
-  await page.getByText('Showing the first 200 of 725 — search to narrow.').waitFor();
+  await page.getByText('Showing the first 200 of 725. Search to narrow.').waitFor();
   assert.equal(await values.getByRole('button').count(), 201, 'All and the first 200');
   await screensInPlace(page, 'dashboard-value-picker');
   await page.getByRole('searchbox', { name: 'Search values' }).fill('2024-12-30');

@@ -158,7 +158,7 @@ if (!adminUrl) {
     await screensInPlace(page, 'subscribe-message');
     await dlg.getByRole('button', { name: 'Subscribe' }).click();
     await dlg.waitFor({ state: 'detached' });
-    await page.getByText(/^Subscribed — next: /).waitFor();
+    await page.getByText(/^Subscribed\. Next: /).waitFor();
 
     // ── Reports → Subscriptions ────────────────────────────────────────
     await page.goto(`/reports?project=${pid}&tab=subscriptions`);
@@ -188,7 +188,7 @@ if (!adminUrl) {
     // Off: no next run.
     // A controlled switch: it shows the server's state, so it moves when the write has landed.
     await page.getByRole('switch', { name: 'Send Weekly board on its schedule' }).click();
-    await page.getByRole('listitem', { name: 'Weekly board' }).getByText('Off — no next run').waitFor();
+    await page.getByRole('listitem', { name: 'Weekly board' }).getByText('Off: no next run').waitFor();
 
     // ── By email: the Email preview, then a send that arrives at the relay ──
     await page.getByRole('button', { name: 'New subscription' }).first().click();

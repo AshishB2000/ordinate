@@ -34,7 +34,7 @@ export function pick<T extends { id: string; name: string }>(list: readonly T[],
     const hits = list.filter(same);
     if (hits.length === 1) return hits[0];
     if (hits.length > 1) {
-      throw new AutomationError('usage', `${hits.length} ${what}s are called "${r}" — use the id instead (${hits.map((x) => x.id).join(', ')}).`);
+      throw new AutomationError('usage', `${hits.length} ${what}s are called "${r}". Use the id instead (${hits.map((x) => x.id).join(', ')}).`);
     }
   }
   throw new AutomationError('not_found', `No ${what} called "${r}".`);

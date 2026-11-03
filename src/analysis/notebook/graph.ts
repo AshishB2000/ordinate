@@ -113,7 +113,7 @@ export function analyzeNotebook(cells: readonly NbCell[], reserved: Iterable<str
     switch (c.kind) {
       case 'param': {
         const key = c.name.toLowerCase();
-        if (!c.name) fail('Name the parameter — later cells read it as [[name]].');
+        if (!c.name) fail('Name the parameter. Later cells read it as [[name]].');
         else if (params.has(key)) fail(`[[${c.name}]] is already defined above; this one is ignored.`);
         else params.set(key, c);
         info.sig = short({ k: 'param', name: c.name, type: c.type, value: c.value });
@@ -129,9 +129,9 @@ export function analyzeNotebook(cells: readonly NbCell[], reserved: Iterable<str
           const f = fold(t.text);
           if (f === info.view) fail(`A cell cannot read its own view (${info.view}).`);
           else if (above.has(f)) dep(above.get(f) as string);
-          else if (allViews.has(f)) fail(`${f} is a cell below this one — move this cell under it.`);
+          else if (allViews.has(f)) fail(`${f} is a cell below this one. Move this cell under it.`);
           // A titled cell is queried by its title: `cell_2` then names nothing.
-          else if (/^cell_\d+$/.test(f)) fail(`No cell above is called ${f} — a cell with a title is queried by its title.`);
+          else if (/^cell_\d+$/.test(f)) fail(`No cell above is called ${f}. A cell with a title is queried by its title.`);
         }
         const bound = bindSqlParams(c.sql, probeParams(params));
         if ('error' in bound) {
@@ -145,7 +145,7 @@ export function analyzeNotebook(cells: readonly NbCell[], reserved: Iterable<str
         let input: NbCell | undefined;
         for (let j = i - 1; j >= 0 && !input; j -= 1) if (cells[j].kind === 'sql' || cells[j].kind === 'formula') input = cells[j];
         if (input) dep(input.id);
-        else fail('A formula reads the result of the cell above it — add a SQL cell first.');
+        else fail('A formula reads the result of the cell above it. Add a SQL cell first.');
         if (!c.expression.trim()) fail('Write a formula first.');
         readParams(paramRefs(c.expression));
         info.sig = short({ k: 'formula', expression: c.expression, column: c.column, in: info.deps.map((d) => sig.get(d)) });

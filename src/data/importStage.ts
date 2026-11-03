@@ -30,7 +30,7 @@ export const TTL_MS = stageStore.TTL_MS;
 /** Rows the renderer gets to paint — the composer draws 100 per page. */
 export const PREVIEW_ROWS = 2000;
 /** What a save says when the staged table it names is gone (or was never the caller's). */
-export const GONE = 'This import is no longer available — bring the file in again.';
+export const GONE = 'This import is no longer available. Bring the file in again.';
 
 interface Staged {
   table: ParseResult;

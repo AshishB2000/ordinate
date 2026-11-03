@@ -88,7 +88,7 @@ export function ScorecardList({ projectId }: { projectId: string }) {
     body = (
       <EmptyState icon="target" title="No scorecards yet" actions={newButton}>
         A scorecard reads your metrics one period at a time against their targets: on track, at risk or off track, the change on the last period, and a
-        twelve-period trend. Every figure is recomputed by the app — nothing is stored.{!canEdit && ' An editor of this project can create one. You have view-only access.'}
+        twelve-period trend. Every figure is recomputed by the app. Nothing is stored.{!canEdit && ' An editor of this project can create one. You have view-only access.'}
       </EmptyState>
     );
   } else {

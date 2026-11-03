@@ -18,7 +18,7 @@ function SampleLine({ res }: { res: TextPreview }) {
   if (!res.sampled) return null;
   return (
     <div className={s.muted}>
-      Preview of the first {fmtN(res.sampleRows)} of {fmtN(res.total)} rows — saving runs on every row.
+      Preview of the first {fmtN(res.sampleRows)} of {fmtN(res.total)} rows. Saving runs on every row.
     </div>
   );
 }

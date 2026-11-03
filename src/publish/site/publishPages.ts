@@ -118,7 +118,7 @@ function pcScorecard(page: any, root: HTMLElement): void {
     if (grouped) {
       const roll = sc.groups.find((x: any) => x.group === g);
       const tr = pcEl('tr', 'pub-sc-group');
-      const td = pcEl('td', '', (g || 'Other') + (roll && roll.scored ? ` — ${roll.onTrack} of ${roll.scored} on track` : ''));
+      const td = pcEl('td', '', (g || 'Other') + (roll && roll.scored ? `: ${roll.onTrack} of ${roll.scored} on track` : ''));
       td.setAttribute('colspan', '8');
       tr.appendChild(td);
       body.appendChild(tr);

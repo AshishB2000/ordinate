@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   ok('contrast (light): pale yellow on white warns, blue does not',
     JSON.stringify(warnedOn(light)) === JSON.stringify(['--chart-2']), JSON.stringify(tm.themeWarnings(light)));
   const w0 = tm.themeWarnings(light)[0];
-  ok('contrast: the warning names its ratio and floor', w0 && w0.min === 3 && w0.ratio < 3 && /on the surface — needs 3:1$/.test(w0.message), w0 && w0.message);
+  ok('contrast: the warning names its ratio and floor', w0 && w0.min === 3 && w0.ratio < 3 && /on the surface \(needs 3:1\)$/.test(w0.message), w0 && w0.message);
   const dark = { '--bg': '#18181b', '--surface': '#232327', '--text': '#ececee', '--chart-1': '#fbbf24', '--chart-2': '#1e293b' };
   ok('contrast (dark): slate-800 on the dark surface warns, amber does not',
     JSON.stringify(warnedOn(dark)) === JSON.stringify(['--chart-2']), JSON.stringify(tm.themeWarnings(dark)));
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
   const darkTint = { '--surface': '#232327', '--accent-soft': 'rgba(59, 130, 246, 0.16)' };
   const inkWarn = tm.themeWarnings({ ...darkTint, '--accent-text': '#1d4fd0' });
   ok('contrast: a light ink on a dark sheet\'s tint warns at 4.5:1',
-    inkWarn.length === 1 && inkWarn[0].token === '--accent-text' && inkWarn[0].against === '--accent-soft' && /on its fill — needs 4.5:1$/.test(inkWarn[0].message), JSON.stringify(inkWarn));
+    inkWarn.length === 1 && inkWarn[0].token === '--accent-text' && inkWarn[0].against === '--accent-soft' && /on its fill \(needs 4\.5:1\)$/.test(inkWarn[0].message), JSON.stringify(inkWarn));
   ok('contrast: the dark sheet\'s own ink on that tint does not', warnedOn({ ...darkTint, '--accent-text': '#8cbaff' }).length === 0);
   ok('contrast: an ink without its tint is not guessed at', warnedOn({ '--surface': '#232327', '--ok-text': '#065f46' }).length === 0);
 

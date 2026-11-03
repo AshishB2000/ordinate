@@ -77,8 +77,8 @@ export function QueryTree({ schema, onInsert }: { schema: readonly SchemaDataset
         {shown.map(({ d, cols, force }) => {
           const isOpen = force || open.has(d.id);
           const title = d.queryable
-            ? `Insert ${d.slug}${d.alias && d.alias.toLowerCase() !== d.slug ? ` — or query it as ${ident(d.alias)}` : ''}`
-            : 'Saved before datasets were stored as Parquet — import it again to query it.';
+            ? `Insert ${d.slug}${d.alias && d.alias.toLowerCase() !== d.slug ? `, or query it as ${ident(d.alias)}` : ''}`
+            : 'Saved before datasets were stored as Parquet. Import it again to query it.';
           return (
             <div key={d.id}>
               <div
@@ -112,7 +112,7 @@ export function QueryTree({ schema, onInsert }: { schema: readonly SchemaDataset
                 </button>
                 <span className={s.dsText}>
                   <span className={w.rowName}>{d.name}</span>
-                  <span className={s.slug}>{d.queryable ? d.slug : 'not queryable — re-import'}</span>
+                  <span className={s.slug}>{d.queryable ? d.slug : 'not queryable (re-import)'}</span>
                 </span>
                 <span className={w.num} title={`${formatNumber(d.rowCount)} rows`}>
                   {formatNumber(d.rowCount)}

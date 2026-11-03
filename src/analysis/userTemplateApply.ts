@@ -109,7 +109,7 @@ export function planApply(
     const miss = missing(new Set(formulaRefs(cf.expression)));
     const expression = miss.length ? null : formulaFromRefs(cf.expression, name);
     if (expression === null) {
-      dropped.push(`Calculated field “${cf.name}” — needs ${needsLine(miss)}`);
+      dropped.push(`Calculated field “${cf.name}” needs ${needsLine(miss)}`);
       continue;
     }
     if (existingCalc.get(cf.name) === expression) { avail.set(cf.ref, cf.name); continue; }
@@ -125,7 +125,7 @@ export function planApply(
   const metrics: ApplyPlan['metrics'] = [];
   for (const m of body.metrics) {
     const miss = missing(refsIn(m.spec));
-    if (miss.length) { dropped.push(`Metric “${m.name}” — needs ${needsLine(miss)}`); continue; }
+    if (miss.length) { dropped.push(`Metric “${m.name}” needs ${needsLine(miss)}`); continue; }
     const spec = resolve(m.spec) as Obj;
     const reuse = target.metrics.find((x) => x.datasetId === target.datasetId
       && x.name.toLowerCase() === m.name.toLowerCase() && same(x.definition, spec.definition));
@@ -142,7 +142,7 @@ export function planApply(
   const visuals: ApplyPlan['visuals'] = [];
   for (const v of body.visuals) {
     const miss = missing(refsIn(v.spec));
-    if (miss.length) { dropped.push(`Chart “${String(v.spec.name || '')}” — needs ${needsLine(miss)}`); continue; }
+    if (miss.length) { dropped.push(`Chart “${String(v.spec.name || '')}” needs ${needsLine(miss)}`); continue; }
     const enc = obj(v.spec.encoding);
     const geo = obj(enc.geo);
     const level = isRef(enc.category) ? target.geoLevels?.[enc.category.$ref] : undefined;
@@ -170,7 +170,7 @@ export function planApply(
       const c = obj(raw);
       total += 1;
       const miss = missing(refsIn(c));
-      if (miss.length) { dropped.push(`Tile “${cardName(c)}” — needs ${needsLine(miss)}`); continue; }
+      if (miss.length) { dropped.push(`Tile “${cardName(c)}” needs ${needsLine(miss)}`); continue; }
       const out = resolve(c) as Obj;
       cards.push(out);
       tiles += 1;
@@ -184,7 +184,7 @@ export function planApply(
   const filters: unknown[] = [];
   for (const f of body.filters) {
     const miss = missing(refsIn(f));
-    if (miss.length) dropped.push(`A dashboard filter — needs ${needsLine(miss)}`);
+    if (miss.length) dropped.push(`A dashboard filter needs ${needsLine(miss)}`);
     else filters.push(resolve(f));
   }
   // A list parameter whose options came from an unmapped column keeps its name

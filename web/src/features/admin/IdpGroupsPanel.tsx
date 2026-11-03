@@ -38,7 +38,7 @@ function MapDialog({ row, onOpenChange }: { row: IdpGroupRow | null; onOpenChang
       open
       onOpenChange={onOpenChange}
       title={row ? `Map ${row.group}` : 'Map a group'}
-      description="Matched exactly, as your identity provider sends it — case and spaces inside the name count."
+      description="Matched exactly, as your identity provider sends it: case and spaces inside the name count."
       footer={
         <>
           <DialogClose asChild>

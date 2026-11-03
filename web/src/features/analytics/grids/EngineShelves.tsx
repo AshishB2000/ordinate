@@ -54,7 +54,7 @@ function CohortForm({ cols, block, onChange }: { cols: readonly Column[]; block:
     <div className={b.encoding}>
       <Select label="Entity" aria-label="Cohort entity column" value={block.entity} options={pick(entityPool(cols), 'Pick a column')} onValueChange={(v) => set({ entity: v })} />
       <Select label="Event date" aria-label="Cohort event date column" value={block.date} options={pick(cols.filter((c) => c.type === 'date'), 'Pick a date column')} onValueChange={(v) => set({ date: v })} />
-      <Select label="Value" aria-label="Cohort value column" value={block.value ?? ''} options={pick(cols.filter((c) => c.type === 'number'), 'None — retention only')} onValueChange={(v) => set({ value: v || undefined })} />
+      <Select label="Value" aria-label="Cohort value column" value={block.value ?? ''} options={pick(cols.filter((c) => c.type === 'number'), 'None (retention only)')} onValueChange={(v) => set({ value: v || undefined })} />
       <div className={b.row}>
         <span className={b.label}>Grain</span>
         <Segmented

@@ -221,7 +221,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           </DialogClose>
           {step === 3 && !onTemplate && (
             <Button onClick={() => void createFrom('blank')} disabled={busy}>
-              Skip — blank sheet
+              Skip, use a blank sheet
             </Button>
           )}
           <Button variant="primary" onClick={() => void next()} loading={busy} disabled={(step === 1 && !selectedId) || (step === 2 && start === 'template' && !template)}>
@@ -258,7 +258,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           ) : sets.isError ? (
             <ErrorState compact heading={3} title="Datasets could not be loaded" message={sets.error.message} onRetry={() => void sets.refetch()} />
           ) : list.length === 0 ? (
-            <p className={s.none}>This project has no datasets yet. Create one first — a dashboard is built on data.</p>
+            <p className={s.none}>This project has no datasets yet. Create one first: a dashboard is built on data.</p>
           ) : (
             <>
               <div className={s.table} role="radiogroup" aria-label="Dataset">
@@ -369,7 +369,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           {key.isPending ? (
             <p className={s.note}>Checking whether a model is set up…</p>
           ) : key.isError ? (
-            <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works — pick any of the others.</p>
+            <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works, so pick any of the others.</p>
           ) : (
             !aiReady && <AiNotReady status={key.data} className={s.note} />
           )}
@@ -394,7 +394,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
             Describe what you want to see
           </h3>
           <p className={s.aiP}>
-            The model proposes structure only — which sheets, which charts, which calculated fields. Every number is computed by the app from your data,
+            The model proposes structure only: which sheets, which charts, which calculated fields. Every number is computed by the app from your data,
             and you review the whole draft before anything is created.
           </p>
           <Textarea

@@ -156,7 +156,7 @@ const SPECS: SaasSpec[] = [
       { key: 'token', label: 'Personal access token', type: 'password', required: true, secret: true,
         help: 'Create one at airtable.com/create/tokens with the data.records:read scope on this base.' },
       { key: 'baseId', label: 'Base ID', type: 'text', required: true, placeholder: 'appXXXXXXXXXXXXXX',
-        help: 'Starts with "app" — the first code in the base\'s address.' },
+        help: 'Starts with "app". It is the first code in the base\'s address.' },
       { key: 'table', label: 'Table', type: 'text', required: true, placeholder: 'Tasks', help: 'The table\'s name or its ID (tbl…).' },
       { key: 'view', label: 'View', type: 'text', help: 'Optional. Only the records this view shows, in its order.' },
     ],

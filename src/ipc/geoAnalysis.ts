@@ -47,7 +47,7 @@ async function save(projectId: string, datasetId: string, index: number, raw: un
   const rows = typeof meta.rowCount === 'number' ? meta.rowCount : 0;
   const job = jobs.submit({
     kind: 'compute',
-    label: `Assign regions — ${meta.name || 'dataset'}`,
+    label: `Assign regions: ${meta.name || 'dataset'}`,
     projectId,
     datasetId,
     cancellable: false,

@@ -175,7 +175,7 @@ export async function restore(
   }
   const main = await moveBack(projectId, type, id);
   if (!main) {
-    return { ok: false, error: 'It could not be restored — something with the same id is already there.', restored };
+    return { ok: false, error: 'It could not be restored: something with the same id is already there.', restored };
   }
   restored.push(main);
   if (datasetBack) restored.push(datasetBack);

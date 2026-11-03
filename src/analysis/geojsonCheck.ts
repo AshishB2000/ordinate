@@ -82,7 +82,7 @@ export function checkBoundaries(text: string): BoundaryCheck | Refusal {
     const f = raw.features[i];
     const g = f && f.type === 'Feature' ? f.geometry : null;
     if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) {
-      return { ok: false, error: `Region ${i + 1} is not a Polygon or MultiPolygon — only areas can be a choropleth.` };
+      return { ok: false, error: `Region ${i + 1} is not a Polygon or MultiPolygon. Only areas can be a choropleth.` };
     }
     const coords = g.type === 'Polygon'
       ? polygon(g.coordinates, box, budget)
@@ -91,7 +91,7 @@ export function checkBoundaries(text: string): BoundaryCheck | Refusal {
         : null;
     if (!coords || (Array.isArray(coords) && coords.some((p: unknown) => p === null))) {
       return budget.n < 0
-        ? { ok: false, error: 'That file has too many points to draw — simplify it first.' }
+        ? { ok: false, error: 'That file has too many points to draw. Simplify it first.' }
         : { ok: false, error: `Region ${i + 1} has coordinates that are not longitude/latitude.` };
     }
     const props: Record<string, string | number> = {};

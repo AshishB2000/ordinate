@@ -74,7 +74,7 @@ export function ChartStage({
       </div>
     );
   }
-  if (!canRender) return <StageNote type={type}>{`${typeLabel(type)} needs ${needs} — it doesn't fit this data.`}</StageNote>;
+  if (!canRender) return <StageNote type={type}>{`${typeLabel(type)} needs ${needs}, so it doesn't fit this data.`}</StageNote>;
   if (type === 'table') return <DataTable data={data} label={label} />;
   if (isMapChartType(type)) return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} className={s.map} />;
   if (grid) return <FacetGrid grid={grid} data={data} type={type} overrides={overrides} onMark={onMark} />;

@@ -171,7 +171,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
       <span className={g.thCell}>
         <span
           className={`${g.thName} ${profile === c.name ? g.thOn : ''}`}
-          title={[doc?.displayName && `${doc.displayName} — `, doc?.description, doc?.description ? '\n' : '', `${c.name}: profile, sort, rename, type, hide`].filter(Boolean).join('')}
+          title={[doc?.displayName && `${doc.displayName}: `, doc?.description, doc?.description ? '\n' : '', `${c.name}: profile, sort, rename, type, hide`].filter(Boolean).join('')}
         >
           {c.name}
         </span>

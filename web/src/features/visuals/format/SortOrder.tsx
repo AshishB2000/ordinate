@@ -48,7 +48,7 @@ export function SortOrder({ labels, overrides, patch }: { labels: Cx[]; override
         ) : (
           <>
             <Note>Drag to reorder. Categories not in the list follow in their own order.</Note>
-            <ol className={s.order} aria-label="Custom order — drag, or Alt+Up/Down on a focused row">
+            <ol className={s.order} aria-label="Custom order: drag, or Alt+Up/Down on a focused row">
               {order.map((label, i) => (
                 <li
                   key={label}

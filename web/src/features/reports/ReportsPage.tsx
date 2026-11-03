@@ -15,10 +15,10 @@ import { SubscriptionList } from '../subscriptions/SubscriptionList';
 const TABS = ['reports', 'stories', 'scorecards', 'subscriptions'] as const;
 type TabId = (typeof TABS)[number];
 const SUB: Record<TabId, string> = {
-  reports: 'Dashboards as files you can send — PDF, PowerPoint or Word, built from the figures the app computed.',
+  reports: 'Dashboards as files you can send (PDF, PowerPoint or Word), built from the figures the app computed.',
   stories: 'Documents you read top to bottom: prose with live charts and metrics in between.',
   scorecards: 'Metrics against their targets, one period at a time.',
-  subscriptions: 'Dashboards sent to Slack, Teams or email on a schedule — the figures as text, with a link back.',
+  subscriptions: 'Dashboards sent to Slack, Teams or email on a schedule: the figures as text, with a link back.',
 };
 
 export default function ReportsPage() {

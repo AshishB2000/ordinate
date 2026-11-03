@@ -90,7 +90,7 @@ export function resolveRef<T extends CtxRecord>(list: readonly T[], ref: string,
   for (const same of [(x: T) => x.name === r, (x: T) => x.name.toLowerCase() === lower]) {
     const hits = list.filter(same);
     if (hits.length === 1) return { hit: hits[0] };
-    if (hits.length > 1) return { error: `${hits.length} ${what}s are called "${r}" — rename one, or name it by id.` };
+    if (hits.length > 1) return { error: `${hits.length} ${what}s are called "${r}". Rename one, or name it by id.` };
   }
   return { error: `No ${what} called "${r}".` };
 }
@@ -108,8 +108,8 @@ function cloneCtx(ctx: PlanCtx): PlanCtx {
 
 function deferral(ds: CtxDataset): string {
   return typeof ds.importStep === 'number'
-    ? `Checked when it runs — "${ds.name}" is imported by step ${ds.importStep + 1}.`
-    : `Checked when it runs — "${ds.name}" has no columns yet.`;
+    ? `Checked when it runs: "${ds.name}" is imported by step ${ds.importStep + 1}.`
+    : `Checked when it runs: "${ds.name}" has no columns yet.`;
 }
 
 /**
@@ -167,7 +167,7 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
       const name = step.name || step.file.replace(/\.[^.]+$/, '');
       if (!name) return fail('Name the file to import.');
       if (step.file && !/\.(csv|json|xlsx)$/i.test(step.file)) {
-        return fail(`"${step.file}" is not a file Ordinate imports — CSV, JSON or Excel.`);
+        return fail(`"${step.file}" is not a file Ordinate imports (CSV, JSON or Excel).`);
       }
       next.datasets.push({ id: vid, name, columns: null, rowCount: 0, fromRun: true, importStep: index });
       return { check: { ok: true, deferred: 'You pick the file when this step runs.' }, next };
@@ -186,11 +186,11 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
         return fail(t ? `"${t}" is not a prepare step Ordinate knows, or it is missing a field.` : 'The step has no type.');
       }
       const s = clean[0];
-      if (s.type === 'segment') return fail('A segment step carries a fitted model — make it with Find segments.');
+      if (s.type === 'segment') return fail('A segment step carries a fitted model. Make it with Find segments.');
       if (s.type === 'calculated_field') {
         if (!s.name) return fail('The calculated field has no name.');
         const compiled = compile(s.expression);
-        if (!compiled.ok) return fail(`The formula did not compile — ${compiled.error}.`);
+        if (!compiled.ok) return fail(`The formula did not compile: ${compiled.error}.`);
       }
       if (!ds.columns) {
         if (s.type === 'calculated_field') ds.pending = [...(ds.pending || []), { name: s.name, expression: s.expression }];
@@ -261,7 +261,7 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
 
     case 'style': {
       if (!Object.prototype.hasOwnProperty.call(DASHBOARD_STYLE_PRESETS, step.preset)) {
-        return fail(`"${step.preset}" is not a style — clean, executive, dense or dark.`);
+        return fail(`"${step.preset}" is not a style (clean, executive, dense or dark).`);
       }
       if (step.dashboard) {
         const r = resolveRef(next.dashboards, step.dashboard, 'dashboard');
@@ -276,7 +276,7 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
       const r = resolveRef(next.metrics, step.metric, 'metric');
       if (!r.hit) return fail(r.error || 'Unknown metric.');
       const m = r.hit;
-      if (!['>', '<', '>=', '<='].includes(step.op)) return fail(`"${step.op}" is not a comparison an alert can make — use >, <, >= or <=.`);
+      if (!['>', '<', '>=', '<='].includes(step.op)) return fail(`"${step.op}" is not a comparison an alert can make. Use >, <, >= or <=.`);
       if (step.value === null) return fail('An alert needs the number to compare against.');
       // The dataset is checked by the metric resolving above; a virtual one
       // stands in as the zero id so the rest of the rule is judged on its own.
@@ -288,7 +288,7 @@ export function checkStep(step: PlanStep, ctx: PlanCtx, index: number): { check:
         compare: 'threshold',
         threshold: { op: step.op, value: step.value },
       });
-      if (!rule) return fail(`An alert on "${m.name}" is not possible — it needs a ${m.aggregation || 'column'} metric.`);
+      if (!rule) return fail(`An alert on "${m.name}" is not possible: it needs a ${m.aggregation || 'column'} metric.`);
       return { check: { ok: true }, next };
     }
   }

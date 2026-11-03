@@ -129,8 +129,8 @@ function apiMessage(body: string): string {
 const HINT: Record<number, string> = {
   401: 'the credential was rejected',
   403: 'the credential cannot read this',
-  404: 'not found — check the id or name',
-  429: 'rate limited — try again in a minute',
+  404: 'not found; check the id or name',
+  429: 'rate limited; try again in a minute',
 };
 
 /**

@@ -125,7 +125,7 @@ export function ProfilePanel({ projectId, datasetId, column, doc, onClose, onFil
             column={column}
             doc={doc}
             example={p?.mostCommon ?? undefined}
-            trigger={<IconButton icon="info" size="sm" label="Column details — description, display name, sensitivity" />}
+            trigger={<IconButton icon="info" size="sm" label="Column details: description, display name, sensitivity" />}
           />
         </div>
       }

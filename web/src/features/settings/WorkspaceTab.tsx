@@ -127,7 +127,7 @@ function Formats({ f }: { f: FormatPrefs }) {
   const system = typeof navigator !== 'undefined' && navigator.language ? ` (${navigator.language})` : '';
   return (
     <>
-      <Group title="Formats" desc="How every number and date is written — on every chart, card, table and report, for every member.">
+      <Group title="Formats" desc="How every number and date is written on every chart, card, table and report, for every member.">
         <Preview formats={f} />
         <Row title="Locale" desc="Month names, and the grouping and decimal marks when Numbers follows the locale.">
           <div className={s.select}>
@@ -155,7 +155,7 @@ function Formats({ f }: { f: FormatPrefs }) {
               aria-label="Currency"
               value={f.currency}
               onValueChange={(v) => set({ currency: v })}
-              options={OrdFormat.CURRENCIES.map((c) => ({ value: c, label: `${c} — ${OrdFormat.currencySymbol(c)}` }))}
+              options={OrdFormat.CURRENCIES.map((c) => ({ value: c, label: `${c} (${OrdFormat.currencySymbol(c)})` }))}
             />
           </div>
           <Segmented

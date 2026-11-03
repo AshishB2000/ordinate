@@ -128,6 +128,6 @@ export function fromTemplateFile(text: string, newId: () => string): { ok: true;
   if (o.format !== TEMPLATE_FORMAT) return { ok: false, error: 'That file is not an Ordinate template.' };
   if (o.formatVersion !== TEMPLATE_VERSION) return { ok: false, error: 'That template is from a newer version of Ordinate.' };
   const t = sanitizeUserTemplate(o.template, newId);
-  if (!t) return { ok: false, error: 'That template has no name — it was refused.' };
+  if (!t) return { ok: false, error: 'That template has no name, so it was refused.' };
   return { ok: true, template: t };
 }

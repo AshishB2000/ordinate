@@ -42,7 +42,7 @@ export function generateDocs(commands: readonly Command[]): string {
   const index = commands.map((c) =>
     `| ${c.cli ? '`' + c.cli + '`' : '—'} | ${c.tool ? '`' + c.tool + '`' : '—'} | ${c.readOnly ? 'read' : 'writes ' + (c.writes || 'data')} | ${c.summary} |`);
   return [
-    '# Automation — the MCP endpoint',
+    '# Automation: the MCP endpoint',
     '',
     '<!-- GENERATED from src/automation/registry.ts by `node scripts/gen-automation-docs.js`.',
     '     Do not edit by hand: scripts/test-automation.ts fails when this file differs. -->',
@@ -96,7 +96,7 @@ export function generateDocs(commands: readonly Command[]): string {
     '  content, so the draft as stored is what goes live); `unpublish_dashboard` takes it away from viewers.',
     '  Both need editor on the project; a viewer\'s token is refused with a sentence that says so.',
     '- Connections are not exposed. No output ever contains config, API keys, connection passwords or',
-    '  tokens. A dataset\'s origin is reported by KIND only (`file`, `url`, `sql`…) — never its path, URL,',
+    '  tokens. A dataset\'s origin is reported by KIND only (`file`, `url`, `sql`…), never its path, URL,',
     '  query or connection id.',
     '- `query_sql` runs one read-only statement through the same SQL gate as the SQL workbench, in the',
     '  caller\'s org-locked DuckDB worker.',

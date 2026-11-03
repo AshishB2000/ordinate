@@ -84,7 +84,7 @@ export function register(deps: { headless?: boolean }): void {
     try {
       if (!isValidId(projectId)) return { ok: false, error: 'Unknown project.' };
       if (cron !== undefined && cron !== null && (!parseCron(cron) || !isValidTimeZone(tz))) {
-        return { ok: false, error: 'That is not a schedule: five fields — minute, hour, day, month, weekday.' };
+        return { ok: false, error: 'That is not a schedule. It needs five fields: minute, hour, day, month, weekday.' };
       }
       const s = await store.update(projectId, (st) => {
         if (cron === null) { delete st.schedule; return; }

@@ -70,7 +70,7 @@ export default function AdminPage() {
       title="Admin"
       sub={
         accounts
-          ? 'Who can sign in, the teams they belong to, who owns each project, what happened — and the organization’s own settings.'
+          ? 'Who can sign in, the teams they belong to, who owns each project, what happened, and the organization’s own settings.'
           : 'The organization’s own settings: formats, branding, dashboard themes and backups.'
       }
     >

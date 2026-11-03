@@ -5,7 +5,7 @@ import { sampleLine, syncWords } from '../data/SchemaPanel';
 import { chartFeature, LIVE_OFF, LIVE_OFF_CHARTS, LIVE_OFF_LIST } from './offFeatures';
 import { LIVE_OFF_FALLBACK, LiveRefusalError, liveRefusalOf, replyError } from './refusal';
 
-const SENTENCE = 'This is a Live dataset — this isn’t available on Live yet. Make a copy to use it.';
+const SENTENCE = 'This is a Live dataset, and this isn’t available on Live yet. Make a copy to use it.';
 const PIVOT = 'A pivot table cannot be drawn from a Live dataset yet.';
 
 describe('liveRefusalOf — one reading of every "off for Live" shape', () => {
@@ -108,7 +108,7 @@ describe('the Schema panel’s words', () => {
   });
   it('words a sync: what changed, the sample, or the server’s refusal', () => {
     expect(syncWords({ ok: true, status: 'synced', columns: 3, added: ['note'], removed: [], retyped: [], missing: [], sample: { ok: true, rows: 240 } }).text)
-      .toBe('Synced 3 columns — added note. Profiled from 240 rows.');
+      .toBe('Synced 3 columns: added note. Profiled from 240 rows.');
     const skipped = syncWords({ ok: true, status: 'synced', columns: 1, added: [], removed: [], retyped: [], missing: [], sample: { ok: false, error: 'The sample would cost too much, so the last figures are kept.' } });
     expect(skipped).toEqual({ text: 'Synced 1 column. The sample would cost too much, so the last figures are kept.', error: true });
     expect(syncWords({ ok: false, error: 'The warehouse could not be read.' })).toEqual({ text: 'The warehouse could not be read.', error: true });

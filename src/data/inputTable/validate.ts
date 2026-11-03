@@ -77,9 +77,9 @@ const LOOKUP_RULE_ID = '00000000-0000-4000-8000-000000000000';
 /** Why parse.ts's strict rule refused a number, in the words that fix it. */
 function numberReason(t: string): string {
   const digitsOnly = /^[+-]?[\d.]+$/.test(t);
-  if (digitsOnly && /^[+-]?0\d/.test(t)) return 'Leading zeros would be lost as a number — make this a text column to keep them';
-  if (digitsOnly && t.replace(/[^\d]/g, '').length > 15) return 'More than 15 digits cannot be stored exactly as a number — use a text column';
-  if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) return 'Remove the thousands separators — 1200, not 1,200';
+  if (digitsOnly && /^[+-]?0\d/.test(t)) return 'Leading zeros would be lost as a number. Make this a text column to keep them';
+  if (digitsOnly && t.replace(/[^\d]/g, '').length > 15) return 'More than 15 digits cannot be stored exactly as a number. Use a text column';
+  if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) return 'Remove the thousands separators: 1200, not 1,200';
   if (/^[+-]?[$€£¥]|[$€£¥%]$/.test(t)) return 'Type the number without a currency sign or %';
   return 'Not a number';
 }
@@ -101,7 +101,7 @@ export function coerceInput(v: Cell, type: ColumnType): { value: Cell; error?: s
   if (s.trim() === '') return { value: null };
   if (type === 'date') {
     const t = s.trim();
-    return looksLikeDate(t) ? { value: t } : { value: null, error: 'Not a date — type it like 2026-03-31' };
+    return looksLikeDate(t) ? { value: t } : { value: null, error: 'Not a date. Type it like 2026-03-31' };
   }
   return { value: s };
 }

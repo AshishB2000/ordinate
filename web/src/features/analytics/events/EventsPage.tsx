@@ -128,7 +128,7 @@ export default function EventsPage() {
         className={a.head}
         back={back}
         title={<Marked icon="calendar">Events</Marked>}
-        sub="Launches, campaigns, incidents and holidays — marked on every chart with a date axis, and named when a figure changes during one."
+        sub="Launches, campaigns, incidents and holidays: marked on every chart with a date axis, and named when a figure changes during one."
         actions={
           canEdit && (
             <>
@@ -179,8 +179,8 @@ export default function EventsPage() {
               }
             >
               {canEdit
-                ? 'Add a launch, a campaign or an outage and every chart with a date axis marks it — a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.'
-                : 'A launch, a campaign or an outage is marked on every chart with a date axis — a line for a day, a band for a range. An editor of this project can add one. You have view-only access.'}
+                ? 'Add a launch, a campaign or an outage and every chart with a date axis marks it: a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.'
+                : 'A launch, a campaign or an outage is marked on every chart with a date axis: a line for a day, a band for a range. An editor of this project can add one. You have view-only access.'}
             </EmptyState>
           ) : (
             <>
@@ -279,7 +279,7 @@ export default function EventsPage() {
           existing={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={(title, isNew) => {
-            toast(isNew ? `Added "${title}" — every date axis it falls on now marks it.` : `Saved "${title}".`, { kind: 'success' });
+            toast(isNew ? `Added "${title}". Every date axis it falls on now marks it.` : `Saved "${title}".`, { kind: 'success' });
             refresh();
           }}
         />

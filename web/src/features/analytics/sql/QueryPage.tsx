@@ -46,8 +46,8 @@ function Head({ projectId }: { projectId: string }) {
       title={<Marked icon="code">SQL query</Marked>}
       sub={
         canEdit
-          ? 'Every dataset in this project is a table — join, filter and aggregate them, then save the result as a dataset that stays up to date.'
-          : 'Every dataset in this project is a table — join, filter and aggregate them.'
+          ? 'Every dataset in this project is a table. Join, filter and aggregate them, then save the result as a dataset that stays up to date.'
+          : 'Every dataset in this project is a table. Join, filter and aggregate them.'
       }
     />
   );
@@ -188,7 +188,7 @@ function Workbench({ projectId }: { projectId: string }) {
         }
       >
         {canEdit
-          ? 'Every dataset in this project becomes a table you can query with SQL — join them, filter them, aggregate them, and save the result as a dataset that stays up to date.'
+          ? 'Every dataset in this project becomes a table you can query with SQL. Join them, filter them, aggregate them, and save the result as a dataset that stays up to date.'
           : 'Every dataset in this project becomes a table you can query with SQL. An editor of this project can import one. You have view-only access.'}
       </EmptyState>
     );
@@ -227,7 +227,7 @@ function Workbench({ projectId }: { projectId: string }) {
             <span className={result.kind === 'error' ? `${w.note} ${s.statusErr}` : w.note} role="status">
               {status}
             </span>
-            {shown && <span className={`${w.note} ${s.noteEnd}`}>{`${plural(shown.columns.length, 'column')}${shown.truncated ? ` · showing the first 500${canEdit ? ' — Save as dataset keeps them all' : ''}` : ''}`}</span>}
+            {shown && <span className={`${w.note} ${s.noteEnd}`}>{`${plural(shown.columns.length, 'column')}${shown.truncated ? ` · showing the first 500${canEdit ? ' (Save as dataset keeps them all)' : ''}` : ''}`}</span>}
           </div>
           {explained && (
             <ul className={w.chips} aria-label="Columns it returns">

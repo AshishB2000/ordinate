@@ -68,7 +68,7 @@ function targetWarning(target: NavItem['target'], dashboards: { id: string; shee
   if (!target) return 'Choose a dashboard to open.';
   const an = dashboards.find((d) => d.id === target.analysisId);
   if (!an) return 'The target dashboard no longer exists.';
-  if (target.page && !an.sheets.some((p) => p.id === target.page)) return 'The target page no longer exists — it will open on its first page.';
+  if (target.page && !an.sheets.some((p) => p.id === target.page)) return 'The target page no longer exists, so it will open on its first page.';
   return '';
 }
 
@@ -200,7 +200,7 @@ export function InteractionProps({ def }: { def: VisualDef }) {
         const { id, name, datasetId, chartType, encoding, overrides, filters, analytics, updatedAt, tag } = now;
         ed.addVisuals([{ id, name, datasetId, chartType, encoding, overrides: overrides ?? {}, filters, ...(analytics?.length ? { analytics } : {}), updatedAt, tag }]);
       }
-      toast('This visual was changed in another tab or by someone else. Its settings here are now the current ones — make the change again.', { kind: 'error' });
+      toast('This visual was changed in another tab or by someone else. Its settings here are now the current ones. Make the change again.', { kind: 'error' });
     } finally {
       setBusy(false);
     }
@@ -219,7 +219,7 @@ export function InteractionProps({ def }: { def: VisualDef }) {
           : !def.encoding.category
             ? 'Give this visual a category first.'
             : `A click on a mark filters the other cards on the sheet to that ${def.encoding.category}${typeof def.encoding.series === 'string' && def.encoding.series ? ` and ${def.encoding.series}` : ''}; ⌘/Ctrl-click picks several, Esc clears. ${
-                sheetOn ? 'This sheet has Click to filter on (Filters panel) — untick to leave this visual out.' : 'Or turn it on for every visual on the sheet in the Filters panel.'
+                sheetOn ? 'This sheet has Click to filter on (Filters panel). Untick to leave this visual out.' : 'Or turn it on for every visual on the sheet in the Filters panel.'
               }`}
       </p>
       <Checkbox label="Show tooltips" checked={ov.showTooltips !== false} disabled={busy} onCheckedChange={(v) => void write({ showTooltips: v })} />

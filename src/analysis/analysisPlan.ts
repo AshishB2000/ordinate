@@ -377,7 +377,7 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
       dropped.push({
         kind: 'formula',
         where,
-        message: `Calculated field "${fieldName}" on "${ds.name}" dropped: formula did not compile — ${compiled.error}.`,
+        message: `Calculated field "${fieldName}" on "${ds.name}" dropped: formula did not compile (${compiled.error}).`,
       });
       return;
     }
@@ -688,7 +688,7 @@ function validateVisual(
       dropped.push({
         kind: 'filter',
         where,
-        message: `${at} ("${title}"): filter on "${f.column}" dropped — not a column of "${ds.name}".`,
+        message: `${at} ("${title}"): filter on "${f.column}" dropped (not a column of "${ds.name}").`,
       });
       continue;
     }

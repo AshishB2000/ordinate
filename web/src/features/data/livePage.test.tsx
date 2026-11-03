@@ -73,7 +73,7 @@ describe('a Live dataset’s page', () => {
   it('the settings: Live switch on, the cache age, Refresh now — and the Data tab says what needs a copy', async () => {
     const calls = serve();
     renderApp(`/data/${P}/${D}`);
-    await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' }, { timeout: LAZY });
+    await screen.findByRole('heading', { name: 'Live: the rows stay in the warehouse' }, { timeout: LAZY });
     expect((screen.getByRole('switch', { name: 'Live' }) as HTMLInputElement).checked).toBe(true);
     expect((await screen.findByRole('combobox', { name: 'Cache age of Orders (live)' })).textContent).toContain('5 min (default)');
     expect((screen.getByRole('button', { name: 'Refresh now' }) as HTMLButtonElement).disabled).toBe(false);
@@ -92,7 +92,7 @@ describe('a Live dataset’s page', () => {
     fireEvent.click(screen.getByRole('option', { name: '1 h' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'dataset:setMode')?.payload).toEqual({ projectId: P, datasetId: D, mode: 'live', maxCacheAgeSec: 3600 }));
     fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
-    await screen.findByText('Cache reset — the next figure asks the warehouse.');
+    await screen.findByText('Cache reset. The next figure asks the warehouse.');
     expect(calls.find((c) => c.channel === 'dataset:refresh')?.payload).toEqual({ projectId: P, id: D });
   });
 
@@ -113,9 +113,9 @@ describe('a Live dataset’s page', () => {
     const row = screen.getByText('region').closest('tr') as HTMLElement;
     expect(within(row).getByText('North').textContent).toBe('North');
     expect(within(row).queryByText('Values withheld from the Assistant')).not.toBeNull();
-    expect(screen.getByRole('alert').textContent).toContain('discount — used by the visual “Discount by region”');
+    expect(screen.getByRole('alert').textContent).toContain('discount, used by the visual “Discount by region”');
     fireEvent.click(screen.getByRole('button', { name: 'Sync schema' }));
-    await screen.findByText('Synced 3 columns — gone discount. Profiled from 240 rows.');
+    await screen.findByText('Synced 3 columns: gone discount. Profiled from 240 rows.');
     expect(calls.filter((c) => c.channel === 'dataset:syncLiveSchema')).toHaveLength(1);
     expect(readersCalled(calls)).toEqual([]);
   });

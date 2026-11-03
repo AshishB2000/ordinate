@@ -337,7 +337,7 @@ describe('the workbench rail', () => {
 
     fireEvent.click(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }));
     const greyed = (await screen.findAllByRole('option')).filter((o) => o.getAttribute('aria-disabled') === 'true').map((o) => o.textContent);
-    expect(greyed).toEqual(['Refresh every 5 minutes — needs incremental refresh', 'Refresh every 15 minutes — needs incremental refresh']);
+    expect(greyed).toEqual(['Refresh every 5 minutes (needs incremental refresh)', 'Refresh every 15 minutes (needs incremental refresh)']);
     fireEvent.keyDown(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }), { key: 'Escape' });
 
     fireEvent.click(within(live).getByRole('combobox', { name: 'Auto-refresh Live' }));

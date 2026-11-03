@@ -128,7 +128,7 @@ function textOf(m: MessageModel, look: EmailLook, link: string | null): string {
     if (s.note) out.push(s.note);
     const cols = s.columns.filter(Boolean);
     if (cols.length && s.rows.length) out.push(cols.join(' · '));
-    for (const r of s.rows) out.push(`• ${r[0]}${r.length > 1 ? ' — ' + r.slice(1).join(' · ') : ''}`);
+    for (const r of s.rows) out.push(`• ${r[0]}${r.length > 1 ? ': ' + r.slice(1).join(' · ') : ''}`);
     if (s.more > 0) out.push(moreInDashboard(s.more));
   }
   if (m.more > 0) out.push('', moreInDashboard(m.more));

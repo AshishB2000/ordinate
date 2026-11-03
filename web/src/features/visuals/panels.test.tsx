@@ -41,7 +41,7 @@ function serve(routes: Record<string, (payload: Record<string, unknown>) => unkn
 describe('filter words', () => {
   it('summarises a step the way the row shows it', () => {
     expect(stepSummary({ type: 'filter', column: 'r', op: 'in', values: ['a', 'b', 'c', 'd', 'e'] })).toBe('is any of a, b, c +2');
-    expect(stepSummary({ type: 'filter', column: 'r', op: 'not in', values: [] })).toBe('is none of — no values yet');
+    expect(stepSummary({ type: 'filter', column: 'r', op: 'not in', values: [] })).toBe('is none of (no values yet)');
     expect(stepSummary({ type: 'filter', column: 'r', op: 'is_empty' })).toBe('is empty');
     expect(stepSummary({ type: 'filter', column: 'r', op: '>=', value: 3 })).toBe('at least 3');
     expect(stepSummary({ type: 'filter', column: 'r', op: 'period', period: { preset: 'ytd' } }, 'Year to date')).toBe('in Year to date');
@@ -67,7 +67,7 @@ describe('the filter dialog', () => {
     const calls = serve({ 'dataset:distinct': () => ({ values: ['East', 'North'], total: 5 }) });
     const onApply = vi.fn();
     wrap(<FilterDialog projectId={P} datasetId={D} column="region" type="text" lodToggle onClose={() => undefined} onApply={onApply} />);
-    expect(await screen.findByText('Showing the first 2 of 5 values — search to narrow.')).toBeTruthy();
+    expect(await screen.findByText('Showing the first 2 of 5 values. Search to narrow.')).toBeTruthy();
     expect(calls[0].payload).toEqual({ projectId: P, datasetId: D, column: 'region', limit: 200 });
     const apply = screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
     expect(apply.disabled).toBe(true); // nothing chosen → nothing to apply

@@ -78,7 +78,7 @@ function SiteRow({ site, projectId, publicLinks, onRepublish, onEmbed, canEdit }
                   : { label: 'Anyone with the link', icon: 'globe', disabled: !publicLinks, onSelect: () => access.mutate({ id: site.id, access: 'link' }, { onError: fail }) },
                 { kind: 'separator' },
                 {
-                  label: armed ? 'Unpublish — the link stops working' : 'Unpublish…',
+                  label: armed ? 'Unpublish: the link stops working' : 'Unpublish…',
                   icon: 'trash',
                   danger: true,
                   onSelect: () => {
@@ -154,7 +154,7 @@ function SharedLinks({ projectId, preselect, onClosePreselect }: { projectId: st
           }
         >
           {canEdit
-            ? 'Publishing turns dashboards into read-only pages at a link you can share — with their filter bars, built from the figures as they are when you publish.'
+            ? 'Publishing turns dashboards into read-only pages at a link you can share. Each keeps its filter bar and is built from the figures as they are when you publish.'
             : 'An editor of this project can publish its dashboards as read-only pages at a link. You have view-only access.'}
         </EmptyState>
       ) : (

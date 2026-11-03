@@ -64,7 +64,7 @@ describe('Jobs button', () => {
       ],
     });
     renderApp('/');
-    const btn = await screen.findByRole('button', { name: 'Jobs — 1 running, 1 waiting' });
+    const btn = await screen.findByRole('button', { name: 'Jobs: 1 running, 1 waiting' });
     fireEvent.click(btn);
     const pop = await screen.findByRole('dialog', { name: 'Jobs' });
     const running = within(pop).getByRole('region', { name: 'Running' });
@@ -97,10 +97,10 @@ describe('Jobs button', () => {
     const es = FakeSource.last!;
     es.emit('jobs:changed', { pod: 'A', active: [job({ id: 'on-a', state: 'running', progress: 0.1 })], recent: [] });
     es.emit('jobs:changed', { pod: 'B', active: [job({ id: 'on-b', state: 'running', progress: 0.2, label: 'Export' })], recent: [] });
-    expect(await screen.findByRole('button', { name: 'Jobs — 2 running' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Jobs: 2 running' })).toBeTruthy();
     es.emit('jobs:changed', { pod: 'A', active: [], recent: [job({ id: 'on-a', finishedAt: NOW })] }); // A's finished
-    expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs — 1 running' }));
+    expect(await screen.findByRole('button', { name: 'Jobs: 1 running' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs: 1 running' }));
     const pop = await screen.findByRole('dialog', { name: 'Jobs' });
     expect(within(pop).getByText('Export')).toBeTruthy();
     fireEvent.click(within(pop).getByRole('button', { name: 'Clear finished' }));
@@ -114,7 +114,7 @@ describe('Jobs button', () => {
     const es = FakeSource.last!;
     act(() => es.onopen?.()); // the first open
     es.emit('jobs:changed', { pod: 'A', active: [job({ id: 'stale', state: 'running', progress: 0.3 })], recent: [] });
-    expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Jobs: 1 running' })).toBeTruthy();
     act(() => es.onopen?.()); // a reconnect: the list is re-read, and the reply ([]) starts it over
     expect(await screen.findByRole('button', { name: 'Jobs' })).toBeTruthy();
   });
@@ -126,13 +126,13 @@ describe('Jobs button', () => {
     const es = FakeSource.last!;
     expect(es.url).toMatch(/^\/api\/events\?client=[0-9a-f-]{36}$/);
     es.emit('jobs:changed', { active: [job({ state: 'running', progress: 0.1 })], recent: [] });
-    expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Jobs: 1 running' })).toBeTruthy();
     es.emit('jobs:finished', job({}));
     es.emit('jobs:finished', job({ id: 'x', state: 'error', label: 'Import', error: 'Bad file.' }));
     es.emit('jobs:finished', job({ id: 's', silent: true, label: 'Scheduled' }));
     const toasts = screen.getByRole('status', { name: 'Notifications' });
-    expect(within(toasts).getByText('Quality checks — done')).toBeTruthy();
-    expect(within(toasts).getByText('Import — Bad file.')).toBeTruthy();
+    expect(within(toasts).getByText('Quality checks: done')).toBeTruthy();
+    expect(within(toasts).getByText('Import: Bad file.')).toBeTruthy();
     expect(within(toasts).queryByText(/Scheduled/)).toBeNull();
   });
 });

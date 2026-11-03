@@ -50,7 +50,7 @@ export function DockToggle() {
       id={TOGGLE_ID}
       icon="sparkles"
       label="Assistant"
-      title="Assistant — works on what you're looking at (⌘L)"
+      title="Assistant: works on what you're looking at (⌘L)"
       aria-expanded={open}
       aria-controls="dock-panel"
       onClick={() => setDockOpen(!open)}
@@ -70,7 +70,7 @@ export function ThreadMenu({ projectId, threadId, title, onOpen, onAll }: { proj
   const items: MenuEntry[] = !list
     ? note(threads.isError ? 'Conversations could not load' : 'Loading conversations…')
     : list.length === 0
-      ? note('No past conversations yet — ask something below')
+      ? note('No past conversations yet. Ask something below')
       : [
           ...list.slice(0, RECENT).map(
             (t): MenuEntry => ({
@@ -88,7 +88,7 @@ export function ThreadMenu({ projectId, threadId, title, onOpen, onAll }: { proj
       open={open}
       onOpenChange={setOpen}
       trigger={
-        <button type="button" className={s.threadTitle} aria-label={`Conversations — ${title}`} disabled={!projectId}>
+        <button type="button" className={s.threadTitle} aria-label={`Conversations: ${title}`} disabled={!projectId}>
           <span className={s.threadText}>{title}</span>
           <Icon name="chevron-down" />
         </button>
@@ -134,7 +134,7 @@ export function DockMenu({
       onSelect: () => {
         navigator.clipboard.writeText(transcriptText(turns)).then(
           () => toast('Conversation copied.', { kind: 'success' }),
-          () => toast('Copy failed — select the text and copy it instead.', { kind: 'error' }),
+          () => toast('Copy failed. Select the text and copy it instead.', { kind: 'error' }),
         );
       },
     },

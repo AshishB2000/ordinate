@@ -75,7 +75,7 @@ export function RadiusEditor({ seed, onChange }: { seed?: Partial<RadiusState> |
         <input
           className={`${s.input} ${s.place}`}
           type="text"
-          placeholder="City, county or ZIP — e.g. Austin, TX"
+          placeholder="City, county or ZIP, for example Austin, TX"
           aria-label="Place"
           value={text}
           onChange={(e) => lookup(e.target.value)}

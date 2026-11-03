@@ -202,7 +202,7 @@ function AddDriver({ projectId, targets, onAdd }: { projectId: string; targets: 
               label="Column"
               size="sm"
               value={column}
-              options={cols.map((c) => ({ value: `${c.datasetId}|${c.column}`, label: `${c.column} — in ${c.metrics.join(', ')}` }))}
+              options={cols.map((c) => ({ value: `${c.datasetId}|${c.column}`, label: `${c.column} (in ${c.metrics.join(', ')}` }))}
               onValueChange={(v) => setA({ ...a, column: v, fcol: '', fval: '' })}
             />
             <Select
@@ -310,7 +310,7 @@ export function ScenarioSetup({
         </div>
         <div className={s.mchips}>
           {draft.baseMetricIds.length === 0 ? (
-            <p className={s.sideEmpty}>No metrics yet — add the ones you want to see move.</p>
+            <p className={s.sideEmpty}>No metrics yet. Add the ones you want to see move.</p>
           ) : (
             draft.baseMetricIds.map((id) => (
               <span key={id} className={s.mchip}>
@@ -337,7 +337,7 @@ export function ScenarioSetup({
         <div className={s.drivers}>
           {draft.drivers.length === 0 ? (
             <div className={s.driversEmpty}>
-              <p className={s.driversEmptyH}>No drivers yet — every figure is its baseline</p>
+              <p className={s.driversEmptyH}>No drivers yet, so every figure is its baseline</p>
               <p>A driver moves one input: a column&apos;s values (every row, or only some rows) or a metric&apos;s result. The stored data never changes.</p>
               {ideas.length > 0 && (
                 <div className={s.ideas}>

@@ -92,7 +92,7 @@ export function register(): void {
       if (!v) return { ok: false, error: 'That version is gone.' };
       await safetyBackup('before-restore', pid); // a copy of the project first (src/ipc/backups.ts)
       const saved = await writeBack(pid, type, rid, v.record);
-      if (!saved) return { ok: false, error: 'The record could not be restored — it may have been deleted.' };
+      if (!saved) return { ok: false, error: 'The record could not be restored. It may have been deleted.' };
       const meta = await versions.record(pid, type, saved, { restoredFrom: v.savedAt });
       return { ok: true, record: saved, version: meta, unchanged: meta === null };
     } catch (err: any) {

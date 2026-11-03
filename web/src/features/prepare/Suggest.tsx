@@ -10,7 +10,7 @@ import { suggestCalc, suggestSteps, type Step } from './api';
 import { stepSummary } from './steps';
 import s from './Prepare.module.css';
 
-const NOT_READY = 'The Assistant is not connected yet — connect a model from the Assistant panel (⌘J).';
+const NOT_READY = 'The Assistant is not connected yet. Connect a model from the Assistant panel (⌘J).';
 
 type StepsState = { kind: 'idle' } | { kind: 'busy' } | { kind: 'hint'; text: string } | { kind: 'steps'; steps: Step[] };
 
@@ -21,7 +21,7 @@ export function useSuggestSteps(projectId: string, datasetId: string) {
     setState({ kind: 'busy' });
     const r = await suggestSteps(projectId, datasetId).catch(() => null);
     if (r && r.ok && r.steps.length) setState({ kind: 'steps', steps: r.steps });
-    else if (r && r.ok) setState({ kind: 'hint', text: 'No steps suggested — the data already looks ready.' });
+    else if (r && r.ok) setState({ kind: 'hint', text: 'No steps suggested: the data already looks ready.' });
     else if (r && r.notReady) setState({ kind: 'hint', text: NOT_READY });
     else setState({ kind: 'hint', text: (r && !r.ok && r.error) || 'Could not get step suggestions.' });
   }
@@ -42,7 +42,7 @@ export function SuggestedSteps({
   if (state.kind === 'idle') return null;
   return (
     <section className={s.suggest} aria-label="Suggested steps" aria-busy={state.kind === 'busy' || undefined}>
-      <p className={s.aiHead}>Assistant suggestion — structure only; nothing changes until you apply it.</p>
+      <p className={s.aiHead}>Assistant suggestion (structure only). Nothing changes until you apply it.</p>
       {state.kind === 'busy' && <p className={s.muted}>Thinking…</p>}
       {state.kind === 'hint' && (
         <p className={s.muted}>{state.text}</p>
@@ -89,7 +89,7 @@ export function useSuggestCalc(projectId: string, datasetId: string, open: (pref
       open({
         name: r.name,
         expression: r.expression,
-        note: `Assistant suggestion — review and edit; the app compiles and computes the formula.${r.warning ? ` ${r.warning}` : ''}`,
+        note: `Assistant suggestion: review and edit; the app compiles and computes the formula.${r.warning ? ` ${r.warning}` : ''}`,
       });
     } else setHint(r && r.notReady ? NOT_READY : (r && !r.ok && r.error) || 'Could not suggest a calculated field.');
   }

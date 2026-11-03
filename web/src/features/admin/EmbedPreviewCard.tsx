@@ -37,7 +37,7 @@ export function EmbedPreviewCard({ canPreview }: { canPreview: boolean }) {
         </h3>
       </div>
       <p className={s.lead}>
-        Sign a ten-minute preview with the org’s secret and see exactly what a host page would show — before you turn embedding on.
+        Sign a ten-minute preview with the org’s secret and see exactly what a host page would show, before you turn embedding on.
         {!canPreview && ' Generate a signing secret first.'}
       </p>
       <div className={s.previewCols}>

@@ -139,7 +139,7 @@ export function BackupsTab() {
       const r = (await rpc('backups:download')) as { ok: boolean; count?: number; downloadToken?: string; error?: string };
       if (!r.ok || !r.downloadToken) throw new Error(r.error ?? 'The backup failed.');
       startDownload(r.downloadToken);
-      toast(`${r.count} project${r.count === 1 ? '' : 's'} backed up — the download has started.`, { kind: 'success' });
+      toast(`${r.count} project${r.count === 1 ? '' : 's'} backed up. The download has started.`, { kind: 'success' });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'The backup failed.', { kind: 'error' });
     } finally {
@@ -148,14 +148,14 @@ export function BackupsTab() {
   };
   return (
     <div className={s.stackPage}>
-      <Group title="Back up" desc="Every project in the organization — its records, data, version history and share policy — as one file you keep.">
+      <Group title="Back up" desc="Every project in the organization (its records, data, version history and share policy) as one file you keep.">
         <Row title="Download a backup" desc="Unmasked: the backup carries every column as it is, so keep the file as safe as the data. Recorded in the audit log.">
           <Button variant="primary" icon="hard-drive" loading={busy} onClick={() => void download()}>
             Download backup
           </Button>
         </Row>
       </Group>
-      <Group title="Restore" desc="Bring a backup back. Each project returns as a new one, named “… (restored <date>)” — the projects here now are never overwritten.">
+      <Group title="Restore" desc="Bring a backup back. Each project returns as a new one, named “… (restored <date>)”. The projects here now are never overwritten.">
         <Row title="Restore from a backup" desc="Upload a file downloaded from this page. You will be asked to type a word to confirm.">
           <Button icon="rotate-ccw" onClick={() => setRestoring(true)}>
             Restore from a backup…

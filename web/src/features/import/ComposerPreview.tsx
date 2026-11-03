@@ -130,7 +130,7 @@ export function ComposerPreview({ projectId, base, joins, chainKey, head, map, o
       <div className={s.gridHost} ref={gridHost}>
         {!base ? (
           <EmptyState icon="table" title="Nothing to preview yet" heading={3}>
-            Add a saved dataset from the left — the preview fills in as the chain grows.
+            Add a saved dataset from the left. The preview fills in as the chain grows.
           </EmptyState>
         ) : head.isPending ? (
           <SkeletonTable label="Building the preview" />

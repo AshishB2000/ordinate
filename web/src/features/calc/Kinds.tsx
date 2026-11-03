@@ -93,13 +93,13 @@ function WorkedExample() {
         <li className={c.right}>
           <Icon name="circle-check" />
           <span>
-            <strong>As a measure:</strong> 100 ÷ 400 = <b>25%</b> — the margin on everything sold.
+            <strong>As a measure:</strong> 100 ÷ 400 = <b>25%</b>, the margin on everything sold.
           </span>
         </li>
         <li className={c.wrong}>
           <Icon name="alert" />
           <span>
-            <strong>As a column, then averaged:</strong> (10% + 30%) ÷ 2 = <b>20%</b> — wrong: the small order counts as much as the large one.
+            <strong>As a column, then averaged:</strong> (10% + 30%) ÷ 2 = <b>20%</b>. Wrong: the small order counts as much as the large one.
           </span>
         </li>
       </ul>

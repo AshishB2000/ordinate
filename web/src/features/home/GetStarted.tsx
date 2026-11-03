@@ -39,7 +39,12 @@ export function GetStartedPill() {
   if (!d?.show || !d.collapsed) return null;
   const progress = `${d.doneCount} of ${d.total}`;
   return (
-    <button type="button" className={s.pill} aria-label={`Get started: ${progress} done, show the checklist`} onClick={() => set.mutate({ collapsed: false })}>
+    <button
+      type="button"
+      className={s.pill}
+      aria-label={`Get started: ${progress} done. Show the checklist`}
+      onClick={() => set.mutate({ collapsed: false })}
+    >
       <Icon name="circle-check" size={12} />
       <span>Get started</span>
       <span className={s.pillCount}>{progress}</span>

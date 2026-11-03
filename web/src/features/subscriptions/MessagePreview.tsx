@@ -25,7 +25,7 @@ function SlackSection({ sec }: { sec: MessageSection }) {
           {sec.rows.map((r, i) => (
             <li key={i}>
               {r[0]}
-              {r.length > 1 && <span className={s.slackValue}> — {r.slice(1).join(' · ')}</span>}
+              {r.length > 1 && <span className={s.slackValue}>: {r.slice(1).join(' · ')}</span>}
             </li>
           ))}
         </ul>

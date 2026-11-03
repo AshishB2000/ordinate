@@ -48,7 +48,7 @@ export function useMakeCopy(projectId: string, datasetId: string, open?: (copyId
         return;
       }
       for (const key of REFRESH) void client.invalidateQueries({ queryKey: [key] });
-      const what = `Copied into “${r.dataset.name}” — ${rowsText(r.dataset.rowCount)}. The Live dataset is unchanged.`;
+      const what = `Copied into “${r.dataset.name}”: ${rowsText(r.dataset.rowCount)}. The Live dataset is unchanged.`;
       if (open) {
         void navigate(open(r.dataset.id));
         toast(what, { kind: 'success' });
@@ -105,7 +105,7 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
         actions={<MakeCopyButton projectId={projectId} datasetId={datasetId} open={(id) => words.open(projectId, id)} size={compact ? 'sm' : 'md'} />}
       >
         {canEdit
-          ? `${words.why} Make a copy to use it — the copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`
+          ? `${words.why} Make a copy to use it. The copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`
           : `${words.why} An editor of this project can make a copy that keeps its rows here.`}
       </EmptyState>
     </div>

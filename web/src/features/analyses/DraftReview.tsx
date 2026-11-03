@@ -131,7 +131,7 @@ export async function buildDraft(projectId: string, draft: PlanPreview, preferre
       id = (r.analysis as Analysis | undefined)?.id; // a reply is data: guard the shape, not the type
       // Built, but the reply named no dashboard: say where to look rather than claim a failure (anBuildDraft).
       if (!id) {
-        toast('The dashboard was built but not opened — find it in the list.');
+        toast('The dashboard was built but not opened. Find it in the list.');
         return null;
       }
     } else {
@@ -221,7 +221,7 @@ export function DraftFlow({
   };
 
   const refused = (message: string) => <ErrorState compact heading={3} title="Could not draft a dashboard" message={message} onRetry={retry} />;
-  let title = 'Assistant draft — review before creating';
+  let title = 'Assistant draft: review before creating';
   let description: string | undefined;
   let body;
   let close = 'Close';
@@ -261,7 +261,7 @@ export function DraftFlow({
           </Button>
         }
       >
-        Drafting needs a model. Everything else — blank sheets, layouts and templates — works without one.
+        Drafting needs a model. Everything else (blank sheets, layouts and templates) works without one.
       </EmptyState>
     );
   } else if (!reply.ok) body = refused(reply.error || 'Try again.');
@@ -276,7 +276,7 @@ export function DraftFlow({
       const chosen = questions.flatMap((q, i) => (picked[i] ? [{ ask: q.ask, answer: picked[i] }] : []));
       actions = (
         <>
-          <Button onClick={() => answer([])}>Skip — just build it</Button>
+          <Button onClick={() => answer([])}>Skip, just build it</Button>
           <Button variant="primary" disabled={!chosen.length} onClick={() => answer(chosen)}>
             Continue
           </Button>

@@ -408,7 +408,7 @@ export const VARIANTS: MysqlVariant[] = [
     // Some PlanetScale plans do not expose a usable information_schema through
     // the Vitess routing layer; SHOW TABLES always works.
     listVia: 'show_tables',
-    sslHelp: 'PlanetScale requires TLS — this cannot be turned off.',
+    sslHelp: 'PlanetScale requires TLS, so this cannot be turned off.',
   },
   {
     id: 'starrocks',

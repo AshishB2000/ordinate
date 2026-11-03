@@ -17,7 +17,7 @@ import s from './Answer.module.css';
 async function copyLink(): Promise<void> {
   try {
     await navigator.clipboard.writeText(window.location.href);
-    toast('Link copied — anyone with access to this project sees this question.', { kind: 'success' });
+    toast('Link copied. Anyone with access to this project sees this question.', { kind: 'success' });
   } catch {
     toast('The clipboard is not available here.', { kind: 'error' });
   }

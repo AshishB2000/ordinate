@@ -28,7 +28,7 @@ export function DataSearch({ projectId }: { projectId: string }) {
   const on = term.trim().length >= 2;
   // A Live dataset keeps its rows in the warehouse, so the search skips it (L2.6) — said, never silent.
   const live = (useDatasets(projectId).data ?? []).filter((d) => d.mode === 'live').length;
-  const skipped = live === 0 ? '' : live === 1 ? 'One Live dataset was not searched: its rows stay in the warehouse — make a copy to search it.' : `${formatNumber(live)} Live datasets were not searched: their rows stay in the warehouse — make a copy to search one.`;
+  const skipped = live === 0 ? '' : live === 1 ? 'One Live dataset was not searched: its rows stay in the warehouse. Make a copy to search it.' : `${formatNumber(live)} Live datasets were not searched: their rows stay in the warehouse. Make a copy to search one.`;
   const base = (id: string) => `/data/${projectId}/${id}`;
   return (
     <section className={s.search} aria-label="Search inside the data">
@@ -36,7 +36,7 @@ export function DataSearch({ projectId }: { projectId: string }) {
         type="search"
         icon="search"
         aria-label="Search values in this project's datasets"
-        placeholder="Find a value in your data — a name, an id, a place…"
+        placeholder="Find a value in your data: a name, an id, a place…"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => e.key === 'Escape' && setText('')}

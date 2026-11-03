@@ -54,7 +54,7 @@ function ThemeList({ state, onEdit }: { state: ThemeState; onEdit: (d: Draft) =>
   const duplicate = (name: string, tokens: Tokens) => dup.mutate({ name: uniqueName(`Copy of ${name}`, state.themes), tokens });
   return (
     <div className={s.stackPage}>
-      <Group title="Workspace theme" desc="Colours, fonts and card style every dashboard in the organization wears — unless its own Style panel picks another.">
+      <Group title="Workspace theme" desc="Colours, fonts and card style every dashboard in the organization wears, unless its own Style panel picks another.">
         <Row title="Every dashboard wears" desc={state.themes.length ? undefined : 'Make a theme below first.'}>
           <div className={s.select}>
             <Select
@@ -62,7 +62,7 @@ function ThemeList({ state, onEdit }: { state: ThemeState; onEdit: (d: Draft) =>
               value={state.defaultId}
               disabled={!state.themes.length}
               onValueChange={(v) => setDefault.mutate(v)}
-              options={[{ value: '', label: 'None — each dashboard’s own style' }, ...state.themes.map((x) => ({ value: x.id, label: x.name }))]}
+              options={[{ value: '', label: 'None (each dashboard’s own style)' }, ...state.themes.map((x) => ({ value: x.id, label: x.name }))]}
             />
           </div>
         </Row>

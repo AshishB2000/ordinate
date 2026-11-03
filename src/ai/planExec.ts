@@ -167,7 +167,7 @@ async function runMetric(run: PlanRun, step: Extract<PlanStep, { kind: 'metric' 
   const m = await metrics.saveMetric(pid, {
     name: step.name, datasetId: ds.id, definition: { column: step.column, aggregation: step.aggregation }, filters: [],
   });
-  if (!m) return { ok: false, error: 'Could not save the metric — check the dataset still exists.' };
+  if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
   await versions.record(pid, 'metric', m);
   const kpi = await kpiOf(pid, m.id);
   return {
@@ -299,7 +299,7 @@ export async function undoGroup(projectId: string, g: UndoGroup): Promise<{ ok: 
     return r.ok ? { ok: true } : { ok: false, error: 'It could not be moved to the Trash.' };
   }
   const saved = await writeBack(projectId, g.type, g.id, g.before);
-  if (!saved) return { ok: false, error: 'It could not be put back — it may have been deleted.' };
+  if (!saved) return { ok: false, error: 'It could not be put back. It may have been deleted.' };
   if (versions.isVersionType(g.type)) await versions.record(projectId, g.type, saved);
   return { ok: true };
 }
@@ -319,7 +319,7 @@ const FIX_PROMPT =
 
 /** Fix: re-ask the model with the app's error; the answer is checked like any step. */
 export async function fixStep(run: PlanRun, index: number): Promise<{ ok: true; step: PlanStep } | { ok: false; error: string }> {
-  if (!(await execConfig.executionReady())) return { ok: false, error: 'Fix needs an AI model — set one up in Settings, or edit the step yourself.' };
+  if (!(await execConfig.executionReady())) return { ok: false, error: 'Fix needs an AI model. Set one up in Settings, or edit the step yourself.' };
   const ctx = await loadProjectCtx(run.projectId, ownKeys(run));
   const text = [
     'FACTS', ctxFactsText(ctx), '',

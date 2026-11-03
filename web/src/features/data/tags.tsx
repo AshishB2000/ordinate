@@ -155,7 +155,7 @@ export function TagEditor({ value, index, onChange }: { value: readonly string[]
       <input
         className={s.tagInput}
         value={text}
-        placeholder={value.length ? 'Add a tag' : 'Add a tag — sales, finance…'}
+        placeholder={value.length ? 'Add a tag' : 'Add a tag: sales, finance…'}
         aria-label="Add a tag"
         role="combobox"
         aria-expanded={focused && options.length > 0}

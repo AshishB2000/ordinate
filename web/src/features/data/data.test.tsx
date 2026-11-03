@@ -143,8 +143,8 @@ describe('Data list', () => {
     fireEvent.click(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }));
     const opts = await screen.findAllByRole('option');
     const state = (label: RegExp) => opts.filter((o) => label.test(o.textContent ?? '')).map((o) => `${o.textContent}:${o.getAttribute('aria-disabled') ?? 'on'}`);
-    expect(state(/^Every 5 minutes/)).toEqual(['Every 5 minutes — needs incremental refresh:true']);
-    expect(state(/^Every 15 minutes/)).toEqual(['Every 15 minutes — needs incremental refresh:true']);
+    expect(state(/^Every 5 minutes/)).toEqual(['Every 5 minutes (needs incremental refresh):true']);
+    expect(state(/^Every 15 minutes/)).toEqual(['Every 15 minutes (needs incremental refresh):true']);
     expect(state(/^Hourly/)).toEqual(['Hourly:on']);
     fireEvent.keyDown(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }), { key: 'Escape' });
 
@@ -196,13 +196,13 @@ describe('Live datasets (L2.1)', () => {
       'dataset:source': { body: { kind: 'connection', label: 'Connection · Warehouse · orders', refreshable: true, live: true, maxCacheAgeSec: 300 } },
     });
     renderApp(`/data/${P}/${D}`);
-    expect(await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Live: the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
     expect(await screen.findByText('Live · cached up to 5 min')).toBeTruthy();
     // L2.6: Quality, Insights and Snapshots stay as tabs, each saying why it is off and offering a copy.
     fireEvent.mouseDown(screen.getByRole('tab', { name: /Quality/ }), { button: 0 });
     expect(await screen.findByRole('heading', { name: 'Quality checks are off for Live datasets' })).toBeTruthy();
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Data' }), { button: 0 });
-    await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' });
+    await screen.findByRole('heading', { name: 'Live: the rows stay in the warehouse' });
     expect(screen.queryByRole('link', { name: 'Prepare' })).toBeNull();
     expect(calls.some((c) => ['dataset:page', 'dataset:stats', 'quality:list', 'insights:list'].includes(c.channel))).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Copy the data instead' }));
@@ -261,7 +261,7 @@ describe('Columns tab: "Also called"', () => {
     expect(input.value).toBe('sales');
     expect((await field('gross')).value).toBe(''); // a column nobody has named yet: an empty field, not an error
     expect(document.getElementById(input.getAttribute('aria-describedby') ?? '')?.textContent)
-      .toBe('Also called — Other names people use for this column. The Assistant understands them in questions. Separate names with commas.');
+      .toBe('Also called: Other names people use for this column. The Assistant understands them in questions. Separate names with commas.');
     await waitFor(() => expect(input.readOnly).toBe(false)); // the roles arrived: an editor
     fireEvent.change(input, { target: { value: ' Revenue,  sales ,, revenue' } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -433,7 +433,7 @@ describe('Data helpers', () => {
     expect(freshness({ updatedAt: '2026-10-01T10:00:00Z', sourceKind: 'json', originKind: 'connection', autoRefresh: { every: '15min' } })).toMatch(/^Refreshes every 15 minutes · last /);
     const off = cadenceOptions(SCHEDULES, false);
     expect(off.filter((o) => o.disabled).map((o) => o.value)).toEqual(['5min', '15min']);
-    expect(off.find((o) => o.value === '5min')?.label).toBe('Every 5 minutes — needs incremental refresh');
+    expect(off.find((o) => o.value === '5min')?.label).toBe('Every 5 minutes (needs incremental refresh)');
     expect(cadenceOptions(SCHEDULES, true).some((o) => o.disabled)).toBe(false);
     expect(cadenceOptions(SCHEDULES, true).map((o) => o.value)).toEqual(['off', '5min', '15min', 'hourly', 'daily', 'weekly']);
   });

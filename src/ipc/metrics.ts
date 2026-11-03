@@ -474,7 +474,7 @@ export function register() {
         ...raw,
         filters: sanitizeDashboardFilters(raw.filters),
       });
-      if (!m) return { ok: false, error: 'Could not save the metric — check the dataset still exists.' };
+      if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
       await versions.record(projectId, 'metric', m);
       return { ok: true, metric: m };
     } catch (err: any) {

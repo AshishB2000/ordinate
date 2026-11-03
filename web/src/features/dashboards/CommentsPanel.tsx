@@ -76,7 +76,7 @@ export function CommentDoor({ projectId, kind, id, disabledReason }: { projectId
   });
   const threads = id ? threadsOn(q.data?.comments, kind, id) : [];
   const n = threads.filter((c) => !c.resolvedAt).length;
-  const label = !id ? (disabledReason ?? 'Comments') : n ? `${n} open comment${n === 1 ? '' : 's'}` : threads.length ? 'Comments — all resolved' : 'Comments';
+  const label = !id ? (disabledReason ?? 'Comments') : n ? `${n} open comment${n === 1 ? '' : 's'}` : threads.length ? 'Comments: all resolved' : 'Comments';
   return (
     <>
       <Button size="sm" variant="ghost" icon="message-square" disabled={!id} title={label} aria-label={label} onClick={() => setOpen(true)}>
@@ -92,7 +92,7 @@ export function CommentButton({ ed, card }: { ed: EditorApi; card: Card }) {
   const q = useComments(ed.projectId);
   const threads = threadsOn(q.data?.comments, 'card', card.id);
   const open = threads.filter((c) => !c.resolvedAt).length;
-  const label = open ? `${open} open comment${open === 1 ? '' : 's'}` : threads.length ? 'Comments — all resolved' : 'Comment on this';
+  const label = open ? `${open} open comment${open === 1 ? '' : 's'}` : threads.length ? 'Comments: all resolved' : 'Comment on this';
   return (
     <button type="button" className={open ? `${s.cmtBtn} ${s.cmtOn}` : s.cmtBtn} data-keep={open ? '' : undefined} aria-label={label} title={label} onClick={() => ed.view.openComments({ kind: 'card', id: card.id })}>
       <Icon name="message-square" size={12} />
@@ -288,7 +288,7 @@ export function CommentsDrawer({ projectId, target, dashboard, title: titleIn, o
           Every thread on this dashboard is resolved.
         </EmptyState>
       ) : (
-        <EmptyState compact heading={3} icon="message-square" title="No comments yet — start the discussion">
+        <EmptyState compact heading={3} icon="message-square" title="No comments yet. Start the discussion">
           Ask a question, flag a number or leave a note for whoever opens this next.
         </EmptyState>
       );

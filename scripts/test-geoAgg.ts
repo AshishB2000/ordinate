@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     [{ type: 'filter', column: 'lat', op: 'within_km', radius: { lngColumn: 'lng', lat: 30.2672, lng: -97.7431, km: 40 } }]);
   {
     const minmax = await diff('hexbin with a max measure (shown as the sum, with a note)', proj.id, ds.id, hexEnc('max'));
-    ok('…says so', !!minmax && minmax.warnings.some((w: string) => /showing the sum/.test(w)));
+    ok('…says so', !!minmax && minmax.warnings.some((w: string) => /shows the sum/.test(w)));
   }
 
   const flowEnc = (agg: string, names = true): unknown => ({

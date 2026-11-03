@@ -116,7 +116,7 @@ export function useRefresh(projectId: string) {
     // Warnings are not a failure — the data landed, but a step no longer fits it.
     // Nor is "already being refreshed" (another server got there first).
     // A Live dataset fetches nothing: its refresh resets the cache (L2.6), and says so.
-    const message = r.ok ? (r.live ? 'Cache reset — the next figure asks the warehouse.' : (r.warnings ?? []).join(' · ')) : r.error || 'Could not refresh this dataset.';
+    const message = r.ok ? (r.live ? 'Cache reset. The next figure asks the warehouse.' : (r.warnings ?? []).join(' · ')) : r.error || 'Could not refresh this dataset.';
     setState((m) => ({ ...m, [id]: { message, error: !r.ok && !r.alreadyRunning } }));
     return r.ok || r.alreadyRunning === true;
   };
@@ -231,7 +231,7 @@ export function DatasetList({ projectId }: { projectId: string }) {
         }
       >
         {canEdit
-          ? 'Import a CSV, JSON or Excel file, paste data straight in, or connect a database, warehouse or app — each saves a structured dataset in this project.'
+          ? 'Import a CSV, JSON or Excel file, paste data straight in, or connect a database, warehouse or app. Each saves a structured dataset in this project.'
           : 'An editor of this project can import a file, paste data in or connect a database. You have view-only access.'}
       </EmptyState>
     );

@@ -19,7 +19,7 @@ import s from './Prepare.module.css';
 type Found = Extract<SimilarReply, { ok: true }>;
 type State = { kind: 'idle' } | { kind: 'busy' } | { kind: 'error'; text: string } | { kind: 'found'; reply: Found; asked: boolean; off: ReadonlySet<string> };
 
-const NOT_READY = 'The Assistant is not connected yet — connect a model from the Assistant panel (⌘J).';
+const NOT_READY = 'The Assistant is not connected yet. Connect a model from the Assistant panel (⌘J).';
 const plural = (n: number, one: string, many: string): string => `${fmtN(n)} ${n === 1 ? one : many}`;
 
 function detail(c: ValueCluster): string {
@@ -59,7 +59,7 @@ export function SimilarValues({
         {state.kind === 'error' ? (
           <p className={s.problem} role="alert">{state.text}</p>
         ) : (
-          <p className={s.hint}>Looks for values that are the same thing written differently — case, punctuation, “Inc.” and “LLC” — and offers them as rules.</p>
+          <p className={s.hint}>Looks for values that are the same thing written differently (case, punctuation, “Inc.” and “LLC”) and offers them as rules.</p>
         )}
       </div>
     );
@@ -86,7 +86,7 @@ export function SimilarValues({
     <section className={s.suggest} aria-label="Similar values">
       <p className={s.aiHead}>
         {reply.clusters.length
-          ? `${plural(reply.clusters.length, 'group', 'groups')} of similar values in “${column}” — nothing changes until you add them as rules and save the step.`
+          ? `${plural(reply.clusters.length, 'group', 'groups')} of similar values in “${column}”. Nothing changes until you add them as rules and save the step.`
           : `No similar values among the ${plural(reply.distinct, 'value', 'values')} of “${column}”.`}
       </p>
       {reply.clusters.length > 0 && (
@@ -103,7 +103,7 @@ export function SimilarValues({
           ))}
         </ul>
       )}
-      {reply.more > 0 && <p className={s.muted}>{plural(reply.more, 'more group', 'more groups')} — add these, save the step, and look again.</p>}
+      {reply.more > 0 && <p className={s.muted}>{plural(reply.more, 'more group', 'more groups')}. Add these, save the step, and look again.</p>}
       {note && <p className={s.muted}>{note}</p>}
       <div className={s.actions}>
         {reply.clusters.length > 0 && (

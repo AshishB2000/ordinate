@@ -33,7 +33,7 @@ export const GRID_STRINGS = {
   'cohortRender.s_since_first_event': '{periodNoun}s since first event',
   'cohortRender.showing_the_latest_cohorts_and_first': 'Showing the latest {cohortsCount} cohorts and first {periods} {p2}s.',
   'cohortRender.step_entities': 'Step {p0}, {step}: {p2} entities{p3}',
-  'cohortRender.top': ' — top {groupsCount}',
+  'cohortRender.top': ' (top {groupsCount})',
   'cohortRender.weighted_by_cohort_size_over_the': 'Weighted by cohort size, over the cohorts that have reached each period',
   'cohortRender.without_an_entity_or_a_readable': '{excluded} {excluded2, plural, one {row} other {rows}} without an entity or a readable date left out.',
   'cohortRender.without_an_entity_or_a_readable_2': '{excluded} {excluded2, plural, one {row} other {rows}} without an entity or a readable timestamp left out.',
@@ -49,7 +49,7 @@ export const GRID_STRINGS = {
   'pivotRender.ascending': ', ascending',
   'pivotRender.descending': ', descending',
   'pivotRender.pick_a_row_dimension_and_at': 'Pick a row dimension and at least one value to build a pivot.',
-  'pivotRender.showing_the_first_row_groups_and': 'Showing the first {p0} row groups and {p1} column groups — narrow the pivot with a filter or Top N to see the rest.',
+  'pivotRender.showing_the_first_row_groups_and': 'Showing the first {p0} row groups and {p1} column groups. Narrow the pivot with a filter or Top N to see the rest.',
   'pivotRender.sort_by': 'Sort by {p0}{p1}',
 } as const;
 

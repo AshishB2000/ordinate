@@ -11,8 +11,8 @@ import pk from './Pickers.module.css';
 export type PickKind = 'text' | 'heading' | 'visual' | 'metric' | 'metrics_row' | 'image' | 'divider' | 'callout';
 
 export const PICKS: Array<{ kind: PickKind; label: string; icon: IconName; hint: string }> = [
-  { kind: 'text', label: 'Text', icon: 'type-text', hint: 'A paragraph — Markdown works' },
-  { kind: 'heading', label: 'Heading', icon: 'list', hint: 'A section — it opens a page when presenting' },
+  { kind: 'text', label: 'Text', icon: 'type-text', hint: 'A paragraph (Markdown works)' },
+  { kind: 'heading', label: 'Heading', icon: 'list', hint: 'A section that opens a page when presenting' },
   { kind: 'visual', label: 'Chart', icon: 'chart-bar', hint: 'A saved chart, live' },
   { kind: 'metric', label: 'Metric', icon: 'zap', hint: 'One named number, live' },
   { kind: 'metrics_row', label: 'Metrics row', icon: 'columns', hint: 'Up to four metrics side by side' },

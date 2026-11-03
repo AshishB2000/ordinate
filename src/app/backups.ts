@@ -89,7 +89,7 @@ async function projectFolder(root: string, p: { id: string; name: string }): Pro
   const want = path.join(root, folderName(p));
   // A folder on a drive that is not connected must fail, not be re-created on
   // the boot disk by a recursive mkdir: only the last level is ever created.
-  if (!fs.existsSync(path.dirname(root))) throw new Error('The backup folder is not available — is its drive connected?');
+  if (!fs.existsSync(path.dirname(root))) throw new Error('The backup folder is not available. Is its drive connected?');
   await fs.promises.mkdir(root, { recursive: true });
   if (!fs.existsSync(want)) {
     const suffix = ` — ${p.id.slice(0, 8)}`;

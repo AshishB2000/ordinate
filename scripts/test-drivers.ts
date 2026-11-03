@@ -282,7 +282,7 @@ function scopeChecks(): void {
     drv.driversCaption({ metric: 'Revenue', delta: -412, deltaText: '$412K', top: { label: 'West', share: 61.2 }, lead: { label: 'California', deltaText: '−$190K' } }) ===
       'Revenue fell $412K; West explains 61%, led by California at −$190K.');
   ok('caption: offsetting members are named as such',
-    /explains 121% — other members offset part of it/.test(drv.driversCaption({ metric: 'Revenue', delta: -1, deltaText: '1', top: { label: 'West', share: 121 }, lead: null })));
+    /explains 121% \(other members offset part of it\)/.test(drv.driversCaption({ metric: 'Revenue', delta: -1, deltaText: '1', top: { label: 'West', share: 121 }, lead: null })));
   ok('caption: no change', drv.driversCaption({ metric: 'Units', delta: 0, deltaText: '0', top: null, lead: null }) === 'Units did not change overall.');
   ok('caption: members that cancel out are named as offsetting, not as 1,457%',
     drv.driversCaption({ metric: 'Profit', delta: 215.8, deltaText: '$215.8', top: { label: 'California', share: 1457, deltaText: '+$3.1K' }, lead: null, offsetting: true }) ===

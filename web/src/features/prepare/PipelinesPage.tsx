@@ -24,7 +24,7 @@ import { PipelinesGraph } from './PipelinesGraph';
 import s from './Pipelines.module.css';
 
 const TITLE = 'Pipelines';
-const SUB = 'Refreshes, the SQL datasets built on them, quality checks, alerts, reports and publishes — one pipeline you can schedule, run and watch.';
+const SUB = 'Refreshes, the SQL datasets built on them, quality checks, alerts, reports and publishes, all in one pipeline you can schedule, run and watch.';
 
 export default function PipelinesPage() {
   const { projectId: linked } = useParams();
@@ -78,7 +78,7 @@ function Pipeline({ projectId }: { projectId: string }) {
     else if (r.failed) {
       const stopped = r.blocked ? `, ${r.blocked} stopped after ${r.failed === 1 ? 'it' : 'them'}` : '';
       toast(`${r.failed} ${r.failed === 1 ? 'step' : 'steps'} failed${stopped}. An alert was raised.`, { kind: 'error' });
-    } else toast(`Pipeline ran — ${r.done} ${r.done === 1 ? 'step' : 'steps'} done.`, { kind: 'success' });
+    } else toast(`Pipeline ran: ${r.done} ${r.done === 1 ? 'step' : 'steps'} done.`, { kind: 'success' });
     reload();
   }
 

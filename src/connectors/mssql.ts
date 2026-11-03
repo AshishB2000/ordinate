@@ -352,7 +352,7 @@ function fieldsFor(v: MssqlVariant): ConnectorDef['fields'] {
       label: 'Trust the server certificate without verifying it',
       type: 'checkbox',
       default: false,
-      help: 'Off by default. Turning this on encrypts the connection but stops checking who is on the other end — anyone able to intercept the network path can impersonate the server. Only for a self-signed certificate on a network you control.',
+      help: 'Off by default. Turning this on encrypts the connection but stops checking who is on the other end, so anyone able to intercept the network path can impersonate the server. Only for a self-signed certificate on a network you control.',
     });
   }
   return fields;

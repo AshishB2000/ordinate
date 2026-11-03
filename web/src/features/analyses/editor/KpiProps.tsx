@@ -75,7 +75,7 @@ export function KpiCompare({ card }: { card: Card }) {
         {mode === 'custom'
           ? "The card's figure against the same figure over these dates."
           : mode
-            ? "Moves the date range of the dashboard's filters and resolves the figure again — so it needs a date filter or date control in scope."
+            ? "Moves the date range of the dashboard's filters and resolves the figure again, so it needs a date filter or date control in scope."
             : 'Show how the figure changed against another period, coloured by whether up is good.'}
       </p>
     </div>
@@ -116,7 +116,7 @@ export function KpiScenario({ card }: { card: Card }) {
         {cur
           ? 'The card shows this metric under the scenario, with its change on the baseline. A driver that follows a parameter moves with that parameter’s control on this sheet.'
           : list.length
-            ? 'Show this metric as it would be under a scenario — and move it from a slider by adding a parameter control.'
+            ? 'Show this metric as it would be under a scenario, and move it from a slider by adding a parameter control.'
             : 'No scenarios yet. Build one in Analytics → Scenarios, then pick it here.'}
       </p>
     </div>

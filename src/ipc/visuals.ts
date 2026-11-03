@@ -228,7 +228,7 @@ export function resolveDrill(
   if (catCol && catCol.type === 'number') {
     return {
       available: false,
-      reason: `"${encoding.category}" is a number, so this axis is grouped into ranges rather than single values — a bar covers a span, not one value, so its rows cannot be identified by an exact match.`,
+      reason: `"${encoding.category}" is a number, so this axis is grouped into ranges rather than single values. A bar covers a span, not one value, so its rows cannot be identified by an exact match.`,
     };
   }
   // …unless the caller knows the GRAIN the chart bucketed this axis by (./drillScope
@@ -238,7 +238,7 @@ export function resolveDrill(
   if (catCol && catCol.type === 'date' && !range) {
     return {
       available: false,
-      reason: `"${encoding.category}" is a date, so this axis is rolled up to a period rather than single days — a bar covers a range of dates, so its rows cannot be identified by an exact match.`,
+      reason: `"${encoding.category}" is a date, so this axis is rolled up to a period rather than single days. A bar covers a range of dates, so its rows cannot be identified by an exact match.`,
     };
   }
   if (category === OTHER_LABEL) {
@@ -283,7 +283,7 @@ function markStep(
   // no equality filter selects.
   if (value === null || String(value).trim() === '') {
     return {
-      reason: `The clicked mark has a blank "${column}", which can mean either an empty value or a missing one — those are different rows, so the exact set is ambiguous.`,
+      reason: `The clicked mark has a blank "${column}", which can mean either an empty value or a missing one. Those are different rows, so the exact set is ambiguous.`,
     };
   }
   if (col.type === 'number' && coerceValue(value, 'number') === null) {

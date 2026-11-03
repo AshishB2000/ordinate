@@ -77,8 +77,8 @@ const RAW: Record<string, Entry> = {
   log: n('log(number, base?)', 'The logarithm, base 10 unless another base is given.', 'log([views], 2)'),
   div: n('div(numerator, denominator)', 'Integer division, truncated towards zero. Dividing by zero yields null.', 'div([total], [count])'),
   zn: n('zn(number)', 'The number, or 0 when it is null or not numeric.', 'zn([discount])'),
-  min: n('min(a, b, …)', 'The smallest argument — numeric when all are numbers, otherwise compared as text.', 'min([list_price], [sale_price])'),
-  max: n('max(a, b, …)', 'The largest argument — numeric when all are numbers, otherwise compared as text.', 'max([list_price], [sale_price])'),
+  min: n('min(a, b, …)', 'The smallest argument. It compares as numbers when all are numbers, otherwise as text.', 'min([list_price], [sale_price])'),
+  max: n('max(a, b, …)', 'The largest argument. It compares as numbers when all are numbers, otherwise as text.', 'max([list_price], [sale_price])'),
 
   // ── String ─────────────────────────────────────────────────────────────────
   lower: s('lower(text)', 'Converts the text to lower case.', 'lower([email])'),
@@ -103,7 +103,7 @@ const RAW: Record<string, Entry> = {
   split: s('split(text, delimiter, n)', 'The nth piece after splitting; a negative n counts from the end.', 'split([full_name], " ", 1)'),
   regexp_match: s('regexp_match(text, pattern)', 'True when the regular expression matches anywhere in the text.', 'regexp_match([sku], "^[A-Z]{2}")'),
   regexp_extract: s('regexp_extract(text, pattern)', 'The first capture group, or the whole match when the pattern has no group.', 'regexp_extract([url], "https?://([^/]+)")'),
-  regexp_extract_nth: s('regexp_extract_nth(text, pattern, n)', 'The nth capture group — 0 is the whole match.', 'regexp_extract_nth([stamp], "(\\\\d+)-(\\\\d+)", 2)'),
+  regexp_extract_nth: s('regexp_extract_nth(text, pattern, n)', 'The nth capture group, where 0 is the whole match.', 'regexp_extract_nth([stamp], "(\\\\d+)-(\\\\d+)", 2)'),
   regexp_replace: s('regexp_replace(text, pattern, replacement)', 'Replaces every regular-expression match.', 'regexp_replace([note], "\\\\s+", " ")'),
   concat: s('concat(a, b, …)', 'Joins every argument into one string; nulls contribute nothing.', 'concat([first], " ", [last])'),
 
@@ -117,7 +117,7 @@ const RAW: Record<string, Entry> = {
   isoyear: d('isoyear(date)', 'The ISO-8601 week-numbering year, which can differ from the calendar year in January and December.', 'isoyear([ordered_at])'),
   isoquarter: d('isoquarter(date)', 'The quarter as 1–4.', 'isoquarter([ordered_at])'),
   isoweekday: d('isoweekday(date)', 'The weekday as 1–7, Monday being 1.', 'isoweekday([ordered_at])'),
-  datepart: d('datepart(part, date)', 'One numeric component — "year", "month", "day", "hour", "minute", "second" and friends.', 'datepart("month", [ordered_at])'),
+  datepart: d('datepart(part, date)', 'One numeric component: "year", "month", "day", "hour", "minute", "second" and friends.', 'datepart("month", [ordered_at])'),
   datename: d('datename(part, date)', 'One component as a NAME, e.g. "March" or "Tuesday".', 'datename("month", [ordered_at])'),
   datediff: d('datediff(part, start, end)', 'Whole `part` units from start to end.', 'datediff("day", [ordered_at], [shipped_at])'),
   dateadd: d('dateadd(part, amount, date)', 'Shifts the date by `amount` units of `part`.', 'dateadd("month", 1, [ordered_at])'),
@@ -137,7 +137,7 @@ const RAW: Record<string, Entry> = {
   str: c('str(value)', 'Converts the value to text.', 'str([order_id])'),
 
   // ── Logical ────────────────────────────────────────────────────────────────
-  if: l('if(condition, then, else)', 'The call form of IF. The keyword form — IF … THEN … ELSE … END — reads better for more than one branch.', 'if([score] > 90, "A", "B")'),
+  if: l('if(condition, then, else)', 'The call form of IF. The keyword form (IF … THEN … ELSE … END) reads better for more than one branch.', 'if([score] > 90, "A", "B")'),
   iif: l('iif(condition, then, else, unknown?)', 'Like if(), with a fourth branch taken when the condition is null rather than false.', 'iif([active], "yes", "no", "unknown")'),
   ifnull: l('ifnull(value, fallback)', 'The value, or the fallback when it is null.', 'ifnull([discount], 0)'),
   isnull: l('isnull(value)', 'True when the value is null.', 'isnull([shipped_at])'),
@@ -178,13 +178,13 @@ export const LOD_DOCS: FunctionDoc[] = [
     'Aggregates at the visual’s dimensions minus these. Outside a visual it is the whole table.',
     '{EXCLUDE [region] : SUM([sales])}', '{EXCLUDE [] : SUM()}'),
   lodEntry('share of region', 'recipe', 'Share of region',
-    'Each row’s sales as a fraction of its whole region’s sales — sum it by region and every region reads 100%.',
+    'Each row’s sales as a fraction of its whole region’s sales. Sum it by region and every region reads 100%.',
     '[sales] / {FIXED [region] : SUM([sales])}', '[sales] / {FIXED [region] : SUM([sales])}'),
   lodEntry('first order date per customer', 'recipe', 'First order date per customer',
-    'The earliest order date of each row’s customer, on every one of that customer’s rows — the cohort start.',
+    'The earliest order date of each row’s customer, on every one of that customer’s rows: the cohort start.',
     '{FIXED [customer] : MIN([order_date])}', '{FIXED [customer] : MIN([order_date])}'),
   lodEntry('customers with more than 3 orders', 'recipe', 'Customers with more than 3 orders',
-    'True on every row whose customer placed more than three distinct orders — use it as a filter or a dimension.',
+    'True on every row whose customer placed more than three distinct orders. Use it as a filter or a dimension.',
     '{FIXED [customer] : COUNTD([order_id])} > 3', '{FIXED [customer] : COUNTD([order_id])} > 3'),
 ];
 
