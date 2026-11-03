@@ -67,8 +67,8 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   for (const door of ['Dashboard', 'Visual', 'CSV / Excel', 'Paste data', 'Screenshot', 'Database']) await menu.getByRole('menuitem', { name: door }).waitFor();
   await page.keyboard.press('Escape');
   // ── the hero: the ask bar in its own panel; this server has no model, and the panel says so ──
-  const hero = page.getByRole('region', { name: 'Ask your data anything' });
-  await hero.getByRole('textbox', { name: 'Ask about your data' }).waitFor();
+  const hero = page.getByRole('region', { name: 'What do you want to do?' });
+  await hero.getByRole('textbox', { name: 'Ask a question or say what to build' }).waitFor();
   await hero.getByTestId('ai-not-ready').waitFor();
   // Starter cards from the project's real dataset names (the seed's two datasets, so not the sample-only pair).
   const chips = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
@@ -102,7 +102,7 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await card.waitFor();
 
   // ── the ask bar hands the question to the Assistant dock ──
-  const ask = page.getByRole('textbox', { name: 'Ask about your data' });
+  const ask = page.getByRole('textbox', { name: 'Ask a question or say what to build' });
   const chip = (await chips.last().textContent()) ?? '';
   await chips.last().click();
   assert.equal(await ask.inputValue(), chip);

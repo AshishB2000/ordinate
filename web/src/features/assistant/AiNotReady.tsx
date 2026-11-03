@@ -23,7 +23,7 @@ export function AiNotReady({ status, className }: { status: Pick<AiStatus, 'keyS
           <Link className={s.link} to="/admin?tab=ai">
             Connect a provider
           </Link>{' '}
-          to start asking questions about your data.
+          to turn on the Assistant.
         </p>
       ) : (
         <p className={s.line}>{AI_NOT_READY}</p>
