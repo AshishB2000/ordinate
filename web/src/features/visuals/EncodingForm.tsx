@@ -251,7 +251,7 @@ export function EncodingForm({
             Add measure
           </Button>
           {canEdit && (
-            <Button size="sm" variant="ghost" icon="function" title="Write a formula — a ratio, a difference, a share — and chart it" onClick={() => setCalc({ slot: -1 })}>
+            <Button size="sm" variant="ghost" icon="function" title="Write a formula (a ratio, a difference, a share) and chart it" onClick={() => setCalc({ slot: -1 })}>
               Calculated measure
             </Button>
           )}

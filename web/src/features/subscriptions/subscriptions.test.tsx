@@ -53,7 +53,7 @@ describe('Reports → Subscriptions', () => {
     expect(within(row).getByRole('note').textContent).toContain('Paused after 5 failed runs in a row.');
     expect(within(row).getByRole('note').textContent).toContain('answered HTTP 404');
     expect(within(row).getByText('Failed')).toBeTruthy();
-    expect(within(row).getByText('Off — no next run')).toBeTruthy();
+    expect(within(row).getByText('Off: no next run')).toBeTruthy();
     expect(within(row).getByText('Removed channel')).toBeTruthy();
   });
 
@@ -263,8 +263,8 @@ describe('Subscribe dialog', () => {
     const saved = calls.find((c) => c.channel === 'subscription:save')?.payload;
     expect(saved.projectId).toBe(PID);
     expect(saved.id).toBeUndefined();
-    expect(saved.subscription).toMatchObject({ analysisId: AID, channelIds: [TEAMS.id], name: 'Retail overview — weekdays', message: { includeLink: true } });
-    expect(await screen.findByText('Subscribed — next: Mon 12 Oct, 08:00')).toBeTruthy();
+    expect(saved.subscription).toMatchObject({ analysisId: AID, channelIds: [TEAMS.id], name: 'Retail overview, weekdays', message: { includeLink: true } });
+    expect(await screen.findByText('Subscribed. Next: Mon 12 Oct, 08:00')).toBeTruthy();
   });
 
   it('Where, with no channels: a member is told to ask an admin; an admin gets the link', async () => {

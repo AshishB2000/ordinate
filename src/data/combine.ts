@@ -174,7 +174,7 @@ function joinTables(
       rows.push(lr.slice().concat(rightOutCols.map((rc) => rr[rc.srcIdx] ?? null)));
     }
   }
-  if (capped) warnings.push(`Join row cap reached — kept first ${limit} matched rows`);
+  if (capped) warnings.push(`Join row cap reached: kept first ${limit} matched rows`);
 
   const columns: ParsedColumn[] = left.columns.map((c) => ({ ...c }));
   for (const rc of rightOutCols) columns.push({ name: rc.name, type: 'text' });

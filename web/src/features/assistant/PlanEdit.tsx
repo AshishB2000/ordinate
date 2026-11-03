@@ -128,9 +128,9 @@ export function EditFields({ step, index, onChange }: { step: Step; index: numbe
 export function EditControls({ index, count, onMove, onRemove }: { index: number; count: number; onMove: (to: number) => void; onRemove: () => void }) {
   return (
     <div className={s.editCtl}>
-      <IconButton icon="arrow-up" size="sm" label={`Move up — step ${index + 1}`} disabled={index === 0} onClick={() => onMove(index - 1)} />
-      <IconButton icon="arrow-down" size="sm" label={`Move down — step ${index + 1}`} disabled={index === count - 1} onClick={() => onMove(index + 1)} />
-      <IconButton icon="trash" size="sm" label={`Remove — step ${index + 1}`} disabled={count <= 1} onClick={onRemove} />
+      <IconButton icon="arrow-up" size="sm" label={`Move step ${index + 1} up`} disabled={index === 0} onClick={() => onMove(index - 1)} />
+      <IconButton icon="arrow-down" size="sm" label={`Move step ${index + 1} down`} disabled={index === count - 1} onClick={() => onMove(index + 1)} />
+      <IconButton icon="trash" size="sm" label={`Remove step ${index + 1}`} disabled={count <= 1} onClick={onRemove} />
     </div>
   );
 }

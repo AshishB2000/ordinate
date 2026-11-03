@@ -80,7 +80,7 @@ function structure(): void {
   ok('identical versions → no changes', d.changes.length === 0 && vd.isEmptyDiff(d), show(d.changes));
   ok('…every tile on both sides is "same"', d.sheets[0].before!.every((t) => t.status === 'same') && d.sheets[0].after!.every((t) => t.status === 'same'));
   ok('…the sheet is not marked changed, and no figure is asked', d.sheets[0].changed === false && d.figures.length === 0);
-  ok('…the summary says so', ipcDiff.summaryLine(d.counts) === 'No changes — these two versions are the same.', ipcDiff.summaryLine(d.counts));
+  ok('…the summary says so', ipcDiff.summaryLine(d.counts) === 'No changes: these two versions are the same.', ipcDiff.summaryLine(d.counts));
 
   const shuffled = clone(a);
   shuffled.sheets[0].cards.reverse();

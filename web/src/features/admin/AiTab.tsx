@@ -264,7 +264,7 @@ export function AiTab() {
         <div>
           <h3 className={s.noticeTitle}>This server can’t store API keys</h3>
           <p className={s.lead}>
-            {ai.data.keyStore} AI needs both DATABASE_URL (Postgres) and ORDINATE_MASTER_KEY. An operator sets them — see docs/server/configuration.md — and
+            {ai.data.keyStore} AI needs both DATABASE_URL (Postgres) and ORDINATE_MASTER_KEY. An operator sets them (see docs/server/configuration.md), and
             this page then lets you connect providers.
           </p>
         </div>

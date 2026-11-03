@@ -40,7 +40,7 @@ export function MetricPicker({ projectId, onPick, onClose }: { projectId: string
           ) : list.isError ? (
             <ErrorState compact heading={3} title="The metrics could not be listed" message={list.error.message} onRetry={() => void list.refetch()} />
           ) : shown.length === 0 ? (
-            <p className={d.empty}>{(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet — define one with Manage metrics below, or use Custom….'}</p>
+            <p className={d.empty}>{(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet. Define one with Manage metrics below, or use Custom….'}</p>
           ) : (
             shown.map((m) => (
               <div key={m.id} role="listitem">

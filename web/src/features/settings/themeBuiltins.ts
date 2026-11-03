@@ -11,7 +11,7 @@ export const BUILTINS: ReadonlyArray<{ id: string; name: string; note: string; t
   {
     id: 'auto',
     name: 'Auto',
-    note: 'Follows the app — light or dark with your Appearance setting.',
+    note: 'Follows the app: light or dark with your Appearance setting.',
     tokens: {
       '--bg': '#f7f7f8',
       '--surface': '#ffffff',
@@ -197,7 +197,7 @@ export const BUILTINS: ReadonlyArray<{ id: string; name: string; note: string; t
   {
     id: 'dense',
     name: 'Dense',
-    note: 'Tighter grid and smaller type — more on screen.',
+    note: 'Tighter grid and smaller type: more on screen.',
     tokens: {
       '--bg': '#f7f7f8',
       '--surface': '#ffffff',

@@ -62,10 +62,10 @@ function escapedChar(e: string): string {
 }
 
 function escapeError(e: string): string {
-  if (e === 's' || e === 'S') return '\\s matches different whitespace in JavaScript and DuckDB — spell the characters out, e.g. [ \\t]';
+  if (e === 's' || e === 'S') return '\\s matches different whitespace in JavaScript and DuckDB, so spell the characters out, e.g. [ \\t]';
   if (e === 'b' || e === 'B') return 'Word boundaries (\\b) are not supported';
   if (/[1-9]/.test(e) || e === 'k') return 'Back-references are not supported';
-  return `"\\${e}" is not supported — type the character itself`;
+  return `"\\${e}" is not supported: type the character itself`;
 }
 
 /** One escape at `i` (the backslash). Returns the error, or the kind of atom it is. */
@@ -87,7 +87,7 @@ function readClass(ch: string[], i: number): { end: number } | { error: string }
     const c = ch[j];
     if (c === undefined) return { error: 'Unclosed [' };
     if (c === ']') return { end: j + 1 };
-    if (c === '[') return { error: 'A "[" inside a class (e.g. [[:alpha:]]) is not supported — escape it as \\[' };
+    if (c === '[') return { error: 'A "[" inside a class (e.g. [[:alpha:]]) is not supported: escape it as \\[' };
     if (c === '-' && afterRange && ch[j + 1] !== ']') return { error: 'Escape a "-" that follows a range as \\-' };
     // One class atom: an escape or a literal.
     let lo: string | null = c;
@@ -142,7 +142,7 @@ export function checkPattern(pattern: unknown): string | null {
       canRepeat = true;
     } else if (c === '(') {
       if (ch[i + 1] === '?') {
-        if (ch[i + 2] !== ':') return 'Only plain ( ) and (?: ) groups are supported — no lookarounds, named groups or inline flags';
+        if (ch[i + 2] !== ':') return 'Only plain ( ) and (?: ) groups are supported, not lookarounds, named groups or inline flags';
         i += 3;
       } else {
         i += 1;

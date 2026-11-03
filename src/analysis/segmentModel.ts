@@ -341,7 +341,7 @@ export async function runFit(columns: ParsedColumn[], features: string[], io: Se
   const stats = await io.stats(idx);
   if (!stats) return null;
   if (stats.count < MIN_ROWS) {
-    return { error: `Only ${stats.count} row${stats.count === 1 ? ' has' : 's have'} a number in every chosen column — at least ${MIN_ROWS} are needed.` };
+    return { error: `Only ${stats.count} row${stats.count === 1 ? ' has' : 's have'} a number in every chosen column. At least ${MIN_ROWS} are needed.` };
   }
   progress(0.08, 'Sampling rows');
   const sample = await io.sample(idx, stats.count, SAMPLE_CAP);

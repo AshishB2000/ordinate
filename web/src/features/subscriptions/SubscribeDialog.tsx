@@ -38,7 +38,7 @@ export interface SubscribeDialogProps {
 }
 
 export default function SubscribeDialog({ projectId, dashboard, existing, onClose }: SubscribeDialogProps) {
-  const [draft, setDraft] = useState<Draft>(() => (existing ? draftOf(existing) : newDraft(dashboard?.id ?? '', dashboard ? `${dashboard.name} — weekdays` : '')));
+  const [draft, setDraft] = useState<Draft>(() => (existing ? draftOf(existing) : newDraft(dashboard?.id ?? '', dashboard ? `${dashboard.name}, weekdays` : '')));
   const [step, setStep] = useState<StepId>('what');
   const locked = !!dashboard || !!existing;
   // The dashboard picker's list — only when there is a dashboard to pick.
@@ -76,7 +76,7 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
       { ...(existing ? { id: existing.id } : {}), subscription: { ...draft, name: draft.name.trim(), channelIds: chosen.map((c) => c.id) } },
       {
         onSuccess: (r) => {
-          toast(existing ? 'Subscription saved' : `Subscribed — next: ${r.subscription.nextRuns[0]?.text ?? r.subscription.scheduleText}`, { kind: 'success' });
+          toast(existing ? 'Subscription saved' : `Subscribed. Next: ${r.subscription.nextRuns[0]?.text ?? r.subscription.scheduleText}`, { kind: 'success' });
           onClose();
         },
         onError: (e) => toast(reason(e, 'The subscription could not be saved.'), { kind: 'error' }),

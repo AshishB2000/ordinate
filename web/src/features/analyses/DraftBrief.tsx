@@ -29,7 +29,7 @@ const KINDS: { value: DraftKind; title: string; hint: string; art: Box[] }[] = [
   {
     value: 'explore',
     title: 'Explore',
-    hint: 'Filters, more charts and a detail table — a dashboard to dig into.',
+    hint: 'Filters, more charts and a detail table: a dashboard to dig into.',
     art: [['control', 0, 0, 3, 1], ['control', 3, 0, 3, 1], ['control', 6, 0, 2, 1], ['visual', 0, 1, 4, 5], ['visual', 4, 1, 4, 5], ['visual', 8, 1, 4, 5], ['visual', 0, 6, 12, 4]],
   },
   {

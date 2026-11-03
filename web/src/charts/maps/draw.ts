@@ -276,7 +276,7 @@ function drawPoints(ctx: DrawContext): Drawn {
       });
       markers.push(new ml.Marker({ element: el, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(map));
       // After the Marker: its constructor stamps a generic "Map marker" label over ours.
-      el.setAttribute('aria-label', `${c.count.toLocaleString()} points — zoom in`);
+      el.setAttribute('aria-label', `${c.count.toLocaleString()} points, zoom in`);
     }
     const fc = pointLayer(items, cells, colors, { min, max, clusterColor: theme.accent });
     const src = map.getSource(SRC) as { setData(d: unknown): void } | undefined;
@@ -339,7 +339,7 @@ function drawHexbin(ctx: DrawContext): Drawn {
     const capped = hex.dropped.length > 0 && levels.indexOf(level) === levels.length - 1 && map.getZoom() + 1 > level.zoom + 2;
     const warn: string[] = [];
     if (hex.skipped) warn.push(`${hex.skipped.toLocaleString()} rows had no usable coordinates`);
-    if (capped) warn.push(`finer levels exceed ${hex.maxHexes.toLocaleString()} hexagons — this is the finest drawn`);
+    if (capped) warn.push(`finer levels exceed ${hex.maxHexes.toLocaleString()} hexagons, so this is the finest drawn`);
     return {
       legend: { kind: 'ramp', title: hex.label, min: fmt(min), max: fmt(max), stops: rampStops(theme.dark) },
       notes: {

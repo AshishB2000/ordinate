@@ -139,7 +139,7 @@ export function ScenarioResults({ res, busy, onFocus }: { res: ScenarioResult; b
           <div className={s.kpisEmpty}>
             <Icon name="gauge" size={20} />
             <p className={s.kpisEmptyH}>No metrics in this scenario yet</p>
-            <p>Add the metrics you want to see move — revenue, margin, units — and every driver is applied to all of them at once.</p>
+            <p>Add the metrics you want to see move (revenue, margin, units), and every driver is applied to all of them at once.</p>
           </div>
         )}
         {res.metrics.map((m) => (

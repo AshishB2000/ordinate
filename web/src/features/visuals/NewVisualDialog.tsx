@@ -128,7 +128,7 @@ export function NewVisualDialog({
         <div className={s.choices}>
           <div className={aiReady ? s.choice : `${s.choice} ${s.disabled}`}>
             <h3 className={s.choiceH}>Describe it</h3>
-            <p className={s.sub}>Say what you want to see and a model proposes charts. You pick one — nothing is saved for you.</p>
+            <p className={s.sub}>Say what you want to see and a model proposes charts. You pick one. Nothing is saved for you.</p>
             <Textarea
               aria-label="Describe the visual you want"
               placeholder="e.g. profile registrations year over year"

@@ -386,7 +386,7 @@ export function describeColumns(json: unknown): { name: string; type: string; nu
 
 const SCOPE_HINT =
   'Google refused the read-only access this server asks for (insufficient authentication scopes). ' +
-  'Ordinate requests only the bigquery.readonly and cloud-platform.read-only scopes and will not ask for write access — see docs/server/live-data.md (BigQuery).';
+  'Ordinate requests only the bigquery.readonly and cloud-platform.read-only scopes and will not ask for write access. See docs/server/live-data.md (BigQuery).';
 const ROLE_HINT = 'The service account needs BigQuery Data Viewer on the data and BigQuery Job User on the billing project.';
 
 /** A non-2xx BigQuery reply → one user-facing sentence (the caller scrubs secrets from it). */
@@ -404,7 +404,7 @@ export function apiError(status: number, body: string): string {
     return `${SCOPE_HINT} (HTTP 403: ${message || 'insufficient scopes'})`;
   }
   if (status === 401) return `Google rejected the access token (HTTP 401)${message ? ': ' + message : ''}`;
-  if (status === 403 && reasons.includes('accessDenied')) return `${message || 'Access denied'} — ${ROLE_HINT}`;
+  if (status === 403 && reasons.includes('accessDenied')) return `${message || 'Access denied'} (${ROLE_HINT})`;
   if (reasons.includes('bytesBilledLimitExceeded')) return `${message} Raise "Max bytes billed per query" or narrow the query.`;
   return message ? `BigQuery: ${message}` : `BigQuery request failed (HTTP ${status})`;
 }

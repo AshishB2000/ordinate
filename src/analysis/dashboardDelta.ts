@@ -196,7 +196,7 @@ export function resolveTile(ctx: DeltaContext, query: unknown): TileMatch {
 function tileDropMessage(at: string, ref: string, reason: 'empty' | 'none' | 'ambiguous'): string {
   if (reason === 'empty') return `${at} dropped: no tile named.`;
   if (reason === 'ambiguous') {
-    return `${at} dropped: ${JSON.stringify(ref)} matches more than one tile — rename them or say which one.`;
+    return `${at} dropped: ${JSON.stringify(ref)} matches more than one tile. Rename them or say which one.`;
   }
   return `${at} dropped: no tile called ${JSON.stringify(ref)}.`;
 }
@@ -308,7 +308,7 @@ function keepFilters(
       dropped.push({
         kind: 'filter',
         where,
-        message: `${at}: filter on ${JSON.stringify(f.column)} dropped — not a column of "${ds.name}".`,
+        message: `${at}: filter on ${JSON.stringify(f.column)} dropped (not a column of "${ds.name}").`,
       });
       continue;
     }
@@ -514,7 +514,7 @@ function opReplaceEncoding(
     dropped.push({
       kind: 'tile',
       where,
-      message: `${at} dropped: "${tile.title}" is a ${tile.type} tile, not a chart — it has no encoding to replace.`,
+      message: `${at} dropped: "${tile.title}" is a ${tile.type} tile, not a chart, so it has no encoding to replace.`,
     });
     return null;
   }
@@ -555,7 +555,7 @@ function opReplaceEncoding(
     dropped.push({
       kind: 'encoding',
       where,
-      message: `${at} dropped: nothing to change on "${tile.title}" — no chart type, encoding or filters given.`,
+      message: `${at} dropped: nothing to change on "${tile.title}" (no chart type, encoding or filters given).`,
     });
     return null;
   }
@@ -582,7 +582,7 @@ function opTileRef(
     dropped.push({
       kind: 'layout',
       where,
-      message: `${at} dropped: a move may say top/bottom/before/after, never x, y, w or h — the app lays tiles out.`,
+      message: `${at} dropped: a move may say top/bottom/before/after, never x, y, w or h. The app lays tiles out.`,
     });
     return null;
   }

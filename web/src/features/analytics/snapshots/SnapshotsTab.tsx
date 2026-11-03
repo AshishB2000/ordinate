@@ -70,7 +70,7 @@ function RestoreDialog({ projectId, datasetId, item, onClose, onDone }: { projec
       open
       onOpenChange={(o) => !o && onClose()}
       title="Restore this snapshot?"
-      description={`The data goes back to how it was on ${when(item.at)} — ${rowsText(item.rowCount)}. Charts and dashboards on this dataset follow.`}
+      description={`The data goes back to how it was on ${when(item.at)} (${rowsText(item.rowCount)}). Charts and dashboards on this dataset follow.`}
       footer={
         <>
           <DialogClose asChild>
@@ -200,7 +200,7 @@ export function SnapshotsTab({ projectId, datasetId }: { projectId: string; data
         list.eligible && (
           <EmptyState icon="history" title="Snapshots start with the next refresh" heading={3}>
             {list.keep > 0
-              ? `When a refresh replaces this table, the table it replaces is kept here — the last ${list.keep}, oldest dropped first. Compare any of them with now, or restore one.`
+              ? `When a refresh replaces this table, the table it replaces is kept here: the last ${list.keep}, oldest dropped first. Compare any of them with now, or restore one.`
               : canEdit
                 ? 'Keeping is off for this dataset. Choose how many to keep above to start.'
                 : 'Keeping is off for this dataset.'}

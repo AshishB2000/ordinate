@@ -22,7 +22,7 @@ export function DraftClarify({
     <div className={s.body}>
       <div className={s.interp}>
         <span className={s.interpH}>Asked by the model · AI interpretation</span>
-        <p>Your request leaves these open. Answer the ones that matter to you — anything you leave, the Assistant decides.</p>
+        <p>Your request leaves these open. Answer the ones that matter to you. Anything you leave, the Assistant decides.</p>
       </div>
       {questions.map((q, i) => (
         <CardRadios key={i} as="options" label={q.ask} value={picked[i]} onChange={(option) => onPick(i, option)} options={q.options.map((o) => ({ value: o, title: o }))} />

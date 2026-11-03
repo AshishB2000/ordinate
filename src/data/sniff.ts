@@ -61,7 +61,7 @@ export function sniffBytes(head: Buffer, tail: Buffer, size: number): Sniff {
       : { ok: false, reason: 'is a damaged Parquet file' };
   }
   if (startsWith(head, [0x50, 0x4b, 0x03, 0x04])) return { ok: true, kind: 'zip', names: zipNames(tail, size) };
-  if (startsWith(head, OLE)) return { ok: false, reason: 'is an old Excel (.xls) or Office file — save it as .xlsx' };
+  if (startsWith(head, OLE)) return { ok: false, reason: 'is an old Excel (.xls) or Office file. Save it as .xlsx' };
   for (const [sig, what] of BINARY) if (startsWith(head, sig)) return { ok: false, reason: `is ${what}, not a data file` };
   if (head.includes(0)) return { ok: false, reason: 'is a binary file, not text' };
 
@@ -73,7 +73,7 @@ export function sniffBytes(head: Buffer, tail: Buffer, size: number): Sniff {
   if (first === '{' || first === '[') return { ok: true, kind: 'json' };
   const delimiter = csvDelimiter(body, head.length >= size);
   return delimiter === null
-    ? { ok: false, reason: 'does not look like a table — its rows do not split into the same columns' }
+    ? { ok: false, reason: 'does not look like a table: its rows do not split into the same columns' }
     : { ok: true, kind: 'csv', delimiter };
 }
 

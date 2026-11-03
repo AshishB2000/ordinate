@@ -266,7 +266,7 @@ export function WhereStep({
               <ChannelMark kind={c.kind} />
               <Checkbox
                 label={c.name}
-                hint={c.ready ? KIND_LABEL[c.kind] : c.kind === 'email' ? 'Email · email is not set up on this server' : `${KIND_LABEL[c.kind]} · its webhook URL is missing — an admin has to paste it again`}
+                hint={c.ready ? KIND_LABEL[c.kind] : c.kind === 'email' ? 'Email · email is not set up on this server' : `${KIND_LABEL[c.kind]} · its webhook URL is missing, so an admin has to paste it again`}
                 checked={picked.has(c.id)}
                 disabled={!c.ready && !picked.has(c.id)}
                 onCheckedChange={(on) => set({ channelIds: on ? [...draft.channelIds, c.id] : draft.channelIds.filter((x) => x !== c.id) })}

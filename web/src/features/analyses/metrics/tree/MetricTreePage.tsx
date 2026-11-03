@@ -92,7 +92,7 @@ function StartHere({ projectId, metricId, name, tag, onEdit, onSaved, onChanged 
         </div>
       }
     >
-      A tree shows which parts moved {name}: a product like Orders × Avg order value, a sum, a ratio, or its segments by a column — each with its share of the change.
+      A tree shows which parts moved {name}: a product like Orders × Avg order value, a sum, a ratio, or its segments by a column, each with its share of the change.
     </EmptyState>
   );
 }

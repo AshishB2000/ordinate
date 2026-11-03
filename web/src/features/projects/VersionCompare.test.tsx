@@ -88,7 +88,7 @@ describe('version compare', () => {
   });
 
   it('shows the server\'s sentence and a retry when a version is gone', async () => {
-    const calls = serve(base({ 'versions:diff': { body: { ok: false, error: 'One of these versions is gone — it may have been pruned, or removed with its record.' } } }));
+    const calls = serve(base({ 'versions:diff': { body: { ok: false, error: 'One of these versions is gone. It may have been pruned, or removed with its record.' } } }));
     renderApp(at);
     expect(await screen.findByText(/One of these versions is gone/)).toBeTruthy();
     const before = calls.filter((c) => c.channel === 'versions:diff').length;

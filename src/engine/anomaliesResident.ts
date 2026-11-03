@@ -450,7 +450,7 @@ function dominantAnomaly(name: string, summary: ColumnSummary | undefined, o: Op
     kind: 'dominant_category',
     column: name,
     severity: 'info',
-    detail: `Column "${name}" is dominated by "${top.value}" — ${top.count} of ${nonEmpty} non-empty cells (${pct}%).`,
+    detail: `Column "${name}" is dominated by "${top.value}": ${top.count} of ${nonEmpty} non-empty cells (${pct}%).`,
     facts: { value: top.value, count: top.count, share: round(share) },
   };
 }

@@ -226,7 +226,7 @@ function calcRankByValue(ctx: Ctx): CalcResult | null {
   return {
     id: 'rank_by_value',
     title: `Ranked by ${colLabel(ctx, ctx.primaryValue)}`,
-    lines: sorted.map((o, i) => `${i + 1}. ${o.label} — ${fmtNum(o.v)}`),
+    lines: sorted.map((o, i) => `${i + 1}. ${o.label}: ${fmtNum(o.v)}`),
     raw: { column: ctx.primaryValue, rows: sorted.map((o, i) => ({ rank: i + 1, label: o.label, value: o.v })) },
   };
 }
@@ -245,7 +245,7 @@ function calcRankByGrowth(ctx: Ctx): CalcResult | null {
   return {
     id: 'rank_by_growth',
     title: 'Ranked by recent growth',
-    lines: out.map((o, i) => `${i + 1}. ${o.label} — ${fmtPct(o.pct)}`),
+    lines: out.map((o, i) => `${i + 1}. ${o.label}: ${fmtPct(o.pct)}`),
     raw: { from: pPrev, to: pCur, rows: out.map((o, i) => ({ rank: i + 1, label: o.label, pct: o.pct })) },
   };
 }
@@ -286,7 +286,7 @@ function calcCagr(ctx: Ctx): CalcResult | null {
   if (!out.length) return null;
   const unit = assumed ? 'per period' : 'per year';
   const lines = out.map(o => `${o.label}: ${fmtPct(o.cagr)} ${unit}`);
-  if (assumed) lines.push('(periods assumed evenly spaced — exact year gaps unknown)');
+  if (assumed) lines.push('(periods assumed evenly spaced, as the exact year gaps are unknown)');
   return { id: 'cagr', title: `CAGR over ${span} ${assumed ? 'periods' : 'years'}`, lines, raw: { span, assumed, rows: out } };
 }
 

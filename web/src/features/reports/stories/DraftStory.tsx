@@ -64,7 +64,7 @@ export function DraftStory({ projectId, onClose, onBuilt }: { projectId: string;
         open
         onOpenChange={(o) => !o && onClose()}
         title="Draft a story with the Assistant"
-        description="It proposes the outline — sections, charts and metrics. You review it before anything is created; every figure is computed by the app."
+        description="It proposes the outline: sections, charts and metrics. You review it before anything is created; every figure is computed by the app."
         footer={
           <>
             <DialogClose asChild>
@@ -124,7 +124,7 @@ export function DraftStory({ projectId, onClose, onBuilt }: { projectId: string;
               </div>
             )}
             {(sh.texts ?? []).map((t, j) => {
-              const note = [t.heading, t.text].filter(Boolean).join(' — ');
+              const note = [t.heading, t.text].filter(Boolean).join(': ');
               return note ? <p key={j} className={pk.planNote}>{note}</p> : null;
             })}
           </li>

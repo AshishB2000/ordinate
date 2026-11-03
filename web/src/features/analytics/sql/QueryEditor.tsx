@@ -190,7 +190,7 @@ export function QueryEditor({
         {onSave && (
           <>
             <span className={w.gap} />
-            <Button size="sm" icon="download" disabled={!canSave} loading={saving} onClick={onSave} title={canSave ? undefined : 'Run the query first — a saved dataset is the result you saw.'}>
+            <Button size="sm" icon="download" disabled={!canSave} loading={saving} onClick={onSave} title={canSave ? undefined : 'Run the query first: a saved dataset is the result you saw.'}>
               {saving ? 'Fetching rows…' : 'Save as dataset'}
             </Button>
           </>

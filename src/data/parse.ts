@@ -197,7 +197,7 @@ function finalize(header: string[], body: string[][]): ParseResult {
 
   let rows = body;
   if (rows.length > MAX_ROWS) {
-    warnings.push(`Row cap reached — kept first ${MAX_ROWS} of ${rows.length} rows`);
+    warnings.push(`Row cap reached: kept first ${MAX_ROWS} of ${rows.length} rows`);
     rows = rows.slice(0, MAX_ROWS);
   }
 
@@ -208,7 +208,7 @@ function finalize(header: string[], body: string[][]): ParseResult {
     if (r.length > width) return r.slice(0, width);
     return r;
   });
-  if (ragged) warnings.push(`Ragged rows — padded to ${width} columns`);
+  if (ragged) warnings.push(`Ragged rows: padded to ${width} columns`);
   if (normalized.length === 0) warnings.push('No rows found');
 
   const columns: ParsedColumn[] = names.map((name, c) => {
@@ -308,7 +308,7 @@ function parse2dArray(arr: unknown[][]): ParseResult {
     }
     header = Array.from({ length: width }, (_, i) => `col${i + 1}`);
     body = arr;
-    extra.push('No header row detected — using generated column names');
+    extra.push('No header row detected: using generated column names');
   }
   const bodyStr: string[][] = body.map((r) =>
     (Array.isArray(r) ? r : [r]).map((c) => (c == null ? '' : String(c))),

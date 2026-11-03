@@ -104,7 +104,7 @@ export function MapRegions({ projectId, cols, geo, canEdit, onChange }: {
     onChange(next);
   };
   const nums = cols.filter((c) => c.type === 'number').map((c) => opt(c.name));
-  const names = [opt('', 'None — show coordinates'), ...cols.filter((c) => c.type !== 'number').map((c) => opt(c.name))];
+  const names = [opt('', 'None (show coordinates)'), ...cols.filter((c) => c.type !== 'number').map((c) => opt(c.name))];
   const lvl = geo?.level ?? '';
   const b = boundaries.find((x) => x.id === geo?.boundaryId);
   const field = (label: string, value: string | undefined, options: SelectOption[], key: keyof Geo) => (
@@ -143,8 +143,8 @@ export function MapRegions({ projectId, cols, geo, canEdit, onChange }: {
           {lvl === 'point' && field('Colour by', geo.color, [opt('', 'One colour'), ...cols.map((c) => opt(c.name))], 'color')}
           {lvl === 'custom' &&
             field('Joins on', geo.property, (b?.properties ?? []).map((p) => opt(p.key, p.unique ? p.key : `${p.key} (repeats)`)), 'property')}
-          {field('Basemap', geo.basemap === 'none' ? 'none' : '', [opt('', 'Map tiles (OpenStreetMap)'), opt('none', 'None — offline land and water')], 'basemap')}
-          {lvl === 'hexbin' && <p className={s.note}>Each hexagon shows the first measure — a count of points, or its sum or average. Hexagons get finer as you zoom.</p>}
+          {field('Basemap', geo.basemap === 'none' ? 'none' : '', [opt('', 'Map tiles (OpenStreetMap)'), opt('none', 'None (offline land and water)')], 'basemap')}
+          {lvl === 'hexbin' && <p className={s.note}>Each hexagon shows the first measure: a count of points, or its sum or average. Hexagons get finer as you zoom.</p>}
           {lvl === 'flow' && <p className={s.note}>Each route is one origin → destination pair; line width is the first measure (count, sum or average).</p>}
         </div>
       )}

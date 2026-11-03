@@ -88,7 +88,7 @@ export async function similarValues(projectId: string, datasetId: string, index:
   const ci = at.input.columns.findIndex((c) => c.name === column);
   if (ci < 0 || at.input.columns[ci].type !== 'text') return { ok: false, error: 'Pick a text column to look for similar values in.' };
   const counts = valueCountsJs(at.input.rows, ci, MAX_DISTINCT);
-  if (!counts) return { ok: false, error: `"${column}" has more than ${MAX_DISTINCT.toLocaleString('en-US')} different values — too many to compare.` };
+  if (!counts) return { ok: false, error: `"${column}" has more than ${MAX_DISTINCT.toLocaleString('en-US')} different values, too many to compare.` };
   // A marked column's values never go to the model — under the name it has later in the pipeline too (NV-30).
   let later = column;
   for (const s of at.after) if (s.type === 'rename_column' && s.from === later) later = s.to.trim();

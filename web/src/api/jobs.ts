@@ -88,8 +88,8 @@ export function useJobs() {
   useServerEvent('jobs:finished', (p) => {
     const j = p as Job;
     if (!j || typeof j !== 'object' || j.silent) return;
-    if (j.state === 'done') toast(`${j.label} — done`, { kind: 'success' });
-    else if (j.state === 'error') toast(`${j.label} — ${j.error || 'failed'}`, { kind: 'error' });
+    if (j.state === 'done') toast(`${j.label}: done`, { kind: 'success' });
+    else if (j.state === 'error') toast(`${j.label}: ${j.error || 'failed'}`, { kind: 'error' });
   });
   useEffect(() => onReconnect(() => void qc.invalidateQueries({ queryKey: KEY })), [qc]);
   return q;

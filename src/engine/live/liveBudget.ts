@@ -218,7 +218,7 @@ export function setDailyCheckForTest(fn: DailyOverride | null): void {
 export function noteCall(ticket: Ticket | undefined, bytes: number | undefined): void {
   if (!ticket || bytes === undefined) return;
   void usage.addBytes(ticket, bytes).catch((err: unknown) => {
-    logger.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded — ${safeError(err)}`);
+    logger.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded: ${safeError(err)}`);
   });
 }
 

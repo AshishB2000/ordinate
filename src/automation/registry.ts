@@ -109,7 +109,7 @@ const PROJECT: ArgSpec = {
 
 const FILTERS: ArgSpec = {
   type: 'array',
-  description: 'Row filters applied before aggregation — the same filter steps a visual stores.',
+  description: 'Row filters applied before aggregation: the same filter steps a visual stores.',
   items: {
     type: 'object',
     properties: {
@@ -198,7 +198,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     tool: 'aggregate', readOnly: true,
-    summary: 'Compute chart data (labels and series) for an encoding — the numbers a visual would draw.',
+    summary: 'Compute chart data (labels and series) for an encoding: the numbers a visual would draw.',
     args: { dataset: { type: 'string', description: 'Dataset id or exact name.' }, encoding: ENCODING, filters: FILTERS },
     required: ['dataset', 'encoding'],
     run: (a, ctx) => h.aggregate(ctx, a),
@@ -273,7 +273,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     tool: 'create_dashboard', readOnly: false, writes: 'records',
-    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project\'s editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.',
+    summary: 'Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project\'s editors and admins see it until it is published (publish_dashboard, or Publish in the app). Leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.',
     args: {
       plan: {
         type: 'object',

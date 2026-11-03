@@ -263,7 +263,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
     const src = await datasets.residentSource(projectId, id);
     if (!src) {
       requireExtract(await datasets.getDatasetMeta(projectId, id)); // a Live dataset: refused, typed — never an empty table
-      return { error: `"${e.name}" can't be queried — it was saved before datasets were stored as Parquet. Import it again (or re-save it), then run this.` };
+      return { error: `"${e.name}" can't be queried. It was saved before datasets were stored as Parquet. Import it again (or re-save it), then run this.` };
     }
     const primary = e.alias ?? e.slug;
     ctes.push(`${quoteIdent(primary)} AS (${viewSelectSql(src.parquetPath, src.columns)})`);
@@ -409,7 +409,7 @@ export async function runForDataset(
   if (res.truncated) {
     return {
       ok: false,
-      error: `This query returns more than ${cap.toLocaleString('en-US')} rows — the most one dataset can hold. Filter or aggregate it, then try again.`,
+      error: `This query returns more than ${cap.toLocaleString('en-US')} rows, the most one dataset can hold. Filter or aggregate it, then try again.`,
     };
   }
   const clean = sanitizeSqlParams(params) || [];

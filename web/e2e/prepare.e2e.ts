@@ -93,8 +93,8 @@ e2e('prepare: add, preview, edit and remove steps over the server pipeline', asy
   await page.waitForFunction((t) => document.querySelector('main header p')?.textContent === t, filtered.replace(/(\d+) columns/, (_m, c: string) => `${Number(c) + 1} columns`));
 
   // ── A keyword-rules preview: the categories' shares are the server's ──
-  await addStep(page, 'Text — tag with keyword rules');
-  const kw = page.getByRole('region', { name: 'Add: Text — tag with keyword rules' });
+  await addStep(page, 'Tag text with keyword rules');
+  const kw = page.getByRole('region', { name: 'Add: Tag text with keyword rules' });
   await kw.getByRole('textbox', { name: 'Pattern' }).fill('Furniture');
   await kw.getByRole('textbox', { name: 'Category' }).fill('Chairs and tables');
   await kw.getByText(/^Chairs and tables$/).waitFor();
@@ -140,7 +140,7 @@ e2e('pipelines: a dependent dataset as a step, the cron editor, Run all', async 
   await page.getByText(/^Times in .* · next run /).waitFor();
 
   await page.getByRole('button', { name: 'Run all' }).click();
-  await page.getByText(/Pipeline ran — \d+ steps? done\.|failed\. An alert was raised\./).waitFor({ timeout: 60_000 });
+  await page.getByText(/Pipeline ran: \d+ steps? done\.|failed\. An alert was raised\./).waitFor({ timeout: 60_000 });
   await panel.locator('button[aria-expanded]').first().waitFor();
   await screens(page, 'pipelines');
 

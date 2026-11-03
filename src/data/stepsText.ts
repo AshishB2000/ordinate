@@ -185,7 +185,7 @@ function keywordRunner(t: TableData, s: KeywordRulesStep, memo?: RegexMemo): Tex
       }
     },
     finish(input) {
-      const warnings = compiled.problems.map((p) => `Tag with rules: ${p} — rule left out`);
+      const warnings = compiled.problems.map((p) => `Tag with rules: ${p} (rule left out)`);
       const columns: ParsedColumn[] = [...input.columns.map((c) => ({ ...c })), { name, type: 'text' }];
       return { table: { columns, rows: input.rows.map((r, i) => [...r, values[i]]) }, warnings };
     },
@@ -214,7 +214,7 @@ function termsRunner(t: TableData, s: TextTermsStep): TextRunner | PowerResult {
   const bi = s.by ? colIndex(t.columns, s.by) : -1;
   if (s.by && bi < 0) return skipped(t, `Count terms skipped: unknown column "${s.by}"`);
   if (s.by && (Object.values(TERMS_COLUMNS) as string[]).includes(s.by)) {
-    return skipped(t, `Count terms skipped: the dimension "${s.by}" has the same name as an output column — rename it first`);
+    return skipped(t, `Count terms skipped: the dimension "${s.by}" has the same name as an output column. Rename it first`);
   }
   const byColumn: ParsedColumn | null = bi >= 0 ? { ...t.columns[bi] } : null;
   const groups: Group[] = [];

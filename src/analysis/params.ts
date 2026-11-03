@@ -279,7 +279,7 @@ function resolveStep(s: FilterStep, values: ParamValues): { step?: FilterStep; e
       if (s.op === '=' || s.op === '!=') {
         return { step: { type: 'filter', column: s.column, op: s.op === '=' ? 'in' : 'not in', values: p.value.slice() } };
       }
-      return { error: `Filter on "${s.column}" skipped: "${p.name}" is a list — use it with "is any of"` };
+      return { error: `Filter on "${s.column}" skipped: "${p.name}" is a list, so use it with "is any of"` };
     }
     if (!SCALAR_OPS.has(s.op)) return { step: s };
     return { step: { ...s, value: p.value } };
@@ -290,7 +290,7 @@ function resolveStep(s: FilterStep, values: ParamValues): { step?: FilterStep; e
   const text = String(s.value).replace(REF_RE, (whole, name: string) => {
     const p = values.get(name.toLowerCase());
     if (!p) { err = err || unknown(name); return whole; }
-    if (Array.isArray(p.value)) { err = err || `Filter on "${s.column}" skipped: "${p.name}" is a list — use it on its own`; return whole; }
+    if (Array.isArray(p.value)) { err = err || `Filter on "${s.column}" skipped: "${p.name}" is a list, so use it on its own`; return whole; }
     return p.value == null ? '' : String(p.value);
   });
   if (err) return { error: err };
@@ -333,7 +333,7 @@ export function bindFormulaText(expr: string, values: ParamValues): { text: stri
       if (end > 0 && PARAM_NAME_RE.test(name)) {
         const p = values.get(name.toLowerCase());
         if (!p) errors.push(`No parameter named "${name}" on this dashboard`);
-        else if (Array.isArray(p.value)) errors.push(`"${p.name}" is a list — a formula takes one value`);
+        else if (Array.isArray(p.value)) errors.push(`"${p.name}" is a list, but a formula takes one value`);
         out += p ? formulaLiteral(p.kind, p.value) : 'null';
         i = end + 2;
         continue;
@@ -545,7 +545,7 @@ export function bindSqlParams(
       const m = SQL_PLACEHOLDER_RE.exec(src.slice(i, i + 80));
       if (m) {
         const p = defs.get(m[1]);
-        if (!p) return { error: `[[${m[1]}]] is not defined — give it a type and a value in the parameters row.` };
+        if (!p) return { error: `[[${m[1]}]] is not defined. Give it a type and a value in the parameters row.` };
         const bad = paramValueError(p);
         if (bad) return { error: bad };
         if (!used.includes(p.name)) used.push(p.name);

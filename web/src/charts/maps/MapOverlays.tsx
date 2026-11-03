@@ -86,7 +86,7 @@ export function MapOverlays({
     );
   };
   const notes = overlay.notes;
-  const warn = [notes?.warn, tilesFailed ? 'Basemap tiles could not load — the data still draws' : ''].filter(Boolean).join(' · ');
+  const warn = [notes?.warn, tilesFailed ? 'Basemap tiles could not load, but the data still draws' : ''].filter(Boolean).join(' · ');
   return (
     <>
       {overlay.empty && (

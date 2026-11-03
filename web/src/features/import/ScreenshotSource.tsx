@@ -144,8 +144,8 @@ export function ScreenshotSource({
         title="Drop a screenshot, or paste one"
         hint={
           onRead
-            ? 'A chart, a table, a dashboard — the model reads it on the server and its analysis opens beside the screenshot. Ctrl+V / ⌘V pastes from the clipboard.'
-            : 'A chart, a table, a dashboard — the model reads the figures out of it on the server, and you check every cell before it is saved. Ctrl+V / ⌘V pastes from the clipboard.'
+            ? 'A chart, a table, a dashboard: the model reads it on the server and its analysis opens beside the screenshot. Ctrl+V / ⌘V pastes from the clipboard.'
+            : 'A chart, a table, a dashboard: the model reads the figures out of it on the server, and you check every cell before it is saved. Ctrl+V / ⌘V pastes from the clipboard.'
         }
         accept="image/*"
         choose="Choose an image"

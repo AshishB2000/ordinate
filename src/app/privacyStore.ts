@@ -68,7 +68,7 @@ async function readJson(file: string): Promise<unknown> {
     return JSON.parse(await recordFs.readFile(file, 'utf8'));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') logger.error('[privacy] unreadable', path.basename(file), '— treating as empty');
+    if (code !== 'ENOENT') logger.error('[privacy] unreadable', path.basename(file), '(treating as empty)');
     return null;
   }
 }

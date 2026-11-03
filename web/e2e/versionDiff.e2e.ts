@@ -44,7 +44,7 @@ e2e('version diff: edit a dashboard, compare two saves, restore the older one', 
 
   await page.goto(`/versions/${pid}/dashboard/${seed.analysisId}`);
   await settled(page);
-  await page.getByRole('heading', { level: 1, name: `${seed.edited} — version history` }).waitFor();
+  await page.getByRole('heading', { level: 1, name: `${seed.edited}: version history` }).waitFor();
   await page.getByRole('region', { name: 'Saved versions' }).getByRole('button', { pressed: false }).first().click();
   await page.getByRole('button', { name: 'Compare with current' }).click();
 
@@ -92,8 +92,8 @@ e2e('version diff: edit a dashboard, compare two saves, restore the older one', 
   const dialog = page.getByRole('dialog', { name: 'Restore v1?' });
   await dialog.getByText(line, { exact: false }).waitFor();
   await dialog.getByRole('button', { name: 'Restore v1' }).click();
-  await page.getByText(/^Restored v1 — the version before it is still in the history\.$/).waitFor();
-  await page.getByRole('heading', { level: 1, name: `${seed.original} — version history` }).waitFor();
+  await page.getByText(/^Restored v1\. The version before it is still in the history\.$/).waitFor();
+  await page.getByRole('heading', { level: 1, name: `${seed.original}: version history` }).waitFor();
   await page.getByRole('region', { name: 'Version preview' }).waitFor();
   assert.ok(!page.url().includes('compare='), 'the compare closed');
   await page.getByText(/^Restored from /).waitFor();

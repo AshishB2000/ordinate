@@ -172,7 +172,7 @@ e2e('scenarios: empty list → new scenario → a driver moves the figures → c
   assert.match(new URL(page.url()).pathname, /^\/analytics\/scenarios\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   const results = page.getByRole('group', { name: 'Scenario results' });
   await results.getByRole('button', { name: /Revenue/ }).first().waitFor();
-  await page.getByText('No drivers yet — every figure is its baseline').waitFor();
+  await page.getByText('No drivers yet, so every figure is its baseline').waitFor();
 
   // An idea chip adds a driver; the figures move and the draft is saved.
   await page.getByRole('button', { name: /^Add the driver / }).first().click();

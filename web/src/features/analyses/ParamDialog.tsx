@@ -171,13 +171,13 @@ export function ParamDialog({
             <Textarea
               label="Options"
               rows={3}
-              placeholder="One option per line — leave empty for a free text box"
+              placeholder="One option per line, or leave empty for a free text box"
               value={f.options}
               onChange={(e) => set({ options: e.target.value })}
             />
           </>
         )}
-        <Input label="Label" placeholder="Shown on the chip — defaults to the name" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} />
+        <Input label="Label" placeholder="Shown on the chip (defaults to the name)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} />
         {r.error && (
           <p className={s.error} role="alert">
             {r.error}

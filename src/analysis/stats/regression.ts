@@ -159,7 +159,7 @@ export function olsFit(target: string, y: readonly (number | null)[], predictors
       counts.set(v, (counts.get(v) || 0) + 1);
     }
     if (counts.size > MAX_LEVELS) {
-      return { ok: false, error: `“${p.name}” has ${counts.size.toLocaleString('en-US')} distinct values — too many to use as a category (the limit is ${MAX_LEVELS}).` };
+      return { ok: false, error: `“${p.name}” has ${counts.size.toLocaleString('en-US')} distinct values, too many to use as a category (the limit is ${MAX_LEVELS}).` };
     }
     if (n > 0 && counts.size < 2) return { ok: false, error: `“${p.name}” has only one value in the rows used, so it cannot explain anything.` };
     const ref = referenceLevel(counts);

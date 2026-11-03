@@ -71,7 +71,7 @@ function Row({ projectId, r }: { projectId: string; r: CatalogRow }) {
             </span>
             <span className={s.ctSub} title={r.description || undefined}>
               {sub}
-              {r.description ? ` — ${r.description}` : ''}
+              {r.description ? `. ${r.description}` : ''}
             </span>
           </span>
         </span>
@@ -125,7 +125,7 @@ export function CatalogTab({ projectId }: { projectId: string }) {
         }
       >
         Every dataset, visual, dashboard, metric and report in this project is listed here with its description, tags and
-        owner — so anyone can find the right one and know who to ask.
+        owner, so anyone can find the right one and know who to ask.
         {!canEdit && ' An editor of this project can import a dataset. You have view-only access.'}
       </EmptyState>
     );

@@ -39,7 +39,12 @@ export function GetStartedPill() {
   if (!d?.show || !d.collapsed) return null;
   const progress = `${d.doneCount} of ${d.total}`;
   return (
-    <button type="button" className={s.pill} aria-label={`Get started: ${progress} done, show the checklist`} onClick={() => set.mutate({ collapsed: false })}>
+    <button
+      type="button"
+      className={s.pill}
+      aria-label={`Get started: ${progress} done. Show the checklist`}
+      onClick={() => set.mutate({ collapsed: false })}
+    >
       <Icon name="circle-check" size={12} />
       <span>Get started</span>
       <span className={s.pillCount}>{progress}</span>
@@ -72,7 +77,7 @@ export function GetStarted({ noData }: { noData: boolean }) {
           <h2 id="gs-title" className={s.title}>
             Get started
           </h2>
-          <p className={s.sub}>A quick tour. Open each one and it ticks itself off.</p>
+          <p className={s.sub}>Four things to try, with the sample data or your own.</p>
         </div>
         <div className={s.meter}>
           <span className={s.count}>{progress}</span>

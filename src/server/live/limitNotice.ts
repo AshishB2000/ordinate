@@ -43,6 +43,6 @@ export async function tellAdmins(org: string, n: LimitNotice): Promise<void> {
     );
     for (const { email } of r.rows) publish({ org, user: email }, LIMIT_CHANNEL, notice);
   } catch (err) {
-    logger.warn(`[live] org ${org}: the daily-limit notice was not pushed — ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[live] org ${org}: the daily-limit notice was not pushed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

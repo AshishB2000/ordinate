@@ -248,7 +248,7 @@ export function validateRows(
     dropped.push({
       kind: 'row',
       where,
-      message: `${at}: the last ${extra === 1 ? 'row' : `${extra} rows`} dropped — a sheet holds at most ${MAX_ROWS} rows.`,
+      message: `${at}: the last ${extra === 1 ? 'row' : `${extra} rows`} dropped: a sheet holds at most ${MAX_ROWS} rows.`,
     });
     out.length = MAX_ROWS;
   }

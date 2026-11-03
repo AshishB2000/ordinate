@@ -22,7 +22,7 @@ const COLS = [
   { name: 'region', type: 'text' },
   { name: 'amount', type: 'number' },
 ] as const;
-const SENTENCE = 'This is a Live dataset — this isn’t available on Live yet. Make a copy to use it.';
+const SENTENCE = 'This is a Live dataset, and this isn’t available on Live yet. Make a copy to use it.';
 const DRAWN = { ok: true, data: { labels: ['East', 'North', 'South'], series: [{ name: 'sum of amount', values: [3, 4, 5] }] }, recommendedShape: 'categorical', warnings: [] };
 
 function serve(live: boolean, extra: Record<string, unknown> = {}) {

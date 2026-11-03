@@ -139,7 +139,7 @@ export function register(): void {
       if (!meta) return NOT_FOUND;
       const clean = transforms.sanitizeSteps([step]);
       const s = clean[0];
-      if (clean.length !== 1 || s.type !== 'segment') return { ok: false, error: 'The segment model is not valid — run Find segments again.' };
+      if (clean.length !== 1 || s.type !== 'segment') return { ok: false, error: 'The segment model is not valid. Run Find segments again.' };
       if (meta.columns.some((c) => c.name === s.column)) return { ok: false, error: `There is already a column called "${s.column}".` };
       const res = await commitSteps(meta.projectId, meta.id, [...(meta.steps || []), s]);
       if (!res.ok) return { ok: false, error: res.error };
@@ -191,7 +191,7 @@ export function register(): void {
       if (!agg || !agg.customers.length) return { ok: false, error: 'There are no customers to save.' };
       const t = rfmTable(agg, s.id);
       // Made from the source's rows: born with its row access rules (closed: the RFM table has no rule column).
-      const saved = await savedFrom(meta.projectId, meta.id, () => datasets.saveDataset(meta.projectId, { name: `${meta.name} — RFM`, sourceKind: 'combined', columns: t.columns, rows: t.rows }));
+      const saved = await savedFrom(meta.projectId, meta.id, () => datasets.saveDataset(meta.projectId, { name: `${meta.name} (RFM)`, sourceKind: 'combined', columns: t.columns, rows: t.rows }));
       if (!saved) return { ok: false, error: 'Could not save the dataset' };
       return { ok: true, dataset: { id: saved.id, name: saved.name, rowCount: saved.rowCount } };
     } catch (err) {

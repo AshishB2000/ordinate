@@ -140,7 +140,7 @@ export function LiveUsageTab() {
     <section className={s.section} aria-label="Live usage">
       <p className={s.lead}>
         What Live datasets asked their warehouses, per day and connection. Every query sent counts once; a figure served from the cache costs
-        nothing. Bytes are what the warehouse reports billing — BigQuery reports them, Snowflake bills by warehouse time instead.
+        nothing. Bytes are what the warehouse reports billing: BigQuery reports them, Snowflake bills by warehouse time instead.
       </p>
       {body}
     </section>

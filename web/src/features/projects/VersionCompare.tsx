@@ -189,7 +189,7 @@ export function VersionCompare({ projectId, type, id, versions, from, to, onPick
     (r) => {
       setConfirm(false);
       if (!r.ok) return void toast(r.error ?? 'Could not restore that version.', { kind: 'error' });
-      toast(r.unchanged ? 'That version is already the current one.' : `Restored ${targetLabel} — the version before it is still in the history.`, { kind: 'success' });
+      toast(r.unchanged ? 'That version is already the current one.' : `Restored ${targetLabel}. The version before it is still in the history.`, { kind: 'success' });
       onClose();
     },
   );
@@ -275,7 +275,7 @@ export function VersionCompare({ projectId, type, id, versions, from, to, onPick
       {body}
       {ready && target && targetMeta && can('editor') && (
         <footer className={s.foot}>
-          <span>{`Restoring ${targetLabel} saves it again as the newest version — the current one stays in the history.`}</span>
+          <span>{`Restoring ${targetLabel} saves it again as the newest version. The current one stays in the history.`}</span>
           <Button size="sm" variant="primary" icon="rotate-ccw" onClick={() => setConfirm(true)}>
             {`Restore ${targetLabel}`}
           </Button>

@@ -153,7 +153,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
         column personal or financial so exports and reports can say so.
       </p>
       <p className={s.lead} id={helpId}>
-        <span className={s.strong}>Also called</span> — {ALSO_CALLED_HELP} Separate names with commas.
+        <span className={s.strong}>Also called</span>: {ALSO_CALLED_HELP} Separate names with commas.
       </p>
       <div className={s.card}>
         <table className={`${s.table} ${s.docTable}`}>

@@ -121,7 +121,7 @@ export function PeriodPanel({ value, relativeOnly, onChange }: { value: PeriodSp
               </Button>
             </div>
             <p className={s.note}>
-              “Last” periods are complete ones — Last 30 days ends yesterday.{' '}
+              “Last” periods are complete ones: Last 30 days ends yesterday.{' '}
               {q.data.fiscal ? 'Quarters and years follow your fiscal year.' : 'Weeks and fiscal years follow Settings → Formats.'}
             </p>
           </>
@@ -156,7 +156,7 @@ export function PeriodPanel({ value, relativeOnly, onChange }: { value: PeriodSp
 function Resolved({ value }: { value: PeriodSpec | null }) {
   const q = usePeriodPicker(value && relative(value) ? value : null);
   let text: ReactNode;
-  if (!value) text = 'No date filter — every date is included';
+  if (!value) text = 'No date filter, so every date is included';
   else if (!relative(value)) text = value.from && value.to ? `${value.from} to ${value.to}` : value.from ? `From ${value.from}` : value.to ? `Until ${value.to}` : 'Pick a start or an end';
   else if (q.isPending) text = <Skeleton className={s.lineSkel} />;
   else

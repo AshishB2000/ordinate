@@ -17,7 +17,7 @@ const PRESETS: readonly (readonly [string, string])[] = [
   ['Weekdays 07:00', '0 7 * * 1-5'],
   ['Mondays 09:00', '0 9 * * 1'],
 ];
-const RETRIES = ['Stop — no retries', 'Retry once', 'Retry twice', 'Retry 3 times'];
+const RETRIES = ['Stop (no retries)', 'Retry once', 'Retry twice', 'Retry 3 times'];
 const BACKOFFS: readonly (readonly [number, string])[] = [
   [10_000, 'after 10 s, doubling'],
   [30_000, 'after 30 s, doubling'],
@@ -50,7 +50,7 @@ function CronEditor({ view, onSave, onRemove, onCancel }: { view: PipelineView; 
           className={s.cronInput}
           spellCheck={false}
           aria-label="Schedule, as five cron fields"
-          placeholder="minute hour day month weekday — e.g. 0 6 * * *"
+          placeholder="minute hour day month weekday, e.g. 0 6 * * *"
           value={cron}
           onChange={(e) => setCron(e.target.value)}
         />
@@ -135,7 +135,7 @@ export function PipelineHead({
             <span className={s.schedSub}>
               {sch
                 ? sch.paused
-                  ? `Times in ${sch.tz}. Paused — nothing runs on this schedule until you resume it.`
+                  ? `Times in ${sch.tz}. Paused: nothing runs on this schedule until you resume it.`
                   : `Times in ${sch.tz} · next run ${sch.nextRunAt ? `${absTime(sch.nextRunAt)} (${relTime(sch.nextRunAt)})` : 'never'}`
                 : 'Run every step on one schedule, in order. Each step’s own schedule still applies.'}
             </span>

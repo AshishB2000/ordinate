@@ -64,7 +64,7 @@ export function ClickFilterBar({ ed }: { ed: EditorApi }) {
   }
   const from = (c: ClickFilter): string => {
     const name = visualOf(c.origin)?.name;
-    return name ? ` — clicked on “${name}”` : '';
+    return name ? ` (clicked on “${name}”)` : '';
   };
   return (
     <div className={s.bar} role="group" aria-label="Click filters">

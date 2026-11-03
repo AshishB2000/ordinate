@@ -57,7 +57,7 @@ function SecretRow({ f, set, projectId, conn, onReplaced }: { f: CatalogField; s
       await replaceSecret(projectId, conn.id, f.key, value);
       setValue('');
       setOpen(false);
-      toast(`${f.label} replaced — the connection tested OK with it.`, { kind: 'success' });
+      toast(`${f.label} replaced. The connection tested OK with it.`, { kind: 'success' });
       onReplaced();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not replace it.');

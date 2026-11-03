@@ -381,7 +381,7 @@ export class Parser {
     const fnTok = this.peek();
     const agg = fnTok && fnTok.kind === 'name' ? fnTok.value.toLowerCase() : '';
     if (!LOD_AGGS.has(agg)) {
-      this.fail('Expected one aggregate — SUM, AVG, MIN, MAX, COUNT or COUNTD — after ":"');
+      this.fail('Expected one aggregate (SUM, AVG, MIN, MAX, COUNT or COUNTD) after ":"');
     }
     this.pos += 1;
     this.expectPunc('(');

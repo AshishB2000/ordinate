@@ -134,7 +134,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
   holder.appendChild(canvas);
   // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
   const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, OrdFormat.formatPct);
-  if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
+  if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw. Publish the dashboard again.');
   const src: number[] | undefined = cfg.src;
   delete cfg.src;
   // What it draws, as text a screen reader hears — the app's own list (OrdFormat.figureLines).

@@ -128,7 +128,7 @@ function Metrics({ projectId }: { projectId: string }) {
           )
         }
       >
-        A metric names a number once — Revenue, Margin %, Orders — so every KPI card, alert and chart that shows it agrees.
+        A metric names a number once (Revenue, Margin %, Orders), so every KPI card, alert and chart that shows it agrees.
         {canEdit ? ' Define it from a column or as a formula of other metrics.' : ' An editor of this project can define one. You have view-only access.'}
       </EmptyState>
     );

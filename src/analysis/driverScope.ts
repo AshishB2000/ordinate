@@ -256,7 +256,7 @@ export function periodScopes(spec: DriversSpec, columns: ParsedColumn[]): Period
   if (c.mode === 'latest') return { reason: 'The latest periods are read from the data.' };
   const moved = compareScope(spec.filters, columns, c);
   if (!moved) {
-    return { reason: 'There is no date range in scope to compare — add a date filter or a date control first.' };
+    return { reason: 'There is no date range in scope to compare. Add a date filter or a date control first.' };
   }
   return {
     a: spec.filters.concat(path),

@@ -55,7 +55,7 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
             onValueChange={(v) => act.setNode(n.id, { every: v as 'off' | AutoRefreshEvery })}
             options={cadenceOptions(
               [
-                { value: 'off', label: 'Manual — no refresh schedule' },
+                { value: 'off', label: 'Manual (no refresh schedule)' },
                 { value: '5min', label: 'Refresh every 5 minutes' },
                 { value: '15min', label: 'Refresh every 15 minutes' },
                 { value: 'hourly', label: 'Refresh hourly' },
@@ -66,7 +66,7 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
             )}
           />
           <BehindBadge behind={sch.behind} />
-          <p className={s.note}>Saved on the dataset — the same schedule its Refresh menu sets.</p>
+          <p className={s.note}>Saved on the dataset: the same schedule its Refresh menu sets.</p>
         </>
       ) : sch.edit === 'report' ? (
         <>
@@ -96,12 +96,12 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
           <p className={s.note}>
             {sch.hasFolder
               ? 'Saved on the report. Each run writes a file into the report’s folder.'
-              : 'This report has no folder yet — open it and pick one in its schedule, so a run has somewhere to write.'}
+              : 'This report has no folder yet. Open it and pick one in its schedule, so a run has somewhere to write.'}
           </p>
         </>
       ) : (
         <p className={s.note}>
-          {n.kind === 'source' ? 'A source has nothing to run: the datasets after it fetch from it.' : 'This step runs after its inputs — whenever they refresh, and in every pipeline run.'}
+          {n.kind === 'source' ? 'A source has nothing to run: the datasets after it fetch from it.' : 'This step runs after its inputs: whenever they refresh, and in every pipeline run.'}
         </p>
       )}
     </div>

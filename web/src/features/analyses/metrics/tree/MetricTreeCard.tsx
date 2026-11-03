@@ -102,7 +102,7 @@ export function MetricTreeProps({ card, set }: { card: Card; set: (label: string
         options={MODES}
         onValueChange={(v) => set('Change the tree’s comparison', (c) => void (c.metricTree = { ...spec, compare: { mode: v as CompareMode } }))}
       />
-      <p className={s.propNote}>The period is the sheet’s date filter — the newest closed month when it has none.</p>
+      <p className={s.propNote}>The period is the sheet’s date filter, or the newest closed month when it has none.</p>
       <Link className={buttonClass('secondary', 'sm')} to={`/data/metrics/${ed.projectId}/${spec.metricId}/tree`}>
         <Icon name="lineage" />
         <span>Edit the tree</span>
@@ -133,7 +133,7 @@ export function AddTreeCardDialog({ onClose }: { onClose: () => void }) {
       open
       onOpenChange={(o) => !o && onClose()}
       title="Add a metric tree"
-      description="Why a metric moved, broken into its parts — under this sheet’s date filter and Compare."
+      description="Why a metric moved, broken into its parts, under this sheet’s date filter and Compare."
       footer={
         <>
           <DialogClose asChild>

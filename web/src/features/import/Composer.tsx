@@ -109,7 +109,7 @@ export function Composer({ projectId, start, onBack }: { projectId: string; star
   };
 
   const notes = [
-    ...(start.unsure ? ['The model was unsure about some of what it read. Check the cells before you save — any of them can be corrected here.'] : []),
+    ...(start.unsure ? ['The model was unsure about some of what it read. Check the cells before you save. Any of them can be corrected here.'] : []),
     ...(start.warnings ?? []),
     ...(head.data?.warnings ?? []),
   ];

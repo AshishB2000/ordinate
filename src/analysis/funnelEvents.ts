@@ -135,7 +135,7 @@ export function eventMs(cell: Cell): number | null {
 
 export function funnelNeeds(cols: ParsedColumn[], enc: FunnelEncoding | undefined): string {
   const has = (n: string | undefined): boolean => !!n && cols.some((c) => c && c.name === n);
-  if (!enc || !enc.entity) return 'Pick the entity column — who moves through the funnel.';
+  if (!enc || !enc.entity) return 'Pick the entity column (who moves through the funnel).';
   if (!has(enc.entity)) return `The entity column "${enc.entity}" is not in this dataset.`;
   if (!enc.event) return 'Pick the event-name column.';
   if (!has(enc.event)) return `The event column "${enc.event}" is not in this dataset.`;

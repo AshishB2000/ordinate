@@ -242,7 +242,7 @@ export function ValuePicker({ projectId, control, value, onChange }: { projectId
         </div>
         {q.data && q.data.total > q.data.values.length && (
           <p className={s.more}>
-            Showing the first {formatNumber(q.data.values.length)} of {formatNumber(q.data.total)} — search to narrow.
+            Showing the first {formatNumber(q.data.values.length)} of {formatNumber(q.data.total)}. Search to narrow.
           </p>
         )}
         {multi && picked.length > 0 && (

@@ -143,7 +143,7 @@ if (!adminUrl) {
 
     // A site that is not an origin is refused as it is typed; the portal's is allowed.
     await page.getByLabel('Allow a site').fill(`${allowed.origin}/analytics`);
-    await page.getByText(/no path, no wildcard/).waitFor();
+    await page.getByText(/no path and no wildcard/).waitFor();
     await page.getByLabel('Allow a site').fill(allowed.origin);
     await page.getByRole('button', { name: 'Allow', exact: true }).click();
     await page.getByRole('list', { name: 'Allowed sites' }).getByText(allowed.origin).waitFor();

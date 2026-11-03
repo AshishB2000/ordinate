@@ -117,7 +117,7 @@ export function FieldsDemo() {
           <Select label="Source" value="csv" onValueChange={setNone} options={SOURCES} disabled />
           <Select aria-label="Small" size="sm" value="csv" onValueChange={setNone} options={SOURCES} />
         </Cell>
-        <Cell label="Select: a long list (130) — opens bounded, scrolls inside, flips near the edge">
+        <Cell label="Select: a long list (130) that opens bounded, scrolls inside and flips near the edge">
           <div className={g.selectHost}>
             <Select label="Model" value={model} onValueChange={setModel} options={MODELS} />
           </div>

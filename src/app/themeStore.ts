@@ -67,7 +67,7 @@ async function readState(): Promise<ThemeState> {
   try {
     return sanitizeState(JSON.parse(text));
   } catch (_) {
-    logger.error('[themes] themes.json is not valid JSON — kept as themes.json.corrupt, reading as empty');
+    logger.error('[themes] themes.json is not valid JSON: kept as themes.json.corrupt, reading as empty');
     await recordFs.copyFile(file, file + '.corrupt').catch(() => undefined);
     return { defaultId: '', themes: [] };
   }

@@ -52,7 +52,7 @@ function NewReport({ projectId, onClose }: { projectId: string; onClose: () => v
       open
       onOpenChange={(o) => !o && onClose()}
       title="New report"
-      description="Pick the dashboard to print. Its sheets become the report’s pages — a cover, a summary, a page per sheet and one per big chart."
+      description="Pick the dashboard to print. Its sheets become the report’s pages: a cover, a summary, a page per sheet and one per big chart."
       footer={
         <DialogClose asChild>
           <Button variant="ghost">Cancel</Button>

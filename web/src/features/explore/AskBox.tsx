@@ -33,7 +33,7 @@ export function AskBox({ projectId }: { projectId: string }) {
         type="text"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Or ask in your own words — the Assistant answers with the app’s figures"
+        placeholder="Or ask in your own words, and the Assistant answers with the app’s figures"
         aria-label="Ask in your own words"
         autoComplete="off"
         maxLength={2000}

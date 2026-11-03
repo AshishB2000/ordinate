@@ -90,7 +90,7 @@ function You({ me }: { me: Me }) {
           title="Keyboard"
           desc={
             <>
-              <KeyCaps keys="mod+k" /> opens the command palette — every command, and the records in this project. <KeyCaps keys="?" /> shows this list anywhere.
+              <KeyCaps keys="mod+k" /> opens the command palette: every command, and the records in this project. <KeyCaps keys="?" /> shows this list anywhere.
             </>
           }
         >
@@ -100,7 +100,7 @@ function You({ me }: { me: Me }) {
         </Group>
       </div>
       <aside className={s.side} aria-label="More settings">
-        {admin && <LinkCard to="/admin?tab=workspace" icon="shield" title="Organization settings" desc="Formats, branding, dashboard themes, the Assistant's rules and backups — for everyone." />}
+        {admin && <LinkCard to="/admin?tab=workspace" icon="shield" title="Organization settings" desc="Formats, branding, dashboard themes, the Assistant's rules and backups, for everyone." />}
         <LinkCard to="/settings?tab=privacy" icon="lock" title="Privacy" desc={project ? `The Share policy and sensitive columns of ${project.name}.` : 'The Share policy of the current project.'} />
         <LinkCard to="/tokens" icon="terminal" title="API tokens and MCP" desc="Use Ordinate from a script, the command line or an MCP client such as Claude Code." />
         <LinkCard to="/about" icon="info" title="About Ordinate" desc="Version, licences of the software it bundles, and links." />

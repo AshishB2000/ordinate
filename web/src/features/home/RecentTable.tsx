@@ -174,7 +174,7 @@ export function RecentTable({ projectId, recent, canEdit }: { projectId: string 
             }
           >
             {allProjects
-              ? 'Every dataset, visual and dashboard you open shows up in this list — newest first, across all projects.'
+              ? 'Every dataset, visual and dashboard you open shows up in this list, newest first, across all projects.'
               : 'Every dataset, visual and dashboard in this project shows up here, newest first. “All projects” shows the rest.'}
           </EmptyState>
         </div>

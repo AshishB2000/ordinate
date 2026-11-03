@@ -62,7 +62,7 @@ export function Row({ r, selected, onOpen }: { r: ScoreRow; selected: boolean; o
       <td className={s.cStatus}><Dot status={r.status} /></td>
       <th scope="row" className={s.cName}>
         <span className={s.metricName}>{r.name}</span>
-        {r.undated && <span className={s.note}>All time — no date column</span>}
+        {r.undated && <span className={s.note}>All time (no date column)</span>}
         {why && <LiveRefusalLine message={why} />}
       </th>
       <td className={s.cNum}>{r.display || '—'}</td>

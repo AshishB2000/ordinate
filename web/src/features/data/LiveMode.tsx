@@ -80,7 +80,7 @@ export function SwitchToLiveDialog({ projectId, datasetId, name, rowCount, onClo
     >
       <p>
         The stored copy of {rowsText(rowCount)} is deleted. Answers are cached for 5 minutes by default. Browsing rows, prepare steps, quality checks,
-        insights and snapshots work on a copy, so they are off while the dataset is Live — switch back with “Copy the data”.
+        insights and snapshots work on a copy, so they are off while the dataset is Live. Switch back with “Copy the data”.
       </p>
       {error && (
         <p role="alert" className={s.rowError}>
@@ -99,7 +99,7 @@ export function SwitchToLiveDialog({ projectId, datasetId, name, rowCount, onClo
  */
 export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId: string; datasetId: string; maxCacheAgeSec?: number }) {
   const set = useWrite('dataset:setMode', REFRESH, {
-    onDone: (r: ModeReply) => r.ok !== false && toast('Copied — the rows are stored here now.', { kind: 'success' }),
+    onDone: (r: ModeReply) => r.ok !== false && toast('Copied. The rows are stored here now.', { kind: 'success' }),
   });
   const cache = cacheText(maxCacheAgeSec);
   // Both copies save a dataset: an editor's. A viewer reads what works here and what needs a copy.
@@ -108,7 +108,7 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
     <div className={l.notice}>
       <EmptyState
         icon="zap"
-        title="Live — the rows stay in the warehouse"
+        title="Live: the rows stay in the warehouse"
         actions={
           <>
             <MakeCopyButton projectId={projectId} datasetId={datasetId} />
@@ -123,7 +123,7 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
         {`Charts, KPI tiles and answers on this dataset ask its warehouse${cache ? ` (${cache})` : ''}. Browsing rows, prepare steps and the other tools need a copy.`}
       </EmptyState>
       <section className={l.offList} aria-label="Needs a copy">
-        <h3 className={l.offHead}>Off while Live — each works on a copy</h3>
+        <h3 className={l.offHead}>Off while Live (each works on a copy)</h3>
         <ul>
           {LIVE_OFF_LIST.map((what) => (
             <li key={what}>{what}</li>

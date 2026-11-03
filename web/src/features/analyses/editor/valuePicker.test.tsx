@@ -75,7 +75,7 @@ describe('a dropdown / multi control’s value picker', () => {
     const asked = serve();
     draw('dropdown');
     fireEvent.click(await screen.findByRole('button', { name: 'Code: All' }));
-    await screen.findByText('Showing the first 200 of 250 — search to narrow.');
+    await screen.findByText('Showing the first 200 of 250. Search to narrow.');
     expect(within(panel()).getAllByRole('button')).toHaveLength(201); // All + 200
     expect(asked).toEqual([{ projectId: P, datasetId: D, column: 'code', limit: 200 }]);
   });

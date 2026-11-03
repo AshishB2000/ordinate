@@ -75,7 +75,7 @@ function Trash({ projectId, projectName }: { projectId: string; projectName: str
   } else if (items.length === 0) {
     body = (
       <EmptyState heading={3} icon="trash" title="Trash is empty">
-        Anything you delete — a dataset, a visual, a dashboard, a metric, a report or an alert — waits here for 30 days, and can be put back
+        Anything you delete (a dataset, a visual, a dashboard, a metric, a report or an alert) waits here for 30 days, and can be put back
         exactly where it was.
       </EmptyState>
     );

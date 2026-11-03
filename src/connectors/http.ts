@@ -76,7 +76,7 @@ const INSECURE_FIELD: ConnectorField = {
   default: false,
   help:
     'Off by default. When on, the query, your results and your credentials cross ' +
-    'the network in clear text — only tick this for a host on this machine or a ' +
+    'the network in clear text. Only tick this for a host on this machine or a ' +
     'trusted private network.',
 };
 
@@ -622,7 +622,7 @@ export const CONNECTORS: ConnectorDef[] = [
     readOnly: true,
     blurb: 'Reads over the HTTP interface with the readonly=2 setting set.',
     fields: [
-      hostField('Hostname only — the scheme and port come from the fields below.'),
+      hostField('Hostname only. The scheme and port come from the fields below.'),
       portField(8443, '8443 for the TLS interface, 8123 for plain HTTP.'),
       { key: 'database', label: 'Database', type: 'text', default: 'default' },
       { key: 'user', label: 'User', type: 'text', default: 'default' },
@@ -662,7 +662,7 @@ export const CONNECTORS: ConnectorDef[] = [
       hostField('The coordinator hostname.'),
       portField(8443, '8443 for TLS, 8080 for the default plain-HTTP coordinator port.'),
       { key: 'user', label: 'User', type: 'text', required: true },
-      { key: 'password', label: 'Password', type: 'password', secret: true, help: 'Optional. Sent as HTTP Basic — Trino rejects Basic over plain HTTP.' },
+      { key: 'password', label: 'Password', type: 'password', secret: true, help: 'Optional. Sent as HTTP Basic, which Trino rejects over plain HTTP.' },
       { key: 'catalog', label: 'Catalog', type: 'text' },
       { key: 'schema', label: 'Schema', type: 'text' },
       INSECURE_FIELD,
@@ -681,7 +681,7 @@ export const CONNECTORS: ConnectorDef[] = [
       hostField('The coordinator hostname.'),
       portField(8443, '8443 for TLS, 8080 for the default plain-HTTP coordinator port.'),
       { key: 'user', label: 'User', type: 'text', required: true },
-      { key: 'password', label: 'Password', type: 'password', secret: true, help: 'Optional. Sent as HTTP Basic — Presto rejects Basic over plain HTTP.' },
+      { key: 'password', label: 'Password', type: 'password', secret: true, help: 'Optional. Sent as HTTP Basic, which Presto rejects over plain HTTP.' },
       { key: 'catalog', label: 'Catalog', type: 'text' },
       { key: 'schema', label: 'Schema', type: 'text' },
       INSECURE_FIELD,
@@ -730,7 +730,7 @@ export const CONNECTORS: ConnectorDef[] = [
     family: 'http',
     category: 'Query engines',
     readOnly: true,
-    blurb: 'The query-only /druid/v2/sql endpoint — ingestion endpoints are never called.',
+    blurb: 'The query-only /druid/v2/sql endpoint. Ingestion endpoints are never called.',
     fields: [
       hostField('The router or broker hostname.'),
       portField(8888, '8888 for the router, 8082 for a broker.'),

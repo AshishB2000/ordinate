@@ -37,7 +37,7 @@ export function stepSummary(step: FilterStep | null | undefined, periodLabel?: s
   if (isValuelessOp(op)) return label;
   if (isListOp(op)) {
     const vals = Array.isArray(step.values) ? step.values.map((v) => (v == null ? '' : String(v))) : [];
-    if (vals.length === 0) return `${label} — no values yet`;
+    if (vals.length === 0) return `${label} (no values yet)`;
     if (vals.length > 3) return `${label} ${vals.slice(0, 3).join(', ')} +${vals.length - 3}`;
     return `${label} ${vals.join(', ')}`;
   }

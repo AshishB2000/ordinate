@@ -7,7 +7,7 @@ import s from './SignInPage.module.css';
 
 const SSO_POINTS: { icon: 'shield' | 'lock' | 'layers'; text: string }[] = [
   { icon: 'shield', text: 'Your company account, through your own identity provider' },
-  { icon: 'lock', text: 'Runs in your infrastructure — your data stays there' },
+  { icon: 'lock', text: 'Runs in your infrastructure, so your data stays there' },
   { icon: 'layers', text: 'Data, visuals and dashboards in one workspace' },
 ];
 

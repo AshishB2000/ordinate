@@ -26,7 +26,7 @@ import s from './RefreshUrl.module.css';
 function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(
     () => toast(`${what} copied.`, { kind: 'success' }),
-    () => toast('Copy failed — select the text and copy it instead.', { kind: 'error' }),
+    () => toast('Copy failed. Select the text and copy it instead.', { kind: 'error' }),
   );
 }
 

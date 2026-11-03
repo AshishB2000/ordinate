@@ -83,9 +83,9 @@ describe('the sheet’s Compare', () => {
   });
 
   it('one reason for every line (no date in scope) is said once', async () => {
-    serve(() => ({ ok: false, error: 'There is no date range in scope to compare — add a date filter or a date control first.' }));
+    serve(() => ({ ok: false, error: 'There is no date range in scope to compare. Add a date filter or a date control first.' }));
     show({ mode: 'previous_period' }, [kpi('a', 'Revenue'), kpi('b', 'Units')]);
-    expect(await screen.findAllByText('There is no date range in scope to compare — add a date filter or a date control first.')).toHaveLength(1);
+    expect(await screen.findAllByText('There is no date range in scope to compare. Add a date filter or a date control first.')).toHaveLength(1);
   });
 
   it('half a custom range asks nothing and says what is missing; a sheet with no KPI says where the comparison shows', async () => {

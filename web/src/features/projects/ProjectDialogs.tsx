@@ -113,7 +113,7 @@ export function DeleteDialog({ project, onClose, onDeleted }: { project: Project
   return (
     <ConfirmDelete
       title={`Delete ${project.name}?`}
-      description="Every dataset, visual, dashboard and report in it is deleted for good, with its history. This cannot be undone — to hide it instead, archive it."
+      description="Every dataset, visual, dashboard and report in it is deleted for good, with its history. This cannot be undone. To hide it instead, archive it."
       confirm="Delete project"
       typeToConfirm={project.name}
       busy={busy}

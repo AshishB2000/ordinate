@@ -58,7 +58,7 @@ export const MODEL: MessageModel = {
   sections: [{ title: 'Sales by region', caption: 'West leads with 400.', columns: ['', 'sum of amount', 'Share of total'], rows: [['West', '400', '40%'], ['South', '300', '30%']], more: 2 }],
   more: 0,
   link: { url: 'https://bi.example.com/analyses/x/y', label: 'Open in Ordinate' },
-  footer: 'Sent by Ordinate · Retail overview — weekdays · Every weekday at 08:00 (UTC)',
+  footer: 'Sent by Ordinate · Retail overview, weekdays · Every weekday at 08:00 (UTC)',
 };
 
 export function preview(over: Partial<Preview> = {}): { body: { ok: true } & Preview } {

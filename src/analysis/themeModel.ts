@@ -207,13 +207,13 @@
       if (r === null || r >= c.min) continue;
       const ratio = Math.round(r * 10) / 10;
       out.push({ token: c.token, against: c.against, ratio, min: c.min,
-        message: `${ratio}:1 ${c.what} — needs ${c.min}:1` });
+        message: `${ratio}:1 ${c.what} (needs ${c.min}:1)` });
     }
     for (const [ink, fill] of INKS) {
       const r = contrast(t[ink], over(t[fill], t['--surface']));
       if (r === null || r >= 4.5) continue;
       const ratio = Math.round(r * 10) / 10;
-      out.push({ token: ink, against: fill, ratio, min: 4.5, message: `${ratio}:1 on its fill — needs 4.5:1` });
+      out.push({ token: ink, against: fill, ratio, min: 4.5, message: `${ratio}:1 on its fill (needs 4.5:1)` });
     }
     return out;
   }
