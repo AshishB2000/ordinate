@@ -146,7 +146,7 @@ if (!adminUrl) {
     await page.setExtraHTTPHeaders({ 'x-forwarded-email': VIEWER });
 
     await open(`/?project=${pid}`);
-    await page.getByTestId('home-sub').getByText(PROJECT).waitFor();
+    await page.getByTestId('project-switcher').getByText(PROJECT).waitFor();
     await page.getByRole('region', { name: 'Recent', exact: true }).getByRole('link', { name: /^Orders, Dataset/ }).waitFor();
     await page.getByRole('textbox', { name: 'Ask a question or say what to build' }).waitFor(); // asking is anyone's
     assert.equal(await count(page, 'button', 'New'), 0, 'Home: no New menu');
