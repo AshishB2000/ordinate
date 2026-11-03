@@ -187,6 +187,6 @@ export function VersionPreview({ type, record, meta }: { type: VersionType; reco
       ))}
     </ol>
   ) : (
-    <Facts rows={[['Steps', 'None — the source as imported']]} />
+    <Facts rows={[['Steps', 'None (the source as imported)']]} />
   );
 }

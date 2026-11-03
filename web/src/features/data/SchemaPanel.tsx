@@ -20,8 +20,8 @@ const USE_WORD: Record<MissingColumn['usedBy'][number]['kind'], string> = { visu
 
 /** "Profiled from a sample of 240 rows · 7:12 PM" — or why there is no sample yet. */
 export function sampleLine(v: Pick<LiveSchema, 'sampledAt' | 'sampleRows' | 'method'>): string {
-  if (!v.sampledAt || v.sampleRows === null) return 'Not profiled yet — Sync schema reads the columns and a sample of the rows.';
-  const how = v.method === 'limit' ? ' (the first rows — this table could not be sampled at random)' : '';
+  if (!v.sampledAt || v.sampleRows === null) return 'Not profiled yet. Sync schema reads the columns and a sample of the rows.';
+  const how = v.method === 'limit' ? ' (the first rows, since this table could not be sampled at random)' : '';
   return `Profiled from a sample of ${rowsText(v.sampleRows)}${how} · ${stamp(v.sampledAt)}`;
 }
 
@@ -35,7 +35,7 @@ export function syncWords(r: SyncReply): { text: string; error?: boolean } {
     r.retyped.length ? `retyped ${r.retyped.join(', ')}` : '',
   ].filter(Boolean);
   const sample = r.sample.ok ? `profiled from ${rowsText(r.sample.rows)}` : r.sample.error;
-  return { text: `Synced ${formatNumber(r.columns)} ${r.columns === 1 ? 'column' : 'columns'}${changes.length ? ` — ${changes.join('; ')}` : ''}. ${sample.charAt(0).toUpperCase()}${sample.slice(1)}${/[.!?]$/.test(sample) ? '' : '.'}`, error: !r.sample.ok };
+  return { text: `Synced ${formatNumber(r.columns)} ${r.columns === 1 ? 'column' : 'columns'}${changes.length ? `: ${changes.join('; ')}` : ''}. ${sample.charAt(0).toUpperCase()}${sample.slice(1)}${/[.!?]$/.test(sample) ? '' : '.'}`, error: !r.sample.ok };
 }
 
 function Missing({ missing }: { missing: MissingColumn[] }) {
@@ -48,7 +48,7 @@ function Missing({ missing }: { missing: MissingColumn[] }) {
           {missing.map((m) => (
             <li key={m.column}>
               <strong>{m.column}</strong>
-              {m.usedBy.length > 0 && ` — used by ${m.usedBy.map((u) => `the ${USE_WORD[u.kind]} “${u.name}”`).join(', ')}`}
+              {m.usedBy.length > 0 && `, used by ${m.usedBy.map((u) => `the ${USE_WORD[u.kind]} “${u.name}”`).join(', ')}`}
             </li>
           ))}
         </ul>
@@ -81,7 +81,7 @@ export function SchemaPanel({ projectId, datasetId }: { projectId: string; datas
           {v.note && <p className={l.warnNote}>{v.note}</p>}
         </div>
         {can('editor') && (
-          <Button icon="refresh" size="sm" loading={busy} title="Re-read the columns and profile a sample of the rows — one query, cost-guarded" onClick={run}>
+          <Button icon="refresh" size="sm" loading={busy} title="Re-read the columns and profile a sample of the rows (one query, cost-guarded)" onClick={run}>
             {v.syncing && !sync.isPending ? 'Syncing…' : 'Sync schema'}
           </Button>
         )}

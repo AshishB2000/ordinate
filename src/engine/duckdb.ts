@@ -607,7 +607,7 @@ function onWorkerMessage(w: Worker, reply: WorkerReply): void {
 
 function call(kind: 'query' | 'exec', sql: string, params?: readonly DuckValue[]): string {
   if ((syncForbidden && isMainThread) || router) {
-    throw new DuckDBError('sync', `synchronous duck.${kind}() is forbidden in server mode — use ${kind}Async()`);
+    throw new DuckDBError('sync', `synchronous duck.${kind}() is forbidden in server mode. Use ${kind}Async()`);
   }
   if (!ensureStarted() || !worker || !ctl) {
     throw new DuckDBError('unavailable', 'DuckDB is not available' + (failReason ? ': ' + failReason : ''));

@@ -92,7 +92,7 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   assert.match(progress, /^Get started: \d of 4 done$/);
   await screensHome(page);
   await card.getByRole('button', { name: 'Fold the checklist into a progress pill' }).click();
-  const pill = page.getByRole('button', { name: /^Get started: \d of 4 done, show the checklist$/ });
+  const pill = page.getByRole('button', { name: /^Get started: \d of 4 done\. Show the checklist$/ });
   await pill.waitFor();
   assert.equal(await card.count(), 0);
   await pill.click();
@@ -144,7 +144,7 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
     [id, server.sample.projectId, datasetId] as const,
   );
   assert.equal(reply, 200);
-  await page.getByRole('status', { name: 'Notifications' }).getByText(/ — done$/).waitFor();
+  await page.getByRole('status', { name: 'Notifications' }).getByText(/: done$/).waitFor();
   const toastMs = Date.now() - sent;
   await jobs.click();
   const pop = page.getByRole('dialog', { name: 'Jobs' });

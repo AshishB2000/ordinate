@@ -111,7 +111,7 @@ describe('the wizard’s layouts', () => {
     expect(calls.some((c) => c.channel === 'analysis:draft')).toBe(false); // the wizard no longer asks the model itself
 
     fireEvent.click(screen.getByRole('button', { name: 'Draft with the Assistant' }));
-    const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
+    const review = await screen.findByRole('dialog', { name: 'Assistant draft: review before creating' });
     expect(screen.queryByRole('dialog', { name: 'Draft a dashboard' })).toBeNull();
     expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
     expect(calls.filter((c) => c.channel === 'analysis:draft').map((c) => c.payload)).toEqual([{ projectId: PID, datasetId: DID, intent: 'revenue by region', kind: 'overview', clarify: true }]);

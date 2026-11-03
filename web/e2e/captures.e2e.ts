@@ -209,7 +209,7 @@ e2e('capture: upload on the Captures tab → its page, the analysis beside the s
   await analysis.getByText('Sales by region.').waitFor();
   // The headline's figure is the app's, from the extracted table: North, 120.
   assert.equal(await analysis.locator('strong').first().textContent(), '120');
-  await page.getByRole('region', { name: 'Metrics' }).getByText('1. North — 120').waitFor();
+  await page.getByRole('region', { name: 'Metrics' }).getByText('1. North: 120').waitFor();
   await page.getByRole('region', { name: 'Chart' }).locator('canvas').waitFor();
   const read = page.getByRole('region', { name: 'What the model read' });
   await read.getByRole('cell', { name: '95' }).waitFor();

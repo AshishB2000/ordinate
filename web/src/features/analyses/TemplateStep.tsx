@@ -92,8 +92,8 @@ const SKIP = '';
 const DEBOUNCE_MS = 220;
 const CONFIDENCE: Record<string, string> = {
   high: 'Matched confidently',
-  medium: 'Best match — worth a look',
-  low: 'A guess — check this one',
+  medium: 'Best match, worth a look',
+  low: 'A guess, so check this one',
   chosen: 'You chose this column',
   none: 'Not mapped',
 };

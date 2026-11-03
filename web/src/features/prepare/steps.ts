@@ -16,9 +16,9 @@ export const STEP_TYPES: readonly { type: string; label: string }[] = [
   { type: 'trim', label: 'Trim whitespace' },
   { type: 'drop_column', label: 'Drop column' },
   { type: 'rename_column', label: 'Rename column' },
-  { type: 'mask_hash', label: 'Mask — hash' },
-  { type: 'mask_redact', label: 'Mask — redact' },
-  { type: 'mask_generalize', label: 'Mask — generalise' },
+  { type: 'mask_hash', label: 'Mask by hashing' },
+  { type: 'mask_redact', label: 'Mask by redacting' },
+  { type: 'mask_generalize', label: 'Mask by generalising' },
   { type: 'split_column', label: 'Split column' },
   { type: 'replace_values', label: 'Replace values' },
   { type: 'conditional_column', label: 'Conditional column' },
@@ -29,9 +29,9 @@ export const STEP_TYPES: readonly { type: string; label: string }[] = [
   { type: 'pivot', label: 'Pivot rows to columns' },
   { type: 'lookup_join', label: 'Look up from another dataset' },
   { type: 'union', label: 'Append another dataset' },
-  { type: 'text_terms', label: 'Text — count terms' },
-  { type: 'text_sentiment', label: 'Text — sentiment score' },
-  { type: 'keyword_rules', label: 'Text — tag with keyword rules' },
+  { type: 'text_terms', label: 'Count terms in text' },
+  { type: 'text_sentiment', label: 'Score text sentiment' },
+  { type: 'keyword_rules', label: 'Tag text with keyword rules' },
   { type: 'spatial_join', label: 'Assign regions (spatial join)' },
 ];
 
@@ -97,7 +97,7 @@ export function stepSummary(step: Step, names: ReadonlyMap<string, string> = new
       if (s.op === 'not_empty') return `Filter: ${col} is not empty`;
       if (isListOp(s.op)) {
         const vals = list(s.values).join(', ');
-        return `Filter: ${col} ${str(s.op)} ${vals ? `(${vals})` : '— no values yet'}`;
+        return `Filter: ${col} ${str(s.op)} ${vals ? `(${vals})` : '(no values yet)'}`;
       }
       return `Filter: ${col} ${str(s.op)} ${str(s.value)}`;
     }

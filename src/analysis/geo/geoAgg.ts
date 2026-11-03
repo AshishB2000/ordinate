@@ -51,7 +51,7 @@ export function geoMeasure(enc: VizEncoding): { measure: GeoMeasure; warning?: s
   if (v.aggregation === 'avg') return { measure: { agg: 'avg', column: v.column, label: `Average ${v.column}` } };
   const measure: GeoMeasure = { agg: 'sum', column: v.column, label: `Sum of ${v.column}` };
   if (v.aggregation === 'min' || v.aggregation === 'max') {
-    return { measure, warning: 'Hexbin and flow maps show a count, a sum or an average — showing the sum.' };
+    return { measure, warning: 'Hexbin and flow maps show a count, a sum or an average, so this map shows the sum.' };
   }
   return { measure };
 }

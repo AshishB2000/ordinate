@@ -62,7 +62,7 @@ export function TextProfile({
   if (q.isError) return <ErrorState compact heading={3} title="Could not read this column’s text." message={q.error.message} onRetry={() => void q.refetch()} />;
   const p = q.data;
   if (!p || !p.eligible) {
-    return <p className={s.hint}>“{column}” holds short labels, not text — the Text profile is for reviews, tickets and notes (values that average 20 characters or more).</p>;
+    return <p className={s.hint}>“{column}” holds short labels, not text. The Text profile is for reviews, tickets and notes (values that average 20 characters or more).</p>;
   }
   const terms = p.topTerms.map((t) => t.term);
   return (
@@ -91,7 +91,7 @@ export function TextProfile({
             <span className={s.muted}>average, {p.mood} (VADER, −1 to +1)</span>
           </div>
           <SentimentBar parts={p.sentiment.bands.map((b, k) => ({ label: b.label, count: b.count, tone: BAND_TONES[k] ?? 'neu' }))} />
-          {p.lang !== 'en' && <p className={s.hint}>VADER’s lexicon is English — scores for other languages read only the English words in them.</p>}
+          {p.lang !== 'en' && <p className={s.hint}>VADER’s lexicon is English, so scores for other languages read only the English words in them.</p>}
         </section>
       )}
       <TermBars title="Top terms" list={p.topTerms} empty="No terms left after removing stop words." />

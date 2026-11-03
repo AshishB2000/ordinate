@@ -55,7 +55,7 @@ export function resolveColumnEdit(
       return;
     }
     if (type !== cur.type) {
-      throw new ColumnEditError(`"${cur.name}" is made by a prepare step, so its type comes from that step — change the step instead.`);
+      throw new ColumnEditError(`"${cur.name}" is made by a prepare step, so its type comes from that step. Change the step instead.`);
     }
     addSteps.push({ type: 'rename_column', from: cur.name, to: name } as TransformStep);
   });

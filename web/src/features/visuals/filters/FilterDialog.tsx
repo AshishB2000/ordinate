@@ -190,8 +190,8 @@ export function FilterDialog({
             </div>
             <p className={s.note} role="status">
               {[
-                list.data?.approximate ? `From a sample of ${fmt.format(list.data.sampleRows ?? 0)} rows — the warehouse may hold other values (use a Condition for those).` : '',
-                total > shown.length ? `Showing the first ${fmt.format(shown.length)} of ${fmt.format(total)} values — search to narrow.` : '',
+                list.data?.approximate ? `From a sample of ${fmt.format(list.data.sampleRows ?? 0)} rows. The warehouse may hold other values (use a Condition for those).` : '',
+                total > shown.length ? `Showing the first ${fmt.format(shown.length)} of ${fmt.format(total)} values. Search to narrow.` : '',
                 selected.size ? `${selected.size} selected.` : '',
               ]
                 .filter(Boolean)
@@ -231,7 +231,7 @@ export function FilterDialog({
             hint={
               context
                 ? 'Context filter: runs first, so FIXED, INCLUDE and EXCLUDE expressions only see the rows it keeps.'
-                : 'Runs after LOD expressions, so a FIXED value — a region’s total — still counts every row.'
+                : 'Runs after LOD expressions, so a FIXED value (a region’s total) still counts every row.'
             }
             checked={context}
             onCheckedChange={setContext}

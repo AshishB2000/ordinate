@@ -337,15 +337,15 @@ export function mergeFx(a: FxInfo | undefined, b: FxInfo | undefined): FxInfo | 
   return fxInfo(a.target, { missing: a.missing + b.missing, pairs: sortPairs([...new Set(a.pairs.concat(b.pairs))]) }, a.sample || b.sample);
 }
 
-/** "3 rows had no EUR→USD rate — excluded", or '' when nothing was missing. */
+/** "3 rows excluded: no EUR→USD rate", or '' when nothing was missing. */
 export function fxWarning(fx: FxInfo | undefined): string {
   if (!fx || fx.missing <= 0) return '';
   const rows = fx.missing === 1 ? '1 row' : fx.missing.toLocaleString('en-US') + ' rows';
   const named = fx.pairs.filter((p) => !p.startsWith('?'));
   const noCode = fx.pairs.some((p) => p.startsWith('?'));
   const shown = named.slice(0, MAX_PAIRS).join(', ') + (named.length > MAX_PAIRS ? ` +${named.length - MAX_PAIRS} more` : '');
-  if (!named.length) return `${rows} had no currency code — excluded`;
-  return `${rows} had no ${shown} rate${noCode ? ' or no currency code' : ''} — excluded`;
+  if (!named.length) return `${rows} excluded: no currency code`;
+  return `${rows} excluded: no ${shown} rate${noCode ? ' or no currency code' : ''}`;
 }
 
 export const SAMPLE_LABEL = 'Sample rates, not live';

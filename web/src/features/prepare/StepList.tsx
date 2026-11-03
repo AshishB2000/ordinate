@@ -25,7 +25,7 @@ export function StepList({
   onRemove: (i: number) => void;
 }) {
   if (!steps.length) {
-    return <p className={s.empty}>No steps yet. Add one to transform the data — the original stays intact and every step is reversible.</p>;
+    return <p className={s.empty}>No steps yet. Add one to transform the data. The original stays intact and every step is reversible.</p>;
   }
   const aligned = counts && counts.length === steps.length ? counts : null;
   return (

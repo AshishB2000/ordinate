@@ -103,7 +103,7 @@ function Panel({ q }: { q: ReturnType<typeof useJobs> }) {
         {active.length === 0 && recent.length === 0 ? (
           <div className={s.pad}>
             <EmptyState compact heading={3} icon="activity" title="Nothing running">
-              Imports, refreshes, exports, publishes and backups show up here while they run — you can keep working.
+              Imports, refreshes, exports, publishes and backups show up here while they run. You can keep working.
             </EmptyState>
           </div>
         ) : (
@@ -123,7 +123,7 @@ export function JobsButton() {
   const active = q.data?.active ?? [];
   const running = active.filter((j) => j.state === 'running').length;
   const waiting = active.length - running;
-  const label = active.length === 0 ? 'Jobs' : `Jobs — ${running} running${waiting ? `, ${waiting} waiting` : ''}`;
+  const label = active.length === 0 ? 'Jobs' : `Jobs: ${running} running${waiting ? `, ${waiting} waiting` : ''}`;
   return (
     <Popover
       title="Jobs"

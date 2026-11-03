@@ -159,13 +159,13 @@ const FOLLOWUP_FORMAT_HINT =
 // Typed error constructors — raw provider text / status never reaches the renderer.
 export type TypedError = { ok: false; errorType: string; message: string; detail?: string };
 export function errNetwork(): TypedError {
-  return { ok: false, errorType: 'network', message: 'No connection — check your internet and try again.' };
+  return { ok: false, errorType: 'network', message: 'No connection. Check your internet and try again.' };
 }
 export function errAuth(): TypedError {
   return { ok: false, errorType: 'auth', message: 'Your API key was rejected. Check it in Settings.' };
 }
 export function errRateLimit(): TypedError {
-  return { ok: false, errorType: 'rate_limit', message: 'Too many requests — wait a moment and try again.' };
+  return { ok: false, errorType: 'rate_limit', message: 'Too many requests. Wait a moment and try again.' };
 }
 export function errProvider(): TypedError {
   return { ok: false, errorType: 'provider', message: 'The model provider had an error. Try again.' };
@@ -176,7 +176,7 @@ function errBadReply(): TypedError {
 // Distinct from errBadReply: the provider hit the max_tokens cap and cut the reply
 // off mid-JSON. Retrying the SAME capture won't help — the user must raise the cap.
 export function errTruncated(): TypedError {
-  return { ok: false, errorType: 'truncated', message: 'Response was cut off — try raising Max tokens in Settings.' };
+  return { ok: false, errorType: 'truncated', message: 'Response was cut off. Try raising Max tokens in Settings.' };
 }
 function errUnknown(): TypedError { return { ok: false, errorType: 'unknown', message: 'Something went wrong. Try again.' }; }
 
@@ -303,7 +303,7 @@ export function parseReply(raw: string | null | undefined): any {
   if (headlineProse) {
     const check = verifyHeadlineNumbers(headlineProse);
     if (!check.ok) {
-      logger.warn('[headline] dropping headline — untraceable figures:', check.stray);
+      logger.warn('[headline] dropping headline, untraceable figures:', check.stray);
       headlineProse = null;
     }
   }
@@ -552,7 +552,7 @@ export async function testProvider(provider: string, model?: string): Promise<Ty
   });
   if (error) return error;
   if (!rawText) return errBadReply();
-  return { ok: true, message: 'Connected — the provider responded.' };
+  return { ok: true, message: 'Connected. The provider responded.' };
 }
 
 // Plain-prose one-shot through the SAME execution path (BYOK or local CLI) —

@@ -139,7 +139,7 @@ export function describeStep(s: PlanStep): string {
       return `${t.charAt(0).toUpperCase() + t.slice(1)}${col} in ${q(s.dataset)}`;
     }
     case 'calc': return `Add calculated field ${q(s.name)} to ${q(s.dataset)}`;
-    case 'metric': return `Define metric ${q(s.name)} — ${s.aggregation || '?'} of ${s.column || '?'} in ${q(s.dataset)}`;
+    case 'metric': return `Define metric ${q(s.name)} as ${s.aggregation || '?'} of ${s.column || '?'} in ${q(s.dataset)}`;
     case 'chart': return `Build ${s.chartType || 'a'} chart ${q(s.name)} from ${q(s.dataset)}`;
     case 'dashboard': {
       const n = s.visuals.length + s.metrics.length;

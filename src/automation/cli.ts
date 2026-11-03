@@ -138,7 +138,7 @@ export function formatText(result: unknown): string {
   if (Array.isArray(result.columns) && Array.isArray(result.rows) && typeof result.rowCount === 'number') {
     const head = (result.columns as Array<{ name: string }>).map((c) => c.name);
     const n = result.rowCount.toLocaleString('en-US');
-    return table(head, result.rows as unknown[][]) + `\n\n${n} row${result.rowCount === 1 ? '' : 's'}${result.truncated ? ' (more exist — raise --limit)' : ''}`;
+    return table(head, result.rows as unknown[][]) + `\n\n${n} row${result.rowCount === 1 ? '' : 's'}${result.truncated ? ' (more exist; raise --limit)' : ''}`;
   }
   const out: string[] = [];
   const nested: string[] = [];

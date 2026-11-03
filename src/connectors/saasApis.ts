@@ -83,7 +83,7 @@ export function publishedCsvUrl(raw: string): URL | string {
     return 'Only a Google Sheets link on https://docs.google.com/spreadsheets/ is accepted.';
   }
   if (u.searchParams.get('output') !== 'csv') {
-    return 'Use the CSV link from File → Share → Publish to web — it ends in output=csv.';
+    return 'Use the CSV link from File → Share → Publish to web. It ends in output=csv.';
   }
   return u;
 }
@@ -121,7 +121,7 @@ export async function sheetsFetch(ctx: ConnectorContext): Promise<Result> {
   }
   const id = val(ctx, 'spreadsheetId');
   const key = secret(ctx, 'apiKey');
-  if (!id || !key) return err('Enter a published CSV link — or a spreadsheet ID and an API key.');
+  if (!id || !key) return err('Enter a published CSV link, or a spreadsheet ID and an API key.');
   if (!/^[A-Za-z0-9_-]{10,}$/.test(id)) return err('The spreadsheet ID is the long code between /d/ and /edit in the sheet\'s address.');
   const range = boundRange(val(ctx, 'range') || 'Sheet1', rowCap(ctx));
   const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}`);
@@ -147,7 +147,7 @@ export async function airtableFetch(ctx: ConnectorContext): Promise<Result> {
   const table = val(ctx, 'table');
   const view = val(ctx, 'view');
   if (!token) return err('A personal access token is required.');
-  if (!/^app[A-Za-z0-9]{3,}$/.test(base)) return err('The base ID starts with "app" — it is the first code in the base\'s address.');
+  if (!/^app[A-Za-z0-9]{3,}$/.test(base)) return err('The base ID starts with "app". It is the first code in the base\'s address.');
   if (!table) return err('Enter the table\'s name or ID.');
   const cap = rowCap(ctx);
   const r = await paginate<unknown>(ctx, async (cursor, size): Promise<PageResult<unknown>> => {

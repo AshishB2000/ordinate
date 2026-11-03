@@ -139,7 +139,7 @@ function VisualsPane() {
       ) : (
         <div className={s.gallery}>
           {list.map((v) => (
-            <button key={v.id} type="button" className={s.tile} title={`${v.name} · ${vizLabel(v.chartType)} — click to add`} onClick={() => add(v.id, v.name)}>
+            <button key={v.id} type="button" className={s.tile} title={`${v.name} · ${vizLabel(v.chartType)}. Click to add`} onClick={() => add(v.id, v.name)}>
               <Icon name={vizGlyph(v.chartType)} size={20} />
               <span className={s.tileName}>{v.name || 'Untitled visual'}</span>
             </button>
@@ -203,7 +203,7 @@ function FiltersPane() {
       ) : cols.isError ? (
         <ErrorState compact heading={3} title="The columns could not be read" message={cols.error.message} onRetry={() => void cols.refetch()} />
       ) : !dsId ? (
-        <p className={s.paneHint}>Import a dataset first — a filter narrows one.</p>
+        <p className={s.paneHint}>Import a dataset first: a filter narrows one.</p>
       ) : (
         <FilterRows
           projectId={ed.projectId}

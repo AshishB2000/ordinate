@@ -125,7 +125,7 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   // ── Version history ─────────────────────────────────────────────────────
   await page.goto(`/versions/${server.sample.projectId}/visual/${seed.visualId}`);
   await settled(page);
-  await page.getByRole('heading', { level: 1, name: `${seed.edited} — version history` }).waitFor();
+  await page.getByRole('heading', { level: 1, name: `${seed.edited}: version history` }).waitFor();
   const saves = page.getByRole('region', { name: 'Saved versions' }).getByRole('button', { pressed: false });
   assert.equal(await saves.count(), 1, 'one older save besides the current one');
   await screens(page, 'projects-versions');
@@ -134,7 +134,7 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   await page.getByRole('region', { name: 'Version preview' }).getByText(seed.original, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
   await page.getByText(/^Restored the version from/).waitFor();
-  await page.getByRole('heading', { level: 1, name: `${seed.original} — version history` }).waitFor();
+  await page.getByRole('heading', { level: 1, name: `${seed.original}: version history` }).waitFor();
   await page.getByText(/^Restored from /).waitFor();
   assert.equal(await page.getByRole('region', { name: 'Saved versions' }).getByRole('button').count(), 3);
 
@@ -154,7 +154,7 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   // A name already taken gets " (imported)" (src/app/bundle.ts), and the import becomes current.
   const copy = `${sample} (imported)`;
   // The counts are the bundle's manifest (the server's), as many as the sample holds.
-  await page.getByText(new RegExp(`^Imported “${copy.replace(/[()]/g, '\\$&')}” — \\d+ datasets?, \\d+ visuals?, \\d+ dashboards?\\.$`)).waitFor();
+  await page.getByText(new RegExp(`^Imported “${copy.replace(/[()]/g, '\\$&')}”: \\d+ datasets?, \\d+ visuals?, \\d+ dashboards?\\.$`)).waitFor();
   await page.waitForFunction((n) => document.querySelector('[data-testid="project-switcher"]')?.textContent?.includes(n), copy);
   await switcher(page).click();
   await pop.getByRole('button', { name: `${copy} options` }).click();

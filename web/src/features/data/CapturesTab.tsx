@@ -35,7 +35,7 @@ export function CapturesTab({ projectId }: { projectId: string }) {
           )
         }
       >
-        A capture is a screenshot of a table — a report, a dashboard, a page — read into rows you check before saving.
+        A capture is a screenshot of a table (a report, a dashboard, a page) read into rows you check before saving.
         {!canEdit && ' An editor of this project can upload one. You have view-only access.'}
       </EmptyState>
     );

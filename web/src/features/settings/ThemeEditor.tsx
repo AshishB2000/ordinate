@@ -124,7 +124,7 @@ export function ThemeEditor({ start, onClose }: { start: Draft; onClose: () => v
       </div>
       {warns.length > 0 && (
         <div className={t.warnSummary} role="status">
-          {warns.length === 1 ? 'One colour is under its contrast floor.' : `${warns.length} colours are under their contrast floor.`} It still saves — the warning is advice.
+          {warns.length === 1 ? 'One colour is under its contrast floor.' : `${warns.length} colours are under their contrast floor.`} It still saves. The warning is advice.
         </div>
       )}
       <div className={t.body}>
@@ -197,7 +197,7 @@ export function ThemeEditor({ start, onClose }: { start: Draft; onClose: () => v
         <aside className={t.previewPane} aria-label="Preview">
           <span className={t.previewLabel}>Preview</span>
           <ThemePreview tokens={tokens} />
-          <p className={t.previewNote}>The sample dashboard, redrawn as you edit. Placeholder figures — a look, not data.</p>
+          <p className={t.previewNote}>The sample dashboard, redrawn as you edit. Placeholder figures: a look, not data.</p>
         </aside>
       </div>
     </div>

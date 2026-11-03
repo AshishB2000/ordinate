@@ -19,7 +19,7 @@ export default function DataPage() {
   }
   if (!cur.projectId) {
     return (
-      <Page title="Data" sub="Datasets, their catalog, quality rules and relationships — per project.">
+      <Page title="Data" sub="Each project’s datasets, catalog, quality rules and relationships.">
         <NoProject why="Datasets live in a project." />
       </Page>
     );

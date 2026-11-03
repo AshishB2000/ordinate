@@ -82,7 +82,7 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
 
   const columnOff = live ? (
     <>
-      <p>{LIVE_OFF.prepare.why} Make a copy to add columns — this Live dataset stays as it is.</p>
+      <p>{LIVE_OFF.prepare.why} Make a copy to add columns. This Live dataset stays as it is.</p>
       <MakeCopyButton projectId={projectId} datasetId={datasetId} variant="secondary" size="sm" open={copyTo ?? ((id) => LIVE_OFF.prepare.open(projectId, id))} />
     </>
   ) : undefined;

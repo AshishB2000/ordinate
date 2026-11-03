@@ -95,7 +95,7 @@ function Ask({ projectId, view }: { projectId: string; view: CaptureView }) {
       <div className={s.ask}>
         <div className={s.askText}>
           <h2 className={s.askTitle}>Want an analysis built from this?</h2>
-          <p className={s.askBody}>This capture is already saved as a dataset. Start an analysis on it — a draft from the assistant, a template or a blank layout.</p>
+          <p className={s.askBody}>This capture is already saved as a dataset. Start an analysis on it: a draft from the assistant, a template or a blank layout.</p>
         </div>
         <div className={s.askActs}>
           <Link className={buttonClass('primary')} to={`/dashboards?project=${projectId}&new=1&dataset=${view.datasetId}`}>
@@ -114,7 +114,7 @@ function Ask({ projectId, view }: { projectId: string; view: CaptureView }) {
       <div className={s.askText}>
         <h2 className={s.askTitle}>Want an analysis built from this?</h2>
         <p className={s.askBody}>
-          You check the table the model read first — any cell can be corrected — then it is saved as a dataset and the analysis starts on it.
+          You check the table the model read first (any cell can be corrected), then it is saved as a dataset and the analysis starts on it.
         </p>
       </div>
       <div className={s.askActs}>
@@ -166,7 +166,7 @@ function ReadTable({ view }: { view: CaptureView }) {
         <h2 className={s.label}>What the model read</h2>
         {view.unsure && <Badge tone="warn">Check the cells</Badge>}
       </div>
-      {view.unsure && <p className={s.note}>The model was unsure about some of what it read. Check the cells before you build on them — any of them can be corrected when you save.</p>}
+      {view.unsure && <p className={s.note}>The model was unsure about some of what it read. Check the cells before you build on them. Any of them can be corrected when you save.</p>}
       {t.warnings.map((w, i) => (
         <p key={i} className={s.note}>
           {w}

@@ -101,12 +101,12 @@ function Body({ projectId, site, status }: { projectId: string; site: HostedSite
                   host={status.origins[0] ? `${status.origins[0]}/…` : 'https://your-portal.example/…'}
                   target={status.secretSet ? { projectId, siteId: site.id, dashboardId: dashId, params, ...(choice.theme ? { theme: choice.theme } : {}), hide: choice.hide } : null}
                 />
-                {!status.secretSet && <p className={s.previewMeta}>A preview is signed with the organisation’s secret — an admin generates it in Admin → Embedding.</p>}
+                {!status.secretSet && <p className={s.previewMeta}>A preview is signed with the organisation’s secret. An admin generates it in Admin → Embedding.</p>}
               </div>
             </TabPanel>
             <TabPanel value="code">
               <p className={s.lead}>
-                Run on your server for every page view. The values of a lock come from the signed-in user’s session — never from the browser.
+                Run on your server for every page view. The values of a lock come from the signed-in user’s session, never from the browser.
               </p>
               <EmbedSnippets input={input} />
             </TabPanel>
@@ -139,7 +139,7 @@ export function EmbedDialog({ projectId, site, onClose }: { projectId: string; s
         <ErrorState compact heading={3} title="Embedding could not be loaded" message={status.error.message} onRetry={() => void status.refetch()} />
       ) : !status.data.canStore ? (
         <EmptyState heading={3} icon="lock" title="This server cannot embed yet">
-          Embedding signs links with a secret the server keeps encrypted — that needs a database and ORDINATE_MASTER_KEY. Ask whoever runs the server to set them.
+          Embedding signs links with a secret the server keeps encrypted, and that needs a database and ORDINATE_MASTER_KEY. Ask whoever runs the server to set them.
         </EmptyState>
       ) : (
         <Body projectId={projectId} site={site} status={status.data} />

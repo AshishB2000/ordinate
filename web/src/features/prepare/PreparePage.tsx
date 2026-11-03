@@ -213,7 +213,7 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
           </div>
           {calc.hint && (
             <div className={s.suggest} role="status">
-              <p className={s.aiHead}>Assistant suggestion — the app compiles and computes the formula</p>
+              <p className={s.aiHead}>Assistant suggestion: the app compiles and computes the formula</p>
               <p className={s.muted}>{calc.hint}</p>
             </div>
           )}
@@ -244,7 +244,7 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
             key={state.updatedAt}
             columns={state.columns}
             source={source}
-            label={`${state.name} — prepared rows`}
+            label={`${state.name}: prepared rows`}
             emptyTitle="No rows left"
             emptyBody="The steps above filter every row out. Edit or remove one to bring rows back."
           />

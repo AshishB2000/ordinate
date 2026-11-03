@@ -102,7 +102,7 @@ function Compare({ projectId }: { projectId: string }) {
   let body;
   if (list.isPending) body = <SkeletonTable rows={4} cols={3} label="Loading scenarios" />;
   else if (list.isError) body = <ErrorState title="Scenarios could not be loaded" message={list.error.message} onRetry={() => void list.refetch()} />;
-  else if (!all.length) body = <Empty projectId={projectId} title="Nothing to compare yet" text="Save a scenario or two — a price rise, a volume dip — and see them here side by side with the baseline." />;
+  else if (!all.length) body = <Empty projectId={projectId} title="Nothing to compare yet" text="Save a scenario or two (a price rise, a volume dip) and see them here side by side with the baseline." />;
   else if (!chosen.length) body = <Empty title="Pick scenarios to compare" text={`Choose up to ${MAX} above. Each becomes a column beside the baseline.`} />;
   else if (!q.data) body = <SkeletonTable rows={4} cols={chosen.length + 2} label="Comparing the scenarios" />;
   else if (!q.data.ok) body = <ErrorState title="Could not compare the scenarios" message={q.data.error} onRetry={() => void q.refetch()} />;

@@ -58,7 +58,7 @@ function Result({ diff }: { diff: Diff }) {
   const notes: string[] = [];
   if (diff.mode === 'row') notes.push('Matched on the whole row: a row with any cell different reads as one removed and one added.');
   if (diff.duplicates.old || diff.duplicates.new) {
-    notes.push(`${formatNumber(diff.duplicates.old + diff.duplicates.new)} row(s) repeat an earlier ${diff.key} (${diff.duplicates.old} then, ${diff.duplicates.new} now) — only the first row of each is compared.`);
+    notes.push(`${formatNumber(diff.duplicates.old + diff.duplicates.new)} row(s) repeat an earlier ${diff.key} (${diff.duplicates.old} then, ${diff.duplicates.new} now). Only the first row of each is compared.`);
   }
   if (diff.addedColumns.length) notes.push(`New columns, not compared: ${diff.addedColumns.join(', ')}.`);
   if (diff.removedColumns.length) notes.push(`Columns since removed, not compared: ${diff.removedColumns.join(', ')}.`);
@@ -82,7 +82,7 @@ function Result({ diff }: { diff: Diff }) {
         </p>
       ))}
       {total === 0 ? (
-        <p className={s.same}>No differences — the compared columns hold the same rows.</p>
+        <p className={s.same}>No differences: the compared columns hold the same rows.</p>
       ) : (
         <>
           {diff.counts.changed > 0 && (

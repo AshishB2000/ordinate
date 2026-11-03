@@ -96,7 +96,7 @@ export function StyleDialog({ onClose }: { onClose: () => void }) {
       open
       onOpenChange={(o) => !o && cancel()}
       title="Dashboard style"
-      description="Applies to this dashboard only — and to what you publish or export from it."
+      description="Applies to this dashboard only, and to what you publish or export from it."
       footer={
         <>
           <Button variant="ghost" onClick={cancel}>
@@ -221,7 +221,7 @@ export function ViewControls() {
           className={ed.view.asOf ? s.asOfOn : undefined}
           value={ed.view.asOf ?? ''}
           onValueChange={(v) => ed.view.setAsOf(v || null)}
-          options={[{ value: '', label: latest ? `Latest · ${latest.text.replace(/^As of/, 'as of')}` : 'Latest' }, ...items.map((it) => ({ value: it.at, label: `As of ${new Date(it.at).toLocaleString()}${datasetIds.length > 1 ? ` — ${it.datasets.join(', ')}` : ''}` }))]}
+          options={[{ value: '', label: latest ? `Latest · ${latest.text.replace(/^As of/, 'as of')}` : 'Latest' }, ...items.map((it) => ({ value: it.at, label: `As of ${new Date(it.at).toLocaleString()}${datasetIds.length > 1 ? ` (${it.datasets.join(', ')})` : ''}` }))]}
         />
       )}
       {/* Compare: where there is a figure to compare — a KPI or a chart on any sheet. Off under "As of" (a past figure against today's periods means nothing). */}

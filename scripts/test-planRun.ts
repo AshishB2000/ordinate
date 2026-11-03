@@ -126,7 +126,7 @@ void (async () => {
     ok('finished: running again does nothing', (await pr.runNext(run, deps(f))) === -1 && f.executed.length === 8);
     const log = pr.runLogText(run);
     ok('log: one line per step, marked, with the app-written summary',
-      /^Plan run finished — 8 of 8 steps done\./.test(log) && /1\. ✓ Import sales\.csv as "Sales" — 100 rows/.test(log) && log.split('\n').length === 9, log);
+      /^Plan run finished: 8 of 8 steps done\./.test(log) && /1\. ✓ Import sales\.csv as "Sales": 100 rows/.test(log) && log.split('\n').length === 9, log);
   }
 
   // ── The re-check right before a step runs ────────────────────────────────
@@ -170,7 +170,7 @@ void (async () => {
     ok('stop: nothing runs, skips or is replaced after a stop',
       (await pr.runNext(run, deps(f))) === -1 && !pr.skipStep(run, 5) && !pr.replaceStep(run, 5, FULL[5]));
     ok('log: a stopped run says so, with the failed and not-run steps',
-      /^Plan run stopped — 4 of 8 steps done\./.test(pr.runLogText(run)) && /5\. – .* — skipped/.test(pr.runLogText(run)) && /7\. · .* — not run/.test(pr.runLogText(run)), pr.runLogText(run));
+      /^Plan run stopped: 4 of 8 steps done\./.test(pr.runLogText(run)) && /5\. – .* \(skipped\)/.test(pr.runLogText(run)) && /7\. · .* \(not run\)/.test(pr.runLogText(run)), pr.runLogText(run));
   }
 
   // ── An executor that throws, and partial writes ─────────────────────────
@@ -231,7 +231,7 @@ void (async () => {
     ok('undo run: the run is over, and cannot be undone twice', run.state === 'undone' && !pr.canUndo(run)
       && (await pr.runNext(run, deps(f))) === -1);
     ok('log: an undone run says how many records were put back, and what could not be',
-      /^Plan run undone — 4 records put back\./.test(pr.runLogText(run)) && /Could not undo: By region \(locked\)/.test(pr.runLogText(run)), pr.runLogText(run));
+      /^Plan run undone: 4 records put back\./.test(pr.runLogText(run)) && /Could not undo: By region \(locked\)/.test(pr.runLogText(run)), pr.runLogText(run));
 
     // An existing dashboard restyled: restored, not trashed.
     const g = fake();

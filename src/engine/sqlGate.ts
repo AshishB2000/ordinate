@@ -10,7 +10,7 @@ import { lexSql } from './sqlLex';
 
 // ── The read-only gate ───────────────────────────────────────────────────────
 
-export const ONLY_DATASETS = "Only this project's datasets can be queried here — not files, other databases or the app's own tables.";
+export const ONLY_DATASETS = "Only this project's datasets can be queried here, not files, other databases or the app's own tables.";
 const FIRST_WORDS: ReadonlySet<string> = new Set(['select', 'with', 'from', 'values']);
 // Table functions (and two scalars) that read a file, run a string as SQL, or
 // look into the engine. `query('…')` would otherwise run any read hidden in a
@@ -40,13 +40,13 @@ export function readOnlyError(sql: string, known: ReadonlySet<string> = new Set(
   const count = statementCount(sql);
   if (count < 0) return 'The query ends inside an unterminated string, quoted name or comment.';
   if (count === 0) return 'Write a query first.';
-  if (count > 1) return `Run one statement at a time — this has ${count}.`;
+  if (count > 1) return `Run one statement at a time. This has ${count}.`;
 
   const toks = lexSql(sql).filter((t) => !(t.kind === 'punct' && t.text === ';'));
   const first = toks[0];
   const opensParen = first && first.kind === 'punct' && first.text === '(';
   if (!opensParen && !(first && first.kind === 'word' && FIRST_WORDS.has(first.text.toLowerCase()))) {
-    return 'Only queries that read data can run here — start with SELECT, WITH, FROM or VALUES.';
+    return 'Only queries that read data can run here. Start with SELECT, WITH, FROM or VALUES.';
   }
 
   const inFrom: boolean[] = [false];
@@ -93,7 +93,7 @@ export function readOnlyError(sql: string, known: ReadonlySet<string> = new Set(
 // binder, no file is opened. The lexer above cannot know every word that opens
 // table position, so this walks what DuckDB itself would bind instead.
 
-const PIVOT_NEEDS_IN = 'PIVOT needs its values listed here — write ON col IN (…) USING …, or one SELECT.';
+const PIVOT_NEEDS_IN = 'PIVOT needs its values listed here: write ON col IN (…) USING …, or one SELECT.';
 /** TableRef types the parser emits (the `class`-less `type` of a FROM item). */
 const REF_TYPES: ReadonlySet<string> = new Set([
   'BASE_TABLE', 'SUBQUERY', 'JOIN', 'TABLE_FUNCTION', 'EXPRESSION_LIST', 'EMPTY_FROM', 'EMPTY', 'PIVOT', 'SHOW_REF',

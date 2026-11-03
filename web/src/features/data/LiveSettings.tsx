@@ -85,7 +85,7 @@ export function RefreshNow({ projectId, datasetId }: { projectId: string; datase
   if (!can('editor')) return null;
   const run = () =>
     reset.mutate(undefined, {
-      onSuccess: (r) => setSaid(r.ok ? { text: 'Cache reset — the next figure asks the warehouse.' } : { text: r.error || 'The cache could not be reset.', error: true }),
+      onSuccess: (r) => setSaid(r.ok ? { text: 'Cache reset. The next figure asks the warehouse.' } : { text: r.error || 'The cache could not be reset.', error: true }),
       onError: (err) => setSaid({ text: `The cache could not be reset: ${err.message}`, error: true }),
     });
   return (

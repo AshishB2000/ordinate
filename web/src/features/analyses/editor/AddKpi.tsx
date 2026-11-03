@@ -74,7 +74,7 @@ function Picker({ onPick, onCustom }: { onPick: (m: MetricSummary) => void; onCu
         ) : list.isError ? (
           <ErrorState compact heading={3} title="The metrics could not be listed" message={list.error.message} onRetry={() => void list.refetch()} />
         ) : shown.length === 0 ? (
-          <p className={s.empty}>{(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet — define one with Manage metrics below, or use Custom….'}</p>
+          <p className={s.empty}>{(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet. Define one with Manage metrics below, or use Custom….'}</p>
         ) : (
           shown.map((m) => (
             <div key={m.id} role="listitem">
@@ -120,7 +120,7 @@ function CustomForm({ onDraft }: { onDraft: (m: NonNullable<Card['metric']> | nu
   const key = JSON.stringify(draft);
   useEffect(() => onDraft(JSON.parse(key) as NonNullable<Card['metric']> | null), [key, onDraft]);
 
-  if (sets.data && sets.data.length === 0) return <p className={s.empty}>Import a dataset first — a metric is computed from one.</p>;
+  if (sets.data && sets.data.length === 0) return <p className={s.empty}>Import a dataset first: a metric is computed from one.</p>;
   return (
     <div className={s.form}>
       <Select
@@ -185,7 +185,7 @@ export function AddKpiDialog({ onClose }: { onClose: () => void }) {
       onOpenChange={(o) => !o && onClose()}
       size="md"
       title={custom ? 'Add a metric' : 'Add a KPI'}
-      description={custom ? 'A column rolled up — computed by the server under the sheet’s filters.' : 'Pick a defined metric, or build one from a column.'}
+      description={custom ? 'A column rolled up, computed by the server under the sheet’s filters.' : 'Pick a defined metric, or build one from a column.'}
       footer={
         <>
           {custom && (

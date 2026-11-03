@@ -303,7 +303,7 @@ export function capRows(columns: ConnectorColumn[], rows: Cell[][], ctx: Connect
   return { ok: true, columns, rows: rows.length > cap ? rows.slice(0, cap) : rows, truncated };
 }
 
-export const CLIPPED = 'Response exceeded the 100 MB ceiling and was cut off — narrow the query or lower the row limit.';
+export const CLIPPED = 'Response exceeded the 100 MB ceiling and was cut off. Narrow the query or lower the row limit.';
 
 /** A ClickHouse `FORMAT JSONCompact` body → ConnectorRows: `run` and `runBound` read the same shape. */
 export function shapeClickhouse(json: unknown, ctx: ConnectorContext, clipped = false): ConnectorRows {

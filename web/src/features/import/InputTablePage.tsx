@@ -178,7 +178,7 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
     if (isMod(e) && !e.altKey && k === 'z') step(e.shiftKey ? 'redo' : 'undo');
     else if (isMod(e) && !e.altKey && k === 'y') step('redo');
     else if (isMod(e) && !e.altKey && !e.shiftKey && k === 'd') {
-      if (!commit(edits.fillDownBatch(rows, sel))) toast('Select the cells to fill — the first row of the selection is copied down.');
+      if (!commit(edits.fillDownBatch(rows, sel))) toast('Select the cells to fill. The first row of the selection is copied down.');
     } else if (isMod(e) && !e.altKey && !e.shiftKey && k === 'a') setSel({ r0: 0, c0: 0, r1: Math.max(0, rows.length - 1), c1: width - 1 });
     else if (!isMod(e) && !e.altKey && (e.key === 'Delete' || e.key === 'Backspace')) commit(edits.clearBatch(rows, sel));
     else done = false;
@@ -211,9 +211,9 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
     if (kind === 'cut') commit(edits.clearBatch(rows, sel));
   };
 
-  const notes = [...m.view.check.notes, ...(m.view.steps ? [`Prepare has ${m.view.steps} step${m.view.steps === 1 ? '' : 's'} on this table — the dataset page shows their output.`] : [])];
+  const notes = [...m.view.check.notes, ...(m.view.steps ? [`Prepare has ${m.view.steps} step${m.view.steps === 1 ? '' : 's'} on this table. The dataset page shows their output.`] : [])];
   return (
-    <Page back={{ to: `/data/${projectId}/${id}`, label: 'Dataset' }} title={m.view.name} sub="Input table — type or paste rows; every change is saved and checked by the server.">
+    <Page back={{ to: `/data/${projectId}/${id}`, label: 'Dataset' }} title={m.view.name} sub="Input table: type or paste rows; every change is saved and checked by the server.">
       <div className={s.inputHost}>
         <InputToolbar
           m={m}
@@ -227,7 +227,7 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
           onRedo={() => step('redo')}
           onEditColumns={() =>
             void flush().then(() => {
-              if (m.pending.length || m.error) return toast(`Save the table first — ${m.error || 'edits are still being saved'}.`, { kind: 'error' });
+              if (m.pending.length || m.error) return toast(`Save the table first: ${m.error || 'edits are still being saved'}.`, { kind: 'error' });
               setEditing(true);
             })
           }
@@ -249,7 +249,7 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
             ))}
           </div>
         )}
-        {rows.length === 0 && <p className={s.hint}>No rows yet — type into the first row, or paste cells from a spreadsheet.</p>}
+        {rows.length === 0 && <p className={s.hint}>No rows yet. Type into the first row, or paste cells from a spreadsheet.</p>}
         <div className={s.inputGrid} onKeyDownCapture={onKey} onCopy={(e) => onClip(e, 'copy')} onCut={(e) => onClip(e, 'cut')} onPaste={(e) => onClip(e, 'paste')}>
           <DataGrid
             columns={cols}

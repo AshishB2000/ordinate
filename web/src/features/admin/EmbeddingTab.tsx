@@ -35,7 +35,7 @@ function Hero({ st }: { st: EmbedSettings }) {
       <div className={s.heroText}>
         <h3 className={s.heroTitle}>Show published dashboards inside your portal or app</h3>
         <p className={s.lead}>
-          Your backend signs a short-lived link for each page view — with locked filters, so a customer sees only their own rows. The browser never holds the secret,
+          Your backend signs a short-lived link for each page view, with locked filters so a customer sees only their own rows. The browser never holds the secret,
           and only the sites below may frame a dashboard.
         </p>
       </div>
@@ -66,7 +66,7 @@ function Access({ st }: { st: EmbedSettings }) {
       onError: (e) => setError(reason(e, 'The change did not go through.')),
     });
   const typed = draft.trim() ? normalizeOrigin(draft) : null;
-  const typedError = draft.trim() && !typed ? 'https://host (or http://localhost:port) — no path, no wildcard.' : st.origins.includes(typed ?? '') ? 'Already allowed.' : undefined;
+  const typedError = draft.trim() && !typed ? 'https://host (or http://localhost:port), with no path and no wildcard.' : st.origins.includes(typed ?? '') ? 'Already allowed.' : undefined;
   const add = (e: FormEvent) => {
     e.preventDefault();
     if (!typed || typedError) return;
@@ -106,7 +106,7 @@ function Access({ st }: { st: EmbedSettings }) {
           ))}
         </ul>
       ) : (
-        <p className={s.originsEmpty}>No site yet. Add the exact origin of each page that will show a dashboard — your portal, your app, its staging copy.</p>
+        <p className={s.originsEmpty}>No site yet. Add the exact origin of each page that will show a dashboard: your portal, your app, its staging copy.</p>
       )}
       <form className={s.addRow} onSubmit={add} aria-label="Add an allowed site">
         <Input label="Allow a site" placeholder="https://portal.example.com" value={draft} onChange={(e) => setDraft(e.target.value)} error={typedError} disabled={!st.canStore}
@@ -151,7 +151,7 @@ function Secret({ st }: { st: EmbedSettings }) {
         <dt>Algorithm</dt>
         <dd className={s.mono}>HS256</dd>
         <dt>Longest link life</dt>
-        <dd>{st.maxTtlHours} hours — sign a fresh link per page view</dd>
+        <dd>{st.maxTtlHours} hours. Sign a fresh link per page view</dd>
       </dl>
       {fresh && (
         <div className={s.fresh} role="status">
@@ -164,7 +164,7 @@ function Secret({ st }: { st: EmbedSettings }) {
           </div>
           <p className={s.warn}>
             <Icon name="alert" size={12} />
-            <span>This is the only time it is shown. Put it in your backend’s secret store as ORDINATE_EMBED_SECRET — never in a browser.</span>
+            <span>This is the only time it is shown. Put it in your backend’s secret store as ORDINATE_EMBED_SECRET, never in a browser.</span>
           </p>
           <div>
             <Button size="sm" onClick={() => setFresh(null)}>
@@ -222,7 +222,7 @@ export function EmbeddingTab() {
           <div>
             <h3 className={a.noticeTitle}>This server cannot keep a signing secret yet</h3>
             <p className={a.lead}>
-              The secret is a credential, so it is only ever stored encrypted — and that needs a database and a master key. Set DATABASE_URL and ORDINATE_MASTER_KEY on the
+              The secret is a credential, so it is only ever stored encrypted, and that needs a database and a master key. Set DATABASE_URL and ORDINATE_MASTER_KEY on the
               server, restart it, and embedding can be set up here.
             </p>
           </div>

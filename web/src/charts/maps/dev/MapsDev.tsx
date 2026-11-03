@@ -48,7 +48,7 @@ const CARDS: readonly Card[] = [
   { id: 'bubble', title: 'Revenue by state', kind: 'Bubble', chartType: 'map_bubble', dataset: SAMPLE,
     encoding: { category: 'state', values: sum('revenue'), geo: { level: 'us_state' } }, blurb: 'Named regions placed at their boundary centroids.' },
   { id: 'offline', title: 'Units by state, offline basemap', kind: 'Region · no tiles', chartType: 'map_choropleth', dataset: SAMPLE,
-    encoding: { category: 'state', values: sum('units'), geo: { level: 'us_state', basemap: 'none' } }, blurb: 'Land and water from the bundled world shapes — no network at all.' },
+    encoding: { category: 'state', values: sum('units'), geo: { level: 'us_state', basemap: 'none' } }, blurb: 'Land and water from the bundled world shapes, with no network at all.' },
   { id: 'points', title: 'Deliveries by carrier', kind: 'Points', chartType: 'map_bubble', dataset: SHIPMENTS,
     encoding: { category: 'city', values: sum('weight_kg'), geo: { level: 'point', ...ship, color: 'carrier' } }, blurb: 'One mark per row, clustered on a grid above 2,000 points.' },
   { id: 'hexbin', title: 'Delivered weight density', kind: 'Hexbin', chartType: 'map_hexbin', dataset: SHIPMENTS,
@@ -64,7 +64,7 @@ function MapCard({ card, projectId, ds, filters }: { card: Card; projectId: stri
   if (!ds) {
     body = (
       <EmptyState icon="map-pin" title={`Needs a “${card.dataset}” dataset`} compact heading={3}>
-        {card.dataset === SHIPMENTS ? 'A dataset with latitude and longitude columns — the e2e seed adds one.' : 'The bundled sample dataset.'}
+        {card.dataset === SHIPMENTS ? 'A dataset with latitude and longitude columns. The e2e seed adds one.' : 'The bundled sample dataset.'}
       </EmptyState>
     );
   } else if (q.isPending) body = <SkeletonBlock label={`Loading ${card.title}`} />;
@@ -128,7 +128,7 @@ export default function MapsDev() {
   else if (!projectId) body = <EmptyState icon="map" title="No project to map">Seed the sample project, or open /dev/maps?project=&lt;id&gt;.</EmptyState>;
   else body = <Maps projectId={projectId} />;
   return (
-    <Page title="Maps" sub="Every map kind, drawn from the server over the sample project. Development only — not in the nav.">
+    <Page title="Maps" sub="Every map kind, drawn from the server over the sample project. Development only, not in the nav.">
       {body}
     </Page>
   );

@@ -86,7 +86,7 @@ export function LookupForm({ draft, set, ctx }: FormProps) {
               <div>
                 {fmtN(l.matched)} of {fmtN(l.total)} rows matched · {l.ratePct}%
               </div>
-              {l.dupes > 0 && <div>{fmtN(l.dupes)} key value(s) repeat in the other dataset — the first match in stored order is used.</div>}
+              {l.dupes > 0 && <div>{fmtN(l.dupes)} key value(s) repeat in the other dataset. The first match in stored order is used.</div>}
               {notes.map((w) => (
                 <div key={w}>{w}</div>
               ))}
@@ -145,7 +145,7 @@ export function UnionForm({ draft, set, ctx }: FormProps) {
               <div>
                 Rows: {fmtN(p.data.before ?? 0)} → {fmtN(p.data.after ?? 0)} ({fmtN(u.otherRows)} appended)
               </div>
-              {u.unmatched.length > 0 && <div>Dropped — no matching column here: {u.unmatched.join(', ')}</div>}
+              {u.unmatched.length > 0 && <div>Dropped (no matching column here): {u.unmatched.join(', ')}</div>}
               {u.missing.length > 0 && <div>Empty for the appended rows: {u.missing.join(', ')}</div>}
             </>
           ) : (

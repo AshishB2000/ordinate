@@ -78,7 +78,7 @@ export function Detail({ projectId, scorecardId, metricId, offset, onClose }: { 
             </div>
           </div>
           <p className={s.def}>{q.data.metric.definitionText}</p>
-          <div className={s.sub}>{q.data.dateColumn ? `Last ${(q.data.series.labels ?? []).length} periods, by ${q.data.dateColumn}` : 'No date column — no history to draw.'}</div>
+          <div className={s.sub}>{q.data.dateColumn ? `Last ${(q.data.series.labels ?? []).length} periods, by ${q.data.dateColumn}` : 'No date column, so no history to draw.'}</div>
           {(q.data.series.labels ?? []).length > 0 && (
             <div className={s.detailChart}>
               <Chart type="line" data={q.data.series} overrides={LINE} label={`${q.data.metric.name} over time, with its target and forecast`} />

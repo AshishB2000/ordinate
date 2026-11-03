@@ -19,7 +19,7 @@ export const NEEDS_INCREMENTAL = 'needs incremental refresh';
  * disabled, saying why.
  */
 export function cadenceOptions(options: readonly SelectOption[], incrementalOn: boolean): SelectOption[] {
-  return options.map((o) => (FAST.has(o.value) && !incrementalOn ? { ...o, label: `${o.label} — ${NEEDS_INCREMENTAL}`, disabled: true } : o));
+  return options.map((o) => (FAST.has(o.value) && !incrementalOn ? { ...o, label: `${o.label} (${NEEDS_INCREMENTAL})`, disabled: true } : o));
 }
 
 const BEHIND_TITLE = 'The last scheduled refresh took longer than the schedule allows, so this data is older than the schedule promises.';

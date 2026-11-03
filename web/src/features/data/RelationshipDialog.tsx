@@ -19,8 +19,8 @@ import ms from './Model.module.css';
 
 type Cardinality = Relationship['cardinality'];
 const KINDS = [
-  { value: 'many_to_one', label: 'Many to one — many rows share one lookup row' },
-  { value: 'one_to_one', label: 'One to one — each row has exactly one match' },
+  { value: 'many_to_one', label: 'Many to one: many rows share one lookup row' },
+  { value: 'one_to_one', label: 'One to one: each row has exactly one match' },
 ] as const;
 
 export function RelationshipDialog({ projectId, datasets: all, onClose }: { projectId: string; datasets: DatasetSummary[]; onClose: (savedId?: string) => void }) {
@@ -64,7 +64,7 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
       if (!r.ok || !r.relationship) return setError(r.error || 'Could not save the relationship.');
       const rel = r.relationship;
       const n = (id: string) => datasets.find((d) => d.id === id)?.name ?? 'dataset';
-      toast(`Related ${n(rel.from.datasetId)} to ${n(rel.to.datasetId)} on ${rel.from.column} — ${pctText(rel.matchPct)} matched.`, { kind: 'success' });
+      toast(`Related ${n(rel.from.datasetId)} to ${n(rel.to.datasetId)} on ${rel.from.column}, ${pctText(rel.matchPct)} matched.`, { kind: 'success' });
       onClose(rel.id);
     },
   });
@@ -89,7 +89,7 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
       size="lg"
       onOpenChange={(o) => !o && onClose()}
       title="New relationship"
-      description="Each row of the many side looks up one row of the one side — orders to the region they ship to."
+      description="Each row of the many side looks up one row of the one side, like orders to the region they ship to."
       footer={
         <>
           <DialogClose asChild>
@@ -175,7 +175,7 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
       />
       {best?.stats && best.stats.toKeys !== best.stats.toKeyed && (
         <p className={s.muted} role="status">
-          {toName} repeats some {best.to} values — each lookup uses the first matching row.
+          {toName} repeats some {best.to} values. Each lookup uses the first matching row.
         </p>
       )}
       {error && (

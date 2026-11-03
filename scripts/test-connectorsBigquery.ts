@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     ok('jwtClaims is the pure builder the exchange uses', JSON.stringify(auth.jwtClaims({ clientEmail: 'a@b' }, auth.READ_SCOPES, 100)) ===
       JSON.stringify({ iss: 'a@b', scope: auth.READ_SCOPES.join(' '), aud: TOKEN_URI, iat: 100, exp: 3700 }));
     ok('bearer: every BigQuery call carries the minted token', calls.filter((c) => !isToken(c)).every((c) => c.headers.authorization === 'Bearer ya29.read-1'));
-    ok('readTokenReply: Google\'s refusal is reported with its own words', errOf(auth.readTokenReply(400, JSON.stringify(fixture('token-error.json')))) === 'Google refused the service-account key: invalid_grant — Invalid JWT Signature.');
+    ok('readTokenReply: Google\'s refusal is reported with its own words', errOf(auth.readTokenReply(400, JSON.stringify(fixture('token-error.json')))) === 'Google refused the service-account key: invalid_grant. Invalid JWT Signature.');
 
     // The cache: per key, scope and org.
     await def.run(ctx(), 'select 2');

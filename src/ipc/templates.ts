@@ -43,7 +43,7 @@ export function register() {
     try {
       const ctx = await loadPlanContext(projectId, typeof datasetId === 'string' ? datasetId : undefined);
       const ds = ctx.datasets[0];
-      if (!ds) return { ok: false, error: 'Import a dataset first — a template builds from one.' };
+      if (!ds) return { ok: false, error: 'Import a dataset first. A template builds from one.' };
       const geoHits = ds.geoHits || {};
       // The project's own names for its numbers. A template's measure role
       // takes the matching metric's column rather than whichever numeric column

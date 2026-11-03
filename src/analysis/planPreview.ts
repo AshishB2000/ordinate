@@ -253,7 +253,7 @@ async function previewVisual(
   }), encoding);
   if (!res.ok) {
     base.note = res.tooLarge
-      ? 'Too large to preview without the DuckDB bridge — the chart renders normally once built.'
+      ? 'Too large to preview without the DuckDB bridge. The chart renders normally once built.'
       : res.error;
     return base;
   }

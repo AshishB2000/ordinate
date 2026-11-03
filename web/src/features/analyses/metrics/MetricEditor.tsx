@@ -191,12 +191,12 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
             label="Dataset"
             disabled={!!editingId || sets.isPending}
             placeholder={sets.isPending ? 'Loading…' : 'Choose a dataset'}
-            hint={editingId ? 'A metric cannot change dataset — duplicate it instead.' : undefined}
+            hint={editingId ? 'A metric cannot change dataset. Duplicate it instead.' : undefined}
             error={
               sets.isError
                 ? `The datasets could not be listed: ${sets.error.message}`
                 : sets.isSuccess && !sets.data.length
-                  ? 'This project has no datasets yet — import one first.'
+                  ? 'This project has no datasets yet. Import one first.'
                   : editingId && sets.isSuccess && !sets.data.some((d) => d.id === ds)
                     ? 'This metric’s dataset is no longer in the project.'
                     : undefined
@@ -242,7 +242,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
                 rows={3}
                 spellCheck={false}
                 placeholder="[Profit] / [Revenue]"
-                hint="Other metrics by name in [brackets], or an aggregation of a column — sum(revenue) - sum(cost)."
+                hint="Other metrics by name in [brackets], or an aggregation of a column, for example sum(revenue) - sum(cost)."
                 value={formula}
                 onChange={(e) => setFormula(e.target.value)}
               />
@@ -259,7 +259,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
           )}
           <div className={s.group}>
             {ds && <FilterRows projectId={projectId} datasetId={ds} cols={columns} filters={filters} onChange={setFilters} />}
-            <span className={s.filterHint}>Filters apply before the aggregation — they are part of what the metric means.</span>
+            <span className={s.filterHint}>Filters apply before the aggregation: they are part of what the metric means.</span>
           </div>
           {editingId && (
             <div className={s.group}>

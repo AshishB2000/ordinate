@@ -40,7 +40,7 @@ export function saveBlob(blob: Blob, filename: string): void {
 
 async function finish(reply: PagesReply, setup: PageSetup, projectId: string, hooks: GenerateHooks): Promise<GenerateResult> {
   if (!reply.ok) return { ok: false, error: reply.error };
-  if (!reply.pages.length) return { ok: false, error: 'Every page is excluded — nothing to build.' };
+  if (!reply.pages.length) return { ok: false, error: 'Every page is excluded, so there is nothing to build.' };
   if (reply.share) {
     if (reply.share.action === 'include') {
       if (!(await hooks.confirmInclude(reply.share))) return { ok: false, cancelled: true };

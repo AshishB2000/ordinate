@@ -163,7 +163,7 @@ async function partOne(): Promise<void> {
     ok('preview: a sheet page carries its tiles as charts', sheet.tiles.length === 1 && same(sheet.tiles[0].chart.data, want.data));
     const kcap = await direct('reports:caption', { input: { kpis: [{ label: 'Avg order', value: avg.value }, { label: 'Revenue', value: revv.value }] } });
     ok('preview: the sheet caption IS the KPI sentence', sheet.caption === kcap, JSON.stringify([sheet.caption, kcap]));
-    ok('preview: the summary lists the KPIs and every tile\'s sentence', pv.body.pages[1].kpis.length === 2 && pv.body.pages[1].bullets.some((b: string) => b.startsWith('Sales by region — ')), JSON.stringify(pv.body.pages[1]));
+    ok('preview: the summary lists the KPIs and every tile\'s sentence', pv.body.pages[1].kpis.length === 2 && pv.body.pages[1].bullets.some((b: string) => b.startsWith('Sales by region: ')), JSON.stringify(pv.body.pages[1]));
     ok('preview: the cover names the date and the dashboard\'s filter line; the mark is Ordinate\'s', pv.body.pages[0].meta.length >= 2
       && pv.body.pages[0].meta[1] === 'Filtered: Region = North, East, West' && pv.body.pages[0].logo === 'mark', JSON.stringify(pv.body.pages[0]));
     ok('preview: a card removed from the dashboard keeps its page and says so', pv.body.pages[5].body === 'This tile is no longer on the dashboard.');

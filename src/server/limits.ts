@@ -90,7 +90,7 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
   const ipKey = (prefix: string) => (req: FastifyRequest) => {
     if (!warned && req.headers['x-forwarded-for'] !== undefined && !trusted(proxies, req.socket.remoteAddress)) {
       warned = true;
-      req.log.warn({ peer: req.socket.remoteAddress }, 'X-Forwarded-For from a peer outside TRUSTED_PROXY_CIDRS: if it is your proxy, every client behind it shares its rate-limit buckets — add it to TRUSTED_PROXY_CIDRS');
+      req.log.warn({ peer: req.socket.remoteAddress }, 'X-Forwarded-For from a peer outside TRUSTED_PROXY_CIDRS: if it is your proxy, every client behind it shares its rate-limit buckets, so add it to TRUSTED_PROXY_CIDRS');
     }
     return prefix + normalizeIP(clientIp(req, proxies));
   };

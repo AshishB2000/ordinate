@@ -223,10 +223,10 @@ delete partial[roleOf('state')!.id];
 delete partial[roleOf('order_date')!.id];
 const drop = planApply(optional, partial, { datasetId: T2, columns: RENAMED_COLS, steps: [], metrics: [] }, { newId: uuid });
 const said = drop.dropped.join(' | ');
-ok('optional: the map that needs State is skipped, and says so', said.includes('Chart “Profit by state” — needs State'), said);
+ok('optional: the map that needs State is skipped, and says so', said.includes('Chart “Profit by state” needs State'), said);
 ok('optional: Month needs Order date, so it goes — and the chart and KPI that read it, and the Orders metric',
-  drop.newSteps.length === 0 && said.includes('Calculated field “Month” — needs Order date')
-  && said.includes('Chart “Revenue by month” — needs the calculated field Month') && said.includes('Metric “Orders”')
+  drop.newSteps.length === 0 && said.includes('Calculated field “Month” needs Order date')
+  && said.includes('Chart “Revenue by month” needs the calculated field Month') && said.includes('Metric “Orders”')
   && said.includes('Tile “Orders”'), said);
 ok('optional: "N tiles skipped" is exact', drop.total === 9 && drop.tiles === 6, `${drop.tiles}/${drop.total}`);
 ok('optional: everything that does not need them is still built', drop.visuals.length === 1 && drop.metrics.length === 4);

@@ -90,13 +90,13 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
     const tab = card.type === 'tabs' ? activeTab(card, ed.groupTab.get(card.id)) : undefined;
     const kids = childrenOf(ed.cards, card.id).filter((c) => !tab || c.tabId === tab);
     if (kids.length) return null;
-    return <p className={s.groupEmpty}>{tab ? 'Drag cards into this tab.' : 'Drag cards in here — they move with it.'}</p>;
+    return <p className={s.groupEmpty}>{tab ? 'Drag cards into this tab.' : 'Drag cards in here. They move with it.'}</p>;
   }
   // A card kind this build does not draw: the record keeps it; the sheet says so.
   return (
     <div className={s.placeholder}>
       <Icon name="layout-dashboard" size={16} />
-      <span>{KIND_TITLE[card.type] ?? card.type} card — not shown here.</span>
+      <span>{KIND_TITLE[card.type] ?? card.type} card is not shown here.</span>
     </div>
   );
 }

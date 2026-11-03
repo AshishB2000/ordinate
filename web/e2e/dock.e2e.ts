@@ -289,7 +289,7 @@ if (!dbUrl) {
     await box.fill('Make a plan for my sales file');
     await box.press('Enter');
     const card = page.getByTestId('plan-card');
-    await card.getByText('Plan — 2 steps').waitFor();
+    await card.getByText('Plan: 2 steps').waitFor();
     await card.getByRole('button', { name: 'Run all' }).click();
     await card.getByText('Choose the file for step 1.').waitFor();
     await page.setInputFiles('input[aria-label="File to import"]', {
@@ -398,10 +398,10 @@ if (!dbUrl) {
     assert.equal(await rename.getByRole('textbox', { name: 'Name' }).inputValue(), 'What is in this project?', 'the dialog opens on the name its first question gave it');
     await rename.getByRole('textbox', { name: 'Name' }).fill('Ledger review');
     await rename.getByRole('button', { name: 'Rename' }).click();
-    await dock.getByRole('button', { name: 'Conversations — Ledger review' }).waitFor();
+    await dock.getByRole('button', { name: 'Conversations: Ledger review' }).waitFor();
     await page.reload();
     await settled(page);
-    await dock.getByRole('button', { name: 'Conversations — Ledger review' }).waitFor();
+    await dock.getByRole('button', { name: 'Conversations: Ledger review' }).waitFor();
     await dock.getByText(ANSWER.join(''), { exact: true }).first().waitFor(); // the stub gave the same answer twice
 
     await dock.getByRole('button', { name: 'Conversation history' }).click();
@@ -411,7 +411,7 @@ if (!dbUrl) {
     const confirm = page.getByRole('dialog', { name: 'Delete this conversation?' });
     await confirm.getByText(/“Ledger review” and everything in it will be removed/).waitFor();
     await confirm.getByRole('button', { name: 'Delete' }).click();
-    await dock.getByRole('button', { name: 'Conversations — New conversation' }).waitFor();
+    await dock.getByRole('button', { name: 'Conversations: New conversation' }).waitFor();
     assert.equal(await dock.getByText(ANSWER.join(''), { exact: true }).count(), 0, 'the deleted conversation\'s turns are gone from the dock');
 
     // ── A dashboard: it asks first, drafts from the answers, is reviewed, and is created on the click ──
@@ -450,12 +450,12 @@ if (!dbUrl) {
     await measure.waitFor();
     assert.equal(await ask.getByRole('radio').count(), 5, 'two questions, with two and three options');
     assert.equal(await ask.getByRole('button', { name: 'Continue' }).isDisabled(), true, 'nothing is answered for the user');
-    await ask.getByRole('button', { name: 'Skip — just build it' }).waitFor();
+    await ask.getByRole('button', { name: 'Skip, just build it' }).waitFor();
     await measure.getByRole('radio', { name: 'Revenue' }).check();
     await shots('dock-draft-questions');
     await ask.getByRole('button', { name: 'Continue' }).click();
 
-    const review = page.getByRole('dialog', { name: 'Assistant draft — review before creating' });
+    const review = page.getByRole('dialog', { name: 'Assistant draft: review before creating' });
     await review.getByText('Revenue by region', { exact: true }).waitFor();
     await review.locator('canvas').first().waitFor(); // the app drew it, from its own figures
     assert.deepEqual(draftCalls.map((c) => c.asking), [true, false], 'it asked once: the call that carried the answers could not ask again');
@@ -505,7 +505,7 @@ if (!dbUrl) {
     const before = draftCalls.length;
     await wiz.getByRole('button', { name: 'Draft with the Assistant' }).click();
     // Straight to the model's questions — and "Skip" drafts with none of them answered.
-    await page.getByRole('dialog', { name: 'A few questions first' }).getByRole('button', { name: 'Skip — just build it' }).click();
+    await page.getByRole('dialog', { name: 'A few questions first' }).getByRole('button', { name: 'Skip, just build it' }).click();
     await review.getByText('Revenue by region', { exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog', { name: 'Draft a dashboard' }).count(), 0, 'the brief was the wizard\'s: the flow showed none of its own');
     assert.deepEqual(draftCalls.slice(before).map((c) => c.asking), [true, false], 'asked once here too');

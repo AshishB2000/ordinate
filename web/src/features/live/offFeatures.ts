@@ -36,7 +36,7 @@ const builder = (p: string, d: string) => `/visuals/${p}/new?dataset=${encodeURI
 export const LIVE_OFF: Readonly<Record<LiveOffFeature, LiveOffWords>> = {
   prepare: {
     title: 'Prepare steps and formulas are off for Live datasets',
-    why: 'Steps, calculated fields and LOD expressions rewrite the rows, and a Live dataset keeps none here — every chart asks the warehouse.',
+    why: 'Steps, calculated fields and LOD expressions rewrite the rows, and a Live dataset keeps none here: every chart asks the warehouse.',
     open: (p, d) => `/data/${p}/${d}/prepare`,
   },
   table: {

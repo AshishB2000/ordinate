@@ -197,7 +197,7 @@ const POLL_MAX_MS = 1_500;
 /** A submit may park up to ~45 s server side before its 202; the socket gets that long past our deadline. */
 const SUBMIT_GRACE_MS = 50_000;
 const CANCEL_TIMEOUT_MS = 5_000;
-const CLIPPED = 'Response exceeded the 100 MB ceiling and was cut off — narrow the query or lower the row limit.';
+const CLIPPED = 'Response exceeded the 100 MB ceiling and was cut off. Narrow the query or lower the row limit.';
 
 /** The user-facing sentence for a non-2xx/202 reply. */
 function failureOf(res: SfHttpResponse, json: unknown, budget: number): string {
@@ -205,7 +205,7 @@ function failureOf(res: SfHttpResponse, json: unknown, budget: number): string {
   const detail = st.message || (json === undefined ? res.body.trim().slice(0, 300) : '');
   if (res.status === 401 || res.status === 403) return `Snowflake refused the sign-in (HTTP ${res.status})${detail ? ': ' + detail : ''}`;
   if (res.status === 408) return `The query ran past its ${Math.ceil(budget / 1000)}s limit and Snowflake stopped it.`;
-  if (res.status === 429) return 'Snowflake is rate-limiting requests — try again in a minute.';
+  if (res.status === 429) return 'Snowflake is rate-limiting requests. Try again in a minute.';
   if (res.status === 422 && detail) return st.code ? `Snowflake error ${st.code}: ${detail}` : detail;
   return detail ? `HTTP ${res.status}: ${detail}` : `Request failed (HTTP ${res.status})`;
 }
@@ -410,11 +410,11 @@ export const CONNECTORS: ConnectorDef[] = [
     fields: [
       {
         key: 'account', label: 'Account', type: 'text', required: true, placeholder: 'myorg-myaccount',
-        help: 'Your account identifier — myorg-myaccount, or a locator such as xy12345.us-east-2.aws. Not a URL: Ordinate builds the address itself.',
+        help: 'Your account identifier: myorg-myaccount, or a locator such as xy12345.us-east-2.aws. Not a URL: Ordinate builds the address itself.',
       },
       {
         key: 'privatelink', label: 'Connect over PrivateLink', type: 'checkbox', default: false,
-        help: 'Uses <account>.privatelink.snowflakecomputing.com, which resolves inside your network — an administrator allows its range with SSRF_ALLOW.',
+        help: 'Uses <account>.privatelink.snowflakecomputing.com, which resolves inside your network. An administrator allows its range with SSRF_ALLOW.',
       },
       { key: 'user', label: 'User', type: 'text', required: true, help: 'The Snowflake user this connection signs in as.' },
       {

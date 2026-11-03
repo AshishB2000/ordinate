@@ -354,11 +354,11 @@ export function resolveRule(
   if (ci < 0) return err(`Column "${name}" no longer exists`);
   const type = columns[ci].type;
   if (rule.kind === 'range') {
-    if (type === 'text') return err(`"${name}" is a text column — a range needs a number or date column`);
+    if (type === 'text') return err(`"${name}" is a text column, but a range needs a number or date column`);
     const b = rule.args.min ?? rule.args.max;
     if ((typeof b === 'number') !== (type === 'number')) return err(`The bounds don't match "${name}", which is a ${type} column`);
   }
-  if (rule.kind === 'regex' && type === 'number') return err(`"${name}" is a number column — patterns apply to text and date columns`);
+  if (rule.kind === 'regex' && type === 'number') return err(`"${name}" is a number column, but patterns apply to text and date columns`);
   if (rule.kind === 'references') {
     if (!ref) return err('The dataset this rule checks against no longer exists');
     const other = rule.args.column ?? '';
@@ -366,7 +366,7 @@ export function resolveRule(
     if (refCi < 0) return err(`Column "${other}" no longer exists in the referenced dataset`);
     const refType = ref.columns[refCi].type;
     if ((type === 'number') !== (refType === 'number')) {
-      return err(`"${name}" is a ${type} column but "${other}" is ${refType} — the types must match`);
+      return err(`The types must match: "${name}" is a ${type} column but "${other}" is ${refType}`);
     }
     return { ok: true, ci, type, refCi, refType };
   }

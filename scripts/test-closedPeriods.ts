@@ -124,7 +124,7 @@ async function main(): Promise<void> {
   ok('partial: the change rule does not fire on five days of February', fired(first, pRule.id).length === 0, show(fired(first, pRule.id)));
   const tested = await alertStore.testRule(pid, pRule);
   ok('partial: the Test button agrees — would not fire, and says it waits for a period to close, not a refresh',
-    tested.ok && !tested.fire && tested.message === 'Nothing to compare yet — day has fewer than two complete periods. This can fire once the next one closes.', show(tested));
+    tested.ok && !tested.fire && tested.message === 'Nothing to compare yet: day has fewer than two complete periods. This can fire once the next one closes.', show(tested));
   const fTested = await alertStore.testRule(pid, fRule);
   ok('full (control): its Test button compares the two periods, with no such sentence', fTested.ok && fTested.fire && !fTested.message.includes('complete periods'), show(fTested));
   const fEv = fired(first, fRule.id);

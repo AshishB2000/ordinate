@@ -61,7 +61,7 @@ function pool(): Pool {
 }
 
 /** What put says when its own row was swept while it wrote (it never is, in normal operation). */
-export const STAGE_LOST = 'This import took too long to stage — bring the file in again.';
+export const STAGE_LOST = 'This import took too long to stage. Bring the file in again.';
 
 // ── This pod's memory copies ────────────────────────────────────────────────
 const memory = new Map<string, { org: string; user: string; table: ParseResult; cells: number; expires: number }>();

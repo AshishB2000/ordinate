@@ -62,7 +62,7 @@ describe('Fresh on ask', () => {
   it('without incremental refresh: disabled, saying why in words', () => {
     serve();
     draw({ ...ON, incrementalOn: undefined });
-    const picker = screen.getByRole('combobox', { name: 'Fresh on ask for Orders — needs incremental refresh' });
+    const picker = screen.getByRole('combobox', { name: 'Fresh on ask for Orders (needs incremental refresh)' });
     expect(picker.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('needs incremental refresh')).toBeTruthy();
     expect(picker.closest('span[title]')?.getAttribute('title')).toMatch(/needs incremental refresh on this dataset/);

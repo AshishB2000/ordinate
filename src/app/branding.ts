@@ -86,17 +86,17 @@ export type LogoCheck = { ok: true; kind: 'png' | 'svg' } | { ok: false; error: 
 export function validateLogo(buf: Buffer | null | undefined): LogoCheck {
   if (!buf || !buf.length) return { ok: false, error: 'That file is empty.' };
   if (buf.length > LOGO_MAX_BYTES) {
-    return { ok: false, error: `That logo is ${(buf.length / 1024).toFixed(0)} KB — the limit is ${LOGO_MAX_BYTES / 1024} KB.` };
+    return { ok: false, error: `That logo is ${(buf.length / 1024).toFixed(0)} KB. The limit is ${LOGO_MAX_BYTES / 1024} KB.` };
   }
   if (PNG_SIG.every((b, i) => buf[i] === b)) return { ok: true, kind: 'png' };
   const text = buf.toString('utf8');
   const head = text.replace(/^﻿/, '').replace(/<\?xml[\s\S]*?\?>/, '').replace(/<!--[\s\S]*?-->/g, '').trimStart();
   if (/^<svg[\s>]/i.test(head) || /^<!doctype svg/i.test(head)) {
     if (/<script/i.test(text) || /\son[a-z]+\s*=/i.test(text) || /javascript:/i.test(text) || /<foreignObject/i.test(text)) {
-      return { ok: false, error: 'That SVG contains script — use a plain SVG or a PNG.' };
+      return { ok: false, error: 'That SVG contains script. Use a plain SVG or a PNG.' };
     }
     if (/(?:xlink:)?href\s*=\s*["']\s*(?:https?:|\/\/|file:)/i.test(text)) {
-      return { ok: false, error: 'That SVG loads something from elsewhere — use a self-contained SVG or a PNG.' };
+      return { ok: false, error: 'That SVG loads something from elsewhere. Use a self-contained SVG or a PNG.' };
     }
     return { ok: true, kind: 'svg' };
   }

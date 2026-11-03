@@ -30,7 +30,7 @@ function Stamp({ by, at, readOnly }: { by?: string; at?: string; readOnly: boole
         ? `Updated by ${by || 'someone'} · ${ago(at)}`
         : readOnly
           ? 'Not documented yet.'
-          : 'Not documented yet — anything you add here is shown to everyone in this project.'}
+          : 'Not documented yet. Anything you add here is shown to everyone in this project.'}
     </p>
   );
 }

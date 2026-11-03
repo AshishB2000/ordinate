@@ -121,7 +121,7 @@ function loadAll(): ConnectorDef[] {
         // Loud, at module load, on the machine of whoever added the collision.
         throw new Error(
           `[connectors] Duplicate connector id "${def.id}": registered by ${prior} and ${spec}. ` +
-          'Ids are persisted on connection records — pick a different one.',
+          'Ids are persisted on connection records, so pick a different one.',
         );
       }
       byId.set(def.id, spec);

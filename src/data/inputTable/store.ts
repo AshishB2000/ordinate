@@ -151,7 +151,7 @@ async function checkLookups(projectId: string, selfId: string | null, columns: I
     const meta = await datasets.getDatasetMeta(projectId, l.datasetId);
     if (!meta) return `The dataset ${col.name} looks up no longer exists`;
     const key = meta.columns.find((k) => k.name === l.column);
-    if (!key) return `Pick the key column for ${col.name} again — "${l.column}" is not in ${meta.name}`;
+    if (!key) return `Pick the key column for ${col.name} again: "${l.column}" is not in ${meta.name}`;
     if ((key.type === 'number') !== (col.type === 'number')) {
       return `${col.name} must be a ${key.type === 'number' ? 'number' : 'text'} column to look up ${meta.name} · ${key.name}`;
     }
@@ -215,7 +215,7 @@ async function writeBase(
 
 async function inputDataset(projectId: string, id: string): Promise<Dataset | Fail> {
   const ds = await datasets.getDataset(projectId, id);
-  if (!ds) return fail('That table could not be found — it may have been deleted');
+  if (!ds) return fail('That table could not be found. It may have been deleted');
   if (ds.sourceKind !== 'input') return fail('Only an input table can be edited here');
   return ds;
 }
@@ -263,7 +263,7 @@ export function saveInputBatches(projectId: string, id: string, batches: unknown
   if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(fail('That table could not be found'));
   return withTable(projectId, id, async () => {
     if (!Array.isArray(batches) || batches.length === 0) return fail('Nothing to save');
-    if (batches.length > MAX_BATCHES) return fail('Too many edits in one save — reload the table');
+    if (batches.length > MAX_BATCHES) return fail('Too many edits in one save. Reload the table');
     const existing = await inputDataset(projectId, id);
     if ('ok' in existing) return existing;
     const base = baseOf(existing);
@@ -271,7 +271,7 @@ export function saveInputBatches(projectId: string, id: string, batches: unknown
     const states: Cell[][][] = [];
     for (const b of batches) {
       const res = applyBatch(rows, b, base.columns.length, MAX_INPUT_ROWS);
-      if (!res) return fail('An edit could not be applied to the saved table — reload it to see what is stored');
+      if (!res) return fail('An edit could not be applied to the saved table. Reload it to see what is stored');
       rows = res.rows;
       states.push(rows);
     }
@@ -303,9 +303,9 @@ export function setInputColumns(projectId: string, id: string, rawColumns: unkno
     const base = baseOf(existing);
     const map = Array.isArray(from) ? from : [];
     const used = new Set<number>();
-    if (map.length !== check.columns.length) return fail('The column list changed while it was being edited — reopen Edit columns');
+    if (map.length !== check.columns.length) return fail('The column list changed while it was being edited. Reopen Edit columns');
     for (const f of map) {
-      if (!Number.isInteger(f) || f < -1 || f >= base.columns.length || (f >= 0 && used.has(f))) return fail('The column list changed while it was being edited — reopen Edit columns');
+      if (!Number.isInteger(f) || f < -1 || f >= base.columns.length || (f >= 0 && used.has(f))) return fail('The column list changed while it was being edited. Reopen Edit columns');
       if (f >= 0) used.add(f);
     }
     const bad = await checkLookups(projectId, id, check.columns);

@@ -70,7 +70,7 @@ const SAMPLE_NOTE_HEADING = 'This is sample data';
 // two lines scrolls inside it, hiding the Remove button the note is promising.
 const SAMPLE_NOTE_TEXT =
   'A generated retail orders dataset, bundled so the app has something to show on '
-  + 'first launch. Nothing here is real — remove it whenever you like; your project stays.';
+  + 'first launch. Nothing here is real. Remove it whenever you like; your project stays.';
 
 /** The bundled CSV, resolved from this file (src/app/ → the app root): the repo
  *  root in dev, /app in the image. The server seeds the sample from it (T0.8's
@@ -255,7 +255,7 @@ export async function seedSampleProject(opts: { again?: boolean } = {}): Promise
   if (!opts.again && config.get().sampleSeeded) return { seeded: false };
   const csv = sampleCsvPath();
   if (!fs.existsSync(csv)) {
-    logger.error('[sample] bundled CSV missing at', csv, '— skipping seed');
+    logger.error('[sample] bundled CSV missing at', csv, '(skipping seed)');
     return { seeded: false };
   }
   // First-run guidance starts with the first launch, and only then: an install

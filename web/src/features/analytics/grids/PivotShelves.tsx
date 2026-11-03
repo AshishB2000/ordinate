@@ -68,7 +68,7 @@ export function PivotShelves({ projectId, cols, pivot, onChange }: { projectId: 
     const m = p.metric;
     const def = m.definition as { formula?: string; column?: string; aggregation?: string };
     if (typeof def.formula === 'string') {
-      toast(`"${m.name}" is a formula metric. Every pivot cell is a column rolled up within a group — use it on a KPI card instead.`, { kind: 'error' });
+      toast(`"${m.name}" is a formula metric. Every pivot cell is a column rolled up within a group, so use it on a KPI card instead.`, { kind: 'error' });
       return;
     }
     if (!cols.some((c) => c.name === def.column)) {

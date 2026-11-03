@@ -97,7 +97,7 @@ export function MaskForm({ draft, set, ctx }: FormProps) {
       <>
         {column}
         <Hint>
-          Each value becomes a short token like #3f9a0c21b7d4 — the same token for the same value everywhere in this project, so counts, joins and
+          Each value becomes a short token like #3f9a0c21b7d4. The same value gets the same token everywhere in this project, so counts, joins and
           groupings still work. The key that makes the tokens stays with this project on the server and never leaves it.
         </Hint>
       </>

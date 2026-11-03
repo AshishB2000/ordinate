@@ -24,7 +24,7 @@ export const KINDS: { kind: string; label: string; icon: IconName; hint: string 
   { kind: 'trend', label: 'Trend line', icon: 'trending-up', hint: 'Least-squares line with its slope and R²' },
   { kind: 'moving_average', label: 'Moving average', icon: 'chart-line', hint: 'Trailing average over N points' },
   { kind: 'forecast', label: 'Forecast', icon: 'chart-area', hint: 'Linear, seasonal naive or Holt-Winters, with an 80% interval' },
-  { kind: 'annotation', label: 'Annotation', icon: 'pencil', hint: 'A note pinned to a category — or ⌥-click a mark' },
+  { kind: 'annotation', label: 'Annotation', icon: 'pencil', hint: 'A note pinned to a category, or ⌥-click a mark' },
   { kind: 'highlight', label: 'Highlight', icon: 'star', hint: 'Outline the top, bottom, or points past a threshold' },
 ];
 export const kindInfo = (kind: string) => KINDS.find((k) => k.kind === kind) ?? KINDS[0];

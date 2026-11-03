@@ -129,7 +129,7 @@ export function NavBody({ card }: { card: Card }) {
   const navigate = useNavigate();
   const nav = (card.nav as NavSpec | undefined) ?? { style: 'buttons', items: [] };
   const items = nav.style === 'back' ? [nav.items[0] ?? { id: 'back', label: 'Back to overview' }] : nav.items;
-  if (!items.length) return <p className={s.missing}>No buttons yet — add them in Properties.</p>;
+  if (!items.length) return <p className={s.missing}>No buttons yet. Add them in Properties.</p>;
   const open = (it: NavItem) => {
     if (!it.target) return;
     // This dashboard: just switch sheets (the editor stays open).

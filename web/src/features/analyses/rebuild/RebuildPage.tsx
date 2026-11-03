@@ -33,7 +33,7 @@ import s from './Rebuild.module.css';
 
 const STEPS = ['Reading the screenshot', 'Finding the tiles', 'Naming the fields', 'Matching them to your columns'];
 const HOW = [
-  ['camera', 'The model reads the layout', 'Which tiles, where, of what kind, over which fields — never the numbers on them.'],
+  ['camera', 'The model reads the layout', 'Which tiles, where, of what kind, over which fields, but never the numbers on them.'],
   ['columns', 'Ordinate matches your columns', 'By name and by type: a sum needs a number column. You can change any match.'],
   ['layout-dashboard', 'Your data fills it', 'Every KPI and chart is computed from your dataset, then it opens as a dashboard you own.'],
 ] as const;
@@ -70,7 +70,7 @@ function Reading() {
           </li>
         ))}
       </ol>
-      <p className={s.muted}>Only the layout is read. The numbers on the screenshot are never used — every figure comes from your data.</p>
+      <p className={s.muted}>Only the layout is read. The numbers on the screenshot are never used: every figure comes from your data.</p>
     </section>
   );
 }
@@ -157,7 +157,7 @@ export default function RebuildPage() {
   };
 
   const title = 'Rebuild a dashboard from a screenshot';
-  const sub = 'Drop a screenshot of a Tableau, Power BI, Looker or Metabase dashboard. The model reads its layout — never its numbers — and Ordinate rebuilds it on your data.';
+  const sub = 'Drop a screenshot of a Tableau, Power BI, Looker or Metabase dashboard. The model reads its layout (never its numbers), and Ordinate rebuilds it on your data.';
   const back: Back = { to: `/dashboards?project=${projectId}`, label: 'Dashboards' };
 
   if (status.isPending || sets.isPending) return <PageSkeleton />;
@@ -179,7 +179,7 @@ export default function RebuildPage() {
     return (
       <Page back={back} title={title} sub={sub}>
         <EmptyState icon="sparkles" title="Reading a dashboard screenshot needs AI" actions={<AiNotReady status={status.data ?? undefined} className={s.aiNote} />}>
-          Templates, layouts and blank sheets work without a model — start one from Dashboards → New.
+          Templates, layouts and blank sheets work without a model. Start one from Dashboards → New.
         </EmptyState>
       </Page>
     );
@@ -263,7 +263,7 @@ export default function RebuildPage() {
             <DropZone
               icon="layout-dashboard"
               title="Drop a dashboard screenshot, or paste one"
-              hint="A whole dashboard reads best — uncropped, at the size you would read it. PNG, JPEG, WebP or GIF. Ctrl+V / ⌘V pastes from the clipboard."
+              hint="A whole dashboard reads best: uncropped, at the size you would read it. PNG, JPEG, WebP or GIF. Ctrl+V / ⌘V pastes from the clipboard."
               accept="image/*"
               choose="Choose a screenshot"
               onFile={(f) => void take(f)}

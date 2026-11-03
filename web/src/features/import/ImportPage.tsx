@@ -154,7 +154,7 @@ function Importer({ projectId }: { projectId: string }) {
               }
             >
               {source === 'input'
-                ? 'Targets, budgets, a code mapping — define the columns, then type or paste the rows.'
+                ? 'Targets, budgets, a code mapping: define the columns, then type or paste the rows.'
                 : 'Join or append the project’s datasets on one canvas, check the result, and save it as a new dataset.'}
             </EmptyState>
           ) : (
@@ -169,7 +169,7 @@ function Importer({ projectId }: { projectId: string }) {
           onClose={() => setDefining(false)}
           onDone={(id) => {
             setDefining(false);
-            toast('Input table created — type or paste rows.', { kind: 'success' });
+            toast('Input table created. Type or paste rows.', { kind: 'success' });
             void navigate(`/data/input/${projectId}/${id}`);
           }}
         />

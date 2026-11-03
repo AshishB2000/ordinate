@@ -37,7 +37,7 @@ function Card({ sc, projectId, onDelete, refresh }: { sc: ScenarioSummary; proje
           <span className={s.cardTitle}>{sc.name || 'Untitled scenario'}</span>
           <span className={s.cardMeta}>{`${plural(sc.driverCount, 'driver', 'drivers')} · ${plural(sc.metricCount, 'metric', 'metrics')} · ${when(sc.updatedAt)}`}</span>
           <span className={s.cardDrivers}>
-            <DriverChips names={sc.driverNames} none="No drivers yet — the baseline" />
+            <DriverChips names={sc.driverNames} none="No drivers yet (the baseline)" />
           </span>
         </span>
       </Link>
@@ -95,7 +95,7 @@ function List({ projectId }: { projectId: string }) {
           <TornadoArt className={s.emptyArt} />
           <h2 className={s.emptyH}>No scenarios yet</h2>
           <p className={s.emptyP}>
-            A scenario asks “what if?” of your metrics. Add drivers — a price up five percent, one region’s volume down three, a discount set to zero — and every metric is recomputed beside its baseline, with a chart of which driver moves it most. The stored data never changes.
+            A scenario asks “what if?” of your metrics. Add drivers (a price up five percent, one region’s volume down three, a discount set to zero) and every metric is recomputed beside its baseline, with a chart of which driver moves it most. The stored data never changes.
             {!canEdit && ' An editor of this project can create one. You have view-only access.'}
           </p>
           <ul className={s.examples} aria-label="Example drivers">

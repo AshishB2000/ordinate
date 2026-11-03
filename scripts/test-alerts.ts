@@ -362,18 +362,18 @@ ok('a disabled rule never fires however far it crosses',
 {
   const r = rule();
   ok('a threshold message states the value and the target, both app-computed',
-    alertMessage(r, 5_194_598.73, null) === 'revenue is 5.2M — below 6.0M.',
+    alertMessage(r, 5_194_598.73, null) === 'revenue is 5.2M, below 6.0M.',
     alertMessage(r, 5_194_598.73, null));
   // A rule born on a card called "Revenue" says Revenue, not the column name it
   // happens to be computed over. The alert is read beside that card.
   const labelled = rule({ metric: { column: 'revenue', aggregation: 'sum', label: 'Revenue' } });
   ok('…using the SURFACE\u2019s word for the number when it has one',
-    alertMessage(labelled, 5_194_598.73, null) === 'Revenue is 5.2M — below 6.0M.',
+    alertMessage(labelled, 5_194_598.73, null) === 'Revenue is 5.2M, below 6.0M.',
     alertMessage(labelled, 5_194_598.73, null));
   ok('…and the auto-name follows it too',
     suggestRuleName(labelled) === 'Revenue below 6.0M', suggestRuleName(labelled));
   ok('…and names the operator in words, not symbols',
-    alertMessage(rule({ threshold: { op: '>=', value: 100 } }), 120, null) === 'revenue is 120 — at or above 100.',
+    alertMessage(rule({ threshold: { op: '>=', value: 100 } }), 120, null) === 'revenue is 120, at or above 100.',
     alertMessage(rule({ threshold: { op: '>=', value: 100 } }), 120, null));
   ok('a fall reads as a fall',
     alertMessage(fall, 4_600_000, 5_251_000) === 'revenue fell 12.4% to 4.6M since the previous refresh.',
@@ -407,10 +407,10 @@ ok('a disabled rule never fires however far it crosses',
   // would be worse than the alert.
   ok('one event is simply its own message', digestMessage([ev('Revenue')]) === 'Revenue fired.');
   ok('two or three are named in full',
-    digestMessage([ev('Revenue'), ev('Profit')]) === '2 alerts fired — Revenue, Profit.',
+    digestMessage([ev('Revenue'), ev('Profit')]) === '2 alerts fired: Revenue, Profit.',
     digestMessage([ev('Revenue'), ev('Profit')]));
   ok('past three, the rest are counted rather than listed',
-    digestMessage([ev('A'), ev('B'), ev('C'), ev('D'), ev('E')]) === '5 alerts fired — A, B, C, and 2 more.',
+    digestMessage([ev('A'), ev('B'), ev('C'), ev('D'), ev('E')]) === '5 alerts fired: A, B, C, and 2 more.',
     digestMessage([ev('A'), ev('B'), ev('C'), ev('D'), ev('E')]));
 }
 
@@ -425,7 +425,7 @@ ok('a disabled rule never fires however far it crosses',
   const out = wouldFire(armed, 5_000_000);
   ok('Test ignores enabled, armed, quiet hours and the snooze', out.fire === true);
   ok('…and reports the sentence a real firing would have sent',
-    out.message === 'revenue is 5.0M — below 6.0M.', out.message);
+    out.message === 'revenue is 5.0M, below 6.0M.', out.message);
   ok('…and says no when the condition genuinely does not hold',
     wouldFire(rule(), 9_000_000).fire === false);
   ok('Test on a change rule uses the value pair it is given',
@@ -435,7 +435,7 @@ ok('a disabled rule never fires however far it crosses',
   const fresh = wouldFire(fall, 5_194_598.73, null);
   ok('…and says so plainly when there is no comparison point yet',
     fresh.fire === false
-    && fresh.message === 'Nothing to compare 5.2M against yet \u2014 this can fire from the next refresh on.',
+    && fresh.message === 'Nothing to compare 5.2M against yet. This can fire from the next refresh on.',
     fresh.message);
 }
 

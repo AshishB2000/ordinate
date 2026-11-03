@@ -208,7 +208,7 @@ export async function orgWall(p: Pass): Promise<void> {
 }
 
 // ── 1. Upload on A → parse on B → save on A = a one-pod import ───────────
-const STAGE_GONE = 'This import is no longer available — bring the file in again.';
+const STAGE_GONE = 'This import is no longer available. Bring the file in again.';
 
 /** A CSV that bites: leading zeros, −0, 1e21, a float sum, empties, NBSP, a tab, a BOM inside a cell, duplicate and quoted headers. */
 function nastyCsv(rows: number, width: number): Buffer {

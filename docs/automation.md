@@ -1,4 +1,4 @@
-# Automation — the MCP endpoint
+# Automation: the MCP endpoint
 
 <!-- GENERATED from src/automation/registry.ts by `node scripts/gen-automation-docs.js`.
      Do not edit by hand: scripts/test-automation.ts fails when this file differs. -->
@@ -52,7 +52,7 @@ with the reason. Results carry the JSON as text, and as `structuredContent` when
   content, so the draft as stored is what goes live); `unpublish_dashboard` takes it away from viewers.
   Both need editor on the project; a viewer's token is refused with a sentence that says so.
 - Connections are not exposed. No output ever contains config, API keys, connection passwords or
-  tokens. A dataset's origin is reported by KIND only (`file`, `url`, `sql`…) — never its path, URL,
+  tokens. A dataset's origin is reported by KIND only (`file`, `url`, `sql`…), never its path, URL,
   query or connection id.
 - `query_sql` runs one read-only statement through the same SQL gate as the SQL workbench, in the
   caller's org-locked DuckDB worker.
@@ -93,7 +93,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `datasets import` | — | writes data | Import a .csv, .json or .xlsx file as a new dataset (runs as an import job). |
 | `datasets refresh` | — | writes data | Re-fetch a dataset from its source, then run its quality rules and alerts. |
 | `query` | `query_sql` | read | Run one read-only SQL SELECT over the project's datasets, bounded to --limit rows. |
-| — | `aggregate` | read | Compute chart data (labels and series) for an encoding — the numbers a visual would draw. |
+| — | `aggregate` | read | Compute chart data (labels and series) for an encoding: the numbers a visual would draw. |
 | `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. |
 | `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. |
 | `insights` | `insights` | read | What the app found in a dataset: trends, movers, concentration and anomalies. |
@@ -102,7 +102,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `reports run` | `run_report` | read | Generate a saved report (PDF, PPTX or DOCX) through the app's own report renderer. |
 | `publish` | — | writes files | Publish dashboards to a static folder from a publish config file (runs as a publish job). |
 | — | `create_visual` | writes records | Save a new visual. Validated exactly as the app validates a chart; writes a record, never data. Logged in Jobs. |
-| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs. |
+| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app). Leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs. |
 | — | `publish_dashboard` | writes records | Publish a dashboard: its draft as it is now becomes the version EVERYONE in the project sees, viewers included, until someone publishes again. Layout, filters and charts freeze; figures stay live. Only publish when the user asks you to. Publishing a dashboard already in sync is fine (it re-freezes its charts). Editors and admins only. Writes records, never data. |
 | — | `unpublish_dashboard` | writes records | Unpublish a dashboard: it disappears for the project's viewers; the draft stays, for editors and admins. Only unpublish when the user asks you to. Editors and admins only. Writes records, never data. |
 
@@ -172,14 +172,14 @@ Run one read-only SQL SELECT over the project's datasets, bounded to --limit row
 
 MCP only · MCP tool `aggregate` · read-only
 
-Compute chart data (labels and series) for an encoding — the numbers a visual would draw.
+Compute chart data (labels and series) for an encoding: the numbers a visual would draw.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 | `dataset` | string | yes | Dataset id or exact name. |
 | `encoding` | object | yes | What to chart: a category column and one or more measures, exactly as a visual stores it. |
-| `filters` | array | no | Row filters applied before aggregation — the same filter steps a visual stores. |
+| `filters` | array | no | Row filters applied before aggregation: the same filter steps a visual stores. |
 
 ### metrics list
 
@@ -274,13 +274,13 @@ Save a new visual. Validated exactly as the app validates a chart; writes a reco
 | `name` | string | yes | Visual name. |
 | `chartType` | `column` \| `bar` \| `clustered_column` \| `clustered_bar` \| `stacked_column` \| `stacked_bar` \| `pct_stacked_column` \| `pct_stacked_bar` \| `line` \| `line_markers` \| `area` \| `stacked_area` \| `pie` \| `donut` \| `scatter` \| `gauge` \| `combo` \| `bubble` \| `treemap` \| `heatmap` \| `funnel` \| `histogram` \| `sankey` \| `candlestick` \| `boxplot` \| `pivot` \| `cohort` \| `event_funnel` \| `waterfall` \| `bullet` \| `calendar` \| `radar` \| `pareto` \| `table` \| `map_bubble` \| `map_choropleth` \| `word_cloud` | yes | One of the app chart types. |
 | `encoding` | object | yes | What to chart: a category column and one or more measures, exactly as a visual stores it. |
-| `filters` | array | no | Row filters applied before aggregation — the same filter steps a visual stores. |
+| `filters` | array | no | Row filters applied before aggregation: the same filter steps a visual stores. |
 
 ### create_dashboard
 
 MCP only · MCP tool `create_dashboard` · **writes records**
 
-Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app) — leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.
+Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app). Leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

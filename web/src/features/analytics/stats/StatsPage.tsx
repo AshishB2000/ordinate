@@ -112,7 +112,7 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
       toast(res.error, { kind: 'error' });
       return;
     }
-    toast(`${res.replaced ? 'Updated' : 'Added'} ${res.name} — it is a calculated field in Prepare.`, { kind: 'success' });
+    toast(`${res.replaced ? 'Updated' : 'Added'} ${res.name}. It is a calculated field in Prepare.`, { kind: 'success' });
     // The new column joins the pickers here and on the dataset page.
     void client.invalidateQueries({ queryKey: ['dataset:columns', projectId, datasetId] });
   }
@@ -128,14 +128,14 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
   if (big && !ran) {
     body = (
       <EmptyState icon="play" title="Ready to run" actions={<Button variant="primary" icon="play" onClick={run}>Run analysis</Button>}>
-        {`${formatNumber(ds.rowCount)} rows — large runs go to the background as a job.`}
+        {`${formatNumber(ds.rowCount)} rows. Large runs go to the background as a job.`}
       </EmptyState>
     );
   } else if (q.isPending || q.isFetching || (!big && stale)) {
     body = (
       <div className={s.loading}>
-        <SkeletonBlock label={big ? 'Running as a background job — progress and Cancel are in Jobs.' : 'Computing'} />
-        {big && <p className={s.ctlHint}>Running as a background job — progress and Cancel are in Jobs.</p>}
+        <SkeletonBlock label={big ? 'Running as a background job. Progress and Cancel are in Jobs.' : 'Computing'} />
+        {big && <p className={s.ctlHint}>Running as a background job. Progress and Cancel are in Jobs.</p>}
       </div>
     );
   } else if (!reply || !reply.ok) {

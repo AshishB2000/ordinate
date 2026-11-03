@@ -256,17 +256,17 @@ const MARK: Record<StepStatus, string> = { pending: '·', running: '…', done: 
 export function runLogText(run: PlanRun): string {
   const done = run.status.filter((s) => s === 'done').length;
   const head = run.state === 'undone'
-    ? `Plan run undone — ${run.undo ? run.undo.undone : 0} record${run.undo && run.undo.undone === 1 ? '' : 's'} put back.`
+    ? `Plan run undone: ${run.undo ? run.undo.undone : 0} record${run.undo && run.undo.undone === 1 ? '' : 's'} put back.`
     : run.state === 'stopped'
-      ? `Plan run stopped — ${done} of ${run.steps.length} steps done.`
-      : `Plan run finished — ${done} of ${run.steps.length} steps done.`;
+      ? `Plan run stopped: ${done} of ${run.steps.length} steps done.`
+      : `Plan run finished: ${done} of ${run.steps.length} steps done.`;
   const lines = run.steps.map((s, i) => {
     const r = run.results[i];
     let tail = '';
-    if (run.status[i] === 'failed') tail = ` — failed: ${run.errors[i] || 'error'}`;
-    else if (run.status[i] === 'skipped') tail = ' — skipped';
-    else if (run.status[i] === 'pending') tail = ' — not run';
-    else if (r) tail = ` — ${r.summary}`;
+    if (run.status[i] === 'failed') tail = ` (failed: ${run.errors[i] || 'error'})`;
+    else if (run.status[i] === 'skipped') tail = ' (skipped)';
+    else if (run.status[i] === 'pending') tail = ' (not run)';
+    else if (r) tail = `: ${r.summary}`;
     return `${i + 1}. ${MARK[run.status[i]]} ${describeStep(s)}${tail}`;
   });
   const failed = run.undo && run.undo.failed.length

@@ -194,7 +194,7 @@ export function LineageDrawer({ projectId, id, name, onClose, type = 'dataset' }
             <span className={s.meta}>Hover to follow a path; click to open.</span>
           </div>
           <Graph projectId={projectId} g={g} />
-          {g.nodes.length === 1 && <p className={s.note}>Nothing is built from this yet — visuals, dashboards and reports on it will appear here.</p>}
+          {g.nodes.length === 1 && <p className={s.note}>Nothing is built from this yet. Visuals, dashboards and reports on it will appear here.</p>}
         </>
       )}
     </Drawer>

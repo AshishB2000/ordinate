@@ -103,7 +103,7 @@ export function ControlDialog({
           ))}
         </div>
         {sets.data && sets.data.length === 0 ? (
-          <p className={s.empty}>Import a dataset first — a control filters one.</p>
+          <p className={s.empty}>Import a dataset first: a control filters one.</p>
         ) : (
           <>
             <Select
@@ -134,7 +134,7 @@ export function ControlDialog({
             <Input label="Label" placeholder={col ?? 'Filter'} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} />
             {draft && (
               <div className={s.preview}>
-                <span className={s.previewH}>Preview — what it is left on becomes its default</span>
+                <span className={s.previewH}>Preview: what it is left on becomes its default</span>
                 <ControlWidget projectId={projectId} control={draft} value={preview} onChange={setPreview} />
               </div>
             )}

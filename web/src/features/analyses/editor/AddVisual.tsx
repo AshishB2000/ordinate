@@ -44,7 +44,7 @@ export function AddVisualDialog({ onClose }: { onClose: () => void }) {
       onOpenChange={(o) => !o && onClose()}
       size="lg"
       title="Add a visual"
-      description="Pick a saved visual — the card shows it live, and editing the visual changes it everywhere it is used."
+      description="Pick a saved visual. The card shows it live, and editing the visual changes it everywhere it is used."
       footer={
         <DialogClose asChild>
           <Button variant="ghost">Cancel</Button>
@@ -59,7 +59,7 @@ export function AddVisualDialog({ onClose }: { onClose: () => void }) {
         </Link>
       </div>
       {all.length === 0 ? (
-        <p className={s.empty}>No saved visuals yet — make one in the Visuals builder, then add it here.</p>
+        <p className={s.empty}>No saved visuals yet. Make one in the Visuals builder, then add it here.</p>
       ) : shown.length === 0 ? (
         <p className={s.empty}>No visual matches “{q.trim()}”.</p>
       ) : (
