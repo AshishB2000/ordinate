@@ -153,11 +153,14 @@ export default function DockPanel() {
   asker.current = { send, usable }; // the current render's, read once per handed question
   useEffect(() => {
     if (!handed || !decided) return;
-    const q = takePendingQuestion();
-    if (asker.current.usable) void asker.current.send(q);
+    const { question: q, about } = takePendingQuestion();
+    // Pointed at one thing (a Home suggestion): pinned as `@` pins, if the dock is in its project.
+    const on = about && pid && about.projectId === pid ? about.context : undefined;
+    if (on && pid) setPin({ projectId: pid, context: on });
+    if (asker.current.usable) void asker.current.send(q, on);
     else setText(q);
     (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
-  }, [handed, decided]);
+  }, [handed, decided, pid]);
 
   // The dock moved to another project (the route named one, or the picker did): what the last turn left on
   // screen — a proposed plan, the Get-data links, an error — was about the project it was asked in.
@@ -205,7 +208,8 @@ export default function DockPanel() {
     setTurns([], id || null);
   }
 
-  async function send(question: string): Promise<void> {
+  /** `on`: what the answer is about, when the caller pinned it in this same turn (the state has not caught up). */
+  async function send(question: string, on: DockContext = context): Promise<void> {
     const q = question.trim();
     if (!q || !pid || pending) return;
     const askId = crypto.randomUUID();
@@ -218,7 +222,7 @@ export default function DockPanel() {
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:'))); // last turn's proposal is superseded
     let r: Awaited<ReturnType<typeof ask>>;
     try {
-      r = await ask(pid, context, q, shownThread, askId);
+      r = await ask(pid, on, q, shownThread, askId);
     } catch {
       r = { ok: false, error: 'Something went wrong. Try again.' };
     }
@@ -236,7 +240,7 @@ export default function DockPanel() {
       setRebuildOffer(action?.kind === 'rebuild');
       if (action?.kind === 'dashboard') {
         // ponytail: one turn's intent; fold a thread's earlier dashboard asks in if follow-ups should refine one plan.
-        setDraft({ projectId: pid, ...(context.kind === 'dataset' && context.id ? { datasetId: context.id } : {}), intent: (action.intent || q).slice(0, 2000) });
+        setDraft({ projectId: pid, ...(on.kind === 'dataset' && on.id ? { datasetId: on.id } : {}), intent: (action.intent || q).slice(0, 2000) });
       }
       return;
     }
