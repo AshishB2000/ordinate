@@ -1,9 +1,10 @@
-/* Home's "Jump back in": preview cards for the project's newest records.
-   Tokens only — both themes follow. */
+/* Home's "Starred": preview cards for the caller's pins, then a hint in the
+   room left. Tokens only, so both themes follow. */
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* Fixed columns (4, then 2, then 1), so the hint knows how many it may take. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-12);
   margin: 0;
   padding: 0;
@@ -100,4 +101,70 @@
 .sk {
   height: 204px;
   border-radius: var(--r-lg);
+}
+
+/* The way to add a pin, in the room the cards leave in the first row
+   (data-free: the empty columns of four). */
+.grid > .hint {
+  grid-column: span var(--free, 1);
+  max-width: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 88px;
+  padding: var(--sp-16) var(--sp-24);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+/* Gold, as the star itself is: a pin, not the way forward. */
+.hintMark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.hintTitle {
+  display: block;
+  margin-bottom: 2px;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.hint[data-free='2'] {
+  --free: 2;
+}
+.hint[data-free='3'] {
+  --free: 3;
+}
+.hint[data-free='4'] {
+  --free: 4;
+}
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Two columns: beside an odd card, else a row of its own. */
+  .hint[data-free='1'],
+  .hint[data-free='3'] {
+    --free: 1;
+  }
+  .hint[data-free='2'],
+  .hint[data-free='4'] {
+    --free: 2;
+  }
+}
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grid > .hint {
+    grid-column: 1 / -1;
+  }
 }

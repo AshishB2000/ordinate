@@ -1,7 +1,7 @@
 // Home's table of work — homePage.ts's Recent, as ONE list: All / Dashboards /
-// Visuals / Datasets pills, Starred as a pill beside them, and a This project /
-// All projects scope. A pin is a pin: Starred is never scoped (the caller's
-// own pins — `starred:*` on the server is per user — across every project).
+// Visuals / Datasets pills and a This project / All projects scope. Each row's
+// star makes or drops a pin (`starred:*` on the server is per user); the pins
+// themselves are the Starred row above (StarredRow.tsx), so no filter here.
 // Filtering, scoping and "Show all" are view state only — no re-fetch.
 
 import { useState } from 'react';
@@ -19,13 +19,12 @@ import s from './HomePage.module.css';
 
 const COLLAPSED = 8;
 const SCOPE_KEY = 'ordinate.recentAllProjects';
-type Filter = 'all' | 'analysis' | 'visual' | 'dataset' | 'starred';
+type Filter = 'all' | 'analysis' | 'visual' | 'dataset';
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'analysis', label: 'Dashboards' },
   { value: 'visual', label: 'Visuals' },
   { value: 'dataset', label: 'Datasets' },
-  { value: 'starred', label: 'Starred' },
 ];
 
 function readScope(): boolean {
@@ -96,10 +95,7 @@ export function RecentTable({ projectId, recent, canEdit }: { projectId: string 
     }
   };
 
-  const onlyStarred = filter === 'starred';
-  const rows = (recent.data ?? []).filter((it) =>
-    onlyStarred ? pinned.has(starKey(it)) : (filter === 'all' || it.type === filter) && (allProjects || !projectId || it.projectId === projectId),
-  );
+  const rows = (recent.data ?? []).filter((it) => (filter === 'all' || it.type === filter) && (allProjects || !projectId || it.projectId === projectId));
   const shown = expanded ? rows : rows.slice(0, COLLAPSED);
   const loading = recent.isPending || starredQ.isPending;
 
@@ -121,25 +117,20 @@ export function RecentTable({ projectId, recent, canEdit }: { projectId: string 
                 setExpanded(false); // a narrower list starts collapsed, so "Show all" stays honest
               }}
             >
-              {f.value === 'starred' && <Icon name="star" size={12} />}
               {f.label}
             </button>
           ))}
         </div>
-        {!onlyStarred && (
-          <button type="button" className={s.scope} aria-pressed={allProjects} title="Show recent work from every project" onClick={flipScope}>
-            <Icon name="layers" size={12} />
-            All projects
-          </button>
-        )}
+        <button type="button" className={s.scope} aria-pressed={allProjects} title="Show recent work from every project" onClick={flipScope}>
+          <Icon name="layers" size={12} />
+          All projects
+        </button>
       </div>
 
       {loading ? (
         <SkeletonRows rows={6} label="Loading recent work" />
       ) : recent.isError ? (
         <ErrorState compact heading={3} title="Recent work could not be loaded" message={recent.error.message} onRetry={() => void recent.refetch()} />
-      ) : onlyStarred && starredQ.isError ? (
-        <ErrorState compact heading={3} title="Your pins could not be loaded" message={starredQ.error.message} onRetry={() => void starredQ.refetch()} />
       ) : shown.length ? (
         <div className={s.table}>
           {/* Column names for the eye; each row's link already says the whole row as one sentence. */}
@@ -162,12 +153,6 @@ export function RecentTable({ projectId, recent, canEdit }: { projectId: string 
               {!expanded && <Icon name="arrow-right" size={12} />}
             </button>
           )}
-        </div>
-      ) : onlyStarred ? (
-        <div className={s.emptyBox}>
-          <EmptyState compact heading={3} icon="star" title="Nothing starred yet">
-            Star a dataset, visual or dashboard and it stays here, across every project.
-          </EmptyState>
         </div>
       ) : (
         <div className={s.emptyBox}>

@@ -1,4 +1,4 @@
-// The live pictures on Home's "Jump back in" cards — a lazy chunk, so Home
+// The live pictures on Home's "Starred" cards: a lazy chunk, so Home
 // paints its cards (glyph tiles) before any chart code loads. A saved visual
 // draws the Visuals gallery's own thumbnail; a dashboard draws its first two
 // visual cards the same way, from the ids `recent:list` carries for it. So
@@ -11,7 +11,7 @@
 import type { RecentItem } from '../../api/home';
 import { useThumb, type VisualSummary } from '../visuals/api';
 import { NO_THUMB, Thumb } from '../visuals/Thumb';
-import s from './JumpBackIn.module.css';
+import s from './StarredRow.module.css';
 
 /** What the gallery's thumbnail reads of a summary: the id, the chart type and (its cache key) a time. */
 const summary = (it: RecentItem, id: string, chartType: string): VisualSummary => ({ id, name: it.name, chartType, updatedAt: it.updatedAt, datasetId: '', favorite: false });

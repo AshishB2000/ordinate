@@ -111,12 +111,12 @@ describe('Home', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/^(Good (morning|afternoon|evening)|Good to see you), Dev$/));
 
-    // Jump back in: this project's newest records, each opening the record itself.
-    const jump = await screen.findByRole('region', { name: 'Jump back in' });
-    const cards = within(jump).getAllByRole('link');
-    expect(cards.map((a) => a.getAttribute('href'))).toEqual([`/data/${P}/d1`, `/analyses/${P}/a1`, `/visuals/${P}/v1`]);
-    expect(cards[0]!.getAttribute('aria-label')).toMatch(/^Orders, Dataset, 5,000 rows × 9 columns, /);
-    expect(cards[2]!.getAttribute('aria-label')).toMatch(/^Revenue by month, Visual, Line( chart)?, /);
+    // Starred: the caller's pins as cards (one here), each opening the record itself, then the way to add one.
+    const pinsRow = await screen.findByRole('region', { name: 'Starred' });
+    const cards = await within(pinsRow).findAllByRole('link');
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual([`/analyses/${P}/a1`]);
+    expect(cards[0]!.getAttribute('aria-label')).toMatch(/^Sales overview, Dashboard, 2 sheets, in My project, /);
+    expect(within(pinsRow).getByText('Star what you come back to')).toBeTruthy();
 
     // The table: this project only (the scope), every type in one list, a pin shown on its own row.
     const rec = screen.getByRole('region', { name: 'Recent' });
@@ -132,7 +132,7 @@ describe('Home', () => {
     expect(screen.queryByRole('link', { name: 'CSV / Excel' })).toBeNull();
   });
 
-  it('widens Recent to every project and narrows it by type or to the pins, without asking the server again', async () => {
+  it('widens Recent to every project and narrows it by type, without asking the server again', async () => {
     const calls = stubServer({});
     renderApp('/');
     const rec = await screen.findByRole('region', { name: 'Recent' });
@@ -148,10 +148,8 @@ describe('Home', () => {
     expect(names()).toEqual(['Revenue by month']);
     fireEvent.click(screen.getByRole('button', { name: 'Datasets' }));
     expect(names()).toEqual(['Orders', 'Elsewhere']);
-    // Starred: the caller's pins, in every project — so the scope has nothing to say there.
-    fireEvent.click(screen.getByRole('button', { name: 'Starred' }));
-    expect(names()).toEqual(['Sales overview']);
-    expect(screen.queryByRole('button', { name: 'All projects' })).toBeNull();
+    // No Starred filter: the pins are the row above.
+    expect(within(screen.getByRole('group', { name: 'Filter recent' })).queryByRole('button', { name: 'Starred' })).toBeNull();
     expect(calls.filter((c) => c.channel === 'recent:list' || c.channel === 'starred:get').length).toBe(before);
     localStorage.removeItem('ordinate.recentAllProjects');
   });
@@ -163,10 +161,28 @@ describe('Home', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'starred:set')?.payload).toEqual({ ids: ['analysis:a1', 'dataset:d1'] }));
     const rec = screen.getByRole('region', { name: 'Recent' });
     expect(await within(rec).findByRole('button', { name: 'Unstar Orders' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Starred' }));
-    expect(within(rec).getAllByRole('link').length).toBe(2);
+    // The Starred row follows: the newest pin first.
+    const pinned = () => within(screen.getByRole('region', { name: 'Starred' })).queryAllByRole('link').map((a) => a.getAttribute('aria-label')!.split(',')[0]);
+    await waitFor(() => expect(pinned()).toEqual(['Orders', 'Sales overview']));
     fireEvent.click(within(rec).getByRole('button', { name: 'Unstar Orders' }));
-    await waitFor(() => expect(within(rec).getAllByRole('link').length).toBe(1));
+    await waitFor(() => expect(pinned()).toEqual(['Sales overview']));
+  });
+
+  it('shows the pins from any project, saying where, or the way to make the first one', async () => {
+    stubServer({ 'starred:get': ['analysis:a1', 'dataset:d2'] });
+    renderApp('/');
+    const row = await screen.findByRole('region', { name: 'Starred' });
+    const cards = await within(row).findAllByRole('link');
+    expect(cards.map((a) => a.getAttribute('aria-label')!.split(',')[0])).toEqual(['Elsewhere', 'Sales overview']);
+    // A pin from another project names it; one from Home's own does not repeat it.
+    expect(cards[0]!.textContent).toContain('Other');
+    expect(cards[1]!.textContent).not.toContain('My project');
+    cleanup();
+    stubServer({ 'starred:get': [] });
+    renderApp('/');
+    const empty = await screen.findByRole('region', { name: 'Starred' });
+    expect(await within(empty).findByText('Nothing starred yet')).toBeTruthy();
+    expect(within(empty).queryAllByRole('link')).toEqual([]);
   });
 
   it('hands a question to the Assistant dock, which asks it; a chip only fills the bar', async () => {
@@ -271,19 +287,17 @@ describe('Home', () => {
     expect(await screen.findByRole('complementary', { name: 'Assistant' })).toBeTruthy();
   });
 
-  it('designs the empty states: no project, no work, no pins', async () => {
+  it('designs the empty states: no project, no work', async () => {
     stubServer({ 'projects:list': [], 'recent:list': [], 'starred:get': [], 'onboarding:status': { show: false } });
     renderApp('/');
     expect(await screen.findByRole('heading', { name: 'No project yet' })).toBeTruthy();
     // An org admin may create one, right here.
     expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Your work will collect here' })).toBeTruthy();
-    // No project: nothing to bring data into yet, and no cards to jump back to.
+    // No work at all: nothing to bring data into yet, and no Starred row to fill.
     expect(screen.queryByRole('link', { name: 'Bring in some data' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Jump back in' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Starred' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Get started' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Starred' }));
-    expect(screen.getByRole('heading', { name: 'Nothing starred yet' })).toBeTruthy();
   });
 
   it('gives an editor of an empty project the doors to bring data in', async () => {
@@ -291,7 +305,7 @@ describe('Home', () => {
     renderApp('/');
     expect((await screen.findByRole('link', { name: 'Bring in some data' })).getAttribute('href')).toBe(`/data/import?project=${P}`);
     expect(screen.getByRole('link', { name: 'Browse sources' }).getAttribute('href')).toBe(`/connections/${P}`);
-    expect(screen.queryByRole('region', { name: 'Jump back in' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Starred' })).toBeNull();
   });
 
   it('shows a project viewer Home without the controls that change the project', async () => {
@@ -357,7 +371,7 @@ describe('Home', () => {
     renderApp('/');
     const mine = [`/data/${P}/d1`, `/analyses/${P}/a1`, `/visuals/${P}/v1`];
     const links = (name: string) => within(screen.getByRole('region', { name })).getAllByRole('link').map((a) => a.getAttribute('href'));
-    await waitFor(() => expect(links('Jump back in')).toEqual(mine));
+    await waitFor(() => expect(links('Recent')).toEqual(mine));
 
     fireEvent.click(screen.getByTestId('project-switcher'));
     fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
@@ -365,18 +379,17 @@ describe('Home', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Empty New Project'));
     expect((await screen.findByRole('link', { name: 'Bring in some data' })).getAttribute('href')).toBe(`/data/import?project=${B}`);
-    expect(screen.queryByRole('region', { name: 'Jump back in' })).toBeNull();
+    // Recent follows too: nothing of Sales's, only the empty project's ways in.
+    expect(links('Recent')).toEqual([`/data/import?project=${B}`, `/connections/${B}`]);
 
     // Back to the project with the work: the switcher and every part of Home follow at once.
     fireEvent.click(screen.getByTestId('project-switcher'));
     const pop = await screen.findByRole('dialog', { name: 'Projects' });
     fireEvent.click(within(pop).getByRole('button', { name: /^Sales.*opened/ }));
     await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Sales'));
-    await waitFor(() => expect(links('Jump back in')).toEqual(mine));
-    expect(links('Recent')).toEqual(mine);
+    await waitFor(() => expect(links('Recent')).toEqual(mine));
     // And it stays there once the lists refetch.
     await new Promise((r) => setTimeout(r, 50));
-    expect(links('Jump back in')).toEqual(mine);
     expect(links('Recent')).toEqual(mine);
   });
 });

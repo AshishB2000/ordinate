@@ -1,9 +1,9 @@
 // Home — homePage.ts, homeAsk.ts and getStarted.ts, ported. ASK FIRST: after
 // the greeting comes the ask hero (a tinted panel the page's full measure —
-// asking is what Home is for) and its starter questions as cards, then the
-// Get-started card while first-run guidance lasts, then ONE column — "Jump
-// back in" (the newest records as preview cards), what the app found in the
-// data, the open comments, and the table of all recent work. Bringing data in
+// asking is what Home is for) with its suggestion chips, then the Get-started
+// card while first-run guidance lasts, then ONE column: "Starred" (the
+// caller's pins as preview cards), what the app found in the data, the open
+// comments, and the table of all recent work. Bringing data in
 // is the New menu's, so nothing on the page repeats it.
 //
 // The project Home speaks for is the current one — the top bar's switcher's
@@ -22,7 +22,7 @@ import { ErrorState } from '../../ui/States';
 import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
 import { displayName, greeting, importPath, suggestPrompts, type Starter } from './homeText';
-import { JumpBackIn } from './JumpBackIn';
+import { StarredRow } from './StarredRow';
 import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
@@ -94,7 +94,7 @@ export default function HomePage() {
         </div>
       )}
       {cur.status === 'error' && <ErrorState compact heading={2} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={cur.refetch} />}
-      <JumpBackIn projectId={projectId} recent={recent} />
+      <StarredRow projectId={projectId} recent={recent} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={projectId} />
       {/* The comments that name YOU, across your projects (docs/notifications); nothing without a user directory. */}

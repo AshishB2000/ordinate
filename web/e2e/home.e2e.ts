@@ -41,21 +41,21 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await orders.waitFor();
   assert.match((await orders.getAttribute('href')) ?? '', new RegExp(`^/data/${server.sample.projectId}/[0-9a-f-]{36}$`));
 
-  // ── one table, every kind of work: the pills narrow it, Starred holds the seed's pinned dashboard ──
+  // ── one table, every kind of work: the pills narrow it ──
   await filterBy('Visuals').click();
   assert.ok((await recent.getByRole('listitem').count()) >= 1, 'saved visuals are rows of the same table');
   assert.match((await recent.getByRole('link').first().getAttribute('href')) ?? '', new RegExp(`^/visuals/${server.sample.projectId}/[0-9a-f-]{36}$`));
-  await filterBy('Starred').click();
-  assert.equal(await recent.getByRole('listitem').count(), 1);
-  assert.match((await recent.getByRole('link').getAttribute('aria-label')) ?? '', /, Dashboard, /);
-  assert.match((await recent.getByRole('link').getAttribute('href')) ?? '', new RegExp(`^/analyses/${server.sample.projectId}/[0-9a-f-]{36}$`));
+  assert.equal(await filterBy('Starred').count(), 0, 'no Starred filter: the pins have their own row');
   await filterBy('All').click();
 
-  // ── Jump back in: the newest records as cards, a saved visual and the dashboard with their picture drawn ──
-  const jump = page.getByRole('region', { name: 'Jump back in' });
-  const cards = await jump.getByRole('link').count();
-  assert.ok(cards >= 2 && cards <= 4, `preview cards: ${cards}`);
-  await jump.locator('canvas').first().waitFor();
+  // ── Starred: the seed's pinned dashboard as a card with its picture drawn, then the way to pin more ──
+  const pins = page.getByRole('region', { name: 'Starred', exact: true });
+  await pins.getByRole('link').first().waitFor();
+  assert.equal(await pins.getByRole('link').count(), 1);
+  assert.match((await pins.getByRole('link').getAttribute('aria-label')) ?? '', /, Dashboard, /);
+  assert.match((await pins.getByRole('link').getAttribute('href')) ?? '', new RegExp(`^/analyses/${server.sample.projectId}/[0-9a-f-]{36}$`));
+  await pins.locator('canvas').first().waitFor();
+  await pins.getByText('Star what you come back to').waitFor();
   // No side column, and nothing on the page repeats the New menu's doors.
   assert.equal(await page.getByRole('complementary', { name: 'This project' }).count(), 0);
   assert.equal(await page.getByRole('link', { name: 'CSV / Excel' }).count(), 0);
@@ -75,11 +75,10 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await recent.getByRole('button', { name: 'Unstar Retail orders' }).waitFor();
   await page.reload();
   await settled(page);
-  await filterBy('Starred').click();
-  assert.equal(await recent.getByRole('listitem').count(), 2);
+  await pins.getByRole('link', { name: /^Retail orders, Dataset, / }).waitFor();
+  assert.equal(await pins.getByRole('link').count(), 2);
   await recent.getByRole('button', { name: 'Unstar Retail orders' }).click();
-  await page.waitForFunction(() => document.querySelectorAll('section[aria-labelledby="home-recent"] li').length === 1);
-  await filterBy('All').click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-labelledby="home-starred"] a').length === 1);
   await recent.getByRole('button', { name: 'Star Retail orders' }).waitFor();
 
   // ── Get started: the tour (no Assistant stop without a model), folds to the pill and comes back ──
