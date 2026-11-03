@@ -1,10 +1,12 @@
 import { ipcMain } from './bus';
+import { ctx } from '../server/context';
 import * as onboarding from '../app/onboarding';
 
-// First-run guidance IPC: what the Get-started card shows, and the three
-// things the renderer may change about it (fold, dismiss, tour seen). The
-// ticks themselves are computed in main from real records — see onboarding.ts.
+// First-run guidance IPC: the caller's own Get-started tour (ticks, fold,
+// hide) and the org's coach marks seen. A stop ticks when the browser reports
+// a visit to its page; see onboarding.ts.
 export function register(): void {
-  ipcMain.handle('onboarding:status', async () => onboarding.status());
-  ipcMain.handle('onboarding:set', async (_e, patch: any = {}) => ({ ok: onboarding.set(patch || {}) }));
+  ipcMain.handle('onboarding:status', async () => onboarding.status(ctx().user.email));
+  ipcMain.handle('onboarding:set', async (_e, patch: any = {}) => ({ ok: onboarding.set(ctx().user.email, patch || {}) }));
+  ipcMain.handle('onboarding:visit', async (_e, { step }: { step: onboarding.StepId }) => ({ ok: onboarding.visit(ctx().user.email, step) }));
 }

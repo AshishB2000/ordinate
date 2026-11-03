@@ -38,7 +38,7 @@ export interface RecentComment {
   on: { name: string; analysisId?: string } | null;
 }
 
-export type StepId = 'import' | 'visual' | 'dashboard' | 'assistant';
+export type StepId = 'assistant' | 'explore' | 'dashboards' | 'reports' | 'data';
 
 export interface Onboarding {
   show: boolean;
@@ -102,7 +102,7 @@ export function useOverview(projectId: string | undefined) {
 
 const ONBOARDING = ['onboarding:status'] as const;
 
-/** `enabled: false` asks nothing: the checklist is an org editor's, and a viewer's Home never asks for it. */
+/** The caller's own Get-started tour. `enabled: false` asks nothing and reads what Home already fetched. */
 export function useOnboarding(enabled = true) {
   return useQuery({
     queryKey: ONBOARDING,
@@ -117,6 +117,15 @@ export function useOnboarding(enabled = true) {
         total: typeof o.total === 'number' ? o.total : 0,
       };
     },
+  });
+}
+
+/** The caller opened a tour stop's page (or the Assistant): the server ticks it for them. */
+export function useVisitTour() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (step: StepId) => rpc('onboarding:visit', { step }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ONBOARDING }),
   });
 }
 

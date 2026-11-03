@@ -104,7 +104,7 @@ export default function HomePage() {
         </div>
       </header>
       <AskBar prompts={prompts} onAsk={openDockWith} />
-      <GetStarted />
+      <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (
         <div className={s.emptyBox}>
           <NoProject why="Your data, visuals and dashboards live in a project." />

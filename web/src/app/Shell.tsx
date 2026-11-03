@@ -20,6 +20,7 @@ import { useLogo } from '../features/settings/api';
 import { JobsButton } from './JobsButton';
 import { AlertsBell } from '../features/dashboards/AlertsBell';
 import { useLiveLimitNotice } from '../features/admin/liveLimitNotice';
+import { useTourVisits } from '../features/home/tourVisits';
 import { NAV, type NavItem } from './nav';
 import { NAV_GROUPS } from './navGroups';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
@@ -186,6 +187,8 @@ function Rail({ groups, bottom, branding }: { groups: { label: string; items: Na
 
 export function Shell() {
   const branding = useWorkspacePrefs();
+  // Opening Explore, Dashboards, Reports or Data ticks that Get-started stop, from wherever it was opened.
+  useTourVisits();
   // A refreshed dataset redraws every figure on screen that reads it (L0.1).
   useDatasetFreshness();
   // An org admin hears when today's live warehouse queries run out (L2.7; pushed to admins only).

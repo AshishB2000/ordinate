@@ -23,6 +23,9 @@ const recent = [
   { type: 'dataset', id: 'd2', projectId: Q, projectName: 'Other', name: 'Elsewhere', updatedAt: NOW },
 ];
 
+/** The tour as a server with no AI model sends it: no Assistant stop, Explore visited. */
+const TOUR = [{ id: 'explore', done: true }, { id: 'dashboards', done: false }, { id: 'reports', done: false }, { id: 'data', done: false }];
+
 const MINE = {
   counts: { datasets: 2, dashboards: 1, captures: 0, visuals: 1 },
   datasets: [
@@ -45,7 +48,7 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
     'recent:list': recent,
     'starred:get': ['analysis:a1'],
     'home:overview': MINE,
-    'onboarding:status': { show: true, collapsed: false, steps: [{ id: 'import', done: true }], doneCount: 1, total: 4 },
+    'onboarding:status': { show: true, collapsed: false, steps: TOUR, doneCount: 1, total: 4 },
     'jobs:list': { active: [], recent: [] },
     'prefs:get': { formats: {}, branding: { accent: '' } },
     // The Assistant dock (T2.12): not set up, unless a test says otherwise.
@@ -212,45 +215,44 @@ describe('Home', () => {
     expect(calls.some((c) => c.channel === 'copilot:ask')).toBe(false);
   });
 
-  it('shows the Get-started checklist from the server, folds it for an editor and not for a viewer', async () => {
+  it('shows the tour from the server, the next stop first in blue, and folds it', async () => {
     const calls = stubServer({ 'onboarding:set': { ok: true } });
     renderApp('/');
     const card = await screen.findByRole('region', { name: 'Get started' });
     expect(within(card).getByText('1 of 4')).toBeTruthy();
     expect(within(card).getAllByRole('img', { name: 'Done' }).length).toBe(1);
-    expect(within(card).getByRole('link', { name: 'Open the builder' }).getAttribute('href')).toBe('/visuals');
+    expect(within(card).getByText('Visited')).toBeTruthy();
+    // The next stop is the first not visited, in the server's order: Dashboards, with the card's one filled button.
+    const next = within(card).getByText('Next').closest('li')!;
+    expect(next.getAttribute('data-step')).toBe('dashboards');
+    expect(within(next).getByRole('link', { name: 'Open Dashboards' }).getAttribute('href')).toBe('/dashboards');
+    expect(within(card).getByRole('link', { name: 'Open Data' }).getAttribute('href')).toBe('/data');
     fireEvent.click(within(card).getByRole('button', { name: 'Fold the checklist into a progress pill' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'onboarding:set')?.payload).toEqual({ collapsed: true }));
   });
 
-  it('gives an org viewer no checklist, no pill and no onboarding:status call; an org admin gets the card and "Set up"', async () => {
-    let calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: [], doneCount: 1, total: 4 } }, 'viewer');
+  it('gives a viewer their own tour, folded to the pill, and lets them hide it', async () => {
+    const calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: TOUR, doneCount: 1, total: 4 }, 'onboarding:set': { ok: true } }, 'viewer');
     renderApp('/');
-    await screen.findByRole('region', { name: 'Recent' });
-    await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/Dev$/));
-    expect(screen.queryByRole('region', { name: 'Get started' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Get started:/ })).toBeNull();
-    expect(calls.some((c) => c.channel === 'onboarding:status')).toBe(false);
-    // Negative control: an org editor's Home asks for it and shows the folded pill; an admin's card offers "Set up".
-    cleanup();
-    calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: [], doneCount: 1, total: 4 } }, 'editor');
-    renderApp('/');
-    expect(await screen.findByRole('button', { name: /^Get started: 1 of 4/ })).toBeTruthy();
+    const pill = await screen.findByRole('button', { name: 'Get started: 1 of 4 done, show the checklist' });
     expect(calls.some((c) => c.channel === 'onboarding:status')).toBe(true);
-    cleanup();
-    stubServer({});
-    renderApp('/');
-    const card = await screen.findByRole('region', { name: 'Get started' });
-    expect(within(card).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/admin?tab=ai');
+    fireEvent.click(pill);
+    await waitFor(() => expect(calls.find((c) => c.channel === 'onboarding:set')?.payload).toEqual({ collapsed: false }));
   });
 
-  it('keeps the org admin\'s "Set up" from an org editor', async () => {
-    stubServer({}, 'editor');
+  it('puts Data first while the project has no data, and the Assistant’s Ask opens the dock', async () => {
+    const steps = [{ id: 'assistant', done: false }, ...TOUR.map((x) => ({ ...x, done: false }))];
+    stubServer({
+      'home:overview': { ...MINE, counts: { datasets: 0, dashboards: 0, captures: 0, visuals: 0 }, datasets: [] },
+      'onboarding:status': { show: true, collapsed: false, steps, doneCount: 0, total: 5 },
+    });
     renderApp('/');
     const card = await screen.findByRole('region', { name: 'Get started' });
-    expect(within(card).queryByRole('link', { name: 'Set up' })).toBeNull();
-    expect(within(card).getByText('An org admin’s step')).toBeTruthy();
-    expect(within(card).getByRole('link', { name: 'Open the builder' })).toBeTruthy();
+    await waitFor(() => expect(card.querySelector('li')?.getAttribute('data-step')).toBe('data'));
+    expect(within(card).getByText('Next').closest('li')!.getAttribute('data-step')).toBe('data');
+    expect([...card.querySelectorAll('li')].map((li) => li.getAttribute('data-step'))).toEqual(['data', 'assistant', 'explore', 'dashboards', 'reports']);
+    fireEvent.click(within(card).getByRole('button', { name: 'Ask' }));
+    expect(await screen.findByRole('complementary', { name: 'Assistant' })).toBeTruthy();
   });
 
   it('designs the empty states: no project, no work, no pins', async () => {

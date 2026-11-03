@@ -83,6 +83,10 @@
   padding: 0;
   list-style: none;
 }
+/* Five stops when AI is set up, four without the Assistant. */
+.items[data-count="5"] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
 .item {
   display: flex;
   flex-direction: column;
@@ -134,13 +138,6 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-.adminNote {
-  display: inline-flex;
-  align-items: center;
-  height: var(--ctl-sm);
-  font-size: var(--t-12);
-  color: var(--muted);
-}
 .doneLabel {
   display: inline-flex;
   align-items: center;
@@ -160,10 +157,50 @@
   background: var(--ok-soft);
   color: var(--ok);
 }
-/* A narrow window stacks the four items rather than squeezing their lines. */
+/* The next stop: the one place on the card with a filled button. */
+.next {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.next:hover {
+  border-color: var(--accent);
+}
+.next .tile {
+  background: var(--surface-1);
+  color: var(--accent);
+}
+.nextTag {
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+/* A narrow window stacks the items rather than squeezing their lines. */
 @media (max-width: 1000px) {
-  .items {
+  .items,
+  .items[data-count="5"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A phone: the title keeps its row (the meter and buttons drop below it), and one stop per row. */
+@media (max-width: 600px) {
+  .head {
+    flex-wrap: wrap;
+  }
+  .headText {
+    flex: 1 1 calc(100% - 48px);
+  }
+  .meter {
+    margin-right: auto;
+  }
+  .items,
+  .items[data-count="5"] {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

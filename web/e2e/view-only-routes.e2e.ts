@@ -12,7 +12,7 @@
 //   (c) the editor           the negative controls: each route's editor control is
 //                            there and its write controls are counted, Description
 //                            is editable in the Details popover, a write is
-//                            recorded; the admin's Home has Get started and Set up.
+//                            recorded; the admin's Home has their own Get started tour.
 //
 // Screens of the viewer's Home, Prepare, a story, a scorecard and a metric tree,
 // both themes, go to web/e2e/__screens__/view-only-routes-*.png.
@@ -197,11 +197,11 @@ if (!adminUrl) {
     assert.ok(editorWrites.includes('catalog:set'), `an editor's write is recorded: ${editorWrites.join(', ')}`);
     who = ADMIN;
 
-    // The org admin's Home: the checklist, with the Assistant's "Set up".
+    // The org admin's Home: their own tour, untouched by the viewer's and editor's walks, Explore next.
     await page.goto(`/?project=${seed.pid}`);
     await settled(page);
     const card = page.getByRole('region', { name: 'Get started' });
-    await card.getByRole('link', { name: 'Set up' }).waitFor();
+    await card.getByRole('link', { name: 'Open Explore' }).waitFor();
     if (DISCOVER) console.log(`\n===== WALK DISCOVERY =====\n${found.join('\n')}\n===== END =====\n`);
   });
 }

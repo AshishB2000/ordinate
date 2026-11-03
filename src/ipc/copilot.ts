@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
-import { senderOf } from '../server/context';
+import { ctx, senderOf, serverDataDir } from '../server/context';
+import * as onboarding from '../app/onboarding';
 import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
@@ -471,6 +472,8 @@ export function register() {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
+      // Asking the Assistant anything ticks its Get-started stop for the person asking.
+      if (serverDataDir() !== null) onboarding.visit(ctx().user.email, 'assistant');
 
       // Activity chips (feat/ask-activity): a fire-and-forget push of each real
       // operation to the window that asked. Wired ONLY when the renderer passed
