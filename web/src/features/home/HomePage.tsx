@@ -13,38 +13,21 @@ import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
 import { openDockWith } from '../assistant/dockState';
 import { useMe } from '../auth/api';
-import { useCanEdit, type ProjectRow } from '../projects/api';
+import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
-import { Skeleton } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
-import { displayName, greeting, importPath, plural, suggestPrompts } from './homeText';
+import { displayName, greeting, importPath, suggestPrompts } from './homeText';
 import { JumpBackIn } from './JumpBackIn';
 import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
 import { RecentComments } from '../dashboards/RecentComments';
 import { MentionedYou } from '../dashboards/MentionedYou';
-
-function Subtitle({ project, failed, loading }: { project: ProjectRow | null; failed: boolean; loading: boolean }) {
-  const ov = useOverview(project?.id);
-  if (loading) return <Skeleton className={s.subSk} />;
-  if (failed) return <p className={s.sub}>Your projects could not be loaded.</p>;
-  if (!project) return <p className={s.sub}>No project yet.</p>;
-  const c = ov.data?.counts;
-  const parts = [project.name || 'Untitled project'];
-  // Captures only when there are any: a project that never took one is not told it has none.
-  if (c) parts.push(plural(c.datasets, 'dataset'), plural(c.dashboards, 'dashboard'), ...(c.captures ? [plural(c.captures, 'capture')] : []));
-  return (
-    <p className={s.sub} data-testid="home-sub">
-      {parts.join('  ·  ')}
-    </p>
-  );
-}
 
 /** Dashboard opens the new-dashboard wizard and Visual its section; each way of bringing data in opens its own door, in Home's project. */
 function NewMenu({ projectId }: { projectId: string | undefined }) {
@@ -96,7 +79,6 @@ export default function HomePage() {
           <p className={s.greet} data-testid="home-greet">
             {greeting(displayName(me.data?.user?.email), new Date().getHours())}
           </p>
-          <Subtitle project={project} failed={cur.status === 'error'} loading={cur.status === 'pending'} />
         </div>
         <div className={s.headActions}>
           <GetStartedPill />

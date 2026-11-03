@@ -52,19 +52,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.sub {
-  margin: 0;
-  font-size: var(--t-13);
-  color: var(--muted);
-  white-space: pre;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.subSk {
-  width: 260px;
-  height: 14px;
-  margin-top: 4px;
-}
 .headActions {
   display: flex;
   align-items: center;

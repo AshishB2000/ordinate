@@ -101,7 +101,7 @@ describe('Home → New → Dashboard', () => {
     serve('editor', { 'home:overview': { counts: { datasets: 1, dashboards: 0, captures: 0, visuals: 0 }, datasets: [], comments: [] } });
     const router = renderApp('/');
     const trigger = await screen.findByRole('button', { name: 'New' }, LAZY);
-    await screen.findByTestId('home-sub');
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Sales')); // the project is known
     act(() => trigger.focus());
     fireEvent.keyDown(trigger, { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Dashboard' }));
@@ -113,7 +113,7 @@ describe('Home → New → Dashboard', () => {
   it('a viewer has no New menu (control)', async () => {
     serve('viewer');
     renderApp('/');
-    await screen.findByTestId('home-sub', undefined, LAZY);
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Sales'), LAZY);
     expect(screen.queryByRole('button', { name: 'New' })).toBeNull();
   });
 });

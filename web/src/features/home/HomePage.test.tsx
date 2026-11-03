@@ -95,7 +95,7 @@ describe('Home', () => {
       stubServer({});
       const router = renderApp('/');
       const trigger = await screen.findByRole('button', { name: 'New' });
-      await screen.findByTestId('home-sub'); // the project is known, so the doors open in it
+      await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('My project')); // the project is known, so the doors open in it
       act(() => trigger.focus());
       fireEvent.keyDown(trigger, { key: 'Enter' });
       fireEvent.click(await screen.findByRole('menuitem', { name }));
@@ -110,7 +110,6 @@ describe('Home', () => {
     expect(await screen.findByRole('status', { name: 'Loading recent work' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/^(Good (morning|afternoon|evening)|Good to see you), Dev$/));
-    expect((await screen.findByTestId('home-sub')).textContent).toBe('My project  ·  2 datasets  ·  1 dashboard');
 
     // Jump back in: this project's newest records, each opening the record itself.
     const jump = await screen.findByRole('region', { name: 'Jump back in' });
@@ -258,7 +257,7 @@ describe('Home', () => {
   it('designs the empty states: no project, no work, no pins', async () => {
     stubServer({ 'projects:list': [], 'recent:list': [], 'starred:get': [], 'onboarding:status': { show: false } });
     renderApp('/');
-    expect(await screen.findByText('No project yet.')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'No project yet' })).toBeTruthy();
     // An org admin may create one, right here.
     expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Your work will collect here' })).toBeTruthy();
@@ -314,7 +313,7 @@ describe('Home', () => {
     renderApp('/');
     const rec = await screen.findByRole('region', { name: 'Recent' });
     expect(await within(rec).findByRole('link', { name: /^Orders/ })).toBeTruthy();
-    expect((await screen.findByTestId('home-sub')).textContent).toBe('My project');
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('My project'));
   });
   it('follows the switcher: a new empty project, then back to the one with the work', async () => {
     const B = '33333333-3333-4333-8333-333333333333';
@@ -339,15 +338,15 @@ describe('Home', () => {
       'onboarding:status': { show: false },
     });
     renderApp('/');
-    const sub = () => screen.getByTestId('home-sub').textContent;
-    await waitFor(() => expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard'));
+    const mine = [`/data/${P}/d1`, `/analyses/${P}/a1`, `/visuals/${P}/v1`];
+    const links = (name: string) => within(screen.getByRole('region', { name })).getAllByRole('link').map((a) => a.getAttribute('href'));
+    await waitFor(() => expect(links('Jump back in')).toEqual(mine));
 
     fireEvent.click(screen.getByTestId('project-switcher'));
     fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
     fireEvent.change(await screen.findByLabelText('Project name'), { target: { value: 'Empty New Project' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    await waitFor(() => expect(sub()).toBe('Empty New Project  ·  0 datasets  ·  0 dashboards'));
-    expect(screen.getByTestId('project-switcher').textContent).toContain('Empty New Project');
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Empty New Project'));
     expect((await screen.findByRole('link', { name: 'Bring in some data' })).getAttribute('href')).toBe(`/data/import?project=${B}`);
     expect(screen.queryByRole('region', { name: 'Jump back in' })).toBeNull();
 
@@ -356,14 +355,11 @@ describe('Home', () => {
     const pop = await screen.findByRole('dialog', { name: 'Projects' });
     fireEvent.click(within(pop).getByRole('button', { name: /^Sales.*opened/ }));
     await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Sales'));
-    await waitFor(() => expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard'));
-    const mine = [`/data/${P}/d1`, `/analyses/${P}/a1`, `/visuals/${P}/v1`];
-    const jump = await screen.findByRole('region', { name: 'Jump back in' });
-    expect(within(jump).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(mine);
-    const rec = screen.getByRole('region', { name: 'Recent' });
-    expect(within(rec).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(mine);
+    await waitFor(() => expect(links('Jump back in')).toEqual(mine));
+    expect(links('Recent')).toEqual(mine);
     // And it stays there once the lists refetch.
     await new Promise((r) => setTimeout(r, 50));
-    expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard');
+    expect(links('Jump back in')).toEqual(mine);
+    expect(links('Recent')).toEqual(mine);
   });
 });

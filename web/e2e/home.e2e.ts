@@ -31,15 +31,12 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await settled(page);
   const firstPaint = Date.now() - t0;
 
-  // ── the greeting names the sample project and its counts (the server's) ──
+  // ── the greeting ──
   assert.match((await page.getByTestId('home-greet').textContent()) ?? '', /, Dev$/);
-  // The seed also adds a geo dataset for the maps (seed.ts), so the count is read off the table it must match.
   const recent = page.getByRole('region', { name: 'Recent', exact: true });
   const filterBy = (name: string) => page.getByRole('group', { name: 'Filter recent' }).getByRole('button', { name, exact: true });
   await recent.getByRole('listitem').first().waitFor();
   await filterBy('Datasets').click();
-  const n = await recent.getByRole('listitem').count();
-  assert.equal(await page.getByTestId('home-sub').textContent(), `${server.sample.projectName}  ·  ${n} dataset${n === 1 ? '' : 's'}  ·  1 dashboard`);
   const orders = recent.getByRole('link', { name: /^Retail orders, Dataset, 5,000 rows × \d+ columns, in / });
   await orders.waitFor();
   assert.match((await orders.getAttribute('href')) ?? '', new RegExp(`^/data/${server.sample.projectId}/[0-9a-f-]{36}$`));
