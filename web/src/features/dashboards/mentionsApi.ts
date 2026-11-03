@@ -1,9 +1,10 @@
 // @mentions on the web (docs/notifications/00-design.md §5.9-5.12): the caller's
-// "Mentioned you" list, its seen marks, and their email setting. Every figure-free
+// "Mentioned you" list (in the bell), its seen marks, and their email setting. Every figure-free
 // word here is the server's; the browser never derives a person's name.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import { ME_KEY } from '../auth/api';
 import type { ThreadKind } from '../../../../src/app/threadPath.ts';
 
 export interface HomeMention {
@@ -32,9 +33,10 @@ export interface MentionPrefs {
 export const MENTIONS_KEY = ['mentions:list'] as const;
 
 /** The caller's mentions, unseen first. `available` false: no user directory here, so no list. */
-export function useMentions() {
+export function useMentions(enabled = true) {
   return useQuery({
     queryKey: MENTIONS_KEY,
+    enabled,
     queryFn: async (): Promise<MentionList> => {
       const r = (await rpc('mentions:list')) as Partial<MentionList> & { ok?: boolean; error?: string };
       if (r && r.ok === false) throw new Error(r.error || 'Could not read your mentions.');
@@ -44,12 +46,15 @@ export function useMentions() {
   });
 }
 
-/** Mark one of the caller's mentions seen, or all of them up to `through` (the newest one shown); the list re-reads. */
+/** Mark one of the caller's mentions seen, or all of them up to `through` (the newest one shown); the list and the bell's count re-read. */
 export function useMentionSeen() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (which: { projectId: string; id: string } | { through: string }) => rpc('mentions:seen', which),
-    onSettled: () => void client.invalidateQueries({ queryKey: MENTIONS_KEY }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: MENTIONS_KEY });
+      void client.invalidateQueries({ queryKey: ME_KEY });
+    },
   });
 }
 

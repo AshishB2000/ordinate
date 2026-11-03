@@ -33,17 +33,17 @@ const routes = (role: string, extra: Record<string, RpcReply> = {}): Record<stri
 });
 
 async function openBell() {
-  const bell = await screen.findByRole('button', { name: /^Alerts/ });
+  const bell = await screen.findByRole('button', { name: /^Notifications/ });
   await waitFor(() => expect(bell.hasAttribute('disabled')).toBe(false)); // the current project is known
   fireEvent.click(bell);
-  return screen.findByRole('dialog', { name: 'Alerts' });
+  return screen.findByRole('dialog', { name: 'Notifications' });
 }
 
 describe('the alert bell', () => {
   it('closed, asks for no role; opened by a viewer, offers Mark seen and Mark all seen but no Snooze', async () => {
     const calls = serveRpc(routes('viewer'));
     renderApp('/no-such-page');
-    await screen.findByRole('button', { name: /^Alerts/ });
+    await screen.findByRole('button', { name: /^Notifications/ });
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:overview')).toBe(true));
     expect(calls.some((c) => c.channel === 'projects:roles')).toBe(false);
     const inbox = await openBell();

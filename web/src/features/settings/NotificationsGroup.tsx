@@ -1,6 +1,6 @@
 // Settings → You → Notifications (docs/notifications/00-design.md §5.12): "Email
 // me when someone mentions me" — the signed-in person's own switch, on unless
-// they turn it off. A mention still reaches them on Home and as a notice in their
+// they turn it off. A mention still reaches them in the bell and as a notice in their
 // open tabs either way, and the row says so. Not shown on a server without a user
 // directory (no one can be mentioned there); disabled, and saying why, on one
 // that sends no email.
@@ -29,8 +29,8 @@ export function NotificationsGroup() {
           label="Email me when someone mentions me"
           hint={
             prefs.data.mail
-              ? 'Mentions always reach you on Home and as a notice in your open tabs.'
-              : 'This server does not send email; mentions still reach you on Home and as a notice in your open tabs.'
+              ? 'Mentions always reach you in the bell and as a notice in your open tabs.'
+              : 'This server does not send email; mentions still reach you in the bell and as a notice in your open tabs.'
           }
           checked={prefs.data.mail && prefs.data.emailMe}
           disabled={!prefs.data.mail || set.isPending}
