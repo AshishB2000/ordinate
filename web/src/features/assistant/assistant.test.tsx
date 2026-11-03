@@ -283,32 +283,33 @@ describe('the dock', () => {
     expect(document.activeElement?.id).toBe('dock-toggle');
   });
 
-  it('not set up, for an admin: the sentence and a Set up AI button to Admin → AI — no key field in the dock', async () => {
+  it('not set up, for an admin: a Connect a provider link to Admin → AI, not "an admin can" — no key field in the dock', async () => {
     serve(base(ADMIN, false));
     renderApp('/');
     const dock = await openDock();
-    expect(await within(dock).findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
-    const setUp = await within(dock).findByRole('link', { name: /Set up AI/ });
+    expect(await within(dock).findByText(/AI isn’t set up yet/)).toBeTruthy();
+    expect(within(dock).queryByText(/An admin can turn it on/)).toBeNull();
+    const setUp = await within(dock).findByRole('link', { name: 'Connect a provider' });
     expect(setUp.getAttribute('href')).toBe('/admin?tab=ai');
     expect((within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement).disabled).toBe(true);
     expect(within(dock).queryByLabelText('API key')).toBeNull();
   });
 
-  it('not set up, for a member: the sentence alone — no button, no key field', async () => {
+  it('not set up, for a member: the sentence alone — no link, no key field', async () => {
     serve(base(VIEWER, false));
     renderApp('/');
     const dock = await openDock();
     expect(await within(dock).findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
-    await waitFor(() => expect(within(dock).queryByRole('link', { name: /Set up AI/ })).toBeNull());
+    await waitFor(() => expect(within(dock).queryByRole('link', { name: 'Connect a provider' })).toBeNull());
     expect(within(dock).queryByLabelText('API key')).toBeNull();
   });
 
-  it('not set up, on a server with no key store: an admin gets the operator line instead of the button', async () => {
+  it('not set up, on a server with no key store: an admin gets the operator line instead of the link', async () => {
     serve({ ...base(ADMIN, false), 'ai:status': { body: status(false, [], 'This server has no database, so it cannot store API keys.') } });
     renderApp('/');
     const dock = await openDock();
     expect(await within(dock).findByText(/An operator sets DATABASE_URL and ORDINATE_MASTER_KEY/)).toBeTruthy();
-    expect(within(dock).queryByRole('link', { name: /Set up AI/ })).toBeNull();
+    expect(within(dock).queryByRole('link', { name: 'Connect a provider' })).toBeNull();
   });
 
   it('one model: its name as text, no dropdown', async () => {

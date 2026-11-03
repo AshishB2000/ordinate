@@ -202,8 +202,8 @@ describe('Home', () => {
     const input = await screen.findByRole('textbox', { name: 'Ask about your data' });
     // No model: the hero says so, and gives an admin the one way to fix it.
     const note = await within(screen.getByRole('region', { name: 'Ask your data anything' })).findByTestId('ai-not-ready');
-    expect(note.textContent).toContain('AI isn’t set up for your organization yet');
-    expect(within(note).getByRole('link', { name: /Set up AI/ }).getAttribute('href')).toBe('/admin?tab=ai');
+    expect(note.textContent).toContain('AI isn’t set up yet');
+    expect(within(note).getByRole('link', { name: 'Connect a provider' }).getAttribute('href')).toBe('/admin?tab=ai');
     fireEvent.change(input, { target: { value: 'Which month was worst?' } });
     fireEvent.submit(input.closest('form')!);
     const composer = await screen.findByRole('textbox', { name: 'Ask the Assistant' });

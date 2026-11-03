@@ -58,7 +58,7 @@ if (!dbUrl) {
     await setup.getByText(/AI isn’t set up for your organization yet/).waitFor();
     await setup.getByText(/no database, so it cannot store API keys/).waitFor();
     assert.equal(await page.getByLabel('API key').count(), 0, 'no key field in the dock, ever');
-    assert.equal(await setup.getByRole('link', { name: /Set up AI/ }).count(), 0, 'no Set up button where nothing can be set up');
+    assert.equal(await setup.getByRole('link', { name: 'Connect a provider' }).count(), 0, 'no Connect link where nothing can be set up');
     assert.equal(await page.getByRole('textbox', { name: 'Ask the Assistant' }).isDisabled(), true);
     await screens(page, 'dock-setup');
     // The left edge is a handle the pointer can find: it runs the panel's height

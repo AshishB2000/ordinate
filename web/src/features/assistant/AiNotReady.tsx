@@ -1,12 +1,10 @@
 // The one "AI isn't set up" message (docs/ai-models/00-plan.md §5), on every
 // surface that needs a model: the dock, Home, Analyses, Visuals, captures.
-// A member reads the sentence; an org admin also gets the way to fix it —
-// "Set up AI" to Admin → AI, or, when this server cannot store a key at all,
-// what the operator has to set.
+// A member reads that an admin can turn it on; an org admin is the one who
+// can, so they read the fix itself — a link to Admin → AI, or, when this
+// server cannot store a key at all, what the operator has to set.
 
 import { Link } from 'react-router';
-import { buttonClass } from '../../ui/Button';
-import { Icon } from '../../ui/icons/Icon';
 import { useMe } from '../auth/api';
 import type { AiStatus } from './api';
 import s from './AiNotReady.module.css';
@@ -19,15 +17,20 @@ export function AiNotReady({ status, className }: { status: Pick<AiStatus, 'keyS
   const admin = me.data?.user?.role === 'admin';
   return (
     <div className={[s.box, className].filter(Boolean).join(' ')} role="note" data-testid="ai-not-ready">
-      <p className={s.line}>{AI_NOT_READY}</p>
-      {admin &&
-        (status?.keyStore ? (
-          <p className={s.operator}>{`${status.keyStore} An operator sets DATABASE_URL and ORDINATE_MASTER_KEY to turn AI on.`}</p>
-        ) : (
-          <Link className={buttonClass('secondary', 'sm')} to="/admin?tab=ai">
-            Set up AI <Icon name="arrow-right" size={12} />
-          </Link>
-        ))}
+      {admin && !status?.keyStore ? (
+        <p className={s.line}>
+          AI isn’t set up yet.{' '}
+          <Link className={s.link} to="/admin?tab=ai">
+            Connect a provider
+          </Link>{' '}
+          to start asking questions about your data.
+        </p>
+      ) : (
+        <p className={s.line}>{AI_NOT_READY}</p>
+      )}
+      {admin && status?.keyStore && (
+        <p className={s.operator}>{`${status.keyStore} An operator sets DATABASE_URL and ORDINATE_MASTER_KEY to turn AI on.`}</p>
+      )}
     </div>
   );
 }

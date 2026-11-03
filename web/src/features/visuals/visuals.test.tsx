@@ -141,7 +141,7 @@ describe('the gallery', () => {
     const card = await screen.findByRole('button', { name: /Orders/ });
     expect(card.textContent).toContain('1,234 rows · 3 columns');
     expect((screen.getByRole('button', { name: 'Start with the Assistant' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(await screen.findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
+    expect(await screen.findByText(/AI isn’t set up yet/)).toBeTruthy();
     fireEvent.click(card);
     expect(await screen.findByRole('dialog', { name: 'New visual' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open the builder' })).toBeTruthy();

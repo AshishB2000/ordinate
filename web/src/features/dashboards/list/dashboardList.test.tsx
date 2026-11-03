@@ -206,7 +206,8 @@ describe('an editor’s first dashboard', { timeout: 30_000 }, () => {
     expect(screen.queryByRole('button', { name: 'More ways to create' })).toBeNull();
     expect((screen.getByRole('button', { name: 'Draft with AI' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('link', { name: 'Rebuild it here' }).getAttribute('href')).toBe(`/analyses/${P}/rebuild`);
-    await screen.findByText(/AI isn’t set up for your organization yet/);
+    await screen.findByText(/AI isn’t set up yet/); // an admin: the fix, as a link
+    expect(screen.getByRole('link', { name: 'Connect a provider' }).getAttribute('href')).toBe('/admin?tab=ai');
     expect(screen.queryByRole('group', { name: 'Or start from a dataset' })).toBeNull();
   });
 
