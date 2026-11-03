@@ -140,6 +140,10 @@
 .askInput::placeholder {
   color: var(--text-dim);
 }
+/* The placeholder is a long sentence: on a phone it ends in an ellipsis, not mid-word. */
+.askInput:placeholder-shown {
+  text-overflow: ellipsis;
+}
 .askSend {
   flex: none;
   display: inline-flex;

@@ -181,8 +181,8 @@ describe('Home', () => {
     });
     renderApp('/');
     // The hero: the bar sits in its own region, first on the page; with a model ready it has nothing to explain.
-    const hero = screen.getByRole('region', { name: 'Ask your data anything' });
-    const input = within(hero).getByRole('textbox', { name: 'Ask about your data' });
+    const hero = screen.getByRole('region', { name: 'What do you want to do?' });
+    const input = within(hero).getByRole('textbox', { name: 'Ask a question or say what to build' });
     const starters = within(await screen.findByRole('group', { name: 'Suggested questions' })).getAllByRole('button');
     expect(starters.map((b) => b.textContent)).toEqual(['What stands out in Orders?', 'How do Orders and Returns compare?', 'Summarise Orders in plain terms']);
     await waitFor(() => expect(calls.some((c) => c.channel === 'ai:status')).toBe(true));
@@ -199,11 +199,11 @@ describe('Home', () => {
   it('keeps the question in the dock\'s composer when the Assistant is not set up, focus in the dock', async () => {
     const calls = stubServer({});
     renderApp('/');
-    const input = await screen.findByRole('textbox', { name: 'Ask about your data' });
+    const input = await screen.findByRole('textbox', { name: 'Ask a question or say what to build' });
     // No model: the hero says so, and gives an admin the one way to fix it.
-    const note = await within(screen.getByRole('region', { name: 'Ask your data anything' })).findByTestId('ai-not-ready');
-    expect(note.textContent).toContain('AI isn’t set up for your organization yet');
-    expect(within(note).getByRole('link', { name: /Set up AI/ }).getAttribute('href')).toBe('/admin?tab=ai');
+    const note = await within(screen.getByRole('region', { name: 'What do you want to do?' })).findByTestId('ai-not-ready');
+    expect(note.textContent).toContain('AI isn’t set up yet');
+    expect(within(note).getByRole('link', { name: 'Connect a provider' }).getAttribute('href')).toBe('/admin?tab=ai');
     fireEvent.change(input, { target: { value: 'Which month was worst?' } });
     fireEvent.submit(input.closest('form')!);
     const composer = await screen.findByRole('textbox', { name: 'Ask the Assistant' });

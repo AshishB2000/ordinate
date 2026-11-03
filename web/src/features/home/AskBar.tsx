@@ -1,6 +1,7 @@
 // Home's hero — homeAsk.ts's ask bar, as the page's first thing: a tinted
 // panel the page's full measure with the bar on it, then the starter questions
-// as cards. Enter or the send button hands the question to the Assistant dock
+// as cards. It asks what to do, not only what to ask: the Assistant builds too.
+// Enter or the send button hands the request to the Assistant dock
 // (no model is called from Home). A starter FILLS the bar and focuses it; it
 // never sends — a suggestion is a draft to edit, and asking can cost money.
 // Where no model is set up the panel says so, with the one way to fix it.
@@ -27,7 +28,7 @@ export function AskBar({ prompts, onAsk }: { prompts: Starter[]; onAsk: (questio
       <section className={s.hero} aria-labelledby="home-ask">
         <h2 id="home-ask" className={s.heroH}>
           <Icon name="sparkles" size={20} />
-          Ask your data anything
+          What do you want to do?
         </h2>
         <form
           className={s.askBar}
@@ -43,8 +44,8 @@ export function AskBar({ prompts, onAsk }: { prompts: Starter[]; onAsk: (questio
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Ask about your data…"
-            aria-label="Ask about your data"
+            placeholder="Ask a question, or say what to build: a chart, a dashboard, a cleaner dataset…"
+            aria-label="Ask a question or say what to build"
             autoComplete="off"
             spellCheck={false}
             maxLength={2000}
