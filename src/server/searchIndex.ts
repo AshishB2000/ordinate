@@ -21,8 +21,10 @@ import { logger } from '../app/logger';
 
 /** Bump when what a record describes to changes: every marker is then stale, and each source rebuilds once. */
 export const INDEX_VERSION = 1;
-/** Records read per statement while rebuilding: bodies can be large (a v2 dataset holds its rows). */
+/** Records read per statement while rebuilding, by count and by bytes: a v2 dataset holds its rows (up to 8 MiB),
+ *  so 100 of those would be ~800 MiB in this process, parsed in one loop without yielding. */
 const REBUILD_BATCH = 100;
+const REBUILD_BYTES = 8 * 1024 * 1024;
 
 export type Audience = 'all' | 'editor' | 'viewer';
 
@@ -42,7 +44,8 @@ export interface IndexRow {
 }
 
 export type Describe = (where: RecordSource, body: string) => IndexRow[];
-export type RowsUnder = (c: PoolClient, org: string, rel: string, after: string, limit: number) => Promise<Array<{ rel: string; body: string }>>;
+/** A null body: a record past its limits, skipped but paged past. */
+export type RowsUnder = (c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number) => Promise<Array<{ rel: string; body: string | null }>>;
 
 let describe: Describe | null = null;
 /** src/ipc/search.ts registers the stores' parsers; null puts writes back to dropping markers. */
@@ -93,13 +96,24 @@ async function insertRows(c: PoolClient, org: string, projectId: string, srcOrd:
 const dropMarkers = (c: PoolClient, org: string, projectId: string, sources: readonly SourceKey[] = SOURCES) =>
   c.query('DELETE FROM search_sources WHERE org_id = $1 AND project_id = $2 AND source = ANY($3::text[])', [org, projectId, sources]);
 
+/** A writer's hold on its sources until the transaction ends, so no rebuild reads them mid-write. */
+const lockShared = (c: PoolClient, org: string, projectId: string, sources: readonly SourceKey[]) =>
+  c.query('SELECT pg_advisory_xact_lock_shared(hashtextextended(k, 0)) FROM unnest($1::text[]) AS k', [sources.map((s) => lockKeyOf(org, projectId, s))]);
+
+/** After a failed write: drop the markers under the lock again. The rollback to the savepoint released it, and a
+ *  rebuild that slipped in unlocked could commit its marker after this drop, over rows that miss this write. */
+const dropLocked = async (c: PoolClient, org: string, projectId: string, sources: readonly SourceKey[] = SOURCES): Promise<void> => {
+  await lockShared(c, org, projectId, sources);
+  await dropMarkers(c, org, projectId, sources);
+};
+
 /** A record at `rel` was written (`body`) or removed (null), in transaction `c`. Never throws but on a dead connection. */
 export async function onRecordWrite(c: PoolClient, org: string, rel: string, body: string | null): Promise<void> {
   const where = sourceOf(rel);
   if (!where) return;
   const d = describe;
   const held = await guarded(c, async () => {
-    await c.query('SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))', [lockKeyOf(org, where.projectId, where.source)]);
+    await lockShared(c, org, where.projectId, [where.source]);
     await c.query('DELETE FROM search_entries WHERE org_id = $1 AND path = $2', [org, rel]);
     if (!d) {
       await dropMarkers(c, org, where.projectId, [where.source]); // a script without the stores: rebuilt on the next search
@@ -107,7 +121,7 @@ export async function onRecordWrite(c: PoolClient, org: string, rel: string, bod
     }
     if (body !== null) await insertRows(c, org, where.projectId, where.srcOrd, d(where, body).map((r) => ({ ...r, path: rel })));
   });
-  if (!held) await guarded(c, async () => { await dropMarkers(c, org, where.projectId, [where.source]); });
+  if (!held) await guarded(c, () => dropLocked(c, org, where.projectId, [where.source]));
 }
 
 /** Every record under directory `rel` was removed, in transaction `c`: their rows go, and a whole project's markers. */
@@ -121,11 +135,11 @@ export async function onRangeDelete(c: PoolClient, org: string, rel: string): Pr
     else if (projectOfDir(rel)) await dropMarkers(c, org, project as string);
   };
   const held = await guarded(c, async () => {
-    if (project) await c.query('SELECT pg_advisory_xact_lock_shared(hashtextextended(k, 0)) FROM unnest($1::text[]) AS k', [SOURCES.map((s) => lockKeyOf(org, project, s))]);
+    if (project) await lockShared(c, org, project, SOURCES);
     await c.query('DELETE FROM search_entries WHERE org_id = $1 AND path >= $2 AND path < $3', [org, lo, hi]);
     await forget();
   });
-  if (!held) await guarded(c, async () => { await (project ? dropMarkers(c, org, project) : forget()); });
+  if (!held) await guarded(c, () => (project ? dropLocked(c, org, project) : forget()));
 }
 
 /** The sources of `projectId` the index does not hold completely; null without a database. */
@@ -149,10 +163,11 @@ export async function rebuild(projectId: string, source: SourceKey, rowsUnder: R
     if (done.rowCount) return; // another pod built it while this one waited for the lock
     await c.query('DELETE FROM search_entries WHERE org_id = $1 AND project_id = $2 AND src_ord = $3', [org, projectId, srcOrd]);
     for (let after = ''; ;) {
-      const batch = await rowsUnder(c, org, sourceRel(projectId, source), after, REBUILD_BATCH);
+      const batch = await rowsUnder(c, org, sourceRel(projectId, source), after, REBUILD_BATCH, REBUILD_BYTES);
       if (!batch.length) break;
       const rows: Array<IndexRow & { path: string }> = [];
       for (const b of batch) {
+        if (b.body === null) continue; // past its limits: skipped, but `after` still moves past it
         const where = sourceOf(b.rel);
         if (where && where.projectId === projectId && where.source === source) for (const r of d(where, b.body)) rows.push({ ...r, path: b.rel });
       }

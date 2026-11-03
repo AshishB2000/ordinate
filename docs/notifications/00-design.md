@@ -449,6 +449,16 @@ from ids; it never follows a URL from a push.
 
 ### 5.10 Home's "Mentioned you"
 
+> **Moved to the bell (November 2026, `feat/mentions-in-bell`).** For most people this section was an
+> empty "No mentions yet" box taking a band of Home, and the top bar's bell is where people look for
+> "someone wants me". The list below is now the bell's first part, "Mentioned you · all projects",
+> above the current project's alerts: one inbox titled **Notifications**. Its badge adds the project's
+> unseen alerts to the caller's unseen mentions, a count `/api/auth/me` now carries (`mentionsUnseen`,
+> `null` without a database) so no page pays an RPC for it; `mentions:list` is read only once the bell
+> opens. Rows are compact (no cards); a new one has the accent's line and dot, no tint (the contrast
+> test). With nothing in either part the bell shows one state, "Nothing here yet". The bell now opens
+> with no project, for mentions alone. The data, ordering and seen rules below are unchanged.
+
 - **Data:** `mentions:list` (org-scoped, `read`; one RPC on Home, inside the 25 budget) returns
   `{ available, items }`. The handler filters to the projects the caller may read **now** in SQL
   (`readable`'s predicate: an org admin reads all; otherwise a direct or team grant), unseen first then
@@ -488,9 +498,9 @@ false`. The picker excludes the caller.
 ### 5.12 Settings → You → Notifications
 
 A `Group` "Notifications" holding one `Switch` row (the primitive's own label and hint, as Admin → Organization's switches) "Email me when someone mentions me". Hint:
-"Mentions always reach you on Home and as a notice in your open tabs." When the server sends no email the
+"Mentions always reach you in the bell and as a notice in your open tabs." When the server sends no email the
 switch is disabled and the description says "This server does not send email; mentions still reach you
-on Home and as a notice." Loading → a skeleton row; error → `ErrorState compact` with Retry; no database
+in the bell and as a notice." (Both said "on Home" until the list moved to the bell, §5.10.) Loading → a skeleton row; error → `ErrorState compact` with Retry; no database
 → the group is not shown. `mentions:prefs` → `{ available, mail, emailMe }`; `mentions:setPrefs
 { emailMe }` (org-scoped `read`: one's own setting, like `starred:set`).
 

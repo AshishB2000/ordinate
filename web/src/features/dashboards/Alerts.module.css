@@ -96,6 +96,21 @@
   padding: var(--sp-8);
   flex: 1 1 auto;
 }
+/* A part of the bell's inbox (Mentioned you, Alerts) and what it covers. */
+.inboxSec {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-8) var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.inboxScope {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
 .events {
   list-style: none;
   margin: 0;

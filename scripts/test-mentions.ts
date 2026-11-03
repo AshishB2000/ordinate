@@ -23,7 +23,8 @@
 //   names      comment:list's `people`, Home's snippet (labelled before its cut),
 //              a report's discussion page: "@Name" / "@former member"
 //   gone       deleting a comment or a reply deletes its mention rows; a mention
-//              edited out is marked seen when Home skips it; `unseen` is the DB's
+//              edited out is marked seen when Home skips it; `unseen` is the DB's,
+//              and /api/auth/me carries the same count for the bell's badge
 //   home       mentions:list unseen first, readable projects only; ids that repeat
 //              across projects are two rows, and mentions:seen marks one
 //   bounded    one mentions:list reads at most 10 projects' comments, and names
@@ -107,6 +108,8 @@ async function noDatabase(): Promise<void> {
     ok('no db: the picker never offers anyone', picker.ok && picker.available === false && picker.people.length === 0, show(picker));
     const home = await call('mentions:list', undefined);
     ok('no db: Home has no "Mentioned you"', home.ok && home.available === false);
+    const meReply = (await app.inject({ url: '/api/auth/me', headers: withCsrf({}) })).json() as { mentionsUnseen?: unknown };
+    ok('no db: /api/auth/me carries no mention count for the bell', meReply.mentionsUnseen === null, show(meReply));
   } finally {
     await app.close();
     fs.rmSync(DATA, { recursive: true, force: true });
@@ -302,6 +305,8 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const dbUnseen = Number((await b.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM mentions WHERE user_email = $1 AND seen_at IS NULL`, [at('bea')])).rows[0].n);
     ok('gone: a mention edited out is skipped by Home and marked seen, so it never hides what is new', before.rows[0]?.seen === false && afterGone.rows[0]?.seen === true && !homeNow.items.some((x: { id: string }) => x.id === edited), show([before.rows, afterGone.rows]));
     ok('gone: `unseen` is the database\'s count after that', homeNow.unseen === dbUnseen, show([homeNow.unseen, dbUnseen]));
+    const meReply = (await (await fetch(`${b.base}/api/auth/me`, { headers: { 'x-forwarded-email': at('bea') } })).json()) as { mentionsUnseen?: unknown };
+    ok('bell: /api/auth/me carries the same count, so the badge costs no RPC of its own', meReply.mentionsUnseen === dbUnseen, show([meReply.mentionsUnseen, dbUnseen]));
 
     // ── home ──────────────────────────────────────────────────────────────
     const h = (await as('bea').call('mentions:list')).body.items as Array<{ projectId: string; id: string; seen: boolean }>;

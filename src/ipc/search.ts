@@ -81,8 +81,13 @@ type Item = Found & Pick<IndexRow, 'updated' | 'rec' | 'ord'>;
 
 const named = (name: unknown): name is string => typeof name === 'string';
 const stamp = (updatedAt: unknown): string => (typeof updatedAt === 'string' ? updatedAt : '');
+/** Every text a row holds, as Postgres text can store it: one NUL in a detail line (a metric's column) fails the index's insert. */
+const stored = (it: Item): Item => ({
+  ...it, id: clean(it.id), name: clean(it.name), sub: clean(it.sub), updated: clean(it.updated), rec: clean(it.rec),
+  ...(it.parentId === undefined ? {} : { parentId: clean(it.parentId) }),
+});
 const one = (kind: Item['kind'], id: unknown, name: unknown, sub: string, updatedAt: unknown): Item[] =>
-  named(name) ? [{ kind, id: String(id), name: clean(name), sub, updated: stamp(updatedAt), rec: String(id), ord: 0 }] : [];
+  named(name) ? [stored({ kind, id: String(id), name, sub, updated: stamp(updatedAt), rec: String(id), ord: 0 })] : [];
 
 const fromDataset = (d: datasets.DatasetSummary): Item[] => one('dataset', d.id, d.name, `${Number(d.rowCount || 0).toLocaleString()} rows`, d.updatedAt);
 const fromVisual = (v: visuals.VisualSummary): Item[] => one('visual', v.id, v.name, String(v.chartType || 'visual'), v.updatedAt);
@@ -94,14 +99,14 @@ const fromReport = (r: Pick<reportSpec.ReportSummary, 'id' | 'name' | 'format' |
 // Metrics, reports and alert rules are records too — the palette's → actions
 // (History, Lineage) are how a metric or an alert reaches either.
 const fromAlerts = (rules: readonly AlertRule[]): Item[] =>
-  rules.filter((a) => !a.fromWatch && named(a.name)).map((a, ord) => ({ kind: 'alert', id: String(a.id), name: clean(a.name), sub: 'Alert rule', updated: '', rec: '', ord }));
+  rules.filter((a) => !a.fromWatch && named(a.name)).map((a, ord) => stored({ kind: 'alert', id: String(a.id), name: a.name, sub: 'Alert rule', updated: '', rec: '', ord }));
 function fromAnalysis(a: analysis.AnalysisSummary): Item[] {
   const rec = String(a.id);
   const sheets = a.sheetCount ? `${a.sheetCount} sheet${a.sheetCount === 1 ? '' : 's'}` : 'dashboard';
   return [
     ...one('analysis', a.id, a.name, sheets, a.updatedAt),
     // r10:views — "Retail overview › West Q4", matched on the whole phrase.
-    ...(a.views || []).map((v, i): Item => ({ kind: 'view', id: String(v.id), parentId: rec, name: clean(`${a.name} › ${v.name}`), sub: 'Saved view', updated: stamp(a.updatedAt), rec, ord: i + 1 })),
+    ...(a.views || []).map((v, i): Item => stored({ kind: 'view', id: String(v.id), parentId: rec, name: `${a.name} › ${v.name}`, sub: 'Saved view', updated: stamp(a.updatedAt), rec, ord: i + 1 })),
   ];
 }
 

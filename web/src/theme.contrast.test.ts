@@ -102,13 +102,11 @@ const CHIPS: Array<[string, Decls]> = [
   ...['neutral', 'accent', 'ok', 'warn', 'error'].map((tone): [string, Decls] => [`Badge ${tone}`, block(BADGE, `.${tone}`)]),
   ...['text', 'number', 'date'].map((type): [string, Decls] => [`Grid chip ${type}`, { ...block(GRID, '.type'), ...block(GRID, `.${type}`) }]),
   ['Data type chip', block(DATA, '.typeChip')],
-  // @mentions (docs/notifications): the chip in a comment, Home's new count, and the quiet words on a picked
-  // option and on a mention's card (a new one is marked by its line and dot, never a tint under the words).
+  // @mentions (docs/notifications): the chip in a comment and the quiet words on a picked option. The
+  // bell's mention rows put no fill under their words (a new one is marked by its line and dot), so the
+  // TEXT rows above cover them.
   ['Mention chip', block(MENTIONS, '.chip')],
-  ['Mentioned you: new count', block(MENTIONS, '.homeNew')],
   ['Mention picker: e-mail on the picked option', { color: block(MENTIONS, '.optionMail').color, background: block(MENTIONS, '.optionOn').background }],
-  ['Mentioned you: time on a card', { color: block(MENTIONS, '.cardWhen').color, background: block(MENTIONS, '.card').background }],
-  ['Mentioned you: dashboard on a card', { color: block(MENTIONS, '.on').color, background: block(MENTIONS, '.card').background }],
 ];
 
 /** Every pair a sheet must hold, measured. `chips: false` for a sheet that carries no chips of its own. */

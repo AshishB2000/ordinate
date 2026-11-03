@@ -11,6 +11,8 @@
 //      are found by the very next search with still no rebuild — the write updated the index itself.
 //   4. A save never fails for the index: a describer that throws, or none at all, drops the marker, the
 //      save goes through, and the next search rebuilds that source and finds it.
+//   4b. A NUL in a detail line is stored cleaned; a record past its limits never ends a rebuild early; a page is
+//      cut by bytes; a failed index write keeps its shared lock until its transaction ends.
 //   5. NEGATIVE CONTROL: a row changed behind the index's back makes the differential FAIL.
 //   6. A failing index query falls back to the reference through the handler, counted as `failed`.
 //   7. A deleted project leaves no rows and no markers.
@@ -33,6 +35,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
 const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -196,7 +199,7 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('a viewer still gets the PUBLISHED name, not the renamed draft', viewed.includes('Shown sales board') && !viewed.some((n) => n.startsWith('Renamed')), viewed);
 
   // ── 4. A save never fails for the index ────────────────────────────────
-  const markers = async () => Number((await pool.query(`SELECT count(*) FROM search_sources WHERE project_id = $1 AND source = 'datasets'`, [P])).rows[0].count);
+  const markers = async (source = 'datasets') => Number((await pool.query('SELECT count(*) FROM search_sources WHERE project_id = $1 AND source = $2', [P, source])).rows[0].count);
   index.useDescriber(() => { throw Object.assign(new Error('describer broke'), { code: 'TEST' }); });
   let saved = '';
   try {
@@ -215,6 +218,66 @@ async function dbLeg(pool: Pool): Promise<void> {
   }
   ok('no describer (a script without the stores): the save drops the marker', (await markers()) === 0);
   ok('…and the next search finds it', names(await indexed(EDITOR, P, 'script')).join() === 'Sales from a script');
+
+  // ── 4b. What a record can hold, and what a rebuild must read past ──────
+  // A NUL in a detail line (a metric's column) is text Postgres refuses: stored cleaned, on both paths alike.
+  const nulDs = await saveDataset(P, 'Nul source');
+  await as(ADMIN, null, async () => {
+    const m = await metrics.saveMetric(P, { name: 'Nul column metric', datasetId: nulDs, definition: { column: 'amount', aggregation: 'sum' } });
+    if (!m) throw new Error('seed the nul metric');
+    const file = path.join(appPaths.userData(), 'projects', P, 'metrics', m.id + '.json');
+    const body = JSON.parse(await recordFs.readFile(file, 'utf8'));
+    body.definition.column = 'am\u0000ount';
+    await recordFs.writeFile(file, JSON.stringify(body));
+  });
+  const nul = await both(EDITOR, P, 'nul column');
+  ok('a NUL in a detail line: the write keeps the metrics marker, and the index answers, cleaned, equal to the reference',
+    (await markers('metrics')) === 1 && same(nul.ref, nul.idx) && nul.idx?.[0]?.sub === 'sum(amount)', nul);
+
+  // A record past its limits, first in path order: alone in a byte-capped page, it must not end the rebuild.
+  const HUGE = `projects/${P}/datasets/00000000-0000-4000-8000-000000000000.json`;
+  await pool.query('INSERT INTO records (org_id, path, body) VALUES ($1, $2, $3)',
+    ['acme', HUGE, JSON.stringify({ id: '00000000-0000-4000-8000-000000000000', name: 'Huge sales', pad: 'x'.repeat(9 * 1024 * 1024) })]);
+  await pool.query(`DELETE FROM search_sources WHERE project_id = $1 AND source = 'datasets'`, [P]);
+  const past = await both(EDITOR, P, 'sales');
+  ok('a record past its limits: the rebuild pages past it and indexes the rest, equal to the reference', !!past.idx?.length && same(past.ref, past.idx) && !names(past.idx).includes('Huge sales'), names(past.idx));
+  const c = await pool.connect();
+  try {
+    const dir = `projects/${P}/datasets`;
+    const pageOf = (after: string, maxBytes: number) => as(ADMIN, null, () => recordFs.rowsUnder(c, 'acme', dir, after, 100, maxBytes));
+    const whole = await pageOf('', Number.MAX_SAFE_INTEGER);
+    const pages: string[][] = [];
+    for (let after = ''; ;) {
+      const page = await pageOf(after, 1);
+      if (!page.length) break;
+      pages.push(page.map((r) => r.rel));
+      after = page[page.length - 1].rel;
+    }
+    ok('rowsUnder: a 1-byte budget reads one record a page, and the pages visit every record once, in order (a skipped one as a null body)',
+      whole.length > 1 && pages.every((p) => p.length === 1) && pages.flat().join() === whole.map((r) => r.rel).join() && whole.some((r) => r.rel === HUGE && r.body === null), pages.length);
+  } finally {
+    c.release();
+  }
+  await pool.query('DELETE FROM records WHERE org_id = $1 AND path = $2', ['acme', HUGE]);
+
+  // A failed index write keeps the source's shared lock to the end of its transaction, so no rebuild reads past it.
+  const sharedLocks = async () => Number((await pool.query(
+    `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND mode = 'ShareLock' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`)).rows[0].count);
+  const JUNK = await as(ADMIN, null, async () => path.join(appPaths.userData(), 'projects', P, 'datasets', '11111111-1111-4111-8111-111111111111.json'));
+  let during = -1;
+  index.useDescriber(() => { throw Object.assign(new Error('describer broke'), { code: 'TEST' }); });
+  try {
+    await as(ADMIN, null, () => recordFs.locked(JUNK, async () => {
+      await recordFs.writeFile(JUNK, '{}');
+      during = await sharedLocks();
+    }));
+  } finally {
+    index.useDescriber(search.describeRecord);
+    await as(ADMIN, null, () => recordFs.rm(JUNK, { force: true }));
+  }
+  ok('a failed index write still holds its shared lock until the transaction ends', during === 1 && (await sharedLocks()) === 0, during);
+  const relocked = await counting(async () => ({ before: await markers(), found: await indexed(EDITOR, P, 'sales') }));
+  ok('…its marker was dropped under that lock, and the next search rebuilds the source once', relocked.out.before === 0 && relocked.rebuilds === 1 && !!relocked.out.found?.length, relocked);
 
   // ── 5. NEGATIVE CONTROL: a row changed behind the index's back ─────────
   await pool.query(`UPDATE search_entries SET name = 'Sales tampered' WHERE project_id = $1 AND name = 'Sales 2024'`, [P]);

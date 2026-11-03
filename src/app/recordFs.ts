@@ -428,19 +428,23 @@ export async function readMany(paths: readonly string[]): Promise<Map<string, st
 
 /**
  * The search index's rebuild (src/server/searchIndex.ts): the record rows AT `rel` (a `.json` file) or UNDER it (a
- * directory), in path order, `limit` after `after`, read with `c` — the rebuild's own transaction, its RLS org set.
- * A row past its limits is left out, as readFile refuses it.
+ * directory), in path order, `limit` after `after` and no more bytes than `maxBytes` past the first, read with `c` — the
+ * rebuild's own transaction, its RLS org set. A row past its limits comes back with a null body (readFile refuses it),
+ * so the caller still pages past it.
  */
-export async function rowsUnder(c: PoolClient, org: string, rel: string, after: string, limit: number): Promise<Array<{ rel: string; body: string }>> {
+export async function rowsUnder(c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number): Promise<Array<{ rel: string; body: string | null }>> {
   // A file's range holds the file alone: U+0001 is the least character that can follow its name.
   const [lo, hi] = JSON_NAME.test(rel) ? [rel, rel + '\u0001'] : under(rel);
+  // `before`: the bytes of the page's earlier rows, so the first row is always read, however large.
   const r = await c.query(
-    'SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND path > $4 ORDER BY path LIMIT $5',
-    [org, lo, hi, after, limit],
+    `SELECT path, body FROM (
+       SELECT path, body, sum(octet_length(body)) OVER (ORDER BY path) - octet_length(body) AS before
+       FROM (SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND path > $4 ORDER BY path LIMIT $5) page
+     ) sized WHERE before < $6 ORDER BY path`,
+    [org, lo, hi, after, limit, maxBytes],
   );
   return (r.rows as Array<{ path: string; body: string }>)
-    .filter((x) => !overLimit(path.join(appPaths.userData(), x.path), x.body))
-    .map((x) => ({ rel: x.path, body: x.body }));
+    .map((x) => ({ rel: x.path, body: overLimit(path.join(appPaths.userData(), x.path), x.body) ? null : x.body }));
 }
 
 /**
