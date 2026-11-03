@@ -266,7 +266,7 @@ describe('Home', () => {
   it('gives a viewer their own tour, folded to the pill, and lets them hide it', async () => {
     const calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: TOUR, doneCount: 1, total: 4 }, 'onboarding:set': { ok: true } }, 'viewer');
     renderApp('/');
-    const pill = await screen.findByRole('button', { name: 'Get started: 1 of 4 done, show the checklist' });
+    const pill = await screen.findByRole('button', { name: 'Get started: 1 of 4 done. Show the checklist' });
     expect(calls.some((c) => c.channel === 'onboarding:status')).toBe(true);
     fireEvent.click(pill);
     await waitFor(() => expect(calls.find((c) => c.channel === 'onboarding:set')?.payload).toEqual({ collapsed: false }));
@@ -281,6 +281,7 @@ describe('Home', () => {
     renderApp('/');
     const card = await screen.findByRole('region', { name: 'Get started' });
     await waitFor(() => expect(card.querySelector('li')?.getAttribute('data-step')).toBe('data'));
+    expect(within(card).getByText('A quick tour. Open each one and it ticks itself off.')).toBeTruthy();
     expect(within(card).getByText('Next').closest('li')!.getAttribute('data-step')).toBe('data');
     expect([...card.querySelectorAll('li')].map((li) => li.getAttribute('data-step'))).toEqual(['data', 'assistant', 'explore', 'dashboards', 'reports']);
     fireEvent.click(within(card).getByRole('button', { name: 'Ask' }));
