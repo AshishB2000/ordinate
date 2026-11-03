@@ -34,6 +34,9 @@ const MINE = {
   ],
 };
 
+/** The Starred row's own pins: its cards, less the suggestions after them. */
+const pinCards = (row: HTMLElement) => within(row).queryAllByRole('link').filter((a) => !a.getAttribute('aria-label')!.endsWith(', suggested'));
+
 type Reply = unknown; // a canned reply, or a (payload) => reply function
 type ListRow = { id: string; name: string; updatedAt: string; lastOpenedAt?: string; archivedAt?: string };
 const answer = (r: Reply, payload: unknown) => (typeof r === 'function' ? (r as (p: unknown) => unknown)(payload) : r);
@@ -113,12 +116,16 @@ describe('Home', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/^(Good (morning|afternoon|evening)|Good to see you), Dev$/));
 
-    // Starred: the caller's pins as cards (one here), each opening the record itself, then the way to add one.
+    // Starred: the caller's pins as cards (one here), each opening the record itself, then this
+    // project's newest work not yet pinned, each with its Star, then the way to add one.
     const pinsRow = await screen.findByRole('region', { name: 'Starred' });
     const cards = await within(pinsRow).findAllByRole('link');
-    expect(cards.map((a) => a.getAttribute('href'))).toEqual([`/analyses/${P}/a1`]);
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual([`/analyses/${P}/a1`, `/data/${P}/d1`, `/visuals/${P}/v1`]);
     expect(cards[0]!.getAttribute('aria-label')).toMatch(/^Sales overview, Dashboard, 2 sheets, in My project, /);
-    expect(within(pinsRow).getByText('Star what you come back to')).toBeTruthy();
+    expect(cards.map((a) => a.getAttribute('aria-label')!.endsWith(', suggested'))).toEqual([false, true, true]);
+    expect(within(pinsRow).getByRole('button', { name: 'Star Orders' })).toBeTruthy();
+    expect(within(pinsRow).getByText(/^More from this project, newest first\./)).toBeTruthy();
+    expect(within(pinsRow).getByText('Star what you come back to')).toBeTruthy(); // one column still free
 
     // The table: this project only (the scope), every type in one list, a pin shown on its own row.
     const rec = screen.getByRole('region', { name: 'Recent' });
@@ -159,22 +166,34 @@ describe('Home', () => {
   it('stars and unstars a row as the caller\'s own pins', async () => {
     const calls = stubServer({ 'starred:set': (p: unknown) => ({ ok: true, starred: (p as { ids: string[] }).ids }) });
     renderApp('/');
-    fireEvent.click(await screen.findByRole('button', { name: 'Star Orders' }));
+    const rec = await screen.findByRole('region', { name: 'Recent' });
+    fireEvent.click(await within(rec).findByRole('button', { name: 'Star Orders' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'starred:set')?.payload).toEqual({ ids: ['analysis:a1', 'dataset:d1'] }));
-    const rec = screen.getByRole('region', { name: 'Recent' });
     expect(await within(rec).findByRole('button', { name: 'Unstar Orders' })).toBeTruthy();
     // The Starred row follows: the newest pin first.
-    const pinned = () => within(screen.getByRole('region', { name: 'Starred' })).queryAllByRole('link').map((a) => a.getAttribute('aria-label')!.split(',')[0]);
+    const pinned = () => pinCards(screen.getByRole('region', { name: 'Starred' })).map((a) => a.getAttribute('aria-label')!.split(',')[0]);
     await waitFor(() => expect(pinned()).toEqual(['Orders', 'Sales overview']));
     fireEvent.click(within(rec).getByRole('button', { name: 'Unstar Orders' }));
     await waitFor(() => expect(pinned()).toEqual(['Sales overview']));
+  });
+
+  it('stars a suggestion from the Starred row, which then counts it a pin', async () => {
+    const calls = stubServer({ 'starred:set': (p: unknown) => ({ ok: true, starred: (p as { ids: string[] }).ids }) });
+    renderApp('/');
+    const row = await screen.findByRole('region', { name: 'Starred' });
+    fireEvent.click(await within(row).findByRole('button', { name: 'Star Revenue by month' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'starred:set')?.payload).toEqual({ ids: ['analysis:a1', 'visual:v1'] }));
+    await waitFor(() => expect(pinCards(row).map((a) => a.getAttribute('aria-label')!.split(',')[0])).toEqual(['Revenue by month', 'Sales overview']));
+    // Only Home's project is suggested: Elsewhere (another project) never is.
+    expect(within(row).queryByRole('link', { name: /^Elsewhere/ })).toBeNull();
   });
 
   it('shows the pins from any project, saying where, or the way to make the first one', async () => {
     stubServer({ 'starred:get': ['analysis:a1', 'dataset:d2'] });
     renderApp('/');
     const row = await screen.findByRole('region', { name: 'Starred' });
-    const cards = await within(row).findAllByRole('link');
+    await within(row).findAllByRole('link');
+    const cards = pinCards(row);
     expect(cards.map((a) => a.getAttribute('aria-label')!.split(',')[0])).toEqual(['Elsewhere', 'Sales overview']);
     // A pin from another project names it; one from Home's own does not repeat it.
     expect(cards[0]!.textContent).toContain('Other');
@@ -183,8 +202,17 @@ describe('Home', () => {
     stubServer({ 'starred:get': [] });
     renderApp('/');
     const empty = await screen.findByRole('region', { name: 'Starred' });
-    expect(await within(empty).findByText('Nothing starred yet')).toBeTruthy();
-    expect(within(empty).queryAllByRole('link')).toEqual([]);
+    // Nothing pinned: the project's newest work, every card a suggestion.
+    expect(await within(empty).findByText(/^Nothing starred yet\. Here is this project/)).toBeTruthy();
+    expect(pinCards(empty)).toEqual([]);
+    expect(within(empty).getAllByRole('link').map((a) => a.getAttribute('aria-label')!.split(',')[0])).toEqual(['Orders', 'Sales overview', 'Revenue by month']);
+    cleanup();
+    // Negative control: nothing pinned and nothing in Home's project to suggest says so plainly.
+    stubServer({ 'starred:get': [], 'recent:list': recent.filter((it) => it.projectId === Q) });
+    renderApp('/');
+    const none = await screen.findByRole('region', { name: 'Starred' });
+    expect(await within(none).findByText('Nothing starred yet')).toBeTruthy();
+    expect(within(none).queryAllByRole('link')).toEqual([]);
   });
 
   it('hands a question to the Assistant dock, which asks it; a chip only fills the bar', async () => {

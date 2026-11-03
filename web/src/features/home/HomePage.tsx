@@ -3,7 +3,8 @@
 // asking is what Home is for) with its suggestion chips, then "Your numbers"
 // (the metrics this person follows, as tiles), then the Get-started
 // card while first-run guidance lasts, then ONE column: "Starred" (the
-// caller's pins as preview cards), what the app found in the data, the open
+// caller's pins as preview cards), the freshness of the data that refreshes on
+// its own, what the app found in the data, the open
 // comments, and the table of all recent work. Bringing data in
 // is the New menu's, so nothing on the page repeats it. A mention of you is the
 // top bar bell's, on every page, not a section here.
@@ -25,6 +26,7 @@ import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
 import { displayName, greeting, importPath, suggestPrompts, type Starter } from './homeText';
 import { StarredRow } from './StarredRow';
+import { DataFreshness } from './DataFreshness';
 import { YourNumbers } from './YourNumbers';
 import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
@@ -98,6 +100,7 @@ export default function HomePage() {
       )}
       {cur.status === 'error' && <ErrorState compact heading={2} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={cur.refetch} />}
       <StarredRow projectId={projectId} recent={recent} />
+      <DataFreshness projectId={projectId} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={projectId} />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
