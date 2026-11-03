@@ -5,7 +5,7 @@
 //                   only the picked fields leave (no origin, no crop path)
 //   starred:*       per USER: one member's pins never move another's; a user
 //                   with none sees the org's seeded pins; orgs never mix
-//   onboarding:*    any member reads the card; only an editor+ folds it
+//   onboarding:*    each member reads, ticks, folds and hides their own tour
 //   jobs:*          a user lists, cancels and clears only their own jobs, and
 //                   never sees a server file path; no jobs:reveal on a server
 //   prefs:get       formats + branding, nothing else
@@ -134,11 +134,15 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
 
   // ── onboarding ────────────────────────────────────────────────────────────
   const st = await rpc('org-a', 'v', 'onboarding:status', undefined, 'viewer');
-  ok('a viewer reads the card: started, import done (two datasets), visual done', st.status === 200 && st.body.started === true
-    && st.body.steps.find((s: { id: string }) => s.id === 'import').done === true, JSON.stringify(st.body));
-  ok('a viewer may not fold the org\'s card → 403', (await rpc('org-a', 'v', 'onboarding:set', { collapsed: true }, 'viewer')).status === 403);
-  ok('an admin folds it', (await rpc('org-a', 'u1', 'onboarding:set', { collapsed: true })).body?.ok === true
-    && (await rpc('org-a', 'u1', 'onboarding:status')).body.collapsed === true);
+  ok('a viewer reads their own tour: started, shown, nothing visited', st.status === 200 && st.body.started === true && st.body.show === true
+    && st.body.doneCount === 0 && st.body.steps.some((s: { id: string }) => s.id === 'explore'), JSON.stringify(st.body));
+  ok('a viewer folds their own card', (await rpc('org-a', 'v', 'onboarding:set', { collapsed: true }, 'viewer')).body?.ok === true
+    && (await rpc('org-a', 'v', 'onboarding:status', undefined, 'viewer')).body.collapsed === true);
+  ok('…the admin\'s stays open', (await rpc('org-a', 'u1', 'onboarding:status')).body.collapsed === false);
+  ok('a viewer opening Explore ticks it for them', (await rpc('org-a', 'v', 'onboarding:visit', { step: 'explore' }, 'viewer')).body?.ok === true
+    && (await rpc('org-a', 'v', 'onboarding:status', undefined, 'viewer')).body.doneCount === 1
+    && (await rpc('org-a', 'u1', 'onboarding:status')).body.doneCount === 0);
+  ok('a stop that is not on the tour → 400', (await rpc('org-a', 'u1', 'onboarding:visit', { step: 'import' })).status === 400);
   ok('dismissed: false is not a thing a tab can send → 400', (await rpc('org-a', 'u1', 'onboarding:set', { dismissed: false })).status === 400);
 
   // ── jobs: the caller's own ────────────────────────────────────────────────

@@ -87,7 +87,7 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await filterBy('All').click();
   await recent.getByRole('button', { name: 'Star Retail orders' }).waitFor();
 
-  // ── Get started: ticked by the server, folds to the pill and comes back ──
+  // ── Get started: the tour (no Assistant stop without a model), folds to the pill and comes back ──
   const card = page.getByRole('region', { name: 'Get started' });
   await card.waitFor();
   assert.equal(await card.getByRole('listitem').count(), 4);

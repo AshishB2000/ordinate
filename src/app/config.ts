@@ -12,7 +12,7 @@ import { FORMAT_DEFAULTS, sanitizeFormatPrefs, setFormatPrefs } from './format';
 import type { FormatPrefs } from './format';
 import { BRANDING_DEFAULTS, sanitizeBranding } from './branding';
 import type { Branding } from './branding';
-import type { OnboardingState } from './onboarding';
+import type { OnboardingState, TourState } from './onboarding';
 import { BACKUP_DEFAULTS, sanitizeBackups } from './backupSettings';
 import type { BackupSettings } from './backupSettings';
 import { isLanguage, setLanguage } from './i18n';
@@ -320,17 +320,25 @@ function cleanAutomation(raw: any): AutomationPrefs {
   };
 }
 
-const ONBOARDING_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
+const TOUR_STEPS = ['assistant', 'explore', 'dashboards', 'reports', 'data'];
+const LEGACY_STEPS = ['import', 'visual', 'dashboard', 'assistant'];
 // ponytail: raw disk JSON — every field is checked before it is kept
+function cleanTour(raw: any): TourState {
+  const s = raw.seen && typeof raw.seen === 'object' ? raw.seen : {};
+  const seen: TourState['seen'] = {};
+  for (const k of TOUR_STEPS) if (typeof s[k] === 'string') seen[k as keyof TourState['seen']] = s[k];
+  return { seen, collapsed: raw.collapsed === true, dismissed: raw.dismissed === true };
+}
 function cleanOnboarding(raw: any): OnboardingState | null {
   if (typeof raw.startedAt !== 'string') return null;
-  const done: OnboardingState['done'] = {};
-  const d = raw.done && typeof raw.done === 'object' ? raw.done : {};
-  for (const k of ONBOARDING_STEPS) if (typeof d[k] === 'string') done[k as keyof OnboardingState['done']] = d[k];
-  return {
-    startedAt: raw.startedAt, done,
-    collapsed: raw.collapsed === true, dismissed: raw.dismissed === true, coachSeen: raw.coachSeen === true,
-  };
+  // The old org-wide checklist, already hidden or finished: this org is past first run.
+  const legacy = raw.done && typeof raw.done === 'object' ? raw.done : {};
+  if (raw.dismissed === true || LEGACY_STEPS.every((k) => typeof legacy[k] === 'string')) return null;
+  const by: Record<string, TourState> = {};
+  if (raw.by && typeof raw.by === 'object') {
+    for (const [k, v] of Object.entries(raw.by).slice(0, 10_000)) if (k.length <= 320 && v && typeof v === 'object') by[k] = cleanTour(v);
+  }
+  return { startedAt: raw.startedAt, coachSeen: raw.coachSeen === true, by };
 }
 
 // ponytail: input is raw disk/IPC JSON — validated field-by-field below.

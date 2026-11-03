@@ -1,67 +1,42 @@
-// First-run guidance — getStarted.ts, ported: four things to do, each with
-// its door. What is DONE comes from the server (src/app/onboarding.ts reads it
-// off the org's records), so the card never claims a step nobody took. It
-// folds into a "2 of 4" pill beside New, and goes for good when every step is
-// done or someone hides it. The card is the ORG's and its steps are an
-// editor's (importing, building, creating), so it shows only to the org's
-// editors and admins — a viewer's Home neither shows it nor asks for it. The
-// Assistant step's "Set up" is the org admin's.
+// First-run guidance: a quick tour of the app, one stop per area. Each stop
+// ticks when this person opens its page, from the card or the sidebar
+// (tourVisits.ts, in the shell), or for the Assistant when they ask it
+// something. The tour is EACH PERSON'S and the server keeps it
+// (src/app/onboarding.ts), including the count, so the card never claims a
+// visit that did not happen. Anyone can fold it into the "2 of 5" pill beside
+// New or hide it; it goes for good once every stop is ticked.
 
 import { Link } from 'react-router';
 import { useOnboarding, useSetOnboarding, type StepId } from '../../api/home';
-import { useMe } from '../auth/api';
-import { buttonClass, IconButton } from '../../ui/Button';
+import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
+import { setDockOpen } from '../assistant/dockState';
 import s from './GetStarted.module.css';
 
-interface Step {
-  id: StepId;
+interface Stop {
   icon: IconName;
   title: string;
   line: string;
   action: string;
-  to: string;
+  /** The page; the Assistant has none, its action opens the dock. */
+  to?: string;
 }
 
-// The doors land on each area's page; the flows they open (import, the visual
-// builder, the template wizard, the model settings) arrive with T2.4, T2.7,
-// T2.8 and T2.12.
-const STEPS: Step[] = [
-  {
-    id: 'import', icon: 'upload', title: 'Import your data', to: '/data', action: 'Import',
-    line: 'Bring in a CSV or Excel file, paste a table, or connect a database.',
-  },
-  {
-    id: 'visual', icon: 'chart-bar', title: 'Build a visual', to: '/visuals', action: 'Open the builder',
-    line: 'Chart the sample orders by month, region or category in a few clicks.',
-  },
-  {
-    id: 'dashboard', icon: 'layout-dashboard', title: 'Create a dashboard', to: '/dashboards?new=1', action: 'Browse templates',
-    line: 'Start from a template and have a laid-out sheet in one step.',
-  },
-  {
-    id: 'assistant', icon: 'sparkles', title: 'Set up the Assistant', to: '/admin?tab=ai', action: 'Set up',
-    line: 'An admin connects a provider and picks the models everyone may use. Everything else works without one.',
-  },
-];
+const STOPS: Record<StepId, Stop> = {
+  assistant: { icon: 'sparkles', title: 'Ask the Assistant', action: 'Ask', line: 'Ask a question, or have it build a chart or a dashboard for you.' },
+  explore: { icon: 'trending-up', title: 'Explore', action: 'Open Explore', to: '/explore', line: 'Ask a question of your data and get a chart back. No AI needed.' },
+  dashboards: { icon: 'layout-dashboard', title: 'Dashboards', action: 'Open Dashboards', to: '/dashboards', line: 'See your key numbers on one page, or start one from a template.' },
+  reports: { icon: 'file-text', title: 'Reports', action: 'Open Reports', to: '/reports', line: 'Send a dashboard as a PDF, PowerPoint or Word file, or on a schedule.' },
+  data: { icon: 'database', title: 'Data', action: 'Open Data', to: '/data', line: 'Your datasets. Bring in a file, paste a table, or connect a database.' },
+};
 
-/** The caller's ORG role: editor or admin. False until it is known. */
-function useOrgRole(): { editor: boolean; admin: boolean } {
-  const role = useMe().data?.user?.role;
-  return { editor: role === 'admin' || role === 'editor', admin: role === 'admin' };
-}
-export function useOrgEditor(): boolean {
-  return useOrgRole().editor;
-}
-
-/** The folded card: "Get started | 2 of 4", beside New. */
+/** The folded card: "Get started | 2 of 5", beside New. */
 export function GetStartedPill() {
-  const editor = useOrgEditor();
-  const q = useOnboarding(editor);
+  const q = useOnboarding();
   const set = useSetOnboarding();
   const d = q.data;
-  if (!editor || !d?.show || !d.collapsed) return null;
+  if (!d?.show || !d.collapsed) return null;
   const progress = `${d.doneCount} of ${d.total}`;
   return (
     <button
@@ -77,15 +52,15 @@ export function GetStartedPill() {
   );
 }
 
-export function GetStarted() {
-  const { editor, admin } = useOrgRole();
-  const q = useOnboarding(editor);
+/** `noData`: the current project has no datasets yet, so Data comes first (every other stop would open onto an empty page). */
+export function GetStarted({ noData }: { noData: boolean }) {
+  const q = useOnboarding();
   const set = useSetOnboarding();
   const d = q.data;
-  // Loading or failed: nothing — the card is guidance, not content, and Home
-  // reads fine without it (the desktop hides it the same way).
-  if (!editor || !d?.show || d.collapsed) return null;
-  const done = new Set(d.steps.filter((x) => x.done).map((x) => x.id));
+  // Loading or failed: nothing. The card is guidance, not content, and Home reads fine without it.
+  if (!d?.show || d.collapsed) return null;
+  const steps = noData ? [...d.steps.filter((x) => x.id === 'data'), ...d.steps.filter((x) => x.id !== 'data')] : d.steps;
+  const next = steps.find((x) => !x.done)?.id;
   const progress = `${d.doneCount} of ${d.total}`;
   const change = (patch: { collapsed?: boolean; dismissed?: true }, after?: () => void) =>
     set.mutate(patch, {
@@ -108,46 +83,54 @@ export function GetStarted() {
           <span className={s.count}>{progress}</span>
           <progress className={s.bar} value={d.doneCount} max={d.total || 1} aria-label={`Get started: ${progress} done`} />
         </div>
-        {editor && (
-          <>
-            <IconButton icon="chevron-up" size="sm" label="Fold the checklist into a progress pill" onClick={() => change({ collapsed: true })} />
-            <IconButton
-              icon="x"
-              size="sm"
-              label="Hide Get started"
-              onClick={() => change({ dismissed: true }, () => toast('Get started is hidden. Everything it pointed to is in the sidebar.'))}
-            />
-          </>
-        )}
+        <IconButton icon="chevron-up" size="sm" label="Fold the checklist into a progress pill" onClick={() => change({ collapsed: true })} />
+        <IconButton
+          icon="x"
+          size="sm"
+          label="Hide Get started"
+          onClick={() => change({ dismissed: true }, () => toast('Get started is hidden. Everything it pointed to is in the sidebar.'))}
+        />
       </div>
-      <ol className={s.items}>
-        {STEPS.map((st) => {
-          const ok = done.has(st.id);
+      <ol className={s.items} data-count={steps.length}>
+        {steps.map(({ id, done }) => {
+          const st = STOPS[id];
+          if (!st) return null;
+          const isNext = id === next;
+          const cls = [s.item, done ? s.done : isNext ? s.next : ''].filter(Boolean).join(' ');
+          const variant = isNext ? 'primary' : 'ghost';
           return (
-            <li key={st.id} className={ok ? `${s.item} ${s.done}` : s.item} data-step={st.id}>
+            <li key={id} className={cls} data-step={id}>
               <div className={s.itemTop}>
                 <span className={s.tile} aria-hidden="true">
                   <Icon name={st.icon} />
                 </span>
-                <span className={s.tick} role="img" aria-label={ok ? 'Done' : 'Not done yet'}>
-                  <Icon name={ok ? 'circle-check' : 'circle'} size={20} />
-                </span>
+                {isNext ? (
+                  <span className={s.nextTag}>Next</span>
+                ) : (
+                  <span className={s.tick} role="img" aria-label={done ? 'Done' : 'Not done yet'}>
+                    <Icon name={done ? 'circle-check' : 'circle'} size={20} />
+                  </span>
+                )}
               </div>
               <div className={s.itemBody}>
                 <h3 className={s.itemTitle}>{st.title}</h3>
                 <p className={s.itemLine}>{st.line}</p>
               </div>
-              {ok ? (
+              {done ? (
                 <span className={s.doneLabel}>
                   <Icon name="check" size={12} />
-                  Done
+                  Visited
                 </span>
-              ) : st.id === 'assistant' && !admin ? (
-                <span className={s.adminNote}>An org admin’s step</span>
-              ) : (
-                <Link className={buttonClass('ghost', 'sm', s.action)} to={st.to}>
+              ) : st.to ? (
+                <Link className={buttonClass(variant, 'sm', isNext ? undefined : s.action)} to={st.to}>
                   {st.action}
+                  {isNext && <Icon name="arrow-right" size={12} />}
                 </Link>
+              ) : (
+                <Button size="sm" variant={variant} className={isNext ? undefined : s.action} onClick={() => setDockOpen(true)}>
+                  {st.action}
+                  {isNext && <Icon name="arrow-right" size={12} />}
+                </Button>
               )}
             </li>
           );

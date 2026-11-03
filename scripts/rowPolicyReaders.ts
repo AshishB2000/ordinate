@@ -102,7 +102,9 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'metric:values': 'DOOR',
   'metricTree:compute': 'DOOR+',
   'metricTree:suggest': 'META',
+  'onboarding:set': 'META', // the caller's own fold and hide; returns no row or figure
   'onboarding:status': 'META',
+  'onboarding:visit': 'META', // ticks the caller's own tour stop; returns no row or figure
   'period:picker': 'META',
   'pipelines:get': 'REDACT',
   'pipelines:preview': 'META',

@@ -1,78 +1,66 @@
-// First-run guidance — the Get-started checklist and the sample dashboard's
-// coach marks. MAIN PROCESS ONLY.
+// First-run guidance: the Get-started tour and the sample dashboard's coach
+// marks. MAIN PROCESS ONLY.
 //
-// Started ONCE, by the sample seeder, so only a first launch ever sees it: an
-// install that seeded before this existed has no `onboarding` block and gets
-// neither the card nor the tour.
+// Started ONCE for the org, by the sample seeder, so only an org that began
+// with the sample sees it: an install seeded before this existed (or one that
+// hid or finished the old org-wide checklist) has no `onboarding` block and
+// gets neither the card nor the coach marks.
 //
-// THE TICKS COME FROM REAL RECORDS, not from button presses: "Import your data"
-// is done when a dataset exists that is not the sample's, "Build a visual"
-// when a visual exists that the seed did not make, "Create a dashboard" when
-// a dashboard does, and "Set up the Assistant" when executionReady() says so.
-// Each tick LATCHES into config the first time it is seen — deleting the one
-// visual you made does not un-teach you how to make one — and once all four
-// are latched nothing is scanned again.
+// THE TOUR IS EACH PERSON'S. A stop ticks when that person opens its page
+// (the browser reports the visit, from the card or the sidebar) or, for the
+// Assistant, sends it a question. Ticks, fold and hide live under
+// `by[email]`, so one member's tour never moves another's. The Assistant stop
+// exists only while AI is set up. Once every stop a person was shown is ticked
+// their card is gone for good: setting AI up later does not bring it back.
 
 import * as config from './config';
 import * as execConfig from './execConfig';
-import * as projects from './projects';
-import * as datasets from '../data/datasets';
-import * as visuals from '../analysis/visuals';
-import * as analysis from '../analysis/analysis';
 
-export type StepId = 'import' | 'visual' | 'dashboard' | 'assistant';
-export const STEPS: StepId[] = ['import', 'visual', 'dashboard', 'assistant'];
+export type StepId = 'assistant' | 'explore' | 'dashboards' | 'reports' | 'data';
+/** The tour's order when the project has data (the browser moves Data first when it has none). */
+export const STEPS: StepId[] = ['assistant', 'explore', 'dashboards', 'reports', 'data'];
+
+export interface TourState {
+  /** When each stop was first visited. */
+  seen: Partial<Record<StepId, string>>;
+  /** The card is folded to the header's "2 of 5" pill. */
+  collapsed: boolean;
+  /** Hidden by the person, or finished: gone for good. */
+  dismissed: boolean;
+}
 
 export interface OnboardingState {
   startedAt: string;
-  /** When each step was first seen done. */
-  done: Partial<Record<StepId, string>>;
-  /** The card is folded to the header's "2 of 4" pill. */
-  collapsed: boolean;
-  /** The card is gone for good. */
-  dismissed: boolean;
-  /** The sample dashboard's tour has been shown (once, ever). */
+  /** The sample dashboard's coach marks have been shown (once, for the org). */
   coachSeen: boolean;
+  /** Each person's tour, by sign-in email. */
+  by: Record<string, TourState>;
 }
 
 export interface OnboardingStatus {
   started: boolean;
-  /** Show the card (or its pill): started, not dismissed, not finished. */
+  /** Show the card (or its pill): started, not hidden, not finished. */
   show: boolean;
   collapsed: boolean;
   steps: Array<{ id: StepId; done: boolean }>;
   doneCount: number;
   total: number;
-  /** Start the tour when the sample dashboard next opens. */
+  /** Start the coach marks when the sample dashboard next opens. */
   coachPending: boolean;
   sample: { projectId: string; datasetId: string; analysisId: string } | null;
 }
 
 export function fresh(now = new Date()): OnboardingState {
-  return { startedAt: now.toISOString(), done: {}, collapsed: false, dismissed: false, coachSeen: false };
+  return { startedAt: now.toISOString(), coachSeen: false, by: {} };
 }
 
-/** Which of the three record steps the project tree already satisfies. */
-async function scan(need: Set<StepId>): Promise<Set<StepId>> {
-  const found = new Set<StepId>();
-  const sample = config.get().sample;
-  const seededVisuals = new Set(sample ? sample.visualIds : []);
-  for (const p of await projects.listProjects()) {
-    if (need.has('import') && !found.has('import')) {
-      if ((await datasets.listDatasets(p.id)).some((d) => !sample || d.id !== sample.datasetId)) found.add('import');
-    }
-    if (need.has('visual') && !found.has('visual')) {
-      if ((await visuals.listVisuals(p.id)).some((v) => !seededVisuals.has(v.id))) found.add('visual');
-    }
-    if (need.has('dashboard') && !found.has('dashboard')) {
-      if ((await analysis.listAnalyses(p.id)).some((a) => !sample || a.id !== sample.analysisId)) found.add('dashboard');
-    }
-    if ([...need].every((s) => s === 'assistant' || found.has(s))) break;
-  }
-  return found;
+const blank = (): TourState => ({ seen: {}, collapsed: false, dismissed: false });
+
+function put(state: OnboardingState, user: string, mine: TourState): void {
+  config.save({ onboarding: { ...state, by: { ...state.by, [user]: mine } } });
 }
 
-export async function status(): Promise<OnboardingStatus> {
+export async function status(user: string): Promise<OnboardingStatus> {
   const cfg = config.get();
   const state = cfg.onboarding;
   const sample = cfg.sample ? { projectId: cfg.sample.projectId, datasetId: cfg.sample.datasetId, analysisId: cfg.sample.analysisId } : null;
@@ -82,33 +70,38 @@ export async function status(): Promise<OnboardingStatus> {
       doneCount: 0, total: STEPS.length, coachPending: false, sample,
     };
   }
-  const done = { ...state.done };
-  const now = new Date().toISOString();
-  const need = new Set(STEPS.filter((s) => !done[s]));
-  if (need.has('assistant') && (await execConfig.executionReady())) done.assistant = now;
-  need.delete('assistant');
-  if (need.size) for (const s of await scan(need)) done[s] = now;
-  if (Object.keys(done).length !== Object.keys(state.done).length) config.save({ onboarding: { ...state, done } });
-  const steps = STEPS.map((id) => ({ id, done: !!done[id] }));
+  const ids = (await execConfig.executionReady()) ? STEPS : STEPS.filter((s) => s !== 'assistant');
+  const mine = state.by[user] ?? blank();
+  const steps = ids.map((id) => ({ id, done: !!mine.seen[id] }));
   const doneCount = steps.filter((s) => s.done).length;
+  if (doneCount === ids.length && !mine.dismissed) put(state, user, { ...mine, dismissed: true });
   return {
     started: true,
-    show: !state.dismissed && doneCount < STEPS.length,
-    collapsed: state.collapsed,
-    steps, doneCount, total: STEPS.length,
+    show: !mine.dismissed && doneCount < ids.length,
+    collapsed: mine.collapsed,
+    steps, doneCount, total: ids.length,
     coachPending: !state.coachSeen,
     sample,
   };
 }
 
-/** The three things the renderer may change: fold, dismiss, tour seen. */
-export function set(patch: { collapsed?: unknown; dismissed?: unknown; coachSeen?: unknown }): boolean {
+/** `user` opened a stop's page (or asked the Assistant). Latches; a second visit writes nothing. */
+export function visit(user: string, step: StepId): boolean {
+  const state = config.get().onboarding;
+  if (!state || !STEPS.includes(step)) return false;
+  const mine = state.by[user] ?? blank();
+  if (mine.seen[step]) return true;
+  put(state, user, { ...mine, seen: { ...mine.seen, [step]: new Date().toISOString() } });
+  return true;
+}
+
+/** What the browser may change: the person's own fold and hide, and the org's coach marks seen. */
+export function set(user: string, patch: { collapsed?: unknown; dismissed?: unknown; coachSeen?: unknown }): boolean {
   const state = config.get().onboarding;
   if (!state) return false;
-  const next = { ...state };
-  if (typeof patch.collapsed === 'boolean') next.collapsed = patch.collapsed;
-  if (patch.dismissed === true) next.dismissed = true;
-  if (patch.coachSeen === true) next.coachSeen = true;
-  config.save({ onboarding: next });
+  const mine = { ...(state.by[user] ?? blank()) };
+  if (typeof patch.collapsed === 'boolean') mine.collapsed = patch.collapsed;
+  if (patch.dismissed === true) mine.dismissed = true;
+  config.save({ onboarding: { ...state, coachSeen: state.coachSeen || patch.coachSeen === true, by: { ...state.by, [user]: mine } } });
   return true;
 }

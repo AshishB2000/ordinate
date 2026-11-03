@@ -109,8 +109,9 @@ e2e('viewer: present, style, alert me, the inbox, comments', async ({ page, serv
   await dlg.getByRole('button', { name: 'Save' }).click();
   await dlg.waitFor({ state: 'detached' });
   await page.getByRole('group', { name: 'Revenue card' }).getByRole('img', { name: 'Watched by an alert' }).waitFor();
-  await page.getByRole('button', { name: 'Alerts', exact: true }).click();
-  await page.getByText('Nothing has fired').waitFor();
+  await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+  // Without a database the bell is the alerts alone; with one, nothing fired and no mention is one state.
+  await page.getByText(/^(Nothing has fired|Nothing here yet)$/).waitFor();
   await screensInPlace(page, 'dashboards-inbox');
   await page.getByRole('button', { name: 'Manage rules' }).click();
   const rules = page.getByRole('dialog', { name: 'Alert rules' });

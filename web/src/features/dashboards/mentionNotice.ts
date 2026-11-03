@@ -11,6 +11,7 @@ import { rpc } from '../../api/client';
 import { useServerEvent } from '../../api/events';
 import { toast } from '../../ui/Toast';
 import { threadPath, type ThreadKind } from '../../../../src/app/threadPath.ts';
+import { ME_KEY } from '../auth/api';
 import { MENTIONS_KEY } from './mentionsApi';
 
 interface Notice {
@@ -33,14 +34,19 @@ export function useMentionNotice(): void {
     const projectId = str(n.projectId);
     const kind = str(n.target?.kind);
     if (!projectId || !KINDS.has(kind)) return;
+    // The list, and the bell's badge (its count rides on /api/auth/me).
     void client.invalidateQueries({ queryKey: MENTIONS_KEY });
+    void client.invalidateQueries({ queryKey: ME_KEY });
     const href = threadPath(projectId, { kind: kind as ThreadKind, id: str(n.target?.id) }, str(n.analysisId) || null);
     toast(`${str(n.by) || 'Someone'} mentioned you on ${str(n.on) || 'a comment'}`, {
       action: href
         ? {
             label: 'Open',
             onClick: () => {
-              void rpc('mentions:seen', { projectId, id: str(n.id) }).then(() => client.invalidateQueries({ queryKey: MENTIONS_KEY }));
+              void rpc('mentions:seen', { projectId, id: str(n.id) }).then(() => {
+                void client.invalidateQueries({ queryKey: MENTIONS_KEY });
+                void client.invalidateQueries({ queryKey: ME_KEY });
+              });
               void navigate(href);
             },
           }
