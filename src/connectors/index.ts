@@ -32,6 +32,8 @@ const FAMILY_MODULES: readonly string[] = [
   './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
   './bigquery', // Google BigQuery (REST, a service-account key)
   './snowflake', // Snowflake (SQL API)
+  './mongodb',  // MongoDB (the official driver; aggregation pipelines)
+  './athena',   // Amazon Athena (REST, SigV4-signed)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —

@@ -27,7 +27,7 @@ Connect your data, build dashboards, and let AI analyse it for you.
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2f81f7?style=flat-square" /></a>
 <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-f0883e?style=flat-square" />
 <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-Docker%20%C2%B7%20Helm%20%C2%B7%20ECS-2496ED?style=flat-square&logo=docker&logoColor=white" />
-<img alt="40 connectors" src="https://img.shields.io/badge/connectors-40-8957e5?style=flat-square" />
+<img alt="42 connectors" src="https://img.shields.io/badge/connectors-42-8957e5?style=flat-square" />
 <img alt="39 chart types" src="https://img.shields.io/badge/chart%20types-39-8957e5?style=flat-square" />
 <img alt="Telemetry: none" src="https://img.shields.io/badge/telemetry-none-2ea043?style=flat-square" />
 <br/>
@@ -63,7 +63,7 @@ Connect your data, build dashboards, and let AI analyse it for you.
     </td>
     <td width="33%" valign="top">
       <h3>📊 The whole BI workflow</h3>
-      40 sources, a reversible prepare pipeline, 39 chart, map and table types, and dashboards your
+      42 sources, a reversible prepare pipeline, 39 chart, map and table types, and dashboards your
       team opens at a link.
     </td>
   </tr>
@@ -89,7 +89,7 @@ Connect your data, build dashboards, and let AI analyse it for you.
 
 ```mermaid
 flowchart LR
-  S["📥 <b>Connect</b><br/>files · 40 sources<br/>screenshots"] --> P["🧹 <b>Prepare</b><br/>reversible steps"]
+  S["📥 <b>Connect</b><br/>files · 42 sources<br/>screenshots"] --> P["🧹 <b>Prepare</b><br/>reversible steps"]
   P --> V["📊 <b>Visualize</b><br/>39 chart, map<br/>and table types"]
   V --> A["🗂️ <b>Author</b><br/>analyses with filters<br/>and parameters"]
   A --> D["🔗 <b>Share</b><br/>dashboards at a link<br/>PDF · PowerPoint · Word"]
@@ -236,7 +236,7 @@ For UI work, run `npm run dev:web` beside the server for hot reload.
 
 | | |
 |---|---|
-| **📥 Bring data in** | Upload CSV, JSON or Excel, paste a table, point at a JSON URL, read a table out of a screenshot, or connect one of **40 read-only sources**. Copy the data, or keep a warehouse table Live. |
+| **📥 Bring data in** | Upload CSV, JSON or Excel, paste a table, point at a JSON URL, read a table out of a screenshot, or connect one of **42 read-only sources**. Copy the data, or keep a warehouse table Live. |
 | **🧹 Prepare** | A step-by-step pipeline you can reorder or undo: calculated fields, filters, grouping, joins, pivot and unpivot, dedupe, regex, window functions and more. Refreshes and pipelines run on a schedule. |
 | **📊 Visualize** | **39 types**: 31 charts, a pivot table, cohort and event-funnel grids, 4 maps and a table. Small multiples, drill-down, annotations, reference lines and forecasts. |
 | **🔬 Analyze** | Statistics, key drivers, what-if scenarios, segments, snapshots, events and a SQL workbench. |
@@ -245,13 +245,13 @@ For UI work, run `npm run dev:web` beside the server for hot reload.
 
 ## 🔌 Connectors
 
-**40 read-only sources.** ⚡ marks the ones that can also run **Live**.
+**42 read-only sources.** ⚡ marks the ones that can also run **Live**.
 
 | Category | Sources |
 |---|---|
 | **Cloud warehouses** (9) | Snowflake ⚡ · Google BigQuery ⚡ · Amazon Redshift ⚡ · Google AlloyDB · Neon · Supabase · Azure SQL Database · Azure Synapse Analytics · Oracle Autonomous Database |
-| **Databases** (14) | PostgreSQL ⚡ · CockroachDB · TimescaleDB · YugabyteDB · Materialize · QuestDB · RisingWave · MySQL · MariaDB · Amazon Aurora (MySQL) · TiDB · PlanetScale · Microsoft SQL Server · Oracle Database |
-| **Query engines** (10) | Databricks SQL ⚡ · ClickHouse ⚡ · SingleStore · StarRocks · Apache Doris · Trino · Presto · Elasticsearch · OpenSearch · Apache Druid |
+| **Databases** (15) | PostgreSQL ⚡ · CockroachDB · TimescaleDB · YugabyteDB · Materialize · QuestDB · RisingWave · MySQL · MariaDB · Amazon Aurora (MySQL) · TiDB · PlanetScale · Microsoft SQL Server · Oracle Database · MongoDB |
+| **Query engines** (11) | Databricks SQL ⚡ · ClickHouse ⚡ · SingleStore · StarRocks · Apache Doris · Trino · Presto · Elasticsearch · OpenSearch · Apache Druid · Amazon Athena |
 | **Apps and SaaS** (6) | Google Sheets · Airtable · Notion · Stripe · GitHub · HubSpot |
 | **Web** (1) | URL / API (JSON) |
 
