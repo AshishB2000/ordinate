@@ -16,6 +16,7 @@ import { projectDir, projectsBase } from '../app/recordKinds';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
 import * as sample from '../app/sampleProject';
+import * as onboarding from '../app/onboarding';
 import { waitForLease } from '../app/runLease';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
@@ -52,8 +53,11 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
 
   // ponytail: untrusted renderer payloads — any.
   ipcMain.handle('projects:create', async (_e, { name }: any) => {
+    const first = (await projects.listProjects()).length === 0; // archived ones count, as for sample:seed
     const created = await projects.createProject(name);
     if (created) {
+      // The org's first project starts the Get started tour, as the sample does.
+      if (first) onboarding.startOnce();
       active(created.id);
       await projects.touchOpened(created.id);
     }

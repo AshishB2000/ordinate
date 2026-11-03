@@ -112,6 +112,18 @@ async function main(): Promise<void> {
   const kept = config.get().onboarding!.by[ANN];
   ok('a person\'s stored tour keeps only real stops with real times', JSON.stringify(kept) === '{"seen":{"data":"x"},"collapsed":false,"dismissed":false}', JSON.stringify(kept));
 
+  // startOnce: the tour for an org with none (projects:create calls it for the org's first project).
+  config.save({ onboarding: null });
+  onboarding.startOnce();
+  st = await onboarding.status(ANN);
+  ok('startOnce starts the tour for an org that has none', st.started && st.show && st.doneCount === 0, JSON.stringify(st));
+  onboarding.visit(ANN, 'explore');
+  onboarding.startOnce();
+  ok('…a second call leaves a started one alone (the tick stays)', done(await onboarding.status(ANN), 'explore'));
+  onboarding.set(ANN, { dismissed: true });
+  onboarding.startOnce();
+  ok('…and a hidden one stays hidden', !(await onboarding.status(ANN)).show);
+
   finish();
 }
 

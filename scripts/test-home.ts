@@ -5,7 +5,8 @@
 //                   only the picked fields leave (no origin, no crop path)
 //   starred:*       per USER: one member's pins never move another's; a user
 //                   with none sees the org's seeded pins; orgs never mix
-//   onboarding:*    each member reads, ticks, folds and hides their own tour
+//   onboarding:*    each member reads, ticks, folds and hides their own tour;
+//                   an org's first project starts it, sample or not
 //   jobs:*          a user lists, cancels and clears only their own jobs, and
 //                   never sees a server file path; no jobs:reveal on a server
 //   prefs:get       formats + branding, nothing else
@@ -144,6 +145,19 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
     && (await rpc('org-a', 'u1', 'onboarding:status')).body.doneCount === 0);
   ok('a stop that is not on the tour → 400', (await rpc('org-a', 'u1', 'onboarding:visit', { step: 'import' })).status === 400);
   ok('dismissed: false is not a thing a tab can send → 400', (await rpc('org-a', 'u1', 'onboarding:set', { dismissed: false })).status === 400);
+
+  // An org that starts with its own project, not the sample, gets the tour too.
+  ok('an org with no project has no tour yet', (await rpc('org-c', 'u1', 'onboarding:status')).body.started === false);
+  const made = await rpc('org-c', 'u1', 'projects:create', { name: 'Ours' });
+  const c1 = (await rpc('org-c', 'u1', 'onboarding:status')).body;
+  ok('its first project starts the tour, shown, nothing visited', made.status === 200 && c1.started === true && c1.show === true && c1.doneCount === 0, JSON.stringify({ made: made.status, c1 }));
+  await rpc('org-c', 'u1', 'onboarding:visit', { step: 'data' });
+  await rpc('org-c', 'u1', 'projects:create', { name: 'Second' });
+  ok('…a second project does not restart it (the tick stays)', (await rpc('org-c', 'u1', 'onboarding:status')).body.doneCount === 1);
+  // Negative control: an org that already had a project (an install from before the tour) is not started by its next one.
+  await context.runInContext(who('org-d', 'u1'), 'seed-d', async () => { await projects.createProject('Old'); });
+  const d = await rpc('org-d', 'u1', 'projects:create', { name: 'Newer' });
+  ok('an org that already had projects gets no tour from its next one', d.status === 200 && (await rpc('org-d', 'u1', 'onboarding:status')).body.started === false);
 
   // ── jobs: the caller's own ────────────────────────────────────────────────
   const run = await rpc('org-a', 'u1', 'quality:run', { projectId: seed.pid, datasetId: seed.dsid });
