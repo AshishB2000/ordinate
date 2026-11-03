@@ -54,4 +54,13 @@ export const home = {
   // preload: invoke('prefs:get') — the workspace's formats and branding (accent,
   // dashboard style; never the logo file). Secret-free by construction.
   'prefs:get': rpc({ access: 'read', org: true, input: z.undefined() }),
+  // Home's "Your numbers" (src/ipc/numbers.ts): the caller's followed metrics and
+  // scorecards in one project, each figure another channel's reply. Following
+  // is the caller's own, like a star, so a viewer may.
+  'numbers:get': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  'numbers:follow': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, kind: z.enum(['metric', 'scorecard']), id: Uuid, on: z.boolean() }),
+    project: byProjectId,
+  }),
 } as const;

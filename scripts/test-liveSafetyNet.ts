@@ -265,6 +265,19 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ok('a scenario on a Live metric could be created to test', false, scen.body.slice(0, 240));
   }
 
+  // Home's "Your numbers": a followed Live metric is the warehouse's figure, dated live, or a typed failure; never a confident zero.
+  type NumTile = { id: string; display: string; error?: string; asOf?: { mode?: string } };
+  const tileOf = async (metricId: string): Promise<NumTile | undefined> => {
+    await post('numbers:follow', { projectId: P, kind: 'metric', id: metricId, on: true });
+    const r = await post('numbers:get', { projectId: P });
+    bodies.push(r.body);
+    return ((r.value?.tiles ?? []) as NumTile[]).find((x) => x.id === metricId);
+  };
+  const liveTile = await tileOf(recs.live.metricId);
+  ok('Live → Your numbers (numbers:get) ANSWERS from the warehouse, dated live', !!liveTile && !liveTile.error && liveTile.display !== '' && liveTile.asOf?.mode === 'live', JSON.stringify(liveTile));
+  const goneTile = await tileOf(recs.gone.metricId);
+  ok('Live, connection gone → Your numbers shows a failure, no figure', !!goneTile && !!goneTile.error && goneTile.display === '', JSON.stringify(goneTile));
+
   // A chart can be DEFINED on a Live dataset, and its thumbnail is drawn through the chart door (L2.4).
   const vis = await post('visual:save', { projectId: P, datasetId: seed.live, name: 'Sales by region', chartType: 'bar', encoding: enc });
   const visualId = String((vis.value?.visual as { id?: string } | undefined)?.id ?? (vis.value as { id?: string } | null)?.id ?? '');

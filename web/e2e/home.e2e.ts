@@ -63,6 +63,12 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   const menu = page.getByRole('menu', { name: 'New' });
   for (const door of ['Dashboard', 'Visual', 'CSV / Excel', 'Paste data', 'Screenshot', 'Database']) await menu.getByRole('menuitem', { name: door }).waitFor();
   await page.keyboard.press('Escape');
+  // ── Your numbers: nothing followed, so the sample's first metrics, each with its figure and Follow ──
+  const numbers = page.getByRole('region', { name: 'Your numbers' });
+  await numbers.getByRole('article').first().waitFor();
+  assert.equal(await numbers.getByRole('article').count(), 3);
+  assert.equal(await numbers.getByRole('button', { name: 'Follow', exact: true }).count(), 3);
+  assert.match((await numbers.getByRole('article').first().getAttribute('aria-label')) ?? '', /^.+: .*\d.*, suggested$/);
   // ── the hero: the ask bar in its own panel; this server has no model, and the panel says so ──
   const hero = page.getByRole('region', { name: 'What do you want to do?' });
   await hero.getByRole('textbox', { name: 'Ask a question or say what to build' }).waitFor();

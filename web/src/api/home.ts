@@ -136,3 +136,47 @@ export function useSetOnboarding() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ONBOARDING }),
   });
 }
+
+// ── Home's "Your numbers" (src/ipc/numbers.ts): every figure, label and change in a tile is the server's. ──
+
+export interface MetricTile {
+  kind: 'metric';
+  id: string;
+  name: string;
+  dataset: string | null;
+  display: string;
+  period: string | null;
+  change: { text: string; up: boolean; tone: 'good' | 'bad' | 'flat' | 'neutral'; vs: string } | null;
+  spark: Array<number | null> | null;
+  error?: string;
+}
+export interface GoalsTile { kind: 'scorecard'; id: string; name: string; period: string; off: number; warn: number; good: number; scored: number; error?: string }
+export type NumberTile = MetricTile | GoalsTile;
+export interface NumberChoice { kind: 'metric' | 'scorecard'; id: string; name: string; followed: boolean }
+export interface Numbers { tiles: NumberTile[]; suggestions: MetricTile[]; choices: NumberChoice[] }
+
+const numbersKey = (projectId: string | undefined) => ['numbers:get', projectId] as const;
+
+export function useNumbers(projectId: string | undefined) {
+  return useQuery({
+    queryKey: numbersKey(projectId),
+    enabled: !!projectId,
+    queryFn: async (): Promise<Numbers> => {
+      const o = obj(await rpc('numbers:get', { projectId: projectId! }));
+      if (o.ok === false) throw new Error(typeof o.error === 'string' ? o.error : 'Your numbers could not be loaded.');
+      return { tiles: list(o.tiles), suggestions: list(o.suggestions), choices: list(o.choices) };
+    },
+  });
+}
+
+/** Follow or unfollow one, for the caller; the tiles are read again. A refusal (the limit) throws its reason. */
+export function useFollowNumber(projectId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: { kind: 'metric' | 'scorecard'; id: string; on: boolean }) => {
+      const r = obj(await rpc('numbers:follow', { projectId: projectId!, ...v }));
+      if (r.ok === false) throw new Error(typeof r.error === 'string' ? r.error : 'That could not be saved. Try again.');
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: numbersKey(projectId) }),
+  });
+}
