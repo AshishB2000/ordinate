@@ -112,7 +112,7 @@ function actionLineRe(): RegExp { return new RegExp(ACTION_LINE_SRC, 'gm'); }
  * the bug. This is app-written, so it is safe to show under any model, and it
  * says the one thing a blank turn should say — what to type next.
  */
-export const EMPTY_ANSWER = 'Ask me about your data — e.g. \'revenue by region\'.';
+export const EMPTY_ANSWER = 'Ask me about your data, for example \'revenue by region\'.';
 
 // The four preset NAMES, spelled out here and imported only as a TYPE.
 //

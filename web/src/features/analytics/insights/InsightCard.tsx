@@ -110,7 +110,7 @@ function Spark({ projectId, ins }: { projectId: string; ins: Insight & { chart: 
   }
   // Silent on failure: a card without its sparkline is still a card with a number on it.
   if (q.isError) return null;
-  return <SparkSvg type={ins.chart.type || 'line'} data={q.data.data} label={`${ins.title} — trend`} />;
+  return <SparkSvg type={ins.chart.type || 'line'} data={q.data.data} label={`${ins.title} (trend)`} />;
 }
 
 export interface CardAction {

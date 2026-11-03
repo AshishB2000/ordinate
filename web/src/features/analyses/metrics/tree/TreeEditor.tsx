@@ -19,9 +19,9 @@ import s from './TreeEditor.module.css';
 
 type Kind = Relation | 'split';
 const KINDS: { value: Kind; label: string; hint: string }[] = [
-  { value: 'product', label: 'Product', hint: 'A × B — Revenue = Orders × Avg order value' },
-  { value: 'sum', label: 'Sum', hint: 'A + B − C — Profit = Revenue − Cost' },
-  { value: 'ratio', label: 'Ratio', hint: 'A ÷ B — Margin % = Profit ÷ Revenue' },
+  { value: 'product', label: 'Product', hint: 'A × B, as in Revenue = Orders × Avg order value' },
+  { value: 'sum', label: 'Sum', hint: 'A + B − C, as in Profit = Revenue − Cost' },
+  { value: 'ratio', label: 'Ratio', hint: 'A ÷ B, as in Margin % = Profit ÷ Revenue' },
   { value: 'split', label: 'Split by a column', hint: 'Each segment’s share of the change' },
 ];
 const LIMITS: Record<Relation, [number, number]> = { sum: [2, 8], product: [2, 4], ratio: [2, 2] };
@@ -114,7 +114,7 @@ function BreakdownForm({
                 <button
                   type="button"
                   className={s.sign}
-                  aria-label={p.negative ? `Part ${i + 1} is subtracted — add it instead` : `Part ${i + 1} is added — subtract it instead`}
+                  aria-label={p.negative ? `Part ${i + 1} is subtracted. Add it instead` : `Part ${i + 1} is added. Subtract it instead`}
                   aria-pressed={!!p.negative}
                   onClick={() => setParts(parts.map((q, j) => (j === i ? { ...q, negative: !q.negative } : q)))}
                 >
@@ -294,7 +294,7 @@ export function TreeEditor({
       onOpenChange={onOpenChange}
       size="lg"
       title={`Break down ${metricName}`}
-      description="Each part is a saved metric on the same dataset. Ordinate weighs how much each part moved the total — the figures are always the app’s."
+      description="Each part is a saved metric on the same dataset. Ordinate weighs how much each part moved the total, and the figures are always the app’s."
       footer={
         <>
           {error && (

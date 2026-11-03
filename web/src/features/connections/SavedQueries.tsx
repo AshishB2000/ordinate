@@ -100,7 +100,7 @@ export function SavedQueries({
         onOpenChange={(o) => !o && onDialog(null)}
         title={title}
         size="sm"
-        description={dialog?.kind === 'delete' ? `“${dialog.q.name}” is removed. Datasets built from it keep refreshing — they carry the SQL, not the query.` : undefined}
+        description={dialog?.kind === 'delete' ? `“${dialog.q.name}” is removed. Datasets built from it keep refreshing: they carry the SQL, not the query.` : undefined}
         footer={
           <>
             <DialogClose asChild>

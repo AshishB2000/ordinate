@@ -69,7 +69,7 @@ export const CHART_STRINGS = {
   'renderResult.treemap': 'Treemap',
   'renderResult.waterfall': 'Waterfall',
   'renderResult.word_cloud': 'Word cloud',
-  'wordCloudRender.no_words_to_draw_every_value': 'No words to draw — every value is empty or zero',
+  'wordCloudRender.no_words_to_draw_every_value': 'No words to draw: every value is empty or zero',
   'wordCloudRender.not_fit': '{p0}{n, plural, one { smaller word did} other { smaller words did}} not fit',
   'wordCloudRender.word_cloud': 'Word cloud: {p0}{p1, select, true {, …} other {}}',
   'wordCloudRender.word_cloud_no_words_to_draw': 'Word cloud: no words to draw',

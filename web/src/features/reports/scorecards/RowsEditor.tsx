@@ -115,7 +115,7 @@ export function RowsEditor({ projectId, sc, guard, conflict, onClose, onSaved }:
         {metrics.isPending ? (
           <SkeletonRows rows={4} label="Loading metrics" />
         ) : !rows.length ? (
-          <p className={s.edEmpty}>No metrics yet — add the numbers this scorecard should track.</p>
+          <p className={s.edEmpty}>No metrics yet. Add the numbers this scorecard should track.</p>
         ) : (
           <div className={s.edScroll}>
           <table className={s.edTable}>

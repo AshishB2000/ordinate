@@ -56,7 +56,7 @@ export function LockPicker({ columns, locks, onChange, max = 8 }: {
       {partial.map((l) => (
         <p className={`${s.lockNote} ${s.lockWarn}`} key={l.column} role="note">
           <Icon name="alert" size={12} />
-          <span>Some tiles read a dataset without “{l.column}”. They show “Not available in this embedded view” — never their unfiltered figures.</span>
+          <span>Some tiles read a dataset without “{l.column}”. They show “Not available in this embedded view”, never their unfiltered figures.</span>
         </p>
       ))}
       <div>

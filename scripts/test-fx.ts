@@ -84,8 +84,8 @@ const miss = fx.missingOf(conv);
 ok('missing: four rows had no rate', miss.missing === 4, JSON.stringify(miss));
 ok('missing: their pairs, sorted', JSON.stringify(miss.pairs) === JSON.stringify(['?→USD', 'EUR→USD', 'SEK→USD']), JSON.stringify(miss.pairs));
 ok('missing: excluded from the sum, never counted as 1', computeMetric(conv.columns, conv.rows, { column: 'amount', aggregation: 'sum' }) === 367.5);
-ok('missing: the warning names the pairs and the rows', fx.fxWarning({ target: 'USD', ...miss, sample: false }) === '4 rows had no EUR→USD, SEK→USD rate or no currency code — excluded');
-ok('missing: one row reads singular', fx.fxWarning({ target: 'USD', missing: 1, pairs: ['EUR→USD'], sample: false }) === '1 row had no EUR→USD rate — excluded');
+ok('missing: the warning names the pairs and the rows', fx.fxWarning({ target: 'USD', ...miss, sample: false }) === '4 rows excluded: no EUR→USD, SEK→USD rate or no currency code');
+ok('missing: one row reads singular', fx.fxWarning({ target: 'USD', missing: 1, pairs: ['EUR→USD'], sample: false }) === '1 row excluded: no EUR→USD rate');
 ok('missing: none → no warning', fx.fxWarning({ target: 'USD', missing: 0, pairs: [], sample: true }) === '');
 ok('missing: the source rows are not mutated', rows[1][0] === 100 && rows[1].length === 4);
 
@@ -124,7 +124,7 @@ ok('settings: bad target, bad source, bad ids are dropped', s.target === '' && s
   && JSON.stringify(Object.keys(s.columns['00000000-0000-4000-8000-000000000001'])) === '["a"]'
   && JSON.stringify(s.dashboards) === '{"00000000-0000-4000-8000-000000000002":"GBP"}', JSON.stringify(s));
 ok('merge: two operands\' notes add up', JSON.stringify(fx.mergeFx({ target: 'USD', missing: 2, pairs: ['SEK→USD'], sample: false }, { target: 'USD', missing: 1, pairs: ['EUR→USD', 'SEK→USD'], sample: true }))
-  === JSON.stringify({ target: 'USD', missing: 3, pairs: ['EUR→USD', 'SEK→USD'], sample: true, warning: '3 rows had no EUR→USD, SEK→USD rate — excluded' }));
+  === JSON.stringify({ target: 'USD', missing: 3, pairs: ['EUR→USD', 'SEK→USD'], sample: true, warning: '3 rows excluded: no EUR→USD, SEK→USD rate' }));
 
 // ── The bundled sample ───────────────────────────────────────────────────────
 const sample = sampleRates();

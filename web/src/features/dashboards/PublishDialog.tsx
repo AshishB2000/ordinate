@@ -158,7 +158,7 @@ export function PublishDialog({
       size="lg"
       onOpenChange={(o) => !o && onClose()}
       title={site ? 'Publish again' : 'Publish'}
-      description="A read-only page the server keeps at its own link. It shows the figures as they are when you publish — publish again to update them."
+      description="A read-only page the server keeps at its own link. It shows the figures as they are when you publish. Publish again to update them."
       footer={
         <>
           <DialogClose asChild>
@@ -193,7 +193,7 @@ export function PublishDialog({
                 {
                   value: 'link',
                   label: 'Anyone with the link',
-                  hint: publicLinks ? 'No sign-in. Only what you publish is on the page.' : 'Your organisation has not turned public links on — an admin can, in Admin → Settings.',
+                  hint: publicLinks ? 'No sign-in. Only what you publish is on the page.' : 'Your organisation has not turned public links on. An admin can, in Admin → Settings.',
                   disabled: !publicLinks,
                 },
               ]}

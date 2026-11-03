@@ -207,7 +207,7 @@ function Empty({ projectId, onNew }: { projectId: string; onNew: (o: { datasetId
           No visuals yet
         </h2>
         <p className={s.emptyP}>
-          A visual is one saved chart — build it once, then drop it into any dashboard, or export it on its own. Every number is computed by the
+          A visual is one saved chart: build it once, then drop it into any dashboard, or export it on its own. Every number is computed by the
           app.
         </p>
         <div className={s.emptyActions}>
@@ -245,7 +245,7 @@ function Empty({ projectId, onNew }: { projectId: string; onNew: (o: { datasetId
             {sets.length === 0 ? (
               <div className={s.noData}>
                 <h4 className={s.noDataH}>No data yet</h4>
-                <p className={s.noDataP}>Import a CSV, paste a table, or connect a source — then build your first visual.</p>
+                <p className={s.noDataP}>Import a CSV, paste a table, or connect a source, then build your first visual.</p>
                 <Button variant="primary" onClick={() => void navigate('/data')}>
                   Import data
                 </Button>

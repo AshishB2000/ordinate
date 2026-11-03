@@ -116,7 +116,7 @@ export function RuleEditor({ projectId, datasetId, header, summaries, existing, 
         : p.error
           ? { cls: s.failText, text: `Cannot run: ${p.error}` }
           : p.passed
-            ? { cls: s.good, text: kind === 'row_count' ? 'Passes now.' : 'Passes now — no rows fail.' }
+            ? { cls: s.good, text: kind === 'row_count' ? 'Passes now.' : 'Passes now: no rows fail.' }
             : { cls: s.failText, text: kind === 'row_count' ? 'Would fail now.' : `Would fail now: ${rowsText(p.failing)}.` };
 
   const save = useWrite('quality:save', ['quality:list', 'dataset:list'], {

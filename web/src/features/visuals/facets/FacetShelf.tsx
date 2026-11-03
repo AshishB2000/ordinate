@@ -63,7 +63,7 @@ export function FacetShelf({ cols, facet, onChange }: { cols: readonly Column[];
           </Button>
         )}
       </div>
-      {!on && <p className={s.empty}>Split this chart into a grid of panels — one per value of a field, all drawn the same way.</p>}
+      {!on && <p className={s.empty}>Split this chart into a grid of panels, one per value of a field, all drawn the same way.</p>}
       <div className={s.dims}>
         {side('rows', 'Rows', 'Facet rows')}
         {side('cols', 'Columns', 'Facet columns')}

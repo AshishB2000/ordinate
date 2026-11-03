@@ -33,7 +33,7 @@ export function SizeSwitch() {
             className={on ? `${s.sizeBtn} ${s.sizeOn}` : s.sizeBtn}
             aria-pressed={on}
             aria-label={`${SIZE_LABEL[size]} layout${state}`}
-            title={`${SIZE_LABEL[size]} — ${WHAT[size]}${size === 'desktop' ? '' : ed2 ? ' (edited)' : ' (derived)'}${on && !ed.pinned ? " · picked for this pane's width" : ''}`}
+            title={`${SIZE_LABEL[size]}: ${WHAT[size]}${size === 'desktop' ? '' : ed2 ? ' (edited)' : ' (derived)'}${on && !ed.pinned ? " · picked for this pane's width" : ''}`}
             onClick={() => ed.setPinned(size)}
           >
             <Icon name={ICON[size]} />
@@ -70,7 +70,7 @@ export function SizeNote() {
             <strong>
               {SIZE_LABEL[size]} preview · {FRAME_WIDTH[size]}px.
             </strong>{' '}
-            Drag a card by its header to reorder it and its bottom edge to change its height — or use its ⋯ menu, the arrow keys and shift+arrows — or hide it on {name}. Desktop is unchanged.
+            Drag a card by its header to reorder it and its bottom edge to change its height (or use its ⋯ menu, the arrow keys and shift+arrows), or hide it on {name}. Desktop is unchanged.
           </>
         ) : (
           <>

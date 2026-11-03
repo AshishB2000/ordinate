@@ -190,7 +190,7 @@ export interface AiOutcome {
   message?: string;
   detail?: string;
 }
-export const aiWhy = (r: AiOutcome): string => r.error || [r.message, r.detail].filter(Boolean).join(' — ') || 'The change did not go through.';
+export const aiWhy = (r: AiOutcome): string => r.error || [r.message, r.detail].filter(Boolean).join(' ') || 'The change did not go through.';
 
 export const useAiAdmin = () => useQuery({ queryKey: ['ai:admin'], queryFn: async () => (await rpc('ai:admin')) as AiAdmin });
 

@@ -65,7 +65,7 @@ function SheetPicker({ at, busy, onSheet, onUse }: { at: Sheets; busy: boolean; 
       <div className={s.sheetBar}>
         <Select label="Sheet" value={at.sheet} options={(at.preview.sheetNames ?? []).map((n) => ({ value: n, label: n }))} onValueChange={onSheet} disabled={busy} />
         <p className={s.sheetNote}>
-          {at.preview.rowCount > rows.length ? `${size(at.preview)} — showing the first ${formatNumber(rows.length)}` : size(at.preview)}
+          {at.preview.rowCount > rows.length ? `${size(at.preview)}, showing the first ${formatNumber(rows.length)}` : size(at.preview)}
         </p>
         <Button variant="primary" onClick={onUse} disabled={busy}>
           Use this sheet
@@ -122,7 +122,7 @@ export function FileSource({ onComposer }: { onComposer: (start: ComposerStart) 
       <DropZone
         icon="upload"
         title="Drop a file here"
-        hint="CSV, TSV, JSON, Excel (.xlsx) or Parquet — up to a million rows. It is read on the server, and nothing is saved until you press Save."
+        hint="CSV, TSV, JSON, Excel (.xlsx) or Parquet, up to a million rows. It is read on the server, and nothing is saved until you press Save."
         accept={ACCEPT}
         choose="Choose a file"
         onFile={(f) => void take(f)}
@@ -142,7 +142,7 @@ export function PasteSource({ onComposer }: { onComposer: (start: ComposerStart)
     try {
       const r = await parsePaste(text);
       if (!r.ok) return setError(r.error);
-      if (r.preview.columns.length === 0) return setError('There is no table in that text — paste rows with a header line.');
+      if (r.preview.columns.length === 0) return setError('There is no table in that text. Paste rows with a header line.');
       onComposer(startFrom('Pasted data', 'paste', r.preview));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The pasted text could not be parsed.');
@@ -154,8 +154,8 @@ export function PasteSource({ onComposer }: { onComposer: (start: ComposerStart)
     <div className={s.paneStack}>
       <Textarea
         label="Paste a table"
-        hint={tooBig ? undefined : 'CSV, TSV or JSON — copy cells from a spreadsheet and paste them here. The first line names the columns.'}
-        error={tooBig ? 'Too much to paste — save it as a .csv or .tsv file and upload it instead.' : error}
+        hint={tooBig ? undefined : 'CSV, TSV or JSON: copy cells from a spreadsheet and paste them here. The first line names the columns.'}
+        error={tooBig ? 'Too much to paste. Save it as a .csv or .tsv file and upload it instead.' : error}
         rows={14}
         value={text}
         onChange={(e) => setText(e.target.value)}

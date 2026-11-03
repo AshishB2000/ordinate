@@ -264,7 +264,7 @@ if (adminUrl) {
     await row.getByRole('button', { name: 'Refresh Regions now' }).click();
     await page.getByText('Refreshed “Regions”.').waitFor();
     // Fresh on ask (L3.1) beside the schedule: disabled without incremental refresh, saying why.
-    const freshPicker = row.getByRole('combobox', { name: 'Fresh on ask for Regions — needs incremental refresh' });
+    const freshPicker = row.getByRole('combobox', { name: 'Fresh on ask for Regions (needs incremental refresh)' });
     assert.equal(await freshPicker.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
     await row.getByText('needs incremental refresh', { exact: true }).waitFor();
     // …and the Incremental refresh panel that turns it on (web/e2e/data.e2e.ts walks it).
@@ -309,7 +309,7 @@ if (adminUrl) {
     await rail.getByRole('button', { name: 'Replace Password' }).click();
     await rail.getByLabel('New password').fill(CANARY2);
     await rail.getByRole('button', { name: 'Test & replace' }).click();
-    await page.getByText('Password replaced — the connection tested OK with it.').waitFor();
+    await page.getByText('Password replaced. The connection tested OK with it.').waitFor();
     await rail.getByRole('button', { name: 'Test', exact: true }).click();
     await rail.getByText('OK', { exact: true }).waitFor();
 
@@ -381,7 +381,7 @@ if (adminUrl) {
 
     // The dataset page: a Live badge, the notice in place of rows; Quality says why it is off (L2.6).
     await row.getByRole('link', { name: 'Orders live' }).click();
-    await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+    await page.getByRole('heading', { name: 'Live: the rows stay in the warehouse' }).waitFor();
     await page.getByText('Live · cached up to 5 min').waitFor();
     await page.getByRole('tab', { name: 'Quality' }).click();
     await page.getByRole('heading', { name: 'Quality checks are off for Live datasets' }).waitFor();
@@ -403,7 +403,7 @@ if (adminUrl) {
     await dialog.screenshot({ path: `${SCREENS}connections-live-switch-dialog-light.png` });
     await dialog.getByRole('button', { name: 'Delete the copy and go Live' }).click();
     await page.getByText('“Orders live” is Live.').waitFor();
-    await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+    await page.getByRole('heading', { name: 'Live: the rows stay in the warehouse' }).waitFor();
     const source = (await (await post(s, 'dataset:source', { projectId, id: datasetId })).json()) as Record<string, unknown>;
     assert.equal(source.live, true);
     assert.deepEqual(Object.keys(source).sort(), ['kind', 'label', 'live', 'maxCacheAgeSec', 'refreshable'], 'flags and a label — no SQL, no host');
@@ -459,7 +459,7 @@ if (adminUrl) {
 
     // The Live dataset's own page.
     await row.getByRole('link', { name: 'Orders on the replica' }).click();
-    await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+    await page.getByRole('heading', { name: 'Live: the rows stay in the warehouse' }).waitFor();
     const datasetId = new URL(page.url()).pathname.split('/').pop()!;
     const source = (await (await post(s, 'dataset:source', { projectId, id: datasetId })).json()) as Record<string, unknown>;
     assert.equal(source.live, true);

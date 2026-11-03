@@ -122,7 +122,7 @@ async function main(): Promise<void> {
       a.pca.variance[0] >= a.pca.variance[1] && a.pca.variance[0] + a.pca.variance[1] <= 1 + 1e-12, JSON.stringify(a.pca.variance));
 
     const tiny = await model.runFit(three.columns, ['revenue', 'discount'], model.jsSegmentIo(three.columns, three.rows.slice(0, 5)));
-    ok('fewer than 10 complete rows is an error, not a guess', !!tiny && 'error' in tiny && /at least 10/.test(tiny.error), JSON.stringify(tiny));
+    ok('fewer than 10 complete rows is an error, not a guess', !!tiny && 'error' in tiny && /At least 10/.test(tiny.error), JSON.stringify(tiny));
     const flat = table(Array.from({ length: 20 }, () => [1, 1]));
     const same = await model.runFit(flat.columns, ['revenue', 'discount'], model.jsSegmentIo(flat.columns, flat.rows));
     ok('all rows identical → an error, not a model', !!same && 'error' in same, JSON.stringify(same));

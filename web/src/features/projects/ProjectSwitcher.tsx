@@ -150,7 +150,7 @@ export function ProjectSwitcher() {
       switchTo(r.project.id);
       const c = r.counts ?? {};
       toast(
-        `Imported “${r.project.name}” — ${plural(c.datasets ?? 0, 'dataset')}, ${plural(c.visuals ?? 0, 'visual')}, ${plural(c.dashboards ?? 0, 'dashboard')}.`,
+        `Imported “${r.project.name}”: ${plural(c.datasets ?? 0, 'dataset')}, ${plural(c.visuals ?? 0, 'visual')}, ${plural(c.dashboards ?? 0, 'dashboard')}.`,
         { kind: 'success' },
       );
     } catch (err) {

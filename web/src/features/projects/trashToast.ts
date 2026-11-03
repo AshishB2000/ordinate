@@ -14,7 +14,7 @@ export function restoredLine(restored: readonly Restored[]): string {
   const [main, ...rest] = restored;
   if (!main) return 'Restored';
   let line = `Restored “${main.name || 'Untitled'}”`;
-  if (main.type === 'visual' && rest[0]?.type === 'dataset') line += ` — and its dataset “${rest[0].name}”, which was in Trash too`;
+  if (main.type === 'visual' && rest[0]?.type === 'dataset') line += ` and its dataset “${rest[0].name}”, which was in Trash too`;
   else if (main.type === 'dataset' && rest.length) line += ` and ${plural(rest.length, 'visual')} deleted with it`;
   return line;
 }

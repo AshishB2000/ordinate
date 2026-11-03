@@ -73,7 +73,7 @@ export function TermsForm({ draft, set, ctx }: FormProps) {
       <TextColumn draft={draft} set={set} ctx={ctx} />
       <PickSelect label="Language (stop words)" value={str(draft.lang) || 'en'} options={TX_LANGS} onChange={(lang) => set({ lang })} />
       <PickSelect label="Terms" value={str(draft.range) || '1-1'} options={TX_RANGES} onChange={(range) => set({ range })} />
-      <NameSelect label="Group by (optional)" value={str(draft.by)} names={ctx.columns.map((c) => c.name)} blank="(none — across all rows)" onChange={(by) => set({ by })} />
+      <NameSelect label="Group by (optional)" value={str(draft.by)} names={ctx.columns.map((c) => c.name)} blank="(none, across all rows)" onChange={(by) => set({ by })} />
       {str(draft.by) && (
         <PickSelect
           label="Rank terms by"
@@ -89,7 +89,7 @@ export function TermsForm({ draft, set, ctx }: FormProps) {
       <Checkbox label="Keep numbers as terms" checked={!!draft.keepNumbers} onCheckedChange={(keepNumbers) => set({ keepNumbers })} />
       <Checkbox label="Add each term’s average sentiment" checked={!!draft.sentiment} onCheckedChange={(sentiment) => set({ sentiment })} />
       <Hint>
-        The table becomes one row per term — term, words, count (and tfidf per group). Stop words are removed; contractions stay whole (“don’t”).
+        The table becomes one row per term: term, words, count (and tfidf per group). Stop words are removed; contractions stay whole (“don’t”).
         TF-IDF treats each group as one document: a term every group uses scores 0.
       </Hint>
       <Preview p={p} empty={textColumns(ctx).length ? null : 'This dataset has no text column to count.'}>
@@ -161,7 +161,7 @@ export function KeywordForm({ draft, set, ctx }: FormProps) {
               <IconButton
                 icon="arrow-up"
                 size="sm"
-                label="Move rule up — earlier rules win"
+                label="Move rule up (earlier rules win)"
                 disabled={i === 0}
                 onClick={() => set({ rules: rules.map((x, k) => (k === i - 1 ? rules[i] : k === i ? rules[i - 1] : x)) })}
               />
@@ -176,7 +176,7 @@ export function KeywordForm({ draft, set, ctx }: FormProps) {
         </Button>
       </div>
       <TextField label="Otherwise" value={draft.otherwise} placeholder="(leave empty)" onChange={(otherwise) => set({ otherwise })} />
-      <Hint>The FIRST rule that matches decides the category, so order matters — move a rule up to give it priority. Matching ignores case unless the box is ticked.</Hint>
+      <Hint>The FIRST rule that matches decides the category, so order matters: move a rule up to give it priority. Matching ignores case unless the box is ticked.</Hint>
       {hasRule || !textColumns(ctx).length ? (
         <Preview p={p} empty={textColumns(ctx).length ? null : 'This dataset has no text column to tag.'}>
           {(r) => <CategoryPreview res={r} />}

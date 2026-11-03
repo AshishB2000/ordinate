@@ -120,7 +120,7 @@ export function lookupPlan(columns: ParsedColumn[], s: LookupJoinStep, ctx?: Pip
   const prefix = typeof s.prefix === 'string' ? s.prefix : '';
   const names = bring.map((j) => prefix + other.columns[j].name);
   const clash = names.find((nm, k) => colIndex(columns, nm) >= 0 || names.indexOf(nm) !== k);
-  if (clash !== undefined) return [...warnings, `Lookup skipped: column "${clash}" already exists — set a prefix`];
+  if (clash !== undefined) return [...warnings, `Lookup skipped: column "${clash}" already exists (set a prefix)`];
   return { other, li, ri, bring, names, warnings };
 }
 

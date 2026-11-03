@@ -108,7 +108,7 @@ describe('the dock header', () => {
     const calls = serve({ ...base(ADMIN, true), 'copilot:threads': { body: { ok: true, threads: THREADS } } });
     renderApp('/');
     const dock = await openDock();
-    fireEvent.keyDown(within(dock).getByRole('button', { name: /^Conversations —/ }), { key: 'Enter' });
+    fireEvent.keyDown(within(dock).getByRole('button', { name: /^Conversations:/ }), { key: 'Enter' });
     await screen.findByRole('menuitem', { name: /Revenue by region/ });
     expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Revenue by region1 turn', 'Churn last month2 turns', 'Upload data3 turns', 'Top customers4 turns', 'Margin outliers5 turns', 'All conversations']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'All conversations' }));
@@ -170,7 +170,7 @@ describe('the dock header', () => {
     renderApp('/');
     const dock = await openDock();
     // The stored name, not the first question's words.
-    await within(dock).findByRole('button', { name: 'Conversations — Revenue by region' });
+    await within(dock).findByRole('button', { name: 'Conversations: Revenue by region' });
     fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename conversation' }));
     const dialog = await screen.findByRole('dialog', { name: 'Rename conversation' });
@@ -180,7 +180,7 @@ describe('the dock header', () => {
     fireEvent.change(field, { target: { value: '  Board prep ' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Rename' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:renameThread')?.payload).toEqual({ projectId: PID, threadId: THREADS[0].id, title: 'Board prep' }));
-    await within(dock).findByRole('button', { name: 'Conversations — Board prep' });
+    await within(dock).findByRole('button', { name: 'Conversations: Board prep' });
     expect(screen.queryByRole('dialog', { name: 'Rename conversation' })).toBeNull();
   });
 
@@ -444,7 +444,7 @@ describe('the dock', () => {
     expect(calls.some((c) => c.channel === 'analysis:draft')).toBe(false);
     fireEvent.click(within(brief).getByRole('radio', { name: /^Report/ }));
     fireEvent.click(within(brief).getByRole('button', { name: 'Draft dashboard' }));
-    const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
+    const review = await screen.findByRole('dialog', { name: 'Assistant draft: review before creating' });
     expect(await within(review).findByText('Population overview')).toBeTruthy();
     expect(within(review).getByRole('button', { name: 'Create draft' })).toBeTruthy();
     expect(calls.find((c) => c.channel === 'analysis:draft')?.payload).toEqual({ projectId: PID, intent: 'population by state', kind: 'report', clarify: true });

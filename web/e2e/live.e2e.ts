@@ -50,7 +50,7 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   await page.goto(`/data/${P}/${D}`);
   await ready(page);
   await page.getByRole('heading', { level: 1, name: 'Orders (live)' }).waitFor();
-  await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+  await page.getByRole('heading', { name: 'Live: the rows stay in the warehouse' }).waitFor();
   await page.getByText('Live · cached up to 5 min').waitFor();
   assert.equal(await page.getByRole('switch', { name: 'Live' }).isChecked(), true, 'the Live switch is on');
   assert.match((await page.getByRole('combobox', { name: 'Cache age of Orders (live)' }).textContent()) ?? '', /5 min \(default\)/);
@@ -78,7 +78,7 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   const source = (await (await post(s, 'dataset:source', { projectId: P, id: D })).json()) as Record<string, unknown>;
   assert.equal(source.maxCacheAgeSec, 3600, 'the server keeps the new cache age');
   await page.getByRole('button', { name: 'Refresh now' }).click();
-  await page.getByText('Cache reset — the next figure asks the warehouse.').waitFor();
+  await page.getByText('Cache reset. The next figure asks the warehouse.').waitFor();
 
   // ── 4. Off for Live, with no request to the channel it guards ─────────────
   await page.getByRole('tab', { name: 'Quality' }).click();
@@ -107,7 +107,7 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   await page.getByRole('button', { name: 'Make a copy' }).click();
   await page.waitForURL((u) => u.pathname.startsWith(`/data/${P}/`) && !u.pathname.endsWith(D) && u.search === '?tab=quality', { timeout: 30_000 });
   await page.getByRole('heading', { level: 1, name: 'Orders (live) (copy)' }).waitFor();
-  await page.getByText(/Copied into “Orders \(live\) \(copy\)” — 240 rows/).waitFor();
+  await page.getByText(/Copied into “Orders \(live\) \(copy\)”: 240 rows/).waitFor();
   await page.getByText('240 rows', { exact: false }).first().waitFor();
   await page.getByRole('tab', { name: 'Data' }).click();
   await ready(page);

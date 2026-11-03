@@ -257,7 +257,7 @@ async function main(): Promise<void> {
       find(rAt, 'dominant_category', 'c')?.facts.share === 0.6);
     ok('dominant: the detail is the shipped wording with app-computed counts',
       find(rAt, 'dominant_category', 'c')?.detail
-        === 'Column "c" is dominated by "A" — 6 of 10 non-empty cells (60%).');
+        === 'Column "c" is dominated by "A": 6 of 10 non-empty cells (60%).');
     ok('dominant: severity is info', find(rAt, 'dominant_category', 'c')?.severity === 'info');
 
     const below = makeFixture('dominant: just below 0.6',

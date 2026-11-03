@@ -40,7 +40,7 @@ function Kmeans({ projectId, datasetId, info }: { projectId: string; datasetId: 
     const features = info.features.map((f) => f.name).filter((f) => picked.has(f));
     const res = await call<Extract<FitReply, { ok: true }>>(rpc('segments:fit', { projectId, datasetId, features }), 'Could not find segments.');
     setBusy(false);
-    if (!res.ok) setErr(res.cancelled ? { text: 'Stopped — nothing was changed.', soft: true } : { text: res.error });
+    if (!res.ok) setErr(res.cancelled ? { text: 'Stopped. Nothing was changed.', soft: true } : { text: res.error });
     else setResult(res);
   }
 
@@ -81,7 +81,7 @@ function Kmeans({ projectId, datasetId, info }: { projectId: string; datasetId: 
         {!info.features.length ? (
           <p className={s.note}>This dataset has no number columns, so there is nothing to compare. RFM works on a date and an amount.</p>
         ) : info.otherColumns ? (
-          <p className={s.note}>{`${info.otherColumns} text or date column${info.otherColumns === 1 ? ' is' : 's are'} not listed — segments compare numbers.`}</p>
+          <p className={s.note}>{`${info.otherColumns} text or date column${info.otherColumns === 1 ? ' is' : 's are'} not listed, because segments compare numbers.`}</p>
         ) : null}
         <div className={s.runRow}>
           <Button variant="primary" icon="play" disabled={n < 2 || busy} onClick={() => void run()}>

@@ -199,7 +199,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     setChecks(r.checks);
     setLines(r.lines);
     setEditing(false);
-    setNote(r.checks.some((c) => c && !c.ok) ? '' : 'Checked — every step passes.');
+    setNote(r.checks.some((c) => c && !c.ok) ? '' : 'Checked: every step passes.');
   }
 
   function move(i: number, to: number): void {
@@ -275,7 +275,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     return (
       <>
         {state === 'undone' && u && (
-          <span className={s.hint}>{`Undone — ${plural(u.undone, 'record')} put back${u.failed.length ? `; ${u.failed.length} could not be.` : '.'}`}</span>
+          <span className={s.hint}>{`Undone: ${plural(u.undone, 'record')} put back${u.failed.length ? `; ${u.failed.length} could not be.` : '.'}`}</span>
         )}
         {state !== 'undone' && snap.canUndo && <Button size="sm" onClick={() => void call(() => rpc('plan:undo', { projectId, runId }))}>Undo run</Button>}
         <Button size="sm" variant={state === 'undone' ? 'secondary' : 'primary'} onClick={onDone}>Done</Button>
@@ -295,7 +295,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     const runId = snap.runId;
     setNote(`Asking the Assistant to fix step ${i + 1}…`);
     const sn = await call(() => rpc('plan:fix', { projectId, runId, index: i }));
-    if (sn && sn.ok) setNote(`Step ${i + 1} was rewritten and passed the check — run it when ready.`);
+    if (sn && sn.ok) setNote(`Step ${i + 1} was rewritten and passed the check. Run it when ready.`);
   }
 
   if (checked !== 'ok') return null;
@@ -303,7 +303,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     <div className={s.card} data-testid="plan-card">
       <div className={s.cardHead}>
         <span className={s.badge}>AI</span>
-        <span className={s.label}>{`Plan — ${plural(steps.length, 'step')}`}</span>
+        <span className={s.label}>{`Plan: ${plural(steps.length, 'step')}`}</span>
       </div>
       {action.intent && <div className={s.intent}>{action.intent}</div>}
       {dropped > 0 && <div className={`${s.note} ${s.error}`}>{`${plural(dropped, 'part')} of the Assistant's plan were not steps and were left out.`}</div>}
@@ -337,7 +337,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
         })}
       </ol>
       {invalid > 0 && !editing && (
-        <div className={s.hint}>{`${plural(invalid, 'step')} will fail as written — Edit, or run and use Fix when it stops.`}</div>
+        <div className={s.hint}>{`${plural(invalid, 'step')} will fail as written. Edit, or run and use Fix when it stops.`}</div>
       )}
       {note && <div className={s.hint} role="status">{note}</div>}
       <input

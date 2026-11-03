@@ -108,7 +108,7 @@ describe('a viewer on the dataset page', () => {
     };
     serveRpc(routes('viewer', live));
     renderApp(`/data/${P}/${D}`);
-    expect(await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Live: the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
     expect(screen.getByText(/An editor of this project can make a copy that keeps its rows here/)).toBeTruthy();
     for (const name of ['Make a copy', 'Copy the data instead', 'Refresh now']) expect(screen.queryByRole('button', { name })).toBeNull();
     cleanup();

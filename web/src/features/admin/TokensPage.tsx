@@ -24,7 +24,7 @@ import s from './Admin.module.css';
 function copy(text: string) {
   navigator.clipboard.writeText(text).then(
     () => toast('Copied.', { kind: 'success' }),
-    () => toast('Copy failed — select the text and copy it instead.', { kind: 'error' }),
+    () => toast('Copy failed. Select the text and copy it instead.', { kind: 'error' }),
   );
 }
 

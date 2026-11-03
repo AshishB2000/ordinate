@@ -121,7 +121,7 @@ async function main(argv: string[]): Promise<void> {
   }
   const source = args[0] ? path.resolve(args[0]) : '';
   if (!source || args.length !== 1) throw new Error('usage: npm run import-desktop -- <path-to-userData> [--org <id>]');
-  if (!fs.existsSync(path.join(source, 'projects'))) throw new Error(`${source} has no projects/ folder — point at the desktop app's userData`);
+  if (!fs.existsSync(path.join(source, 'projects'))) throw new Error(`${source} has no projects/ folder; point at the desktop app's userData`);
   const cfg = env();
   enterServerMode(cfg.dataDir);
   const pool = cfg.databaseUrl ? createPool(cfg.databaseUrl, () => undefined) : null;

@@ -127,7 +127,7 @@ function ChannelDialog({ channel, canStore, canEmail, onClose }: { channel?: Cha
               autoComplete="off"
               spellCheck={false}
               maxLength={2048}
-              placeholder={channel ? 'Stored — paste a new URL to replace it' : how?.looks}
+              placeholder={channel ? 'Stored. Paste a new URL to replace it' : how?.looks}
               hint="https only. It is encrypted on the server and never shown again."
               error={error || undefined}
               onChange={(e) => setUrl(e.target.value)}
@@ -329,7 +329,7 @@ export function ChannelsTab() {
       <div className={s.bar}>
         <p className={s.lead}>
           {canEmail ? 'Slack and Teams channels and email lists' : 'Slack and Teams channels'} members can send dashboards and alerts to. What is sent: KPI figures and chart rows as
-          text, shaped by each project’s share policy — never a file, never a connection’s credentials.
+          text, shaped by each project’s share policy. Never a file, never a connection’s credentials.
         </p>
         <div className={s.barEnd}>
           <Button variant="primary" icon="plus" disabled={!canStore && !canEmail} onClick={() => setEditing({})}>
@@ -343,7 +343,7 @@ export function ChannelsTab() {
           <div>
             <h3 className={s.noticeTitle}>This server cannot keep webhook URLs yet</h3>
             <p className={s.lead}>
-              A webhook URL is a credential, so it is only ever stored encrypted — and that needs a database and a master key. Set DATABASE_URL and ORDINATE_MASTER_KEY on the
+              A webhook URL is a credential, so it is only ever stored encrypted, and that needs a database and a master key. Set DATABASE_URL and ORDINATE_MASTER_KEY on the
               server, restart it, and channels can be added here.{' '}
               {canEmail ? 'Email lists work without them.' : 'Email lists need the database too, and a mail relay (SMTP_HOST).'}
             </p>

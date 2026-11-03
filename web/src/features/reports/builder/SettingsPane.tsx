@@ -64,7 +64,7 @@ export function SettingsPane({ report, views, onChange }: { report: Report; view
         </fieldset>
         {pptx ? (
           <p className={s.note}>
-            <Icon name="info" size={12} /> Slides are always 16:9 — paper size does not apply.
+            <Icon name="info" size={12} /> Slides are always 16:9, so paper size does not apply.
           </p>
         ) : (
           <fieldset className={s.group}>
@@ -110,7 +110,7 @@ export function SettingsPane({ report, views, onChange }: { report: Report; view
           <Switch label="Discussion" hint="The dashboard’s comment threads, printed last." checked={report.discussion} onCheckedChange={(discussion) => onChange({ discussion })} />
         </fieldset>
         <p className={s.note}>
-          <Icon name="calendar" size={12} /> Scheduled delivery is not available in the browser yet — generate the file when you need it.
+          <Icon name="calendar" size={12} /> Scheduled delivery is not available in the browser yet. Generate the file when you need it.
         </p>
       </div>
     </aside>

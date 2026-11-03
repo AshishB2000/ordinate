@@ -91,7 +91,7 @@ describe('Admin → Channels', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Edit #sales-weekly' });
     const url = within(dialog).getByLabelText('Webhook URL') as HTMLInputElement;
     expect(url.value).toBe('');
-    expect(url.placeholder).toBe('Stored — paste a new URL to replace it');
+    expect(url.placeholder).toBe('Stored. Paste a new URL to replace it');
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Sales' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'channel:save')?.payload).toEqual({ id: SLACK.id, name: 'Sales', kind: 'slack' }));
@@ -159,7 +159,7 @@ describe('Admin → Channels', () => {
       expect(add.disabled).toBe(true);
       const alice = await within(dialog).findByRole('checkbox', { name: /alice@acme\.test/ });
       expect(within(dialog).queryByRole('checkbox', { name: /gone@acme\.test/ })).toBeNull();
-      expect(within(dialog).getByText('Invited — receives once they have signed in')).toBeTruthy();
+      expect(within(dialog).getByText('Invited: receives once they have signed in')).toBeTruthy();
       fireEvent.click(alice);
       fireEvent.click(within(dialog).getByRole('checkbox', { name: /East/ }));
       expect(within(dialog).getByText(/Names 1 person · 1 team\./)).toBeTruthy();
@@ -178,7 +178,7 @@ describe('Admin → Channels', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Edit Sales leads' });
       const gone = await within(dialog).findByRole('checkbox', { name: /gone@acme\.test/ });
       expect((gone as HTMLInputElement).checked).toBe(true);
-      expect(within(dialog).getByText('Turned off — gets nothing; untick to remove')).toBeTruthy();
+      expect(within(dialog).getByText('Turned off: gets nothing; untick to remove')).toBeTruthy();
       expect(within(dialog).getByText(/Names 2 people\./)).toBeTruthy(); // 'gone-id' matches no account
       fireEvent.click(gone);
       expect(within(dialog).queryByRole('checkbox', { name: /gone@acme\.test/ })).toBeNull(); // unticked, it is no longer offered

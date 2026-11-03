@@ -192,7 +192,7 @@ export function register() {
       if (kind !== 'kpis' && kind !== 'twoup' && kind !== 'spotlight' && kind !== 'lead') return { ok: false, error: 'Unknown starter layout.' };
       const ctx = await plan.loadPlanContext(projectId, typeof datasetId === 'string' ? datasetId : undefined);
       const ds = ctx.datasets[0];
-      if (!ds) return { ok: false, error: 'Import a dataset first — a starter layout builds from one.' };
+      if (!ds) return { ok: false, error: 'Import a dataset first. A starter layout builds from one.' };
       const records = await planBuild.buildPlanRecords(projectId, buildStarterPlan(kind, ds));
       const sheet = records.sheets[0];
       return {

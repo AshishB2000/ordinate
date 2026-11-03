@@ -114,14 +114,14 @@ export function StatsControls({
   if (tab === 'correlation') {
     body = (
       <>
-        <Section label="Columns" hint="Numeric columns — pick 2 to 12.">
+        <Section label="Columns" hint="Numeric columns: pick 2 to 12.">
           {num.length ? (
             <Checks name="Columns to correlate" items={num.map((c) => ({ value: c, label: c }))} chosen={spec.columns} onChange={(v) => onChange({ columns: v.slice(0, 12) })} />
           ) : (
             noNumbers
           )}
         </Section>
-        <Section label="Method" hint="Spearman ranks the values first — robust to outliers and curved trends.">
+        <Section label="Method" hint="Spearman ranks the values first, so it is robust to outliers and curved trends.">
           <Seg label="Correlation method" options={[['pearson', 'Pearson'], ['spearman', 'Spearman']]} value={spec.method ?? 'pearson'} onChange={(v) => onChange({ method: v as 'pearson' | 'spearman' })} />
         </Section>
       </>

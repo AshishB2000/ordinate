@@ -68,7 +68,7 @@ const md = (text: string): SlackText => ({ type: 'mrkdwn', text });
 
 function slackSection(s: MessageSection): { text: string; dropped: number } {
   const head = `*${slackEscape(s.title)}*` + (s.caption ? `\n${slackEscape(s.caption)}` : '') + (s.note ? `\n_${slackEscape(s.note)}_` : '');
-  const line = (r: string[]): string => `• ${slackEscape(r[0])}${r.length > 1 ? ' — ' + r.slice(1).map(slackEscape).join(' · ') : ''}`;
+  const line = (r: string[]): string => `• ${slackEscape(r[0])}${r.length > 1 ? ': ' + r.slice(1).map(slackEscape).join(' · ') : ''}`;
   const cols = s.columns.filter(Boolean).map(slackEscape).join(' · ');
   let rows = s.rows;
   for (;;) {

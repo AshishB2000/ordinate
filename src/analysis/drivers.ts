@@ -313,7 +313,7 @@ export function driversCaption(c: CaptionInput): string {
   const pct = c.top.share === null ? null : Math.round(c.top.share);
   if (c.offsetting || pct === null || Math.abs(pct) > MAX_SHARE) {
     out += ` as members offset each other; ${c.top.label} moved the most` + (c.top.deltaText ? `, ${c.top.deltaText}` : '');
-  } else if (pct > 100) out += `; ${c.top.label} explains ${pct}% — other members offset part of it`;
+  } else if (pct > 100) out += `; ${c.top.label} explains ${pct}% (other members offset part of it)`;
   else out += `; ${c.top.label} explains ${pct}%`;
   if (c.lead) out += `, led by ${c.lead.label} at ${c.lead.deltaText}`;
   return out + '.';

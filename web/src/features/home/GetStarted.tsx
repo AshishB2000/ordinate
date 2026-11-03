@@ -67,7 +67,7 @@ export function GetStartedPill() {
     <button
       type="button"
       className={s.pill}
-      aria-label={`Get started: ${progress} done — show the checklist`}
+      aria-label={`Get started: ${progress} done. Show the checklist`}
       onClick={() => set.mutate({ collapsed: false })}
     >
       <Icon name="circle-check" size={12} />
@@ -102,7 +102,7 @@ export function GetStarted() {
           <h2 id="gs-title" className={s.title}>
             Get started
           </h2>
-          <p className={s.sub}>Four things to try — with the sample data, or with your own.</p>
+          <p className={s.sub}>Four things to try, with the sample data or your own.</p>
         </div>
         <div className={s.meter}>
           <span className={s.count}>{progress}</span>

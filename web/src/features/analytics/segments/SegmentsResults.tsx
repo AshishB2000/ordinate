@@ -77,7 +77,7 @@ function SaveColumn({ projectId, datasetId, datasetName, fit }: { projectId: str
     <Card
       id="sg-h-save"
       title="Save as a column"
-      hint={`Adds a Prepare step that stores this model — each column’s mean and spread and the ${fit.k} centroids — and assigns every row on each refresh. The column is text, so it works as a dimension in any chart, filter or pivot.`}
+      hint={`Adds a Prepare step that stores this model (each column’s mean and spread and the ${fit.k} centroids) and assigns every row on each refresh. The column is text, so it works as a dimension in any chart, filter or pivot.`}
     >
       <div className={s.saveRow}>
         <div className={s.colName}>
@@ -96,7 +96,7 @@ function SaveColumn({ projectId, datasetId, datasetName, fit }: { projectId: str
       {done && (
         <p className={s.saved} role="status">
           <Icon name="circle-check" />
-          <span>{`Saved — “${done.column}” is now a column of ${datasetName}, step ${done.steps} in Prepare.`}</span>
+          <span>{`Saved. “${done.column}” is now a column of ${datasetName}, step ${done.steps} in Prepare.`}</span>
           <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${datasetId}`}>
             Open the dataset
           </Link>
@@ -110,14 +110,14 @@ export function KmeansResults({ projectId, datasetId, datasetName, reply }: { pr
   if (!reply) {
     return (
       <EmptyState icon="layers" title="Group rows that are alike" heading={2}>
-        Pick the columns that describe a row — spend, discount, units — and Find segments groups the rows that are alike, names each group after what sets it apart and plots them. Save the grouping as a column and it becomes an ordinary dimension for charts, filters and pivots.
+        Pick the columns that describe a row (spend, discount, units) and Find segments groups the rows that are alike, names each group after what sets it apart and plots them. Save the grouping as a column and it becomes an ordinary dimension for charts, filters and pivots.
       </EmptyState>
     );
   }
   const r = reply.result;
   const best = r.silhouettes.find((x) => x.k === r.k);
   const rows = r.names.map((name, i) => ({ name, n: r.sizes[i], share: reply.shares.sizes[i], i }));
-  if (r.empty) rows.push({ name: 'No segment — a value is missing', n: r.empty, share: reply.shares.empty, i: -1 });
+  if (r.empty) rows.push({ name: 'No segment (a value is missing)', n: r.empty, share: reply.shares.empty, i: -1 });
   const top = Math.max(0.0001, ...r.silhouettes.map((x) => x.score));
   const [v1, v2] = r.pca.variance;
   return (

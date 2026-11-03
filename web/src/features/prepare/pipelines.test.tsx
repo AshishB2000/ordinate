@@ -150,7 +150,7 @@ describe('Pipelines', () => {
     expect(within(panel).queryByText('Behind schedule')).toBeNull();
     fireEvent.click(within(panel).getByRole('combobox', { name: 'Refresh this dataset' }));
     const greyed = (await screen.findAllByRole('option')).filter((o) => o.getAttribute('aria-disabled') === 'true').map((o) => o.textContent);
-    expect(greyed).toEqual(['Refresh every 5 minutes — needs incremental refresh', 'Refresh every 15 minutes — needs incremental refresh']);
+    expect(greyed).toEqual(['Refresh every 5 minutes (needs incremental refresh)', 'Refresh every 15 minutes (needs incremental refresh)']);
   });
 
   it('an empty pipeline shows the six stages waiting, and where to start', async () => {

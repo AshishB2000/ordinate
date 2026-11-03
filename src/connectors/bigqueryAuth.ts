@@ -131,7 +131,7 @@ export function readTokenReply(status: number, body: string): { ok: true; token:
   }
   const code = typeof json.error === 'string' ? json.error.slice(0, 80) : '';
   const why = typeof json.error_description === 'string' ? json.error_description.slice(0, 200) : '';
-  return bad(`Google refused the service-account key${code ? `: ${code}` : ` (HTTP ${status})`}${why ? ` — ${why}` : ''}`);
+  return bad(`Google refused the service-account key${code ? `: ${code}` : ` (HTTP ${status})`}${why ? `. ${why}` : ''}`);
 }
 
 // ── the cache ───────────────────────────────────────────────────────────────

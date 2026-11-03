@@ -27,7 +27,7 @@ const QUESTIONS = {
     { ask: 'Compared how?', options: ['By region', 'Over time', 'Both'] },
   ],
 };
-const REVIEW = 'Assistant draft — review before creating';
+const REVIEW = 'Assistant draft: review before creating';
 
 /** A reply body, a promise of one (to hold a call open), or `{ status, body }` for a failed request. */
 type Canned = unknown;
@@ -122,7 +122,7 @@ describe('the draft flow', () => {
     expect(within(within(ask).getByRole('radiogroup', { name: 'Compared how?' })).getAllByRole('radio')).toHaveLength(3);
     expect(within(ask).getAllByRole('radio').some((r) => (r as HTMLInputElement).checked)).toBe(false);
     expect((within(ask).getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(ask).getByRole('button', { name: 'Skip — just build it' })).toBeTruthy();
+    expect(within(ask).getByRole('button', { name: 'Skip, just build it' })).toBeTruthy();
 
     // One answered, one left: only the answered one is sent.
     fireEvent.click(within(measure).getByRole('radio', { name: 'Revenue' }));
@@ -146,7 +146,7 @@ describe('the draft flow', () => {
     const { drafts } = serve([QUESTIONS, PLAN]);
     mount(<DraftFlow projectId={PID} onClose={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Draft dashboard' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip — just build it' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip, just build it' }));
     await screen.findByRole('dialog', { name: REVIEW });
     expect(drafts()).toEqual([
       { projectId: PID, kind: 'explore', clarify: true },
@@ -189,7 +189,7 @@ describe('the draft flow', () => {
     expect((await screen.findByRole('status')).getAttribute('aria-label')).toBe('The Assistant is planning your dashboard');
     expect(screen.queryByRole('button', { name: 'Create draft' })).toBeNull();
     first(QUESTIONS);
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip — just build it' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip, just build it' }));
     expect((await screen.findByRole('status')).getAttribute('aria-label')).toBe('The Assistant is drafting your dashboard');
     second(PLAN);
     await screen.findByRole('button', { name: 'Create draft' });
@@ -228,7 +228,7 @@ describe('the draft flow', () => {
     const { drafts } = serve([QUESTIONS, QUESTIONS]);
     mount(<DraftFlow projectId={PID} onClose={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Draft dashboard' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Skip — just build it' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip, just build it' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(drafts()).toHaveLength(2);

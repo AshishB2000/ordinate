@@ -137,7 +137,7 @@ e2e('pivot: shelves, a month roll-up, a column dimension, a server-sorted header
   let picker = await openPicker();
   await picker.getByRole('button', { name: /^Margin %/ }).waitFor();
   await picker.getByRole('button', { name: /^Margin %/ }).click();
-  await page.getByText('"Margin %" is a formula metric. Every pivot cell is a column rolled up within a group — use it on a KPI card instead.').waitFor();
+  await page.getByText('"Margin %" is a formula metric. Every pivot cell is a column rolled up within a group, so use it on a KPI card instead.').waitFor();
   picker = await openPicker();
   await picker.getByText('$', { exact: true }).first().waitFor(); // a row's format badge; its figure is metric:values' display
   await idle(page);
@@ -239,7 +239,7 @@ e2e('events: empty state, new event, CSV import, a holiday calendar, delete', as
   await dlg.getByLabel('Starts').fill('2024-11-29');
   await dlg.getByLabel('Ends').fill('2024-12-02');
   await dlg.getByRole('button', { name: 'Add event' }).click();
-  await page.getByText('Added "Black Friday" — every date axis it falls on now marks it.').waitFor();
+  await page.getByText('Added "Black Friday". Every date axis it falls on now marks it.').waitFor();
   const row = page.getByRole('row', { name: /Black Friday/ });
   await row.getByText('4 days · drawn as a band').waitFor(); // the server's count
   await row.getByText(/Nov 29/).waitFor(); // the server's "when"
@@ -325,7 +325,7 @@ e2e('sql: a bound parameter, explain, a refused file read, save as dataset, view
   // The server's gate: a filesystem read is refused, nothing comes back.
   await editor.fill("select * from read_csv('/etc/passwd')");
   await page.getByRole('button', { name: 'Run' }).click();
-  await page.getByText("Only this project's datasets can be queried here — not files, other databases or the app's own tables.").waitFor();
+  await page.getByText("Only this project's datasets can be queried here, not files, other databases or the app's own tables.").waitFor();
 
   // Save as dataset: the whole result read on the server, the ordinary composer, the sql origin.
   await editor.fill(sql);

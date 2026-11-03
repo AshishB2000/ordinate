@@ -82,7 +82,7 @@ describe('Admin → Embedding', () => {
     const allow = screen.getByRole('button', { name: 'Allow' }) as HTMLButtonElement;
     for (const bad of ['http://portal.example.com', 'https://portal.example.com/app', 'https://*.example.com', 'portal.example.com']) {
       fireEvent.change(field, { target: { value: bad } });
-      expect(screen.getByText(/no path, no wildcard/)).toBeTruthy();
+      expect(screen.getByText(/no path and no wildcard/)).toBeTruthy();
       expect(allow.disabled).toBe(true);
     }
     fireEvent.change(field, { target: { value: 'https://Portal.Example.com/' } });

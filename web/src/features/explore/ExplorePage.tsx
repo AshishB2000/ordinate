@@ -100,7 +100,7 @@ function NoData({ projectId }: { projectId: string }) {
         <h2 id="explore-blank" className={s.blankH}>
           No data to explore yet
         </h2>
-        <p className={s.blankP}>Explore answers questions about this project’s datasets with charts and tables the app computes — no AI model needed.</p>
+        <p className={s.blankP}>Explore answers questions about this project’s datasets with charts and tables the app computes. No AI model needed.</p>
         <ul className={s.blankAsk} aria-label="Questions you will be able to ask">
           {['Total revenue by region', 'Orders by month', 'Average discount by segment'].map((q) => (
             <li key={q}>{q}</li>

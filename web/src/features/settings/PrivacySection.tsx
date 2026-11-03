@@ -20,12 +20,12 @@ import s from './Settings.module.css';
 
 const PATHS: Array<{ key: SharePath; title: string; desc: string }> = [
   { key: 'export', title: 'Exports', desc: 'Dashboard and visual exports, exported data, Copy data.' },
-  { key: 'report', title: 'Reports and stories', desc: 'Generated reports — scheduled ones too — and stories.' },
+  { key: 'report', title: 'Reports and stories', desc: 'Generated reports (scheduled ones too) and stories.' },
   { key: 'publish', title: 'Publish', desc: 'Dashboards published as a site or a link.' },
   { key: 'bundle', title: 'Project bundles', desc: '.ordinate files: a dataset with sensitive columns travels masked or without them.' },
 ];
 const ACTIONS: Array<{ value: ShareAction; label: string; hint: string }> = [
-  { value: 'mask', label: 'Mask', hint: 'Replace each value with this project’s token for it — joins still line up.' },
+  { value: 'mask', label: 'Mask', hint: 'Replace each value with this project’s token for it, so joins still line up.' },
   { value: 'drop', label: 'Drop', hint: 'Leave the column out; hide a chart built on it.' },
   { value: 'include', label: 'Include', hint: 'Keep the values, and ask before every export that carries them.' },
 ];
@@ -92,7 +92,7 @@ export function PrivacySection() {
       {pendingN > 0 && (
         <Group
           title={`To review · ${pendingN}`}
-          desc={`Columns that look personal or financial. Nothing is marked until someone says so${editor ? '' : ' — an editor of this project'}.`}
+          desc={`Columns that look personal or financial. Nothing is marked until someone says so${editor ? '' : ' (an editor of this project)'}.`}
         >
           {pending.flatMap((x) =>
             x.pending.map((p) => (

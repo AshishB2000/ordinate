@@ -57,7 +57,7 @@ async function logIfOver(run: PlanRun): Promise<string | undefined> {
   return undefined;
 }
 
-const GONE = { ok: false, error: 'That plan run has ended — ask again to start a new one.' };
+const GONE = { ok: false, error: 'That plan run has ended. Ask again to start a new one.' };
 const BUSY = 'This plan is still working on a step. Try again in a moment.';
 const ids = (projectId: unknown, runId: unknown): [string, string] | null =>
   UUID_RE.test(String(projectId || '')) && UUID_RE.test(String(runId || '')) ? [String(projectId), String(runId)] : null;

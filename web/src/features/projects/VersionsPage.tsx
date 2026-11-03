@@ -96,7 +96,7 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
     ['versions:list', 'versions:get', 'trash:list'],
     (r) => {
       if (!r.ok) return void toast(r.error ?? 'Could not restore that version.', { kind: 'error' });
-      toast(r.unchanged ? 'That version is already the current one.' : `Restored the version from ${picked ? fmtWhen(picked.savedAt) : 'then'} — the one before it is still here.`, {
+      toast(r.unchanged ? 'That version is already the current one.' : `Restored the version from ${picked ? fmtWhen(picked.savedAt) : 'then'}. The one before it is still here.`, {
         kind: 'success',
       });
       setSel(null);
@@ -190,7 +190,7 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
   }
 
   return (
-    <Page back={RECORD[type](projectId, id, title)} title={`${title} — version history`} sub={`${WORD[type]} history. Every save is a version; restoring one saves it again as the newest, so nothing is lost.`}>
+    <Page back={RECORD[type](projectId, id, title)} title={`${title}: version history`} sub={`${WORD[type]} history. Every save is a version; restoring one saves it again as the newest, so nothing is lost.`}>
       <div className={s.layout}>
         <section className={s.side} aria-label="Saved versions">
           <div className={s.sideHead}>

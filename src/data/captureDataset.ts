@@ -115,7 +115,7 @@ export function alignForAppend(
 
   const existingNames = new Set(existingColumns.map((c) => norm(c.name)));
   for (const c of draftColumns) {
-    if (!existingNames.has(norm(c.name))) warnings.push(`Column "${c.name}" is not in the target dataset — dropped`);
+    if (!existingNames.has(norm(c.name))) warnings.push(`Column "${c.name}" is not in the target dataset, so it was dropped`);
   }
 
   const matchIdx = existingColumns.map((ec) => {
@@ -123,7 +123,7 @@ export function alignForAppend(
     return di === undefined ? -1 : di;
   });
   matchIdx.forEach((di, i) => {
-    if (di === -1) warnings.push(`No incoming column matched "${existingColumns[i].name}" — filled empty`);
+    if (di === -1) warnings.push(`No incoming column matched "${existingColumns[i].name}", so it was filled empty`);
   });
 
   const rows: (string | number | null)[][] = draftBody.map((r) =>

@@ -158,7 +158,7 @@
     const an = analyses.find((x) => x.id === target.analysisId);
     if (!an) return ['The target dashboard no longer exists.'];
     if (target.page && !(an.pages || []).some((p: any) => p.id === target.page)) {
-      return ['The target page no longer exists — it will open on its first page.'];
+      return ['The target page no longer exists, so it will open on its first page.'];
     }
     return [];
   }

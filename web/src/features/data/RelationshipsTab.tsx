@@ -243,8 +243,8 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
           }
         >
           {canEdit
-            ? 'A relationship needs two datasets — say orders and the regions they ship to. Import a second one to start a data model.'
-            : 'A relationship needs two datasets — say orders and the regions they ship to. An editor of this project can import a second one. You have view-only access.'}
+            ? 'A relationship needs two datasets, say orders and the regions they ship to. Import a second one to start a data model.'
+            : 'A relationship needs two datasets, say orders and the regions they ship to. An editor of this project can import a second one. You have view-only access.'}
         </EmptyState>
       ) : (
         <Canvas datasets={datasets} rels={list} selected={selected} onSelect={select} />

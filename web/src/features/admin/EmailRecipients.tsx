@@ -44,7 +44,7 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
         <section className={c.pickerGroup} aria-label="Teams">
           <h4 className={c.pickerHead}>Teams</h4>
           {groups.length === 0 ? (
-            <p className={c.pickerEmpty}>{needle ? 'No team matches.' : 'No teams yet — make them in Admin → Teams.'}</p>
+            <p className={c.pickerEmpty}>{needle ? 'No team matches.' : 'No teams yet. Make them in Admin → Teams.'}</p>
           ) : (
             groups.map((t) => (
               <Checkbox key={t.id} label={t.name} hint={plural(t.members.length, 'member', 'members')} checked={value.teamIds.includes(t.id)} onCheckedChange={(on) => toggle('teamIds', t.id, on)} />
@@ -60,7 +60,7 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
               <Checkbox
                 key={u.id}
                 label={u.email}
-                hint={u.disabled ? 'Turned off — gets nothing; untick to remove' : u.pending ? 'Invited — receives once they have signed in' : undefined}
+                hint={u.disabled ? 'Turned off: gets nothing; untick to remove' : u.pending ? 'Invited: receives once they have signed in' : undefined}
                 checked={value.userIds.includes(u.id)}
                 onCheckedChange={(on) => toggle('userIds', u.id, on)}
               />

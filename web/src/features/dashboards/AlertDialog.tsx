@@ -113,7 +113,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
     setTest({ busy: true, text: 'Checking…' });
     try {
       const r = (await rpc('alerts:test', { projectId, rule: draft() as AlertRule & { [k: string]: unknown } })) as { ok: boolean; fire: boolean; message: string };
-      setTest(r.ok ? { fire: r.fire, text: `${r.fire ? 'Would fire' : 'Would not fire'}${r.message ? ` — ${r.message}` : ''}` } : { error: true, text: 'That rule is not complete.' });
+      setTest(r.ok ? { fire: r.fire, text: `${r.fire ? 'Would fire' : 'Would not fire'}${r.message ? `: ${r.message}` : ''}` } : { error: true, text: 'That rule is not complete.' });
     } catch (err) {
       setTest({ error: true, text: reason(err, 'Could not test the rule.') });
     }
@@ -186,7 +186,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
           {!dates.length && <p className={s.note}>This dataset has no date column, so only the previous refresh can be compared.</p>}
         </TabPanel>
         <TabPanel value="anomaly">
-          <p className={s.note}>Fires when a refresh brings values the app’s anomaly detector flags as unusual for this column — no number to choose.</p>
+          <p className={s.note}>Fires when a refresh brings values the app’s anomaly detector flags as unusual for this column. No number to choose.</p>
         </TabPanel>
       </Tabs>
       <Input

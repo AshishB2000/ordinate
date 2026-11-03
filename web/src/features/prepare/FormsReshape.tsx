@@ -15,7 +15,7 @@ export function SplitForm({ draft, set, ctx }: FormProps) {
       <PickSelect label="Split by" value={mode} options={[['delimiter', 'delimiter'], ['position', 'position'], ['regex', 'regex']]} onChange={(m) => set({ mode: m })} />
       {mode === 'delimiter' && <TextField label="Delimiter" value={draft.delimiter} onChange={(delimiter) => set({ delimiter })} />}
       {mode === 'position' && (
-        <TextField label="Cut at positions" value={draft.positionsText} placeholder="e.g. 3, 5 — character positions to cut at" onChange={(positionsText) => set({ positionsText })} />
+        <TextField label="Cut at positions" value={draft.positionsText} placeholder="Character positions to cut at, e.g. 3, 5" onChange={(positionsText) => set({ positionsText })} />
       )}
       {mode === 'regex' && (
         <>

@@ -298,7 +298,7 @@ function Completeness({ header, stats }: { header: DatasetColumns; stats: Stats 
                     '—'
                   )}
                 </td>
-                <td className={s.num} title={typeof sum?.distinct === 'number' ? undefined : 'Counted on demand — open this column’s profile'}>
+                <td className={s.num} title={typeof sum?.distinct === 'number' ? undefined : 'Counted on demand: open this column’s profile'}>
                   {figure(sum?.distinct)}
                 </td>
                 <td className={s.meta}>

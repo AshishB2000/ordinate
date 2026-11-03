@@ -64,7 +64,7 @@ export function SpatialJoinForm({ draft, set, ctx }: FormProps) {
         <TextField label="New column" value={draft.as} onChange={(as) => set({ as })} />
         <TextField label="Points in no region get" value={draft.unmatched} placeholder="(empty)" onChange={(unmatched) => set({ unmatched })} />
       </div>
-      {nums.length < 2 && <p className={s.hint}>This step needs two number columns — a latitude and a longitude.</p>}
+      {nums.length < 2 && <p className={s.hint}>This step needs two number columns: a latitude and a longitude.</p>}
       {step && (
         <PreviewBox busy={p.busy} warn={!!st && st.matched < st.total}>
           {st ? (

@@ -65,7 +65,7 @@ export function timeoutMs(): number {
 export function failed(t: LiveTarget, kind: CallKind, detail = ''): LiveCallError {
   const e = new LiveCallError(kind, detail);
   // The server log's line: dataset id, step kind, the connector's (redacted) words.
-  if (kind !== 'cancelled') logger.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${kind}${detail ? ` — ${detail}` : ''}`);
+  if (kind !== 'cancelled') logger.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${kind}${detail ? `: ${detail}` : ''}`);
   return e;
 }
 

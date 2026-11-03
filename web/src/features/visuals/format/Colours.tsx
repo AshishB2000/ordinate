@@ -79,7 +79,7 @@ function ColourRow({ label, token, palette, onPick }: { label: string; token: st
           <Button
             size="sm"
             variant="ghost"
-            title="Forget this colour — it is dealt again when next drawn"
+            title="Forget this colour. It is dealt again when next drawn"
             onClick={() => {
               setOpen(false);
               onPick(null);
@@ -107,12 +107,12 @@ function ProjectList({ scope, column, values, palette }: { scope: ColourScope; c
           <ColourRow key={String(v)} label={String(v ?? '')} token={tokenOf(v)} palette={palette} onPick={(t) => void scope.edit.set(column, String(v ?? ''), t).catch(fail)} />
         ))}
       </div>
-      {values.length > shown.length && <Note>{values.length - shown.length} more — every value is in the column’s profile, under Data.</Note>}
+      {values.length > shown.length && <Note>{values.length - shown.length} more. Every value is in the column’s profile, under Data.</Note>}
       <div className={s.actions}>
         <Button size="sm" title="Deal the palette out again, in this chart’s order" onClick={() => void scope.edit.palette(column, values.map((v) => (typeof v === 'number' ? v : v == null ? null : String(v)))).catch(fail)}>
           Apply palette
         </Button>
-        <Button size="sm" title="Forget these colours — each value is dealt one when next drawn" onClick={() => void scope.edit.reset(column).catch(fail)}>
+        <Button size="sm" title="Forget these colours. Each value is dealt one when next drawn" onClick={() => void scope.edit.reset(column).catch(fail)}>
           Reset
         </Button>
       </div>

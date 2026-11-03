@@ -138,7 +138,7 @@ async function composePreview({ projectId, base, joins, page, offset: at, limit 
     // Say so when the number on screen is computed from a sample. A row count
     // that silently means "of the first 50k" is worse than no row count.
     if (r.parts.some((p) => p.truncated)) {
-      warnings.push(`Preview — computed from the first ${PREVIEW_PARENT_ROWS.toLocaleString()} rows per table`);
+      warnings.push(`Preview: computed from the first ${PREVIEW_PARENT_ROWS.toLocaleString()} rows per table`);
     }
     const windowed = Number.isInteger(at) && Number.isInteger(limit);
     const offset = windowed ? Math.max(0, at) : Math.max(0, Number(page) || 0) * PREVIEW_PAGE_ROWS;

@@ -211,7 +211,7 @@ export function ComposerChain({ projectId, base, links, previewCols, sheet, open
         onDrop={drop}
       >
         {!base ? (
-          <p className={cs.canvasEmpty}>Pick a table on the left to start — then add more to join or append them.</p>
+          <p className={cs.canvasEmpty}>Pick a table on the left to start, then add more to join or append them.</p>
         ) : (
           <>
             <Chip t={base} />
@@ -227,7 +227,7 @@ export function ComposerChain({ projectId, base, links, previewCols, sheet, open
                       <button
                         type="button"
                         className={missingKey(link) ? `${cs.badge} ${cs.badgeWarn}` : cs.badge}
-                        aria-label={`${MODES.find((m) => m.id === link.mode)?.label} join with ${link.table.label}${missingKey(link) ? ' — no key chosen' : ''}`}
+                        aria-label={`${MODES.find((m) => m.id === link.mode)?.label} join with ${link.table.label}${missingKey(link) ? ' (no key chosen)' : ''}`}
                       >
                         <ModeIcon mode={link.mode} />
                       </button>
@@ -252,7 +252,7 @@ export function ComposerChain({ projectId, base, links, previewCols, sheet, open
         title={removing >= 0 ? `Remove “${links[removing]?.table.label}”?` : 'Remove'}
         description={
           after > 0
-            ? `The ${after === 1 ? 'table joined after it goes' : `${after} tables joined after it go`} too — each join is computed over the ones before it.`
+            ? `The ${after === 1 ? 'table joined after it goes' : `${after} tables joined after it go`} too. Each join is computed over the ones before it.`
             : 'Its columns leave the preview.'
         }
         size="sm"

@@ -32,7 +32,7 @@ export async function loadSpatialRefs(projectId: string, steps: unknown): Promis
     const key = spatialKey(s);
     if (key in out) continue;
     if (s.boundary !== 'custom') {
-      out[key] = bundledIndex(s.boundary) || 'the bundled boundaries are missing — reinstall the app';
+      out[key] = bundledIndex(s.boundary) || 'the bundled boundaries are missing. Reinstall the app';
       continue;
     }
     const fc = s.boundaryId ? await getBoundary(projectId, s.boundaryId).catch(() => null) : null;

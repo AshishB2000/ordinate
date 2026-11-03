@@ -75,7 +75,7 @@ export function runStats(spec: StatsSpec, v: StatsVectors): StatsResult {
   if (spec.kind === 'groups') return runGroups(spec, v);
   const column = spec.columns[0];
   const vals = (v.number.get(column) || []).filter((x): x is number => x !== null && Number.isFinite(x));
-  if (vals.length < 3) return fail('distribution', `Need at least 3 values — “${column}” has ${vals.length}.`);
+  if (vals.length < 3) return fail('distribution', `Need at least 3 values, but “${column}” has ${vals.length}.`);
   const mo = moments(vals) as Moments;
   const test = normality(vals);
   return {
@@ -118,7 +118,7 @@ function runGroups(spec: StatsSpec, v: StatsVectors): StatsResult {
     }
     const groups: GroupStat[] = levels.map((l, i) => ({ label: l, ...describe(vecs[i]) }));
     const small = groups.filter((g) => g.n < 2).map((g) => g.label);
-    if (small.length) return fail('groups', `Each group needs at least 2 values — ${small.map((s) => `“${s}”`).join(', ')} ${small.length === 1 ? 'has' : 'have'} fewer.`);
+    if (small.length) return fail('groups', `Each group needs at least 2 values: ${small.map((s) => `“${s}”`).join(', ')} ${small.length === 1 ? 'has' : 'have'} fewer.`);
     const base = { ok: true as const, kind: 'groups' as const, rows: v.rows, group, outcome, available, groups, warnings };
     if (levels.length === 2) {
       const w = welch(vecs[0], vecs[1]);
@@ -134,7 +134,7 @@ function runGroups(spec: StatsSpec, v: StatsVectors): StatsResult {
 
   // Categorical outcome: a groups × outcome-levels table of counts.
   const outLevels = [...new Set(cat.filter((c, i): c is string => c !== null && keys[i] !== null && index.has(keys[i] as string)))].sort(byCode);
-  if (outLevels.length > MAX_GROUPS) return fail('groups', `“${outcome}” has ${outLevels.length} values — too many to tabulate (the limit is ${MAX_GROUPS}).`);
+  if (outLevels.length > MAX_GROUPS) return fail('groups', `“${outcome}” has ${outLevels.length} values, too many to tabulate (the limit is ${MAX_GROUPS}).`);
   if (outLevels.length < 2) return fail('groups', `“${outcome}” has only one value in these groups, so there is nothing to compare.`);
   const oi = new Map(outLevels.map((l, i) => [l, i] as const));
   const table = levels.map(() => new Array<number>(outLevels.length).fill(0));

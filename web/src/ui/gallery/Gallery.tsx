@@ -25,7 +25,7 @@ export default function Gallery() {
       <header className={g.head}>
         <div>
           <h1 className={g.title}>UI kit</h1>
-          <p className={g.note}>web/src/ui — development only, not in the production bundle.</p>
+          <p className={g.note}>web/src/ui: development only, not in the production bundle.</p>
         </div>
         <RadioGroup
           label="Theme"

@@ -118,7 +118,7 @@ function alertSink(): AlertSink | null {
 
 function eventMessage(rule: QualityRule, result: RuleResult, datasetName: string): string {
   const sig = `"${q.ruleSignature(rule)}"`;
-  if (result.error) return `Data quality: ${sig} could not run in ${datasetName} — ${result.error}`;
+  if (result.error) return `Data quality: ${sig} could not run in ${datasetName}: ${result.error}`;
   if (rule.kind === 'row_count') return `Data quality: ${sig} failing in ${datasetName}`;
   const n = result.failing;
   return `Data quality: ${sig} failing on ${n.toLocaleString('en-US')} ${n === 1 ? 'row' : 'rows'} in ${datasetName}`;

@@ -42,7 +42,7 @@ function SaveChip() {
   if (save.state === 'error') {
     return (
       <button type="button" className={`${s.saveChip} ${s.saveError}`} onClick={save.retry}>
-        <Icon name="alert" size={12} /> Not saved — retry
+        <Icon name="alert" size={12} /> Not saved. Retry
       </button>
     );
   }

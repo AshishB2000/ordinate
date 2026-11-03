@@ -217,7 +217,7 @@ export async function commitTextStep(projectId: string, datasetId: string, index
   try {
     return await job.done;
   } catch (err: any) { // ponytail: any thrown value, reported by its name/message only
-    if (err && err.name === 'JobCancelled') return { ok: false, cancelled: true, error: 'Cancelled — the step was not added.' };
+    if (err && err.name === 'JobCancelled') return { ok: false, cancelled: true, error: 'Cancelled. The step was not added.' };
     return { ok: false, error: err?.message || 'Could not save the step' };
   }
 }

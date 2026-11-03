@@ -119,7 +119,7 @@ function Captures({ projectId }: { projectId: string }) {
       reader
     ) : (
       <EmptyState icon="camera" title="No captures in this project">
-        A capture is a screenshot of a table — a report, a dashboard, a page — read into rows. An editor of this project can upload one. You have view-only
+        A capture is a screenshot of a table (a report, a dashboard, a page) read into rows. An editor of this project can upload one. You have view-only
         access.
       </EmptyState>
     );

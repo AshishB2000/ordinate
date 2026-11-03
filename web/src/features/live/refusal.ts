@@ -60,7 +60,7 @@ export function isRowRefusal(x: unknown): boolean {
 }
 
 /** When a refusal arrives without a sentence (never expected): what it means, in the catalog's words. */
-export const LIVE_OFF_FALLBACK = 'This is a Live dataset — this isn’t available on Live yet. Make a copy to use it.';
+export const LIVE_OFF_FALLBACK = 'This is a Live dataset, and this isn’t available on Live yet. Make a copy to use it.';
 
 /**
  * The Error a reply's failure becomes: a LiveRefusalError for an "off for Live"

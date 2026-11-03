@@ -266,7 +266,7 @@ describe('Trash', () => {
 
   it('words what a restore brought back', () => {
     expect(restoredLine([{ type: 'visual', id: 'v', name: 'Chart' }, { type: 'dataset', id: 'd', name: 'Orders' }])).toBe(
-      'Restored “Chart” — and its dataset “Orders”, which was in Trash too',
+      'Restored “Chart” and its dataset “Orders”, which was in Trash too',
     );
     expect(restoredLine([{ type: 'metric', id: 'm', name: 'MRR' }])).toBe('Restored “MRR”');
   });
@@ -340,7 +340,7 @@ describe('Version history', () => {
   it('lists saves, previews an older one read-only, and restores it', async () => {
     const calls = serve({ ...base({ [A]: 'editor' }), 'versions:list': { body: V }, 'versions:get': versions, 'versions:restore': { body: { ok: true } } });
     renderApp(path);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Revenue — version history' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Revenue: version history' })).toBeTruthy();
     expect(screen.getByText('The current version')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /First saved version/ }));
     expect(await screen.findByText(/^Viewing version from/)).toBeTruthy();

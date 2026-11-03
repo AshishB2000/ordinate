@@ -266,9 +266,9 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
     planned.specs.forEach((s, i) => {
       const without = planCombos(planned.specs.filter((_, j) => j !== i).map((x) => x.domain), maxCombos).keys.length;
       const cut = perCombo * (combos - without);
-      if (cut > 0) saving.push({ text: `Remove the “${s.domain.label}” control from “${planned.name}” (${s.domain.options.length} options) — saves about ${formatBytes(cut)}`, bytes: cut });
+      if (cut > 0) saving.push({ text: `Remove the “${s.domain.label}” control from “${planned.name}” (${s.domain.options.length} options): saves about ${formatBytes(cut)}`, bytes: cut });
     });
-    saving.push({ text: `Leave out “${planned.name}” — saves about ${formatBytes(bytes)}`, bytes });
+    saving.push({ text: `Leave out “${planned.name}”: saves about ${formatBytes(bytes)}`, bytes });
   }
   for (const id of config.storyIds) {
     const st = await buildStory(config.projectId, id, {}, outgoing);
@@ -360,7 +360,7 @@ export async function buildPages(config: PublishConfig, ctx: PublishProgress, ou
   if (total > maxSiteBytes) {
     const worst = pages.slice().sort((a, b) => Buffer.byteLength(b.html) - Buffer.byteLength(a.html))[0];
     throw new Error(
-      `The site would be ${formatBytes(total)} — over the ${formatBytes(maxSiteBytes)} limit. ` +
+      `The site would be ${formatBytes(total)}, over the ${formatBytes(maxSiteBytes)} limit. ` +
       (worst ? `“${worst.name}” alone is ${formatBytes(Buffer.byteLength(worst.html))}; lower its filter combinations or leave it out.` : ''),
     );
   }

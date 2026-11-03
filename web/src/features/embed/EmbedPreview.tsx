@@ -63,7 +63,7 @@ export function EmbedPreview({ target, host }: { target: PreviewTarget | null; h
                 <Icon name="alert" size={16} /> {error}
               </p>
             ) : (
-              <p>{target ? 'Preview shows the embed exactly as a host page frames it — locks, theme and all.' : 'Pick a published dashboard to preview.'}</p>
+              <p>{target ? 'Preview shows the embed exactly as a host page frames it, with its locks and theme.' : 'Pick a published dashboard to preview.'}</p>
             )}
           </div>
         )}

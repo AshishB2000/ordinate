@@ -318,7 +318,7 @@ function fieldsFor(v: OracleVariant): ConnectorDef['fields'] {
         key: 'walletLocation',
         label: 'Wallet folder',
         type: 'text',
-        help: 'Optional, for a mutual-TLS (wallet) database. Path to the unzipped wallet. Thin mode reads ewallet.pem from it — a wallet containing only cwallet.sso will not work.',
+        help: 'Optional, for a mutual-TLS (wallet) database. Path to the unzipped wallet. Thin mode reads ewallet.pem from it, so a wallet containing only cwallet.sso will not work.',
       },
       {
         key: 'walletPassword',

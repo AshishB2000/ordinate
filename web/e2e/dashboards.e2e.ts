@@ -125,7 +125,7 @@ e2e('viewer: present, style, alert me, the inbox, comments', async ({ page, serv
   const kpi = page.getByRole('group', { name: 'Revenue card' });
   await kpi.getByRole('button', { name: 'Comment on this' }).click();
   const panel = page.getByRole('dialog', { name: 'Comments on this card' });
-  await panel.getByText('No comments yet — start the discussion').waitFor();
+  await panel.getByText('No comments yet. Start the discussion').waitFor();
   await panel.getByLabel('New comment').fill('Check the **North** figure');
   await panel.getByRole('button', { name: 'Post' }).click();
   const thread = panel.getByRole('listitem', { name: 'Comment by dev@local' });
@@ -137,7 +137,7 @@ e2e('viewer: present, style, alert me, the inbox, comments', async ({ page, serv
   await thread.getByRole('button', { name: 'Resolve' }).click();
   await thread.getByText('Resolved', { exact: true }).waitFor();
   await page.keyboard.press('Escape');
-  await kpi.getByRole('button', { name: 'Comments — all resolved' }).waitFor();
+  await kpi.getByRole('button', { name: 'Comments: all resolved' }).waitFor();
   await page.getByRole('button', { name: 'Comments on this dashboard' }).click();
   const all = page.getByRole('dialog', { name: 'Comments on this dashboard' });
   await all.getByText('All caught up').waitFor();

@@ -64,7 +64,7 @@ export function accountOrigin(raw: unknown, privatelink: boolean): SfAccount | C
   if (account.length > 200 || !ACCOUNT_RE.test(account)) {
     return {
       ok: false,
-      error: 'Account must be an account identifier such as myorg-myaccount or xy12345.us-east-2.aws — not a URL.',
+      error: 'Account must be an account identifier such as myorg-myaccount or xy12345.us-east-2.aws, not a URL.',
     };
   }
   const link = privatelink && !account.endsWith('.privatelink') ? '.privatelink' : '';

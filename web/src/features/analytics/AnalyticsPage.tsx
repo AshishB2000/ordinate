@@ -23,7 +23,7 @@ const WORKBENCHES: Array<{ kind: string; icon: IconName; name: string; blurb: st
     kind: 'stats',
     icon: 'activity',
     name: 'Statistics',
-    blurb: 'Correlation, regression, compare groups and distributions — with p-values, intervals and the tests behind them.',
+    blurb: 'Correlation, regression, compare groups and distributions, with p-values, intervals and the tests behind them.',
   },
   {
     kind: 'drivers',
@@ -45,10 +45,10 @@ const WORKBENCHES: Array<{ kind: string; icon: IconName; name: string; blurb: st
  * Snapshots open the dataset page's tab.
  */
 const DATASET_DOORS: Array<{ key: string; icon: IconName; name: string; blurb: string; open: string; to: (p: string, d: string) => string; state?: { chartType: string } }> = [
-  { key: 'pivot', icon: 'table', name: 'Pivot table', blurb: 'Rows, columns and values with subtotals, Top N, “show as” and conditional formatting — every total computed from the data, never folded from the cells.', open: 'New pivot table', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'pivot' } },
-  { key: 'cohort', icon: 'grid', name: 'Cohorts', blurb: 'Group members by the period of their first event and see who came back — retention or cumulative value, as a grid or a curve.', open: 'New cohort grid', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'cohort' } },
+  { key: 'pivot', icon: 'table', name: 'Pivot table', blurb: 'Rows, columns and values with subtotals, Top N, “show as” and conditional formatting. Every total is computed from the data, never folded from the cells.', open: 'New pivot table', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'pivot' } },
+  { key: 'cohort', icon: 'grid', name: 'Cohorts', blurb: 'Group members by the period of their first event and see who came back: retention or cumulative value, as a grid or a curve.', open: 'New cohort grid', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'cohort' } },
   { key: 'event_funnel', icon: 'filter', name: 'Event funnel', blurb: 'Pick the steps from an event column; entities move through them in strict order inside a conversion window, with a breakdown.', open: 'New event funnel', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'event_funnel' } },
-  { key: 'insights', icon: 'zap', name: 'Insights', blurb: 'What the app found on its own: movers, trends, concentration, period changes, outliers — each with the figures behind it.', open: 'Open insights', to: (p, d) => `/data/${p}/${d}?tab=insights` },
+  { key: 'insights', icon: 'zap', name: 'Insights', blurb: 'What the app found on its own: movers, trends, concentration, period changes, outliers, each with the figures behind it.', open: 'Open insights', to: (p, d) => `/data/${p}/${d}?tab=insights` },
   { key: 'snapshots', icon: 'history', name: 'Snapshots', blurb: 'The table as it was before each refresh: compare any version with now, restore one, or view a chart as of that time.', open: 'Open snapshots', to: (p, d) => `/data/${p}/${d}?tab=snapshots` },
 ];
 
@@ -60,7 +60,7 @@ function Hub({ projectId }: { projectId: string }) {
   const id = picked && datasets.some((d) => d.id === picked) ? picked : (datasets[0]?.id ?? null);
   const chosen = datasets.find((d) => d.id === id);
   return (
-    <Page title="Analytics" sub="Every statistic, driver, scenario, segment, pivot and insight is computed by Ordinate from your data — the Assistant only puts them into words.">
+    <Page title="Analytics" sub="Every statistic, driver, scenario, segment, pivot and insight is computed by Ordinate from your data. The Assistant only puts them into words.">
       {list.isPending ? (
         <SkeletonRows rows={3} label="Loading datasets" />
       ) : list.isError ? (
@@ -129,7 +129,7 @@ function Hub({ projectId }: { projectId: string }) {
             <Icon name="sliders" size={20} />
           </span>
           <h2 className={s.hubName}>Scenarios</h2>
-          <p className={s.hubBlurb}>What-if: move a price, a volume or a metric and see every figure that depends on it — side by side with the baseline.</p>
+          <p className={s.hubBlurb}>What-if: move a price, a volume or a metric and see every figure that depends on it, side by side with the baseline.</p>
           <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}`}>
             Open scenarios
           </Link>

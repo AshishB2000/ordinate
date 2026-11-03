@@ -122,7 +122,7 @@ function Row({
       <div className={s.cell}>
         <span className={s.cellLabel}>Schedule</span>
         <span className={s.cellValue}>{sub.scheduleText}</span>
-        <span className={s.cellSub}>{sub.enabled ? (sub.nextRuns[0] ? `Next: ${sub.nextRuns[0].text}` : '') : 'Off — no next run'}</span>
+        <span className={s.cellSub}>{sub.enabled ? (sub.nextRuns[0] ? `Next: ${sub.nextRuns[0].text}` : '') : 'Off: no next run'}</span>
       </div>
       <div className={s.cell}>
         <span className={s.cellLabel}>Channels</span>
@@ -221,7 +221,7 @@ export function SubscriptionList({ projectId }: { projectId: string }) {
           )
         }
       >
-        A subscription posts a dashboard’s figures to a Slack or Teams channel on a schedule — every weekday at 08:00, say — with a link back. The server sends it
+        A subscription posts a dashboard’s figures to a Slack or Teams channel on a schedule (every weekday at 08:00, say), with a link back. The server sends it
         with nobody signed in: each KPI with its change, each chart as its top rows, every number one the app computed.
         {!canEdit && ' An editor of this project can create one. You have view-only access.'}
         {canEdit && q.data.channels.length === 0 &&

@@ -102,7 +102,7 @@ export function record(op: string, outcome: Outcome, detail?: string): void {
   if (warned.has(op)) return;
   warned.add(op);
   logger.warn(
-    `[resident] ${op}: the SQL path was chosen and returned null — falling back to the ` +
+    `[resident] ${op}: the SQL path was chosen and returned null. Falling back to the ` +
       `JS path, which is correct but orders of magnitude slower` +
       (detail ? ` (${detail})` : '') +
       `. Further ${op} failures this session are counted, not logged.`,

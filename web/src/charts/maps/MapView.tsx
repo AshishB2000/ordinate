@@ -138,9 +138,9 @@ export function MapView({ data, chartType, label, projectId, onMarkClick, classN
       let type = chartType;
       if (region && chartType === 'map_choropleth') {
         const why = !shapes
-          ? 'No map boundaries for this level — showing the data instead.'
+          ? 'No map boundaries for this level. Showing the data instead.'
           : choroplethLayer(shapes.features, geo.items, geo.level, { min: 0, max: 1, dark: false, noData: '' }, String).matched.size === 0
-            ? "Couldn't place these regions on the map — showing the data instead."
+            ? "Couldn't place these regions on the map. Showing the data instead."
             : '';
         if (why && geo.items.every(hasCoords)) type = 'map_bubble';
         else if (why) return setStatus({ kind: 'fallback', note: why });

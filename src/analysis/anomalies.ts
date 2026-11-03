@@ -188,7 +188,7 @@ function dominantAnomaly(name: string, cells: Cell[], opts: Required<Omit<Anomal
     kind: 'dominant_category',
     column: name,
     severity: 'info',
-    detail: `Column "${name}" is dominated by "${topValue}" — ${topCount} of ${nonEmpty} non-empty cells (${pct}%).`,
+    detail: `Column "${name}" is dominated by "${topValue}": ${topCount} of ${nonEmpty} non-empty cells (${pct}%).`,
     facts: { value: topValue, count: topCount, share: round(share) },
   };
 }

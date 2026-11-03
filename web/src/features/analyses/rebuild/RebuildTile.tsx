@@ -146,7 +146,7 @@ export function RebuildTile({
   const typed = tile.kind === 'kpi' || tile.kind === 'chart';
   const typeValue = tile.kind === 'kpi' ? 'kpi' : tile.chartType;
   const typeOptions: SelectOption[] = [
-    { value: 'kpi', label: 'KPI — one big number' },
+    { value: 'kpi', label: 'KPI (one big number)' },
     ...CHART_CHOICES.map((id) => ({ value: id, label: VIZ_LABELS[id] })),
     ...(tile.chartType && !CHART_CHOICES.includes(tile.chartType as VizId) ? [{ value: tile.chartType, label: VIZ_LABELS[tile.chartType as VizId] ?? tile.chartType }] : []),
   ];

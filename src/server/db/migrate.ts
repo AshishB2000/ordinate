@@ -107,7 +107,7 @@ export async function migrate(pool: Pool, dir: string = MIGRATIONS_DIR): Promise
     if (late) {
       throw new Error(
         `migration ${late.name} is new but numbered below ${String(highest).padStart(4, '0')}, already applied here; ` +
-          `it would run out of order — renumber it above ${String(highest).padStart(4, '0')}`,
+          `it would run out of order, so renumber it above ${String(highest).padStart(4, '0')}`,
       );
     }
     for (const m of migrations) {

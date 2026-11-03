@@ -15,7 +15,7 @@ export function AsOfPicker({ projectId, datasetIds, value, onChange }: { project
   const labels = whenAll(items.map((it) => it.at));
   const options = [
     { value: '', label: 'Latest' },
-    ...items.map((it, i) => ({ value: it.at, label: labels[i] + (many ? ` — ${it.datasets.join(', ')}` : '') })),
+    ...items.map((it, i) => ({ value: it.at, label: labels[i] + (many ? ` (${it.datasets.join(', ')})` : '') })),
     ...(value && !items.some((it) => it.at === value) ? [{ value, label: when(value) }] : []),
   ];
   return (

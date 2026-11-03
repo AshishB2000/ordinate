@@ -94,7 +94,7 @@ function Grid({ r }: { r: RfmResult }) {
                   <td
                     key={ci}
                     className={[s.gridCell, s.toned, toneClass(r, seg), !n && s.isZero].filter(Boolean).join(' ')}
-                    title={`R ${5 - ri} · FM ${ci + 1} — ${seg}: ${fmtNum(n)} ${n === 1 ? 'customer' : 'customers'}`}
+                    title={`R ${5 - ri} · FM ${ci + 1} (${seg}): ${fmtNum(n)} ${n === 1 ? 'customer' : 'customers'}`}
                   >
                     <span className={s.cellN}>{fmtNum(n)}</span>
                     <span className={s.cellS}>{seg}</span>
@@ -137,7 +137,7 @@ function SaveDataset({ projectId, datasetId, spec, customers }: { projectId: str
     <Card
       id="sg-h-rfm-save"
       title="Save as a dataset"
-      hint={`Writes one row per customer — id, recency, frequency, monetary, the three scores and the segment — as a new dataset of ${fmtNum(customers)} rows, ready for charts, dashboards and joins.`}
+      hint={`Writes one row per customer (id, recency, frequency, monetary, the three scores and the segment) as a new dataset of ${fmtNum(customers)} rows, ready for charts, dashboards and joins.`}
     >
       <div className={s.saveRow}>
         <Button variant="primary" icon="database" loading={busy} disabled={!!saved} onClick={() => void save()}>
@@ -153,7 +153,7 @@ function SaveDataset({ projectId, datasetId, spec, customers }: { projectId: str
       {saved && (
         <p className={s.saved} role="status">
           <Icon name="circle-check" />
-          <span>{`Saved “${saved.name}” — ${fmtNum(saved.rowCount)} customers.`}</span>
+          <span>{`Saved “${saved.name}”: ${fmtNum(saved.rowCount)} customers.`}</span>
           <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${saved.id}`}>
             Open dataset
           </Link>
@@ -177,7 +177,7 @@ export function RfmTab({ projectId, datasetId, info }: { projectId: string; data
     setErr({ text: '' });
     const res = await call<{ ok: true; result: RfmResult }>(rpc('segments:rfm', { projectId, datasetId, spec }), 'Could not score the customers.');
     setBusy(false);
-    if (!res.ok) setErr(res.cancelled ? { text: 'Stopped — nothing was changed.', soft: true } : { text: res.error });
+    if (!res.ok) setErr(res.cancelled ? { text: 'Stopped. Nothing was changed.', soft: true } : { text: res.error });
     else setResult({ r: res.result, spec });
   }
 
@@ -213,7 +213,7 @@ export function RfmTab({ projectId, datasetId, info }: { projectId: string; data
       </section>
       {!r || !result ? (
         <EmptyState icon="user" title="Score customers by recency, frequency and spend" heading={2}>
-          Every customer gets a 1–5 score for how recently, how often and how much they buy, and one of eleven named segments — from Champions to Lost. Save the scores as a dataset and chart them like any other.
+          Every customer gets a 1–5 score for how recently, how often and how much they buy, and one of eleven named segments, from Champions to Lost. Save the scores as a dataset and chart them like any other.
         </EmptyState>
       ) : (
         <div className={s.results}>

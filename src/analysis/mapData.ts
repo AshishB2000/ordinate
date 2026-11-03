@@ -56,7 +56,7 @@ export function pointItems(
       return rows.slice(0, DETECT_SAMPLE).map((r) => r[i]);
     };
     const found = geoCluster.detectLatLon(cols, src);
-    if (!found) return { ok: false, error: 'No latitude and longitude columns were found — pick them in the map settings.' };
+    if (!found) return { ok: false, error: 'No latitude and longitude columns were found. Pick them in the map settings.' };
     lat = found.lat;
     lon = found.lon;
   }

@@ -119,7 +119,7 @@ export function chooseImage(): Promise<{ src: string; alt: string } | { error: s
       const r = new FileReader();
       r.onload = () => {
         const src = String(r.result || '');
-        if (src.length > MAX_IMAGE_CHARS) resolve({ error: 'That image is too large — up to about 500 KB.' });
+        if (src.length > MAX_IMAGE_CHARS) resolve({ error: 'That image is too large. The limit is about 500 KB.' });
         else resolve({ src, alt: f.name.replace(/\.[a-z0-9]+$/i, '') });
       };
       r.onerror = () => resolve(null);

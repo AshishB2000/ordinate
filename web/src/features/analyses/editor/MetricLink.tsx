@@ -57,10 +57,10 @@ export function MetricLink({ card }: { card: Card }) {
               ? 'Reading the metric…'
               : list.isError
                 ? 'The saved metrics could not be read, so this card’s metric cannot be shown here.'
-                : 'Its saved metric was deleted — the card shows its own column’s figure.'}
+                : 'Its saved metric was deleted, so the card shows its own column’s figure.'}
         </p>
       ) : (
-        <p className={s.note}>Computed from a column — not a saved metric.</p>
+        <p className={s.note}>Computed from a column, not a saved metric.</p>
       )}
       {m.metricId && linked && (
         <Button size="sm" icon="pencil" onClick={() => void editMetric()}>

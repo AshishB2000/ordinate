@@ -74,7 +74,7 @@ export function asOfView(asOf: AsOf | null | undefined, o: AsOfOptions = {}): As
   if (asOf.refreshing) text += ' · refreshing…';
   const old = now - t > OLD_AFTER_MS;
   const full = fmt(o, { dateStyle: 'full', timeStyle: 'short' }).format(t);
-  const why = asOf.stale ? ' — the source could not be reached, so this is the last answer it gave' : old ? ' — more than a day old' : '';
+  const why = asOf.stale ? '. The source could not be reached, so this is the last answer it gave' : old ? ', more than a day old' : '';
   const title = `${asOf.mode === 'live' ? `Live data${asOf.cached ? ', from the cache,' : ''} as of` : 'Data as of'} ${full}${why}`;
   return { text, title, tone: asOf.stale || old ? 'warn' : 'muted' };
 }
