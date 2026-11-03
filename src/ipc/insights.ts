@@ -168,15 +168,19 @@ export interface Spark extends Record<string, unknown> {
 /** Rows above which Home draws no sparkline rather than hydrate a table without a resident fast path. */
 const SPARK_MAX_HYDRATE = 250_000;
 
+/** The findings that are news about the business. The rest (an outlier value, one dominant
+ *  value, a mostly-empty or constant column) are cleanup notes: the dataset page's Insights tab. */
+const HOME_KINDS: ReadonlySet<Insight['kind']> = new Set(['mover', 'trend', 'concentration', 'period_change']);
+
 /**
  * Home's "What stands out" (T2.11, insights.ts insRenderHome): the project's
- * strongest findings that have a chart, at most `max`, each with its chart's
- * figures — one reply inside `home:overview`, so the row costs Home no round
- * trip (plan §9's RPC budget). A chart that cannot be computed gets no
+ * strongest BUSINESS findings that have a chart, at most `max`, each with its
+ * chart's figures: one reply inside `home:overview`, so the row costs Home no
+ * round trip (plan §9's RPC budget). A chart that cannot be computed gets no
  * sparkline; the card still carries its numbers.
  */
 export async function standsOut(projectId: string, max = 6): Promise<Array<Insight & { spark: Spark | null }>> {
-  const list = (await listInsights(projectId)).filter((i) => i.chart).slice(0, max);
+  const list = (await listInsights(projectId)).filter((i) => i.chart && HOME_KINDS.has(i.kind)).slice(0, max);
   return Promise.all(list.map(async (i) => {
     let spark: Spark | null = null;
     try {

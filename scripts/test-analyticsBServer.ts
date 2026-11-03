@@ -313,6 +313,11 @@ async function partOne(): Promise<void> {
     const home = await call('home:overview', { projectId: pid });
     const stands = home.body.standsOut as Array<{ id: string; datasetId: string; chart: { encoding: unknown; filters?: unknown[] }; spark: { labels: unknown[]; series: Array<{ values: unknown[] }> } | null }>;
     ok('home:overview standsOut: findings with a chart, dismissed ones left out', home.status === 200 && stands.length > 0 && stands.length <= 6 && !stands.some((x) => x.id === first), JSON.stringify(stands.map((x) => x.id)).slice(0, 200));
+    // Home shows news about the business; cleanup notes stay on the dataset page (negative control: the project has some).
+    const HOME_KINDS = ['mover', 'trend', 'concentration', 'period_change'];
+    const kinds = (xs: Array<{ kind: string }>) => [...new Set(xs.map((x) => x.kind))].join(',');
+    ok('home:overview standsOut: business findings only', stands.every((x) => HOME_KINDS.includes((x as unknown as { kind: string }).kind)), kinds(stands as unknown as Array<{ kind: string }>));
+    ok('…while the dataset page still lists the cleanup ones', (all.body.insights as Array<{ kind: string }>).some((x) => !HOME_KINDS.includes(x.kind)), kinds(all.body.insights));
     const own = await call('visual:data', { projectId: pid, datasetId: stands[0].datasetId, encoding: stands[0].chart.encoding, filters: stands[0].chart.filters ?? [] });
     ok('home:overview standsOut: the sparkline equals the chart\'s visual:data (Object.is)', !!stands[0].spark
       && stands[0].spark.labels.length === own.body.data.labels.length && stands[0].spark.labels.every((l, i) => Object.is(l, own.body.data.labels[i]))

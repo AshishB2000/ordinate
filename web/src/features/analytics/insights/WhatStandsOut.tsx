@@ -1,5 +1,6 @@
 // Home's "What stands out" (insights.ts insRenderHome): the project's
-// strongest findings that have a chart, at most six, each with its sparkline
+// strongest business findings (cleanup notes stay on the dataset page) that
+// have a chart, at most six, each with its sparkline
 // — the strongest as ONE banner, the rest behind "Show all" (three cards that
 // say the same thing about three columns were the loudest thing on Home).
 // They ride Home's own `home:overview` reply (src/ipc/insights.ts standsOut),
