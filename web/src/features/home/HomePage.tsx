@@ -21,7 +21,7 @@ import { Menu } from '../../ui/Menu';
 import { ErrorState } from '../../ui/States';
 import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
-import { displayName, greeting, importPath, suggestPrompts } from './homeText';
+import { displayName, greeting, importPath, suggestPrompts, type Starter } from './homeText';
 import { JumpBackIn } from './JumpBackIn';
 import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
@@ -66,10 +66,11 @@ export default function HomePage() {
   const recent = useRecent();
   // New and "Bring in some data" change the project: an editor's.
   const canEdit = useCanEdit(projectId);
-  const prompts = suggestPrompts(
-    (ov.data?.datasets ?? []).map((d) => d.name),
-    (recent.data ?? []).filter((r) => r.type === 'dataset').map((r) => r.name),
-  );
+  // Building is offered only to an editor; asking is anyone's.
+  const prompts = suggestPrompts(ov.data?.datasets ?? [], canEdit);
+  // A suggestion points the Assistant at the dataset it names, in Home's project.
+  const ask = (q: string, about?: Starter['about']) =>
+    openDockWith(q, about && projectId ? { projectId, context: { kind: 'dataset', id: about.id, label: `dataset · ${about.name}`, name: about.name } } : undefined);
   return (
     <div className={s.scroll}>
       <header className={s.head}>
@@ -85,7 +86,7 @@ export default function HomePage() {
           {canEdit && <NewMenu projectId={projectId} />}
         </div>
       </header>
-      <AskBar prompts={prompts} onAsk={openDockWith} />
+      <AskBar prompts={prompts} onAsk={ask} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (
         <div className={s.emptyBox}>

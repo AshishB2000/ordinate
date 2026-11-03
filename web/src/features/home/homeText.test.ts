@@ -23,19 +23,24 @@ describe('home words', () => {
     expect(qualityLabel(0)).toBe('');
   });
 
-  it('suggests from real dataset names, the sample\'s own questions, or nothing', () => {
-    const texts = (project: string[], recent: string[]) => suggestPrompts(project, recent).map((p) => p.text);
-    expect(texts(['Orders', 'Returns', 'Stock'], [])).toEqual([
-      'What stands out in Orders?',
-      'How do Orders and Returns compare?',
-      'Summarise Orders in plain terms',
-    ]);
-    expect(texts(['Orders'], [])).toEqual(['What stands out in Orders?', 'Summarise Orders in plain terms']);
-    expect(texts([SAMPLE_DATASET], [])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
-    expect(texts([], [SAMPLE_DATASET])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
-    expect(texts([], ['Orders'])).toEqual([]);
-    // Each starter card carries a glyph for the kind of question it is.
-    expect(suggestPrompts(['Orders', 'Returns'], []).map((p) => p.icon)).toEqual(['zap', 'columns', 'file-text']);
+  it('suggests from the project’s real datasets, building only for an editor, each pointing at the one it names', () => {
+    const O = { id: 'o', name: 'Orders' };
+    const R = { id: 'r', name: 'Returns' };
+    const texts = (ds: Array<{ id: string; name: string }>, canEdit = true) => suggestPrompts(ds, canEdit).map((p) => p.text);
+    expect(texts([O, R, { id: 's', name: 'Stock' }])).toEqual(['Build a dashboard from Orders', 'Clean up Orders', 'Summarise Orders', 'What is in Returns?']);
+    expect(texts([O])).toEqual(['Build a dashboard from Orders', 'Clean up Orders', 'Summarise Orders']);
+    // A viewer is offered only what reads.
+    expect(texts([O, R], false)).toEqual(['Summarise Orders', 'What is in Returns?']);
+    const sample = { id: 'x', name: SAMPLE_DATASET };
+    expect(texts([sample])).toEqual(['Which region had the worst month in Retail orders?', 'Chart revenue by category in Retail orders', 'Build a dashboard from Retail orders']);
+    expect(texts([sample], false)).toEqual(['Which region had the worst month in Retail orders?', 'Chart revenue by category in Retail orders']);
+    expect(texts([])).toEqual([]);
+    expect(texts([{ id: 'b', name: '  ' }])).toEqual([]);
+    // Each one is about the dataset its sentence names.
+    const all = suggestPrompts([O, R], true);
+    expect(all.map((p) => p.about.id)).toEqual(['o', 'o', 'o', 'r']);
+    for (const p of all) expect(p.text).toContain(p.about.name);
+    expect(all.map((p) => p.icon)).toEqual(['layout-dashboard', 'filter', 'file-text', 'table']);
   });
 
   it('opens a dataset, a dashboard and a visual on their own page and the rest on their section', () => {

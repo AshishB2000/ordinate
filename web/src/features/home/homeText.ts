@@ -56,32 +56,38 @@ export function qualityLabel(failing: number | undefined): string {
 // i18n-skip: a dataset NAME — src/app/sampleProject.ts SAMPLE_DATASET_NAME.
 export const SAMPLE_DATASET = 'Retail orders';
 
-/** A starter question and the glyph its card carries. */
+/** A suggestion under Home's ask bar: its sentence, its glyph, and the dataset the sentence names. */
 export interface Starter {
   text: string;
   icon: IconName;
+  /** The Assistant is pointed at this dataset, as the dock's `@` points it. */
+  about: { id: string; name: string };
 }
-const SAMPLE_PROMPTS: Starter[] = [
-  { text: 'Which region had the worst month?', icon: 'trending-up' },
-  { text: 'Revenue by category this year', icon: 'chart-bar' },
-];
-
-const sampleOnly = (names: string[]) => names.length === 1 && names[0] === SAMPLE_DATASET;
 
 /**
- * haSuggestPrompts: up to three starter questions from REAL dataset names —
- * strings only, never a figure, never a model call. The bundled sample gets
- * questions written for it; a project with no datasets falls back to the
- * datasets in Recent (first launch: the sample may sit in another project).
+ * haSuggestPrompts: Home's suggestions from the project's REAL datasets, strings
+ * only, never a figure, never a model call. Each names ONE dataset (the dock's
+ * `@` points at one thing), asks or builds, and building is offered only to an
+ * editor. The bundled sample gets sentences written for it.
  */
-export function suggestPrompts(projectDatasets: string[], recentDatasets: string[]): Starter[] {
-  const names = projectDatasets.map((n) => n.trim()).filter(Boolean);
-  if (sampleOnly(names)) return [...SAMPLE_PROMPTS];
-  if (!names.length) return sampleOnly(recentDatasets.map((n) => n.trim())) ? [...SAMPLE_PROMPTS] : [];
-  const out: Starter[] = [{ text: `What stands out in ${names[0]}?`, icon: 'zap' }];
-  if (names.length > 1) out.push({ text: `How do ${names[0]} and ${names[1]} compare?`, icon: 'columns' });
-  out.push({ text: `Summarise ${names[0]} in plain terms`, icon: 'file-text' });
-  return out.slice(0, 3);
+export function suggestPrompts(datasets: ReadonlyArray<{ id: string; name: string }>, canEdit: boolean): Starter[] {
+  const named = datasets.map((d) => ({ id: d.id, name: d.name.trim() })).filter((d) => d.name);
+  const [a, b] = named;
+  if (!a) return [];
+  const out: Starter[] = [];
+  if (named.length === 1 && a.name === SAMPLE_DATASET) {
+    out.push({ text: `Which region had the worst month in ${a.name}?`, icon: 'trending-up', about: a });
+    out.push({ text: `Chart revenue by category in ${a.name}`, icon: 'chart-bar', about: a });
+    if (canEdit) out.push({ text: `Build a dashboard from ${a.name}`, icon: 'layout-dashboard', about: a });
+    return out;
+  }
+  if (canEdit) {
+    out.push({ text: `Build a dashboard from ${a.name}`, icon: 'layout-dashboard', about: a });
+    out.push({ text: `Clean up ${a.name}`, icon: 'filter', about: a });
+  }
+  out.push({ text: `Summarise ${a.name}`, icon: 'file-text', about: a });
+  if (b) out.push({ text: `What is in ${b.name}?`, icon: 'table', about: b });
+  return out;
 }
 
 /** Where a Recent row opens: the record itself where it has a page, else its section. */

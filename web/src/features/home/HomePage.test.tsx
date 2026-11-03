@@ -127,7 +127,6 @@ describe('Home', () => {
     expect(within(rec).getByRole('button', { name: 'Unstar Sales overview' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(rec).getByRole('button', { name: 'Star Orders' }).getAttribute('aria-pressed')).toBe('false');
     expect(within(rec).getByRole('img', { name: 'Data quality: 1 rule failing' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'What stands out in Orders?' })).toBeTruthy();
     // Nothing on the page repeats the New menu's doors, and there is no side column.
     expect(screen.queryByRole('complementary', { name: 'This project' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'CSV / Excel' })).toBeNull();
@@ -185,17 +184,31 @@ describe('Home', () => {
     // The hero: the bar sits in its own region, first on the page; with a model ready it has nothing to explain.
     const hero = screen.getByRole('region', { name: 'What do you want to do?' });
     const input = within(hero).getByRole('textbox', { name: 'Ask a question or say what to build' });
-    const starters = within(await screen.findByRole('group', { name: 'Suggested questions' })).getAllByRole('button');
-    expect(starters.map((b) => b.textContent)).toEqual(['What stands out in Orders?', 'How do Orders and Returns compare?', 'Summarise Orders in plain terms']);
+    const chips = within(await within(hero).findByRole('group', { name: 'Suggestions' })).getAllByRole('button');
+    // An editor's: two that build, two that ask, each naming the dataset it is about.
+    expect(chips.map((b) => b.textContent)).toEqual(['Build a dashboard from @Orders', 'Clean up @Orders', 'Summarise @Orders', 'What is in @Returns?']);
     await waitFor(() => expect(calls.some((c) => c.channel === 'ai:status')).toBe(true));
     expect(within(hero).queryByTestId('ai-not-ready')).toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Summarise Orders in plain terms' }));
-    expect((input as HTMLInputElement).value).toBe('Summarise Orders in plain terms');
-    expect(calls.some((c) => c.channel === 'copilot:ask')).toBe(false);
+    const asked = () => calls.filter((c) => c.channel === 'copilot:ask').map((c) => c.payload);
+
+    // A chip fills the bar and tags its dataset; it never sends. Let the tag go and the question is the whole project's.
+    fireEvent.click(screen.getByRole('button', { name: 'What is in @Returns?' }));
+    expect((input as HTMLInputElement).value).toBe('What is in Returns?');
+    expect(within(hero).getByTestId('ask-about').textContent).toBe('@Returns');
+    expect(asked()).toEqual([]);
+    fireEvent.click(within(hero).getByRole('button', { name: 'Ask about the whole project instead' }));
+    expect(within(hero).queryByTestId('ask-about')).toBeNull();
     fireEvent.submit(input.closest('form')!);
     expect((input as HTMLInputElement).value).toBe('');
-    await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:ask')?.payload).toMatchObject({ projectId: P, question: 'Summarise Orders in plain terms' }));
+    await waitFor(() => expect(asked()[0]).toMatchObject({ projectId: P, question: 'What is in Returns?', context: { kind: '' } }));
     expect(screen.getByRole('button', { name: 'Assistant' }).getAttribute('aria-expanded')).toBe('true');
+
+    // Kept, the tag points the Assistant at that dataset, as `@` does, and the dock shows it pinned.
+    fireEvent.click(screen.getByRole('button', { name: 'Summarise @Orders' }));
+    fireEvent.submit(input.closest('form')!);
+    expect(within(hero).queryByTestId('ask-about')).toBeNull();
+    await waitFor(() => expect(asked()[1]).toMatchObject({ projectId: P, question: 'Summarise Orders', context: { kind: 'dataset', id: 'd1' } }));
+    expect(screen.getByTestId('dock-context').textContent).toContain('Orders');
   });
 
   it('keeps the question in the dock\'s composer when the Assistant is not set up, focus in the dock', async () => {
@@ -206,6 +219,10 @@ describe('Home', () => {
     const note = await within(screen.getByRole('region', { name: 'What do you want to do?' })).findByTestId('ai-not-ready');
     expect(note.textContent).toContain('AI isn’t set up yet');
     expect(within(note).getByRole('link', { name: 'Connect a provider' }).getAttribute('href')).toBe('/admin?tab=ai');
+    // …and suggests nothing it could not answer (the same project, with a model, has four: above).
+    await waitFor(() => expect(calls.some((c) => c.channel === 'home:overview')).toBe(true));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('group', { name: 'Suggestions' })).toBeNull();
     fireEvent.change(input, { target: { value: 'Which month was worst?' } });
     fireEvent.submit(input.closest('form')!);
     const composer = await screen.findByRole('textbox', { name: 'Ask the Assistant' });

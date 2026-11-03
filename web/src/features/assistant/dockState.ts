@@ -68,12 +68,26 @@ export function useDockOpen(): boolean {
 
 // A question handed over from outside the dock (Home's ask bar — homeAsk.ts
 // dkAsk): the dock opens and asks it as if typed, or, when it cannot ask yet
-// (no project, no model), keeps it in the composer so nothing is lost.
+// (no project, no model), keeps it in the composer so nothing is lost. It may
+// come pointed at one thing, as `@` points the dock: Home's suggestions do.
 let question = '';
+let about: HandedAbout | null = null;
 
-/** Opens the dock with `q` to ask. */
-export function openDockWith(q: string): void {
+/** What a handed question is about, in the project that thing lives in. */
+export interface HandedAbout {
+  projectId: string;
+  context: DockContext;
+}
+
+/** Opens the dock with `q` to ask; `on` points it at one thing first. */
+export function openDockWith(q: string, on?: HandedAbout): void {
   question = q.trim();
+  about = on ?? null;
+  // Asked in the project the thing is in: off a project's own route, the picked project is the dock's.
+  if (on) {
+    picked = on.projectId;
+    write(PROJECT_KEY, on.projectId);
+  }
   open = true;
   write(OPEN_KEY, '1');
   emit();
@@ -85,11 +99,12 @@ export function usePendingQuestion(): string {
 }
 
 /** The dock took the question: it is asked or in the composer now. */
-export function takePendingQuestion(): string {
-  const q = question;
+export function takePendingQuestion(): { question: string; about: HandedAbout | null } {
+  const taken = { question, about };
   question = '';
-  if (q) emit();
-  return q;
+  about = null;
+  if (taken.question) emit();
+  return taken;
 }
 
 export function pickDockProject(id: string): void {
