@@ -25,19 +25,25 @@ export const home = {
     org: true,
     input: z.strictObject({ ids: z.array(z.string().min(1).max(100)).max(1000) }),
   }),
-  // preload: invoke('onboarding:status') — the Get-started card: which steps
-  // are done (booleans, latched from the org's records) and the sample's ids.
+  // preload: invoke('onboarding:status'): the caller's own Get-started tour,
+  // which stops they have visited, and the sample's ids.
   'onboarding:status': rpc({ access: 'read', org: true, input: z.undefined() }),
-  // preload: invoke('onboarding:set', { collapsed?, dismissed?, coachSeen? }) —
-  // the card is the org's, so folding or hiding it is an editor's call.
+  // preload: invoke('onboarding:set', { collapsed?, dismissed?, coachSeen? }):
+  // the tour is each person's, so anyone folds or hides their own.
   'onboarding:set': rpc({
-    access: 'write',
+    access: 'read',
     org: true,
     input: z.strictObject({
       collapsed: z.boolean().optional(),
       dismissed: z.literal(true).optional(),
       coachSeen: z.literal(true).optional(),
     }),
+  }),
+  // The caller opened a tour stop's page: ticks it for them alone.
+  'onboarding:visit': rpc({
+    access: 'read',
+    org: true,
+    input: z.strictObject({ step: z.enum(['assistant', 'explore', 'dashboards', 'reports', 'data']) }),
   }),
   // hubPlatform: listJobs / cancelJob / clearJobs. The handlers act on the
   // caller's own jobs only (src/ipc/jobs.ts registerServer), so a member needs
