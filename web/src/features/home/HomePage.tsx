@@ -4,7 +4,8 @@
 // Get-started card while first-run guidance lasts, then ONE column — "Jump
 // back in" (the newest records as preview cards), what the app found in the
 // data, the open comments, and the table of all recent work. Bringing data in
-// is the New menu's, so nothing on the page repeats it.
+// is the New menu's, so nothing on the page repeats it. A mention of you is the
+// top bar bell's, on every page, not a section here.
 //
 // The project Home speaks for is the current one — the top bar's switcher's
 // (../projects/current), as on every project-scoped screen.
@@ -28,7 +29,6 @@ import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
 import { RecentComments } from '../dashboards/RecentComments';
-import { MentionedYou } from '../dashboards/MentionedYou';
 
 function Subtitle({ project, failed, loading }: { project: ProjectRow | null; failed: boolean; loading: boolean }) {
   const ov = useOverview(project?.id);
@@ -114,8 +114,6 @@ export default function HomePage() {
       <JumpBackIn projectId={projectId} recent={recent} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={projectId} />
-      {/* The comments that name YOU, across your projects (docs/notifications); nothing without a user directory. */}
-      <MentionedYou />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
       <RecentTable projectId={projectId} recent={recent} canEdit={canEdit} />
     </div>

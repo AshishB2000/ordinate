@@ -19,7 +19,9 @@ import fastifyCookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BlockList, isIP } from 'net';
 import type { Pool } from 'pg';
-import { identityFor, type Identify, type Identity } from '../context';
+import { identityFor, runInContext, type Identify, type Identity } from '../context';
+import { orgDb } from '../db/inOrg';
+import { unseenCount } from '../mentions/store';
 import { proxyList, type AuthEnv, type ServerEnv } from '../env';
 import { audit, type AuditAction } from '../authz/audit';
 import { cookieNames, cookieOpts, safeNext } from './cookies';
@@ -145,6 +147,15 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
       accounts: pool !== null,
       // Password mode before its first admin: the sign-in page shows "Create admin account" (./password.ts).
       setup: !id && auth.mode === 'password' && pool !== null ? await setupOpen(pool, auth.org) : false,
+      // The bell's mention badge rides on this call the shell already makes, so no page pays an RPC
+      // for it. null: no database, so no one can be mentioned here. A failed count never fails sign-in.
+      mentionsUnseen:
+        id && orgDb()
+          ? await runInContext(id, String(req.id), unseenCount).catch((err: unknown) => {
+              req.log.warn({ err: { name: (err as Error | null)?.name, code: (err as { code?: unknown } | null)?.code } }, 'mention count failed');
+              return null;
+            })
+          : null,
     };
   });
 

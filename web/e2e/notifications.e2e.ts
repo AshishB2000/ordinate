@@ -3,8 +3,8 @@
 // own scratch database). A (the org admin) and B (a project viewer) each have a
 // page. B sits on Home. A opens a dashboard's comments, types @ — the picker
 // lists the project's readers — picks B and posts. B's open tab shows "Admin
-// mentioned you on Weekly review" with Open, and B's Home lists it under
-// "Mentioned you", new; the card opens the thread, where the mention is a chip.
+// mentioned you on Weekly review" with Open, and B's bell counts it and lists it
+// under "Mentioned you", new; the row opens the thread, where the mention is a chip.
 // Both pages hold the RPC budget (≤ 25 per load) and fail on any console error
 // or CSP violation. Screens in both themes go to web/e2e/__screens__/
 // notifications-*.png.
@@ -85,8 +85,9 @@ if (!adminUrl) {
       await b.page.setExtraHTTPHeaders({ 'x-forwarded-email': BEA });
       await b.page.goto('/');
       await settled(b.page);
-      const mentioned = b.page.getByRole('region', { name: 'Mentioned you' });
-      await mentioned.getByText('No mentions yet').waitFor();
+      // Nothing yet: the bell carries no count, and Home has no mentions section of its own.
+      await b.page.getByRole('button', { name: 'Notifications', exact: true }).waitFor();
+      assert.equal(await b.page.getByRole('region', { name: 'Mentioned you' }).count(), 0);
 
       // A types @ in the dashboard's comments and picks B.
       await page.goto(`/analyses/${pid}/${board.id}`);
@@ -108,12 +109,14 @@ if (!adminUrl) {
       assert.equal(await thread.getByText(BEA).count(), 0);
       console.log(`rpc: A's dashboard + comment ${rpc.loads.at(-1)?.rpcs ?? 0}`);
 
-      // B's open tab: the notice, and Home's list.
+      // B's open tab: the notice, the bell's count, and its list.
       const notice = b.page.getByText('Admin mentioned you on Weekly review');
       await notice.waitFor();
-      await mentioned.getByRole('button', { name: /Admin mentioned you on Weekly review, new/ }).waitFor();
-      await screensInPlace(b.page, SCREENS, 'notifications-home');
-      await mentioned.getByRole('button', { name: /Admin mentioned you on Weekly review/ }).click();
+      await b.page.getByRole('button', { name: 'Notifications: 1 unseen' }).click();
+      const inbox = b.page.getByRole('dialog', { name: 'Notifications' });
+      await inbox.getByRole('button', { name: /Admin mentioned you on Weekly review, new/ }).waitFor();
+      await screensInPlace(b.page, SCREENS, 'notifications-bell');
+      await inbox.getByRole('button', { name: /Admin mentioned you on Weekly review/ }).click();
       await b.page.waitForURL(new RegExp(`/analyses/${pid}/${board.id}\\?comment=analysis:`));
       const bPanel = b.page.getByRole('dialog', { name: /Comments/ });
       await bPanel.getByText('@Bea', { exact: true }).waitFor();

@@ -1,5 +1,8 @@
-// The top bar's bell, its inbox and the rules page (legacy alertsInbox.ts).
-// The badge is the server's `unseen` count for the current project; a fired
+// The top bar's bell: one inbox for the caller's mentions, across every project
+// (MentionedYou.tsx), and the current project's alerts (legacy alertsInbox.ts),
+// with the alert rules page.
+// The badge is two server counts: the current project's unseen alerts and the
+// caller's unseen mentions (from /api/auth/me). A fired
 // alert arrives as an `alerts:fired` push (to members who may read the
 // project, T6.3) and the list re-reads. Every figure in a message is the
 // server's sentence; the sparkline draws the rule's own stored history.
@@ -8,7 +11,8 @@
 // writes that silence everyone, so they are an editor's and say so. The bell is
 // on every page, so it asks for the role only once it is opened.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { rpc } from '../../api/client';
 import { Button, IconButton } from '../../ui/Button';
@@ -27,6 +31,9 @@ import { DriversView } from '../analytics/drivers/DriversView';
 import type { DriversRequest } from '../analytics/api';
 import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
+import { ME_KEY, useMe } from '../auth/api';
+import { MentionedYou } from './MentionedYou';
+import { useMentions, useMentionSeen } from './mentionsApi';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
 import { useMentionNotice } from './mentionNotice';
@@ -226,7 +233,7 @@ function EventRow({ e, rule, projectId, canEdit, onClose }: { e: AlertEvent; rul
 }
 
 export function AlertsBell() {
-  const { projectId } = useCurrentProject();
+  const { projectId, project } = useCurrentProject();
   const [open, setOpen] = useState(false);
   // The bell is on every page, so it is also where a subscription's owner hears that it paused itself.
   usePausedNotice();
@@ -243,67 +250,130 @@ export function AlertsBell() {
   const [rules, setRules] = useState(false);
   // Asked only once the inbox or the rules are open: a closed bell costs no page a projects:roles call.
   const canEdit = useCanEdit(projectId, open || rules);
-  const unseen = q.data?.unseen ?? 0;
-  const label = unseen ? `Alerts: ${unseen} unseen` : 'Alerts';
+  // Mentions span every project. Their unseen count rides on /api/auth/me, which the shell
+  // already asks, so the badge is there on every page at no RPC; the list is read once the
+  // bell opens. A number means this server has a user directory, so people can be mentioned.
+  const me = useMe();
+  const client = useQueryClient();
+  const mentionsOn = typeof me.data?.mentionsUnseen === 'number';
+  const mentions = useMentions(open && mentionsOn);
+  const seen = useMentionSeen();
+  const items = mentions.data?.available ? mentions.data.items : [];
+  const alertsUnseen = q.data?.unseen ?? 0;
+  const mentionsUnseen = !mentionsOn ? 0 : open && mentions.data ? mentions.data.unseen : (me.data?.mentionsUnseen ?? 0);
+  // Two server counts side by side: the badge adds them and derives nothing else.
+  const unseen = alertsUnseen + mentionsUnseen;
+  const label = unseen ? `Notifications: ${unseen} unseen` : 'Notifications';
+  const close = () => setOpen(false);
+  const onOpenChange = (o: boolean) => {
+    setOpen(o);
+    // Reading the list retires mentions whose comment is gone, so the closed badge re-reads its count.
+    if (!o && mentionsOn) void client.invalidateQueries({ queryKey: ME_KEY });
+  };
+  const markAll = () => {
+    if (projectId && alertsUnseen > 0) write.mutate({ channel: 'alerts:markSeen', input: { projectId, ...shownThrough(q.data?.events ?? []) } });
+    // Up to the newest mention the bell showed: one that lands after that stays unseen.
+    if (mentionsUnseen > 0 && items.length) seen.mutate({ through: items.reduce((m, x) => (x.at > m ? x.at : m), items[0].at) });
+  };
+  const alerts = q.data && q.data.events.length > 0 && projectId && (
+    <ul className={s.events} aria-label="Fired alerts">
+      {q.data.events.slice(0, 50).map((e) => (
+        <EventRow key={e.id} e={e} rule={q.data.rules.find((r) => r.id === e.ruleId)} projectId={projectId} canEdit={canEdit} onClose={close} />
+      ))}
+    </ul>
+  );
+  const alertsError = q.isError && (
+    <ErrorState compact heading={3} title="Could not read alerts" message={q.error.message} onRetry={() => void q.refetch()} />
+  );
+  let body: ReactNode;
+  if (!mentionsOn) {
+    // No user directory: the bell is this project's alerts alone.
+    body = q.isPending ? (
+      <SkeletonRows rows={3} label="Loading alerts" />
+    ) : q.isError ? (
+      alertsError
+    ) : !q.data.rules.length ? (
+      <EmptyState compact heading={3} icon="bell" title="No alerts yet">
+        {canEdit
+          ? 'Open a KPI card’s actions menu and choose “Alert me…” to watch a number.'
+          : 'An editor of this project can set one from a KPI card. You have view-only access.'}
+      </EmptyState>
+    ) : !q.data.events.length ? (
+      <EmptyState compact heading={3} icon="circle-check" title="Nothing has fired">
+        Your rules are watching. You’ll see anything they catch here.
+      </EmptyState>
+    ) : (
+      alerts
+    );
+  } else if (mentions.isPending || (projectId && q.isPending)) {
+    body = <SkeletonRows rows={3} label="Loading notifications" />;
+  } else if (!mentions.isError && !q.isError && !items.length && !alerts) {
+    body = (
+      <EmptyState compact heading={3} icon="bell" title="Nothing here yet">
+        {projectId
+          ? 'When someone mentions you in a comment, or an alert fires in this project, it shows up here.'
+          : 'When someone mentions you in a comment, it shows up here.'}
+      </EmptyState>
+    );
+  } else {
+    body = (
+      <>
+        {mentions.isError ? (
+          <ErrorState compact heading={3} title="Could not read your mentions" message={mentions.error.message} onRetry={() => void mentions.refetch()} />
+        ) : (
+          items.length > 0 && <MentionedYou items={items} onOpened={close} />
+        )}
+        {alertsError ||
+          (alerts && (
+            <section aria-labelledby="bell-alerts">
+              <h3 id="bell-alerts" className={s.inboxSec}>
+                Alerts <span className={s.inboxScope}>· {project?.name ?? 'this project'}</span>
+              </h3>
+              {alerts}
+            </section>
+          ))}
+      </>
+    );
+  }
   return (
     <>
       <Popover
         open={open}
-        onOpenChange={setOpen}
-        title="Alerts"
+        onOpenChange={onOpenChange}
+        title="Notifications"
         align="end"
         className={s.inbox}
         trigger={
-          <button type="button" className={s.bell} aria-label={label} title={label} disabled={!projectId}>
+          <button type="button" className={s.bell} aria-label={label} title={label} disabled={!projectId && !mentionsOn}>
             <Icon name="bell" />
             {unseen > 0 && <span className={s.bellBadge}>{unseen > 9 ? '9+' : unseen}</span>}
           </button>
         }
       >
         <div className={s.inboxHead}>
-          <span className={s.inboxTitle}>Alerts</span>
-          {unseen > 0 && projectId && (
-            <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, ...shownThrough(q.data?.events ?? []) } })}>
+          <span className={s.inboxTitle}>Notifications</span>
+          {unseen > 0 && (
+            <Button size="sm" variant="ghost" onClick={markAll}>
               Mark all seen
             </Button>
           )}
         </div>
-        <div className={s.inboxBody}>
-          {q.isPending ? (
-            <SkeletonRows rows={3} label="Loading alerts" />
-          ) : q.isError ? (
-            <ErrorState compact heading={3} title="Could not read alerts" message={q.error.message} onRetry={() => void q.refetch()} />
-          ) : !q.data.rules.length ? (
-            <EmptyState compact heading={3} icon="bell" title="No alerts yet">
-              {canEdit
-                ? 'Open a KPI card’s actions menu and choose “Alert me…” to watch a number.'
-                : 'An editor of this project can set one from a KPI card. You have view-only access.'}
-            </EmptyState>
-          ) : !q.data.events.length ? (
-            <EmptyState compact heading={3} icon="circle-check" title="Nothing has fired">
-              Your rules are watching. You’ll see anything they catch here.
-            </EmptyState>
-          ) : (
-            <ul className={s.events} aria-label="Fired alerts">
-              {q.data.events.slice(0, 50).map((e) => (
-                <EventRow key={e.id} e={e} rule={q.data.rules.find((r) => r.id === e.ruleId)} projectId={projectId as string} canEdit={canEdit} onClose={() => setOpen(false)} />
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className={s.inboxFoot}>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon="settings"
-            onClick={() => {
-              setOpen(false);
-              setRules(true);
-            }}
-          >
-            {canEdit ? 'Manage rules' : 'Rules'}
-          </Button>
-        </div>
+        <div className={s.inboxBody}>{body}</div>
+        {projectId && (
+          <div className={s.inboxFoot}>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="settings"
+              onClick={() => {
+                setOpen(false);
+                setRules(true);
+              }}
+            >
+              {canEdit ? 'Manage rules' : 'Rules'}
+            </Button>
+          </div>
+        )}
       </Popover>
       {rules && projectId && <RulesDialog projectId={projectId} readOnly={!canEdit} onClose={() => setRules(false)} />}
     </>

@@ -1,5 +1,5 @@
 /* @mentions (docs/notifications): the chip in a comment, the @ picker under a
-   comment box, and Home's "Mentioned you". Tokens only; both themes follow them. */
+   comment box, and the bell's "Mentioned you". Tokens only; both themes follow them. */
 
 /* ── The chip ──────────────────────────────────────────────────────── */
 .chip {
@@ -97,67 +97,40 @@
   font-size: var(--t-12);
 }
 
-/* ── Home: "Mentioned you" ─────────────────────────────────────────── */
-.home {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  margin: 0 0 var(--sp-24);
-}
-.homeHead {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-}
-.homeH {
+/* ── The bell: "Mentioned you" ───────────────────────────────────── */
+.rows {
+  list-style: none;
   margin: 0;
-  font-size: var(--t-11);
-  font-weight: 600;
-  letter-spacing: var(--tr-label);
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.homeNew {
-  padding: 1px 7px;
-  border-radius: var(--r-full);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: var(--t-11);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.homeAll {
-  margin-left: auto;
-}
-.homeRow {
+  padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--sp-12);
+  gap: 2px;
 }
-.card {
-  position: relative;
+.row {
   display: grid;
-  gap: var(--sp-8);
-  padding: var(--sp-12);
+  gap: 3px;
+  width: 100%;
+  padding: var(--sp-8);
   text-align: left;
   font: inherit;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--r-md);
   cursor: pointer;
 }
-.card:hover {
-  border-color: var(--accent-line);
+.row:hover {
+  background: var(--surface-2);
 }
-.card:focus-visible {
+.row:focus-visible {
   outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
 }
-/* New: the accent's line and the dot, not its tint — the card's quiet time and dashboard name read on the surface. */
-.cardNew {
-  border-color: var(--accent-line);
+/* New: the accent's line and the dot, never a tint — the row's quiet time and record name
+   would drop under 4.5:1 on one (theme.contrast.test). */
+.rowNew {
+  box-shadow: inset 2px 0 var(--accent);
 }
-.cardTop {
+.rowTop {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
@@ -165,26 +138,26 @@
   color: var(--text);
   min-width: 0;
 }
-.cardBy {
+.rowBy {
   font-weight: 600;
   color: var(--text-strong);
 }
-.cardWhen {
+.rowWhen {
   margin-left: auto;
   color: var(--text-dim);
   font-size: var(--t-11);
   white-space: nowrap;
 }
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   flex: none;
   border-radius: var(--r-full);
   background: var(--accent);
 }
 .snippet {
   color: var(--text);
-  font-size: var(--t-13);
+  font-size: var(--t-12);
   line-height: var(--lh-body);
   display: -webkit-box;
   -webkit-line-clamp: 2;

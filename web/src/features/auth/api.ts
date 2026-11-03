@@ -16,6 +16,8 @@ export interface Me {
   accounts?: boolean;
   /** Password sign-in with no admin yet: the sign-in page creates the first admin account. */
   setup?: boolean;
+  /** The caller's unseen mentions, for the bell's badge. null: no database, so no one can be mentioned here. */
+  mentionsUnseen?: number | null;
 }
 
 function isMe(v: unknown): v is Me {
