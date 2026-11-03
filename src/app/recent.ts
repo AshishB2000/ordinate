@@ -84,9 +84,11 @@ export interface RecentGroup {
  * analyses ordering, and the project scan order, stay predictable.
  *
  * The `limit` cap is what keeps this a cheap, bounded, metadata-only response
- * even as the number of projects grows.
+ * even as the number of projects grows. A record `keep` names ("type:id") stays
+ * past the cap, in its place: Home's Starred row reads the caller's pins from
+ * this list, and a pin must not vanish because 50 newer things were edited.
  */
-export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] {
+export function buildRecent(groups: RecentGroup[], limit: number, keep: (key: string) => boolean = () => false): RecentItem[] {
   const items: RecentItem[] = [];
   for (const g of groups) {
     for (const d of g.datasets) {
@@ -155,8 +157,8 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
       if (x.item.updatedAt < y.item.updatedAt) return 1;
       return x.index - y.index;
     })
-    .slice(0, cap)
-    .map((entry) => entry.item);
+    .map((entry) => entry.item)
+    .filter((item, i) => i < cap || keep(`${item.type}:${item.id}`));
 }
 
 /**
@@ -170,7 +172,7 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
  * but it is still bounded so the home page never has to reason about an
  * unbounded list.
  */
-export async function listRecent(limit = 50): Promise<RecentItem[]> {
+export async function listRecent(limit = 50, keep?: (key: string) => boolean): Promise<RecentItem[]> {
   let projectList: projects.Project[];
   try {
     // An archived project is out of sight everywhere but the switcher's
@@ -223,5 +225,5 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
     }),
   );
 
-  return buildRecent(groups, limit);
+  return buildRecent(groups, limit, keep);
 }

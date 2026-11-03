@@ -19,18 +19,21 @@ import { labelsFor } from '../server/mentions/people';
 /** Open threads Home shows (commentDoors.ts CMT_HOME_MAX). */
 const HOME_COMMENTS = 4;
 
+/** The caller's own pins ("type:id"); on the desktop, the one list. */
+const pinsOf = (): string[] => (serverDataDir() === null ? execConfig.publicConfig().starred : config.starredFor(ctx().user.email));
+
 export function register() {
-  ipcMain.handle('recent:list', async (_e, { limit }: any = {}) =>
-    recent.listRecent(typeof limit === 'number' ? limit : 50),
-  );
+  // The caller's pins ride along past the cap: Home's Starred row is read from this list.
+  ipcMain.handle('recent:list', async (_e, { limit }: any = {}) => {
+    const pins = new Set(pinsOf());
+    return recent.listRecent(typeof limit === 'number' ? limit : 50, (key) => pins.has(key));
+  });
 
   // Home "Starred" pins — read the current list, or replace it wholesale. A flat
   // array of "type:id" keys; no secrets, so both directions are renderer-safe.
   // On the server they are the CALLER's pins: one member starring a dashboard
   // must not pin it for the whole org.
-  ipcMain.handle('starred:get', () =>
-    serverDataDir() === null ? execConfig.publicConfig().starred : config.starredFor(ctx().user.email),
-  );
+  ipcMain.handle('starred:get', () => pinsOf());
   ipcMain.handle('starred:set', (_e, { ids }: any = {}) =>
     serverDataDir() === null ? config.setStarred(ids) : config.setStarredFor(ctx().user.email, ids),
   );

@@ -77,7 +77,7 @@ export function GetStarted({ noData }: { noData: boolean }) {
           <h2 id="gs-title" className={s.title}>
             Get started
           </h2>
-          <p className={s.sub}>Four things to try, with the sample data or your own.</p>
+          <p className={s.sub}>A quick tour. Open each one and it ticks itself off.</p>
         </div>
         <div className={s.meter}>
           <span className={s.count}>{progress}</span>

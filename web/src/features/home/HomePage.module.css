@@ -1,7 +1,7 @@
 /* hub.css "home" — the greeting, the ask-bar hero, then one column: the
    section headings, the filter pills and the table of recent work
    (.home-scroll, .home-head, .home-ask*, .home-pill, .home-rows, .home-row*).
-   The preview cards are JumpBackIn.module.css. */
+   The preview cards are StarredRow.module.css. */
 
 /* One measure for the whole page: wide enough to use a wide monitor, capped so
    a table row stays one glance. */

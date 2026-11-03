@@ -114,3 +114,13 @@ test('saved visuals are listed with the rest, carrying their chart type', () => 
   assert.deepStrictEqual(out[0]!.meta, { chartType: 'bar' });
   assert.strictEqual(out[0]!.projectName, 'Alpha');
 });
+
+test('keeps a pinned record past the cap, in its place, and only that one', () => {
+  // Newest first is d2, a1, a2, d1: a cap of 2 drops a2 and d1. Pin d1.
+  const out = buildRecent(groups, 2, (key) => key === 'dataset:d1');
+  assert.deepStrictEqual(out.map((i) => i.id), ['d2', 'a1', 'd1']);
+  // Negative control: the same cap with nothing pinned drops it.
+  assert.deepStrictEqual(buildRecent(groups, 2).map((i) => i.id), ['d2', 'a1']);
+  // The key is "type:id": an id alone does not pin.
+  assert.deepStrictEqual(buildRecent(groups, 2, (key) => key === 'd1').map((i) => i.id), ['d2', 'a1']);
+});
