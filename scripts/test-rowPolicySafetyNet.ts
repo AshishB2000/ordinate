@@ -451,6 +451,20 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('related: under a lock (east on Orders), another table\'s term is refused, even an open one\'s', H.refused(lockedEast, 'related'), lockedEast.text.slice(0, 200));
     ok('NEGATIVE CONTROL: the editor\'s Orders chart by that term answers', (await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: [{ type: 'term', term: openTerm }] })).body?.ok === true);
     await W.as('boss', async () => { for (const id of relIds) await relsMod.deleteRelationship(P, id); });
+    // The Data model's one read (model:overview): a Prepare filter step can quote a value, and Orders' key check (declared and
+    // checked above) counts every row. The step keeps every row (no customer is `_m`), so what the suite compares below is unchanged.
+    const quoted = await W.call('boss', 'dataset:addStep', { projectId: P, datasetId: orders, step: { type: 'filter', column: 'customer', op: '!=', value: `${H.W_CANARY}_m` } });
+    const ovEast = await W.call('east', 'model:overview', { projectId: P });
+    const ovEd = await W.call('ed', 'model:overview', { projectId: P });
+    eastReplies.push(ovEast.text);
+    type OvRow = { datasetId: string; keyState: string; valuesHidden?: true; alwaysApplied: { steps: unknown[] } };
+    const ovRow = (r: H.Reply) => (r.body?.tables as OvRow[] | undefined)?.find((t) => t.datasetId === orders);
+    const repeatsItem = (r: H.Reply) => (r.body?.todo as { kind: string }[] | undefined ?? []).some((i) => i.kind === 'key_repeats');
+    ok('setup: boss adds a Prepare filter on Orders that quotes a West value', quoted.body?.ok === true, quoted.text.slice(0, 160));
+    ok('redact: model:overview — east reads no value and no key count', ovEast.body?.ok === true && !H.leaks(ovEast.text) && !repeatsItem(ovEast)
+      && ovRow(ovEast)?.valuesHidden === true && ovRow(ovEast)?.keyState === 'unchecked', ovEast.text.slice(0, 240));
+    ok('…and still reads the step\'s column and operator', JSON.stringify(ovRow(ovEast)?.alwaysApplied.steps) === '[{"type":"filter","column":"customer","op":"!="}]', JSON.stringify(ovRow(ovEast)));
+    ok('NEGATIVE CONTROL: the editor\'s model:overview carries the value and the key count', H.leaks(ovEd.text) && repeatsItem(ovEd) && ovRow(ovEd)?.keyState === 'repeats', ovEd.text.slice(0, 240));
 
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {
