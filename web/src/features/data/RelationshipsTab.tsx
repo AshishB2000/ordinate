@@ -5,7 +5,7 @@
 // keyboard-first table under it. Match counts and rates are the server's,
 // counted over the full tables when the relationship was saved.
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useDatasets, type DatasetSummary } from '../../api/datasets';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
@@ -19,6 +19,7 @@ import { useCanEdit } from '../projects/api';
 import { useRelationships, useWrite, type Relationship } from './api';
 import { formatNumber, fromControl, pctText } from './format';
 import { RelationshipDialog } from './RelationshipDialog';
+import { relWarningText } from './tableApi';
 import s from './Data.module.css';
 import ms from './Model.module.css';
 
@@ -272,32 +273,45 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
             </thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.id} className={`${s.clickRow} ${r.id === selected ? s.rowOn : ''}`} onClick={(e) => !fromControl(e.target) && select(r.id)}>
-                  <td>
-                    <End name={name(r.from.datasetId)} column={r.from.column} />
-                  </td>
-                  <td>
-                    <End name={name(r.to.datasetId)} column={r.to.column} />
-                  </td>
-                  <td>{r.cardinality === 'one_to_one' ? 'One to one' : 'Many to one'}</td>
-                  <td className={s.num}>
-                    {formatNumber(r.verified.matched)} ({pctText(r.matchPct)})
-                  </td>
-                  <td className={`${s.num} ${r.verified.unmatchedFrom ? s.warnText : ''}`}>{formatNumber(r.verified.unmatchedFrom)}</td>
-                  <td className={s.actions}>
-                    {canEdit && (
-                      <Menu
-                        align="end"
-                        trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${name(r.from.datasetId)} to ${name(r.to.datasetId)}`} />}
-                        items={[
-                          { label: 'Show on diagram', icon: 'eye', onSelect: () => setSelected(r.id) },
-                          { kind: 'separator' },
-                          { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
-                        ]}
-                      />
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={r.id}>
+                  <tr className={`${s.clickRow} ${r.id === selected ? s.rowOn : ''}`} onClick={(e) => !fromControl(e.target) && select(r.id)}>
+                    <td>
+                      <End name={name(r.from.datasetId)} column={r.from.column} />
+                    </td>
+                    <td>
+                      <End name={name(r.to.datasetId)} column={r.to.column} />
+                    </td>
+                    <td>{r.cardinality === 'one_to_one' ? 'One to one' : 'Many to one'}</td>
+                    <td className={s.num}>
+                      {formatNumber(r.verified.matched)} ({pctText(r.matchPct)})
+                    </td>
+                    <td className={`${s.num} ${r.verified.unmatchedFrom ? s.warnText : ''}`}>{formatNumber(r.verified.unmatchedFrom)}</td>
+                    <td className={s.actions}>
+                      {canEdit && (
+                        <Menu
+                          align="end"
+                          trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${name(r.from.datasetId)} to ${name(r.to.datasetId)}`} />}
+                          items={[
+                            { label: 'Show on diagram', icon: 'eye', onSelect: () => setSelected(r.id) },
+                            { kind: 'separator' },
+                            { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
+                          ]}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                  {r.warning && (
+                    // The lookup side is not a clean "one": said under its row, in words, from what the server counted.
+                    <tr className={ms.relWarnRow}>
+                      <td colSpan={6}>
+                        <span className={ms.relWarn}>
+                          <Icon name="alert" size={16} />
+                          {relWarningText(r, name(r.to.datasetId))}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

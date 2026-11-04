@@ -1,9 +1,10 @@
 // /data/:projectId/:datasetId — one dataset (dsExplorer.ts, dsLineage.ts,
 // dataSection.ts's tabs): its identity header — source, tags, freshness,
 // schedule, what it is built from and what uses it — then the tabs: the
-// rows (Data), the checks (Quality), the column docs (Columns), what the app
-// found (Insights) and the versions kept on refresh (Snapshots, T2.11). Tab,
-// profiled column and grid filter live in the URL, so a link reopens them.
+// rows (Data), the checks (Quality), the column docs (Columns), what the table
+// is (About: role, key, grain, guide), what the app found (Insights) and the
+// versions kept on refresh (Snapshots, T2.11). Tab, profiled column and grid
+// filter live in the URL, so a link reopens them.
 
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -15,6 +16,7 @@ import { Menu } from '../../ui/Menu';
 import { EmptyState } from '../../ui/States';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { useLineage, useSource, useTags } from './api';
+import { AboutTab } from './AboutTab';
 import { ColumnsTab } from './ColumnsTab';
 import { DataTab } from './DataTab';
 import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle } from './DatasetList';
@@ -40,7 +42,7 @@ import { RowAccessTab } from './RowAccessTab';
 import { RowAccessOff, ScopedChip } from './RowAccessOff';
 import { useCan } from '../projects/api';
 
-const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots', 'access'] as const;
+const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots', 'access', 'about'] as const;
 type TabId = (typeof TABS)[number];
 
 /** Reads from / Used by — the datasets this one is built from, and the SQL datasets built on it. */
@@ -286,6 +288,9 @@ export default function DatasetPage() {
           <Tab value="columns" icon="columns">
             Columns
           </Tab>
+          <Tab value="about" icon="info">
+            About
+          </Tab>
           {/* T2.11: what the app found in this table, and the versions kept on refresh. */}
           <Tab value="insights" icon="zap">
             Insights
@@ -308,6 +313,9 @@ export default function DatasetPage() {
         </TabPanel>
         <TabPanel value="columns">
           <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+        <TabPanel value="about">
+          <AboutTab projectId={projectId} datasetId={datasetId} header={header} />
         </TabPanel>
         <TabPanel value="insights">
           {scoped ? <RowAccessOff what="Insights" /> : <InsightsTab projectId={projectId} datasetId={datasetId} />}
