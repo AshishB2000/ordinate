@@ -295,6 +295,12 @@ export interface SchemaSyncWrite {
   syncedAt: string;
   /** The columns themselves changed (added, removed, retyped): the dataset's `updatedAt` moves too. */
   changed: boolean;
+  /**
+   * The base filters the sample was read under. When the record's differ by the time of the write
+   * (an editor changed them during the sync), the figures are not stored: they describe rows the new
+   * filters may exclude. Absent: not checked.
+   */
+  sampledUnder?: FilterStep[];
 }
 
 /**
@@ -309,7 +315,9 @@ export function writeSchemaSync(projectId: string, id: string, w: SchemaSyncWrit
   return serialized(datasetFilePath(projectId, id), (raw) => {
     const live = sanitizeLive(raw);
     if (!live) return false;
-    const next: LiveSettings = { ...live, schemaSyncedAt: w.syncedAt, profile: sanitizeProfile(w.profile) ?? { columns: [] } };
+    const profile = sanitizeProfile(w.profile) ?? { columns: [] };
+    const moved = w.sampledUnder !== undefined && JSON.stringify(sanitizeBaseFilters(raw.baseFilters)) !== JSON.stringify(w.sampledUnder);
+    const next: LiveSettings = { ...live, schemaSyncedAt: w.syncedAt, profile: moved ? unsampled(profile) : profile };
     if (w.missingColumns.length) next.missingColumns = w.missingColumns;
     else delete next.missingColumns;
     raw.columns = liveColumnsOf(w.columns);

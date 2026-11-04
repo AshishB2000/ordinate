@@ -124,7 +124,7 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated';
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable';
 
 /**
  * A question live cannot answer, said in a catalog sentence (`message`, through
@@ -177,8 +177,9 @@ const MESSAGES: Record<LiveRefusalCode, Sentence> = {
   rowShape: { key: 'liveRefusals.the_warehouse_answered_in_a_shape', text: () => msg.liveRowShape() },
   badQuery: { key: 'liveRefusals.this_question_cannot_be_asked_of', text: () => msg.liveBadQuery() },
   columnMissing: { key: 'liveRefusals.is_no_longer_in_the_warehouse', param: 'column', text: (c) => msg.liveColumnMissing(c) },
-  baseFilter: { key: 'liveRefusals.this_dataset_s_always_applied_filters', param: 'column', text: (c) => msg.liveBaseFilterRefused(c) },
+  baseFilter: { key: 'liveRefusals.the_always_applied_filter_on_can', param: 'column', text: (c) => msg.liveBaseFilterRefused(c) },
   calculated: { key: 'liveRefusals.this_dataset_s_calculated_fields_can', param: 'column', text: (c) => msg.liveCalculatedRefused(c) },
+  baseFilterUnreadable: { key: 'liveRefusals.this_dataset_s_always_applied_filters', text: () => msg.liveBaseFiltersUnreadable() },
 };
 
 export function refuse(code: LiveRefusalCode, arg = ''): LiveRefusal {

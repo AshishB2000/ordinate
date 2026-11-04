@@ -6,6 +6,11 @@
 //    statement is byte-identical to today's, SQL and parameters. NEGATIVE CONTROL: the canary check
 //    sees a statement without the base.
 // 2. The profile names a base column even past PROFILE_MAX_COLUMNS, and refuses one it does not declare.
+// 3. The inventory, by source scan (the test-liveUsage pattern): every file under src/ that makes a
+//    ParamSink builds statements, and every builder function in one ends its statement through
+//    `whereOf` (the compiler) or `sampledFrom` (the profile) — the two places the base is AND-ed in —
+//    or is on the exempt list (it reads no rows). A new builder fails here until it carries the base.
+//    NEGATIVE CONTROL: a planted builder without either is found.
 //
 //   npm run build:ts && node scripts/test-liveBaseCompile.js
 
@@ -18,6 +23,8 @@ const compile: typeof import('../src/engine/live/compile') = require('../src/eng
 const profile: typeof import('../src/engine/live/profileSql') = require('../src/engine/live/profileSql');
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
 
 const show = (v: unknown): string => JSON.stringify(v);
 const CANARY = 'zz-base-7c41';
@@ -72,5 +79,44 @@ const kept = profile.profiledColumns(wide, [{ kind: 'empty', column: 'c500', neg
 ok('profiledColumns keeps a base column past the 500 cap, first, within the cap', kept.length === 500 && kept[0].name === 'c500' && kept.filter((c) => c.name === 'c500').length === 1);
 ok('profiledColumns without a base is today\'s first 500', show(profile.profiledColumns(wide, [])) === show(wide.slice(0, 500)) && show(profile.profiledColumns(wide, undefined)) === show(wide.slice(0, 500)));
 ok('profiledColumns keeps schema order for the rest', show(profile.profiledColumns(fx.COLUMNS, BASE).map((c) => c.name)) === show(['region', ...fx.COLUMNS.map((c) => c.name).filter((n) => n !== 'region')]));
+
+// ── 3. The inventory ─────────────────────────────────────────────────────────
+const ROOT = path.resolve(__dirname, '..');
+/** Repo-relative path → text, for every .ts under src/ (no declarations). */
+function srcFiles(): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (dir: string): void => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel);
+      else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts')) out.set(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    }
+  };
+  walk('src');
+  return out;
+}
+/** Statements need no base: they read the catalog, not rows (plan's inventory #8). */
+const EXEMPT = new Set(['compileSamplingKeyProbe']);
+/** Per builder file (one that makes a ParamSink): its `.finish(` count, and the builder functions that reach neither door. */
+function builders(files: Map<string, string>): { finishers: [string, number][]; unbased: string[] } {
+  const finishers: [string, number][] = [];
+  const unbased: string[] = [];
+  for (const [file, text] of [...files].sort()) {
+    if (file === 'src/engine/live/sqlParams.ts' || !/new ParamSink\(/.test(text)) continue;
+    finishers.push([file, (text.match(/\.finish\(/g) ?? []).length]);
+    for (const chunk of text.split(/\n(?=(?:export )?function )/)) {
+      const name = /^(?:export )?function (\w+)/.exec(chunk)?.[1];
+      if (name && /\.finish\(/.test(chunk) && !/\b(whereOf|sampledFrom)\(/.test(chunk) && !EXEMPT.has(name)) unbased.push(`${file}:${name}`);
+    }
+  }
+  return { finishers, unbased };
+}
+const found = builders(srcFiles());
+ok('inventory: the builders are exactly compile.ts ×6 and profileSql.ts ×2', show(found.finishers) === show([['src/engine/live/compile.ts', 6], ['src/engine/live/profileSql.ts', 2]]), show(found.finishers));
+ok('inventory: every builder function ends its statement through whereOf or sampledFrom', found.unbased.length === 0, show(found.unbased));
+const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
+const caught = builders(planted);
+ok('inventory NEGATIVE CONTROL: a planted builder is counted, and named as carrying no base',
+  caught.finishers.some(([f]) => f === 'src/engine/live/keyCheckSql.ts') && show(caught.unbased) === show(['src/engine/live/keyCheckSql.ts:compileKeyCheck']), show(caught));
 
 finish();

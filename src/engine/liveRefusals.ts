@@ -131,9 +131,14 @@ export function liveColumnMissing(column: string): string {
   return t('liveRefusals.is_no_longer_in_the_warehouse', { column });
 }
 
-/** A Live dataset with always-applied (base) filters this server cannot apply: it answers nothing, never an unfiltered figure. */
+/** A Live dataset whose stored always-applied (base) filters this server cannot read in full: it answers nothing, never a wider figure. */
+export function liveBaseFiltersUnreadable(): string {
+  return t('liveRefusals.this_dataset_s_always_applied_filters');
+}
+
+/** An always-applied (base) filter that cannot be applied any more (its column is gone, retyped, …): the dataset answers nothing, never a wider figure. */
 export function liveBaseFilterRefused(column: string): string {
-  return t('liveRefusals.this_dataset_s_always_applied_filters', { column });
+  return t('liveRefusals.the_always_applied_filter_on_can', { column });
 }
 
 /** A Live dataset with calculated fields this server cannot compute: it answers nothing, never a wider figure. */

@@ -28,5 +28,5 @@ export function liveBaseOf(steps: readonly FilterStep[] | undefined, columns: Li
 
 /** A Live block's base: refused outright when the stored list could not be read in full (`applyLive` marks it). */
 export function baseOfLive(live: Pick<LiveSettings, 'baseFilters' | 'baseFiltersUnreadable'>, columns: LiveColumn[]): LiveBase {
-  return live.baseFiltersUnreadable ? refuse('baseFilter', live.baseFilters?.[0]?.column ?? '') : liveBaseOf(live.baseFilters, columns);
+  return live.baseFiltersUnreadable ? refuse('baseFilterUnreadable') : liveBaseOf(live.baseFilters, columns);
 }
