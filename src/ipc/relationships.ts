@@ -13,9 +13,7 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import type { VizEncoding } from '../analysis/visuals';
 import * as rels from '../analysis/relationships';
 import type { Relationship } from '../analysis/relationships';
-import {
-  VIA_UNSUPPORTED, findPath, mergedLayout, mergedName, planTables, relatedColumnGroups, resolveColumnOwner, resolveVizJoin,
-} from '../analysis/joinPlan';
+import { findPath, planMetricJoin, relatedColumnGroups, resolveColumnOwner, resolveVizJoin } from '../analysis/joinPlan';
 import { TermNotExpandedError, termRefusal } from '../data/termStep';
 import { termNoJoinHere } from '../data/termMessages';
 import type { DsInfo, JoinPlan } from '../analysis/joinPlan';
@@ -80,6 +78,7 @@ async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinS
 async function hydrate(projectId: string, plan: JoinPlan): Promise<Map<string, TableData> | null> {
   const out = new Map<string, TableData>();
   for (const t of plan.tables) {
+    if (out.has(t.datasetId)) continue; // a dataset joined twice is read once
     const ds = await datasets.getDataset(projectId, t.datasetId);
     if (!ds) return null;
     out.set(t.datasetId, { columns: ds.columns, rows: ds.rows });
@@ -142,25 +141,18 @@ export async function joinedVizDataFor(
   return { ok: true, data: r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category };
 }
 
-/** The join a metric's column and filters need — each resolved to its NEAREST owner — or null when every one is the dataset's own. */
+/** The join a metric's column and filters need (analysis/joinPlan planMetricJoin), or null when every one is the dataset's own. */
 async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
-  const viaFilter = filters.some((f) => f && f.via);
-  const pinned = filters.some((f) => f && f.datasetId);
-  if (list.length === 0 && !viaFilter && !pinned) return null;
+  // A via with no relationship left: no value, never a total. A term's other-table filter is refused, not skipped.
+  if (list.length === 0 && !filters.some((f) => f && (f.via || f.datasetId))) return null;
   const infos = await modelInfos(projectId, datasetId, list);
   const model = live(list, infos);
-  const needed = new Set<string>();
-  const owner = resolveColumnOwner(datasetId, column, model, infos);
-  if (owner && owner !== datasetId) needed.add(owner);
-  const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos, f.datasetId) : null));
-  for (const o of filterOwners) if (o && o !== datasetId) needed.add(o);
   // A term's step on another table filters that table or nothing: never this one's same-named column, never a "—".
-  if (filters.some((f, i) => f && f.datasetId && !filterOwners[i])) throw new TermNotExpandedError('unreachable', termNoJoinHere());
-  // A via filter is refused (no value), never skipped into an unfiltered total.
-  if (viaFilter) return { infos, owner, filterOwners, planned: { ok: false as const, error: VIA_UNSUPPORTED } };
-  if (needed.size === 0) return null;
-  return { infos, owner, filterOwners, planned: planTables(datasetId, [...needed], model) };
+  const unpinned = (f: FilterStep): boolean => !(typeof f.column === 'string' && resolveColumnOwner(datasetId, f.column, model, infos, f.datasetId));
+  if (filters.some((f) => f && f.datasetId && unpinned(f))) throw new TermNotExpandedError('unreachable', termNoJoinHere());
+  const planned = planMetricJoin(datasetId, column, filters, model, infos);
+  return planned ? { infos, planned } : null;
 }
 
 /** The dataset a metric's bare column is read from, as joinedMetricFor reads it: its own, else the nearest related one that has it. */
@@ -171,7 +163,7 @@ export async function metricColumnOwner(projectId: string, datasetId: string, co
 /** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
 export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
   const mj = await metricJoin(projectId, datasetId, column, filters);
-  return mj && mj.planned.ok ? mj.planned.value.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
+  return mj && mj.planned.ok ? mj.planned.value.plan.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
 }
 
 /**
@@ -188,20 +180,9 @@ export async function joinedMetricFor(
 ): Promise<{ ok: boolean; value: number | null } | null> {
   const mj = await metricJoin(projectId, datasetId, spec.column, filters);
   if (!mj) return null;
-  const { infos, owner, filterOwners, planned } = mj;
+  const { infos, planned } = mj;
   if (!planned.ok) return { ok: true, value: null };
-  const plan = planned.value;
-  const layout = mergedLayout(plan, infos);
-  const tIndex = (id: string): number => plan.tables.findIndex((t) => t.datasetId === id);
-  const mOwner = owner || datasetId;
-  const column = mergedName(layout, plan, tIndex(mOwner), spec.column, infos) ?? spec.column;
-  const flt = filters.map((f, i) => {
-    const o = filterOwners[i];
-    if (!o) return f;
-    const out = { ...f, column: mergedName(layout, plan, tIndex(o), f.column, infos) ?? f.column };
-    delete out.datasetId; // on its table's merged column now
-    return out;
-  });
+  const { plan, layout, column, table, filters: flt } = planned.value;
 
   const sources = await residentSources(projectId, plan);
   if (sources) {
@@ -212,7 +193,7 @@ export async function joinedMetricFor(
   if (!tables) return { ok: false, value: null };
   return {
     ok: true,
-    value: joinedMetricJs(plan, layout, tables, infos, { column, aggregation: spec.aggregation, table: tIndex(mOwner) }, flt),
+    value: joinedMetricJs(plan, layout, tables, infos, { column, aggregation: spec.aggregation, table }, flt),
   };
 }
 

@@ -95,21 +95,16 @@ export const NO_VIA: { label: string; enc: VizEncoding; filters: FilterStep[] }[
   { label: 'NV3', enc: { category: 'region', values: [M('amount', 'sum')] }, filters: [F('quarter', 'Q1')] },
 ];
 
-/** The KPI sum(amount) where quarter = 'Q2' (NV4), as the server's metric join plans it, over the JS reference. */
+/** The KPI sum(amount) where quarter = 'Q2' (NV4), planned as the server's metric join plans it, over the JS reference. */
 function nv4(): unknown {
-  const filters = [F('quarter', 'Q2')];
-  const owner = jp.resolveColumnOwner(SALES.id, 'quarter', RELS, infos) as string;
-  const planned = jp.planTables(SALES.id, [owner], RELS);
-  if (!planned.ok) return planned;
-  const plan = planned.value;
-  const layout = jp.mergedLayout(plan, infos);
-  const ti = plan.tables.findIndex((t) => t.datasetId === owner);
-  const flt = filters.map((f) => ({ ...f, column: jp.mergedName(layout, plan, ti, f.column, infos) ?? f.column }));
+  const planned = jp.planMetricJoin(SALES.id, 'amount', [F('quarter', 'Q2')], RELS, infos);
+  if (!planned || !planned.ok) return planned;
+  const { plan, layout, column, table, filters } = planned.value;
   return {
     label: 'NV4',
     tables: plan.tables.map((t) => [t.datasetId, t.via ? t.via.relId : null]),
     columns: layout.columns,
-    value: js.joinedMetricJs(plan, layout, tables, infos, { column: 'amount', aggregation: 'sum', table: 0 }, flt),
+    value: js.joinedMetricJs(plan, layout, tables, infos, { column, aggregation: 'sum', table }, filters),
   };
 }
 

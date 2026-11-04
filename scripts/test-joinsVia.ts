@@ -1,9 +1,11 @@
-// A relationship's `label` and a reference's `via` survive every sanitizer, and until the planner
-// can walk a named relationship (step 09) a `via` is REFUSED, never answered through the first one.
+// A relationship's `label` and a reference's `via` survive every sanitizer, and a `via` resolves
+// through THAT relationship (step 09) — or is refused, never answered through the first one.
 // Old pods of a rolling deploy must not drop a field a later release writes (plan 09, "Old pods").
 //
+//   § via     a measure, the category and a filter step name their relationship; JS === resident
+//             (Object.is); a via that cannot resolve is refused
 //   § guard   sanitizeSteps / sanitizeEncoding / sanitizeRelationship keep the new fields (and drop
-//             a malformed one); a chart with `via` is refused by the planner; a `via` filter is
+//             a malformed one); a `via` filter that reaches no planner is
 //             skipped with the unknown-column warning on the JS fold, declined by the resident
 //             predicate, refused by Live; a KPI and a chart reached through `vizJoin` / `metricJoin`
 //             refuse it even in a project with NO relationships. Every guard has a negative control.
@@ -30,6 +32,9 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
 const jp: typeof import('../src/analysis/joinPlan') = require('../src/analysis/joinPlan');
+const js: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
+const jr: typeof import('../src/engine/joinResident') = require('../src/engine/joinResident');
+const { buildVizData }: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const { applyPipeline, sanitizeSteps }: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { sanitizeEncoding }: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const { filterPredicate }: typeof import('../src/engine/residentFilter') = require('../src/engine/residentFilter');
@@ -83,20 +88,81 @@ async function main(): Promise<void> {
     && rels.sanitizeRelationship({ ...r, label: 'x'.repeat(60) })!.label === 'x'.repeat(60));
   ok('the fixture relationships carry their labels', RELS[0].label === 'Order date' && RELS[1].label === 'Ship date' && RELS[2].label === undefined);
 
-  // ── § guard: the planner refuses via ───────────────────────────────────────
-  const viaEnc: VizEncoding = { category: 'month', categoryDatasetId: DATES.id, categoryVia: R_SHIP, values: [{ column: 'amount', aggregation: 'sum' }] };
-  ok('09a: a chart with via is refused, never drawn through the first relationship',
-    show(jp.resolveVizJoin(SALES.id, viaEnc, [], RELS, infos)) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
-  ok('09a: a via on a measure, or on a filter alone, is refused too',
-    show(jp.resolveVizJoin(SALES.id, { category: 'region', values: [{ column: 'year', aggregation: 'max', datasetId: DATES.id, via: R_SHIP }] }, [], RELS, infos))
-      === show({ ok: false, error: jp.VIA_UNSUPPORTED })
-    && show(jp.resolveVizJoin(SALES.id, { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, [viaStep], RELS, infos))
-      === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
-  const plain: VizEncoding = { ...viaEnc, categoryVia: undefined };
-  const planned = jp.resolveVizJoin(SALES.id, plain, [], RELS, infos);
-  ok('negative control: the same chart without via still plans through the first relationship', !!planned && planned.ok);
+  // ── § via: a reference names its relationship, in both engines ─────────
+  const golden = Object.fromEntries((JSON.parse(fs.readFileSync(GOLDEN, 'utf8')) as { label: string; data: unknown }[]).map((g) => [g.label, g])) as Record<string, { data: unknown }>;
+  const M = (column: string, aggregation: 'sum' | 'count' | 'max', datasetId?: string, via?: string) => ({ column, aggregation, ...(datasetId && { datasetId }), ...(via && { via }) });
+  const V: Record<string, { enc: VizEncoding; filters?: FilterStep[] }> = {
+    ship: { enc: { category: 'month', categoryDatasetId: DATES.id, categoryVia: R_SHIP, values: [M('amount', 'sum')] } },
+    both: { enc: { category: 'month', categoryDatasetId: DATES.id, values: [M('amount', 'sum'), M('quarter', 'count', DATES.id, R_SHIP)] } },
+    shipFilter: { enc: { category: 'region', values: [M('amount', 'sum')] }, filters: [{ ...F('quarter', '=', 'Q1'), via: R_SHIP }] },
+    defaultNamed: { enc: { category: 'month', categoryDatasetId: DATES.id, categoryVia: R_ORDER, values: [M('amount', 'sum')] } },
+    orderYear: { enc: { category: 'region', values: [M('amount', 'sum')] }, filters: [{ ...F('year', '=', 2024), via: R_ORDER }] },
+  };
+  const join = (c: { enc: VizEncoding; filters?: FilterStep[] }, rs = RELS) => jp.resolveVizJoin(SALES.id, c.enc, c.filters || [], rs, infos);
+  const planOf = (c: { enc: VizEncoding; filters?: FilterStep[] }): import('../src/analysis/joinPlan').VizJoin => {
+    const j = join(c);
+    if (!j || !j.ok) throw new Error(`does not plan: ${show(j)}`);
+    return j.value;
+  };
+  const err = (c: { enc: VizEncoding; filters?: FilterStep[] }, rs = RELS): string => { const j = join(c, rs); return j && !j.ok ? j.error : `planned: ${show(j)}`; };
+  const dataOf: Record<string, unknown> = {};
+  for (const [label, c] of Object.entries(V)) {
+    const j = planOf(c);
+    const want = js.joinedVizDataJs(j, fx.tables, infos);
+    const got = await jr.joinedAggregateResident(j.plan.tables.map((t) => fx.sourceOf(t.datasetId)), j, infos);
+    dataOf[label] = want.data;
+    ok(`${label}: the resident path answers, and the reference raised no warning`, got !== null && want.warnings.length === 0, show([got, want.warnings]));
+    const same = !!got && show(got.data.labels) === show(want.data.labels) && want.data.series.every((sr, i) => got.data.series[i]?.name === sr.name
+      && sr.values.every((v, k) => Object.is(v, got.data.series[i].values[k])));
+    ok(`${label}: labels and every value SQL === JS (Object.is)`, same, show([got && got.data, want.data]));
+  }
+  const both = planOf(V.both);
+  ok('both: two Dates tables, each one row per sale', both.plan.tables.map((t) => t.key).join() === `,${R_ORDER},${R_SHIP}`
+    && both.plan.tables.map((t) => t.parent).join() === '-1,0,0' && js.joinTables(both.plan, both.layout, fx.tables, infos).rows.length === 40);
+  ok('both: the default Dates keeps its name, the Ship date one takes the label', both.encoding.category === 'Dates.month' && both.encoding.values[1].column === 'Ship date.quarter'
+    && both.measureTable.get('Ship date.quarter') === 2 && both.encoding.values.every((v) => v.via === undefined && v.datasetId === undefined));
+  const ship = planOf(V.ship);
+  ok('ship: its column is named by the label', ship.layout.columns.some((c) => c.name === 'Ship date.month') && ship.encoding.category === 'Ship date.month' && ship.encoding.categoryVia === undefined);
+  ok('NEGATIVE CONTROL: Ship date by month differs from Order date by month', show(dataOf.ship) !== show(golden.NV1.data) && (dataOf.ship as { labels: string[] }).labels.includes('2025-01'));
+  ok('defaultNamed: the same table and the same answer as no via (NV1)', show(dataOf.defaultNamed) === show(golden.NV1.data) && planOf(V.defaultNamed).plan.tables.length === 2
+    && planOf(V.defaultNamed).plan.tables[1].label === undefined);
+  const sf = planOf(V.shipFilter);
+  ok('shipFilter: the step reads Ship date.quarter and loses its via', show(sf.filters) === show([F('Ship date.quarter', '=', 'Q1')]));
+  const oy = planOf(V.orderYear);
+  const allSales = buildVizData(SALES.columns, SALES.rows, V.orderYear.enc, []).data;
+  ok('a via filter on `year` (the primary has one) filters the joined year, never the primary\'s: every 2024 order stays',
+    show(oy.filters) === show([F('Dates.year', '=', 2024)]) && show(dataOf.orderYear) === show(allSales), show([dataOf.orderYear, allSales]));
+  ok('negative control: the primary\'s own year = 2024 drops the orders that ship in 2025',
+    show(buildVizData(SALES.columns, SALES.rows, V.orderYear.enc, [F('year', '=', 2024)]).data) !== show(allSales));
+  const unlabelled = RELS.map((x) => (x.id === R_SHIP ? { ...x, label: undefined } : x));
+  const ul = jp.resolveVizJoin(SALES.id, V.ship.enc, [], unlabelled, infos);
+  ok('an unlabelled relationship names its table "Dates (ship_date)"', !!ul && ul.ok && ul.value.encoding.category === 'Dates (ship_date).month', show(ul));
+
+  for (const q of ['Q1', 'Q3']) {
+    const k = jp.planMetricJoin(SALES.id, 'amount', [{ ...F('quarter', '=', q), via: R_SHIP }], RELS, infos);
+    if (!k || !k.ok) { ok(`KPI ${q}: plans`, false, show(k)); continue; }
+    const { plan, layout, column, table, filters } = k.value;
+    const jsKpi = js.joinedMetricJs(plan, layout, fx.tables, infos, { column, aggregation: 'sum', table }, filters);
+    const sqlKpi = await jr.joinedMetricResident(plan.tables.map((t) => fx.sourceOf(t.datasetId)), plan, layout, infos, { column, aggregation: 'sum' }, filters);
+    ok(`KPI: planMetricJoin with a Ship-date ${q} filter — joinedMetricJs === joinedMetricResident (${jsKpi})`, typeof jsKpi === 'number' && Object.is(jsKpi, sqlKpi), show([jsKpi, sqlKpi]));
+  }
+  const kOrder = jp.planMetricJoin(SALES.id, 'amount', [{ ...F('quarter', '=', 'Q1'), via: R_ORDER }], RELS, infos);
+  const kShip = jp.planMetricJoin(SALES.id, 'amount', [{ ...F('quarter', '=', 'Q1'), via: R_SHIP }], RELS, infos);
+  const kpi = (k: typeof kShip): number | null => (k && k.ok ? js.joinedMetricJs(k.value.plan, k.value.layout, fx.tables, infos, { column: k.value.column, aggregation: 'sum', table: k.value.table }, k.value.filters) : null);
+  ok('NEGATIVE CONTROL: the Q1 total by ship date differs from Q1 by order date', kpi(kShip) !== kpi(kOrder) && typeof kpi(kOrder) === 'number', show([kpi(kShip), kpi(kOrder)]));
+  ok('planMetricJoin: every column the dataset\'s own and no via → no join (null)', jp.planMetricJoin(SALES.id, 'amount', [F('year', '=', 2024)], RELS, infos) === null);
+
+  const viaRet: VizEncoding = { category: 'region', values: [M('refund', 'sum', fx.RETURNS.id, fx.R_RET)] };
+  ok('via through R_RET from Sales (the one side): refused, many side', /many side/.test(err({ enc: viaRet })), err({ enc: viaRet }));
+  ok('a deleted relationship id (a template from another project): refused, never the first', /no longer exists/.test(err({ enc: { ...V.ship.enc, categoryVia: fx.ID(999) } })));
+  ok('deleting Ship date refuses its chart rather than redrawing it through Order date', /no longer exists/.test(err(V.ship, RELS.filter((x) => x.id !== R_SHIP))));
+  ok('via R_SHIP with categoryDatasetId = RETURNS: refused, does not lead', /does not lead/.test(err({ enc: { ...V.ship.enc, categoryDatasetId: fx.RETURNS.id } })), err({ enc: { ...V.ship.enc, categoryDatasetId: fx.RETURNS.id } }));
+  ok('a via filter on a column its table lacks: refused, never the primary\'s same-named column', /has no column "amount"/.test(err({ enc: V.shipFilter.enc, filters: [{ ...F('amount', '>', 0), via: R_SHIP }] })));
+  ok('a via KPI that cannot resolve is an error (no figure), never a fallback', (() => { const k = jp.planMetricJoin(SALES.id, 'amount', [{ ...F('quarter', '=', 'Q1'), via: fx.ID(999) }], RELS, infos); return !!k && !k.ok; })());
+  ok('the golden (no via) is still byte-identical', wire.encode(await fx.noViaAnswers()) === fs.readFileSync(GOLDEN, 'utf8'));
+  const plain: VizEncoding = { ...V.ship.enc, categoryVia: undefined };
   ok('hasVia sees a categoryVia, a measure via and a filter via, and nothing else',
-    jp.hasVia(viaEnc, []) && jp.hasVia(enc, []) && jp.hasVia(plain, [viaStep]) && !jp.hasVia(plain, [F('year', '=', 2024)])
+    jp.hasVia(V.ship.enc, []) && jp.hasVia(enc, []) && jp.hasVia(plain, [viaStep]) && !jp.hasVia(plain, [F('year', '=', 2024)])
     && !jp.hasVia({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, []));
 
   // ── § guard: the fold, the resident predicate and Live never filter the primary's own column ──
@@ -134,14 +200,14 @@ async function main(): Promise<void> {
     && (await ipcRels.metricReads(P, sales.id, 'amount', [viaStep])).length === 0);
   ok('negative control: without via the KPI falls through to the single-dataset path (null)', (await ipcRels.joinedMetricFor(P, sales.id, sum, [F('year', '=', 2024)])) === null);
   const salesEnc: VizEncoding = { category: 'year', values: [{ column: 'amount', aggregation: 'sum' }] };
-  ok('a via filter on a chart with no relationships is refused with the typed sentence',
-    show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('a via filter on a chart with no relationships is refused: its relationship no longer exists',
+    show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: 'A relationship this chart joins through no longer exists.' }));
   ok('negative control: without via the chart needs no join (null)', (await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [F('year', '=', 2024)])) === null);
 
   // ── § guard: a merge keys a filter by its via, so `year = 2024` never swallows `year = 2024 via R_SHIP` ──
   const merged = mergeDashboardFilters([F('year', '=', 2024)], [viaStep]);
   ok('mergeDashboardFilters keeps a dashboard filter and a tile\'s same filter through a relationship, both', show(merged) === show([F('year', '=', 2024), viaStep]), show(merged));
-  ok('…so the merged chart is refused, never drawn on the primary\'s year', show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, merged)) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('…so the merged chart is refused here (no relationship), never drawn on the primary\'s year', show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, merged)) === show({ ok: false, error: 'A relationship this chart joins through no longer exists.' }));
   ok('negative control: the same filter twice without via still merges to one', mergeDashboardFilters([F('year', '=', 2024)], [F('year', '=', 2024)]).length === 1);
   const carried = cardModel.carrySteps({ kind: 'navigate', carry: 'all_selection' }, { filters: [F('year', '=', 2024), viaStep], selection: [] });
   ok('a tile action carries both too', show(carried) === show([F('year', '=', 2024), viaStep]), show(carried));

@@ -32,9 +32,25 @@ export interface DsInfo {
   columns: ParsedColumn[];
 }
 
+/**
+ * One table of a join, keyed by its hop PATH (relationship ids), not its dataset: one dataset can be
+ * joined twice (Sales → Dates by order date and by ship date).
+ */
+export interface PlanTable {
+  /** `pathKey` of the hops that reach it; '' for the primary. */
+  key: string;
+  datasetId: string;
+  /** The hop that adds it; null for the primary. */
+  via: Hop | null;
+  /** The table index `via.from` sits in; -1 for the primary. */
+  parent: number;
+  /** Its columns' prefix when it is NOT its dataset's default path ("Ship date"); else the dataset's name. */
+  label?: string;
+}
+
 export interface JoinPlan {
-  /** [0] is the primary dataset and has no `via`. */
-  tables: { datasetId: string; via: Hop | null }[];
+  /** [0] is the primary dataset: key '', via null, parent -1. */
+  tables: PlanTable[];
 }
 
 export interface JoinLayout {
@@ -111,37 +127,80 @@ export function findPath(
     }
   }
   const blocker = seen.get(target);
-  if (blocker) {
-    return {
-      ok: false,
-      error:
-        `${nameOf(target)} can't be used from ${nameOf(primary)}: ${nameOf(blocker.from.datasetId)} is on the ` +
-        `many side of ${nameOf(blocker.from.datasetId)}.${blocker.from.column} → ` +
-        `${nameOf(blocker.to.datasetId)}.${blocker.to.column}, so its rows would repeat and every measure would be inflated.`,
-    };
-  }
+  if (blocker) return { ok: false, error: fanOutError(target, primary, blocker, nameOf) };
   return { ok: false, error: `${nameOf(target)} is not related to ${nameOf(primary)}.` };
 }
 
-/** The union of the paths to every target, each table once, in chain order. */
+function fanOutError(target: string, primary: string, blocker: Relationship, nameOf: (id: string) => string): string {
+  return `${nameOf(target)} can't be used from ${nameOf(primary)}: ${nameOf(blocker.from.datasetId)} is on the ` +
+    `many side of ${nameOf(blocker.from.datasetId)}.${blocker.from.column} → ` +
+    `${nameOf(blocker.to.datasetId)}.${blocker.to.column}, so its rows would repeat and every measure would be inflated.`;
+}
+
+/** A plan table's identity: its hops' relationship ids, joined by '>'. */
+export function pathKey(hops: readonly Hop[]): string {
+  return hops.map((h) => h.relId).join('>');
+}
+
+/** What a hop's table is called when it is not its dataset's default: the relationship's label, else "Dates (ship_date)". */
+function hopLabel(h: Hop, rels: Relationship[], nameOf: (id: string) => string): string {
+  return rels.find((r) => r.id === h.relId)?.label ?? `${nameOf(h.to.datasetId)} (${h.from.column})`;
+}
+
+/**
+ * The hops a reference naming relationship `relId` takes: the DEFAULT path to the relationship's near
+ * side, then that one hop. The near side is its `from` when the primary reaches it; otherwise, for a
+ * one-to-one, its `to`. Walking a many-to-one backwards is refused as a fan-out, never re-routed.
+ */
+export function viaPath(primary: string, relId: string, rels: Relationship[], nameOf: (id: string) => string = (id) => id): Result<Hop[]> {
+  const r = rels.find((x) => x.id === relId);
+  if (!r) return { ok: false, error: 'A relationship this chart joins through no longer exists.' };
+  const reach = reachable(primary, rels);
+  const at = (ds: string): Hop[] | undefined => (ds === primary ? [] : reach.get(ds));
+  const back = at(r.to.datasetId);
+  if (!at(r.from.datasetId) && back) {
+    if (r.cardinality === 'one_to_one') return { ok: true, value: [...back, { relId, from: r.to, to: r.from }] };
+    return { ok: false, error: fanOutError(r.from.datasetId, primary, r, nameOf) };
+  }
+  const p = findPath(primary, r.from.datasetId, rels, nameOf);
+  return p.ok ? { ok: true, value: [...p.value, { relId, from: r.from, to: r.to }] } : p;
+}
+
+/**
+ * The union of `paths`, each table once by its path key, in chain order. A table reached by anything
+ * but its dataset's default path is labelled, so its columns never take the default table's names.
+ */
+export function planPaths(primary: string, paths: Hop[][], rels: Relationship[], nameOf: (id: string) => string = (id) => id): JoinPlan {
+  const tables: PlanTable[] = [{ key: '', datasetId: primary, via: null, parent: -1 }];
+  const reach = reachable(primary, rels);
+  const defaultKey = (ds: string): string | null => (ds === primary ? '' : reach.has(ds) ? pathKey(reach.get(ds) as Hop[]) : null);
+  for (const p of paths) {
+    p.forEach((h, i) => {
+      const key = pathKey(p.slice(0, i + 1));
+      if (tables.some((t) => t.key === key)) return;
+      const parent = tables.findIndex((t) => t.key === pathKey(p.slice(0, i)));
+      const t: PlanTable = { key, datasetId: h.to.datasetId, via: h, parent };
+      if (key !== defaultKey(h.to.datasetId)) t.label = hopLabel(h, rels, nameOf);
+      tables.push(t);
+    });
+  }
+  return { tables };
+}
+
+/** The union of the DEFAULT paths to every target, each table once, in chain order. */
 export function planTables(
   primary: string,
   targets: string[],
   rels: Relationship[],
   nameOf?: (id: string) => string,
 ): Result<JoinPlan> {
-  const tables: JoinPlan['tables'] = [{ datasetId: primary, via: null }];
-  const have = new Set([primary]);
+  const paths: Hop[][] = [];
   for (const t of targets) {
     const p = findPath(primary, t, rels, nameOf);
     if (!p.ok) return p;
-    for (const h of p.value) {
-      if (have.has(h.to.datasetId)) continue;
-      have.add(h.to.datasetId);
-      tables.push({ datasetId: h.to.datasetId, via: h });
-    }
+    paths.push(p.value);
   }
-  return { ok: true, value: { tables } };
+  return { ok: true, value: planPaths(primary, paths, rels, nameOf) };
 }
 
 export function mergedLayout(plan: JoinPlan, infos: Map<string, DsInfo>): JoinLayout {
@@ -152,10 +211,11 @@ export function mergedLayout(plan: JoinPlan, infos: Map<string, DsInfo>): JoinLa
   const used = new Set<string>();
   plan.tables.forEach((t, ti) => {
     const info = infos.get(t.datasetId) as DsInfo;
+    const prefix = t.label ?? info.name;
     offsets.push(columns.length);
     info.columns.forEach((c, ci) => {
-      let name = ti === 0 ? c.name : `${info.name}.${c.name}`;
-      for (let n = 2; ti > 0 && used.has(name); n++) name = `${info.name}.${c.name} (${n})`;
+      let name = ti === 0 ? c.name : `${prefix}.${c.name}`;
+      for (let n = 2; ti > 0 && used.has(name); n++) name = `${prefix}.${c.name} (${n})`;
       used.add(name);
       columns.push({ name, type: c.type });
       tableOf.push(ti);
@@ -201,15 +261,74 @@ export function resolveColumnOwner(
   return null;
 }
 
-/** Until the planner can walk a named relationship, a chart that names one is refused, never drawn through the first. */
-export const VIA_UNSUPPORTED =
-  'This chart joins a table through a named relationship, which this server cannot do yet. Ask your admin to finish upgrading Ordinate.';
-
-/** Does any reference name a relationship (`via`, `categoryVia`, a filter's `via`)? */
+/** Does any reference name a relationship (`via`, `categoryVia`, a filter's `via`)? Paths with no join planner decline these. */
 export function hasVia(encoding: VizEncoding, filters: FilterStep[]): boolean {
   return !!(encoding && (encoding.categoryVia || (encoding.values || []).some((v) => v && v.via)))
     || (filters || []).some((f) => f && f.via);
 }
+
+/** A column a question names: through its dataset's DEFAULT path (`ds`), or through the relationship `via`. */
+interface Ref { ds?: string; via?: string; column: string }
+
+interface Resolved { plan: JoinPlan; layout: JoinLayout; name: (r: Ref) => string; table: (r: Ref) => number }
+
+/**
+ * The plan reaching every reference, or null when each is the primary's own. A `via` that cannot
+ * resolve (gone, not walkable, leading elsewhere, or lacking the column) is an error, never the first
+ * relationship or a same-named column.
+ */
+function resolveRefs(primary: string, refs: Ref[], rels: Relationship[], infos: Map<string, DsInfo>): Result<Resolved> | null {
+  if (!refs.some((r) => r.via || (r.ds && r.ds !== primary))) return null;
+  for (const r of refs) if (r.ds && !infos.has(r.ds)) return { ok: false, error: 'A related dataset no longer exists.' };
+  const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
+  const keys = new Map<Ref, string>();
+  const paths: Hop[][] = [];
+  for (const r of refs) {
+    if (!r.via && (!r.ds || r.ds === primary)) { keys.set(r, ''); continue; }
+    const p = r.via ? viaPath(primary, r.via, rels, nameOf) : findPath(primary, r.ds as string, rels, nameOf);
+    if (!p.ok) return p;
+    if (r.via) {
+      const last = p.value[p.value.length - 1];
+      const label = hopLabel(last, rels, nameOf);
+      if (r.ds && last.to.datasetId !== r.ds) return { ok: false, error: `${label} does not lead to ${nameOf(r.ds)}.` };
+      if (!infos.get(last.to.datasetId)?.columns.some((c) => c.name === r.column)) return { ok: false, error: `${label} has no column "${r.column}".` };
+    }
+    paths.push(p.value);
+    keys.set(r, pathKey(p.value));
+  }
+  const plan = planPaths(primary, paths, rels, nameOf);
+  const layout = mergedLayout(plan, infos);
+  const table = (r: Ref): number => plan.tables.findIndex((t) => t.key === keys.get(r));
+  const name = (r: Ref): string => mergedName(layout, plan, table(r), r.column, infos) ?? r.column;
+  return { ok: true, value: { plan, layout, name, table } };
+}
+
+/**
+ * Each filter's reference: its `via`, else its column's NEAREST owner, or a glossary term's pinned dataset
+ * (`datasetId`, semantic D11); null when no dataset has the column, or the pinned one cannot be reached.
+ */
+function filterRefs(primary: string, filters: FilterStep[], rels: Relationship[], infos: Map<string, DsInfo>): (Ref | null)[] {
+  return filters.map((f) => {
+    if (!f || typeof f.column !== 'string') return null;
+    if (f.via) return { via: f.via, column: f.column };
+    const owner = resolveColumnOwner(primary, f.column, rels, infos, f.datasetId);
+    return owner ? { ds: owner, column: f.column } : null;
+  });
+}
+
+/** The filters over merged names; a resolved step loses its `via` and its `datasetId`, so no evaluator skips it. */
+function renamedFilters(filters: FilterStep[], refs: (Ref | null)[], name: (r: Ref) => string): FilterStep[] {
+  return filters.map((f, i) => {
+    const r = refs[i];
+    if (!r) return f;
+    const out = { ...f, column: name(r) };
+    delete out.via;
+    delete out.datasetId; // renamed onto its table's merged column: what every engine can apply
+    return out;
+  });
+}
+
+const isRef = (r: Ref | null): r is Ref => r !== null;
 
 /**
  * The join a visual needs, or `null` when it needs none — every field and every
@@ -224,57 +343,63 @@ export function resolveVizJoin(
   rels: Relationship[],
   infos: Map<string, DsInfo>,
 ): Result<VizJoin> | null {
-  if (hasVia(encoding, filters)) return { ok: false, error: VIA_UNSUPPORTED };
   const pinned = (filters || []).some((f) => f && f.datasetId);
   // A term on another dataset filters THAT table: a figure that cannot join refuses it, never filters its own same-named column.
   if (pinned && (!encoding || encoding.pivot || encoding.cohort || encoding.eventFunnel)) return { ok: false, error: termNoJoinHere() };
   if (!encoding || encoding.pivot || !infos.has(primary)) return null;
   if (encoding.cohort || encoding.eventFunnel) return null; // their shelves name the primary's own columns
-  const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
-  const needed = new Set<string>();
-  const want = (id: string | undefined): string => {
-    const ds = id && id !== primary ? id : primary;
-    if (ds !== primary) needed.add(ds);
-    return ds;
-  };
-  const catDs = want(encoding.categoryDatasetId);
-  const serDs = encoding.series ? want(encoding.seriesDatasetId) : primary;
-  const valDs = (encoding.values || []).map((v) => want(v.datasetId));
-  const filterDs = (filters || []).map((f) => {
-    const owner = f && typeof f.column === 'string' ? resolveColumnOwner(primary, f.column, rels, infos, f.datasetId) : null;
-    if (owner && owner !== primary) needed.add(owner);
-    return owner;
-  });
-  if ((filters || []).some((f, i) => f && f.datasetId && !filterDs[i])) return { ok: false, error: termNoJoinHere() };
-  if (needed.size === 0) return null;
-  for (const id of needed) if (!infos.has(id)) return { ok: false, error: 'A related dataset no longer exists.' };
+  const cat: Ref = { ds: encoding.categoryDatasetId || primary, via: encoding.categoryVia, column: encoding.category };
+  const ser: Ref | null = encoding.series ? { ds: encoding.seriesDatasetId || primary, column: encoding.series } : null;
+  const vals: Ref[] = (encoding.values || []).map((v) => ({ ds: v.datasetId || primary, via: v.via, column: v.column }));
+  const flts = filterRefs(primary, filters || [], rels, infos);
+  if ((filters || []).some((f, i) => f && f.datasetId && !flts[i])) return { ok: false, error: termNoJoinHere() };
+  const resolved = resolveRefs(primary, [cat, ...(ser ? [ser] : []), ...vals, ...flts.filter(isRef)], rels, infos);
+  if (!resolved || !resolved.ok) return resolved;
+  const { plan, layout, name, table } = resolved.value;
 
-  const planned = planTables(primary, [...needed], rels, nameOf);
-  if (!planned.ok) return planned;
-  const plan = planned.value;
-  const layout = mergedLayout(plan, infos);
-  const tIndex = (id: string): number => plan.tables.findIndex((t) => t.datasetId === id);
-  const rename = (id: string, col: string): string => mergedName(layout, plan, tIndex(id), col, infos) ?? col;
-
-  const enc: VizEncoding = { ...encoding, category: rename(catDs, encoding.category) };
+  const enc: VizEncoding = { ...encoding, category: name(cat) };
   delete enc.categoryDatasetId;
+  delete enc.categoryVia;
   delete enc.seriesDatasetId;
-  if (encoding.series) enc.series = rename(serDs, encoding.series);
+  if (ser) enc.series = name(ser);
   const measureTable = new Map<string, number>();
   enc.values = (encoding.values || []).map((v, i) => {
-    const column = rename(valDs[i], v.column);
-    measureTable.set(column, tIndex(valDs[i]));
+    const column = name(vals[i]);
+    measureTable.set(column, table(vals[i]));
     const out = { ...v, column };
     delete out.datasetId;
+    delete out.via;
     return out;
   });
-  const flt = (filters || []).map((f, i) => {
-    if (!filterDs[i]) return f;
-    const out = { ...f, column: rename(filterDs[i] as string, f.column) };
-    delete out.datasetId; // renamed onto its table's merged column: what every engine can apply
-    return out;
-  });
-  return { ok: true, value: { plan, layout, encoding: enc, filters: flt, measureTable } };
+  return { ok: true, value: { plan, layout, encoding: enc, filters: renamedFilters(filters || [], flts, name), measureTable } };
+}
+
+export interface MetricJoin {
+  plan: JoinPlan;
+  layout: JoinLayout;
+  /** The measure's merged name, and the table it is read from (the no-fan-out mask). */
+  column: string;
+  table: number;
+  filters: FilterStep[];
+}
+
+/**
+ * The join a metric's column and filters need — each resolved to its NEAREST owner, through its
+ * `via`, or (a glossary term's step) to its pinned dataset — or null when every one is the dataset's own.
+ */
+export function planMetricJoin(
+  primary: string,
+  column: string,
+  filters: FilterStep[],
+  rels: Relationship[],
+  infos: Map<string, DsInfo>,
+): Result<MetricJoin> | null {
+  const m: Ref = { ds: resolveColumnOwner(primary, column, rels, infos) ?? primary, column };
+  const flts = filterRefs(primary, filters, rels, infos);
+  const resolved = resolveRefs(primary, [m, ...flts.filter(isRef)], rels, infos);
+  if (!resolved || !resolved.ok) return resolved;
+  const { plan, layout, name, table } = resolved.value;
+  return { ok: true, value: { plan, layout, column: name(m), table: table(m), filters: renamedFilters(filters, flts, name) } };
 }
 
 /** Reachable datasets and their columns, nearest first — what the builder's pickers list. */

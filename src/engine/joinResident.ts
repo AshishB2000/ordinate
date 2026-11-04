@@ -69,7 +69,7 @@ export function joinRelationSql(
   for (let t = 1; t < plan.tables.length; t++) {
     const via = plan.tables[t].via;
     if (!via) throw new Error('join hop missing');
-    const ft = plan.tables.findIndex((x) => x.datasetId === via.from.datasetId);
+    const ft = plan.tables[t].parent; // by index: one dataset can be joined twice
     const fromInfo = infos.get(via.from.datasetId) as DsInfo;
     const toInfo = infos.get(via.to.datasetId) as DsInfo;
     const fi = fromInfo.columns.findIndex((c) => c.name === via.from.column);
