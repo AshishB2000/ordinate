@@ -22,7 +22,7 @@
 // the fallback for a metric that is gone (visuals.VizMeasure).
 
 import * as metrics from './metrics';
-import type { Metric } from './metrics';
+import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isFormulaDefinition } from './metrics';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
@@ -74,6 +74,34 @@ export function hasMetricMeasure(encoding: VizEncoding | null | undefined): bool
   return Array.isArray(encoding.values) && encoding.values.some((v) => v && typeof v.metricId === 'string');
 }
 
+/** The measures the door draws from their metrics: none for a pivot, cohort, funnel or drivers chart, and with a split only the first (vizData.buildPivot). */
+export function drawnMeasures(encoding: VizEncoding | null | undefined): VizMeasure[] {
+  if (!encoding || !hasMetricMeasure(encoding)) return [];
+  return encoding.series ? encoding.values.slice(0, 1) : encoding.values;
+}
+
+/**
+ * The definition the door draws `encoding.values[i]` from when its metric `m` is a simple one it follows: the
+ * ONE rule behind the planner, `chartChange` and the Assistant's facts. null: the measure is drawn as stored
+ * (no metric, another dataset's, a formula, no column of its own, or not a drawn measure).
+ */
+export function followedDefinition(m: Metric | null | undefined, datasetId: string, encoding: VizEncoding, i: number): MetricSimpleDefinition | null {
+  if (!m || m.datasetId !== datasetId || isFormulaDefinition(m.definition) || !m.definition.column) return null;
+  return i < drawnMeasures(encoding).length ? m.definition : null;
+}
+
+/**
+ * Whether a chart's numbers differ from its stored copy now that it follows `m`, and why: `filters` when the metric
+ * reads other rows than its column's plain total, `definition` when a drawn copy names another column or aggregation.
+ */
+export function chartChange(m: Metric, datasetId: string, encoding: VizEncoding): 'filters' | 'definition' | null {
+  const copies = drawnMeasures(encoding).filter((v, i) => v.metricId === m.id && followedDefinition(m, datasetId, encoding, i));
+  if (!copies.length) return null;
+  if (needsMetricPlan(m)) return 'filters';
+  const def = m.definition as MetricSimpleDefinition; // followed, so a simple one
+  return copies.some((v) => v.column !== def.column || v.aggregation !== def.aggregation) ? 'definition' : null;
+}
+
 /**
  * How a chart's metric measures are drawn, an error sentence, or null when
  * nothing differs from the measures as stored (the door then answers as it always did).
@@ -85,8 +113,7 @@ export async function planMetricMeasures(
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
   if (!hasMetricMeasure(encoding)) return null;
-  // With a split only the first measure is drawn (vizData.buildPivot).
-  const considered = encoding.series ? encoding.values.slice(0, 1) : encoding.values;
+  const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
   const leafAt = new Map<string, number>();
   let byName: Map<string, Metric> | null = null;
@@ -152,16 +179,15 @@ export async function planMetricMeasures(
       const v = considered[i];
       const m = v?.metricId ? await metrics.getMetric(projectId, v.metricId) : null;
       if (!m) continue; // gone: the stored copy, as before
-      const def = m.definition;
-      if (isFormulaDefinition(def)) {
+      if (isFormulaDefinition(m.definition)) {
         formula = true;
         const root = await build(m, new Set([m.name.toLowerCase()]), 0, true);
         if (root) plan.formulas.set(i, { name: m.name, root });
         continue;
       }
-      if (m.datasetId !== datasetId) continue; // another dataset's: the stored copy, as before
+      const def = followedDefinition(m, datasetId, encoding, i);
+      if (!def) continue; // another dataset's, or no column of its own: the stored copy, as before
       if (def.snapshot) throw new PlanError(msg.measureSnapshotPending(m.name)); // a sum over every date would be wrong; step 07 removes this
-      if (!def.column) continue; // no column of its own: nothing to follow
       if (def.column !== v.column || def.aggregation !== v.aggregation) {
         values[i] = { ...v, column: def.column, aggregation: def.aggregation };
         changed = true;

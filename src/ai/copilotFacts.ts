@@ -274,7 +274,7 @@ export function visualFacts(
   lines.push(`Visual: "${v.name}" — a ${v.chartType} chart over dataset "${datasetName}".`);
   const measures = (v.encoding.values || [])
     .map((m, i) => measureTexts[i] ?? `${m.aggregation}(${m.column})`)
-    .join(', ');
+    .join(measureTexts.some(Boolean) ? '; ' : ', '); // a filter can hold a list ("tier in 1, 2"), so a comma no longer ends a measure
   lines.push(`Category (x): ${v.encoding.category}. Measures: ${measures || '(none)'}` +
     (v.encoding.series ? `. Split by: ${v.encoding.series}.` : '.'));
   tableNoteLines(lines, table);

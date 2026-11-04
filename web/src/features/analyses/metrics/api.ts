@@ -41,6 +41,8 @@ export interface Metric extends Omit<MetricSummary, 'datasetName' | 'definitionT
 export interface Usage {
   total: number;
   summary: string;
+  /** `change` (visuals only): the chart now draws this metric as defined today, so its numbers moved once (`metric:usage`). */
+  refs: { kind: string; name: string; id: string; change?: 'filters' | 'definition' }[];
 }
 
 /** The format chip's word — short, it sits beside a name (mpkFormatBadge). */

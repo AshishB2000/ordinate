@@ -159,7 +159,7 @@ async function main(): Promise<void> {
     encoding: { category: 'city', values: [{ column: 'pop', aggregation: 'sum' as const }, { column: 'pop', aggregation: 'avg' as const }] } } as any;
   const bare = copilot.visualFacts(popVisual, 'Cities', viz).text;
   ok('visualFacts: empty measure texts change nothing, byte for byte', copilot.visualFacts(popVisual, 'Cities', viz, {}, [], {}, undefined, [undefined, undefined]).text === bare && bare.includes('Measures: sum(pop), avg(pop).'));
-  ok('visualFacts: a metric\'s text replaces its own measure only', copilot.visualFacts(popVisual, 'Cities', viz, {}, [], {}, undefined, ['"Big" = sum(pop) where pop > 150']).text.includes('Measures: "Big" = sum(pop) where pop > 150, avg(pop).'));
+  ok('visualFacts: a metric\'s text replaces its own measure only, and a `;` ends its filter', copilot.visualFacts(popVisual, 'Cities', viz, {}, [], {}, undefined, ['"Big" = sum(pop) where pop > 150']).text.includes('Measures: "Big" = sum(pop) where pop > 150; avg(pop).'));
   ok('visualFacts provenance names the visual + dataset',
     vFacts.provenance.kind === 'visual' && vFacts.provenance.name === 'Pop chart' && vFacts.provenance.datasetName === 'Cities');
 

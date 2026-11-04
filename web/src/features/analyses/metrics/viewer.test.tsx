@@ -76,4 +76,23 @@ describe('a viewer on the metrics', () => {
     expect(screen.getByRole('button', { name: 'Add to dashboard' })).toBeTruthy();
     await waitFor(() => expect(editor.some((c) => c.channel === 'metricTree:suggest')).toBe(true));
   }, 30_000);
+
+  it('marks a metric whose charts now draw other numbers, naming them; one with none shows no mark', async () => {
+    const ref = (name: string, change?: 'filters' | 'definition') => ({ kind: 'visual', name, id: name, ...(change ? { change } : {}) });
+    const row = (refs: ReturnType<typeof ref>[]) => ({ display: '2', series: null, usage: { total: refs.length, summary: `${refs.length} visuals`, refs } });
+    serveRpc(routes('viewer', {
+      'metric:table': { body: { ok: true, metrics: [metric(M, 'Revenue'), metric(N, 'Orders')], rows: {
+        [M]: row([ref('Tier chart', 'filters'), ref('Old copy', 'definition'), ref('Plain sales')]),
+        [N]: row([ref('Plain sales')]),
+      } } },
+    }));
+    renderApp(`/data/metrics?project=${P}`);
+    const mark = await screen.findByText('2 charts changed', {}, { timeout: LAZY });
+    expect(mark.closest('[title]')?.getAttribute('title')).toBe('Tier chart, Old copy');
+    expect(screen.getAllByText(/charts? changed/)).toHaveLength(1); // Orders' only chart draws what it drew
+    cleanup();
+    serveRpc(routes('viewer', { 'metric:table': { body: { ok: true, metrics: [metric(M, 'Revenue')], rows: { [M]: row([ref('One', 'filters')]) } } } }));
+    renderApp(`/data/metrics?project=${P}`);
+    expect(await screen.findByText('1 chart changed', {}, { timeout: LAZY })).toBeTruthy();
+  }, 30_000);
 });

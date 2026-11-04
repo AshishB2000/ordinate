@@ -28,6 +28,8 @@ const msg: typeof import('../src/analysis/metricCheckMessages') = require('../sr
 const measures: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
 const vmm: typeof import('../src/ipc/vizMetricMeasures') = require('../src/ipc/vizMetricMeasures');
 const { followedMeasureTexts }: typeof import('../src/ipc/copilotMeasures') = require('../src/ipc/copilotMeasures');
+const usage: typeof import('../src/analysis/metricUsage') = require('../src/analysis/metricUsage');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const visualStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
@@ -130,6 +132,36 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   const month = await chart(X, dated);
   const monthRows = await post('visual:rows', { projectId: P, datasetId: X, encoding: dated, filters: [], mark: { category: month.ok ? month.data.labels[0] : '' } }).then((r) => r.value);
   ok('drill on a month: the metric\'s filter and the month\'s range are both in the row scope', month.ok && monthRows.available === true && monthRows.filters.some((f: Reply) => f.column === 'tier' && f.value === 2) && monthRows.filters.some((f: Reply) => f.column === 'd'), show(monthRows.reason ?? monthRows.filters));
+
+  // ── 5b. `metric:usage` names the charts whose numbers change ───────────────
+  // The delete sentence is unchanged; each chart that now draws something else than its stored copy carries `change`.
+  {
+    const saveV = async (name: string, encoding: unknown): Promise<Reply> =>
+      (await post('visual:save', { projectId: P, datasetId: X, name, chartType: 'column', encoding })).value;
+    const v1 = await saveV('Tier chart', enc3);
+    const v2 = await saveV('Plain sales', { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: sales }] });
+    const v3 = await saveV('Old copy', { category: 'region', values: [{ column: 'amt', aggregation: 'sum', metricId: sales }] });
+    const u3 = await H.as(ORG_A, () => usage.metricUsage(P, t3));
+    ok('usage marks a chart built from a filtered metric', u3.refs.find((r) => r.id === v1.id)?.change === 'filters', show(u3.refs));
+    const us = await H.as(ORG_A, () => usage.metricUsage(P, sales));
+    ok('usage marks a chart whose copy differs from the metric', us.refs.find((r) => r.id === v3.id)?.change === 'definition', show(us.refs));
+    ok('NEGATIVE CONTROL: a chart that draws the same figure is not marked', us.refs.find((r) => r.id === v2.id)?.change === undefined && us.refs.some((r) => r.id === v2.id), show(us.refs));
+    ok('the delete sentence is unchanged', us.summary === '2 visuals', us.summary);
+
+    // chartChange is the planner's drawn-measure rule: a chart the door draws from its stored copy is not "changed".
+    const mt3 = (await H.as(ORG_A, () => metricsMod.getMetric(P, t3)))!;
+    const plainAmt3 = { column: 'amt', aggregation: 'sum' };
+    const change = (m: typeof mt3, enc: unknown, ds = X) => measures.chartChange(m, ds, enc as never);
+    ok('chartChange: a filtered metric changes its chart\'s numbers', change(mt3, enc3) === 'filters');
+    ok('chartChange: NEGATIVE CONTROL a metric the chart does not draw', change(mt3, { category: 'region', values: [plainAmt3] }) === null);
+    ok('chartChange: another dataset\'s metric is drawn as stored', change(mt3, enc3, L) === null);
+    ok('chartChange: a pivot draws its saved copy', change(mt3, { ...enc3, pivot: { rows: ['region'], columns: [], values: [] } }) === null);
+    ok('chartChange: under a split only the first measure is drawn (the second is not changed)', change(mt3, { ...enc3, series: 'cat', values: [plainAmt3, enc3.values[0]] }) === null);
+    ok('chartChange: … and the first is', change(mt3, { ...enc3, series: 'cat', values: [enc3.values[0], plainAmt3] }) === 'filters');
+    const f = await save('Half qty', X, { formula: 'sum(qty) / 2' });
+    const mf = (await H.as(ORG_A, () => metricsMod.getMetric(P, f)))!;
+    ok('chartChange: a formula metric is drawn as it always was', change(mf, { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: f }] }) === null);
+  }
 
   // ── 6. Small multiples ─────────────────────────────────────────────────────
   const f1 = await chart(X, { ...enc3, facet: { rows: 'cat' } });
@@ -266,20 +298,59 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   // `sum(qty)` alone would let the model narrate tier-2 figures as the total.
   {
     const west = await save('West qty', X, { column: 'qty', aggregation: 'sum' }, [eq('region', 'West')]);
-    const mk = (name: string, values: unknown[]) => H.as(ORG_A, () => visualStore.saveVisual(P, { datasetId: X, name, chartType: 'column', encoding: { category: 'tier', values } } as never)).then((v) => v!);
-    const measuresOf = async (id: string): Promise<string> => /Measures: ([^\n]*)\./.exec((await H.as(ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'visual', id }))).text)?.[1] ?? '';
+    const mk = (name: string, values: unknown[], extra: Record<string, unknown> = {}) => H.as(ORG_A, () => visualStore.saveVisual(P, { datasetId: X, name, chartType: 'column', encoding: { category: 'tier', values, ...extra } } as never)).then((v) => v!);
+    const factsText = (id: string): Promise<string> => H.as(ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'visual', id })).then((f) => f.text);
+    const measuresOf = async (id: string): Promise<string> => /Measures: ([^\n]*)\./.exec(await factsText(id))?.[1] ?? '';
     const filtered = await mk('Facts filtered', [{ column: 'qty', aggregation: 'sum', metricId: t3 }]);
     ok('facts: a followed simple metric is its name, its definition and its filters', (await measuresOf(filtered.id)) === '"Tier 3 qty" = sum(qty) where tier = 2', await measuresOf(filtered.id));
     const quotedV = await mk('Facts quoted', [{ column: 'qty', aggregation: 'sum', metricId: west }]);
     ok('facts: a text cell value is quoted, as the other facts quote data', (await measuresOf(quotedV.id)) === '"West qty" = sum(qty) where region = "West"', await measuresOf(quotedV.id));
+    // A filter on one measure and not on the next: a `;` ends the filter, so `tier in 1, 2` cannot run into `avg(amt)`.
     const mixed = await mk('Facts mixed', [{ column: 'qty', aggregation: 'sum', metricId: t3 }, { column: 'amt', aggregation: 'avg' }]);
-    ok('facts: a measure with no metric keeps its line byte for byte', (await measuresOf(mixed.id)) === '"Tier 3 qty" = sum(qty) where tier = 2, avg(amt)', await measuresOf(mixed.id));
+    ok('facts: a measure with no metric follows a filtered one after a semicolon', (await measuresOf(mixed.id)) === '"Tier 3 qty" = sum(qty) where tier = 2; avg(amt)', await measuresOf(mixed.id));
+    const t12 = await save('Tier 1 or 2 qty', X, { column: 'qty', aggregation: 'sum' }, [{ type: 'filter', column: 'tier', op: 'in', values: [1, 2] }]);
+    const listV = await mk('Facts list', [{ column: 'qty', aggregation: 'sum', metricId: t12 }, { column: 'amt', aggregation: 'avg' }]);
+    ok('facts: a list filter does not run into the next measure', (await measuresOf(listV.id)) === '"Tier 1 or 2 qty" = sum(qty) where tier in 1, 2; avg(amt)', await measuresOf(listV.id));
     const plainV = await mk('Facts plain', [{ column: 'qty', aggregation: 'sum' }]);
     ok('NEGATIVE CONTROL: a plain measure is the bare line', (await measuresOf(plainV.id)) === 'sum(qty)', await measuresOf(plainV.id));
     const bareV = await mk('Facts unfiltered metric', [{ column: 'amt', aggregation: 'sum', metricId: sales }]);
     ok('NEGATIVE CONTROL: a followed metric with no filters is the bare line of what it draws', (await measuresOf(bareV.id)) === 'sum(qty)', await measuresOf(bareV.id));
-    const marked = await H.as(ORG_A, () => followedMeasureTexts(P, X, filtered.encoding, { tier: { sensitivity: 'personal' } }));
-    ok('facts: a filter on a withheld column names the column and not the value', marked[0] === '"Tier 3 qty" = sum(qty) where tier (withheld)', show(marked));
+    const bareTwo = await mk('Facts unfiltered pair', [{ column: 'amt', aggregation: 'sum', metricId: sales }, { column: 'amt', aggregation: 'avg' }]);
+    ok('NEGATIVE CONTROL: with no filter anywhere the measures are joined with commas, byte for byte', (await measuresOf(bareTwo.id)) === 'sum(qty), avg(amt)', await measuresOf(bareTwo.id));
+
+    // One rule decides "this measure follows its metric": a pivot draws its saved copy, and a split draws only the first measure.
+    const asked = (encoding: unknown) => H.as(ORG_A, () => followedMeasureTexts(P, X, encoding as never, {}));
+    ok('facts: a pivot draws its saved copy, so its measure is not worded as the metric', (await asked({ ...filtered.encoding, pivot: { rows: ['region'], columns: [], values: [] } })).every((t) => t === undefined));
+    const plainAmtM = { column: 'amt', aggregation: 'sum' };
+    ok('facts: under a split only the first measure is drawn, so a filtered second one is not worded', (await asked({ ...filtered.encoding, series: 'cat', values: [plainAmtM, filtered.encoding.values[0]] })).every((t) => t === undefined));
+    ok('NEGATIVE CONTROL: … and a filtered first measure under the same split is', typeof (await asked({ ...filtered.encoding, series: 'cat', values: [filtered.encoding.values[0], plainAmtM] }))[0] === 'string');
+
+    // A filter list may carry a step this pod cannot read (a glossary term, a later release's step): named by its kind, never a crash.
+    const kept = await save('Kept qty', X, { column: 'qty', aggregation: 'sum' }, [eq('tier', 2), { type: 'later_step', column: 'tier', via: randomUUID(), values: 'not a list' }]);
+    const keptV = await mk('Facts kept step', [{ column: 'qty', aggregation: 'sum', metricId: kept }]);
+    ok('facts: a kept step is named by its kind and does not break the Assistant', (await measuresOf(keptV.id)) === '"Kept qty" = sum(qty) where tier = 2 and later step', await factsText(keptV.id).catch((e) => String(e)));
+
+    // The withheld guarantee, through buildFacts: the column's mark in the catalog hides the filter's value from the prompt.
+    const mark = (datasetId: string, column: string, sensitivity: string) => H.as(ORG_A, () => catalog.setColumn(P, datasetId, column, { sensitivity } as never));
+    await mark(X, 'tier', 'personal');
+    const hiddenText = await factsText(filtered.id);
+    ok('facts: a filter on a column the user marked names the column and not the value', /Measures: "Tier 3 qty" = sum\(qty\) where tier \(withheld\)\./.test(hiddenText) && !hiddenText.includes('tier = 2'), hiddenText.slice(0, 600));
+    await mark(X, 'tier', 'none');
+    ok('NEGATIVE CONTROL: unmarked, the same facts show the value', (await measuresOf(filtered.id)) === '"Tier 3 qty" = sum(qty) where tier = 2');
+
+    // A step with `via` names a column of the RELATED dataset: its mark is looked up there, and an unknown relationship is withheld.
+    const rel = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: L, column: 'region' }, cardinality: 'many_to_one' }));
+    if (!rel) throw new Error('relationship not saved');
+    const viaOf = async (name: string, step: unknown): Promise<string> => {
+      const id = await save(name, X, { column: 'qty', aggregation: 'sum' }, [step]);
+      return measuresOf((await mk(`Facts ${name}`, [{ column: 'qty', aggregation: 'sum', metricId: id }])).id);
+    };
+    await mark(L, 'tier', 'personal'); // the related table's column is marked; the primary's own `tier` is not
+    ok('facts: a related table\'s personal column is withheld', (await viaOf('Via tier', { ...eq('tier', 3), via: rel.id })) === '"Via tier" = sum(qty) where tier (withheld)');
+    ok('NEGATIVE CONTROL: a related table\'s unmarked column shows its value', (await viaOf('Via qty', { ...eq('qty', 5), via: rel.id })) === '"Via qty" = sum(qty) where qty = 5');
+    ok('a relationship that cannot be resolved is withheld', (await viaOf('Via gone', { ...eq('qty', 5), via: randomUUID() })) === '"Via gone" = sum(qty) where qty (withheld)');
+    await mark(L, 'tier', 'none');
+    await H.as(ORG_A, () => rels.deleteRelationship(P, rel.id));
   }
 
   // ── 12. A snapshot metric is refused until step 07 ─────────────────────────
