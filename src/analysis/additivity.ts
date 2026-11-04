@@ -6,25 +6,29 @@
 //   categories   the values of two members of a dimension (two regions) add to the whole
 //   time         the values of two periods (two days) add to the whole
 //
-// PURE: it reads a metric record and the dataset's column list, never a row.
+// The rule is PURE: it reads a metric record and the dataset's column list. The chart check at the foot reads
+// metric records and dataset metadata, never a row, so a Live chart is not hydrated.
 
 import type { ParsedColumn } from '../data/parse';
+import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
-import { isFormulaDefinition } from './metrics';
+import { getMetric, isFormulaDefinition, metricsByName } from './metrics';
 import { metricShape } from './driverShape';
 import type { ParamValues } from './params';
-import { CALC_KIND_NAMES } from './tableCalc';
+import { CALC_KIND_NAMES, calcAlong, sanitizeTableCalc } from './tableCalc';
 import type { TableCalcKind } from './tableCalc';
+import type { VizEncoding, VizMeasure } from './visuals';
 import { calcNotAdditive, calcNotAdditiveOverTime } from './metricCheckMessages';
 
 export interface Additivity { categories: boolean; time: boolean }
 
-const NOT_ADDITIVE: ReadonlySet<string> = new Set(['avg', 'min', 'max']);
+// A new aggregation is not additive until it is added to this list.
+const ADDS: ReadonlySet<string> = new Set(['sum', 'count', 'none']);
 const ADDING: ReadonlySet<TableCalcKind> = new Set<TableCalcKind>(['running_total', 'pct_of_total', 'moving_sum']);
 
-/** `sum`, `count` and `none` (the raw value) add; `avg`, `min` and `max` do not. */
+/** `sum`, `count` and `none` (the raw value) add; every other aggregation, an unknown or missing one included, does not. */
 export function aggregationAdditivity(aggregation: string): Additivity {
-  const adds = !NOT_ADDITIVE.has(aggregation);
+  const adds = ADDS.has(aggregation);
   return { categories: adds, time: adds };
 }
 
@@ -55,4 +59,57 @@ export function calcRefusal(measure: string, kind: TableCalcKind, a: Additivity,
   const needs = calcNeedsAdditive(kind, alongTime);
   if (!needs || a[needs]) return null;
   return needs === 'time' && a.categories ? calcNotAdditiveOverTime(measure, CALC_KIND_NAMES[kind]) : calcNotAdditive(measure, CALC_KIND_NAMES[kind]);
+}
+
+/** What a measure is called in a sentence, and whether it adds. A metric that is gone (or is on another dataset) is what is plotted: its stored aggregation. */
+async function resolveMeasure(
+  projectId: string, datasetId: string, m: VizMeasure, params?: ParamValues, plotsStored = false,
+): Promise<{ name: string; additivity: Additivity }> {
+  const dataset = m.datasetId ?? datasetId;
+  const found = m.metricId ? await getMetric(projectId, m.metricId) : null;
+  const metric = found && found.datasetId === dataset ? found : null;
+  const stored = { name: metric?.name ?? `${m.aggregation} of ${m.column}`, additivity: aggregationAdditivity(m.aggregation) };
+  if (!metric || plotsStored) return stored;
+  const def = metric.definition;
+  if (!isFormulaDefinition(def) && !def.snapshot) return stored;
+  // The columns and the other metrics are read for a formula only; a snapshot's rule needs neither.
+  const formula = isFormulaDefinition(def);
+  const columns = formula ? (await getDatasetMeta(projectId, dataset))?.columns ?? [] : [];
+  const byName = formula ? await metricsByName(projectId) : new Map<string, Metric>();
+  return { name: metric.name, additivity: additivityOf(metric, columns, byName, params) };
+}
+
+/** Whether a chart measure's figures add up across categories and across time. Step 03 passes `followedEncoding(...)` as the encoding wherever it asks the chart door. */
+export async function measureAdditivity(projectId: string, datasetId: string, m: VizMeasure, params?: ParamValues): Promise<Additivity> {
+  return (await resolveMeasure(projectId, datasetId, m, params)).additivity;
+}
+
+/**
+ * The reply itself, or a refusal when a running total, percent of total or moving sum is asked of a measure that
+ * does not add. A chart checks the measures it calculates (a split chart calculates `values[0]` only); a pivot
+ * plots the stored column, so each value is judged by its aggregation, across categories. The first refusal wins.
+ * A chart with no adding calc, or a reply that is not ok, comes back as the very object, with nothing read.
+ */
+export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?: { kind?: string } }>(
+  reply: R, projectId: string, datasetId: string, enc: VizEncoding, params?: ParamValues,
+): Promise<R | { ok: false; error: string; code: 'calc_not_additive' }> {
+  // A map plots no calc (applyChartCalcs), so there is no total to get wrong.
+  if (!reply.ok || enc.geo) return reply;
+  const pivot = enc.pivot ?? null;
+  const all = Array.isArray(enc.values) ? enc.values : [];
+  const values: VizMeasure[] = pivot ? pivot.values : enc.series ? all.slice(0, 1) : all;
+  for (const m of Array.isArray(values) ? values : []) {
+    const calc = sanitizeTableCalc(m?.calc);
+    if (!calc || !calcNeedsAdditive(calc.kind, false)) continue;
+    let alongTime = false; // a pivot plots the stored column, never along time
+    if (!pivot) {
+      alongTime = calcAlong(calc, enc) === 'across'
+        ? reply.category?.kind === 'date'
+        : !!enc.series && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
+    }
+    const { name, additivity } = await resolveMeasure(projectId, datasetId, m, params, !!pivot);
+    const error = calcRefusal(name, calc.kind, additivity, alongTime);
+    if (error) return { ok: false, error, code: 'calc_not_additive' };
+  }
+  return reply;
 }

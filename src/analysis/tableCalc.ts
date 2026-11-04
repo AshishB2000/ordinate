@@ -246,6 +246,16 @@ interface CalcEncoding {
   geo?: unknown;
 }
 
+/** The axis a dimension name IS on a chart's grid: the category → across, the split column → down. */
+const axisIn = (enc: { category: string; series?: string }, dim: string): 'across' | 'down' | null =>
+  dim === enc.category ? 'across' : typeof enc.series === 'string' && enc.series !== '' && dim === enc.series ? 'down' : null;
+
+/** The direction a chart's calc runs: its `along`, with a `{ dimension }` resolved to the axis it names (else across). */
+export function calcAlong(calc: TableCalc, enc: { category: string; series?: string }): 'across' | 'down' {
+  if (typeof calc.along === 'object') return axisIn(enc, calc.along.dimension) ?? 'across';
+  return calc.along === 'down' ? 'down' : 'across';
+}
+
 const dimNote = (what: string, name: string): string =>
   `The table calculation's ${what} "${name}" is not a dimension of this chart, so it was ignored.`;
 
@@ -275,20 +285,14 @@ export function applyChartCalcs<T extends { labels: (string | number)[]; series:
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const plotted = data.series.filter((s) => s.role !== 'overlay');
   const raw = plotted.map((s) => labels.map((_, i) => num(s.values[i])));
-  const axisOf = (dim: string): 'across' | 'down' | null =>
-    dim === enc.category ? 'across' : split && dim === enc.series ? 'down' : null;
 
   const out = plotted.map((s, j) => {
     // A split chart plots ONE measure as many series; otherwise series j IS measure j.
     const calc = sanitizeTableCalc(split ? measures[0]?.calc : measures[j]?.calc);
     if (!calc) return s;
-    let along: 'across' | 'down' = calc.along === 'down' ? 'down' : 'across';
-    if (typeof calc.along === 'object') {
-      const a = axisOf(calc.along.dimension);
-      if (a) along = a;
-      else note(dimNote('dimension', calc.along.dimension));
-    }
-    const restartAxis = calc.restart ? axisOf(calc.restart) : null;
+    const along = calcAlong(calc, enc);
+    if (typeof calc.along === 'object' && !axisIn(enc, calc.along.dimension)) note(dimNote('dimension', calc.along.dimension));
+    const restartAxis = calc.restart ? axisIn(enc, calc.restart) : null;
     if (calc.restart && !restartAxis) note(dimNote('restart', calc.restart));
     // Restarting on the along axis puts every cell in a partition of its own;
     // restarting on the other axis is what the partitions already are.

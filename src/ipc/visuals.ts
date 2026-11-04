@@ -20,6 +20,7 @@ import { withAnalytics } from './visualsAnalytics';
 import { withEvents } from './events'; // r8:events
 import { sanitizeOverlays } from '../analysis/analytics';
 import { withTableCalcs } from '../analysis/tableCalc';
+import { refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
@@ -416,7 +417,7 @@ export type VizDataReply =
       geoSuggest?: { level: 'us_state' | 'country' };
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply.
-  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | typeof TERM_CODE; reason?: string };
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {
@@ -640,7 +641,7 @@ export function register() {
       // Table calculations run on the aggregated grid, after either path (and
       // on the overlay's prior slice alike, so both sides mean the same thing).
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        withTableCalcs(await vizDataFor(p, d, e, f, { params: values }), e);
+        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values }), p, d, e, values), e);
       const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
       const computed = await withCompareSeries(drawn, projectId, datasetId, enc, flt, run);
       const shaped = isSharePath(share) && share !== 'bundle'
