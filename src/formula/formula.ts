@@ -66,7 +66,7 @@ export type CompileResult =
 // from the last token's end to the end of the source; when the expression ends
 // exactly there (nothing trailing to mark) it backs up over the final character,
 // because a zero-width underline draws nothing at all.
-function spanOf(tokens: Tok[], index: number, src: string): SourceSpan | undefined {
+export function spanOf(tokens: Tok[], index: number, src: string): SourceSpan | undefined {
   const t = tokens[index];
   if (t) return { start: t.start, end: t.end };
   const last = tokens[tokens.length - 1];
