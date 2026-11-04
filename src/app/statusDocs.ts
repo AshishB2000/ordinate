@@ -14,7 +14,7 @@ export interface StatusDoc {
   by: string;
   at: string;
   note: string;
-  /** Certified only: the pin of everything the figure depends on, sha256 as 43-char base64url. */
+  /** Certified only: the pin of everything the figure depends on, sha256 as 43-char base64url. Absent = unreadable. */
   pin?: string;
   /** Certified only: the version the certify event wrote (versions.ts KEY_RE shape). */
   versionKey?: string;
@@ -45,10 +45,11 @@ function sanitizeStatusDoc(raw: unknown, ref: { kind: StatusKind; id: string }):
   if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
   const doc = { by: clip(r.by, MAX_BY), at: clip(r.at, MAX_AT), note: clip(r.note, MAX_NOTE) };
   if (r.status === 'certified') {
-    if (typeof r.pin !== 'string') return null; // a badge needs something to be checked against
+    // An unreadable pin or versionKey (missing, not a string, malformed) drops that one field and keeps the entry,
+    // so sanitizing twice gives the same entry. Release B reads a certified entry with no pin as "changed since certified".
+    const pin = typeof r.pin === 'string' && PIN_RE.test(r.pin) ? r.pin : undefined;
     const versionKey = typeof r.versionKey === 'string' && KEY_RE.test(r.versionKey) ? r.versionKey : undefined;
-    // A malformed pin or versionKey drops that one field: release B reads a missing pin as "changed since certified".
-    return { status: 'certified', ...doc, ...(PIN_RE.test(r.pin) && { pin: r.pin }), ...(versionKey && { versionKey }) };
+    return { status: 'certified', ...doc, ...(pin && { pin }), ...(versionKey && { versionKey }) };
   }
   if (r.status !== 'retired') return null;
   const to = parseStatusRef(r.replacedBy);
