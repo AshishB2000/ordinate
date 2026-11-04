@@ -11,6 +11,8 @@ import { ok, finish } from './selfcheck';
 import * as H from './liveQueryHarness'; // enters server mode, which turns the SSRF guard on
 
 const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
+const { LIVE_FAKE_ID, resetFake } = H.fakeMod;
+const fake = H.fake;
 const { readTableFacts, FACTS_ROWS }: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
 const { redactSecrets, safeError }: typeof import('../src/connectors/types') = require('../src/connectors/types');
 type ConnectorContext = import('../src/connectors/types').ConnectorContext;
@@ -81,9 +83,35 @@ async function door(): Promise<void> {
   delete process.env.SSRF_ALLOW;
 }
 
+async function fakeWarehouse(): Promise<void> {
+  await H.warehouseExec(H.ORG_A, "CREATE OR REPLACE TABLE wh_keys (id INTEGER PRIMARY KEY, note VARCHAR); COMMENT ON COLUMN wh_keys.note IS 'Free text'");
+  const read = (t: string, values = {}) => H.as(H.ORG_A, () => readTableFacts(LIVE_FAKE_ID, values, {}, t));
+  const got = async (t: string, values = {}) => { const r = await read(t, values); return r && r.ok ? r.facts : null; };
+  const n0 = fake.catalogCalls;
+  const f = await got('live_fake_orders', { fixture: 'orders' });
+  ok('fake: the table and column comments', f?.comment === 'Orders, one row per line' && f.columns.find((c) => c.name === 'amount')?.comment === 'Order amount in USD', JSON.stringify(f));
+  ok('fake: types, nullability and the estimate come from DuckDB', f?.columns.map((c) => c.type).join() === 'VARCHAR,DOUBLE,DATE' && f.columns.every((c) => typeof c.nullable === 'boolean') && f.rowEstimate === 240, JSON.stringify(f));
+  const k = await got('wh_keys');
+  ok('fake: a declared key', JSON.stringify(k?.primaryKey) === '{"columns":["id"],"enforced":true}' && k?.columns[0].key === true && !k.columns[1].key, JSON.stringify(k));
+  ok('fake: a column comment alone', k?.columns[1].comment === 'Free text' && !('comment' in k));
+  const bad = await read('x"; drop table wh_keys; --');
+  ok('fake: a hostile name is refused before DuckDB', bad?.ok === false && (await read('wh_keys'))?.ok === true);
+  ok('fake: counted (the hostile name never reached the reader)', fake.catalogCalls === n0 + 3, `${fake.catalogCalls - n0}`);
+  const gone = await read('no_such_table');
+  ok('fake: a table that is not there is an error', gone?.ok === false, JSON.stringify(gone));
+  fake.factsHook = async () => ({ ok: true, comment: 'from the hook', columns: [{ name: 'h', type: 'int' }] });
+  ok('fake: a test\'s hook may answer instead', (await got('wh_keys'))?.comment === 'from the hook');
+  resetFake();
+  ok('fake: resetFake clears the hook and the count', fake.factsHook === null && fake.catalogCalls === 0);
+  const calls0 = fake.calls.length;
+  await read('wh_keys');
+  ok('fake: fake.calls records runBound only', fake.calls.length === calls0 && fake.catalogCalls === 1);
+}
+
 (async () => {
   register();
   await door();
+  await fakeWarehouse();
   H.cleanup();
   finish();
 })().catch((err: unknown) => {
