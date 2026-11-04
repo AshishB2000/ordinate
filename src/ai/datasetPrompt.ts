@@ -12,6 +12,7 @@
 
 import type { ParsedColumn } from '../data/parse';
 import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
+import { cell, oneLine } from './promptText';
 
 const WITHHELD = '(withheld)';
 
@@ -42,7 +43,7 @@ export function buildDatasetSummaryText(
       if (s.mostCommon) {
         parts.push(withheld.has(s.name)
           ? `most common value ${WITHHELD} (${s.mostCommon.count}x)`
-          : `most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
+          : `most common ${cell(s.mostCommon.value)} (${s.mostCommon.count}x)`);
       }
       lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
     }
@@ -57,10 +58,10 @@ export function buildDatasetSummaryText(
     lines.push(`Sample rows (first ${sample.length}):`);
     const hidden = ds.columns.filter((c) => withheld.has(c.name)).map((c) => c.name);
     if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked personal or financial data.)`);
-    lines.push(ds.columns.map((c) => c.name).join(' | '));
+    lines.push(ds.columns.map((c) => oneLine(c.name)).join(' | '));
     sample.forEach((row) => {
       lines.push(ds.columns
-        .map((col, c) => (withheld.has(col.name) ? WITHHELD : row && row[c] != null ? String(row[c]) : ''))
+        .map((col, c) => (withheld.has(col.name) ? WITHHELD : row ? cell(row[c]) : ''))
         .join(' | '));
     });
   }

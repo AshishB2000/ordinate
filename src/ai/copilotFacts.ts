@@ -27,6 +27,7 @@ import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { CopilotFacts } from './copilot';
 import { WITHHELD, columnNameBits, columnNoteLines, withheldColumns } from './columnNotes';
 import type { FactColumnDoc } from './columnNotes';
+import { cell, oneLine } from './promptText';
 
 // The column-notes block lives in ./columnNotes (this file is near its size
 // cap); re-exported so its readers keep one import.
@@ -180,7 +181,7 @@ export function datasetFacts(
       if (s.mostCommon) {
         parts.push(withheld.has(s.name)
           ? `most common value ${WITHHELD} (${s.mostCommon.count}x)`
-          : `most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
+          : `most common ${cell(s.mostCommon.value)} (${s.mostCommon.count}x)`);
       }
       lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
       num(ledger, `${s.name} distinct`, s.distinct ?? 0, 'count', SRC);
@@ -209,7 +210,7 @@ export function datasetFacts(
   if (told.length > 0) {
     lines.push('');
     lines.push('What the app found (every figure below is app-computed):');
-    told.forEach((i) => lines.push(`- ${i.detail}`));
+    told.forEach((i) => lines.push(`- ${oneLine(i.detail)}`));
   }
   const sample = ds.rows.slice(0, SAMPLE_ROWS);
   if (sample.length > 0) {
@@ -218,12 +219,12 @@ export function datasetFacts(
     num(ledger, 'sample rows shown', sample.length, 'count', 'dataset.sample');
     const hidden = ds.columns.filter((c) => withheld.has(c.name)).map((c) => c.name);
     if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked personal or financial data.)`);
-    lines.push(ds.columns.map((c) => c.name).join(' | '));
+    lines.push(ds.columns.map((c) => oneLine(c.name)).join(' | '));
     sample.forEach((row) => {
       // Harvested from the RENDERED line, not the cells: a text column stores
       // '007' and prints '007', and what the model can cite is what it was shown.
       const rendered = ds.columns
-        .map((col, c) => (withheld.has(col.name) ? WITHHELD : row && row[c] != null ? String(row[c]) : ''))
+        .map((col, c) => (withheld.has(col.name) ? WITHHELD : row ? cell(row[c]) : ''))
         .join(' | ');
       lines.push(rendered);
       fromAppText(ledger, 'sample row cell', rendered, 'dataset.sample');
@@ -489,7 +490,7 @@ export function captureFacts(
         num(ledger, `${s.name} non-empty`, s.nonEmpty, 'count', SRC);
       } else {
         const parts = [`${s.distinct ?? 0} distinct`, `${s.nonEmpty} non-empty`];
-        if (s.mostCommon) parts.push(`most common "${s.mostCommon.value}" (${s.mostCommon.count}x)`);
+        if (s.mostCommon) parts.push(`most common ${cell(s.mostCommon.value)} (${s.mostCommon.count}x)`);
         lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
         num(ledger, `${s.name} distinct`, s.distinct ?? 0, 'count', SRC);
         num(ledger, `${s.name} non-empty`, s.nonEmpty, 'count', SRC);
@@ -502,11 +503,11 @@ export function captureFacts(
     lines.push('');
     lines.push(`Sample rows (first ${sample.length}):`);
     num(ledger, 'sample rows shown', sample.length, 'count', 'capture.sample');
-    lines.push(columns.map((c) => c.name).join(' | '));
+    lines.push(columns.map((c) => oneLine(c.name)).join(' | '));
     sample.forEach((row) => {
       // Harvested from the RENDERED line, exactly as datasetFacts does: what the
       // model may cite is what it was shown, '007' included.
-      const rendered = columns.map((_, c) => (row && row[c] != null ? String(row[c]) : '')).join(' | ');
+      const rendered = columns.map((_, c) => (row ? cell(row[c]) : '')).join(' | ');
       lines.push(rendered);
       fromAppText(ledger, 'sample row cell', rendered, 'capture.sample');
     });
