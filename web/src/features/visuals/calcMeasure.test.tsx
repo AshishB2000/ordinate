@@ -3,7 +3,7 @@
 // and a new one is made without leaving the chart.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import type { Encoding } from './api';
@@ -104,6 +104,21 @@ describe('the builder’s measure picker', () => {
     fireEvent.click(screen.getByRole('combobox', { name: 'Measure column' }));
     fireEvent.click(screen.getByRole('option', { name: 'revenue' }));
     expect(onChange).toHaveBeenLastCalledWith({ category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] });
+  });
+
+  it('a measure whose metric was deleted says so and keeps its column', async () => {
+    serve(SERVER);
+    mount({ encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum', metricId: '3f0c1a2b-4d5e-4f60-8a7b-9c0d1e2f3a4b' }] } });
+    expect(await screen.findByText('Metric deleted')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Measure column' }).textContent).toBe('revenue');
+    // The copy it falls back to is still editable as a column.
+    expect(screen.getByRole('combobox', { name: 'Aggregation' })).toBeTruthy();
+    // Negative control: a metric that still exists is a metric, not a warning.
+    cleanup();
+    serve(SERVER);
+    mount({ encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum', metricId: SIMPLE }] } });
+    await screen.findByRole('button', { name: 'Edit the metric Total revenue' });
+    expect(screen.queryByText('Metric deleted')).toBeNull();
   });
 
   it('"New calculated measure…" opens the dialog in place; saving sets the measure and its format in one step', async () => {

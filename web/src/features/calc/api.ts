@@ -66,11 +66,13 @@ export function templateText(id: TemplateId, a: Operand, b: Operand, measure: bo
 
 /**
  * The chart measure a saved metric becomes (src/analysis/visuals.ts VizMeasure).
- * A SIMPLE metric keeps its own column and aggregation — that is what the chart
- * plots. A FORMULA metric has neither: the server calculates it from `metricId`
- * (src/ipc/vizMetricMeasures.ts) and names the series after the metric, so
- * `column` carries the name and the aggregation is `count` — the one whose
- * series name is the bare column, which keeps per-series formatting keyed right.
+ * The server draws the metric itself, from `metricId`: its aggregation and its
+ * filters (src/ipc/vizMetricMeasures.ts). What this carries besides the id is the
+ * copy a deleted metric falls back to, and the form says so when it does. A
+ * SIMPLE metric's copy is its own column and aggregation. A FORMULA metric has
+ * neither, so `column` carries its name (the series is named for it) and the
+ * aggregation is `count`: the one whose series name is the bare column, which
+ * keeps per-series formatting keyed right.
  */
 export function metricMeasure(m: Pick<MetricSummary, 'id' | 'name' | 'definition'>, prev?: Measure): Measure {
   const out: Measure = isFormula(m.definition) ? { column: m.name, aggregation: 'count', metricId: m.id } : { column: m.definition.column, aggregation: m.definition.aggregation, metricId: m.id };
