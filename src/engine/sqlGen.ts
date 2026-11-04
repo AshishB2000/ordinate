@@ -271,6 +271,10 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
 
       // ── filter ────────────────────────────────────────────────────────────
       case 'filter': {
+        if (step.via) { // a related table's column: the JS fold skips it with this warning, never filtering the primary's own
+          warnings.push(`Filter skipped: unknown column "${step.column}"`);
+          break;
+        }
         const ci = colIndex(cols, step.column);
         if (ci < 0) {
           warnings.push(`Filter skipped: unknown column "${step.column}"`);

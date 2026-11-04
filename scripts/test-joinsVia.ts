@@ -33,6 +33,7 @@ const { sanitizeEncoding }: typeof import('../src/analysis/visuals') = require('
 const { filterPredicate }: typeof import('../src/engine/residentFilter') = require('../src/engine/residentFilter');
 const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const { generateSql }: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 
 const { SALES, DATES, R_ORDER, R_SHIP, RELS, infos } = fx;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -96,6 +97,14 @@ async function main(): Promise<void> {
     filterPredicate(SALES.columns, viaStep, []) === null && !filterCannotWarn(viaStep, new Set(['year'])));
   ok('negative control: without via the resident predicate exists and the step cannot warn',
     filterPredicate(SALES.columns, F('year', '=', 2024), []) !== null && filterCannotWarn(F('year', '=', 2024), new Set(['year'])));
+  // The SQL generator (pipelineDuck / pipelinePower) is a fourth evaluator of a filter step.
+  const sqlCols = SALES.columns.map((c, i) => ({ physical: `c${i}`, name: c.name, type: c.type }));
+  const g = generateSql('sales', sqlCols, [viaStep]);
+  ok('sqlGen skips a via filter with the fold\'s own warning and no predicate; the primary\'s `year` is NOT filtered',
+    !!g.sql && !g.sql.includes('WHERE') && g.params.length === 0 && show(g.warnings) === show(t.warnings));
+  const gc = generateSql('sales', sqlCols, [F('year', '=', 2024)]);
+  ok('negative control: without via sqlGen does filter the primary\'s year (a WHERE, one bound param, no warning)',
+    !!gc.sql && gc.sql.includes('WHERE') && show(gc.params) === show([2024]) && gc.warnings.length === 0);
   ok('Live refuses a via filter (related)', (spec.adaptFilter(viaStep, SALES.columns, {}, []) as LiveRefusal).code === 'related');
   ok('negative control: Live adapts the same filter without via', !spec.isRefusal(spec.adaptFilter(F('year', '=', 2024), SALES.columns, {}, [])));
 
