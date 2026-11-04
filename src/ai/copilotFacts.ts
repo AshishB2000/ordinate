@@ -15,6 +15,7 @@
 import type { Dataset } from '../data/datasets';
 import type { ColumnSummary, QualityIssue } from '../data/datasetStats';
 import type { Visual } from '../analysis/visuals';
+import type { Additivity } from '../analysis/additivity';
 import type { Page } from '../analysis/dashboards';
 import type { Analysis, AnalysisTile } from '../analysis/analysis';
 import type { VizDataResult } from '../analysis/vizData';
@@ -119,8 +120,17 @@ export interface FactMetric {
   value: number | null;
   /** The metric's OWN formatting, which is how it should be written back. */
   display: string;
+  /** Whether its figures add up across groups and over time. Absent when unknown (a formula over a parameter). */
+  additivity?: Additivity;
   /** What the metric means, in the user's words (Metric.description). */
   description?: string;
+}
+
+/** The sentence that keeps the model from adding up what does not add (an average, a stock over time), or ''. */
+function addsUpNote(a?: Additivity): string {
+  if (!a || (a.categories && a.time)) return '';
+  const where = !a.categories && !a.time ? 'across groups or over time' : a.categories ? 'over time' : 'across groups';
+  return ` Can't be added up ${where}.`;
 }
 
 export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
@@ -128,7 +138,7 @@ export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: Fac
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.` + (m.description ? ` Means: ${m.description}` : ''));
+    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}` + (m.description ? ` Means: ${m.description}` : ''));
     num(ledger, m.name, m.value, 'number', 'metrics');
   });
 }

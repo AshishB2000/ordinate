@@ -7,6 +7,7 @@
 //   published   /p/ builds the tile as an error, and a story block as a broken block
 //   assistant   the Assistant reads the raw figures of a refused chart
 //   overlay     the "up N% vs last year" caption is not written over a measure that can't be added across time
+//   facts       the Assistant's facts and `list_metrics` say which metrics can be added up
 //
 //   npm run build:ts && node scripts/test-additivity.js
 
@@ -33,6 +34,9 @@ const stories: typeof import('../src/analysis/stories') = require('../src/analys
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcVizSample: typeof import('../src/ipc/vizSample') = require('../src/ipc/vizSample');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const copilotFacts: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
+const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+const { paramValues }: typeof import('../src/analysis/params') = require('../src/analysis/params');
 const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const { buildStory }: typeof import('../src/publish/storyData') = require('../src/publish/storyData');
 type Additivity = import('../src/analysis/additivity').Additivity;
@@ -202,6 +206,52 @@ async function main(): Promise<void> {
   ok('a parameter formula keeps its caption (overlay)', captioned(await chart({ ...scaledEnc, overlay: 'previous_year' }, withK)));
   ok('a parameter formula keeps its caption (compare)', captioned(await chart({ ...scaledEnc, compare: { mode: 'previous_year' } }, withK)));
   ok('a parameter formula keeps its caption (preview)', captioned(await preview(null, { projectId: pid, datasetId: ds, encoding: { ...scaledEnc, overlay: 'previous_year' }, ...withK })));
+
+  // ── facts ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  const lines: string[] = []; copilotFacts.metricLines(lines, [], [{ name: 'Avg basket', definitionText: 'avg of amount', value: 3, display: '3', additivity: { categories: false, time: false } }]);
+  ok('facts say an average cannot be added up', lines.some((l) => l.includes("Can't be added up across groups or over time.")), lines.join('\n'));
+  const plain: string[] = []; copilotFacts.metricLines(plain, [], [{ name: 'Revenue', definitionText: 'sum of revenue', value: 3, display: '3', additivity: { categories: true, time: true } }]);
+  ok('NEGATIVE CONTROL: an additive metric gets no extra sentence', !plain.some((l) => l.includes('added up')), plain.join('\n'));
+  const said = (a: Additivity | undefined, described = false): string => {
+    const out: string[] = [];
+    copilotFacts.metricLines(out, [], [{ name: 'M', definitionText: 'd', value: 3, display: '3', additivity: a, description: described ? 'Means it.' : undefined }]);
+    return out.join('\n');
+  };
+  ok('facts: a stock cannot be added up over time only', said({ categories: true, time: false }).includes(" Can't be added up over time."));
+  ok('facts: a measure that adds over time but not across groups says so', said({ categories: false, time: true }).includes(" Can't be added up across groups."));
+  ok('NEGATIVE CONTROL: unknown additivity gets no sentence', !said(undefined).includes('added up'));
+  ok('facts: the sentence comes before the description, which keeps its own ending', said({ categories: false, time: false }, true).endsWith(" Can't be added up across groups or over time. Means: Means it."), said({ categories: false, time: false }, true));
+
+  await metric('Avg basket', { column: 'amount', aggregation: 'avg' });
+  await metric('Twice', { formula: '[Scaled] * 2' });
+  const ratioK = await metric('Ratio k', { formula: '[Revenue] / [Cost] * [[k]]' });
+  const rows = await automation.metricsList({ projectId: pid } as never) as Array<{ name: string; adds_up: unknown }>;
+  const addsUp = (name: string) => rows.find((r) => r.name === name)?.adds_up;
+  ok('list_metrics carries adds_up', JSON.stringify(addsUp('Avg basket')) === JSON.stringify({ categories: false, time: false }), show(rows));
+  const byNames = await metrics.metricsByName(pid);
+  const meta = (await datasets.getDatasetMeta(pid, ds))!;
+  for (const m of [profit, perUnit, stock]) {
+    const want = A.additivityOf((await metrics.getMetric(pid, m.id))!, meta.columns, byNames);
+    ok(`list_metrics: ${m.name} is the rule's own answer`, same(addsUp(m.name) as Additivity, want.categories, want.time), show(addsUp(m.name)));
+  }
+  ok('list_metrics: a sum adds up across groups and over time', same(addsUp('Revenue') as Additivity, true, true));
+  ok('list_metrics: a stock adds across groups, not over time', same(addsUp('Stock') as Additivity, true, false));
+  ok('list_metrics: a formula with a parameter is unknown, not "no"', addsUp('Scaled') === null && addsUp('Ratio k') === null);
+  ok('list_metrics: a formula that follows one is unknown too', addsUp('Twice') === null);
+  const k2 = paramValues([{ name: 'k', kind: 'number', value: 2 }]);
+  ok('NEGATIVE CONTROL: with the value known the parameter formulas read', same((await A.metricAdditivity(pid, scaled.id, byNames, k2))!, true, true) && same((await A.metricAdditivity(pid, ratioK.id, byNames, k2))!, false, false));
+  ok('a parameter the dashboard does not define stays unknown', (await A.metricAdditivity(pid, scaled.id, byNames, paramValues([{ name: 'other', kind: 'number', value: 2 }]))) === null);
+  ok('a metric that is gone is unknown', (await A.metricAdditivity(pid, gone.id, byNames)) === null);
+
+  // The Assistant's own facts block, from a dataset (no parameters known) and from a dashboard (its saved parameters).
+  const onDataset = (await ipcCopilot.buildFacts(pid, { kind: 'dataset', id: ds })).text;
+  const lineOf = (text: string, name: string) => text.split('\n').find((l) => l.startsWith(`- "${name}"`)) ?? '';
+  ok('the dataset facts: an average is marked', lineOf(onDataset, 'Avg basket').includes("Can't be added up across groups or over time."), lineOf(onDataset, 'Avg basket'));
+  ok('the dataset facts: a stock is marked over time only', lineOf(onDataset, 'Stock').includes("Can't be added up over time.") && !lineOf(onDataset, 'Stock').includes('across groups'), lineOf(onDataset, 'Stock'));
+  ok('NEGATIVE CONTROL: the dataset facts leave a sum and an unknown unmarked', lineOf(onDataset, 'Revenue') !== '' && !lineOf(onDataset, 'Revenue').includes('added up') && lineOf(onDataset, 'Ratio k') !== '' && !lineOf(onDataset, 'Ratio k').includes('added up'), lineOf(onDataset, 'Ratio k'));
+  const withK2 = (await analysisStore.saveAnalysis(pid, { name: 'With k', sheets: [{ id: randomUUID(), name: 'Main', cards: [] }], parameters: [{ name: 'k', kind: 'number', value: 2 }] } as never))!;
+  const onDashboard = (await ipcCopilot.buildFacts(pid, { kind: 'analysis', id: withK2.id })).text;
+  ok('the dashboard facts: a parameter formula is read with its saved values', lineOf(onDashboard, 'Ratio k').includes("Can't be added up") && lineOf(onDashboard, 'Scaled') !== '' && !lineOf(onDashboard, 'Scaled').includes('added up'), lineOf(onDashboard, 'Ratio k'));
 }
 
 main()

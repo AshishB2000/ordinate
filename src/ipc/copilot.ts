@@ -12,7 +12,7 @@ import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
-import { refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -154,6 +154,7 @@ function reasonLedger(reason: string): LedgerEntry[] {
 async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope): Promise<FactMetric[]> {
   try {
     const list = await metrics.listMetrics(projectId);
+    const byName = await metrics.metricsByName(projectId);
     const out: FactMetric[] = [];
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
@@ -163,7 +164,8 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
         throw err;
       });
       if (!r) continue;
-      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, description: s.description });
+      const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
+      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, additivity, description: s.description });
     }
     return out;
   } catch (_) {

@@ -14,6 +14,7 @@ import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
 import { getMetric, isFormulaDefinition, metricsByName } from './metrics';
 import { metricShape } from './driverShape';
+import { tokenize } from '../formula/formulaTokens';
 import type { ParamValues } from './params';
 import { CALC_KIND_NAMES, calcAlong, sanitizeTableCalc } from './tableCalc';
 import type { TableCalcKind } from './tableCalc';
@@ -47,6 +48,41 @@ export function additivityOf(
   // shortcut: a formula over a snapshot metric reads as not additive (metricShape refuses snapshots); give metricShape a linearity-only mode when snapshot formulas need running totals.
   const adds = metricShape(m.datasetId, columns, def, m.filters, byName, params, m.name).kind === 'additive';
   return { categories: adds, time: adds };
+}
+
+/** Whether this formula, or a metric it follows, names a `[[parameter]]` that `params` does not hold. */
+function needsUnknownParam(formula: string, byName: Map<string, Metric>, params: ParamValues | undefined, seen: Set<string>): boolean {
+  let toks;
+  try { toks = tokenize(formula); } catch { return false; }
+  for (const t of toks) {
+    if (t.kind === 'param') {
+      if (!params?.has(t.value.toLowerCase())) return true;
+    } else if (t.kind === 'col' || t.kind === 'name') {
+      const key = t.value.toLowerCase();
+      const followed = byName.get(key)?.definition;
+      if (seen.has(key) || !followed || !isFormulaDefinition(followed)) continue;
+      seen.add(key);
+      if (needsUnknownParam(followed.formula, byName, params, seen)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * A saved metric's additivity, or null when it is not known: the metric is gone, or its formula (or one it follows)
+ * names a `[[parameter]]` whose value is not in `params` (a dashboard supplies them). Reads the dataset's column list for
+ * a formula only, never a row. Never throws.
+ */
+export async function metricAdditivity(projectId: string, id: string, byName: Map<string, Metric>, params?: ParamValues): Promise<Additivity | null> {
+  try {
+    const m = await getMetric(projectId, id);
+    if (!m) return null;
+    if (!isFormulaDefinition(m.definition)) return additivityOf(m, [], byName);
+    if (needsUnknownParam(m.definition.formula, byName, params, new Set([m.name.toLowerCase()]))) return null;
+    return additivityOf(m, (await getDatasetMeta(projectId, m.datasetId))?.columns ?? [], byName, params);
+  } catch {
+    return null;
+  }
 }
 
 /** The side a calc needs the measure to add on: `time` along a date axis, else `categories`. Null when it adds nothing. */
