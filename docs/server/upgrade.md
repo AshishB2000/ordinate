@@ -203,8 +203,9 @@ write. Each item says what a pod older than this release does, and what this rel
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
   column, and an alert saved from a KPI counts by the control's column instead of the metric's.
   This release keeps both. Where a dashboard's date control is on another column than the metric's
-  own date, it refuses the chart, Explain and the alert ("This chart counts a metric by its own
-  date, which this server cannot do yet"), because the later release counts by the metric's date.
+  own date, it refuses the chart, Explain, the alert and the drivers ("This chart counts a metric by
+  its own date, which this server cannot do yet"), and the metric's KPI (the Summary card's too)
+  shows no figure, because the later release counts by the metric's date.
 - **Snapshot metrics**, which take the last (or first) value by date, as for a balance, instead of
   adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
   duplicate erases the setting. This release keeps it and shows no figure for it: a KPI shows none,

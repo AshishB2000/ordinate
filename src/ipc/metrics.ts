@@ -31,6 +31,7 @@ import { isRowPolicyError } from '../data/rowAccess';
 import * as metrics from '../analysis/metrics';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
+import { controlOffOwnDate } from '../analysis/snapshotGuards';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -190,7 +191,7 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
   ctx.stack.add(key);
   let value: number | null;
   try {
-    value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth);
+    value = controlOffOwnDate(metric.timeColumn, ctx.scope) ? null : await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth); // as resolveMetric
   } finally {
     ctx.stack.delete(key);
   }
@@ -236,7 +237,8 @@ export async function resolveMetric(
   // Seeded so a self-reference inside this metric's own formula is caught by the
   // same guard that catches a loop between two of them.
   ctx.stack.add(metric.name.toLowerCase());
-  const value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
+  // Counted by its own date under a date control on another column: no figure until the release that counts it so.
+  const value = controlOffOwnDate(metric.timeColumn, ctx.scope) ? null : await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
   ctx.stack.delete(metric.name.toLowerCase());
   const out: ResolvedMetric = {
     ok: true,

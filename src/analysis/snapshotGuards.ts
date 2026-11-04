@@ -36,14 +36,21 @@ export async function snapshotMeasureRefusal(projectId: string, encoding: VizEnc
  * date and this one applies it to the control's column, so during a rolling upgrade the two would draw two figures.
  */
 export async function timeColumnControlRefusal(projectId: string, encoding: VizEncoding | null | undefined, filters: readonly FilterStep[] | null | undefined): Promise<string | null> {
-  const controls = (Array.isArray(filters) ? filters : []).filter((f) => f && f.fromControl === true);
-  if (!controls.length) return null;
+  if (!(Array.isArray(filters) && filters.some((f) => f && f.fromControl === true))) return null; // no control: no metric read
   for (const v of drawnMeasures(encoding)) {
     const m = typeof v?.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    const own = m && m.timeColumn;
-    if (own && controls.some((f) => f.column !== own)) return msg.measureTimeColumnPending();
+    if (m && controlOffOwnDate(m.timeColumn, filters)) return msg.measureTimeColumnPending();
   }
   return null;
+}
+
+/**
+ * THE rule every door shares (a chart, Explain, an alert, a KPI, the drivers): a metric with its own `timeColumn`
+ * under a dashboard date control (`fromControl`) on another column. A later release moves the control's period onto
+ * the metric's date; this one would apply it to the control's column, so it gives no figure instead.
+ */
+export function controlOffOwnDate(timeColumn: string | undefined, filters: readonly FilterStep[] | null | undefined): boolean {
+  return !!timeColumn && (Array.isArray(filters) ? filters : []).some((f) => f && f.fromControl === true && f.column !== timeColumn);
 }
 
 /** The measures a chart draws: a pivot's values, else its values (only the first under a split, as vizData.buildPivot); none for the grids beside it. */
