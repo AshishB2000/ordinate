@@ -97,6 +97,7 @@ async function main(adminUrl: string): Promise<void> {
       ok(`NEGATIVE CONTROL: on ${p.engine.name}, the same statements without the '' → NULL fold disagree with the extract (two blank rows)`,
         unfolded.stripped > 0 && unfolded.problems.length >= 3, `${unfolded.stripped} statements unfolded: ${unfolded.problems.join(' | ')}`);
       await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, p.engine.run).live, env: report.envs.typed, stored: x.stored, engine: p.engine });
+      await (require('./liveParityBase') as typeof import('./liveParityBase')).baseFilterCase(x, p.engine.run, report.envs.typed, ok);
       const pgPins: typeof import('./liveParityPgPins') = require('./liveParityPgPins');
       await pgPins.run({ ok, pid: x.pid, pg: p, bound });
 
