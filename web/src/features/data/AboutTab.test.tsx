@@ -84,6 +84,16 @@ function hold(channel: string): () => void {
   return release;
 }
 
+/** Hold each call to `channel` on its own: the returned list gets one release per call, in the order they arrive. */
+function holdEach(channel: string): (() => void)[] {
+  const answer = globalThis.fetch;
+  const releases: (() => void)[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+    url.includes(channel) ? new Promise<void>((go) => releases.push(go)).then(() => answer(url, init)) : answer(url, init),
+  );
+  return releases;
+}
+
 const roleGroup = () => screen.findByRole('group', { name: 'Role' });
 const keyBox = () => screen.findByRole('combobox', { name: 'Key' });
 const grainBox = async () => (await screen.findByRole('textbox', { name: 'Grain' })) as HTMLInputElement;
@@ -141,6 +151,31 @@ describe('About tab: an editor', () => {
     fireEvent.click(screen.getByRole('combobox', { name: 'Key' }));
     fireEvent.click(await screen.findByRole('option', { name: 'No key' })); // the key can be taken away
     await waitFor(() => expect(to(calls, SET)[2]).toEqual({ projectId: P, datasetId: D, patch: { key: '' } }));
+  });
+
+  it('"Not said" clears the role: the one radio whose value is empty', async () => {
+    const calls = renderTab(store(doc({ role: 'fact' })));
+    const role = await roleGroup();
+    fireEvent.click(within(role).getByRole('radio', { name: 'Not said' }));
+    await waitFor(() => expect(to(calls, SET)).toEqual([{ projectId: P, datasetId: D, patch: { role: '' } }]));
+    await waitFor(() => expect((within(role).getByRole('radio', { name: 'Not said' }) as HTMLInputElement).checked).toBe(true));
+    expect((within(role).getByRole('radio', { name: 'Fact' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('an older key reply does not clear what a newer pick is still waiting on', async () => {
+    renderTab(store(doc(), counts(1)));
+    await keyBox();
+    const releases = holdEach('setTable');
+    await pickKey('sku');
+    await pickKey('order_id');
+    await waitFor(() => expect(releases).toHaveLength(2));
+    releases[0](); // the first count lands while the second is still running
+    await act(async () => {});
+    expect(screen.getByText('Counting order_id…')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Key' }).textContent).toContain('order_id');
+    releases[1]();
+    await waitFor(() => expect(screen.queryByText('Counting order_id…')).toBeNull());
+    expect(await keyLine()).toMatch(/^Key order_id · 1 value repeats/);
   });
 
   it('says it is counting while a new key on an extract is counted, then the server\'s verdict', async () => {
@@ -249,6 +284,30 @@ describe('About tab: an editor', () => {
     expect(document.querySelector('[data-live-refusal]')).toBeNull(); // the refusal card is gone: this one is retried, not a copy's job
   });
 
+  it('a refusal of "Check now" is about that key: picking another one clears it', async () => {
+    renderTab({ ...store(doc({ key: 'line_id' })), [CHECK]: { body: { ok: false, code: 'live_refused', error: 'The warehouse budget for today is used up.' } } }, { live: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check now' }));
+    expect(await screen.findByText('The warehouse budget for today is used up.')).toBeTruthy();
+    await pickKey('sku');
+    await waitFor(() => expect(screen.queryByText('The warehouse budget for today is used up.')).toBeNull());
+    expect(await keyLine()).toBe('Key sku · not checked yet');
+  });
+
+  it('a "Check now" that fails outright says so in its own words, not as a change that did not go through', async () => {
+    renderTab({ [GET]: reply(doc({ key: 'line_id' })), [CHECK]: { status: 500, body: { error: 'internal', message: 'boom' } } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check now' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('The key could not be counted. Try again.');
+    expect(screen.queryByText(/did not go through/)).toBeNull(); // no toast: counting a key changes nothing
+    expect(screen.queryByText('boom')).toBeNull(); // and nothing of the server's internals
+  });
+
+  it('announces the key line: it lives in a polite status region that is there before "Check now" answers', async () => {
+    renderTab({ [GET]: reply(doc({ key: 'line_id', keyCheck: counts(0) })) });
+    await screen.findByRole('button', { name: 'Check now' });
+    const line = await screen.findByText((_, el) => el?.hasAttribute('data-key-line') ?? false);
+    expect(line.closest('[role="status"]')).not.toBeNull();
+  });
+
   it('saves the grain trimmed, once for Enter and the blur after it, and shows what the server kept', async () => {
     const calls = renderTab(store(doc({ key: 'line_id' })));
     const grain = await grainBox();
@@ -280,17 +339,16 @@ describe('About tab: an editor', () => {
     expect(to(calls, SET)).toHaveLength(2);
   });
 
-  it('writes the guide in its own editor: Save sends it, Cancel and Escape leave the stored one', async () => {
+  it('writes the guide in its own editor: Save sends it; Cancel and Escape on an unchanged draft just close', async () => {
     const calls = renderTab(store(doc({ guide: 'Old note.' })));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    const box = screen.getByRole('textbox', { name: 'Guide' }) as HTMLTextAreaElement;
-    expect(box.value).toBe('Old note.');
-    fireEvent.change(box, { target: { value: 'Never mind.' } });
+    expect((screen.getByRole('textbox', { name: 'Guide' }) as HTMLTextAreaElement).value).toBe('Old note.');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByText('Old note.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Guide' }), { key: 'Escape' });
     expect(screen.getByText('Old note.')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull(); // nothing was changed: nothing to ask
     expect(to(calls, SET)).toHaveLength(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -300,6 +358,22 @@ describe('About tab: an editor', () => {
     expect(screen.getByText('Returns are negative.').tagName).toBe('LI');
     expect(to(calls, SET)).toEqual([{ projectId: P, datasetId: D, patch: { guide: '## Watch out\n\n- Returns are negative.' } }]);
     expect(screen.queryByRole('textbox', { name: 'Guide' })).toBeNull();
+  });
+
+  it('asks before throwing away a changed guide draft, on Cancel and on Escape alike', async () => {
+    const calls = renderTab(store(doc({ guide: 'Old note.' })));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Guide' }), { target: { value: 'Never mind.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    const ask = await screen.findByRole('dialog', { name: 'Discard your changes to the guide?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((screen.getByRole('textbox', { name: 'Guide' }) as HTMLTextAreaElement).value).toBe('Never mind.'); // still being written
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Guide' }), { key: 'Escape' });
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard your changes to the guide?' })).getByRole('button', { name: 'Discard changes' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Guide' })).toBeNull());
+    expect(screen.getByText('Old note.')).toBeTruthy();
+    expect(to(calls, SET)).toHaveLength(0);
   });
 
   it('keeps the guide editor open, with the server\'s sentence, when the save is refused', async () => {
@@ -367,6 +441,22 @@ describe('About tab: a viewer, loading and failure', () => {
     const loading = await screen.findByRole('status', { name: 'Loading the table notes' });
     expect(loading.getAttribute('aria-busy')).toBe('true');
     expect(screen.queryByRole('group', { name: 'Role' })).toBeNull();
+  });
+
+  it('keeps the skeleton until the roles are known too, so an editor never reads the viewer\'s version first', async () => {
+    let release = () => {};
+    renderTab({ [GET]: reply(doc()) }, {}, () => {
+      release = hold('roles');
+    });
+    await screen.findByRole('status', { name: 'Loading the table notes' });
+    await act(async () => {
+      await new Promise((go) => setTimeout(go, 50)); // the table's reply lands; the roles' does not
+    });
+    expect(screen.getByRole('status', { name: 'Loading the table notes' })).toBeTruthy();
+    expect(screen.queryByText('Nothing written about this table yet')).toBeNull();
+    release();
+    await roleGroup();
+    expect(screen.queryByRole('status', { name: 'Loading the table notes' })).toBeNull();
   });
 
   it('a failed read is an error state with a retry that reads again', async () => {

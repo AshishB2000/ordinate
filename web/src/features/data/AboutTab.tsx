@@ -9,6 +9,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import type { DatasetColumns } from '../../api/datasets';
 import { Button } from '../../ui/Button';
 import { RadioGroup } from '../../ui/Choice';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Input, Textarea } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
@@ -17,8 +18,8 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { MarkdownView } from '../dashboards/Markdown';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
-import { useCanEdit } from '../projects/api';
-import { ago, formatNumber } from './format';
+import { useCanEdit, useRoles } from '../projects/api';
+import { ago, day, formatNumber } from './format';
 import { useTableDoc, useTableWrites, type KeyCheck, type TableDoc, type TablePatch, type TableReply } from './tableApi';
 import a from './About.module.css';
 import s from './Data.module.css';
@@ -30,9 +31,12 @@ const ROLES = [
 ] as const;
 const roleWord = (role: string): string => ROLES.find((r) => r.value === role)?.label ?? 'Not said';
 
-/** The server's bounds (src/api/catalog.ts TablePatch), said at the field instead of cut silently. */
+/** Restated from the server's MAX_GRAIN and MAX_GUIDE (src/app/tableDocs.ts; web cannot import them), said at the field instead of cut silently. */
 const MAX_GRAIN = 200;
 const MAX_GUIDE = 8000;
+
+/** What a "Check now" that never got an answer says: the server's keyCheckFailed() wording (src/app/tableDocMessages.ts). */
+const KEY_NOT_COUNTED = 'The key could not be counted. Try again.';
 
 /** A `{{name}}` in a guide is only text here: there is no metric or parameter to fill it from. */
 const keepToken = (name: string) => ({ text: `{{${name}}}`, missing: true });
@@ -45,7 +49,7 @@ function dayOf(iso: string): string {
   const now = new Date();
   if (Number.isNaN(d.getTime())) return '';
   if (d.toDateString() === now.toDateString()) return 'today';
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) }).format(d);
+  return d.getFullYear() === now.getFullYear() ? day.format(d) : `${day.format(d)}, ${d.getFullYear()}`;
 }
 
 const plural = (n: number, one: string, many: string): string => `${formatNumber(n)} ${n === 1 ? one : many}`;
@@ -131,10 +135,13 @@ function Guide({ guide, canEdit, problem, onSave }: { guide: string; canEdit: bo
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [asking, setAsking] = useState(false);
   const start = () => {
     setDraft(guide);
     setEditing(true);
   };
+  // Leaving a draft that differs from the stored guide asks first (up to 8,000 characters are easy to lose to one Escape).
+  const leave = () => (draft.trim() === guide ? setEditing(false) : setAsking(true));
   const save = async () => {
     if (draft.trim() === guide) return setEditing(false);
     setSaving(true);
@@ -186,18 +193,30 @@ function Guide({ guide, canEdit, problem, onSave }: { guide: string; canEdit: bo
             autoFocus
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setEditing(false);
+              if (e.key === 'Escape') leave();
               else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void save();
             }}
           />
           <div className={a.editorBar}>
-            <Button onClick={() => setEditing(false)} disabled={saving}>
+            <Button onClick={leave} disabled={saving}>
               Cancel
             </Button>
             <Button variant="primary" loading={saving} onClick={() => void save()}>
               Save guide
             </Button>
           </div>
+          {asking && (
+            <ConfirmDelete
+              title="Discard your changes to the guide?"
+              description="What you wrote here is not saved yet."
+              confirm="Discard changes"
+              onConfirm={() => {
+                setAsking(false);
+                setEditing(false);
+              }}
+              onClose={() => setAsking(false)}
+            />
+          )}
         </div>
       ) : (
         <div className={a.guideBody}>
@@ -214,28 +233,41 @@ function Notes({ projectId, datasetId, header, live, table, canEdit }: { project
   const [sent, setSent] = useState<TablePatch>({});
   const [problems, setProblems] = useState<Partial<Record<Slot, string>>>({});
   const [checkFailed, setCheckFailed] = useState<Extract<TableReply, { ok: false }> | null>(null);
+  /** The newest request of each slot: an older reply must not clear (or refuse over) what a newer one is still waiting on. */
+  const newest = useRef<Partial<Record<Slot, number>>>({});
+  /** Bumped by every "Check now" and every key save: a check answers only for the key it was asked about. */
+  const checks = useRef(0);
 
   const save = async (slot: Slot, patch: TablePatch): Promise<boolean> => {
+    const mine = (newest.current[slot] = (newest.current[slot] ?? 0) + 1);
+    if (slot === 'key') {
+      checks.current++;
+      setCheckFailed(null); // a refusal about the old key is not about this one
+    }
     setSent((p) => ({ ...p, ...patch }));
     setProblems((p) => ({ ...p, [slot]: undefined }));
     let ok = false;
     try {
       const r = await writes.save.mutateAsync({ projectId, datasetId, patch });
       ok = r.ok;
-      if (!r.ok) setProblems((p) => ({ ...p, [slot]: r.error || 'This could not be saved.' }));
+      if (!r.ok && newest.current[slot] === mine) setProblems((p) => ({ ...p, [slot]: r.error || 'This could not be saved.' }));
     } catch {
       // the write's own toast says it did not go through
     }
-    setSent((p) => {
-      const rest = { ...p };
-      delete rest[slot];
-      return rest;
-    });
+    if (newest.current[slot] === mine) {
+      setSent((p) => {
+        const rest = { ...p };
+        delete rest[slot];
+        return rest;
+      });
+    }
     return ok;
   };
   const check = () => {
+    const mine = ++checks.current;
+    const failed = (r: Extract<TableReply, { ok: false }>) => checks.current === mine && setCheckFailed(r);
     setCheckFailed(null);
-    void writes.check.mutateAsync({ projectId, datasetId }).then((r) => !r.ok && setCheckFailed(r), () => undefined);
+    void writes.check.mutateAsync().then((r) => !r.ok && failed(r), () => failed({ ok: false, error: KEY_NOT_COUNTED }));
   };
 
   const columns = header.columns.map((c) => c.name);
@@ -256,7 +288,7 @@ function Notes({ projectId, datasetId, header, live, table, canEdit }: { project
   }
   const keyOptions = [...(table.key ? [{ value: '', label: 'No key' }] : []), ...columns.map((name) => ({ value: name, label: name }))];
   const verdict = counting ? (
-    <p className={a.line} role="status" aria-busy="true">
+    <p className={a.line} aria-busy="true">
       <Icon name="refresh" size={16} />
       <span className={a.sentence}>{`Counting ${key}…`}</span>
     </p>
@@ -294,7 +326,10 @@ function Notes({ projectId, datasetId, header, live, table, canEdit }: { project
               />
               {key && (
                 <div className={a.keyStatus}>
-                  {verdict}
+                  {/* Always there once a key is, so what "Check now" finds is announced where it appears. */}
+                  <div className={a.verdict} role="status">
+                    {verdict}
+                  </div>
                   <Button size="sm" icon="refresh" loading={writes.check.isPending} disabled={!known || counting} onClick={check}>
                     Check now
                   </Button>
@@ -361,10 +396,12 @@ export function AboutTab({ projectId, datasetId, header, live = false }: { proje
   const doc = useTableDoc(projectId, datasetId);
   // The notes are an editor's to change; a viewer reads them (false until the roles are known).
   const canEdit = useCanEdit(projectId);
+  // Held on the skeleton until the roles are known too: an editor never reads the viewer's version first.
+  const roles = useRoles();
   return (
     <section className={s.section} aria-label="About this table">
       <p className={s.lead}>Say what one row of this dataset is and how to use it. The Assistant and MCP clients read these notes along with the data.</p>
-      {doc.isPending ? (
+      {doc.isPending || roles.isPending ? (
         <Loading />
       ) : doc.isError ? (
         <ErrorState heading={3} title="The table notes could not be loaded" message={doc.error.message} onRetry={() => void doc.refetch()} />

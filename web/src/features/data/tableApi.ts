@@ -3,7 +3,7 @@
 // hand. The key check's counts are the server's, counted over every row: the screen only
 // formats them. A caller row access rules restrict gets the doc without `keyCheck`.
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { okOr, useWrite, type Fail, type Relationship } from './api';
 
@@ -46,6 +46,7 @@ export type TableReply = { ok: true; table: TableDoc } | { ok: false; error?: st
 /**
  * Save a field (`save`) or count the key now (`check`). A reply puts the stored doc straight into the read, so
  * the screen shows what the SERVER kept (a trimmed grain, a count), and a refusal is the caller's to say at the field.
+ * `check` changes nothing, so a call that throws is the caller's to word too: it has no "the change did not go through" toast.
  */
 export function useTableWrites(projectId: string, datasetId: string) {
   const client = useQueryClient();
@@ -54,7 +55,13 @@ export function useTableWrites(projectId: string, datasetId: string) {
   };
   // A new key rewrites the warnings on the relationships into this table; counting it again does not.
   const save = useWrite<'catalog:setTable', TableReply>('catalog:setTable', [READ, 'relationship:list'], { quiet: true, onDone: keep });
-  const check = useWrite<'catalog:checkKey', TableReply>('catalog:checkKey', [READ], { quiet: true, onDone: keep });
+  const check = useMutation({
+    mutationFn: async () => (await rpc('catalog:checkKey', { projectId, datasetId })) as TableReply,
+    onSuccess: (r) => {
+      keep(r);
+      void client.invalidateQueries({ queryKey: [READ] });
+    },
+  });
   return { save, check };
 }
 

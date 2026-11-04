@@ -42,6 +42,10 @@
 .keyStatus > button {
   flex: none;
 }
+.verdict {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 /* One sentence about the key, with its verdict: sure, repeating, gone, or not counted yet. */
 .line {
