@@ -5,6 +5,7 @@
 
 import { isValidId } from '../app/ids';
 import * as datasets from './datasets';
+import type { Connection } from '../connectors/connections';
 import { restrictedOn } from './rowAccess';
 
 export async function seesSourceNames(projectId: string): Promise<boolean> {
@@ -21,3 +22,6 @@ export async function connectionDatasetIds(projectId: string): Promise<Set<strin
 export async function unreadableErrorIds(projectId: string): Promise<Set<string>> {
   return (await seesSourceNames(projectId)) ? new Set() : connectionDatasetIds(projectId);
 }
+
+/** What `connections:list` gives a caller who may not see source names: the card, never the address, selection, SQL, failure text or dates. A whitelist, so a field added to a connection stays hidden until it is listed here. */
+export const viewerConnection = (c: Connection, datasetCount: number) => ({ id: c.id, name: c.name, connectorId: c.connectorId, lastStatus: c.lastStatus, datasetCount });

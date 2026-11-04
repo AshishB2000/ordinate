@@ -207,7 +207,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('skip: summary:compute names no alert on Orders for east, through the analysis id', sumEast.body?.ok === true && !sumEast.text.includes('987,654'), sumEast.text.slice(0, 200));
     ok('NEGATIVE CONTROL: the editor\'s Summary names it', sumEd.body?.ok === true && sumEd.text.includes('987,654'), sumEd.text.slice(0, 200));
 
-    // A connection's last refresh failure can quote a value: withheld where it feeds a dataset closed to east (N2, NV-22).
+    // A connection's last refresh failure can quote a value, or a relation: east, a viewer, gets the connection's card with no failure text at all (N2, NV-22; the source-names rule widened it).
     const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
     const datasetsSave: typeof import('../src/data/datasets') = require('../src/data/datasets');
     const feed = async (name: string, lastError: string) => W.as('boss', async () => {
@@ -222,9 +222,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const connsEd = await W.call('ed', 'connections:list', { projectId: P });
     eastReplies.push(connsEast.text);
     const lastError = (r: H.Reply, id: string) => (r.body as { id: string; lastError: string | null }[]).find((c) => c.id === id)?.lastError;
-    ok('redact: connections:list withholds the failure text of a connection feeding a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === null, connsEast.text.slice(0, 200));
-    ok('…and keeps it where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === 'OPEN_FEED_ERROR');
-    ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY));
+    ok('redact: connections:list gives east no failure text, where a connection feeds a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === undefined, connsEast.text.slice(0, 200));
+    ok('…and where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === undefined && (connsEast.body as { id: string }[]).some((c) => c.id === openFeed.conn));
+    ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY) && lastError(connsEd, openFeed.conn) === 'OPEN_FEED_ERROR');
     await W.call('boss', 'format:colors:assign', { projectId: P, column: 'customer', values: [`${H.W_CANARY}_1`] });
     const colors = await W.call('east', 'format:colors:get', { projectId: P });
     eastReplies.push(colors.text);

@@ -20,6 +20,8 @@
 //    sentences for a model): a viewer, and any page that leaves the app, read the fixed sentence.
 //    Channels checked for a refresh or run error: dataset:list, pipelines:get, pipelines:changed, alerts:list, alerts:fired,
 //    hub:dataset-refreshed, summary:compute, summary:rewrite.
+// 5. `connections:list`: a viewer gets the connection's id, name, kind of source, status and dataset count: no host, port,
+//    database, user, table, SQL, saved queries, last failure text or dates. NEGATIVE CONTROL: the editor reads them all.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -71,9 +73,11 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       const conn = await connections.saveConnection(P, {
         name: 'Warehouse',
         connectorId: 'postgres',
-        values: { host: HOST, database: DATABASE, user: DB_USER },
+        values: { host: HOST, port: 5432, database: DATABASE, user: DB_USER },
         table: TABLE,
         query: CONN_QUERY,
+        lastStatus: 'error',
+        lastError: REFRESH_ERROR,
       });
       if (!conn) throw new Error('saveConnection refused');
       await connections.saveQuery(P, conn.id, { name: 'Q', sql: SAVED_SQL });
@@ -106,6 +110,16 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('dataset:source: a viewer reads "Web address", not its host', viewerWeb.body.label === 'Web address', viewerWeb.text);
     ok('dataset:source: nothing of the web import reaches a viewer', !CANARY.test(viewerWeb.text), viewerWeb.text);
     ok('NEGATIVE CONTROL: the editor still reads the host', editorWeb.body.label === `Web address · ${WEB_HOST}`, editorWeb.text);
+
+    // connections:list carries the address, the picked table, the SQL and the last failure; a viewer gets the card only.
+    const conns = (who: string) => W.call(who, 'connections:list', { projectId: P });
+    const [connsViewer, connsEditor] = [await conns('nobody'), await conns('ed')];
+    const [cv, ce] = [connsViewer.body[0], connsEditor.body[0]];
+    const HIDDEN = ['values', 'table', 'query', 'queries', 'lastError', 'secretSet', 'host', 'port', 'database', 'user', 'url', 'ssl', 'kind', 'projectId', 'linkedDatasetId', 'lastRefreshedAt', 'createdAt', 'updatedAt', 'schemaVersion'];
+    ok('connections:list: a viewer gets no address, selection, SQL or failure text', connsViewer.body.length === 1 && HIDDEN.every((k) => !(k in cv)) && !CANARY.test(connsViewer.text), connsViewer.text);
+    ok('connections:list: a viewer gets the card and nothing else', JSON.stringify(Object.keys(cv).sort()) === JSON.stringify(['connectorId', 'datasetCount', 'id', 'lastStatus', 'name']), Object.keys(cv).join());
+    ok('connections:list: …with the connection\'s name, kind of source, status and dataset count', cv.id === connId && cv.name === 'Warehouse' && cv.connectorId === 'postgres' && cv.lastStatus === 'error' && cv.datasetCount === 1, connsViewer.text);
+    ok('NEGATIVE CONTROL: the editor gets host, port, the saved SQL, the table and the failure', ce.values.host === HOST && ce.host === HOST && ce.port === 5432 && ce.queries[0].sql.includes('canary_tbl_9f3') && ce.table === TABLE && ce.lastError === REFRESH_ERROR && ce.secretSet !== undefined, connsEditor.text);
 
     // Lineage and Pipelines draw the source node from the dataset's origin: `loadInput` trims the table and the web address for a viewer.
     const lin = (who: string, id = D) => W.call(who, 'lineage:get', { projectId: P, type: 'dataset', id });

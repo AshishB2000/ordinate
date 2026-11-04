@@ -414,7 +414,7 @@ Handler paths are under `src/`.
 | `comment:reopen` | `ipc/comments.ts:101` | as comment:add |
 | `comment:reply` | `ipc/comments.ts:95` | as comment:add |
 | `comment:resolve` | `ipc/comments.ts:99` | as comment:add |
-| `connections:list` | `ipc/connections.ts:251` | connection metadata, secretSet flags; `lastError` (a refresh failure's text, which can quote a value — N2) → withheld from a restricted caller on a connection that feeds a dataset closed to them (NV-22) |
+| `connections:list` | `ipc/connections.ts:251` | connection metadata, secretSet flags; a caller who may not see source names (a viewer) gets id, name, connector, status and dataset count only, so no `lastError` (a refresh failure's text, which can quote a value or a relation — N2, NV-22) and no host, SQL or table |
 | `connectors:catalog` | `ipc/connections.ts:238` | static form shapes |
 | `connectors:logos` | `ipc/connections.ts:471` | static glyphs |
 | `copilot:deleteThread` | `ipc/copilot.ts:434` | own thread |
