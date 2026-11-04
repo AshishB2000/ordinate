@@ -168,11 +168,11 @@ function pcDashboard(page: any, root: HTMLElement): void {
   const grid = pcEl('div', 'pub-grid');
   root.appendChild(grid);
 
-  // A click on a chart label selects that value in a control on the same column.
-  const pick = (column: string, label: string, chart?: string): void => {
+  // A click on a chart label selects that value in a control on the same column (by its stored value: pkOptionAt).
+  const pick = (column: string, label: string, chart: string | undefined, payload: any, at: number): void => {
     const i = d.controls.findIndex((c: any) => c.column === column && c.kind !== 'parameter' && c.kind !== 'date_range');
     if (i < 0) return;
-    const j = d.controls[i].options.indexOf(label);
+    const j = pkOptionAt(d.controls[i], payload, at);
     if (j < 0) return;
     const apply = (): void => {
       picks = pkNextPicks(d.mode, defaults, picks, i, picks[i] === j ? 0 : j);

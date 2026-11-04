@@ -38,6 +38,16 @@ function pkPayload(card: any, combo: number): any {
 }
 
 /**
+ * The option of `control` a click on label `i` of a chart answer selects, or -1. By the STORED value wherever the page
+ * carries one (a labelled axis's `keys`, a labelled bar's `values`), so a label never selects another value's option;
+ * otherwise by the text both show (a masked column's tokens, an unlabelled value).
+ */
+function pkOptionAt(control: any, payload: any, i: number): number {
+  const v = (payload.keys || payload.labels || [])[i];
+  return v === undefined || v === null ? -1 : (control.values || control.options).indexOf(String(v));
+}
+
+/**
  * A dashboard sheet on a phone (docs/phone-dashboards): its tiles in the phone
  * layout's order — each card's phone cell read row by row, then left to right;
  * a card hidden on a phone left out; a card with no phone cell after the rest,

@@ -165,8 +165,14 @@ export function sanitizePayload(raw: unknown): unknown {
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
   if (typeof o.note === 'string' && o.note) out.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
   if (Array.isArray(o.events)) out.events = sanitizeEventMarks(o.events, data.labels.length);
+  // A labelled axis's stored values, one per label, so a click filters by the value (dashboardData.chartPayload).
+  if (Array.isArray(o.keys)) out.keys = storedTexts(o.keys, data.labels.length);
   return out;
 }
+
+/** Stored values aligned to `n` shown texts: a string clipped like a label, anything else null. */
+const storedTexts = (raw: unknown[], n: number): (string | null)[] =>
+  Array.from({ length: n }, (_, i) => (typeof raw[i] === 'string' ? (raw[i] as string).slice(0, MAX_LABEL) : null));
 
 const EVENT_KINDS: ReadonlySet<string> = new Set(['launch', 'campaign', 'incident', 'holiday', 'other']);
 
@@ -233,6 +239,8 @@ function sanitizeControl(raw: unknown): unknown {
     kind: CONTROL_KINDS.has(o.kind as string) ? o.kind : 'dropdown',
     column: str(o.column, MAX_LABEL),
     options: options.length ? options : ['All'],
+    // Labelled options' stored values (null = "All"), which a chart click matches.
+    ...(Array.isArray(o.values) && options.length ? { values: storedTexts(o.values, options.length) } : {}),
     defaultIndex: int(o.defaultIndex, 0, Math.max(0, options.length - 1), 0),
   };
 }

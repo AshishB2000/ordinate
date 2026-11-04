@@ -111,7 +111,7 @@ function pcPivot(grid: any): HTMLElement {
   return wrap;
 }
 
-function pcChartBody(card: { chartType: string; category?: string; title?: string }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
+function pcChartBody(card: { chartType: string; category?: string; title?: string }, payload: any, page: any, onPick: (label: string, i: number) => void): HTMLElement {
   const kind = pkRenderKind(card.chartType);
   if (kind === 'pivot' && payload.pivot) return pcPivot(payload.pivot);
   if (kind === 'map') return pcMap(payload, page, card.chartType);
@@ -152,7 +152,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
     if (ppIsPhone()) ppPhoneChart(cfg);
     cfg.options.onClick = (_e: any, els: any[]) => {
       const i = els && els.length ? (src ? src[els[0].index] : els[0].index) : -1;
-      if (i >= 0 && payload.labels && i < payload.labels.length) onPick(String(payload.labels[i]));
+      if (i >= 0 && payload.labels && i < payload.labels.length) onPick(String(payload.labels[i]), i);
     };
     pcInk();
     requestAnimationFrame(() => { pcCharts.push(new Chart(canvas, cfg)); });
@@ -160,7 +160,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
   return holder;
 }
 
-function pcCard(card: any, combo: number, page: any, onPick: (column: string, label: string, chart?: string) => void, top = 0): HTMLElement {
+function pcCard(card: any, combo: number, page: any, onPick: (column: string, label: string, chart: string | undefined, payload: any, i: number) => void, top = 0): HTMLElement {
   const el = pcEl('section', 'pub-card pub-card--' + card.kind);
   // All three sizes' cells as custom properties; the page's CSS breakpoints
   // pick which pair `grid-column` / `grid-row` read (src/publish/siteHtml.ts).
@@ -208,7 +208,7 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     if (payload.subtitle) box.appendChild(pcEl('div', 'pub-kpi-label', payload.subtitle));
     el.appendChild(box);
   } else {
-    el.appendChild(pcChartBody(card, payload, page, (label) => onPick(card.category || '', label, card.title)));
+    el.appendChild(pcChartBody(card, payload, page, (label, i) => onPick(card.category || '', label, card.title, payload, i)));
   }
   // A KPI's sentence only restates its figure; charts get theirs.
   if (payload.caption && card.kind !== 'metric') el.appendChild(pcEl('p', 'pub-caption', payload.caption));

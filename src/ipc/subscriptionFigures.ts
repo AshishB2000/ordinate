@@ -29,6 +29,7 @@ import type { FilterStep } from '../data/transforms';
 import type { KpiFigure, VisualFigure } from '../analysis/subscriptionMessage';
 import { noFigure } from '../analysis/subscriptionText';
 import { figureAsk } from '../analysis/figureAsk';
+import { shownChart } from '../analysis/valueLabels';
 
 /** A registered handler, called as the RPC layer calls it. Missing or throwing → a refusal, never a throw. */
 async function call(channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -149,7 +150,7 @@ export async function resolveFigures(projectId: string, a: Analysis, cardIds: st
     const caption = await call('reports:caption', { input: { chartType, data, geo: data.geo || null, pivot: data.pivot || null, projectId, datasetId: v.datasetId, overrides: v.overrides || null } });
     const format = (v.overrides as { numberFormat?: unknown } | undefined)?.numberFormat;
     out.push({
-      title, chartType, data,
+      title, chartType, data: shownChart(data), // a message is text: value labels said, the caption above read them from the pairs
       ...(typeof caption === 'string' && caption ? { caption } : {}),
       ...(typeof format === 'string' ? { format } : {}),
       ...(typeof r.recommendedShape === 'string' ? { shape: r.recommendedShape } : {}),

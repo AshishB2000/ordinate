@@ -256,6 +256,7 @@ async function main(): Promise<void> {
   await set('region', { values: [] });
 
   await charts(P);
+  await published(P);
 }
 
 // ── 8. Chart replies, answer cards and captions carry the labels ────────────
@@ -433,6 +434,133 @@ async function charts(P: string): Promise<void> {
   (datasets as { getDatasetMeta: unknown }).getDatasetMeta = realMeta;
   ok('labelListsFor: ONE catalog read for both axes, a meta read per labelled dataset; none for a column without labels', json(both) === '[1,2]' && loads === 1 && metas === 0, json([both, loads, metas]));
 }
+
+// ── 9. Published pages, stories, embeds, report pages and subscriptions ─────
+// A page carries labels as TEXT (its client has no pairs), put on AFTER the Share policy; every filter still uses the raw
+// value, and a click selects by the stored value the page carries beside a label (ruling F11), never by the label's text.
+const dd: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
+const { sanitizePage } = require('../src/publish/sanitize') as typeof import('../src/publish/sanitize');
+const { makeLock } = require('../src/publish/embedLock') as typeof import('../src/publish/embedLock');
+const { buildStory } = require('../src/publish/storyData') as typeof import('../src/publish/storyData');
+const { resolveFigures } = require('../src/ipc/subscriptionFigures') as typeof import('../src/ipc/subscriptionFigures');
+const { pageDeps } = require('../src/ipc/reportsServer') as typeof import('../src/ipc/reportsServer');
+const { storyVisual } = require('../src/analysis/reportPages') as typeof import('../src/analysis/reportPages');
+require('../src/ipc/reports').register(); // reports:caption
+
+async function published(P: string): Promise<void> {
+  const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
+  const { randomUUID }: typeof import('crypto') = require('crypto');
+  const ROWS = [['EU', 'gold', 5], ['APAC', 'silver', 1], ['NA', 'gold', 3], ['EU', 'silver', 2]]; // in data order: EU, APAC, NA
+  const save = async (name: string, rows: (string | number)[][]): Promise<string> => (await datasets.saveDataset(P, {
+    name, sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'tier', type: 'text' }, { name: 'amount', type: 'number' }], rows,
+  }))!.id;
+  /** A dashboard: a dropdown on `column`, and a column chart by region. */
+  const board = async (ds: string, column = 'region', filters: unknown[] = []): Promise<{ A: string; V: string }> => {
+    const v = (await visuals.saveVisual(P, { name: 'By region', datasetId: ds, chartType: 'column', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, filters } as never))!;
+    const a = (await analysis.saveAnalysis(P, { name: 'Board', sheets: [{ id: randomUUID(), name: 'Main', cards: [
+      { id: randomUUID(), type: 'control', layout: { x: 0, y: 0, w: 3, h: 1 }, control: { kind: 'dropdown', label: 'Pick', datasetId: ds, column } },
+      { id: randomUUID(), type: 'visual', visualId: v.id, layout: { x: 0, y: 1, w: 6, h: 4 } },
+    ] }] } as never))!;
+    return { A: a.id, V: v.id };
+  };
+  const chartOf = (d: import('../src/publish/dashboardData').PublishedDashboard, combo = 0): any => { // any: a published payload, read field by field
+    const c = d.sheets[0].cards.find((x) => x.kind === 'chart')!;
+    return c.payloads[c.variants[combo]];
+  };
+  // The page's own click rule (publishCore), in a bare vm as test-publishSite runs the core.
+  const vm: typeof import('vm') = require('vm');
+  const core: any = {}; // any: a bare vm global the core's functions land on
+  vm.createContext(core);
+  vm.runInContext(pub.readAssets().coreJs, core);
+
+  const B = await save('Board', ROWS);
+  await catalog.setColumn(P, B, 'region', { values: L });
+  const { A, V } = await board(B);
+  const plan = (await dd.planDashboard(P, A, 50))!;
+  ok('/p/: the control option shows the label', json(plan.specs[0].domain.options) === '["All","Europe","APAC","North America"]', json(plan.specs[0].domain.options));
+  ok('/p/: …and its state filters by the raw value', json(plan.specs[0].states[1]) === '{"value":"EU"}', json(plan.specs[0].states));
+  const built = (await dd.buildDashboard(P, A, 4))!;
+  const all = chartOf(built);
+  ok('/p/: the page says Europe and carries no valueLabels', json(built).includes('"Europe"') && !json(built).includes('valueLabels'));
+  ok('/p/: the chart draws the labels with the stored values beside them, and its caption says the label',
+    json(all.labels) === '["Europe","APAC","North America"]' && json(all.keys) === '["EU","APAC","NA"]' && String(all.caption).startsWith('Europe'), json(all));
+  const bar = built.controls[0];
+  ok('/p/: the bar carries the stored value behind each option', json(bar.options) === '["All","Europe","APAC","North America"]' && json(bar.values) === '[null,"EU","APAC","NA"]', json(bar));
+  const eu = core.pkOptionAt(bar, all, 0);
+  ok('/p/: a click on the Europe bar selects the Europe option, whose figures are EU\'s', eu === 1 && json(chartOf(built, built.keys.indexOf(String(eu))).labels) === '["Europe"]'
+    && json(chartOf(built, built.keys.indexOf(String(eu))).series[0].values) === '[7]', json([eu, built.keys]));
+  ok('/p/: a click on an unlabelled bar selects by its text, as before', core.pkOptionAt(bar, all, 1) === 2 && core.pkOptionAt({ options: ['All', 'x'] }, { labels: ['x'] }, 0) === 1);
+
+  // A label equal to another stored value: two options would read "Europe". The labelled one says "Europe (EU)", and a click
+  // on a chart that draws EU as "Europe" (its axis holds no raw Europe) selects it, never the raw Europe option.
+  const C = await save('Board and a Europe row', [...ROWS, ['Europe', 'gold', 4]]);
+  await catalog.setColumn(P, C, 'region', { values: L });
+  const clash = (await dd.buildDashboard(P, (await board(C, 'region', [{ type: 'filter', column: 'region', op: '!=', value: 'Europe' }])).A, 50))!;
+  const cBar = clash.controls[0];
+  const cAll = chartOf(clash);
+  const at = cAll.labels.indexOf('Europe');
+  ok('F11: a label that is also a stored value shows as "Label (raw)"; the stored value keeps its own text', json(cBar.options) === '["All","Europe (EU)","APAC","North America","Europe"]', json(cBar.options));
+  ok('F11: a click on the chart\'s Europe (EU) selects Europe (EU)', at >= 0 && cAll.keys[at] === 'EU' && cBar.options[core.pkOptionAt(cBar, cAll, at)] === 'Europe (EU)', json([cAll, cBar]));
+  ok('NEGATIVE CONTROL: matched by text, that click would filter by the raw Europe', cBar.options.indexOf(cAll.labels[at]) === 4);
+  await catalog.setColumn(P, C, 'tier', { values: [{ value: 'gold', label: 'All' }, { value: 'silver', label: 'Silver' }] });
+  ok('F11: a label may not take the bar\'s own "All"', json((await dd.planDashboard(P, (await board(C, 'tier')).A, 50))!.specs[0].domain.options) === '["All","All (gold)","Silver"]');
+  ok('F11: a "Label (raw)" that is itself a stored value falls back to the value', json(await replies.labelPairsForValues(P, C, 'region', ['EU', 'Europe', 'Europe (EU)', 'NA'])) === '[["NA","North America"]]');
+  ok('labelPairsForValues: none for an unlabelled column', (await replies.labelPairsForValues(P, C, 'amount', ['5'])) === undefined && (await replies.labelPairsForValues(P, B, 'tier', ['gold'])) === undefined);
+
+  // An embed locked to region = EU offers only what is inside the lock, by its label.
+  ok('embed: locked to region = EU, the bar offers All and Europe', json((await dd.planDashboard(P, A, 50, { lock: makeLock({ region: ['EU'] }) }))!.specs[0].domain.options) === '["All","Europe"]');
+
+  // The page as written: the whitelist keeps the stored values aligned to what they stand beside, and no pairs.
+  const page = sanitizePage({ kind: 'dashboard', site: { title: 'x', nav: [] }, dashboard: built, formats: {}, geo: {} }) as any; // any: the page as written, read field by field
+  ok('page: the written page keeps the bar\'s values and the chart\'s keys, and has no valueLabels', json(page.dashboard.controls[0].values) === '[null,"EU","APAC","NA"]'
+    && json(page.dashboard.sheets[0].cards[0].payloads[0].keys) === '["EU","APAC","NA"]' && !json(page).includes('valueLabels'), json(page.dashboard.controls));
+  const clean = sanitizePage({ kind: 'dashboard', site: { title: 'x', nav: [] }, dashboard: { controls: [{ options: ['All', 'a'], values: [7, 'A', 'extra'] }], sheets: [{ name: 's', cards: [{ kind: 'chart', layout: {}, payloads: [{ labels: ['a'], series: [], keys: [{}, 'B'] }], variants: [0] }] }] } }) as any; // any: the page, read field by field
+  ok('page: values align to the options and keys to the labels, a non-text one null', json(clean.dashboard.controls[0].values) === '[null,"A"]' && json(clean.dashboard.sheets[0].cards[0].payloads[0].keys) === '[null]', json(clean.dashboard));
+
+  // Share policy first: a masked region gets no label and no stored value, in the bar or on the chart.
+  await catalog.setColumn(P, B, 'region', { sensitivity: 'personal' });
+  const out = pub.policyOutgoing(P, 'publish');
+  const maskedBuilt = (await dd.buildDashboard(P, A, 4, {}, out))!;
+  const masked = json(maskedBuilt);
+  ok('Share policy: a masked region publishes tokens only, with no label, no keys and no stored value', masked.includes('"#') && !/EU|Europe|APAC|North America/.test(masked)
+    && maskedBuilt.sheets[0].cards[0].payloads.every((x) => !('keys' in (x as object))) && !('values' in maskedBuilt.controls[0]), masked.slice(0, 400));
+  ok('Share policy: …its options are tokens', (await dd.planDashboard(P, A, 50, {}, out))!.specs[0].domain.options.slice(1).every((o) => o.startsWith('#')));
+  ok('Share policy: the report path draws no pair either', !('valueLabels' in ((await storyVisual({ visualId: V }, pageDeps({}, P), P))!.chart!.data as object)));
+  await catalog.setColumn(P, B, 'region', { sensitivity: 'none' });
+  // The mask leaves a stored "Other" as it is, so only "the policy touched this axis" (not "no value matched") keeps its label off.
+  const O = await save('Only Other', [['Other', 'gold', 1]]);
+  await catalog.setColumn(P, O, 'region', { values: [{ value: 'Other', label: 'Misc' }] });
+  const { A: OA } = await board(O);
+  await catalog.setColumn(P, O, 'region', { sensitivity: 'personal' });
+  ok('Share policy: a masked column whose value the mask leaves as it is still gets no label', !json(await dd.buildDashboard(P, OA, 4, {}, out)).includes('Misc'));
+  await catalog.setColumn(P, O, 'region', { sensitivity: 'none' });
+  const openO = (await dd.buildDashboard(P, OA, 4, {}, out))!;
+  ok('NEGATIVE CONTROL: unmasked, the same board says Misc in the bar and on the chart', openO.controls[0].options[1] === 'Misc' && json(chartOf(openO).labels) === '["Misc"]', json(openO.controls));
+
+  // No labelled column: the page is byte-identical to one built with no list at all.
+  const { A: UA } = await board(await save('Unlabelled', ROWS));
+  const plain = await dd.buildDashboard(P, UA, 4);
+  const real = catalog.load;
+  (catalog as { load: unknown }).load = async () => catalog.emptyCatalog();
+  const plainStub = await dd.buildDashboard(P, UA, 4).finally(() => { (catalog as { load: unknown }).load = real; });
+  ok('no labels: the dashboard is byte-identical to one built with no list (Object.is), with no keys or values', differ(plain, plainStub) === '' && json(plain) === json(plainStub)
+    && !('keys' in chartOf(plain!)) && !('values' in plain!.controls[0]), differ(plain, plainStub));
+
+  // A story, a report page and a subscription say the labels too.
+  const story = (await stories.saveStory(P, { name: 'Story', blocks: [{ kind: 'visual', visualId: V }] }))!;
+  const block = (await buildStory(P, story.id))!.blocks[0] as any; // any: a published block
+  ok('story: the chart block draws the labels and its caption says Europe', json(block.data.labels) === '["Europe","APAC","North America"]' && String(block.caption).startsWith('Europe') && !json(block).includes('valueLabels'), json(block));
+  const report = (await storyVisual({ visualId: V }, pageDeps({}, P), P))!;
+  ok('report page: the chart goes to the browser\'s chart engine with its pairs (after the report policy), and its caption says Europe',
+    json((report.chart!.data as { valueLabels?: unknown }).valueLabels) === '{"category":[["EU","Europe"],["NA","North America"]]}' && report.caption.startsWith('Europe'), json(report).slice(0, 300));
+  const sent = (await resolveFigures(P, (await analysis.getAnalysis(P, A))!, null, null)).visuals[0];
+  ok('subscription: the message lists the labels and its caption says Europe', json(sent.data!.labels) === '["Europe","APAC","North America"]' && String(sent.caption).startsWith('Europe') && !json(sent).includes('valueLabels'), json(sent));
+  ok('control: an unlabelled board sends the stored values', json((await resolveFigures(P, (await analysis.getAnalysis(P, UA))!, null, null)).visuals[0].data!.labels) === '["EU","APAC","NA"]');
+}
+const replies: typeof import('../src/ipc/valueLabelReplies') = require('../src/ipc/valueLabelReplies');
 
 void main()
   .catch((err: unknown) => { ok('unexpected error', false, err instanceof Error ? err.stack : err); })

@@ -11,7 +11,7 @@ import * as catalog from '../app/catalog';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { applyValueLabels, shownChart, shownText } from '../analysis/valueLabels';
-import type { DroppedLabel, ValueLabel, ValueLabelPairs } from '../analysis/valueLabels';
+import type { DroppedLabel, LabelledAxes, ValueLabel, ValueLabelPairs } from '../analysis/valueLabels';
 import { labelNotShown } from '../analysis/valueLabelMessages';
 import { OTHER_NOTE } from '../analysis/categoryKey';
 import type { CategoryInfo } from '../analysis/categoryKey';
@@ -59,6 +59,34 @@ export async function withValueLabels<R extends VizDataReply>(projectId: string,
   const { data, dropped } = applyValueLabels(reply.data, await labelListsFor(projectId, datasetId, encoding), { otherBucket: reply.category?.note === OTHER_NOTE });
   if (data === reply.data && !dropped.length) return reply;
   return { ...reply, data, warnings: reply.warnings.concat(droppedNotes(dropped, encoding)) };
+}
+
+/** A published chart's lists (read once per visual: a page answers every combination of its bar), and its reply's Other bucket. */
+export interface ChartLabelLists { category?: ValueLabel[]; series?: ValueLabel[]; otherBucket?: boolean }
+
+/**
+ * A published chart answer (pages, stories, embeds) with its pairs, AFTER the Share policy shaped it: a list goes onto an
+ * axis only when the policy left that axis as it came (the very array), so a masked axis never gets a pair beside its tokens.
+ */
+export function labelShaped<D extends LabelledAxes>(stored: LabelledAxes, shaped: D, lists: ChartLabelLists): D & { valueLabels?: ValueLabelPairs } {
+  const open = { category: shaped.labels === stored.labels ? lists.category : undefined, series: shaped.series === stored.series ? lists.series : undefined };
+  return applyValueLabels(shaped, open, { otherBucket: lists.otherBucket }).data;
+}
+
+/**
+ * What a published filter bar's options say for `values` of a text column (ruling F11): each labelled value its label, or
+ * `Label (raw)` when the label is also one of `values` (two options would read the same), or the value itself when even
+ * that text is taken. So no two options read alike, and each option's state keeps its raw value. None → undefined.
+ */
+export async function labelPairsForValues(projectId: string, datasetId: string, column: string, values: readonly string[]): Promise<[string, string][] | undefined> {
+  const list = (await labelListsFor(projectId, datasetId, { category: column, values: [] })).category;
+  if (!list) return undefined;
+  const present = new Set(values);
+  const said = list.filter((l) => present.has(l.value) && l.label !== l.value).map((l): [string, string] => [l.value, present.has(l.label) ? `${l.label} (${l.value})` : l.label]);
+  const count = new Map<string, number>();
+  for (const [, text] of said) count.set(text, (count.get(text) ?? 0) + 1);
+  const pairs = said.filter(([value, text]) => count.get(text) === 1 && (!present.has(text) || text === value));
+  return pairs.length ? pairs : undefined;
 }
 
 /** Why each left-off label shows its value as stored, naming the axis's column. */

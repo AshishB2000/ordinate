@@ -53,6 +53,9 @@ import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
 import { markScopeTerms } from '../data/filterList';
+import { shownChart, shownText } from '../analysis/valueLabels';
+import { OTHER_NOTE } from '../analysis/categoryKey';
+import { labelListsFor, labelPairsForValues, labelShaped, type ChartLabelLists } from '../ipc/valueLabelReplies';
 import { kpiHidden } from './kpiPolicy';
 
 export interface PublishedControl {
@@ -62,6 +65,8 @@ export interface PublishedControl {
   /** The column a click on a chart label can select through this control. */
   column: string;
   options: string[];
+  /** Each option's stored value (null = "All"), only when some option shows a value label: a chart click matches these. */
+  values?: (string | null)[];
   defaultIndex: number;
 }
 
@@ -185,6 +190,7 @@ export async function chartPayload(
   overrides: unknown,
   raw: VizDataResult['data'],
   outgoing?: Outgoing,
+  named?: ChartLabelLists,
 ): Promise<Record<string, unknown>> {
   let data = raw;
   if (outgoing) {
@@ -192,12 +198,16 @@ export async function chartPayload(
     if ('hidden' in shaped) return { hidden: shaped.hidden };
     data = shaped;
   }
+  // Value labels AFTER the policy, on the axes it left as they came; the page draws them as text, the stored values as `keys`.
+  if (named) data = labelShaped(raw, data, named);
   // The figures the chart draws, off the series as shaped for the page (analysis/chartShapes) — and so its caption's.
   data = withChartFigures(data, figureAsk(chartType, overrides));
   const { figures } = data as { figures?: ChartFigures };
+  const shown = shownChart(data);
   return {
-    labels: data.labels,
-    series: data.series.map((s) => ({ label: s.name, values: s.values })),
+    labels: shown.labels,
+    ...(data.valueLabels?.category ? { keys: data.labels } : {}), // a click selects by the stored value (ruling F11)
+    series: shown.series.map((s) => ({ label: s.name, values: s.values })),
     ...(figures ? { figures } : {}),
     ...(data.pivot ? { pivot: data.pivot } : {}),
     ...(data.geo ? { geo: data.geo } : {}),
@@ -222,6 +232,8 @@ interface ControlSpec {
   domain: ControlDomain;
   /** Option index → the control state (null = "All"), or for a parameter, its value. */
   states: unknown[];
+  /** Option index → its stored value, only when some option shows a label instead. */
+  stored?: (string | null)[];
 }
 
 async function distinct(projectId: string, datasetId: string, column: string): Promise<string[] | string> {
@@ -262,12 +274,16 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
     if (outgoing) {
       const shaped = await outgoing(control.datasetId, { category: control.column, values: [] }, { labels: values, series: [] });
       if ('hidden' in shaped) { unlisted.push({ control: label, reason: shaped.hidden }); return null; }
-      shown = shaped.labels.map(String);
+      if (shaped.labels !== values) shown = shaped.labels.map(String);
     }
+    // Value labels AFTER the policy, only on values it left as they came (a token gets none). "All" is the bar's own option.
+    const pairs = shown === values ? await labelPairsForValues(projectId, control.datasetId, control.column, ['All', ...values]) : undefined;
+    if (pairs) shown = shownText(values, pairs);
     return {
       card, control,
       domain: { id, label, options: ['All', ...shown], defaultIndex: idx >= 0 ? idx + 1 : 0 },
       states: [null, ...values.map((v) => (control.kind === 'dropdown' ? { value: v } : { values: [v] }))],
+      ...(pairs ? { stored: [null, ...values] } : {}),
     };
   }
   if (control.kind === 'date_range') {
@@ -459,6 +475,7 @@ export async function buildDashboard(
           if (enc.geo.level === 'custom' && enc.geo.boundaryId) boundaryIds.add(enc.geo.boundaryId);
           else geoLevels.add(enc.geo.level);
         }
+        const lists = await labelListsFor(projectId, v.datasetId, enc); // once per visual: it answers every combination
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           const merged = mergeDashboardFilters(scope.filters, v.filters);
@@ -466,7 +483,7 @@ export async function buildDashboard(
           const drawn = await followedEncoding(projectId, v.datasetId, enc, scope.params); // each metric measure as it is defined NOW: what the tile draws
           const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, drawn, bound.steps, { params: scope.params }), projectId, v.datasetId, drawn, scope.params), projectId, v.datasetId, bound.steps);
           const payload = reply.ok
-            ? { ...(await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing)), ...noteOf(reply.notes) }
+            ? { ...(await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing, { ...lists, otherBucket: reply.category?.note === OTHER_NOTE })), ...noteOf(reply.notes) }
             : { error: reply.error || 'Could not compute this tile.' };
           base.variants.push(intern(store, payload));
           done++;
@@ -618,6 +635,7 @@ export async function buildDashboard(
       kind: s.control.kind === 'radius' ? 'dropdown' : s.control.kind,
       column: s.control.kind === 'radius' ? '' : s.control.column,
       options: plan.domains[i].options,
+      ...(s.stored ? { values: plan.domains[i].options.map((o) => s.stored![s.domain.options.indexOf(o)]) } : {}), // options are unique (labelPairsForValues)
       defaultIndex: plan.domains[i].defaultIndex,
     })),
     mode: plan.mode,
