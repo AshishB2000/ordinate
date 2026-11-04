@@ -411,7 +411,8 @@ class Parser<T> {
   private parseCall(name: string): T {
     const at = this.pos;
     const lower = name.toLowerCase();
-    if (!FUNCTIONS[lower]) this.fail('Unknown function: ' + name);
+    // Own names only: FUNCTIONS is an object literal, and what it inherits (`constructor`) is no function of ours.
+    if (!Object.hasOwn(FUNCTIONS, lower)) this.fail('Unknown function: ' + name);
     this.pos += 1; // consume name
     this.expectPunc('('); // consume '('
     const args: T[] = [];

@@ -43,7 +43,7 @@ export interface FormulaBuilder<T> {
   inList(subject: T, items: T[], at: number): T;
   ifThen(branches: { test: T; then: T }[], otherwise: T | null, at: number): T;
   caseWhen(subject: T, whens: { val: T; then: T }[], otherwise: T | null, at: number): T;
-  /** `name` is lower-cased and a FUNCTIONS key: the parser checks it. */
+  /** `name` is lower-cased and an OWN key of FUNCTIONS: the parser checks it. */
   call(name: string, args: T[], at: number): T;
   lod(parts: LodParts<T>, at: number): T;
 }

@@ -4,6 +4,7 @@
 
 import { type EvalFn, arith, compareOp, looseEq, num, truthy, FUNCTIONS } from './formulaEval';
 import { spendCall } from './formulaBudget';
+import { FormulaError } from './formulaTokens';
 import type { FormulaBuilder } from './formulaBuilder';
 import type { LodSpec } from './formulaParse';
 
@@ -42,7 +43,12 @@ export function jsBuilder(): FormulaBuilder<EvalFn> & { readonly lods: LodSpec[]
       for (const w of whens) if (looseEq(s, w.val(row))) return w.then(row);
       return otherwise ? otherwise(row) : null;
     },
-    call: (name, args) => {
+    call: (name, args, at) => {
+      if (!Object.hasOwn(FUNCTIONS, name)) { // the parser refuses it first; an inherited name is never ours
+        const e = new FormulaError('Unknown function: ' + name);
+        e.tokenIndex = at;
+        throw e;
+      }
       const fn = FUNCTIONS[name];
       return (row) => {
         const vals = args.map((a) => a(row));
