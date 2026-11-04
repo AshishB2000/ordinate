@@ -188,17 +188,17 @@ write. Each item says what a pod older than this release does, and what this rel
   it goes through (`via`). An older pod drops both: every name in the project is lost on its next
   join save or delete, and a chart with `via` is drawn through the first join, which can be the
   wrong date. This release keeps both, and refuses the chart (Explain declines it too). Saving the
-  same join again keeps its name. A join edited onto other columns loses its name and its warning,
-  because they described the old columns.
+  same join again keeps its name. A join edited onto other columns loses its name, because it
+  described the old columns.
 - **Always-applied filters on a [Live dataset](live-data.md).** An older pod ignores them and
   answers every question without them. This release refuses every question, schema sync, "Make a
   copy" and "Copy the data instead" on that dataset ("Ask your admin to finish upgrading
   Ordinate").
 - **Notes on a table, labels for a column's values, and warnings on a join.** An older pod drops
   them the next time it saves a project's notes (any tag or note edit does) or a join. This
-  release keeps them. The column notes a browser reads carry no value labels, so a viewer with row
-  access rules never sees them. A join's warning is worked out again later, so losing it never
-  changes a figure.
+  release keeps the notes and the labels. The column notes a browser reads carry no value labels,
+  so a viewer with row access rules never sees them. A join's warning is dropped when this release
+  saves the join: it is worked out again later, so losing it never changes a figure.
 - **A metric's date column, and the mark on a date filter that came from a dashboard's date
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
   column, and an alert saved from a KPI counts by the control's column instead of the metric's.
