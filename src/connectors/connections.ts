@@ -253,7 +253,7 @@ function sanitizeQueries(raw: unknown): SavedQuery[] {
   return out;
 }
 
-function connectionsDir(projectId: string): string {
+export function connectionsDir(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'connections');
 }
 

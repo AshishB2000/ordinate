@@ -584,6 +584,7 @@
   "semanticMessages.small_multiples_can_t_be_drawn": "No se pueden dibujar múltiplos pequeños a partir de {dataset}: {layer} calcula sus métricas y devuelve totales, no filas.",
   "semanticMessages.this_question_needs_the_latest_date": "Esta pregunta necesita la fecha más reciente o los valores almacenados de {dataset}, que {layer} no puede consultar.",
   "semanticMessages.your_access_to_is_limited_to": "Su acceso a {dataset} está limitado a algunas filas y {layer} no puede aplicar ese límite con exactitud, así que no se muestra ninguna cifra.",
+  "sourceTableMessages.this_connection_already_documents_2_000": "Esta conexión ya documenta 2000 tablas.",
   "statusMessages.an_item_cannot_replace_itself_pick": "Un elemento no puede reemplazarse a sí mismo. Elige otro.",
   "statusMessages.is_retired": "{name} está retirado.",
   "statusMessages.is_retired_replaces_it": "{name} está retirado; {replacement} lo reemplaza.",
