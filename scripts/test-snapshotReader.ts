@@ -3,7 +3,8 @@
 // A LATER release writes `snapshot: {column, take}` (a stock count is the last day's value, not a sum over
 // every day). A pod of THIS release that reads such a record must (1) keep it through every re-save, duplicate
 // and tree save, and (2) never draw the plain sum over every date in its place: every figure path that would
-// do so refuses or shows no figure, until the release that computes snapshots removes the refusals.
+// do so refuses or shows no figure, until the release that computes snapshots removes the refusals. Step 07 is
+// that release: the assertions marked "step 07" now pin its figure (scripts/test-snapshot.ts holds the matrix).
 //
 //   npm run build:ts && node scripts/test-snapshotReader.js
 
@@ -28,7 +29,6 @@ const msg: typeof import('../src/analysis/metricCheckMessages') = require('../sr
 const api: typeof import('../src/api/metrics') = require('../src/api/metrics');
 const ipcTree: typeof import('../src/ipc/metricTree') = require('../src/ipc/metricTree');
 const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
-const treeMsg: typeof import('../src/analysis/metricTreeMessages') = require('../src/analysis/metricTreeMessages');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const stories: typeof import('../src/ipc/stories') = require('../src/ipc/stories');
 const embedLock: typeof import('../src/publish/embedLock') = require('../src/publish/embedLock');
@@ -79,9 +79,11 @@ void (async () => {
   ok('a duplicate keeps it', isDeepStrictEqual((await metrics.duplicateMetric(pid, m.id))!.definition, def));
   ok('the contract takes a writer (step 07)', api.metrics['metric:save'].input.safeParse({ projectId: pid, input: { name: 'x', datasetId: ds.id, definition: def } }).success);
 
-  ok('no figure until step 07, never the sum over every date', (await ipcMetrics.resolveMetric(pid, m.id))!.value === null);
+  // Step 07 computes it: the latest day's units (the last day, 2024-02-20, holds one row of 49), never the sum over every date.
+  const lastDay = rows.filter((r) => r[0] === '2024-02-20').reduce((a, r) => a + r[2], 0);
+  ok('a figure since step 07: the latest day\'s, never the sum over every date', (await ipcMetrics.resolveMetric(pid, m.id))!.value === lastDay);
   const plain = (await metrics.saveMetric(pid, { name: 'Units', datasetId: ds.id, definition: { column: 'units', aggregation: 'sum' } }))!;
-  ok('NEGATIVE CONTROL: the same column without a snapshot has a figure', typeof (await ipcMetrics.resolveMetric(pid, plain.id))!.value === 'number');
+  ok('NEGATIVE CONTROL: the same column without a snapshot has the sum over every date', (await ipcMetrics.resolveMetric(pid, plain.id))!.value === rows.reduce((a, r) => a + r[2], 0));
 
   const f = (await metrics.saveMetric(pid, { name: 'Double', datasetId: ds.id, definition: { formula: '[Stock on hand] * 2' } }))!;
   const c = await viz(null, { projectId: pid, datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'Double', aggregation: 'sum', metricId: f.id }] } });
@@ -126,7 +128,7 @@ void (async () => {
   const snapRoot = await withTree('Stock tree', def, { split: 'region' });
   const plainRoot = await withTree('Units tree', { column: 'units', aggregation: 'sum' }, { split: 'region' });
   const [rs, rp] = [await tree(snapRoot.id), await tree(plainRoot.id)];
-  ok('tree door: a snapshot root has no figure and no split, and says why', rs.ok && rs.root.current === null && rs.root.previous === null && rs.root.display === '—' && rs.root.children.length === 0 && typeof rs.root.note === 'string', JSON.stringify(rs).slice(0, 300));
+  ok('tree door: a snapshot root has its figure (step 07) and no split, and says why', rs.ok && typeof rs.root.current === 'number' && typeof rs.root.previous === 'number' && rs.root.children.length === 0 && typeof rs.root.note === 'string', JSON.stringify(rs).slice(0, 300));
   const refS = await reference(snapRoot.id);
   ok('tree JS reference: the snapshot root agrees with the door (Object.is)', Object.is(refS.current, rs.root.current) && Object.is(refS.previous, rs.root.previous) && refS.children.length === 0, JSON.stringify(refS).slice(0, 300));
   const refP = await reference(plainRoot.id);
@@ -138,7 +140,7 @@ void (async () => {
   const partSnap = await withTree('Parts with a snapshot', { column: 'units', aggregation: 'sum' }, sumOf(snapPart.id, plainPart.id));
   const partPlain = await withTree('Parts without one', { column: 'units', aggregation: 'sum' }, sumOf(plainPart.id, plainPart.id));
   const [ps, pp] = [await tree(partSnap.id), await tree(partPlain.id)];
-  ok('tree door: a snapshot part has no figure, and its parent names it', ps.ok && ps.root.children[0].current === null && ps.root.children[0].display === '—' && ps.root.note === treeMsg.partMissing('Stock part'), JSON.stringify(ps).slice(0, 300));
+  ok('tree door: a snapshot part has its figure (step 07), so its parent needs no note', ps.ok && typeof ps.root.children[0].current === 'number' && ps.root.note === undefined, JSON.stringify(ps).slice(0, 300));
   const refPart = await reference(partSnap.id);
   ok('tree JS reference: the snapshot part agrees with the door (Object.is)', Object.is(refPart.children[0].current, ps.root.children[0].current) && Object.is(refPart.children[0].previous, ps.root.children[0].previous));
   ok('NEGATIVE CONTROL: the same parts without a snapshot have figures and no note', pp.ok && typeof pp.root.children[0].current === 'number' && pp.root.note === undefined, JSON.stringify(pp).slice(0, 300));
@@ -170,7 +172,7 @@ void (async () => {
   ok('scenarios: the picker does not offer a snapshot metric', !listed.includes(m.id) && listed.includes(plain.id), JSON.stringify(listed));
   const run = await scenarioResolve.computeScenario(pid, { id: U(1), name: 't', baseMetricIds: [m.id, plain.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 10 }]) });
   const row = (id: string) => run.metrics.find((x) => x.metricId === id)!;
-  ok('scenarios: a snapshot metric under a driver has no figure', row(m.id).value === null && row(m.id).baseline === null, JSON.stringify(row(m.id)));
+  ok('scenarios: a snapshot metric under a driver is never re-summed over every date', row(m.id).value !== rows.reduce((a, r) => a + r[2], 0) && row(m.id).baseline === lastDay, JSON.stringify(row(m.id)));
   ok('NEGATIVE CONTROL: the same column without a snapshot moves with the driver', typeof row(plain.id).value === 'number' && (row(plain.id).value as number) > (row(plain.id).baseline as number), JSON.stringify(row(plain.id)));
 
   // A template's measure role takes the metric's column only when the metric is a plain total.
@@ -226,8 +228,8 @@ void (async () => {
   const plainSum = rows.reduce((s, r) => s + r[2], 0);
   const summarised = async (metricId: string) => summary.computeSummary(pid, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds.id, column: 'units', aggregation: 'sum', metricId } }] }], { filters: [], params: new Map() });
   const sumSnap = await summarised(m.id);
-  ok('summary: a snapshot metric\'s KPI says no figure, never the plain sum over every date',
-    !sumSnap.some((s) => s.kind === 'kpi') && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
+  ok('summary: a snapshot metric\'s KPI is its latest day\'s figure (step 07), never the plain sum over every date',
+    sumSnap.some((s) => s.kind === 'kpi' && s.figures.some((x) => x.value === lastDay)) && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
   const sumPlain = await summarised(plain.id);
   ok('NEGATIVE CONTROL: the same KPI of a plain metric gives its figure', sumPlain.some((s) => s.kind === 'kpi' && s.figures.some((x) => typeof x.value === 'number')), JSON.stringify(sumPlain).slice(0, 400));
 

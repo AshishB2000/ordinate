@@ -37,6 +37,11 @@ const { metrics: api }: typeof import('../src/api/metrics') = require('../src/ap
 const { describeDefinition }: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const { civilFromDays }: typeof import('../src/analysis/civilDays') = require('../src/analysis/civilDays');
 const { periodDay }: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
+const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const { computeMetric }: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
+const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
+type Metric = import('../src/analysis/metrics').Metric;
+type FilterStep = import('../src/data/transforms').FilterStep;
 
 type Any = any; // any: each handler's own reply shape, read field by field below
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 600);
@@ -82,7 +87,7 @@ void (async () => {
   ok('contract: update takes snapshot: null', api['metric:update'].input.safeParse({ projectId: pid, id: ds, patch: { definition: { column: 'units', aggregation: 'sum', snapshot: null } } }).success);
   ok('contract: take is last or first', !api['metric:preview'].input.safeParse({ projectId: pid, datasetId: ds, definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'max' } } }).success);
   ok('contract: a formula takes none', !api['metric:save'].input.safeParse({ projectId: pid, input: { name: 'S', datasetId: ds, definition: { formula: '[A]', snapshot: S } } }).success);
-  const r = await save({ name: 'Stock', definition: { column: 'units', aggregation: 'sum', snapshot: S } });
+  const r = await save({ name: 'Draft', definition: { column: 'units', aggregation: 'sum', snapshot: S } });
   ok('saved with its snapshot', r.ok && isDeepStrictEqual(r.metric.definition.snapshot, S), show(r));
   const bad = await save({ name: 'Bad', definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'region', take: 'last' } } });
   ok('a text column is refused beside the field', bad.ok === false && bad.field === 'snapshot' && bad.error === msg.snapshotNotDate('region'), show(bad));
@@ -111,6 +116,54 @@ void (async () => {
   ok('per month, earliest: each bucket\'s first day', isDeepStrictEqual(snap.pickPerBucket(day, 'month', 'first'), { labels: ['2024-01', '2024-02'], series: [{ name: 'East', values: [5, 7] }, { name: 'West', values: [1, null] }] }));
   ok('a label that is no day is skipped', isDeepStrictEqual(snap.pickPerBucket({ labels: ['', '2024-01-02'], series: [{ name: 'x', values: [9, 1] }] }, 'year', 'last'), { labels: ['2024'], series: [{ name: 'x', values: [1] }] }));
   ok('onDay', isDeepStrictEqual(snap.onDay('day', '2024-01-31'), { type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2024-01-31', to: '2024-01-31' } }));
+
+  // ── kpi ────────────────────────────────────────────────────────────────────
+  const saved = async (name: string, definition: object, filters: object[] = []): Promise<Metric> => {
+    const res = await save({ name, definition, filters });
+    if (!res.ok) throw new Error(`"${name}" not saved: ${show(res)}`);
+    return res.metric as Metric;
+  };
+  const stock = await saved('Stock', { column: 'units', aggregation: 'sum', snapshot: S });
+  const opening = await saved('Opening', { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'first' } });
+  const lines = await saved('Lines', { column: 'units', aggregation: 'count', snapshot: S });
+  const level = await saved('Level', { column: 'units', aggregation: 'avg', snapshot: S });
+  const peak = await saved('Peak', { column: 'units', aggregation: 'max', snapshot: S });
+  const eastStock = await saved('East stock', { column: 'units', aggregation: 'sum', snapshot: S }, [{ type: 'filter', column: 'region', op: '=', value: 'East' }]);
+  const units = await saved('Units', { column: 'units', aggregation: 'sum' });
+  const double = await saved('Double stock', { formula: '[Stock] * 2' });
+  const snapOf = (m: Metric) => (m.definition as { snapshot: import('../src/analysis/snapshot').MetricSnapshot }).snapshot;
+  const kpi = async (m: Metric, scope: FilterStep[]) => (await ipcMetrics.resolveMetric(pid, m.id, { filters: scope }))!.value;
+  const table = (f: FilterStep[]) => transforms.applyPipeline({ columns: COLS, rows: ROWS }, f);
+  const ref = (m: Metric, scope: FilterStep[]) => {
+    const t = table(m.filters.concat(scope));
+    return computeMetric(t.columns, snap.snapshotRows(t.columns, t.rows, snapOf(m)), m.definition as Any);
+  };
+  const SPRING = [{ type: 'filter', column: 'region', op: 'in', values: ['East', 'West'] }, { type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2023-03-01', to: '2023-06-30' } }] as FilterStep[];
+  const NONE = [{ type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '1999-01-01', to: '1999-12-31' } }] as FilterStep[];
+  const t0 = trace.snapshot();
+  for (const m of [stock, opening, lines, level, peak, eastStock]) {
+    for (const [name, scope] of [['no scope', []], ['East and West in spring', SPRING], ['nothing in scope', NONE]] as Array<[string, FilterStep[]]>) {
+      const got = await kpi(m, scope);
+      const want = ref(m, scope);
+      ok(`kpi ${m.name}, ${name}: door = reference (Object.is)`, Object.is(got, want), show([got, want]));
+    }
+  }
+  const t1 = trace.snapshot();
+  ok('resident: the day list and the figure ran in place', (t1.vizAggregate?.resident ?? 0) > (t0.vizAggregate?.resident ?? 0) && (t1.metric?.resident ?? 0) > (t0.metric?.resident ?? 0), show([t0.vizAggregate, t1.vizAggregate, t0.metric, t1.metric]));
+  ok('empty scope: count 0, sum null', (await kpi(lines, NONE)) === 0 && (await kpi(stock, NONE)) === null);
+  ok('a real figure, not an empty one', typeof (await kpi(stock, [])) === 'number' && typeof (await kpi(stock, SPRING)) === 'number');
+  ok('NEGATIVE CONTROL: not the sum over every date', (await kpi(stock, [])) !== (await kpi(units, [])));
+  ok('NEGATIVE CONTROL: earliest ≠ latest', (await kpi(opening, [])) !== (await kpi(stock, [])));
+  ok('both spellings on the latest day count', (await kpi(lines, [])) === ROWS.filter((row) => periodDay(row[0]) === LAST && typeof row[3] === 'number').length);
+  ok('a formula over it: [Stock] * 2', Object.is(await kpi(double, []), 2 * (await kpi(stock, []))!));
+  ok('the editor\'s preview of an unsaved snapshot is its figure', (await ipcMetrics.previewDefinition(pid, ds, { column: 'units', aggregation: 'sum', snapshot: S }, [], { kind: 'number' })).value === (await kpi(stock, [])));
+  await datasets.updateDatasetData(pid, ds, { columns: COLS, rows: ROWS.concat([[isoFromDays(LAST + 2), 'East', 'A', 41, isoFromDays(LAST + 3)]]) } as Any); // a refresh adds a later day
+  ok('a later day after refresh → that day\'s figure, not a cached old one', (await kpi(stock, [])) === 41);
+  await datasets.updateDatasetData(pid, ds, { columns: COLS, rows: ROWS } as Any); // back, for the sections below
+  ok('…and back', Object.is(await kpi(stock, []), ref(stock, [])));
+  const gone = (await metrics.saveMetric(pid, { name: 'Gone day', datasetId: ds, definition: { column: 'units', aggregation: 'count', snapshot: { column: 'removed', take: 'last' } } }))!;
+  ok('a snapshot day column that is gone gives no figure, never a count of 0', (await ipcMetrics.resolveMetric(pid, gone.id))!.value === null);
+  ok('NEGATIVE CONTROL: the same count on the real day column is a figure', (await kpi(lines, [])) !== null && (await kpi(lines, [])) !== 0);
 
   finish();
 })().catch((err) => {

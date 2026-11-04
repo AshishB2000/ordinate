@@ -5,6 +5,8 @@
 import * as metrics from './metrics';
 import type { Metric } from './metrics';
 import * as msg from './metricCheckMessages';
+import { sanitizeSnapshot } from './snapshot';
+import * as datasets from '../data/datasets';
 import type { VizEncoding } from './visuals';
 
 /** The saved metric `metricId` names when it is a SIMPLE snapshot one (its stored column and total are not its figure), else null. */
@@ -34,4 +36,12 @@ function snapshotDrawn(encoding: VizEncoding | null | undefined): VizEncoding['v
   if (!encoding || encoding.cohort || encoding.eventFunnel || encoding.drivers) return [];
   const all = encoding.pivot ? encoding.pivot.values : encoding.values;
   return Array.isArray(all) ? (encoding.series && !encoding.pivot ? all.slice(0, 1) : all) : [];
+}
+
+/** The sentence refusing a definition whose snapshot names no date column of `datasetId`, or null (none, a date, or no dataset). */
+export async function snapshotProblem(projectId: string, datasetId: string, def: unknown): Promise<string | null> {
+  const snap = sanitizeSnapshot(def && typeof def === 'object' ? (def as { snapshot?: unknown }).snapshot : undefined);
+  if (!snap) return null;
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  return !meta || meta.columns.some((c) => c.name === snap.column && c.type === 'date') ? null : msg.snapshotNotDate(snap.column);
 }

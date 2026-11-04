@@ -1,13 +1,11 @@
 // A snapshot metric (semantic layer part 1): a stock count is the last (or first) day's value, not a sum over
-// every day. This file is the TYPE, its whitelist and the save check; metrics.ts imports from here, never the other
-// way round (types only come back).
+// every day. This file is PURE: the TYPE, its whitelist and the row-level reference; metrics.ts imports from here,
+// never the other way round. The save check, which reads a dataset's columns, is ./snapshotGuards.snapshotProblem.
 
-import * as datasets from '../data/datasets';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import { dateBucket, dateBucketLabel, daysFromCivil, parseDateCell } from './categoryKey';
 import type { DateGrain } from './categoryKey';
-import * as msg from './metricCheckMessages';
 
 /** Which row of each group a snapshot metric reads: the latest or the earliest by `column` (a date column). */
 export interface MetricSnapshot {
@@ -32,14 +30,6 @@ export function sanitizeSnapshot(raw: unknown): MetricSnapshot | undefined {
  */
 export function mergeSnapshot(incoming: unknown, stored: unknown): MetricSnapshot | undefined {
   return incoming === null ? undefined : (sanitizeSnapshot(incoming) ?? sanitizeSnapshot(stored));
-}
-
-/** The sentence refusing a definition whose snapshot names no date column of `datasetId`, or null (none, a date, or no dataset). */
-export async function snapshotProblem(projectId: string, datasetId: string, def: unknown): Promise<string | null> {
-  const snap = sanitizeSnapshot(def && typeof def === 'object' ? (def as { snapshot?: unknown }).snapshot : undefined);
-  if (!snap) return null;
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  return !meta || meta.columns.some((c) => c.name === snap.column && c.type === 'date') ? null : msg.snapshotNotDate(snap.column);
 }
 
 // ── Which rows a snapshot keeps ──────────────────────────────────────────────

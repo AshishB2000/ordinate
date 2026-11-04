@@ -57,7 +57,7 @@ import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
-import { snapshotProblem } from '../analysis/snapshot';
+import { snapshotProblem } from '../analysis/snapshotGuards';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { termHolding } from '../analysis/termNames';
 import { termNameTaken } from '../data/termMessages';
