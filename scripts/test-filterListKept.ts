@@ -192,6 +192,33 @@ async function main(): Promise<void> {
   ok('describeFilter names a term by its kind (no "undefined"), a filter as before',
     mf.describeFilter(TERM as unknown as FilterStep) === 'term' && mf.describeFilter(FUTURE as unknown as FilterStep) === 'future x' && mf.describeFilter(F0 as FilterStep) === 'city = Paris');
 
+  // A filter-only list reads as it did before: the old rule was sanitizeSteps(raw) keeping `filter` steps.
+  const PERIOD = { preset: 'last_n_days', n: 7 };
+  const RADIUS = { lngColumn: 'lng', lat: 40, lng: -74, km: 5, place: ' NYC ' };
+  const CORPUS: unknown[] = [
+    [], undefined, null, 'x', 7, {}, { type: 'filter', column: 'a', op: '=', value: 1 },
+    [F0],
+    [{ type: 'filter', column: 'd', op: 'period', period: PERIOD }, { type: 'filter', column: 'd', op: 'period', period: { preset: 'nope' } }, { type: 'filter', column: 'd', op: 'period' }],
+    [{ type: 'filter', column: 'lat', op: 'within_km', radius: RADIUS }, { type: 'filter', column: 'lat', op: 'within_km', radius: { km: -1 } }],
+    [{ ...F0, context: true }, { ...F0, context: 'yes' }, { ...F0, lock: true }, { ...F0, via: U }, { ...F0, via: '../x' }, { ...F0, fromControl: true }, { ...F0, fromControl: 1 }],
+    [{ type: 'filter', column: 'a', op: 'in', values: [1, 'b', null, { x: 1 }, [2], true, undefined] }, { type: 'filter', column: 'a', op: 'in', values: 'x' }],
+    [{ type: 'filter', column: 'a', op: '=', value: { evil: 1 } }, { type: 'filter', column: 'a', op: '=', value: true }, { type: 'filter', column: 'a', op: 'is null' }],
+    [{ type: 'filter', column: 'a', op: 'drop table' }, { type: 'filter', column: 5, op: '=' }, { type: 'filter', op: '=' }, { type: 'filter' }, { type: 'FILTER', column: 'a', op: '=' }],
+    [null, 7, 'filter', [], [F0], undefined, true, F0, { column: 'a', op: '=' }],
+    [F0, null, { ...F0, column: 'b', evil: { deep: [1] } }, F0],
+  ];
+  const old = (x: unknown) => sanitizeSteps(x).filter((s) => s.type === 'filter');
+  const diverged = CORPUS.map((x, i) => (S(list(x)) === S(old(x)) ? -1 : i)).filter((i) => i >= 0);
+  ok('DIFFERENTIAL: over filter-only lists, sanitizeFilterList === the old sanitizeSteps(...).filter(type filter)', diverged.length === 0, `diverged at corpus index ${diverged.join(',')}`);
+  ok('the corpus really exercises period, radius, via, fromControl and a bad op (the differential is not vacuous)',
+    S(list(CORPUS[8])).includes('last_n_days') && S(list(CORPUS[9])).includes('within_km') && S(list(CORPUS[10])).includes(U) && S(list(CORPUS[10])).includes('fromControl') && list(CORPUS[13]).length === 0 && list(CORPUS[11]).length === 2);
+
+  const eight = Array.from({ length: 8 }, (_, i) => ({ type: 'filter', column: 'city', op: '=', value: `c${i}` }));
+  const tile = (filters: unknown[]) => tileSpec({ datasetId: D, encoding: enc, filters: as(filters), chartType: 'column', name: 'T' });
+  ok('tileSpec: eight filters, a term among them, is a spec with all eight', tile([...eight.slice(0, 7), TERM])?.filters.length === 8);
+  ok('NEGATIVE CONTROL: tileSpec refuses (null) a ninth filter, a term past the eighth, and a term that is not a UUID - never a widened chart',
+    tile([...eight, F0]) === null && tile([...eight, TERM]) === null && tile([F0, { type: 'term', term: 'not-a-uuid' }]) === null);
+
   // ── § control ──────────────────────────────────────────────────────────────
   ok('NEGATIVE CONTROL: Prepare (sanitizeSteps) drops a term and a future step', sanitizeSteps([TERM, FUTURE]).length === 0);
   ok('NEGATIVE CONTROL: datasets.updateSteps stores no term step', !(await datasets.updateSteps(P, D, [F0, TERM]))!.dataset.steps!.some((s) => (s as { type: string }).type === 'term'));

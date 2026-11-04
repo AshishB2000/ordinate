@@ -19,6 +19,7 @@
 
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
+import { isKeptStep } from '../data/filterList';
 import * as versions from '../app/versions';
 import { loadPlanContext, validatePlan } from '../analysis/analysisPlan';
 import type { PlanContext, PlanDrop, PlannedVisual } from '../analysis/analysisPlan';
@@ -60,13 +61,14 @@ export async function checkVisual(projectId: string, datasetRef: string, raw: Re
  * A tool's filters are filter STEPS without the `type` a stored step carries.
  * The sanitizer DROPS a step it cannot read — which here would silently widen
  * an aggregate to rows the caller excluded — so a step that does not survive
- * it is refused by position instead.
+ * it is refused by position instead. The list sanitizer now KEEPS a step of an unknown
+ * type (a glossary term), but an agent's filter is a plain filter: that is refused too.
  */
 function filterSteps(raw: unknown): unknown[] {
   if (raw === undefined) return [];
   const list = (Array.isArray(raw) ? raw : []).map((f) =>
     (f && typeof f === 'object' && !Array.isArray(f) ? { type: 'filter', ...(f as Record<string, unknown>) } : f));
-  const bad = list.findIndex((f) => visuals.sanitizeFilters([f]).length !== 1);
+  const bad = list.findIndex((f) => isKeptStep(f) || visuals.sanitizeFilters([f]).length !== 1);
   if (bad >= 0) throw new AutomationError('usage', `Filter ${bad + 1} is not a valid filter: it needs a column, an op and (for most ops) a value.`);
   return list;
 }

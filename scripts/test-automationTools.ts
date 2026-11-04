@@ -126,6 +126,11 @@ async function main(): Promise<void> {
   ok('aggregate: a filter narrows it (type is filled in, never dropped)', fAgg.labels.length === 1 && fAgg.labels[0] === 'West');
   const badF = await refusal('aggregate', { dataset: ds.name, encoding: enc, filters: [{ column: 'region', op: 'resembles', value: 'x' }] });
   ok('aggregate: an unreadable filter is refused, not silently dropped', badF.code === 'usage' && /Filter 1/.test(badF.message));
+  // The list sanitizer keeps a step of an unknown type (a glossary term); an agent's filter must still be a plain filter.
+  const termF = await refusal('aggregate', { dataset: ds.name, encoding: enc, filters: [{ type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' }] });
+  const futureF = await refusal('aggregate', { dataset: ds.name, encoding: enc, filters: [{ column: 'region', op: '=', value: 'West' }, { type: 'future_x', a: 1 }] });
+  ok('NEGATIVE CONTROL: aggregate refuses a term and an unknown-typed step by position (the plain filter before it passes)',
+    termF.code === 'usage' && /Filter 1/.test(termF.message) && futureF.code === 'usage' && /Filter 2/.test(futureF.message), termF.message + ' | ' + futureF.message);
   const txt = await refusal('aggregate', { dataset: ds.name, encoding: { category: 'region', values: [{ column: 'state', aggregation: 'sum' }] } });
   ok('aggregate: sum of a text column refused with the validator\'s reason', txt.code === 'usage' && txt.message.includes('needs a number column'));
   const missCol = await refusal('aggregate', { dataset: ds.name, encoding: { category: 'nope', values: [{ column: 'revenue', aggregation: 'sum' }] } });

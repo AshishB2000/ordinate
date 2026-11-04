@@ -369,7 +369,7 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
   const enc = t.encoding;
   const category = enc.category || (enc.pivot && enc.pivot.rows && enc.pivot.rows[0]) || '';
   const measures = (enc.values || []).map((m) => (m.aggregation === 'none' ? { ...m, aggregation: 'sum' as const } : m));
-  return sanitizeStoredSpec({
+  const spec = sanitizeStoredSpec({
     datasetId: t.datasetId,
     category,
     measures,
@@ -382,7 +382,9 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
     }),
     chartType: ANSWER_CHART_TYPES.has(t.chartType) ? t.chartType : 'column',
     title: t.name,
-  }) || null;
+  });
+  // sanitizeStoredSpec keeps a term only when it is a UUID and stops at the eighth filter: a filter lost there would widen the chart.
+  return spec && spec.filters.length === (t.filters || []).length ? spec : null;
 }
 
 async function appendAnswer(

@@ -452,8 +452,9 @@ export function register() {
   ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir, filters }: any = {}) => {
     try {
       // Filters are untrusted renderer input and go through the SAME whitelist a
-      // saved visual's filters do — `transforms.sanitizeSteps` keeping only
-      // 'filter' steps. An unknown column or operator survives sanitisation and
+      // saved visual's filters do (`sanitizeFilters`). Only `filter` steps reach it:
+      // the contract's `z.literal('filter')` (src/api/datasets.ts) refuses any other
+      // type, a glossary term included, before this runs. An unknown column or operator survives sanitisation and
       // is then SKIPPED by both paging paths (never thrown), because one
       // dashboard-wide filter has to be able to span heterogeneous datasets.
       const req: PageRequest = { offset, limit, search, sortColumn, sortDir, filters: sanitizeFilters(filters) };
