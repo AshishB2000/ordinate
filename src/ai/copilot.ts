@@ -33,6 +33,7 @@ import { sameChart } from './answerRefine';
 import type { AnswerSpec } from './answerSpec';
 import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
+import { sanitizeGuidance, type TurnGuidance } from './turnGuidance';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
 
@@ -66,6 +67,8 @@ export interface CopilotTurn {
   learn?: AnswerLearn;
   /** The Visual this answer was saved as ("Save as visual", `markSaved`), so a reload links to it instead of saving again. Only beside `answer`. */
   savedVisualId?: string;
+  /** How this answer was guided (./turnGuidance): ids and counts, kept for a later release. Assistant turns only. */
+  guidance?: TurnGuidance;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -105,6 +108,7 @@ export interface NewCopilotTurn {
   answer?: AnswerSpec;
   suggest?: AnswerSuggest;
   learn?: AnswerLearn;
+  guidance?: TurnGuidance;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -222,6 +226,8 @@ function normalizeTurns(raw: any): CopilotTurn[] {
     const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
     if (learn) turn.learn = learn;
     if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
+    const guidance = role === 'assistant' ? sanitizeGuidance(t.guidance) : undefined;
+    if (guidance) turn.guidance = guidance;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -453,6 +459,8 @@ export async function appendTurn(
   if (suggest) record.suggest = suggest;
   const learn = answer ? sanitizeLearn(turn && turn.learn, answer) : undefined;
   if (learn) record.learn = learn;
+  const guidance = role === 'assistant' ? sanitizeGuidance(turn && turn.guidance) : undefined;
+  if (guidance) record.guidance = guidance;
 
   const threads = await loadThreads(projectId);
   const own = mine(threads);
