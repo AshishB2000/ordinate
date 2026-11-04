@@ -17,6 +17,7 @@ import { Select } from '../../ui/Select';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import type { Card, Step } from '../analyses/api';
+import { useMetricList } from '../analyses/metrics/api';
 import { AlertChannels } from '../subscriptions/AlertChannels';
 import { reason, useAlerts, useAlertWrite, type AlertRule } from './api';
 import s from './Alerts.module.css';
@@ -76,7 +77,10 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
   const [dir, setDir] = useState<string>(existing?.change?.direction ?? 'down');
   const [pct, setPct] = useState(existing?.change ? String(existing.change.pct) : '10');
   const [vs, setVs] = useState<string>(existing?.change?.vs ?? 'previous_refresh');
-  const [period, setPeriod] = useState(existing?.change?.periodColumn ?? '');
+  // The previous period's date: the rule's own, else the date the metric counts by (D9), suggested — a pick replaces it.
+  const [picked, setPeriod] = useState<string | null>(existing?.change?.periodColumn ?? null);
+  const suggested = (useMetricList(projectId).data ?? []).find((x) => x.id === subject.metricId)?.timeColumn;
+  const period = picked ?? (suggested && dates.some((d) => d.name === suggested) ? suggested : '');
   const [name, setName] = useState(existing?.name ?? '');
   const [touched, setTouched] = useState(!!existing);
   const [channelIds, setChannelIds] = useState<string[]>(existing?.channelIds ?? []);

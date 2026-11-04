@@ -409,7 +409,9 @@ date instead of the column the control names, for every figure of that metric: i
 tile and the tile's comparison period, its metric tree (each part by its own date), an alert made
 from its KPI, "Why did this change?", the Summary card, a what-if card, and a formula built on it. A
 formula over metrics of several datasets counts each part by its own date. A date filter that is the
-tile's own stays on its column.
+tile's own stays on its column. The tile says which date it used ("Date range applied to
+ship_date"). Scorecards and the Metrics page sparkline run along the metric's date too, with or
+without a control.
 
 Some figures are refused with a sentence instead of guessed:
 

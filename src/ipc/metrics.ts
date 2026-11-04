@@ -404,14 +404,14 @@ export async function resolveMetricSeries(
 }
 
 /**
- * The date column a sparkline runs along, or null.
- *
- * First declared date column: a dataset with two of them (ordered/shipped) has
- * no app-knowable "the" date, and the first one is at least the same choice
- * every time rather than a different one per machine.
+ * The date column a sparkline runs along, or null: the date the metric counts by (D9), else the first declared
+ * date column — a dataset with two of them (ordered/shipped) and a metric that names neither has no app-knowable
+ * "the" date, and the first one is at least the same choice every time rather than a different one per machine.
  */
-async function sparkColumn(projectId: string, datasetId: string): Promise<string | null> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+async function sparkColumn(projectId: string, m: Metric): Promise<string | null> {
+  const own = await metricDate(projectId, m);
+  if (own) return own;
+  const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
   if (!meta) return null;
   const date = meta.columns.find((c) => c.type === 'date');
   return date ? date.name : null;
@@ -587,7 +587,7 @@ export function register() {
     try {
       const m = await metrics.getMetric(projectId, id);
       if (!m) return { ok: false, error: 'Metric not found' };
-      const by = typeof column === 'string' && column ? column : await sparkColumn(projectId, m.datasetId);
+      const by = typeof column === 'string' && column ? column : await sparkColumn(projectId, m);
       // No date column is not an error — it is a metric with no sparkline, and
       // the cell stays blank.
       if (!by) return { ok: true, series: null };

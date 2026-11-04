@@ -64,11 +64,15 @@ export interface MetricFields {
   format: MetricFormat;
   description: string;
   direction: Direction;
+  /** The date it counts by, `''` none. Left out of an edit, the server keeps it (a formula re-takes its parts' date). */
+  timeColumn?: string;
 }
 
+/** A refusal's field: the sentence goes beside it. */
+export type SaveField = 'name' | 'timeColumn';
 /** `changed`: another tab or person saved the metric first — nothing was saved; the editor's banner says so. */
-export type SaveResult = { metric: Metric } | { error: string; field?: 'name' } | { changed: true };
-type Reply = { ok: boolean; metric?: Metric; error?: string; field?: 'name'; tag?: string };
+export type SaveResult = { metric: Metric } | { error: string; field?: SaveField } | { changed: true };
+type Reply = { ok: boolean; metric?: Metric; error?: string; field?: SaveField; tag?: string };
 
 /**
  * Create (no `editingId`) or update a metric. An update goes through the editor's guard (editConflicts/useEditGuard),

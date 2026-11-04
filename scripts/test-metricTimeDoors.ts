@@ -444,6 +444,22 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   const vs = savedViews.viewScope(null, { sheets: boardOf(REV) as never });
   ok('a view\'s scope (reports, subscriptions) marks the control\'s step', vs.filters.some((f) => f.column === 'order_date' && f.op === 'period' && f.fromControl === true), show(vs.filters));
 
+  // ── The sparkline and the scorecard run along the metric's date (Task 7) ──────────────────
+  const table = (await post('metric:table', { projectId: P })).value;
+  const series = async (id: string, column: string): Promise<unknown[] | undefined> => (await H.as(ORG_A, () => ipcMetrics.resolveMetricSeries(P, id, column)))?.values;
+  const sameSeries = (a: unknown[] | null | undefined, b: unknown[] | undefined): boolean => !!a && !!b && a.length === b.length && a.length > 0 && a.every((v, i) => Object.is(v, b[i]));
+  ok('the Metrics page sparkline runs along the metric\'s date', sameSeries(table.rows[REV].series, await series(REV, 'ship_date')), show(table.rows[REV]));
+  ok('NEGATIVE CONTROL: … a metric with no date along the first date column', sameSeries(table.rows[ORD].series, await series(ORD, 'order_date')) && !sameSeries(await series(REV, 'order_date'), await series(REV, 'ship_date')));
+  const scorecardsIpc: typeof import('../src/ipc/scorecards') = require('../src/ipc/scorecards');
+  const card = (rows: { metricId: string }[]) => ({ id: randomUUID(), projectId: P, name: 'Card', period: 'month', rows, createdAt: '', updatedAt: '', schemaVersion: 1 }) as never;
+  const score = (await H.as(ORG_A, () => scorecardsIpc.computeScorecard(P, card([{ metricId: REV }])))) as Reply;
+  const onWindow = (column: string) => kpi([{ type: 'filter', column, op: 'period', period: { preset: 'custom', from: score.window.from, to: score.window.to } }]); // Revenue's KPI
+  ok('a scorecard row counts by the metric\'s date', typeof score.rows?.[0]?.value === 'number' && Object.is(score.rows[0].value, await onWindow('ship_date')), show(score.rows?.[0]));
+  ok('NEGATIVE CONTROL: … on the first date column it is another figure', !Object.is(score.rows[0].value, await onWindow('order_date')));
+  const scoreTwo = (await H.as(ORG_A, () => scorecardsIpc.computeScorecard(P, card([{ metricId: REV }, { metricId: ORD }])))) as Reply;
+  const ordOn = (await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'count', filters: [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: scoreTwo.window.from, to: scoreTwo.window.to } }] })).value.value;
+  ok('two metrics on one dataset, two dates: each row on its own (the memo is per metric)', Object.is(scoreTwo.rows[1].value, ordOn) && Object.is(scoreTwo.rows[0].value, score.rows[0].value), show(scoreTwo.rows));
+
   const kl = await hydrates(DL, () => tile(REVL, [CTRL], undefined, DL));
   ok('Live KPI: the extract\'s figure on the metric\'s date, never hydrated', kl.hydrated === false && Object.is(kl.value.value, k1.value) && kl.value.periodOn === 'ship_date', show(kl.value));
   const klc = await hydrates(DL, () => tile(REVL, [CTRL], { mode: 'previous_period' }, DL));

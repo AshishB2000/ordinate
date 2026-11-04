@@ -85,6 +85,9 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
   });
   const [description, setDescription] = useState(existing?.description ?? '');
   const [direction, setDirection] = useState<Direction>(existing?.direction ?? '');
+  // The date it counts by (D9): `''` is the dashboard's date. Set only by a pick or by "Use <column>", never silently.
+  const [timeColumn, setTimeColumn] = useState(existing?.timeColumn ?? '');
+  const [dateError, setDateError] = useState('');
   const [preview, setPreview] = useState<{ display: string; text: string; error?: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
@@ -131,21 +134,24 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
 
   const save = async () => {
     setError('');
+    setDateError('');
     if (!name.trim()) return setError('A metric needs a name.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
     setSaving(true);
-    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction }, guard);
+    // The date only when it changed: an edit that leaves it alone lets a formula take its new parts' date (the server's rule).
+    const dated = editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
+    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction, ...dated }, guard);
     setSaving(false);
     if ('changed' in r) return; // the banner
-    // In the dialog, not a toast: the user's work is still in these boxes.
-    if ('error' in r) return setError(r.error);
+    // In the dialog, not a toast: the user's work is still in these boxes — a date's refusal beside the date.
+    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : setError(r.error);
     onSaved(r.metric);
     onClose();
   };
   // Save mine as a copy: these boxes as a new metric, which the host then shows (a duplicate name is refused as ever).
   const copy = async () => {
     if (!ds || !definition) throw new Error('Choose a dataset and a column.');
-    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction });
+    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn });
     if ('error' in r) throw new Error(r.error);
     if ('metric' in r) {
       onSaved(r.metric);
@@ -155,6 +161,9 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
 
   const refs = (others.data ?? []).filter((m) => m.id !== editingId && m.datasetId === ds).slice(0, 12);
   const columns = cols.data?.columns ?? [];
+  const dates = columns.filter((c) => c.type === 'date').map((c) => c.name);
+  // A stored date the dataset no longer has as a date column counts as unset on the server (metricDate): said here.
+  const gone = !!timeColumn && cols.isSuccess && !dates.includes(timeColumn);
   return (
     <Dialog
       open
@@ -207,6 +216,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
               setDatasetId(v);
               setColumn(null);
               setFilters([]);
+              setTimeColumn('');
             }}
           />
           <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' ? 'formula' : 'simple')}>
@@ -257,6 +267,27 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
               )}
             </>
           )}
+          <div className={s.group}>
+            <Select
+              label="Date it counts by"
+              value={timeColumn}
+              disabled={!ds || cols.isPending}
+              hint={mode === 'formula' ? 'A dashboard’s date range lands on this date. Left on the dashboard’s, a formula takes the date its parts share.' : 'A dashboard’s date range lands on this date.'}
+              error={dateError || (gone ? `“${timeColumn}” is no longer a date column of this dataset, so the metric counts by the dashboard’s date. Choose another, or the dashboard’s.` : undefined)}
+              options={[{ value: '', label: 'The dashboard’s date' }, ...dates.map((c) => ({ value: c, label: c })), ...(gone ? [{ value: timeColumn, label: timeColumn }] : [])]}
+              onValueChange={(v) => {
+                setTimeColumn(v);
+                setDateError('');
+              }}
+            />
+            {!timeColumn && dates.length === 1 && (
+              <div>
+                <Button size="sm" icon="calendar" onClick={() => setTimeColumn(dates[0])}>
+                  Use {dates[0]}
+                </Button>
+              </div>
+            )}
+          </div>
           <div className={s.group}>
             {ds && <FilterRows projectId={projectId} datasetId={ds} cols={columns} filters={filters} onChange={setFilters} />}
             <span className={s.filterHint}>Filters apply before the aggregation: they are part of what the metric means.</span>
