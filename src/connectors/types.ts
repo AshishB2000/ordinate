@@ -23,6 +23,7 @@
 import type { ColumnType } from '../data/parse';
 import type { DateGrain } from '../analysis/categoryKey';
 import type { PinnedHost } from './ssrf';
+import type { TableFacts } from './tableFacts';
 
 /** One input on the connection form. Rendered generically by the renderer. */
 export interface ConnectorField {
@@ -256,6 +257,15 @@ export interface ConnectorDef {
    * value or whitelist it — it arrives from a renderer.
    */
   describeTable?(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError>;
+  /**
+   * OPTIONAL. What the source's catalog knows about one table beyond its columns: comments, keys,
+   * partitions, size (docs/semantic-layer/02-source-tables.md, D6). The name is the SAME string
+   * `listTables` returned and must be bound or whitelisted like `describeTable`'s. Read only on an
+   * editor's click, through one door; types only until a reader implements it.
+   */
+  tableFacts?(ctx: ConnectorContext, table: string): Promise<({ ok: true } & TableFacts) | ConnectorError>;
+  /** Reading facts runs on the warehouse's compute and can start it (Databricks): the button says so. */
+  factsWake?: true;
   /**
    * OPTIONAL. Present only on a connector that can answer a Live dataset's
    * questions itself (plan D2). Still one registry entry per connector — this
