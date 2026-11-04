@@ -230,6 +230,40 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
         && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);
 
+    // Value labels name STORED values, so a caller closed to a dataset reads no list from any reply that carries a column doc. boss labels
+    // Orders' customer — a West value among them — and Plain's, which has no rules.
+    const labelRows = [{ value: `${H.W_CANARY}_3`, label: 'West three' }, { value: 'c1', label: 'Customer one' }];
+    const labelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'customer', patch: { values: labelRows } });
+    const labelledPlain = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: W.plain, column: 'customer', patch: { values: [{ value: 'c1', label: 'Customer one' }] } });
+    ok('setup: boss labels customer on Orders (a West value among them) and on Plain', labelled.body?.ok === true && labelled.body.column.values.length === 2 && labelledPlain.body?.ok === true, `${labelled.text.slice(0, 160)} | ${labelledPlain.text.slice(0, 160)}`);
+    const colsEast = await W.call('east', 'catalog:columns', { projectId: P, datasetId: orders });
+    const colsEd = await W.call('ed', 'catalog:columns', { projectId: P, datasetId: orders });
+    eastReplies.push(colsEast.text);
+    ok('redact: catalog:columns — east gets the column notes but no value labels, and nothing of West\'s',
+      colsEast.body?.ok === true && colsEast.body.columns.customer?.sensitivity === 'none' && !('values' in colsEast.body.columns.customer) && !H.leaks(colsEast.text) && !colsEast.text.includes('Customer one'), colsEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s catalog:columns holds both labels', colsEd.body?.columns?.customer?.values?.length === 2 && colsEd.text.includes('Customer one') && colsEd.text.includes('West three'), colsEd.text.slice(0, 200));
+    const colsPlain = await W.call('east', 'catalog:columns', { projectId: P, datasetId: W.plain });
+    ok('control: the gate is the dataset\'s rules, not the viewer — east reads the labels of a dataset with none', colsPlain.body?.columns?.customer?.values?.[0]?.label === 'Customer one', colsPlain.text.slice(0, 200));
+    // A save's reply and an alias's reply carry the doc too. A writer is never row-restricted, so they are driven where every caller is closed to
+    // the dataset (a fan-out scope): the list is withheld there, and the same two calls outside it return it.
+    const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+    const writes = (who: string, scoped: boolean) => W.as(who, async () => {
+      const run = () => Promise.all([
+        rpc.handlers.get('catalog:setColumn')!({}, { projectId: P, datasetId: orders, column: 'customer', patch: { description: 'Who bought' } }),
+        rpc.handlers.get('catalog:addAlias')!({}, { projectId: P, datasetId: orders, column: 'customer', alias: 'buyer' }),
+      ]);
+      return scoped ? (await rowAccess.fanOutScope(run)).value : run();
+    });
+    const [closedSave, closedAlias] = await writes('ed', true);
+    const [openSave, openAlias] = await writes('ed', false);
+    ok('redact: catalog:setColumn and catalog:addAlias — a caller closed to the dataset gets the doc without value labels',
+      (closedSave as { ok: boolean }).ok && (closedAlias as { ok: boolean }).ok && ![closedSave, closedAlias].some((r) => /values|Customer one|West three/.test(JSON.stringify(r)) || H.leaks(JSON.stringify(r))), JSON.stringify([closedSave, closedAlias]).slice(0, 240));
+    ok('NEGATIVE CONTROL: the same two calls outside the scope return the list', [openSave, openAlias].every((r) => (r as { column: { values: unknown[] } }).column.values.length === 2), JSON.stringify([openSave, openAlias]).slice(0, 240));
+    // The chart is drawn from East's rows only: it carries no label of a West value.
+    const chartEast = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
+    eastReplies.push(chartEast.text);
+    ok('east\'s chart by customer holds no West value and no label of one', chartEast.status === 200 && !H.leaks(chartEast.text) && !chartEast.text.includes('West three'), chartEast.text.slice(0, 200));
+
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
     await W.as('boss', () => alertStore.recordEvents(P, [{ id: crypto.randomUUID(), ruleId: crypto.randomUUID(), ruleName: 'Sales watch', datasetId: orders, at: new Date().toISOString(),

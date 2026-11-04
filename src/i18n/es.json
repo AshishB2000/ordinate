@@ -639,6 +639,7 @@
   "valueLabelMessages.a_value_cannot_be_blank": "Un valor no puede estar en blanco.",
   "valueLabelMessages.is_also_a_value_of_so": "“{label}” también es un valor de {column}, así que su valor etiquetado se muestra tal como está almacenado.",
   "valueLabelMessages.is_listed_twice": "“{value}” aparece dos veces.",
+  "valueLabelMessages.is_not_a_column_of_this": "“{column}” no es una columna de este conjunto de datos.",
   "valueLabelMessages.needs_a_label": "“{value}” necesita una etiqueta.",
   "valueLabelMessages.value_labels_are_for_text_columns": "Las etiquetas de valor son para columnas de texto. {column} es una columna de tipo {type}.",
   "valueLabelMessages.would_name_both_and_a_label": "“{label}” nombraría tanto “{a}” como “{b}”. Una etiqueta solo puede nombrar un valor.",

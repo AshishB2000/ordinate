@@ -639,6 +639,7 @@
   "valueLabelMessages.a_value_cannot_be_blank": "値を空にすることはできません。",
   "valueLabelMessages.is_also_a_value_of_so": "「{label}」は{column}の値でもあるため、ラベルを付けた値は保存されたまま表示されます。",
   "valueLabelMessages.is_listed_twice": "「{value}」が2回記載されています。",
+  "valueLabelMessages.is_not_a_column_of_this": "「{column}」はこのデータセットの列ではありません。",
   "valueLabelMessages.needs_a_label": "「{value}」にはラベルが必要です。",
   "valueLabelMessages.value_labels_are_for_text_columns": "値ラベルはテキスト列用です。{column}は{type}列です。",
   "valueLabelMessages.would_name_both_and_a_label": "「{label}」は「{a}」と「{b}」の両方を指すことになります。ラベルが指せる値は1つだけです。",

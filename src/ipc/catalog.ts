@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import * as catalog from '../app/catalog';
+import { labelsRefusal, readableColumn, readableColumns } from '../app/columnLabelAccess';
 import * as catalogIndex from '../app/catalogIndex';
 import * as analysis from '../analysis/analysis';
 import * as datasets from '../data/datasets';
@@ -30,18 +31,20 @@ export function register(): void {
     }
   });
 
-  // No value labels: they name stored values, which a row-restricted viewer must not read (a later release gates them).
-  ipcMain.handle('catalog:columns', async (_e, { projectId, datasetId }: any = {}) => {
-    const docs = await catalog.getColumns(str(projectId), str(datasetId));
-    return { ok: true, columns: Object.fromEntries(Object.entries(docs).map(([name, { values: _labels, ...doc }]) => [name, doc])) };
-  });
+  // Value labels name stored values: a caller row access rules restrict gets the notes without them (columnLabelAccess).
+  ipcMain.handle('catalog:columns', async (_e, { projectId, datasetId }: any = {}) =>
+    ({ ok: true, columns: await readableColumns(str(projectId), str(datasetId), await catalog.getColumns(str(projectId), str(datasetId))) }));
 
   ipcMain.handle('catalog:setColumn', async (_e, { projectId, datasetId, column, patch }: any = {}) => {
     try {
       // A name (also-called, or a display name) is checked against the dataset's CURRENT columns — the record's, never its rows.
-      const meta = patch && (patch.aliases !== undefined || patch.displayName) ? await datasets.getDatasetMeta(str(projectId), str(datasetId)) : null;
+      // So is a value-label list: a text column the dataset has (an empty list only removes, which is always allowed).
+      const labels = Array.isArray(patch?.values) && patch.values.length > 0;
+      const meta = patch && (patch.aliases !== undefined || patch.displayName || labels) ? await datasets.getDatasetMeta(str(projectId), str(datasetId)) : null;
+      const refusal = labels ? labelsRefusal(meta?.columns, str(column)) : null;
+      if (refusal) return { ok: false, error: refusal };
       const doc = await catalog.setColumn(str(projectId), str(datasetId), str(column), patch || {}, meta ? meta.columns.map((c) => c.name) : undefined);
-      return doc ? { ok: true, column: doc } : { ok: false, error: 'Could not save the column notes.' };
+      return doc ? { ok: true, column: await readableColumn(str(projectId), str(datasetId), doc) } : { ok: false, error: 'Could not save the column notes.' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not save the column notes.' };
     }
@@ -53,7 +56,7 @@ export function register(): void {
       const meta = await datasets.getDatasetMeta(str(projectId), str(datasetId));
       if (!meta || !meta.columns.some((c) => c.name === column)) return { ok: false, error: 'That column is no longer in the dataset.' };
       const doc = await catalog.setColumn(str(projectId), str(datasetId), str(column), { addAlias: str(alias) }, meta.columns.map((c) => c.name));
-      return doc ? { ok: true, column: doc } : { ok: false, error: 'Could not save the name.' };
+      return doc ? { ok: true, column: await readableColumn(str(projectId), str(datasetId), doc) } : { ok: false, error: 'Could not save the name.' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not save the name.' };
     }

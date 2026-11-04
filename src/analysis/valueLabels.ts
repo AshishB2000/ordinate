@@ -53,12 +53,20 @@ export interface LabelledAxes {
   series: readonly { name: string }[];
 }
 
-/** One axis: a pair for each listed value that is present, minus any whose label is another value present. */
-function axisPairs(list: ValueLabel[] | undefined, present: ReadonlySet<string>, dropped: string[], noPair?: string): [string, string][] {
+/** A label left off a reply because it is also a stored value on its axis, and which axis that was (so a warning can name the column). */
+export interface DroppedLabel { label: string; axis: 'category' | 'series' }
+
+/**
+ * One axis: a pair for each listed value that is present, minus a value labelled as itself (nothing to show) and any whose
+ * label is another value present.
+ */
+function axisPairs(
+  list: ValueLabel[] | undefined, present: ReadonlySet<string>, axis: DroppedLabel['axis'], dropped: DroppedLabel[], noPair?: string,
+): [string, string][] {
   const out: [string, string][] = [];
   for (const { value, label } of list ?? []) {
-    if (!present.has(value) || value === noPair) continue;
-    if (label !== value && present.has(label)) dropped.push(label); // two bars would both read `label`
+    if (!present.has(value) || value === noPair || label === value) continue;
+    if (present.has(label)) dropped.push({ label, axis }); // two bars would both read `label`
     else out.push([value, label]);
   }
   return out;
@@ -66,19 +74,20 @@ function axisPairs(list: ValueLabel[] | undefined, present: ReadonlySet<string>,
 
 /**
  * Decide which labels a reply carries: a pair for each stored value that is on the axis (EXACT text,
- * `'EU '` is not `'EU'`), never for the app's own "Other" bucket (`otherBucket`), and never when the
- * label is itself another stored value on that axis (`dropped` names it, for a warning). A reply
- * with no pair is returned as it came, without the `valueLabels` key.
+ * `'EU '` is not `'EU'`), never for the app's own "Other" bucket (`otherBucket`: its name is not a value
+ * and no label may rename it), never for a value labelled as itself, and never when the label is itself
+ * another stored value on that axis (`dropped` names it and its axis, for a warning). A reply with no
+ * pair is returned as it came, without the `valueLabels` key.
  */
 export function applyValueLabels<D extends LabelledAxes>(
   data: D,
   lists: { category?: ValueLabel[]; series?: ValueLabel[] },
   opts: { otherBucket?: boolean } = {},
-): { data: D & { valueLabels?: ValueLabelPairs }; dropped: string[] } {
-  const dropped: string[] = [];
+): { data: D & { valueLabels?: ValueLabelPairs }; dropped: DroppedLabel[] } {
+  const dropped: DroppedLabel[] = [];
   const text = (xs: readonly unknown[]): Set<string> => new Set(xs.filter((x): x is string => typeof x === 'string'));
-  const category = axisPairs(lists.category, text(data.labels), dropped, opts.otherBucket ? VL_OTHER_LABEL : undefined);
-  const series = axisPairs(lists.series, text(data.series.map((s) => s.name)), dropped);
+  const category = axisPairs(lists.category, text(data.labels), 'category', dropped, opts.otherBucket ? VL_OTHER_LABEL : undefined);
+  const series = axisPairs(lists.series, text(data.series.map((s) => s.name)), 'series', dropped);
   if (!category.length && !series.length) return { data, dropped };
   const valueLabels: ValueLabelPairs = {};
   if (category.length) valueLabels.category = category;

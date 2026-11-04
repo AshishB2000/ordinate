@@ -636,6 +636,7 @@
   "valueLabelMessages.a_value_cannot_be_blank": "A value cannot be blank.",
   "valueLabelMessages.is_also_a_value_of_so": "“{label}” is also a value of {column}, so its labelled value shows as stored.",
   "valueLabelMessages.is_listed_twice": "“{value}” is listed twice.",
+  "valueLabelMessages.is_not_a_column_of_this": "“{column}” is not a column of this dataset.",
   "valueLabelMessages.needs_a_label": "“{value}” needs a label.",
   "valueLabelMessages.value_labels_are_for_text_columns": "Value labels are for text columns. {column} is a {type} column.",
   "valueLabelMessages.would_name_both_and_a_label": "“{label}” would name both “{a}” and “{b}”. A label can name one value only.",

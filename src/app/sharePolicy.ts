@@ -382,6 +382,27 @@ function dropValueLabels(entries: ZipEntry[]): boolean {
   return dropped;
 }
 
+/**
+ * The catalog travels with each column's value labels (analysis/valueLabels.ts), which name STORED values: a column
+ * marked personal or financial leaves without its list, masked in Prepare or not (as its colours do). The mark stays.
+ */
+async function dropMarkedLabels(projectId: string, entries: ZipEntry[]): Promise<boolean> {
+  const file = entries.find((x) => x.name === 'catalog.json');
+  if (!file) return false;
+  let doc: { columns?: Record<string, Record<string, { values?: unknown }>> };
+  try { doc = JSON.parse(file.data.toString('utf8')); } catch (_) { return false; }
+  let changed = false;
+  for (const [datasetId, docs] of Object.entries(doc?.columns ?? {})) {
+    for (const column of await withheldColumns(projectId, datasetId)) {
+      if (docs?.[column]?.values === undefined) continue;
+      delete docs[column].values;
+      changed = true;
+    }
+  }
+  if (changed) file.data = Buffer.from(JSON.stringify(doc, null, 2), 'utf8');
+  return changed;
+}
+
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
@@ -440,6 +461,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
   }
   if (await dropMarkedColors(projectId, entries)) changed = true;
   if (dropValueLabels(entries)) changed = true;
+  if (await dropMarkedLabels(projectId, entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');
   if (manifest) {

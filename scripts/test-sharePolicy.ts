@@ -318,8 +318,16 @@ async function main(): Promise<void> {
   fs.writeFileSync(catFile, JSON.stringify(planted));
   const LABELS = ['4111111111111111', 'Visa test card', 'Northern territory'];
   const catalogOf = (file: string): string => bundle.readZip(fs.readFileSync(file)).find((e) => e.name === 'catalog.json')!.data.toString('utf8');
+  // Value labels name stored values, so they leave a marked column behind as its colours do (email is masked in Prepare, card by the policy).
+  await catalog.setColumn(pid, did, 'card', { values: [{ value: '4111111111111111', label: 'Visa' }] });
+  await catalog.setColumn(pid, did, 'email', { values: [{ value: 'grace@example.com', label: 'Grace' }] });
+  await catalog.setColumn(pid, did, 'region', { values: [{ value: 'North', label: 'Northern' }] });
+  const labelsOf = (entries: { name: string; data: Buffer }[]): Record<string, { values?: unknown; sensitivity: string }> =>
+    JSON.parse(entries.find((e) => e.name === 'catalog.json')!.data.toString('utf8')).columns[did];
   const raw = await bundle.exportProject(pid);
   const rawNames = bundle.readZip(raw!.bytes).map((e) => e.name);
+  const rawLabels = labelsOf(bundle.readZip(raw!.bytes));
+  ok('fixture: a raw export carries every column\'s value labels', !!rawLabels.card.values && !!rawLabels.email.values && !!rawLabels.region.values);
   ok('fixture: a raw export carries the source Parquet and a dataset version', rawNames.includes(`datasets/${did}.source.parquet`) && rawNames.some((n) => n.startsWith(`history/dataset/${did}/`)));
   savePath = path.join(outDir, 'project.ordinate');
   const exp = await call('projects:export', { id: pid });
@@ -349,6 +357,10 @@ async function main(): Promise<void> {
   ok('bundle: only privacy/policy.json travels — never the salt or the review file',
     names.filter((n) => n.startsWith('privacy/')).every((n) => n === 'privacy/policy.json')
     && !names.some((n) => /salt/.test(n)), names.filter((n) => n.startsWith('privacy/')).join(','));
+  const maskLabels = labelsOf(entries);
+  ok('bundle/mask: value labels leave a marked column behind (masked in Prepare or not), the marks stay, other columns keep theirs',
+    !('values' in maskLabels.card) && !('values' in maskLabels.email) && maskLabels.card.sensitivity === 'financial' && maskLabels.email.sensitivity === 'personal'
+    && JSON.stringify(maskLabels.region.values) === '[{"value":"North","label":"Northern"}]', JSON.stringify(maskLabels));
   const imported = await bundle.importBundle(bytes);
   ok('bundle/mask: the shaped bundle still IMPORTS (manifest counts follow)', imported.ok === true, JSON.stringify(imported.error));
   if (imported.ok && imported.project) {
@@ -364,6 +376,8 @@ async function main(): Promise<void> {
   keep(await call('projects:export', { id: pid }));
   const dropRec = JSON.parse(bundle.readZip(fs.readFileSync(savePath)).find((e) => e.name === `datasets/${did}.json`)!.data.toString('utf8'));
   ok('bundle/drop: the column is dropped from the record', !dropRec.columns.some((c: any) => c.name === 'card'));
+  const dropLabels = labelsOf(bundle.readZip(fs.readFileSync(savePath)));
+  ok('bundle/drop: …and its value labels with it', !('values' in dropLabels.card) && !('values' in dropLabels.email) && !!dropLabels.region.values, JSON.stringify(dropLabels));
   ok('bundle/drop: the dropped bundle imports too', (await bundle.importBundle(fs.readFileSync(savePath))).ok === true);
   const dropCat = catalogOf(savePath);
   ok('bundle/drop: catalog.json carries no value labels, on any column', LABELS.every((s) => !dropCat.includes(s)) && !dropCat.includes('"values"'), dropCat);
@@ -375,6 +389,8 @@ async function main(): Promise<void> {
   // NEGATIVE CONTROL: a full, unshaped bundle keeps the labels, so the checks above can fail.
   const inclCat = catalogOf(savePath);
   ok('bundle/include: catalog.json keeps its value labels (control)', LABELS.every((s) => inclCat.includes(s)), inclCat);
+  const inclLabels = labelsOf(bundle.readZip(fs.readFileSync(savePath)));
+  ok('bundle/include: every column keeps its value labels (the policy lets values travel)', !!inclLabels.card.values && !!inclLabels.email.values && !!inclLabels.region.values, JSON.stringify(inclLabels));
   await store.setPolicy(pid, { bundle: 'mask' });
 
   // ── 4. Proposals ──────────────────────────────────────────────────────────

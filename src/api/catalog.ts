@@ -17,6 +17,9 @@ const ColumnPatch = z.strictObject({
   aliases: z.array(z.string().max(60)).max(8).optional(),
   example: z.string().max(200).optional(),
   sensitivity: z.enum(['none', 'personal', 'financial']).optional(),
+  // What a stored value is CALLED ("EU" → "Europe"): replaces the list, [] removes it. Text columns only; a merge, a repeat, a blank or a
+  // missing label is refused with a sentence (analysis/valueLabels.ts), never quietly dropped. The caps are the leaf's MAX_* constants.
+  values: z.array(z.strictObject({ value: z.string().min(1).max(256), label: z.string().max(120) })).max(500).optional(),
 });
 
 // A table's role, key, grain and guide (src/app/tableDocs.ts). Each field is clipped by the store, which stamps who and when itself

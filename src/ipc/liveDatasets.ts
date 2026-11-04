@@ -182,19 +182,21 @@ function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reas
 
 /**
  * The Live dataset's column notes onto its copy — display names, descriptions,
- * examples and, above all, the personal / financial marks, so a copy is never
+ * examples, value labels and, above all, the personal / financial marks, so a copy is never
  * less protected than the dataset it came from. Only columns the copy has.
  */
 async function copyColumnNotes(projectId: string, fromId: string, toId: string, columns: ParsedColumn[]): Promise<void> {
   const notes = await catalog.getColumns(projectId, fromId);
   for (const c of columns) {
     if (!Object.prototype.hasOwnProperty.call(notes, c.name)) continue;
-    const { description, displayName, aliases, example, sensitivity } = notes[c.name];
+    const { description, displayName, aliases, example, sensitivity, values } = notes[c.name];
     // A caption the copy's columns refuse (a hand-edited catalog) is left out; the marks are written regardless.
     await catalog.setColumn(projectId, toId, c.name, { description, displayName, example, sensitivity })
       .catch(() => catalog.setColumn(projectId, toId, c.name, { description, example, sensitivity }));
     // On their own, after the marks: a list the copy's columns now collide with is left out, never the marks with it.
     if (aliases.length) await catalog.setColumn(projectId, toId, c.name, { aliases }, columns.map((x) => x.name)).catch(() => null);
+    // Labels are for a text column: one the copy types otherwise (a number it inferred) leaves them behind.
+    if (values && c.type === 'text') await catalog.setColumn(projectId, toId, c.name, { values }).catch(() => null);
   }
 }
 

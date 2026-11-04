@@ -1,4 +1,5 @@
 import { t } from '../app/i18n';
+import { MAX_VALUE_LABELS, MAX_VALUE_LEN, type ValueLabelProblem } from './valueLabels';
 // What a value-label save and a chart reply say when a label cannot be used (semantic layer,
 // PR 06) — MAIN, through the catalog. Its own file so the i18n extractor
 // (scripts/i18n-extract.ts MAIN_FILES) scans these sentences and nothing else.
@@ -41,4 +42,21 @@ export function labelsTextOnly(column: string, type: string): string {
 /** A reply where a label is also a stored value on the same axis: the pair is left out, the value shows as stored. */
 export function labelNotShown(label: string, column: string): string {
   return t('valueLabelMessages.is_also_a_value_of_so', { label, column });
+}
+
+/** A column the dataset does not have (a label saved for a name that is not there). */
+export function labelColumnGone(column: string): string {
+  return t('valueLabelMessages.is_not_a_column_of_this', { column });
+}
+
+/** The sentence for whatever `valueLabelProblem` found, every kind covered. */
+export function valueLabelProblemText(problem: ValueLabelProblem): string {
+  switch (problem.kind) {
+    case 'repeatValue': return valueListedTwice(problem.value);
+    case 'sharedLabel': return labelShared(problem.label, problem.values[0], problem.values[1]);
+    case 'tooMany': return tooManyLabels(MAX_VALUE_LABELS);
+    case 'blankValue': return valueBlank();
+    case 'valueTooLong': return valueTooLong(MAX_VALUE_LEN);
+    case 'emptyLabel': return labelEmpty(problem.value);
+  }
 }

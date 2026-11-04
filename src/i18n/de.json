@@ -639,6 +639,7 @@
   "valueLabelMessages.a_value_cannot_be_blank": "Ein Wert darf nicht leer sein.",
   "valueLabelMessages.is_also_a_value_of_so": "„{label}“ ist auch ein Wert von {column}, daher wird der bezeichnete Wert wie gespeichert angezeigt.",
   "valueLabelMessages.is_listed_twice": "„{value}“ ist doppelt aufgeführt.",
+  "valueLabelMessages.is_not_a_column_of_this": "„{column}“ ist keine Spalte dieses Datensatzes.",
   "valueLabelMessages.needs_a_label": "„{value}“ braucht eine Bezeichnung.",
   "valueLabelMessages.value_labels_are_for_text_columns": "Wertbezeichnungen gibt es nur für Textspalten. {column} ist eine Spalte vom Typ {type}.",
   "valueLabelMessages.would_name_both_and_a_label": "„{label}“ würde sowohl „{a}“ als auch „{b}“ benennen. Eine Bezeichnung kann nur einen Wert benennen.",
