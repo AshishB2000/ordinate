@@ -272,7 +272,7 @@ function refusals(): void {
   }
   const all: import('../src/engine/live/liveSpec').LiveRefusalCode[] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
     'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate', 'unresolvedPeriod',
-    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery'];
+    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter'];
   ok(`every refusal code (${all.length}) renders its catalog key with its parameters`, all.every((c) => t(spec.refuse(c, 'col'))));
 
   // What the extract SKIPS with a warning is skipped with the byte-identical warning.
