@@ -239,6 +239,44 @@ async function main(): Promise<void> {
   ok('attachTags puts coloured chips on a hit', Array.isArray(hits[0].tags) && hits[0].tags[0].name === 'emea'
     && hits[0].tags[0].color === 1, JSON.stringify(hits[0].tags));
 
+  // ── 7. old-pod-safe readers: table docs, value labels (their writers come later) ──
+  const rpid = (await projects.createProject('Readers'))!.id;
+  const rds = uuid(77);
+  const catalogFile = (p: string): string => path.join(tmpUserData, 'projects', p, 'catalog.json');
+  const stored = {
+    schemaVersion: 1, tags: {}, records: {},
+    columns: { [rds]: { region: { description: 'r', values: [{ value: 'EU', label: 'Europe' }, { value: 'EU', label: 'Again' }, { value: ' ', label: 'Blank' }] } } },
+    tables: {
+      [rds]: { role: 'fact', key: 'line_id', grain: 'One row per order line', guide: '# Orders\nUse line_id.', keyCheck: { rows: 3, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-03T00:00:00.000Z' }, updatedBy: 'a', updatedAt: 'b' },
+      'not-an-id': { role: 'fact' },
+    },
+  };
+  fs.writeFileSync(catalogFile(rpid), JSON.stringify(stored));
+  await catalog.setDoc(rpid, `dataset:${uuid(78)}`, { description: 'another record' }); // the write every old pod makes
+  const back = JSON.parse(fs.readFileSync(catalogFile(rpid), 'utf8'));
+  ok('an old-path write keeps tables', back.tables[rds].guide === '# Orders\nUse line_id.' && back.tables[rds].keyCheck.repeatedKeys === 1 && !('not-an-id' in back.tables));
+  ok('an old-path write keeps values, a repeat and a blank value dropped', JSON.stringify(back.columns[rds].region.values) === '[{"value":"EU","label":"Europe"}]');
+  ok('a role outside the set reads as ""', catalog.sanitizeCatalog({ tables: { [rds]: { role: 'lookup' } } }).tables![rds].role === '');
+  ok('a catalog with no tables writes no tables key', !('tables' in JSON.parse(JSON.stringify(catalog.emptyCatalog()))));
+  await catalog.setColumn(rpid, rds, 'region', { description: 'changed' });
+  ok('setColumn keeps the labels it was not asked to change', (await catalog.getColumns(rpid, rds)).region.values!.length === 1);
+  // Negative controls: a catalog and a column doc with nothing new write the bytes they wrote before.
+  const plain = catalog.sanitizeCatalog({ columns: { [rds]: { a: { description: 'x', values: [] } } }, tables: { [rds]: 'junk' } });
+  ok('no labels and no table docs add no keys', !('tables' in plain) && !('values' in plain.columns[rds].a));
+  const td: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+  const kc = (k: unknown): unknown => td.sanitizeTableDoc({ keyCheck: k }).keyCheck;
+  ok('a keyCheck with a negative, fractional or missing count is dropped',
+    kc({ rows: -1, empty: 0, repeatedKeys: 0, checkedAt: 'x' }) === undefined && kc({ rows: 1.5, empty: 0, repeatedKeys: 0, checkedAt: 'x' }) === undefined
+    && kc({ rows: 1, empty: 0, repeatedKeys: 0 }) === undefined && kc({ rows: 1, empty: 0, repeatedKeys: 0, checkedAt: 'x' }) !== undefined);
+  ok('grain and guide are clipped, a key is matched exactly (never trimmed)',
+    td.sanitizeTableDoc({ grain: 'g'.repeat(300), guide: 'x'.repeat(9000), key: ' id ' }).grain.length === td.MAX_GRAIN
+    && td.sanitizeTableDoc({ guide: 'x'.repeat(9000) }).guide.length === td.MAX_GUIDE && td.sanitizeTableDoc({ key: ' id ' }).key === ' id ');
+  const vl: typeof import('../src/analysis/valueLabels') = require('../src/analysis/valueLabels');
+  ok('value labels: kept verbatim, a repeated label and a non-string value dropped, label trimmed',
+    JSON.stringify(vl.sanitizeValueLabels([{ value: ' EU ', label: ' Europe ' }, { value: 'E', label: 'Europe' }, { value: 5, label: 'five' }, { value: 'x', label: '  ' }, 'junk']))
+    === '[{"value":" EU ","label":"Europe"}]');
+  ok('value labels are capped at 500', vl.sanitizeValueLabels(Array.from({ length: 600 }, (_, i) => ({ value: `v${i}`, label: `l${i}` }))).length === vl.MAX_VALUE_LABELS);
+
   if (!failureCount()) console.log('\nAll catalog checks passed.');
 }
 

@@ -80,6 +80,13 @@ async function main(): Promise<void> {
   ok('sanitize: an unknown cardinality becomes many_to_one', RELS[0].cardinality === 'many_to_one'
     && sanitizeRelationship({ from: { datasetId: ID(1), column: 'a' }, to: { datasetId: ID(2), column: 'b' }, cardinality: 'many_to_many' })?.cardinality === 'many_to_one');
 
+  ok('sanitize: a warning survives a read', JSON.stringify(sanitizeRelationship({ ...RELS[0], warning: { kind: 'repeats', repeats: 2 } })!.warning) === '{"kind":"repeats","repeats":2}');
+  const labelled = sanitizeRelationship({ ...RELS[0], label: 'Order date', warning: { kind: 'not_key', key: 'Region' } })!;
+  ok('sanitize: a not_key warning survives, beside the label', labelled.label === 'Order date' && JSON.stringify(labelled.warning) === '{"kind":"not_key","key":"Region"}');
+  ok('sanitize: a malformed warning is dropped', sanitizeRelationship({ ...RELS[0], warning: { kind: 'x' } })!.warning === undefined);
+  ok('sanitize: a negative or fractional repeat count is dropped', sanitizeRelationship({ ...RELS[0], warning: { kind: 'repeats', repeats: -1 } })!.warning === undefined
+    && sanitizeRelationship({ ...RELS[0], warning: { kind: 'repeats', repeats: 1.5 } })!.warning === undefined && !('warning' in sanitizeRelationship(RELS[0])!));
+
   // ── Key suggestion ──────────────────────────────────────────────────────────
   ok('name: case, underscores and a trailing id normalise away', ks.nameSimilarity('Customer ID', 'customer_id') === 1);
   ok('name: region ~ Region is exact', ks.nameSimilarity('region', 'Region') === 1);

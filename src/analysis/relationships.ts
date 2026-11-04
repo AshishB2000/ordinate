@@ -25,6 +25,9 @@ import { logger } from '../app/logger';
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
 
+/** `repeats` = one side's keyed rows minus its distinct keys. Derived when the key is checked; never typed. */
+export type RelWarning = { kind: 'repeats'; repeats: number } | { kind: 'not_key'; key: string };
+
 export interface RelEnd {
   datasetId: string;
   column: string;
@@ -37,6 +40,7 @@ export interface Relationship {
   cardinality: Cardinality;
   /** What the user calls this edge ("Order date"), trimmed, 1-60 characters, no control characters. */
   label?: string;
+  warning?: RelWarning;
   /** Counted over the FULL tables when the relationship was saved. */
   verified: { matched: number; unmatchedFrom: number };
 }
@@ -57,6 +61,14 @@ function sanitizeLabel(raw: unknown): string | undefined {
   return s.length >= 1 && s.length <= 60 && !/\p{Cc}/u.test(s) ? s : undefined;
 }
 
+function sanitizeWarning(raw: unknown): RelWarning | undefined {
+  const o = raw as Record<string, unknown> | null;
+  if (!o || typeof o !== 'object') return undefined;
+  if (o.kind === 'repeats') return Number.isSafeInteger(o.repeats) && (o.repeats as number) >= 0 ? { kind: 'repeats', repeats: o.repeats as number } : undefined;
+  if (o.kind === 'not_key') return typeof o.key === 'string' && o.key !== '' && o.key.length <= 500 ? { kind: 'not_key', key: o.key } : undefined;
+  return undefined;
+}
+
 function count(n: unknown): number {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
 }
@@ -73,12 +85,14 @@ export function sanitizeRelationship(raw: unknown): Relationship | null {
     : 'many_to_one';
   const v = (o.verified || {}) as Record<string, unknown>;
   const label = sanitizeLabel(o.label);
+  const warning = sanitizeWarning(o.warning);
   return {
     id: isValidId(o.id) ? o.id : randomUUID(),
     from,
     to,
     cardinality,
     ...(label !== undefined && { label }),
+    ...(warning !== undefined && { warning }),
     verified: { matched: count(v.matched), unmatchedFrom: count(v.unmatchedFrom) },
   };
 }

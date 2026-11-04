@@ -37,6 +37,8 @@ import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
 import type { NamedColumn } from './columnNames';
 import { alreadyCalled, tooManyNames } from './columnNameMessages';
 import { logger } from './logger';
+import { sanitizeTables, type TableDoc } from './tableDocs';
+import { sanitizeValueLabels, type ValueLabel } from '../analysis/valueLabels';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -64,6 +66,7 @@ export interface ColumnDoc {
   aliases: string[];
   example: string;
   sensitivity: Sensitivity;
+  values?: ValueLabel[]; // what a stored value is called ("EU" → "Europe"); present only when non-empty
   updatedBy: string;
   updatedAt: string;
 }
@@ -74,6 +77,7 @@ export interface CatalogFile {
   tags: Record<string, { color: number }>;
   records: Record<string, RecordDoc>;
   columns: Record<string, Record<string, ColumnDoc>>;
+  tables?: Record<string, TableDoc>; // table docs by dataset id (./tableDocs.ts); present only when non-empty
 }
 
 export const TAG_COLORS = 8;
@@ -178,12 +182,14 @@ function sanitizeRecordDoc(raw: any): RecordDoc {
 /** `column` is the name the doc is filed under: an alias equal to it says nothing. A doc from before aliases reads as []. */
 function sanitizeColumnDoc(raw: any, column: string): ColumnDoc {
   const r = raw && typeof raw === 'object' ? raw : {};
+  const values = sanitizeValueLabels(r.values);
   return {
     description: clip(r.description, MAX_DESCRIPTION),
     displayName: clip(r.displayName, MAX_DISPLAY),
     aliases: sanitizeAliases(r.aliases, column),
     example: clip(r.example, MAX_EXAMPLE),
     sensitivity: SENSITIVITIES.has(r.sensitivity) ? r.sensitivity : 'none',
+    ...(values.length > 0 && { values }),
     updatedBy: clip(r.updatedBy, MAX_OWNER),
     updatedAt: clip(r.updatedAt, 40),
   };
@@ -216,6 +222,8 @@ export function sanitizeCatalog(raw: any): CatalogFile {
     }
     out.columns[dsId] = cols;
   }
+  const tables = sanitizeTables(raw.tables);
+  if (Object.keys(tables).length > 0) out.tables = tables;
   return out;
 }
 
@@ -370,6 +378,7 @@ export async function setColumn(
       sensitivity: p.sensitivity !== undefined
         ? (SENSITIVITIES.has(String(p.sensitivity)) ? p.sensitivity as Sensitivity : 'none')
         : cur.sensitivity,
+      ...(cur.values && { values: cur.values }),
       updatedBy: osUser(),
       updatedAt: new Date().toISOString(),
     };
