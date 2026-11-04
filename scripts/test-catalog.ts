@@ -295,10 +295,11 @@ async function main(): Promise<void> {
   ok('a status section sanitized twice is the section sanitized once', again(sd.sanitizeStatus, statusIn) && sd.sanitizeStatus(statusIn)[`metric:${uuid(70)}`].note === spaced.slice(0, 500).trimEnd());
   const catalogIn = {
     records: { [`dataset:${uuid(72)}`]: { description: spaced, owner: spaced, updatedBy: spaced, updatedAt: spaced } },
-    columns: { [uuid(72)]: { a: { description: spaced, displayName: spaced, example: spaced, updatedBy: spaced, updatedAt: spaced } } },
+    columns: { [uuid(72)]: { a: { description: spaced, displayName: spaced, example: spaced, updatedBy: spaced, updatedAt: spaced, values: [{ value: 'EU', label: spaced }] } } },
   };
-  ok('a catalog sanitized twice is the catalog sanitized once', again(catalog.sanitizeCatalog, catalogIn)
-    && catalog.sanitizeCatalog(catalogIn).records[`dataset:${uuid(72)}`].description === spaced.slice(0, 2000).trimEnd());
+  ok('a catalog sanitized twice is the catalog sanitized once, a value label cut on a space included', again(catalog.sanitizeCatalog, catalogIn)
+    && catalog.sanitizeCatalog(catalogIn).records[`dataset:${uuid(72)}`].description === spaced.slice(0, 2000).trimEnd()
+    && catalog.sanitizeCatalog(catalogIn).columns[uuid(72)].a.values![0].label === spaced.slice(0, vl.MAX_LABEL_LEN).trimEnd());
 
   // ── 9. hierarchies: a pod that cannot write them keeps them, sanitized, through every catalog write ──
   const hr: typeof import('../src/app/hierarchies') = require('../src/app/hierarchies');
@@ -325,6 +326,10 @@ async function main(): Promise<void> {
   ok('hierarchies sanitized twice are the hierarchies sanitized once, a name cut on a space loses it, an unknown key is dropped',
     again(hr.sanitizeHierarchies, messy) && hr.sanitizeHierarchies(messy)[1].name === 'n'.repeat(79) && !('extra' in hr.sanitizeHierarchies(messy)[2])
     && again(td.sanitizeTableDoc, { hierarchies: messy }));
+  const H = (n: number, name: string, levels: string[]): { id: string; name: string; levels: string[] } => ({ id: uuid(n), name, levels });
+  ok('a dropped entry reserves no name and no column: a later valid entry with its name or its columns is kept',
+    JSON.stringify(hr.sanitizeHierarchies([GEO, H(95, 'geography', ['x', 'y']), H(96, 'Other', ['x', 'y']), H(97, 'Solo', ['k']), H(98, 'solo', ['k', 'l']), H(99, 'Later', ['region', 'z']), H(100, 'later', ['p', 'q'])]))
+    === JSON.stringify([GEO, H(96, 'Other', ['x', 'y']), H(98, 'solo', ['k', 'l']), H(100, 'later', ['p', 'q'])]));
   ok('NEGATIVE CONTROL: a doc without hierarchies, or with none left, writes no key',
     !('hierarchies' in td.sanitizeTableDoc({ role: 'fact' })) && !('hierarchies' in td.sanitizeTableDoc({ hierarchies: [{ id: '../x', name: 'Bad', levels: ['p', 'q'] }] })));
 

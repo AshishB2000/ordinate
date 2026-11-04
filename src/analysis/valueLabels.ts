@@ -1,6 +1,8 @@
 // What a stored column value is CALLED ("EU" -> "Europe"). PURE: no fs, no node imports, because
 // the web imports this file too. A column doc without labels reads as [].
 
+import { clip } from '../app/clip';
+
 export interface ValueLabel { value: string; label: string }
 
 export const MAX_VALUE_LABELS = 500;
@@ -23,7 +25,7 @@ export function sanitizeValueLabels(raw: unknown): ValueLabel[] {
     if (!o || typeof o !== 'object') continue;
     const value = o.value;
     if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_VALUE_LEN) continue;
-    const label = typeof o.label === 'string' ? o.label.trim().slice(0, MAX_LABEL_LEN) : '';
+    const label = clip(o.label, MAX_LABEL_LEN);
     if (!label || values.has(value) || labels.has(label)) continue;
     values.add(value);
     labels.add(label);
