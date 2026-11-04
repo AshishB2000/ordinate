@@ -391,6 +391,7 @@
   "metricCheckMessages.can_t_be_shown_as_it": "{measure}は{calc}として表示できません。合計できないため、その合計は誤りになります。",
   "metricCheckMessages.counts_by_and_by_so_one": "「{a}」は{aDate}で、「{b}」は{bDate}で集計されるため、1 つの日付範囲を両方に適用することはできません。同じ日付に揃えるか、2 つのグラフに分けてください。",
   "metricCheckMessages.counts_by_but_its_part_counts": "「{name}」は{ownDate}で集計されますが、その部分の「{part}」は{partDate}で集計されます。同じ日付に揃えてください。",
+  "metricCheckMessages.counts_by_its_own_date_and": "「{name}」は独自の日付で集計されるため、ピボットテーブルではダッシュボードの日付範囲をその日付に移せません。グラフとして表示するか、タイル自体で日付範囲を設定してください。",
   "metricCheckMessages.is_a_column_a_measure_is": "「{column}」は列です。メジャーは合計のあとに計算されるため、集計方法を指定してください（例: sum([{column}])）。",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_calculated_from_which_counts_by": "「{name}」は、{aDate}で集計される「{a}」と、{bDate}で集計される「{b}」から計算されます。この 2 つに同じ日付を指定してください。",

@@ -2,12 +2,18 @@
 // control's period is ./metricTime; this file asks the dataset. Schema only: a Live dataset is never read for rows.
 
 import * as datasets from '../data/datasets';
+import type { FilterStep } from '../data/transforms';
+import * as metrics from './metrics';
 import { isFormulaDefinition, metricsByName, sanitizeDefinition } from './metrics';
 import type { Metric, MetricDefinition } from './metrics';
 import { compileMetricFormula } from './metricFormula';
 import { bindFormulaText } from './params';
 import { relatedColumnNames } from '../ipc/relationships';
 import * as msg from './metricCheckMessages';
+import { controlPeriodMoved, controlPeriodsConflict, rewriteControlPeriods } from './metricTime';
+import { drawnMeasures } from './metricMeasures';
+import { measureLabel } from './vizData';
+import type { VizEncoding, VizMeasure } from './visuals';
 
 type Columns = { columns: { name: string; type: string }[] } | null;
 const isDate = (meta: Columns, column: string): boolean => !!meta && meta.columns.some((c) => c.name === column && c.type === 'date');
@@ -97,4 +103,114 @@ export async function settleOnUpdate(projectId: string, before: Metric, patch: R
     definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition) : before.definition,
     timeColumn: patch.timeColumn,
   });
+}
+
+// ── At draw time: a dashboard date control's period on the date a figure counts by ─────────────────────
+
+/** The filters a figure is drawn under, each control period on its date (`periodOn` when one moved), or the sentence refusing it. */
+export type DateScope = { ok: true; filters: FilterStep[]; periodOn?: string } | { ok: false; error: string };
+
+/** One part of a figure and the date it counts by (`''`: the dashboard's); `of`, the formula it is a part of. */
+interface Dated {
+  name: string;
+  date: string;
+  of?: Dated;
+}
+
+/** How deep `[A]` → `[B]` is followed: ipc/metrics.ts's MAX_FORMULA_DEPTH. */
+const MAX_DEPTH = 10;
+
+/**
+ * `m` and every metric its formula names on m's dataset, each with its date. Parts on another dataset never share a
+ * date with it (Task 3's per-dataset rule): a chart refuses them (metricMeasures.otherDataset) and a KPI counts each by its own.
+ */
+async function datedOf(projectId: string, m: Metric): Promise<Dated[]> {
+  const own: Dated = { name: m.name, date: await metricDate(projectId, m) };
+  const out = [own];
+  if (!isFormulaDefinition(m.definition)) return out;
+  const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
+  if (!meta) return out;
+  const columns = meta.columns.map((c) => c.name).concat(await relatedColumnNames(projectId, m.datasetId));
+  const byName = await metricsByName(projectId);
+  const seen = new Set([m.name.toLowerCase()]);
+  const walk = async (f: Metric, depth: number): Promise<void> => {
+    if (!isFormulaDefinition(f.definition) || depth > MAX_DEPTH) return;
+    const compiled = compileMetricFormula(bindFormulaText(f.definition.formula, new Map()).text, columns);
+    if (!compiled.ok) return; // the figure says why
+    for (const ref of compiled.program.metricRefs) {
+      const part = byName.get(ref.toLowerCase());
+      if (!part || seen.has(ref.toLowerCase()) || part.datasetId !== m.datasetId) continue;
+      seen.add(ref.toLowerCase());
+      out.push({ name: part.name, date: await metricDate(projectId, part), of: own });
+      await walk(part, depth + 1);
+    }
+  };
+  await walk(m, 0);
+  return out;
+}
+
+/**
+ * ONE filter list for every part of a figure: each part's control periods moved onto its date (./metricTime), and
+ * every part must come out with the same list, or the figure is refused (D9: conflicts are refused, never guessed).
+ * So a part with no date beside one whose date the control already sits on agrees: nothing moves for either.
+ */
+function settle(filters: FilterStep[], dated: Dated[]): DateScope {
+  const parts: Dated[] = dated.length ? dated : [{ name: '', date: '' }];
+  const head = parts[0];
+  const moved = rewriteControlPeriods(filters, head.date);
+  const key = JSON.stringify(moved);
+  for (const d of parts) {
+    if (controlPeriodsConflict(filters, d.date)) return { ok: false, error: msg.controlPeriodsDisagree() };
+    if (d === head || JSON.stringify(rewriteControlPeriods(filters, d.date)) === key) continue;
+    // A part comes after its formula, which agreed: the part is what differs.
+    return { ok: false, error: d.of ? msg.formulaDatesDiffer(d.of.name, d.name, shown(d.date), shown(d.of.date)) : msg.measuresCountByDifferentDates(head.name, shown(head.date), d.name, shown(d.date)) };
+  }
+  const on = parts.find((d) => controlPeriodMoved(filters, d.date));
+  return on ? { ok: true, filters: moved, periodOn: on.date } : { ok: true, filters: moved };
+}
+
+/** Whether any step carries a control's mark: the rewrite hands back the same array when none does. */
+const unmarked = (filters: FilterStep[]): boolean => rewriteControlPeriods(filters, '') === filters;
+
+/** A metric's figure (a KPI, a reference line, a drill) under `filters`: the metric and its parts on their date. */
+export async function metricScope(projectId: string, m: Metric, filters: FilterStep[]): Promise<DateScope> {
+  if (unmarked(filters)) return { ok: true, filters };
+  return settle(filters, await datedOf(projectId, m));
+}
+
+/** The saved metric a chart measure draws from on `datasetId`, or null (none, gone, another dataset's). */
+async function measureMetric(projectId: string, datasetId: string, v: VizMeasure | { metricId?: string } | undefined): Promise<Metric | null> {
+  const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
+  return m && m.datasetId === datasetId ? m : null;
+}
+
+/** The date one chart measure counts by: its metric's, `''` for anything else (the dashboard's). */
+export async function measureDate(projectId: string, datasetId: string, v: VizMeasure | undefined): Promise<string> {
+  const m = await measureMetric(projectId, datasetId, v);
+  return m ? metricDate(projectId, m) : '';
+}
+
+/**
+ * A chart's filters under a dashboard date control: one date for every measure it draws (`values[0]` under a split),
+ * the metric's for a metric measure on this dataset and `''` for anything else. No mark: the filters as they came, no read.
+ *
+ * Two tiles keep release 1's answer. A pivot draws its stored copy, so a value whose metric has a date the control
+ * is not on is refused. A drivers tile's question settles its own metric's date (ipc/drivers.driversFor), so its
+ * filters reach it marked. A cohort or a funnel draws no metric, so it only loses the marks.
+ */
+export async function chartScope(projectId: string, datasetId: string, encoding: VizEncoding | null | undefined, filters: FilterStep[]): Promise<DateScope> {
+  if (unmarked(filters) || encoding?.drivers) return { ok: true, filters };
+  if (encoding?.pivot) {
+    for (const v of encoding.pivot.values) {
+      const m = await measureMetric(projectId, datasetId, v);
+      if (m && controlPeriodMoved(filters, await metricDate(projectId, m))) return { ok: false, error: msg.pivotOwnDate(m.name) };
+    }
+    return settle(filters, []);
+  }
+  const dated: Dated[] = [];
+  for (const v of drawnMeasures(encoding)) {
+    const m = await measureMetric(projectId, datasetId, v);
+    dated.push(...(m ? await datedOf(projectId, m) : [{ name: measureLabel(v), date: '' }]));
+  }
+  return settle(filters, dated);
 }

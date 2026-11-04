@@ -18,9 +18,9 @@ const controlPeriod = (s: FilterStep): boolean => marked(s) && s.op === 'period'
 /** Whether a date control's period is in `filters`. */
 export const hasControlPeriod = (filters: FilterStep[]): boolean => filters.some(controlPeriod);
 
-/** Whether the rewrite moves a control's period: it names a column other than the metric's set date. */
+/** Whether the rewrite moves a control's period: it names a column other than the metric's set date, or that name on a related table (`via`). */
 export const controlPeriodMoved = (filters: FilterStep[], timeColumn: string): boolean =>
-  !!timeColumn && filters.some((s) => controlPeriod(s) && s.column !== timeColumn);
+  !!timeColumn && filters.some((s) => controlPeriod(s) && (s.column !== timeColumn || s.via !== undefined));
 
 /**
  * Whether date controls set different periods on the metric's date: once moved onto `timeColumn`, the

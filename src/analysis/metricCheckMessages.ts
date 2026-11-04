@@ -107,6 +107,11 @@ export function formulaPartsDiffer(name: string, a: string, aDate: string, b: st
   return t('metricCheckMessages.is_calculated_from_which_counts_by', { name, a, aDate, b, bDate });
 }
 
+/** A pivot table's value is a metric with its own date, under a dashboard date control on another column: a pivot draws its stored copy, so the period is not moved. */
+export function pivotOwnDate(name: string): string {
+  return t('metricCheckMessages.counts_by_its_own_date_and', { name });
+}
+
 /** One chart draws measures that count by different dates, under a date control. */
 export function measuresCountByDifferentDates(a: string, aDate: string, b: string, bDate: string): string {
   return t('metricCheckMessages.counts_by_and_by_so_one', { a, aDate, b, bDate });

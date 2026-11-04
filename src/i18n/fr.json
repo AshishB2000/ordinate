@@ -391,6 +391,7 @@
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} ne peut pas être affiché comme {calc} : il ne s’additionne pas, donc son total serait faux.",
   "metricCheckMessages.counts_by_and_by_so_one": "« {a} » compte selon {aDate} et « {b} » selon {bDate} ; une même plage de dates ne peut donc pas s’appliquer aux deux. Donnez-leur la même date, ou placez-les dans deux graphiques.",
   "metricCheckMessages.counts_by_but_its_part_counts": "« {name} » compte selon {ownDate}, mais sa partie « {part} » compte selon {partDate}. Donnez-leur la même date.",
+  "metricCheckMessages.counts_by_its_own_date_and": "« {name} » compte selon sa propre date, et un tableau croisé dynamique ne peut pas y reporter la plage de dates du tableau de bord. Affichez-la sous forme de graphique, ou définissez la plage de dates sur la vignette elle-même.",
   "metricCheckMessages.is_a_column_a_measure_is": "« {column} » est une colonne. Une mesure se calcule après les totaux : indiquez comment la totaliser, par exemple sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_calculated_from_which_counts_by": "« {name} » est calculée à partir de « {a} », qui compte selon {aDate}, et de « {b} », qui compte selon {bDate}. Donnez la même date à ces deux-là.",

@@ -55,6 +55,8 @@ ok('NEGATIVE CONTROL: the same lock twice is one', mergeDashboardFilters([LOCK],
 const VIA = '44444444-4444-4444-8444-444444444444';
 ok('a moved period drops its via', same(rewriteControlPeriods([{ ...CTRL, via: VIA } as FilterStep], 'ship_date'), [{ ...OWN, column: 'ship_date' }]));
 ok('NEGATIVE CONTROL: unset, nothing moves and the via stays', same(rewriteControlPeriods([{ ...CTRL, via: VIA } as FilterStep], ''), [{ ...OWN, via: VIA }]));
+ok('controlPeriodMoved: a control on the metric\'s column name through a relationship moves (its via goes)', controlPeriodMoved([{ ...CTRL, via: VIA } as FilterStep], 'order_date'));
+ok('NEGATIVE CONTROL: the same control on the dataset\'s own column does not', !controlPeriodMoved([CTRL], 'order_date'));
 
 // Two date controls that would land on one date with different periods: the doors refuse (D9).
 const APRIL = { ...CTRL, column: 'ship_date', period: { preset: 'custom', from: '2024-04-01', to: '2024-04-30' } } as FilterStep;

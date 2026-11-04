@@ -391,6 +391,7 @@
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} no se puede mostrar como {calc}: no se puede sumar, así que un total sería incorrecto.",
   "metricCheckMessages.counts_by_and_by_so_one": "«{a}» cuenta por {aDate} y «{b}» por {bDate}, así que un mismo intervalo de fechas no puede aplicarse a ambas. Dales la misma fecha o ponlas en dos gráficos.",
   "metricCheckMessages.counts_by_but_its_part_counts": "«{name}» cuenta por {ownDate}, pero su parte «{part}» cuenta por {partDate}. Dales la misma fecha.",
+  "metricCheckMessages.counts_by_its_own_date_and": "«{name}» cuenta por su propia fecha, y una tabla dinámica no puede trasladar a ella el intervalo de fechas del panel. Muéstrala como gráfico o define el intervalo de fechas en el propio mosaico.",
   "metricCheckMessages.is_a_column_a_measure_is": "«{column}» es una columna. Una medida se calcula después de los totales, así que indica cómo totalizarla; por ejemplo, sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_calculated_from_which_counts_by": "«{name}» se calcula a partir de «{a}», que cuenta por {aDate}, y de «{b}», que cuenta por {bDate}. Dale la misma fecha a esas dos.",

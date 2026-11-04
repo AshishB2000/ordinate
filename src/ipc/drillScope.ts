@@ -17,6 +17,10 @@
 //     chart whose measures need different filter lists (a per-measure plan)
 //     keeps the chart's own rows: no one set of rows adds up to two lists.
 //
+//   · a dashboard date control's period on the date the figure counts by
+//     (analysis/metricTimeScope): the chart's, or the KPI's metric's. A chart
+//     the door refuses for it has no rows either.
+//
 //   · the GRAIN of a dated axis. A month's bar is every row dated in that
 //     month, but only the chart's own answer says the axis was bucketed by
 //     month — so the chart is asked (the cached answer the tile was drawn from)
@@ -30,6 +34,7 @@ import type { DateGrain } from '../analysis/categoryKey';
 import { isLive } from '../data/liveDataset';
 import type { FilterStep } from '../data/transforms';
 import { planMetricMeasures } from '../analysis/metricMeasures';
+import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution } from './visuals';
 
@@ -57,8 +62,13 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
       // ponytail: every formula is refused; one whose operands share their filters could list those rows — add when asked for.
       return { available: false, reason: `"${metric.name}" is calculated from other metrics, so no one set of rows adds up to it. Open a metric it is built from to see its rows.` };
     }
-    filters = resolveFilterParams(metric.filters || [], values).steps.concat(filters);
+    const scoped = await metricScope(projectId, metric, filters);
+    if (!scoped.ok) return { available: false, reason: scoped.error };
+    filters = resolveFilterParams(metric.filters || [], values).steps.concat(scoped.filters);
   } else {
+    const scoped = await chartScope(projectId, datasetId, enc, filters);
+    if (!scoped.ok) return { available: false, reason: scoped.error };
+    filters = scoped.filters;
     const plan = await planMetricMeasures(projectId, datasetId, enc, values);
     if (plan?.ok && !plan.plan) followed = plan.filters;
   }

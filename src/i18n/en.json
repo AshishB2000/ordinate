@@ -388,6 +388,7 @@
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} can't be shown as {calc}: it can't be added up, so a total of it would be wrong.",
   "metricCheckMessages.counts_by_and_by_so_one": "“{a}” counts by {aDate} and “{b}” by {bDate}, so one date range cannot apply to both. Give them the same date, or put them on two charts.",
   "metricCheckMessages.counts_by_but_its_part_counts": "“{name}” counts by {ownDate}, but its part “{part}” counts by {partDate}. Give them the same date.",
+  "metricCheckMessages.counts_by_its_own_date_and": "“{name}” counts by its own date, and a pivot table cannot move a dashboard’s date range onto it. Show it as a chart, or set the date range on the tile itself.",
   "metricCheckMessages.is_a_column_a_measure_is": "“{column}” is a column. A measure is calculated after totals, so say how to total it, for example sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": "{name} is a snapshot metric, which this version of Ordinate can't chart yet.",
   "metricCheckMessages.is_calculated_from_which_counts_by": "“{name}” is calculated from “{a}”, which counts by {aDate}, and “{b}”, which counts by {bDate}. Give those two the same date.",

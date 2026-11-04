@@ -391,6 +391,7 @@
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} kann nicht als {calc} angezeigt werden: Es lässt sich nicht aufsummieren, daher wäre eine Summe davon falsch.",
   "metricCheckMessages.counts_by_and_by_so_one": "„{a}“ zählt nach {aDate} und „{b}“ nach {bDate}, daher kann nicht ein Datumsbereich für beide gelten. Geben Sie beiden dasselbe Datum oder zeigen Sie sie in zwei Diagrammen.",
   "metricCheckMessages.counts_by_but_its_part_counts": "„{name}“ zählt nach {ownDate}, aber der Teil „{part}“ zählt nach {partDate}. Geben Sie ihnen dasselbe Datum.",
+  "metricCheckMessages.counts_by_its_own_date_and": "„{name}“ zählt nach einem eigenen Datum, und eine Pivot-Tabelle kann den Datumsbereich des Dashboards nicht darauf übertragen. Zeigen Sie die Kennzahl als Diagramm oder legen Sie den Datumsbereich in der Kachel selbst fest.",
   "metricCheckMessages.is_a_column_a_measure_is": "„{column}“ ist eine Spalte. Eine Kennzahl wird nach den Summen berechnet – geben Sie also an, wie sie zusammengefasst wird, zum Beispiel sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_calculated_from_which_counts_by": "„{name}“ wird aus „{a}“ berechnet, das nach {aDate} zählt, und aus „{b}“, das nach {bDate} zählt. Geben Sie diesen beiden dasselbe Datum.",

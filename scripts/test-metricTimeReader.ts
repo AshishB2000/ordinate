@@ -62,7 +62,8 @@ void (async () => {
   ok('the version diff names a date change', recordDiff.summarize('metric', m, { ...m, timeColumn: 'order_date' }) === 'Changed the date it counts by');
   ok('NEGATIVE CONTROL: no change, no date sentence', !recordDiff.summarize('metric', m, { ...m, name: 'Other' }).includes('date it counts by'));
 
-  // ── a metric's own date under a dashboard date control: release 2 moves the period onto it, so this release refuses ──
+  // ── a metric's own date under a dashboard date control: release 1 refused it; release 2 moves the period onto it ──
+  // The chart door and Explain move it (PR 04 Task 4, scripts/test-metricTimeDoors.ts); the KPI paths below still refuse until Task 5.
   ipcVisuals.register();
   copilotIpc.register();
   const pending = msg.measureTimeColumnPending();
@@ -71,13 +72,14 @@ void (async () => {
     ({ type: 'filter', column, op: 'period', period: { preset: 'custom', from: '2026-01-01', to: '2026-12-31' }, ...extra });
   const enc = (metricId: string) => ({ category: 'order_date', values: [{ column: 'amt', aggregation: 'sum', metricId }] });
   const chart = (metricId: string, filters: unknown[]) => handlers.get('visual:data')!(null, { projectId: P, datasetId: D, encoding: enc(metricId), filters });
-  const refused = await chart(m!.id, [control('order_date')]);
-  ok('chart door: a metric counted by ship_date under a control on order_date is refused with the sentence', refused.ok === false && refused.error === pending, JSON.stringify(refused).slice(0, 300));
+  const moved = await chart(m!.id, [control('order_date')]);
+  const onShip = await chart(m!.id, [control('ship_date', {})]);
+  ok('chart door: a metric counted by ship_date under a control on order_date draws on ship_date and says so', moved.ok === true && moved.periodOn === 'ship_date' && JSON.stringify(moved.data) === JSON.stringify(onShip.data), JSON.stringify(moved).slice(0, 300));
   ok('NEGATIVE CONTROL: the control on the metric\'s own date draws', (await chart(m!.id, [control('ship_date')])).ok === true);
   ok('NEGATIVE CONTROL: the same period with no fromControl draws', (await chart(m!.id, [control('order_date', {})])).ok === true);
   ok('NEGATIVE CONTROL: a metric with no timeColumn under the control draws', (await chart(plainM.id, [control('order_date')])).ok === true);
   const explained = await handlers.get('answer:explain')!(null, { projectId: P, tile: { datasetId: D, encoding: enc(m!.id), filters: [control('order_date')], chartType: 'column', name: 'Revenue' } });
-  ok('answer:explain: the same tile is refused with the sentence, and starts no conversation', explained.ok === false && explained.reason === pending && !explained.threadId, JSON.stringify(explained));
+  ok('answer:explain: the same tile is explained (its period moved onto ship_date), in a new conversation', explained.ok === true && !!explained.threadId, JSON.stringify(explained));
   const explainedPlain = await handlers.get('answer:explain')!(null, { projectId: P, tile: { datasetId: D, encoding: enc(m!.id), filters: [control('ship_date')], chartType: 'column', name: 'Revenue' } });
   ok('NEGATIVE CONTROL: the tile with the control on the metric\'s own date still explains', explainedPlain.ok === true, JSON.stringify(explainedPlain));
   const rule = (metricId: string, filters: unknown[]) => ({ name: 'Revenue above 0', datasetId: D, metric: { column: 'amt', aggregation: 'sum', metricId, filters }, compare: 'threshold', threshold: { op: '>', value: 0 } });

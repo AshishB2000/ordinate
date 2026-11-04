@@ -8,7 +8,8 @@
 // layer (`resolveMetric`), under the chart's OWN scope (the filters and
 // parameters the chart itself was computed under), so a "Revenue target" line
 // on a West-filtered chart is West's target, the same figure a KPI card under
-// that filter shows.
+// that filter shows. A dashboard date control's period lands on the date THAT
+// metric counts by (analysis/metricTimeScope), as on its KPI card.
 
 import type { FilterStep } from '../data/transforms';
 import type { ParamValues } from '../analysis/params';
@@ -17,6 +18,8 @@ import type { Overlay, ResolvedOverlay } from '../analysis/analytics';
 import type { CategoryInfo } from '../analysis/categoryKey';
 import type { ChartData } from '../analysis/vizData';
 import { resolveMetric } from './metrics';
+import * as metricStore from '../analysis/metrics';
+import { metricScope } from '../analysis/metricTimeScope';
 import type { VizDataReply } from './visuals';
 
 /** Every metric the overlays name → its figure under the scope. */
@@ -28,7 +31,13 @@ async function overlayMetrics(
     if (ov.hidden) continue;
     for (const src of [ov.value, ov.from, ov.to]) {
       if (!src || src.type !== 'metric' || out.has(src.metricId)) continue;
-      const r = await resolveMetric(projectId, src.metricId, { filters, params }).catch(() => null);
+      const m = await metricStore.getMetric(projectId, src.metricId);
+      const scoped = m ? await metricScope(projectId, m, filters) : { ok: true as const, filters };
+      if (!scoped.ok) { // its parts count by different dates: no figure, never a guessed one
+        out.set(src.metricId, { name: m ? m.name : '', value: null });
+        continue;
+      }
+      const r = await resolveMetric(projectId, src.metricId, { filters: scoped.filters, params }).catch(() => null);
       out.set(src.metricId, r ? { name: r.name, value: r.value } : { name: 'Missing metric', value: null });
     }
   }

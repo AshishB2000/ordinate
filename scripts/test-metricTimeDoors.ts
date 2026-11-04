@@ -6,6 +6,9 @@
 //   update    set, clear, and re-checked only when the patch can change the answer; a new definition re-takes its parts' date
 //   read      the list carries it; a column that is gone is flagged by metric:get, counts as unset and blocks no edit
 //   restore   a version brings the date back, or clears it
+//   charts    under a date control the period lands on the metric's date (Task 4): the chart door, visual:data's compare
+//             and reference lines, drill rows, Explain a point and Explain; measures, formula parts or two controls that
+//             disagree are refused; a pivot keeps release 1's refusal; no mark means the same steps and no read; Live too
 //
 // NEGATIVE CONTROLS sit beside each refusal: the same save on a valid date, a formula whose parts agree, a patch that
 // touches neither the definition nor the date.
@@ -23,6 +26,9 @@ const { randomUUID }: typeof import('crypto') = require('crypto');
 const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const scope: typeof import('../src/analysis/metricTimeScope') = require('../src/analysis/metricTimeScope');
 const msg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
+const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const cmp: typeof import('./liveParityCompare') = require('./liveParityCompare');
 
 const { ORG_A, fx } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 500);
@@ -199,6 +205,124 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   ok('restoring a version writes its date back', back.ok === true && (await storedDate(R)) === 'order_date', show(back));
   const gone = await restore(withoutDate.key);
   ok('NEGATIVE CONTROL: restoring a version that had none clears it', gone.ok === true && (await storedDate(R)) === undefined, show(gone));
+
+  // ── Charts under a dashboard date control (Task 4) ──────────────────────────
+  // Revenue counts by ship_date, Orders by none. March 2024 by ship_date is another set of rows than by order_date.
+  const CTRL = { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2024-03-01', to: '2024-03-31' }, fromControl: true };
+  const ON = (column: string) => ({ type: 'filter', column, op: 'period', period: CTRL.period });
+  const byRegion = (id: string, agg = 'sum') => ({ category: 'region', values: [{ column: 'amt', aggregation: agg, metricId: id }] });
+  const chart = async (datasetId: string, encoding: unknown, extra: Record<string, unknown> = {}): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId, encoding, ...extra })).value;
+  const REVL = liveOk.value.metric.id as string; // Revenue on the Live twin, by ship_date
+
+  const a = await chart(D, byRegion(REV), { filters: [CTRL] });
+  const b = await chart(D, byRegion(REV), { filters: [ON('ship_date')] });
+  ok('the control lands on the metric\'s date', a.ok === true && JSON.stringify(a.data) === JSON.stringify(b.data) && a.periodOn === 'ship_date', show(a));
+  ok('NEGATIVE CONTROL: the control\'s own column is a different figure', JSON.stringify(a.data) !== JSON.stringify((await chart(D, byRegion(REV), { filters: [ON('order_date')] })).data));
+  const u1 = await chart(D, byRegion(ORD, 'count'), { filters: [CTRL] });
+  const u0 = await chart(D, byRegion(ORD, 'count'), { filters: [ON('order_date')] });
+  ok('unset: byte-identical to today, no caption', JSON.stringify(u1.data) === JSON.stringify(u0.data) && JSON.stringify(u1.warnings) === JSON.stringify(u0.warnings) && u1.periodOn === undefined);
+  ok('… the whole reply, byte for byte', JSON.stringify(u1) === JSON.stringify(u0), show([u1, u0]));
+  const both = { category: 'region', values: [byRegion(REV).values[0], { column: 'amt', aggregation: 'count', metricId: ORD }] };
+  const clash = await chart(D, both, { filters: [CTRL] });
+  ok('two dates under a control: refused, naming both', clash.ok === false && /Revenue/.test(clash.error) && /Orders/.test(clash.error), show(clash));
+  ok('… in the catalog\'s words', clash.error === msg.measuresCountByDifferentDates('Revenue', 'ship_date', 'Orders', msg.dashboardDate()), show(clash));
+  ok('NEGATIVE CONTROL: the same chart with no control draws', (await chart(D, both)).ok === true);
+  const settled = await chart(D, both, { filters: [{ ...CTRL, column: 'ship_date' }] });
+  ok('measures by {none, ship_date} under a control already on ship_date draw: nothing moves', settled.ok === true && settled.periodOn === undefined, show(settled));
+  ok('a tile\'s own date filter stays on its column', JSON.stringify((await chart(D, byRegion(REV), { filters: [CTRL, ON('order_date')] })).data) === JSON.stringify((await chart(D, byRegion(REV), { filters: [ON('ship_date'), ON('order_date')] })).data));
+  const APRIL = { ...CTRL, column: 'ship_date', period: { preset: 'custom', from: '2024-04-01', to: '2024-04-30' } };
+  const twoCtrl = await chart(D, byRegion(REV), { filters: [CTRL, APRIL] });
+  ok('two date controls setting different periods on the metric\'s date: refused', twoCtrl.ok === false && twoCtrl.error === msg.controlPeriodsDisagree(), show(twoCtrl));
+  ok('NEGATIVE CONTROL: the same controls over a metric with no date draw, each on its column', (await chart(D, byRegion(ORD, 'count'), { filters: [CTRL, APRIL] })).ok === true);
+
+  // The pin: no mark, no read, the same filters in hand — so the door is given exactly what it was given before.
+  const counted = async <T>(fn: () => Promise<T>): Promise<{ value: T; reads: number }> => {
+    let reads = 0;
+    const { getMetric } = metricsMod;
+    const { getDatasetMeta } = H.datasets;
+    Object.assign(metricsMod, { getMetric: (...x: Parameters<typeof getMetric>) => { reads += 1; return getMetric(...x); } });
+    Object.assign(H.datasets, { getDatasetMeta: (...x: Parameters<typeof getDatasetMeta>) => { reads += 1; return getDatasetMeta(...x); } });
+    try {
+      return { value: await fn(), reads };
+    } finally {
+      Object.assign(metricsMod, { getMetric });
+      Object.assign(H.datasets, { getDatasetMeta });
+    }
+  };
+  const unmarked = [ON('order_date')] as never[];
+  const pin = await counted(() => H.as(ORG_A, () => scope.chartScope(P, D, byRegion(REV) as never, unmarked)));
+  ok('no mark: chartScope hands back the very same filters and reads nothing', pin.value.ok === true && pin.value.filters === unmarked && !('periodOn' in pin.value) && pin.reads === 0, show(pin));
+  const marked = await counted(() => H.as(ORG_A, () => scope.chartScope(P, D, byRegion(REV) as never, [CTRL] as never[])));
+  ok('NEGATIVE CONTROL: with a mark it reads the metric', marked.reads > 0);
+  const plainReply = await chart(D, byRegion(REV), { filters: unmarked });
+  ok('no mark: the reply has no periodOn key at all', plainReply.ok === true && !('periodOn' in plainReply), show(plainReply));
+  const door = await H.as(ORG_A, () => ipcVisuals.vizDataFor(P, D, byRegion(REV) as never, [CTRL] as never[]));
+  ok('the door itself (publish, stories) moves the period and says so', door.ok === true && door.periodOn === 'ship_date' && JSON.stringify(door.data) === JSON.stringify(a.data), show(door));
+
+  const cmpA = await chart(D, { ...byRegion(REV), compare: { mode: 'previous_period' } }, { filters: [CTRL] });
+  const cmpB = await chart(D, { ...byRegion(REV), compare: { mode: 'previous_period' } }, { filters: [ON('ship_date')] });
+  ok('compare shifts the date the period landed on', cmpA.ok === true && cmpA.data.series.length === 2 && JSON.stringify(cmpA.data) === JSON.stringify(cmpB.data), show(cmpA));
+  const FEB = { preset: 'custom', from: '2024-02-01', to: '2024-02-29' };
+  const sorted = (r: Reply, i: number): string => JSON.stringify(r.data.labels.map((l: string, k: number) => [l, r.data.series[i].values[k]]).filter((p: unknown[]) => p[1] !== null).sort());
+  const custom = await chart(D, { ...byRegion(REV), compare: { mode: 'custom', from: FEB.from, to: FEB.to } });
+  const febShip = await chart(D, byRegion(REV), { filters: [{ type: 'filter', column: 'ship_date', op: 'period', period: FEB }] });
+  const febOrder = await chart(D, byRegion(REV), { filters: [{ type: 'filter', column: 'order_date', op: 'period', period: FEB }] });
+  ok('a custom compare with no date in scope lands on the metric\'s date', custom.ok === true && custom.data.series.length === 2 && sorted(custom, 1) === sorted(febShip, 0), show(custom));
+  ok('NEGATIVE CONTROL: the first date column is a different figure', sorted(febShip, 0) !== sorted(febOrder, 0));
+  const customPlain = await chart(D, { ...byRegion(ORD, 'count'), compare: { mode: 'custom', from: FEB.from, to: FEB.to } });
+  const febOrderCount = await chart(D, byRegion(ORD, 'count'), { filters: [{ type: 'filter', column: 'order_date', op: 'period', period: FEB }] });
+  ok('NEGATIVE CONTROL: a metric with no date keeps the first date column', sorted(customPlain, 1) === sorted(febOrderCount, 0));
+
+  const drill = (await post('visual:rows', { projectId: P, datasetId: D, encoding: byRegion(REV), filters: [CTRL], mark: { category: 'West' } })).value;
+  ok('drill rows use the metric\'s date', drill.ok === true && drill.filters.some((f: Reply) => f.column === 'ship_date' && f.op === 'period') && !drill.filters.some((f: Reply) => 'fromControl' in f), show(drill));
+  const drillClash = (await post('visual:rows', { projectId: P, datasetId: D, encoding: both, filters: [CTRL], mark: { category: 'West' } })).value;
+  ok('drill rows of a chart refused for two dates: no rows, the same sentence', drillClash.available === false && drillClash.reason === clash.error, show(drillClash));
+
+  const Q1 = { ...CTRL, period: { preset: 'custom', from: '2024-01-01', to: '2024-03-31' } };
+  const point = async (filters: unknown[]): Promise<Reply> => (await post('drivers:explainPoint', { projectId: P, datasetId: D, encoding: { category: 'order_date', grain: 'month', values: byRegion(REV).values }, filters, point: {} })).value;
+  const pA = await point([Q1]);
+  const pB = await point([{ ...Q1, column: 'ship_date', fromControl: undefined }]);
+  const pC = await point([{ ...Q1, fromControl: undefined }]);
+  ok('explain a point: the control lands on the metric\'s date', pA.ok === true && pA.bucket === pB.bucket && Object.is(pA.result.totals.a, pB.result.totals.a) && Object.is(pA.result.totals.b, pB.result.totals.b), show(pA));
+  ok('NEGATIVE CONTROL: on the control\'s column it is another figure', pA.ok === true && pC.ok === true && !Object.is(pA.result.totals.a, pC.result.totals.a), show(pC));
+
+  const explain = async (encoding: unknown): Promise<Reply> => (await post('answer:explain', { projectId: P, tile: { datasetId: D, encoding, filters: [CTRL], chartType: 'column', name: 'Revenue' } })).value;
+  const ex = await explain(byRegion(REV));
+  const exTurns = ex.ok ? (await post('copilot:history', { projectId: P, threadId: ex.threadId })).value.turns : [];
+  const exSpec = exTurns.find((t: Reply) => t.answer)?.answer;
+  ok('Explain on a tile under a control explains it, its period on the metric\'s date', ex.ok === true && !!exSpec && exSpec.filters.some((f: Reply) => f.column === 'ship_date') && !exSpec.filters.some((f: Reply) => f.column === 'order_date'), show([ex, exSpec]));
+  const exClash = await explain(both);
+  ok('Explain on a tile with two dates under a control: the chart\'s sentence, no conversation', exClash.ok === false && exClash.reason === clash.error && !exClash.threadId, show(exClash));
+
+  const refLine = [{ id: 'r1', kind: 'reference', value: { type: 'metric', metricId: REV } }];
+  const withRef = await chart(D, byRegion(ORD, 'count'), { filters: [CTRL], analytics: refLine });
+  const kpi = async (filters: unknown[]): Promise<number | null | undefined> => (await H.as(ORG_A, () => ipcMetrics.resolveMetric(P, REV, { filters: filters as never[] })))?.value;
+  const refValue = withRef.ok ? withRef.data.analytics?.[0]?.value : undefined;
+  ok('a reference line\'s metric counts by its own date, not the chart\'s', typeof refValue === 'number' && Object.is(refValue, await kpi([ON('ship_date')])), show(withRef.data?.analytics));
+  ok('NEGATIVE CONTROL: on the control\'s column it is another figure', !Object.is(refValue, await kpi([ON('order_date')])));
+
+  const pivotOf = (id: string) => ({ category: 'region', values: [], pivot: { rows: [{ column: 'region' }], columns: [], values: byRegion(id).values, totals: { rows: true, columns: true, grand: true } } });
+  const pv = await chart(D, pivotOf(REV), { filters: [CTRL] });
+  ok('a pivot of a metric with its own date under a control on another column is refused, saying why', pv.ok === false && pv.error === msg.pivotOwnDate('Revenue'), show(pv));
+  ok('NEGATIVE CONTROL: the same pivot with no control draws', (await chart(D, pivotOf(REV))).ok === true);
+  ok('NEGATIVE CONTROL: … under a control on its own date', (await chart(D, pivotOf(REV), { filters: [{ ...CTRL, column: 'ship_date' }] })).ok === true);
+  ok('NEGATIVE CONTROL: … and a pivot of a metric with no date under the control', (await chart(D, pivotOf(ORD), { filters: [CTRL] })).ok === true);
+
+  // Formulas: one date for the formula and every part on its dataset, checked at draw time too (a part's date may move after the save).
+  const agreed = await chart(D, byRegion((await save({ name: 'Agreed twice', definition: { formula: '[Revenue] * 2' } })).metric.id), { filters: [CTRL] });
+  const agreedShip = await chart(D, { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }] }, { filters: [ON('ship_date')] });
+  ok('a formula whose parts share its date draws on it, and says so', agreed.ok === true && agreed.periodOn === 'ship_date' && agreed.data.series[0].values.every((v: number, k: number) => Object.is(v, agreedShip.data.series[0].values[agreedShip.data.labels.indexOf(agreed.data.labels[k])] * 2)), show(agreed));
+  const stale = await chart(D, byRegion(DBL), { filters: [CTRL] }); // Double renamed counts by order_date; Revenue moved back to ship_date after it was saved
+  ok('a formula whose part counts by another date is refused at draw time, naming both', stale.ok === false && stale.error === msg.formulaDatesDiffer('Double renamed', 'Revenue', 'ship_date', 'order_date'), show(stale));
+  ok('NEGATIVE CONTROL: the same formula with no control draws', (await chart(D, byRegion(DBL))).ok === true);
+  const RAW = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Raw twice', datasetId: D, definition: { formula: '[Shipped] * 2' } })))!.id; // saveMetric skips the date check
+  const NEST = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Nested twice', datasetId: D, definition: { formula: '[Raw twice] + 1' } })))!.id;
+  ok('a formula with no date over a dated part is refused under a control', (await chart(D, byRegion(RAW), { filters: [CTRL] })).error === msg.formulaDatesDiffer('Raw twice', 'Shipped', 'ship_date', msg.dashboardDate()));
+  ok('… and so is a formula over that formula (the part of a part)', (await chart(D, byRegion(NEST), { filters: [CTRL] })).error === msg.formulaDatesDiffer('Nested twice', 'Shipped', 'ship_date', msg.dashboardDate()));
+  ok('NEGATIVE CONTROL: under a control already on the part\'s date it draws', (await chart(D, byRegion(NEST), { filters: [{ ...CTRL, column: 'ship_date' }] })).ok === true);
+
+  const lv = await hydrates(DL, () => chart(DL, byRegion(REVL), { filters: [CTRL] }));
+  ok('Live: same figures as the extract, never hydrated', lv.hydrated === false && lv.value.ok === true && lv.value.periodOn === 'ship_date' && cmp.compareCharts(a.data, lv.value.data, () => true, false).length === 0, show(lv.value));
 
   await close();
   finish();
