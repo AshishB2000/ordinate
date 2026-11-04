@@ -23,6 +23,7 @@ const ROOTS = ['src', 'web/src'];
 
 const PATTERNS: readonly RegExp[] = [
   /type\s*[!=]==\s*['"]filter['"]/g,
+  /case\s+['"]filter['"]\s*:/g, // the step dispatchers: switch (s.type) { case 'filter': ... }
   /\bsanitize(Steps|Filters|DashboardFilters|MetricFilters|FilterList|FilterStep)\(/g,
   /\bfiltersOf\(/g,
   /\b(liveFilters|mergeFilters|mergeDashboardFilters|carrySteps|withLockSteps|filterPredicates?|adaptFilters?|specFilterSteps|resolveFilterParams)\(/g,
@@ -63,7 +64,8 @@ const mismatches = (found: Map<string, number>) => rows(found).filter((r) => r.n
 // § the repo: every site is classified, and nothing classified has gone
 const found = scan(REPO);
 ok(`scanned ${found.size} files with a site`, found.size > 50);
-for (const r of rows(found)) ok(`${r.file}: ${r.n} site(s), classified ${r.classified}`, r.n === r.classified);
+const failing = new Set(mismatches(found).map((r) => r.file)); // the predicate the controls below test is the one that gates
+for (const r of rows(found)) ok(`${r.file}: ${r.n} site(s), classified ${r.classified}`, !failing.has(r.file));
 
 // § negative control: the same scan over a temp tree that mirrors the table, then one planted site
 const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'term-sites-'));
@@ -88,6 +90,10 @@ try {
   put('src/__termSiteProbe.ts', site);
   const fresh = mismatches(scan(tree));
   ok('NEGATIVE CONTROL: a new unclassified site fails the scan', fresh.length === 1 && fresh[0].file === 'src/__termSiteProbe.ts' && fresh[0].classified === undefined);
+  // ...and the switch form a step dispatcher is written in
+  put('src/__termSiteProbe.ts', "switch (s.type) {\n  case 'filter':\n    break;\n}\n");
+  const dispatch = mismatches(scan(tree));
+  ok('NEGATIVE CONTROL: a new `case \'filter\':` site fails the scan', dispatch.length === 1 && dispatch[0].file === 'src/__termSiteProbe.ts' && dispatch[0].n === 1);
   fs.rmSync(path.join(tree, 'src/__termSiteProbe.ts'));
 
   // a classified file that grows a site, and one that loses its sites

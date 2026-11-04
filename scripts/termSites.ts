@@ -1,8 +1,8 @@
-// The inventory behind scripts/test-termSites.ts: every file under src/ and web/src that cleans,
-// merges, sanitizes, folds or compiles a filter list, with how many such sites it has and what they
-// do to a glossary `term` step. The test counts matches of its PATTERNS in each file and fails on any
-// difference, so a new site is classified here (keep the term, or refuse it) in the commit that adds it.
-// Never raise a number to make the test pass.
+// The inventory behind scripts/test-termSites.ts: every file under src/ and web/src that matches the
+// test's PATTERNS (a `type === 'filter'` test, a `case 'filter':`, a filter-list sanitizer or merge, a
+// predicate builder), with how many matches it has and what its sites do to a glossary `term` step.
+// The test counts the matches in each file and fails on any difference, so a new site is classified
+// here (keep the term, or refuse it) in the commit that adds it. Never raise a number to make the test pass.
 //
 // A file with sites of several kinds carries the strictest of them (keeps > door > throws > ignores > prepare).
 
@@ -91,6 +91,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/residentQuery.ts': { count: 1, how: 'throws' },
   'src/engine/scenarioResident.ts': { count: 2, how: 'throws' },
   'src/engine/statsVectors.ts': { count: 1, how: 'throws' },
+  // the Prepare fold's dispatch: foldStep rethrows TermNotExpandedError, an unknown step type still skips
+  'src/data/transforms.ts': { count: 1, how: 'throws' },
   // adaptFilter and specFilterSteps callers: a term refuses, never skips
   'src/ipc/liveAnswers.ts': { count: 3, how: 'throws' },
   'src/ipc/visualsResident.ts': { count: 1, how: 'throws' },
@@ -101,11 +103,13 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   // a Live dataset's base filters are a dataset setting: a term is dropped on purpose, like Prepare
   'src/data/liveBaseFilters.ts': { count: 2, how: 'prepare' },
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },
-  'src/data/stepSanitize.ts': { count: 2, how: 'prepare' },
-  'src/engine/sqlGen.ts': { count: 1, how: 'prepare' },
+  'src/data/stepSanitize.ts': { count: 3, how: 'prepare' },
+  'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },
   'src/ipc/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/ipc/segments.ts': { count: 1, how: 'prepare' },
-  'web/src/features/prepare/drafts.ts': { count: 1, how: 'prepare' },
+  'web/src/features/prepare/drafts.ts': { count: 3, how: 'prepare' },
+  'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
+  'web/src/features/projects/VersionPreview.tsx': { count: 1, how: 'ignores' },
 };
