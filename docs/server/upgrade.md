@@ -106,8 +106,9 @@ The limits:
 - **Skipping releases** (0.2 → 0.5) is fine for the schema. Missing migrations apply in order, in
   one transaction. A rolling update can still run old and new pods side by side, so a section below
   may name a release to pass through first. Read
-  [Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a) before
-  you skip.
+  [Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a) and
+  [Certification and hidden columns a newer release writes are kept](#certification-and-hidden-columns-a-newer-release-writes-are-kept-p4-01a)
+  (which also says never to roll back below that release once column rules exist) before you skip.
 
 ## Sticky sessions are no longer needed (`0021_any_pod`)
 
@@ -253,16 +254,19 @@ refuses what it cannot apply. An older pod drops both, as in
 [Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a).
 
 - **A certified or retired status.** An older pod drops it the next time it saves the project's notes
-  (any tag or note edit), and every certification in the project is lost. This release keeps it
-  exactly as it was, and shows no badge yet.
+  (any tag or note edit), and every certification and retirement in the project is lost. This
+  release keeps it as written, and drops only a field of an entry that is malformed. It shows no
+  badge yet.
 - **A dataset's column access rules.** An older pod does not know them: it shows every column to
   everyone who can open the dataset, and it drops the rules the next time it saves the dataset (a
-  refresh or a step edit). This release keeps them through every save, refresh, copy, move
-  to the Trash and restore. It cannot apply them, so it **closes the dataset**:
-  - A project viewer is refused it, whether or not a row access rule names them: "Some columns of this
-    dataset are limited to certain people by rules this version of Ordinate can't apply yet, so it is
-    closed to you. Ask your admin to finish upgrading Ordinate." A dataset built from it is closed
-    to viewers too.
+  refresh or a step edit). This release keeps them when the dataset is saved, refreshed, copied,
+  moved to the Trash and restored (emptying it from the Trash forgets them, as it does row access
+  rules). It cannot apply them, so it **closes the dataset**:
+  - A project viewer is refused it, whether or not a row access rule names them. A chart, a grid and
+    a KPI show the sentence "Some columns of this dataset are limited to certain people by rules
+    this version of Ordinate can't apply yet, so it is closed to you. Ask your admin to finish
+    upgrading Ordinate." A metric's tile and a story's chart show no figure and no sentence. A
+    dataset built from it is closed to viewers too.
   - A published page, an embed, a subscription and an alert that read it are refused for everyone.
   - Project editors and admins read it as before.
 
@@ -274,10 +278,10 @@ refuses what it cannot apply. An older pod drops both, as in
 pod first.** A pod older than this one shows the hidden columns and loses the rules.
 
 Nothing in the server can check this, because it keeps no list of the pods that are running. The
-project holds the order itself, as it does for terms: the change that adds certification does not
-merge until a release containing this one is tagged. You hold it on your side. From an older
-release, use the same two ways through as for terms: **go through this release**, or **stop every
-pod, then start the new ones**. The steps, for Compose, Helm and ECS, are in
+project holds the order itself, as it does for terms: the change that adds certification and column
+rules does not merge until a release containing this one is tagged. You hold it on your side. From
+an older release, use the same two ways through as for terms: **go through this release**, or
+**stop every pod, then start the new ones**. The steps, for Compose, Helm and ECS, are in
 [The release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first).
 
 **Never roll back below this release once column rules exist** (`helm rollback`, or an older

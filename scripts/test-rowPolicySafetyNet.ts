@@ -17,8 +17,11 @@
 //    leak check; one that reads through getDataset is refused by the net.
 // 6. `nobody` is refused `none`; the rules themselves are admin-only.
 // 7. COLUMN RULES (semantic layer part 4): `columnAccess`, which a newer release writes, planted on Orders
-//    closes EVERY door and reader of 2 and 3 to east (named by the row rules) and to `nobody`, typed `columns`;
-//    the editor and the admin read each as on an identical dataset without it (NEGATIVE CONTROL).
+//    closes EVERY door and reader of 2 and 3 to east (named by the row rules) and to `nobody`, each in its own
+//    wire form (typed `columns`; the answers carry the sentence; two channels carry no reason and are asserted as
+//    "no figure"); the editor and the admin read each as on an identical dataset without it (NEGATIVE CONTROL).
+//    Planted on datasets with NO row rules, every REDACT, SKIP and META channel of 3 is redacted, skipped or
+//    structure-only for east, shown to east before the key, and shown to the editor (NEGATIVE CONTROLS).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicySafetyNet.js
 
@@ -269,7 +272,8 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       && (await W.call('boss', 'dataset:rowPolicy', { projectId: P, datasetId: orders })).text.includes(H.POLICY_CANARY));
 
     // ── 6. No entitlement ───────────────────────────────────────────────
-    for (const [label, channel, payload] of DIFFERENTIAL.slice(0, 1).concat(DIFFERENTIAL.filter(([l]) => l === 'grid page' || l === 'KPI sum'))) {
+    const NOBODY_PICKS = DIFFERENTIAL.slice(0, 1).concat(DIFFERENTIAL.filter(([l]) => l === 'grid page' || l === 'KPI sum'));
+    for (const [label, channel, payload] of NOBODY_PICKS) {
       const r = await W.call('nobody', channel, payload(orders));
       ok(`none: a viewer no rule names is refused (${label})`, H.refused(r, 'none'), `${r.status} ${r.text.slice(0, 160)}`);
     }
@@ -331,43 +335,119 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
         ok(`NEGATIVE CONTROL: columns: ${label} — ${who} is not refused`, !H.refused(theirs) && !/row_policy/.test(theirs.text), `${theirs.status} ${theirs.text.slice(0, 160)}`);
       }
     }
-    for (const [label, channel, payload] of DIFFERENTIAL.slice(0, 1).concat(DIFFERENTIAL.filter(([l]) => l === 'grid page' || l === 'KPI sum'))) {
+    for (const [label, channel, payload] of NOBODY_PICKS) {
       const r = await W.call('nobody', channel, payload(orders));
       ok(`columns: a viewer no rule names is refused \`columns\`, not \`none\` (${label})`, H.refused(r, 'columns'), `${r.status} ${r.text.slice(0, 160)}`);
     }
     // The figures and rows the editor and the admin read are the twin's, number by number (Object.is) — not just "not refused".
     await W.call('boss', 'visual:update', { projectId: P, id: recs[twin].visualId, overrides: styled }); // Orders' visual was styled above
-    const tail = (b: { turns?: unknown[] } | null) => (Array.isArray(b?.turns) ? { ...b, turns: b!.turns!.slice(-2) } : b); // a thread grows with every call: compare this call's turns
+    // A thread grows with every call (compare this call's turns); a timing differs between two runs of one question.
+    const tail = (b: { turns?: unknown[]; elapsedMs?: unknown } | null) => (b ? { ...b, ...(Array.isArray(b.turns) ? { turns: b.turns.slice(-2) } : {}), elapsedMs: 0 } : b);
+    // Not compared with the twin (all are still asserted not refused above): the Summary card names the alerts and
+    // dismissed insights recorded on Orders earlier in this suite; the literal version and snapshot keys name nothing,
+    // so the reply is the same null or error for everyone.
+    const NOT_ON_TWIN = new Set(['Summary card', 'a dataset version', 'two dataset versions compared', 'snapshot diff']);
+    // The refused readers' payloads are literals on Orders: the same payload with the twin's ids is the question on the twin.
+    const retarget = (p: unknown): unknown => JSON.parse([[orders, twin], [recs[orders].dash, recs[twin].dash], [recs[orders].visualId, recs[twin].visualId], [recs[orders].metricId, recs[twin].metricId]]
+      .reduce((t, [a, b]) => t.split(a).join(b), JSON.stringify(p)));
+    const pairs: [string, string, unknown, unknown][] = [...DIFFERENTIAL.map(([l, c, p]): [string, string, unknown, unknown] => [l, c, p(orders), p(twin)]), ...REFUSED.map(([l, c, p]): [string, string, unknown, unknown] => [l, c, p, retarget(p)])];
     let compared = 0;
-    for (const [label, channel, payload] of DIFFERENTIAL) {
+    for (const [label, channel, payload, twinPayload] of pairs.filter(([l]) => !NOT_ON_TWIN.has(l))) {
       for (const who of ['ed', 'boss']) {
-        const got = await W.call(who, channel, payload(orders));
-        const want = await W.call(who, channel, payload(twin));
+        const got = await W.call(who, channel, payload);
+        const want = await W.call(who, channel, twinPayload);
         const d = H.diff(tail(got.body), tail(want.body), swapTwin);
         compared += 1;
-        ok(`NEGATIVE CONTROL: columns: ${label} (${channel}) — ${who} reads it as on the dataset without column rules`, got.status === 200 && want.status === 200 && !H.refused(got) && got.text.length > 20 && d === '', `${d} | ${got.status} ${got.text.slice(0, 120)}`);
+        ok(`NEGATIVE CONTROL: columns: ${label} (${channel}) — ${who} reads it as on the dataset without column rules`, got.status === want.status && !H.refused(got) && got.text.length > 20 && d === '', `${d} | ${got.status} ${got.text.slice(0, 120)}`);
       }
     }
-    ok(`…${compared} figures and row pages compared, and the comparison can tell data apart`,
+    ok(`…${compared} replies of the editor and the admin compared, and the comparison can tell data apart`,
       H.diff((await W.call('ed', 'dataset:page', { projectId: P, datasetId: orders, offset: 0, limit: 200 })).body, (await W.call('ed', 'dataset:page', { projectId: P, datasetId: east, offset: 0, limit: 200 })).body, {}) !== '');
-    // Skipped and flagged through the same check, on a dataset with no row rules (Orders is skipped for east anyway).
-    const seen = async (who: string) => {
-      const found = await W.call(who, 'dataSearch:query', { projectId: P, term: 'c3' });
-      const listed = row(await W.call(who, 'dataset:list', { projectId: P }), W.plain);
-      return { found: found.text.includes(W.plain), scoped: listed?.scoped === true, header: (await W.call(who, 'dataset:columns', { projectId: P, id: W.plain })).body?.scoped === true };
+    // ── The REDACT, SKIP and META channels of 3, with column rules on datasets that have NO row rules (Orders is redacted
+    // for east by its row rules anyway). Each fact is true while the data is shown: east is shown it before the key (so
+    // the fixture carries it), is not with the key, and the editor still is.
+    const history: typeof import('../src/app/history') = require('../src/app/history');
+    const MARK = { warn: 'PLAIN_RUN_WARN_41', err: 'PLAIN_RUN_ERR_42', style: 'PLAIN_STYLE_43', conn: 'PLAIN_CONN_ERR_44', hw: 731731, alert: 765432 };
+    const plainRec = await (async () => { await mkRecs(W.plain); return recs[W.plain]; })();
+    await W.call('boss', 'visual:update', { projectId: P, id: plainRec.visualId, overrides: { sort: 'custom', sortOrder: [MARK.style, 'East'], seriesColors: { [`${MARK.style}_b`]: 'chart-2' } } });
+    await W.call('boss', 'analysis:publish', { projectId: P, id: plainRec.dash }); // a viewer reads the published copy, frozen at publish: publish it styled
+    const plainKeys = ((await W.call('boss', 'versions:list', { projectId: P, type: 'visual', id: plainRec.visualId })).body as { key: string }[]).map((x) => x.key);
+    await W.call('boss', 'quality:save', { projectId: P, datasetId: W.plain, rule: { kind: 'range', column: 'sales', args: { min: 0, max: 100 }, severity: 'warn' } });
+    await W.call('boss', 'quality:save', { projectId: P, datasetId: W.plain, rule: { kind: 'not_null', column: 'region', severity: 'fail' } });
+    const plainRun = (nodeId: string) => ({ nodeId, id: crypto.randomUUID(), runId: crypto.randomUUID(), trigger: 'manual' as const, status: 'failed' as const,
+      startedAt: at, finishedAt: at, durationMs: 1, attempts: 1, warnings: [`${MARK.warn} looks odd`], errors: [`no row for ${MARK.err}`] });
+    await W.as('boss', () => pipeStore.appendRuns(P, [plainRun(`dataset:${W.plain}`), plainRun(`quality:${W.plain}`)]));
+    const feedCols = await feed('Cols feed', MARK.conn); // also the one dataset with an incremental block: only a connection's dataset keeps one
+    await W.as('boss', () => datasetsMod.writeIncremental(P, feedCols.ds, () => ({ enabled: false, cursorColumn: 'sales', lookback: 0, highWater: MARK.hw, runsSinceFull: 0,
+      log: [{ at, mode: 'full' as const, fetched: 3, inserted: null, updated: null, highWater: MARK.hw, how: 'full' as const }] })));
+    const evId = crypto.randomUUID();
+    await W.as('boss', () => alertStore.recordEvents(P, [{ id: evId, ruleId: crypto.randomUUID(), ruleName: 'Plain watch', datasetId: W.plain, at: new Date(Date.now() + 5000).toISOString(),
+      value: MARK.alert, previous: 700000, delta: 65432, deltaPct: 9, message: 'Plain sales rose to 765,432', seen: false, analysisId: recs[orders].dash }]));
+    const capId = `${Date.now()}9`;
+    await W.as('boss', () => history.saveThread({ id: capId, projectId: P, datasetId: null, title: 'Captured', createdAt: at, updatedAt: at, cropPath: null, thumb: 'data:image/png;base64,iVBORw0KGgo=',
+      result: { title: 'Captured', extractedTable: { columns: [{ id: 'region', label: 'region', type: 'text' }, { id: 'customer', label: 'customer', type: 'text' }], rows: [{ region: 'East', customer: 'e1' }] } } }));
+    const capDs = String((await W.call('ed', 'dataset:composeSave', { projectId: P, name: 'Cap', joins: [], steps: [], sourceKind: 'capture', origin: { kind: 'capture', captureId: capId },
+      base: { inline: { name: 'Cap', columns: [{ name: 'region', type: 'text' }, { name: 'customer', type: 'text' }], rows: [['East', 'e1']] } } })).body?.dataset?.id ?? '');
+    const rowOf = (r: H.Reply, id: string) => (r.body as { id: string }[]).find((x) => x.id === id) as Record<string, unknown> | undefined;
+    const observe = async (who: string): Promise<Record<string, boolean>> => {
+      const ask = (channel: string, payload: unknown) => W.call(who, channel, payload);
+      const f: Record<string, boolean> = {};
+      const ql = await ask('quality:list', { projectId: P, datasetId: W.plain });
+      f['quality:list — the last run and the rules\' args'] = ql.body?.latest != null && /"max":100/.test(ql.text);
+      f['alerts:list — an alert\'s figures'] = ((await ask('alerts:list', { projectId: P })).body?.events as { id: string; value: number | null }[] | undefined ?? []).find((e) => e.id === evId)?.value === MARK.alert;
+      f['summary:compute — an alert found through the analysis id'] = (await ask('summary:compute', { projectId: P, analysisId: recs[orders].dash, pages: [] })).text.includes('765,432');
+      f['connections:list — a refresh failure\'s text'] = rowOf(await ask('connections:list', { projectId: P }), feedCols.conn)?.lastError === MARK.conn;
+      f['pipelines:get — a failed run\'s errors and warnings'] = ((t) => t.includes(MARK.err) && t.includes(MARK.warn))((await ask('pipelines:get', { projectId: P })).text);
+      f['incremental:get — the high-water mark'] = (await ask('incremental:get', { projectId: P, datasetId: feedCols.ds })).text.includes(String(MARK.hw));
+      for (const [channel, payload] of [['visual:get', { projectId: P, id: plainRec.visualId }], ['visual:thumbs', { projectId: P, ids: [plainRec.visualId] }], ['analysis:gallery', { projectId: P }],
+        ['analysis:open', { projectId: P, id: plainRec.dash }], ['versions:get', { projectId: P, type: 'visual', id: plainRec.visualId, key: plainKeys[0] }]] as const) {
+        f[`${channel} — a visual's custom order and series colours`] = (await ask(channel, payload)).text.includes(MARK.style);
+      }
+      f['captureDataset:list — the thumbnail'] = !!rowOf(await ask('captureDataset:list', { projectId: P }), capId)?.thumb;
+      f['captureDataset:get — the extracted table'] = !H.refused(await ask('captureDataset:get', { projectId: P, captureId: capId }));
+      f['captureDataset:image — the screenshot'] = !H.refused(await ask('captureDataset:image', { projectId: P, captureId: capId }));
+      f['dataSearch:query — the dataset among the hits'] = (await ask('dataSearch:query', { projectId: P, term: 'c3' })).text.includes(W.plain);
+      f['dataset:list — no limited flag on its entry'] = rowOf(await ask('dataset:list', { projectId: P }), W.plain)?.scoped === undefined;
+      f['dataset:columns — no limited flag on its header'] = (await ask('dataset:columns', { projectId: P, id: W.plain })).body?.scoped !== true;
+      return f;
     };
-    const before = await seen('east');
-    await setColumns(W.plain, true);
-    const [east7, ed7] = [await seen('east'), await seen('ed')];
-    ok('columns: east\'s value search skips a dataset with column rules, and its list entry and grid header say it is limited', before.found && !before.scoped && !before.header && !east7.found && east7.scoped && east7.header, JSON.stringify([before, east7]));
-    ok('NEGATIVE CONTROL: …the editor\'s search finds it and nothing flags it', ed7.found && !ed7.scoped && !ed7.header, JSON.stringify(ed7));
-    await setColumns(W.plain, false);
+    const carriers = [W.plain, feedCols.ds, capDs];
+    ok('setup: three datasets with no row rules carry the fixtures (a visual, rules and a run, an alert, a failing connection, an incremental mark, a capture)', carriers.every((d) => /^[0-9a-f-]{36}$/.test(d)) && plainKeys.length > 0, JSON.stringify([carriers, plainKeys.length]));
+    const shown = await observe('east');
+    for (const d of carriers) await setColumns(d, true);
+    const [withheld, editorSees] = [await observe('east'), await observe('ed')];
+    ok(`…${Object.keys(shown).length} facts are observed`, Object.keys(shown).length === 17, Object.keys(shown).length);
+    for (const key of Object.keys(shown)) {
+      ok(`columns: ${key} — east is shown it without the key (the fixture carries it)`, shown[key]);
+      ok(`columns: ${key} — withheld, skipped or flagged for east with column rules`, !withheld[key]);
+      ok(`NEGATIVE CONTROL: columns: ${key} — the editor still gets it`, editorSees[key]);
+    }
+    const kept = ((await W.call('east', 'pipelines:get', { projectId: P })).body?.nodes as { ref?: { id: string }; runs: { status: string }[] }[] | undefined ?? []).filter((n) => n.ref?.id === W.plain).flatMap((n) => n.runs).filter((x) => x.status === 'failed').length;
+    ok('columns: pipelines:get keeps east\'s failed runs on the dataset (status, timing and counts stay)', kept === 2, String(kept));
+    // META: structure only. The declared columns, no cell value; the same reply for every caller.
+    const sg = await W.call('east', 'explore:suggest', { projectId: P, datasetId: W.plain });
+    ok('columns: explore:suggest answers east from the declared columns, carries no cell value, and is the editor\'s reply', sg.body?.ok === true && sg.text === (await W.call('ed', 'explore:suggest', { projectId: P, datasetId: W.plain })).text
+      && !H.leaks(sg.text) && !/"(c[0-8]|East|West|North)"/.test(sg.text), sg.text.slice(0, 200));
+    for (const d of carriers) await setColumns(d, false);
     ok(`nothing of West's in any of east's ${columnReplies.length} replies on a dataset with column rules`, columnReplies.filter(H.leaks).length === 0);
     await setColumns(orders, false);
     const reopened = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
     ok('NEGATIVE CONTROL: with the key removed, east is answered through its row lock again (the refusals above were the key\'s)', reopened.body?.ok === true && !H.refused(reopened), reopened.text.slice(0, 160));
     const [mv, sf] = [await W.call('east', 'metric:values', { projectId: P, ids: [recs[orders].metricId] }), await W.call('east', 'story:figures', { projectId: P, blocks: [{ id: 'b1', kind: 'visual', visualId: recs[orders].visualId }] })];
     ok('NEGATIVE CONTROL: …so are the two channels whose refusal carries no reason (a figure, a drawn chart)', mv.body?.[0]?.ok === true && typeof mv.body[0].value === 'number' && sf.body?.blocks?.b1?.chart?.data?.labels?.length > 0, `${mv.text.slice(0, 120)} | ${sf.text.slice(0, 120)}`);
+
+    // ── Project-wide: the colour map is withheld when ANY dataset is closed to the caller, and Orders' row rules (and the
+    // other ruled datasets') would do that alone. They go first, so that only the key on `plain` can.
+    for (const d of [orders, east, W.west, closedFeed.ds]) await W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: d, policy: null });
+    const colorsOf = (who: string) => W.call(who, 'format:colors:get', { projectId: P });
+    const mapShown = await colorsOf('east');
+    await setColumns(W.plain, true);
+    const [mapWithheld, mapEditor] = [await colorsOf('east'), await colorsOf('ed')];
+    ok('columns: format:colors:get — east gets the map without the key, an empty one with it, and the editor keeps it', H.leaks(mapShown.text) && JSON.stringify(mapWithheld.body) === '{}' && H.leaks(mapEditor.text), `${mapShown.text.slice(0, 80)} | ${mapWithheld.text.slice(0, 80)}`);
+    const [pl, po] = [await W.call('east', 'projects:list', {}), await W.call('east', 'projects:open', { id: P })];
+    ok('columns: projects:list and projects:open carry no colour map and no dismissed insight ids (for any caller)', po.body?.id === P && !/colorMap|dismissedInsights/.test(pl.text + po.text));
+    ok('NEGATIVE CONTROL: …the stored project holds both', H.leaks(JSON.stringify(await W.as('boss', () => projectsMod.getProject(P)))));
+    await setColumns(W.plain, false);
   } finally {
     await W.close();
   }
