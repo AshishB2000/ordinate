@@ -178,6 +178,120 @@
   gap: var(--sp-8);
 }
 
+/* ── The Overview: one row per fact, its name on the left ───────────── */
+.rows {
+  margin: 0;
+}
+.row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+  padding: var(--sp-12) 0;
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-13);
+}
+.row:first-child {
+  border-top: 0;
+}
+.row dt {
+  padding-top: 6px;
+  color: var(--muted);
+}
+.row dd {
+  min-width: 0;
+  margin: 0;
+  line-height: var(--lh-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.stepColumn {
+  font-weight: 600;
+}
+.rowBusy {
+  display: inline-block;
+  width: 160px;
+  max-width: 100%;
+}
+.skLine {
+  height: 12px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Fields: what Prepare calculates, above the column notes ────────── */
+.calc {
+  margin-bottom: var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.calcHead {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.calcList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-13);
+}
+.calcList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-12);
+}
+.calcName {
+  font-weight: 600;
+}
+.formula {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  overflow-wrap: anywhere;
+}
+
+/* ── Guide ─────────────────────────────────────────────────────────── */
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.stamp {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
 @media (max-width: 900px) {
   .split {
     grid-template-columns: minmax(0, 1fr);
@@ -187,5 +301,12 @@
   }
   .panelHead {
     flex-direction: column;
+  }
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+  .row dt {
+    padding-top: 0;
   }
 }

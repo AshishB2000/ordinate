@@ -57,7 +57,8 @@ function RecordFields({ projectId, ref_, doc, flushRef, readOnly }: { projectId:
   const tags = useTags(projectId);
   const [stamp, setStamp] = useState<{ by?: string; at?: string }>({ by: doc.updatedBy, at: doc.updatedAt });
   const [tagList, setTagList] = useState(doc.tags.map((t) => t.name));
-  const save = useWrite('catalog:set', ['catalog:list', 'catalog:tags', 'catalog:get'], {
+  // The Data model's overview carries each dataset's description.
+  const save = useWrite('catalog:set', ['catalog:list', 'catalog:tags', 'catalog:get', 'model:overview'], {
     onDone: (r: { ok?: boolean; doc?: Doc }) => r.ok && r.doc && setStamp({ by: r.doc.updatedBy, at: r.doc.updatedAt }),
   });
   const desc = useCommitText(doc.description, (description) => save.mutate({ projectId, ref: ref_, patch: { description } }));
