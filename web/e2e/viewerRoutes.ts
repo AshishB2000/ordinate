@@ -246,4 +246,7 @@ export const ROUTES: readonly RouteCase[] = [
     editor: { role: 'button', name: 'Subscribe' },
     viewer: [{ role: 'button', name: 'Expand' }, { role: 'button', name: 'More dashboard actions' }], // Copy link is in ⋯
   },
+  // The Data model: "To fill in next" is an editor's (the seed's datasets have no key or guide), the dataset's Details popover everyone's.
+  { pattern: '/model', url: (s) => `/model?project=${s.pid}`, editor: { role: 'region', name: 'To fill in next' } },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}`, editor: { role: 'region', name: 'To fill in next' }, open: details },
 ];
