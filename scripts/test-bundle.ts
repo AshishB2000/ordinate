@@ -13,6 +13,9 @@
 //   3. WHITELIST: a bundle with any entry outside it is refused whole, and
 //      leaves no project behind.
 //   4. MANIFEST: counts that do not match the entries are refused.
+//   5. EVERY PROJECT FILE travels, and the salt never does.
+//   6. SOURCE DOCS: a connection's table index and docs (a newer release writes
+//      them) travel, follow the connection's new id, and a near-miss is refused.
 //
 //   npm run build:ts && node scripts/test-bundle.js
 
@@ -36,6 +39,8 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const versions: typeof import('../src/app/versions') = require('../src/app/versions');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+const { projectDir }: typeof import('../src/app/recordKinds') = require('../src/app/recordKinds');
 
 function allText(dir: string): string {
   let out = '';
@@ -181,6 +186,7 @@ async function main(): Promise<void> {
   ok('…and leaves no stray project', (await projects.listProjects()).length === count0);
 
   await everyProjectFile();
+  await sourceDocs();
   finish();
 }
 
@@ -249,6 +255,51 @@ async function everyProjectFile(): Promise<void> {
   const withSalt = bundle.writeZip([...bundle.readZip(out.bytes), { name: 'privacy/salt.key', data: Buffer.from('x') }]);
   const refused = await bundle.importBundle(withSalt);
   ok('a bundle carrying privacy/salt.key is refused', !refused.ok && /refused|does not import/.test(refused.error || ''), refused.error);
+}
+
+// ── 6. a connection's source table docs travel (part 2) ──────────────────────
+// A newer release writes connections/<C>.tables.json (the index) and
+// connections/<C>/tables/<DOC>.json (one doc). This release only has to carry
+// them: neither refused on import nor left out of an export. Written raw, as
+// the newer release's writer would, on a project of its own kept alive.
+async function sourceDocs(): Promise<void> {
+  const p = await projects.createProject('Source docs');
+  const dir = projectDir(p.id);
+  const ds = (await datasets.saveDataset(p.id, { name: 'Orders', sourceKind: 'csv', columns: [{ name: 'k', type: 'text' }], rows: [['a']] }))!;
+  const conn = (await connections.saveConnection(p.id, { name: 'Warehouse', connectorId: 'url', values: { url: 'https://example.com/x.json' } }))!;
+  const C = conn.id;
+  const DOC = 'a1b2c3d4-0000-4000-8000-0000000000d1';
+  const doc = { table: 'ANALYTICS.ORDERS', owner: 'Data', refresh: '', requiredFilters: '', guide: '# g', updatedBy: 'a', updatedAt: 'b', schemaVersion: 1, dismissed: { [ds.id]: { table: 'abc' } } };
+  fs.mkdirSync(path.join(dir, 'connections', C, 'tables'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'connections', `${C}.tables.json`), JSON.stringify([{ table: 'ANALYTICS.ORDERS', docId: DOC, owner: 'Data', hasGuide: true }]));
+  fs.writeFileSync(path.join(dir, 'connections', C, 'tables', `${DOC}.json`), JSON.stringify(doc));
+
+  const out = await bundle.exportProject(p.id);
+  if (!out) throw new Error('export returned nothing');
+  const names = bundle.readZip(out.bytes).map((e) => e.name);
+  ok('export: the index and the doc travel', names.includes(`connections/${C}.tables.json`) && names.includes(`connections/${C}/tables/${DOC}.json`), JSON.stringify(names));
+  ok('…and the manifest counts stay as they were: one connection, no new key', out.manifest.counts.connections === 1 && !Object.keys(out.manifest.counts).some((k) => /table|doc/i.test(k)), JSON.stringify(out.manifest.counts));
+
+  const res = await bundle.importBundle(out.bytes); // same machine: every id collides and is remapped
+  ok('import: a bundle holding them is accepted', res.ok === true, res.error);
+  const nd = projectDir(res.project!.id);
+  const [idx] = fs.readdirSync(path.join(nd, 'connections')).filter((n) => n.endsWith('.tables.json'));
+  const C2 = idx.slice(0, 36);
+  const entry = JSON.parse(fs.readFileSync(path.join(nd, 'connections', idx), 'utf8'))[0];
+  const docFile = path.join(nd, 'connections', C2, 'tables', `${entry.docId}.json`);
+  ok('import: the connection id is new in both names', C2 !== C && fs.existsSync(path.join(nd, 'connections', `${C2}.json`)) && fs.existsSync(docFile));
+  const nds = (await datasets.listDatasets(res.project!.id))[0];
+  const ndoc = JSON.parse(fs.readFileSync(docFile, 'utf8'));
+  ok('import: the index points at the remapped doc, and the doc names the new dataset id',
+    entry.docId !== DOC && nds.id !== ds.id && JSON.stringify(Object.keys(ndoc.dismissed)) === JSON.stringify([nds.id]) && !JSON.stringify(ndoc).includes(ds.id));
+  ok('import: nothing else in the doc changed', JSON.stringify({ ...ndoc, dismissed: doc.dismissed }) === JSON.stringify(doc));
+
+  // Near-misses stay refused, whole: the new rules are exact, not a folder wildcard.
+  for (const bad of [`connections/${C}/tables/notes.json`, `connections/${C}/${DOC}.json`, `connections/${C}/tables/x/${DOC}.json`,
+    `connections/notes.tables.json`, `connections/${C}.tables.json.bak`]) {
+    const r = await bundle.importBundle(bundle.writeZip([...bundle.readZip(out.bytes), { name: bad, data: Buffer.from('{}') }]));
+    ok(`NEGATIVE CONTROL: "${bad.replace(C, '<C>').replace(DOC, '<DOC>')}" is still refused`, r.ok === false && /refused|does not import/.test(r.error || ''), r.error);
+  }
 }
 
 main().catch((err) => {

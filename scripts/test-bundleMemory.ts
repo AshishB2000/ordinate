@@ -16,6 +16,8 @@
 //   round trip  a real large bundle imported into a fresh org: every file
 //               byte-identical; the old in-memory reader and the streamed one
 //               read the same entries (differential)
+//   docs        a connection's source table index and doc (rows on Postgres) travel
+//               and follow the connection's new id; fresh org and same org
 //   backup      16 projects (a backup bigger than the bound) backed up and
 //               restored into a fresh org: RSS growth under 256 MB each way,
 //               every file byte-identical, every inner bundle stored
@@ -46,6 +48,7 @@ const zw: typeof import('../src/app/zipWriter') = require('../src/app/zipWriter'
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const blobs: typeof import('../src/app/blobStore') = require('../src/app/blobStore');
 const recordKinds: typeof import('../src/app/recordKinds') = require('../src/app/recordKinds');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const settings: typeof import('../src/ipc/settingsServer') = require('../src/ipc/settingsServer');
 
 require('v8').setFlagsFromString('--expose_gc');
@@ -214,6 +217,39 @@ async function main(adminUrl: string | undefined): Promise<void> {
   if (back.project) {
     const diff = sameFiles(await filesOf(A, src.id), await filesOf(B, back.project.id));
     ok('round trip: every record, table and picture is byte-identical', diff === '', diff);
+  }
+
+  // ── Source table docs (a newer release writes them; rows on Postgres) travel too ──
+  {
+    const DOC = U();
+    const index = JSON.stringify([{ table: 'ANALYTICS.ORDERS', docId: DOC, owner: 'Data', hasGuide: true }]);
+    const mk = await inOrg(A, async () => {
+      const p = await projects.createProject('Source docs');
+      const ds = (await datasets.saveDataset(p.id, { name: 'Orders', sourceKind: 'csv', columns: [{ name: 'k', type: 'text' }], rows: [['a']] }))!;
+      const conn = (await connections.saveConnection(p.id, { name: 'Warehouse', connectorId: 'url', values: { url: 'https://example.com/x.json' } }))!;
+      const dir = path.join(recordKinds.projectDir(p.id), 'connections');
+      await fs.promises.mkdir(path.join(dir, conn.id, 'tables'), { recursive: true });
+      await recordFs.writeFile(path.join(dir, `${conn.id}.tables.json`), index);
+      await recordFs.writeFile(path.join(dir, conn.id, 'tables', `${DOC}.json`), JSON.stringify({ table: 'ANALYTICS.ORDERS', dismissed: { [ds.id]: { table: 'abc' } } }));
+      return { id: p.id, ds: ds.id, conn: conn.id };
+    });
+    const zipped = (await inOrg(A, () => bundle.exportProject(mk.id)))!;
+    const inZip = bundle.readZip(zipped.bytes).map((e) => e.name);
+    ok('docs: the index and the doc are in the bundle', inZip.includes(`connections/${mk.conn}.tables.json`) && inZip.includes(`connections/${mk.conn}/tables/${DOC}.json`), inZip.join(' '));
+    // The connection's id is always new; into a fresh org nothing else collides, in the same org everything does.
+    const fresh = await inOrg(B, () => bundle.importBundle(zipped.bytes));
+    const kept = fresh.project ? await filesOf(B, fresh.project.id) : new Map<string, Buffer>();
+    const idx = [...kept.keys()].find((k) => k.endsWith('.tables.json'));
+    ok('docs: into a fresh org the index and doc come back under the new connection id, bytes unchanged',
+      !!idx && idx !== `connections/${mk.conn}.tables.json` && kept.get(idx)?.toString() === index
+      && kept.get(`connections/${idx.slice(12, 48)}/tables/${DOC}.json`)?.toString().includes(mk.ds) === true, `${fresh.error} ${idx}`);
+    const same = await inOrg(A, () => bundle.importBundle(zipped.bytes));
+    const moved = same.project ? await filesOf(A, same.project.id) : new Map<string, Buffer>();
+    const idx2 = [...moved.keys()].find((k) => k.endsWith('.tables.json'));
+    const entry = idx2 ? JSON.parse(moved.get(idx2)!.toString())[0] : null;
+    const doc2 = entry ? moved.get(`connections/${idx2!.slice(12, 48)}/tables/${entry.docId}.json`)?.toString() : undefined;
+    ok('docs: in the same org every id is remapped, in names and bodies',
+      !!entry && entry.docId !== DOC && !!doc2 && !doc2.includes(mk.ds) && !JSON.stringify([...moved.keys()]).includes(mk.conn), `${same.error} ${idx2}`);
   }
 
   // ── A cancel during the write is a cancel, and it stops a restore (review C4) ──

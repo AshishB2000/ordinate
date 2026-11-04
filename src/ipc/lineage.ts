@@ -27,8 +27,8 @@ const PREFIX: Record<string, string> = {
 
 const present = <T>(list: Array<T | null>): T[] => list.filter((x): x is T => x !== null);
 
-/** The origin field that names a source to a reader: a warehouse table, a web import's URL (and so its host). */
-const NAME_FIELD: Record<string, string> = { connection: 'table', url: 'url' };
+/** The origin fields that name a source to a reader: a warehouse table and the tables it reads (`readsTables`, spec D11), a web import's URL (and so its host). */
+const NAME_FIELDS: Record<string, string[]> = { connection: ['table', 'readsTables'], url: ['url'] };
 
 export async function loadInput(projectId: string): Promise<LineageInput> {
   const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs, sees] = await Promise.all([
@@ -44,10 +44,9 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     seesSourceNames(projectId),
   ]);
   // the one input lineage:get and pipelines:get share; a job (system admin) still sees names
-  // (`readsTables` names warehouse tables too: spec D11)
   const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T => {
-    const field = NAME_FIELD[d.origin?.kind ?? ''];
-    return !sees && field ? { ...d, origin: { ...d.origin, [field]: undefined, readsTables: undefined } } : d;
+    const fields = NAME_FIELDS[d.origin?.kind ?? ''];
+    return !sees && fields ? { ...d, origin: { ...d.origin, ...Object.fromEntries(fields.map((f) => [f, undefined])) } } : d;
   };
   return {
     datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))).map(unnamed),

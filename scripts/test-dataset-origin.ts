@@ -184,7 +184,11 @@ async function main(): Promise<void> {
   const conns: typeof import('../src/ipc/connections') = require('../src/ipc/connections');
   const messy = [' A.ORDERS ', 'a.orders', 'A.ORDERS', '', 7, 'x'.repeat(1001)];
   ok('readsTables: kept, trimmed, deduped exactly, order kept', JSON.stringify(connOf({ readsTables: messy }).readsTables) === '["A.ORDERS","a.orders"]');
-  ok('readsTables: at most 16', connOf({ readsTables: Array.from({ length: 20 }, (_, i) => `t${i}`) }).readsTables!.length === orig.MAX_READS_TABLES && orig.MAX_READS_TABLES === 16);
+  const t20 = Array.from({ length: 20 }, (_, i) => `t${i}`);
+  ok('readsTables: at most 16, the first 16 kept in order', orig.MAX_READS_TABLES === 16 && JSON.stringify(connOf({ readsTables: t20 }).readsTables) === JSON.stringify(t20.slice(0, 16)));
+  // 30 repeats of t0..t9 come first: if a repeat used up the cap, 16 would be reached inside them and t10..t15 would be lost.
+  const repeats = Array.from({ length: 30 }, (_, i) => `t${i % 10}`);
+  ok('readsTables: duplicates do not use up the cap', JSON.stringify(connOf({ readsTables: [...repeats, ...t20.slice(10)] }).readsTables) === JSON.stringify(t20.slice(0, 16)));
   ok('readsTables: a name of exactly 1,000 characters is kept', connOf({ readsTables: ['x'.repeat(1000)] }).readsTables?.length === 1);
   ok('readsTables: not a list is dropped', !('readsTables' in connOf({ readsTables: 'A.ORDERS' })));
   ok('readsTables: absent when empty, so the bytes match today', !('readsTables' in connOf({ readsTables: [] })) && !('readsTables' in connOf({})));
