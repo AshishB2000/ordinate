@@ -357,6 +357,34 @@ async function charts(P: string): Promise<void> {
   const unlabelled = await call('answer:card', { projectId: P2, spec: { ...spec, datasetId: S2 } });
   ok('control: unlabelled, the card says the stored value and carries no pairs', unlabelled.caption.startsWith('EU') && !('valueLabels' in unlabelled.data), json(unlabelled).slice(0, 200));
 
+  // The card's filter text the server writes (the "Filtered to" bullet, the filter chips, the "did you mean" options) says the label too;
+  // the step still filters by the raw value, and the model's facts keep it.
+  const filtered = { ...spec, filters: [{ column: 'region', op: '=', value: 'EU' }] };
+  const fCard = await call('answer:card', { projectId: P, spec: filtered });
+  ok('a labelled EU filter: the bullet reads "Filtered to region = Europe", and so does its chip', fCard.ok === true && fCard.bullets.includes('Filtered to region = Europe.') && json(fCard.filterLabels) === '["region = Europe"]', json(fCard).slice(0, 400));
+  ok('…while the step filters by the raw value', json(fCard.steps) === '[{"type":"filter","column":"region","op":"=","value":"EU"}]', json(fCard.steps));
+  const fBuilt = await answers.computeCard(P, filtered as never);
+  ok('…and the model\'s facts keep "region = EU"', 'factsText' in fBuilt && fBuilt.factsText.includes('Filtered to: region = EU.') && !fBuilt.factsText.includes('Europe'), 'factsText' in fBuilt ? fBuilt.factsText : json(fBuilt));
+  const fPlainSpec = { projectId: P2, spec: { ...filtered, datasetId: S2 } };
+  const fPlain = await call('answer:card', fPlainSpec);
+  const fPlainStub = await stubbed(() => call('answer:card', fPlainSpec));
+  ok('NEGATIVE CONTROL: no labels, the bullet reads "Filtered to region = EU", byte-identical to a card built with no list', fPlain.bullets.includes('Filtered to region = EU.')
+    && json(fPlain.filterLabels) === '["region = EU"]' && differ(fPlain, fPlainStub) === '' && json(fPlain) === json(fPlainStub), differ(fPlain, fPlainStub));
+  ok('NEGATIVE CONTROL: …its keys in the order the card always had', Object.keys(fPlain).join() === 'ok,spec,title,chartType,datasetName,data,caption,headline,bullets,chips,filterLabels,steps,notes,asOf', Object.keys(fPlain).join());
+  // (A code under MIN_LOOSE characters is never suggested, so this one is longer.)
+  const E = (await datasets.saveDataset(P, { name: 'Codes', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['EMEA', 1], ['APAC', 2]] }))!.id;
+  await label(E, 'key', [{ value: 'EMEA', label: 'Europe and Africa' }]);
+  const near = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: E, category: 'key', filters: [{ column: 'key', op: '=', value: 'EME' }] } });
+  ok('a value not stored: the "did you mean" option says the label, and picks the raw value', near.noMatch?.options.length === 1
+    && near.noMatch.options[0].label === 'Europe and Africa' && json(near.noMatch.options[0].spec.filters) === '[{"column":"key","op":"=","value":"EMEA"}]', json(near.noMatch));
+  ok('…while the filter it fixes says what was asked: "EME" is no stored value, so it has no label', json(near.filterLabels) === '["key = EME"]', json(near.filterLabels));
+
+  // A card's label that is also a stored value is left off, and the card says why, as a chart reply does.
+  const clashCard = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: C } });
+  ok('a card whose label is also a stored value: the pair is left off and the note says why', json(clashCard.data.valueLabels) === '{"category":[["NA","North America"]]}'
+    && clashCard.notes.includes('“Europe” is also a value of region, so its labelled value shows as stored.'), json([clashCard.data.valueLabels, clashCard.notes]));
+  ok('control: without that row the card has no such note', !card.notes.some((n: string) => n.includes('also a value')), json(card.notes));
+
   // Which lists a chart reads (labelListsFor): its category's and its split's, text columns only, never the six raw-valued kinds.
   const replies: typeof import('../src/ipc/valueLabelReplies') = require('../src/ipc/valueLabelReplies');
   const lists = (e: object): Promise<string> => replies.labelListsFor(P, S, e as never).then(json);

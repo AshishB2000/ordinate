@@ -279,7 +279,7 @@ sensitive columns (fail open); it now refuses the search.
 
 ## The inventory
 
-Every channel a viewer can call is a `read` contract: **182** of the 371 contracts (`write` and
+Every channel a viewer can call is a `read` contract: **192** of the 388 contracts (`write` and
 `admin` channels need an editor or an admin, who are never restricted). Every one is listed here
 exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code and fails when a
 `read` contract is missing from it.
@@ -290,12 +290,14 @@ exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code 
 | DOOR+ | 5 | Door figures, plus a part that goes through the locked distinct reader or is redacted. |
 | LOCKED | 5 | Row and value readers locked directly (`pageFor`, distinct, profile). |
 | NET | 31 | Reads rows outside a door through `getDataset`/`residentSource`: refused by the storage net. |
-| EXPLICIT | 11 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
+| EXPLICIT | 12 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
 | SKIP | 1 | A search across datasets: policy datasets are skipped for a restricted caller. |
-| REDACT | 7 | Metadata replies that carry row values: the values are stripped for a restricted caller. |
+| REDACT | 17 | Metadata replies that carry row values: the values are stripped for a restricted caller. |
 | FANOUT | 3 | Builds what is sent to others: refused for everyone. |
 | EXPORT | 4 | Builds a file: refused for a restricted caller. |
-| META | 101 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
+| META | 100 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
+
+The counts are the code's table (`scripts/rowPolicyReaders.ts`), which wins where a row below still lags it.
 
 Handler paths are under `src/`.
 

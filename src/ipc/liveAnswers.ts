@@ -41,7 +41,7 @@ import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
-import { cardTextAsSeen, labelCardData } from './valueLabelReplies';
+import { cardTextAsSeen, filterPairs, labelCardData, saidFilters } from './valueLabelReplies';
 
 /** The operators the case fix applies to — `answers.canonicaliseTextFilters`'s. */
 const CASE_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
@@ -69,9 +69,12 @@ function fail(f: LiveFailure): Failure {
  * The spec's text filters with every asked value replaced by the spelling the
  * warehouse holds — one cached lookup per column, the keys sorted so the same
  * question in another order is the same statement. A value nothing matches is
- * left as asked (the chart then says so, as the extract's does).
+ * left as asked (the chart then says so, as the extract's does). `held`: the
+ * spellings found, per column — values the caller's own (locked) rows hold.
  */
-export async function liveCaseFix(projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = []): Promise<{ ok: true; filters: AnswerFilter[] } | LiveFailure> {
+export async function liveCaseFix(
+  projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = [],
+): Promise<{ ok: true; filters: AnswerFilter[]; held: ReadonlyMap<string, ReadonlyMap<string, string>> } | LiveFailure> {
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
     if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) continue;
@@ -81,7 +84,7 @@ export async function liveCaseFix(projectId: string, datasetId: string, columns:
     for (const v of [f.value, ...(f.values ?? [])]) if (typeof v === 'string') keys.add(caseKey(v));
     if (keys.size) asked.set(col.name, keys);
   }
-  if (!asked.size) return { ok: true, filters };
+  if (!asked.size) return { ok: true, filters, held: new Map() };
   const stored = new Map<string, Map<string, string>>();
   for (const [column, keys] of asked) {
     // Under a row access lock the stored spellings come from the caller's rows only (row-policy D13).
@@ -104,6 +107,7 @@ export async function liveCaseFix(projectId: string, datasetId: string, columns:
   }
   return {
     ok: true,
+    held: stored,
     filters: filters.map((f): AnswerFilter => {
       if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) return f;
       const byKey = stored.get(f.column);
@@ -196,14 +200,16 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
     saidFilterLabels: [...cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), ...termLabels], caption, asOf: utcLabel(r.asOf.at),
   };
   const facts = cardFacts(factsIn, spec, withheld);
-  // As computeCard: what a person reads says the labels (F5), the model's facts keep the stored values.
+  // As computeCard: what a person reads says the labels (F5), its filters' too; the model's facts keep the stored values.
   const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
-  const seen = cardTextAsSeen(labelled, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets });
+  const shown = saidFilters(spec.filters, await filterPairs(projectId, meta.id, fixed.held));
+  const shownLabels = shown === spec.filters ? filterLabels : cardLabels({ ...spec, filters: shown }, meta.columns, r.filterLabels);
+  const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   return {
     card: {
-      ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled, ...seen,
+      ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category) }),
-      filterLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes, asOf: r.asOf,
+      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes.concat(labelled.notes), asOf: r.asOf,
     },
     factsText: facts.text,
     ledger: facts.ledger,
