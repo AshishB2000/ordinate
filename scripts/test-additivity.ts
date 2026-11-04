@@ -6,6 +6,7 @@
 //   doors       visual:data and visual:preview refuse the calc, with the measure named; an adding measure still runs
 //   published   /p/ builds the tile as an error, and a story block as a broken block
 //   assistant   the Assistant reads the raw figures of a refused chart
+//   overlay     the "up N% vs last year" caption is not written over a measure that can't be added across time
 //
 //   npm run build:ts && node scripts/test-additivity.js
 
@@ -140,6 +141,13 @@ async function main(): Promise<void> {
   spyOn(metrics, 'getMetric', () => reads++);
   spyOn(datasets, 'getDatasetMeta', () => reads++);
   ok('no adding calc: the reply itself, nothing read', Object.is(await A.refuseNonAdditiveCalcs(plainReply, pid, ds, { category: 'region', values: [{ column: 'amount', aggregation: 'avg', calc: { kind: 'rank_dense', along: 'across' } }] }), plainReply) && reads === 0);
+  // The spies count: a ratio metric's running total must read its record and the dataset's columns.
+  await A.refuseNonAdditiveCalcs(okReply, pid, ds, { category: 'region', values: [{ column: 'Per unit', aggregation: 'sum', metricId: perUnit.id, calc: RT }] });
+  ok('NEGATIVE CONTROL: the spy counts', reads > 0);
+  // A measure that adds alike on both sides does not need the split column's declared type.
+  const readsBefore = reads;
+  const avgDown = await A.refuseNonAdditiveCalcs(okReply, pid, ds, { category: 'region', series: 'day', values: [{ column: 'amount', aggregation: 'avg', calc: { kind: 'running_total', along: 'down' } }] }) as Any;
+  ok('a down split of an avg: refused without reading the split column', avgDown.code === 'calc_not_additive' && reads === readsBefore, `${reads - readsBefore} reads`);
 
   // ── published ───────────────────────────────────────────────────────────────────────────────────────────────────
   const save = (name: string, encoding: object) => visuals.saveVisual(pid, { datasetId: ds, name, chartType: 'column', encoding } as never);
@@ -166,6 +174,15 @@ async function main(): Promise<void> {
   ok('the Assistant never reads a refused calculation', !refusedFacts.text.includes('before that calculation') && !raws(refusedFacts), refusedFacts.text);
   const allowedFacts = await factsOf(sumVisual.id);
   ok('NEGATIVE CONTROL: it reads an allowed one beside its raw figures', allowedFacts.text.includes('before that calculation') && raws(allowedFacts), allowedFacts.text);
+
+  // ── overlay ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  const FEB_2024 = [{ type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2024-02-01', to: '2024-02-29' } }];
+  const by = (aggregation: string) => chart({ category: 'day', grain: 'month', overlay: 'previous_year', values: [{ column: 'amount', aggregation }] }, { filters: FEB_2024 });
+  const avg = await by('avg');
+  ok('avg: the year-earlier series is drawn', avg.ok && avg.data.series.some((s: Any) => s.role === 'overlay'), show(avg));
+  ok('avg: no "up N% vs last year" caption', avg.ok && avg.overlay?.kind === 'previous_year' && avg.overlay.caption === undefined && avg.overlay.pct === undefined, show(avg.overlay));
+  const sum = await by('sum');
+  ok('NEGATIVE CONTROL: sum keeps its caption', sum.ok && typeof sum.overlay?.caption === 'string' && typeof sum.overlay?.pct === 'number', show(sum.overlay));
 }
 
 main()

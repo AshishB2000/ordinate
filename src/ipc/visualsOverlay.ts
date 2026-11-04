@@ -17,6 +17,7 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import type { VizEncoding } from '../analysis/visuals';
 import type { DateGrain } from '../analysis/categoryKey';
+import { measureAdditivity } from '../analysis/additivity';
 import { shiftBucketLabel } from '../analysis/dateIntel';
 import { compareScope, overlayCaption, overlayFilters } from '../analysis/periodScope';
 import { rangeLabel } from '../analysis/driverScope';
@@ -71,7 +72,10 @@ export async function withPeriodOverlay(
     });
 
     const series = reply.data.series.concat([{ name: `${cur.name} · last year`, values, role: 'overlay' as const }]);
-    const cap = overlayCaption(enc.values[0].column, cur.values, values, captionGrain(reply.data.labels, grain));
+    // "Up 12% vs last year" adds the months; an average (or a stock) can't be added across time, so it gets the series and no caption.
+    const cap = (await measureAdditivity(projectId, datasetId, enc.values[0])).time
+      ? overlayCaption(enc.values[0].column, cur.values, values, captionGrain(reply.data.labels, grain))
+      : null;
     return {
       ...reply,
       data: { ...reply.data, series },
