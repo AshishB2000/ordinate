@@ -27,6 +27,7 @@ import { engineVizData } from './engineViz';
 import type { CohortGrid } from './cohortData';
 import type { EventFunnel } from './funnelEvents';
 import type { FacetGrid } from './facets';
+import type { ValueLabelPairs } from './valueLabels';
 
 // === the buildChart input shape (chartRender.ts). A series is "plottable" when
 // values is a non-empty array; non-numeric cells MUST be null (the renderers test
@@ -60,6 +61,8 @@ export interface VizDataResult {
     facets?: FacetGrid;
     /** The project's events on a date axis (./events), when any land on it. r8:events */
     events?: EventMark[];
+    /** What a stored category value or split value is called (./valueLabels), only for values in this reply. */
+    valueLabels?: ValueLabelPairs;
   };
   recommendedShape: string; // feeds the renderer's eligibleChartTypes()
   warnings: string[];

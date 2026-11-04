@@ -383,6 +383,7 @@ export const MAIN_FILES = [
   'src/data/termMessages.ts',
   'src/engine/formulaSqlMessages.ts',
   'src/app/tableDocMessages.ts',
+  'src/analysis/valueLabelMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
