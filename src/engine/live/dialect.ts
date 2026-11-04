@@ -122,13 +122,36 @@ export interface SqlDialect {
    * bounds the rows (but not, on BigQuery, the bytes: the estimate gate does).
    */
   tableSample(plan: SamplePlan): string | null;
+  // ── What a formula needs (semantic layer part 8, step 03: ./formulaSql.ts) ──
+  /** Lower / upper case. Live REFUSES both today (their case maps disagree with JS's); kept for the pin that says so. */
+  lower(x: string): string;
+  upper(x: string): string;
+  /** JS `trim()`: the class above, from both ends. `caseKey` without its lower. NULL stays NULL. */
+  trimJs(x: string, b: Binder): string;
+  /** `Math.floor` / `Math.ceil` of a DOUBLE, as a DOUBLE. */
+  floor(x: string): string;
+  ceil(x: string): string;
+  /** A DATE's year, month, day of month or quarter, as an integer. */
+  datePart(d: string, part: DatePart): string;
 }
+
+export type DatePart = 'year' | 'month' | 'day' | 'quarter';
 
 /** A `contains` needle → the LIKE pattern, with `%`, `_` and the escape itself escaped. */
 export function likePattern(needle: string, esc: string): string {
+  return likeAffix(needle, esc, 'contains');
+}
+
+/** `likePattern`'s escaping, with `%` where `where` puts it: around, after (`starts`) or before (`ends`). */
+export function likeAffix(needle: string, esc: string, where: 'contains' | 'starts' | 'ends'): string {
   let out = '';
   for (const ch of needle) out += ch === '%' || ch === '_' || ch === esc ? esc + ch : ch;
-  return `%${out}%`;
+  return where === 'starts' ? `${out}%` : where === 'ends' ? `%${out}` : `%${out}%`;
+}
+
+/** `EXTRACT(<PART> FROM d)`: every dialect's but ClickHouse's. */
+export function extractPart(d: string, part: DatePart): string {
+  return `EXTRACT(${part.toUpperCase()} FROM ${d})`;
 }
 
 /** `"…"` with `"` doubled — Snowflake, Redshift, DuckDB. */

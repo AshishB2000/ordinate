@@ -9,7 +9,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, sqlPercent } from '../dialect';
+import { JS_WHITESPACE, extractPart, sqlPercent } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'STRING', number: 'FLOAT64', boolean: 'BOOL', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -47,4 +47,10 @@ export const bigqueryDialect: SqlDialect = {
   // table's row estimate to pick a percent; without one the LIMIT bounds the rows and
   // the estimate gate (../schemaSync.ts) bounds the bill. Tables only: never a query source.
   tableSample: (plan) => (plan.percent === undefined ? null : `TABLESAMPLE SYSTEM (${sqlPercent(plan.percent)} PERCENT)`),
+  lower: (x) => `LOWER(${x})`,
+  upper: (x) => `UPPER(${x})`,
+  trimJs: (x, b) => `TRIM(${x}, ${b.bind('text', JS_WHITESPACE)})`,
+  floor: (x) => `FLOOR(${x})`,
+  ceil: (x) => `CEIL(${x})`,
+  datePart: extractPart,
 };

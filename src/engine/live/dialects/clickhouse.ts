@@ -20,6 +20,8 @@ const TRUNC: Record<string, string> = {
   week: 'toMonday', month: 'toStartOfMonth', quarter: 'toStartOfQuarter', year: 'toStartOfYear',
 };
 
+const PART: Record<string, string> = { year: 'toYear', month: 'toMonth', day: 'toDayOfMonth', quarter: 'toQuarter' };
+
 /** A backquoted identifier; `\` and `` ` `` are escaped with a backslash. */
 function ident(name: string): string {
   return '`' + name.replace(/\\/g, '\\\\').replace(/`/g, '\\`') + '`';
@@ -55,4 +57,10 @@ export const clickhouseDialect: SqlDialect = {
   // SAMPLE needs the table's SAMPLE BY key (asked first, ../profileSql.ts); without one
   // ClickHouse refuses it, so the LIMIT bounds the rows instead.
   tableSample: (plan) => (plan.samplingKey ? `SAMPLE ${sqlInt(plan.rows)}` : null),
+  lower: (x) => `lowerUTF8(${x})`,
+  upper: (x) => `upperUTF8(${x})`,
+  trimJs: (x) => `replaceRegexpAll(${x}, '^[${CLASS_LITERAL}]+|[${CLASS_LITERAL}]+$', '')`,
+  floor: (x) => `floor(${x})`,
+  ceil: (x) => `ceil(${x})`,
+  datePart: (d, part) => `${PART[part]}(${d})`,
 };
