@@ -67,6 +67,8 @@ const bigquery: typeof import('../src/connectors/bigquery') = require('../src/co
 const LOCAL = ['duckdb-file', 'parquet-folder', 'csv-folder'];
 const CANARY = `Canary/pw+${randomBytes(6).toString('hex')}=x y`;
 const CANARY2 = `Second/pw+${randomBytes(6).toString('hex')}`;
+const SIBLING = randomUUID(); // a connection id with source docs and no record: only a delete's range could reach it
+const DOC = randomUUID();
 const MASTER = randomBytes(32);
 
 /** Every spelling a leak could take: plain, URL-encoded, hex, base64/base64url at all 3 alignments (as test-secrets). */
@@ -278,11 +280,31 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     ok('replaceSecret: tested with the new value, stored, never echoed', rep.body.ok && rep.body.connection.secretSet.password === true
       && seen.includes(CANARY2) && (await enc.get('default', 'connection.password', connId)) === CANARY2, JSON.stringify(rep.body).slice(0, 200));
 
+    // Source table docs (p2-02, written raw as a newer release would): rows under the connection's
+    // folder and its index, plus a sibling connection's, which a delete must never touch.
+    const docRows = async (id: string): Promise<number> =>
+      Number((await pool.query(`SELECT count(*) FROM records WHERE path LIKE $1`, [`projects/${project}/connections/${id}%`])).rows[0].count);
+    for (const id of [connId, SIBLING]) {
+      for (const rel of [`${id}.tables.json`, `${id}/tables/${DOC}.json`]) {
+        const c = await pool.connect();
+        try {
+          await c.query('BEGIN');
+          await c.query(`SELECT set_config('ordinate.org', 'default', true)`);
+          await c.query(`INSERT INTO records (org_id, path, body) VALUES ('default', $1, '{}')`, [`projects/${project}/connections/${rel}`]);
+          await c.query('COMMIT');
+        } finally {
+          c.release();
+        }
+      }
+    }
+    ok('docs: planted as rows (index and doc, both connections)', (await docRows(connId)) === 3 && (await docRows(SIBLING)) === 2);
+
     // One project cannot reach another's connection — run or delete.
     const crossRun = await call(srv.base, 'connection:listTables', { projectId: other, connId });
     const crossDel = await call(srv.base, 'connection:delete', { projectId: other, connId });
     ok('cross-project: another project\'s id finds no connection, and its secret survives', crossRun.body.ok === false && crossDel.body.ok === false
       && (await enc.get('default', 'connection.password', connId)) === CANARY2);
+    ok('cross-project: the refused delete left every doc row', (await docRows(connId)) === 3);
 
     // ── Snowflake (L1.1): a multi-line private key and its passphrase ──────
     // The key goes in the `token` slot and the passphrase in `password`; the
@@ -413,6 +435,8 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     const del = await call(srv.base, 'connection:delete', { projectId: project, connId });
     ok('delete: ok, and the store no longer has the password', del.body.ok === true && (await enc.get('default', 'connection.password', connId)) === null
       && (await pool.query('SELECT 1 FROM secrets WHERE ref = $1', [connId])).rowCount === 0);
+    ok('delete: the record, the index and every doc row go (one range delete)', (await docRows(connId)) === 0, await docRows(connId));
+    ok('NEGATIVE CONTROL: the sibling connection\'s doc rows stay', (await docRows(SIBLING)) === 2);
     await srv.close();
     ok('log: the trace-level server log never carries the canary', appLog.length > 1000 && !leaks(appLog));
     ok('output: nothing this process printed carries the canary', !leaks(captured));

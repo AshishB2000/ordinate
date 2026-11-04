@@ -647,13 +647,28 @@ export async function deleteQuery(
   return saved ? saved.queries : null;
 }
 
-// Delete a connection file. Returns true on success (force → missing is
+// A connection's source table docs: the index and the folder of docs a newer release
+// writes beside it. This release only cleans up. Best effort, each on its own: a doc
+// that cannot go is a harmless orphan, never a half-deleted connection.
+async function dropSourceDocs(projectId: string, id: string): Promise<void> {
+  const base = path.join(connectionsDir(projectId), id);
+  for (const [p, opts] of [[base + '.tables.json', { force: true }], [base, { recursive: true, force: true }]] as const) {
+    try {
+      await recordFs.rm(p, opts);
+    } catch (err) {
+      logger.error('[connections] Could not delete source table docs:', id, err instanceof Error ? err.message : err);
+    }
+  }
+}
+
+// Delete a connection file, then its source table docs. Returns true on success (force → missing is
 // success). The caller (IPC layer) is responsible for also dropping the secret
 // via config.deleteConnectionSecret(id).
 export async function deleteConnection(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   try {
     await recordFs.rm(connectionFilePath(projectId, id), { force: true });
+    await dropSourceDocs(projectId, id); // after the record: a retry finds the connection gone, so this must not fail the delete
     emitChange(projectId, id, null);
     return true;
   } catch (_) {
