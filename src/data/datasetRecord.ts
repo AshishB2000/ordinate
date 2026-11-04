@@ -333,7 +333,9 @@ export async function writeRecordKeepingPolicy(file: string, obj: object): Promi
  */
 export async function storedRules(projectId: string, id: string): Promise<KeptRules> {
   if (!isValidId(projectId) || !isValidId(id)) return {};
-  for (const file of [datasetFilePath(projectId, id), entryPath(projectId, 'dataset', id)]) {
+  const live = datasetFilePath(projectId, id);
+  // Live once more after a Trash miss: a restore writes the live record, then removes the entry, between our reads.
+  for (const file of [live, entryPath(projectId, 'dataset', id), live]) {
     let text: string;
     try {
       text = await recordFs.readFile(file, 'utf8');

@@ -490,6 +490,7 @@
   "rowAccessMessages.looking_at_past_data_is_off": "La consultation des données passées est désactivée pour les jeux de données soumis à des règles d’accès aux lignes.",
   "rowAccessMessages.pick_a_text_column_of_this": "Choisissez une colonne de texte de ce jeu de données pour les règles.",
   "rowAccessMessages.row_access_rules_need_the_server": "Les règles d’accès aux lignes ont besoin de l’annuaire des utilisateurs du serveur (DATABASE_URL).",
+  "rowAccessMessages.some_columns_of_this_dataset_are": "Certaines colonnes de ce jeu de données sont réservées à certaines personnes par des règles que cette version d’Ordinate ne sait pas encore appliquer : il vous est donc fermé. Demandez à votre admin de terminer la mise à niveau d’Ordinate.",
   "rowAccessMessages.the_row_access_rules_of_this": "Les règles d’accès aux lignes de ce jeu de données n’ont pas pu être lues pour l’instant : il vous est donc fermé. Réessayez dans un instant.",
   "rowAccessMessages.this_dataset_is_built_from_a": "Ce jeu de données est construit à partir d’un jeu soumis à des règles d’accès aux lignes : il vous est donc fermé jusqu’à ce qu’un admin du projet lui donne ses propres règles.",
   "rowAccessMessages.this_dataset_s_row_access_rules": "Les règles d’accès aux lignes de ce jeu de données nomment une colonne qu’il n’a plus : il vous est donc fermé jusqu’à ce qu’un admin du projet les corrige.",

@@ -10,7 +10,8 @@
 //              Live writers, the mode switch both ways) and is born on every copy (savedFrom, "Make a copy" of
 //              a Live dataset), raw; a copy closed only by an upstream dataset's rules is born with closed row
 //              rules, one with only its own columnAccess is not; a source with rules that goes to the Trash
-//              mid-copy, or whose record is gone by the time its rules are read, never gives an open copy.
+//              mid-copy, or whose record is gone by the time its rules are read, never gives an open copy; nor
+//              do rules saved between a source's check and the copy's read, or a restore mid-read.
 //              NEGATIVE CONTROL: with 'columnAccess' taken out of KEPT_RECORD_KEYS, the writers drop it.
 //              Runs in server mode (the fake warehouse), after § status, which runs outside it.
 //
@@ -234,6 +235,43 @@ async function columnAccess(): Promise<void> {
       return access.rulesForCopyOf(P, GONE);
     });
     ok('a source with rules whose record is gone when its rules are read gives the closed policy', stableStringify(goneRules) === stableStringify({ rowPolicy: CLOSED }), JSON.stringify(goneRules));
+    // Its check found no rules, then rules were saved before the copy read them: the copy is born with those.
+    const LATE = await save('Rules saved after the check');
+    const lateRules = await as(async () => {
+      await access.policyClosed(P, LATE); // the request remembers "no rules"
+      await rec.serialized(rec.datasetFilePath(P, LATE), (r) => { r.rowPolicy = ruled; return true; });
+      return access.rulesForCopyOf(P, LATE);
+    });
+    ok('rules saved on a source between its check and the copy\'s read are the copy\'s, never none', stableStringify(lateRules) === stableStringify({ rowPolicy: ruled }), JSON.stringify(lateRules));
+    // A restore that lands between a read's live miss and its Trash miss (it writes the live record, then removes
+    // the entry): the live record is read once more, never "no rules".
+    const midRestore = async <T>(id: string, read: () => Promise<T>): Promise<{ value: T; fired: boolean }> => {
+      const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+      const { entryPath } = require('../src/app/trashStore') as typeof import('../src/app/trashStore');
+      const entry = await as(async () => entryPath(P, 'dataset', id)); // the org's path: inside a request
+      const realRead = recordFs.readFile;
+      let fired = false;
+      (recordFs as { readFile: unknown }).readFile = async (p: string, ...rest: unknown[]) => {
+        if (!fired && p === entry) {
+          fired = true;
+          await trash.restore(P, 'dataset', id);
+        }
+        return (realRead as (...a: unknown[]) => Promise<string>)(p, ...rest);
+      };
+      try { return { value: await as(read), fired }; } finally { (recordFs as { readFile: unknown }).readFile = realRead; }
+    };
+    const RESTORING = await save('Column rules, restored mid-read');
+    await plant(RESTORING);
+    await as(() => trash.trashRecord(P, 'dataset', RESTORING));
+    const raced = await midRestore(RESTORING, () => rec.storedRules(P, RESTORING));
+    ok('storedRules: a restore between its live and Trash reads still finds the column rules', raced.fired && stableStringify(raced.value) === stableStringify({ columnAccess: CA }), JSON.stringify(raced));
+    await as(() => trash.trashRecord(P, 'dataset', RESTORING));
+    const gated = await midRestore(RESTORING, () => access.policyClosed(P, RESTORING));
+    ok('the row access check: the same restore race still reads it as closed', gated.fired && gated.value === true, JSON.stringify(gated));
+    const restoredOpen = await save('No rules, restored mid-read');
+    await as(() => trash.trashRecord(P, 'dataset', restoredOpen));
+    const open = await midRestore(restoredOpen, () => access.policyClosed(P, restoredOpen));
+    ok('NEGATIVE CONTROL: the same race on a dataset with no rules reads open', open.fired && open.value === false, JSON.stringify(open));
 
     // NEGATIVE CONTROL: the real guard, with 'columnAccess' taken out of KEPT_RECORD_KEYS, drops it on every persist and copy.
     const keys = rec.KEPT_RECORD_KEYS as unknown as string[];
