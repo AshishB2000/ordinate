@@ -22,6 +22,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
+import { captureLogs } from './logCapture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -315,18 +316,76 @@ async function main(): Promise<void> {
     && rel.relWarning({ matched: 4, unmatchedFrom: 0, fromKeys: 3, fromKeyed: 4, toKeys: 3, toKeyed: 4 }, 'email', 'customer_id')?.kind === 'not_key');
   await call('catalog:setTable', { projectId: P, datasetId: CUST, patch: { key: '' } });
 
-  // Every write to relationships.json takes the lock: two saves at once, and a re-check beside them, lose nobody's edit.
+  // Every write to relationships.json takes the lock. The harness makes the overlap certain: a read of the file is held
+  // after it has returned until the OTHER writer has read too (or 200 ms pass, which is what the lock makes happen,
+  // since the second writer cannot read before the first has written). Without the lock both write from the same base.
+  const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+  const realRead = recordFs.readFile;
   const before = (await call('relationship:list', { projectId: P })).relationships.length;
-  const [r1, r2] = await Promise.all([
-    call('relationship:save', { projectId: P, relationship: { from: { datasetId: D, column: 'line_id' }, to: { datasetId: CUST, column: 'customer_id' }, cardinality: 'many_to_one' } }),
-    call('relationship:save', { projectId: P, relationship: { from: { datasetId: NOKEY, column: 'note' }, to: { datasetId: CUST, column: 'email' }, cardinality: 'many_to_one' } }),
-    qualityRun.runQualityChecks(P, CUST),
+  let reads = 0;
+  let bothRead!: () => void;
+  const barrier = new Promise<void>((r) => { bothRead = r; });
+  (recordFs as any).readFile = async (...a: any[]): Promise<any> => {
+    const data = await (realRead as any)(...a);
+    if (String(a[0]).endsWith('relationships.json')) {
+      reads += 1;
+      if (reads >= 2) bothRead();
+      await Promise.race([barrier, new Promise((r) => setTimeout(r, 200))]);
+    }
+    return data;
+  };
+  const [w1, w2] = await Promise.all([
+    rel.saveRelationship(P, { from: { datasetId: D, column: 'line_id' }, to: { datasetId: CUST, column: 'customer_id' }, cardinality: 'many_to_one' }),
+    rel.saveRelationship(P, { from: { datasetId: NOKEY, column: 'note' }, to: { datasetId: CUST, column: 'email' }, cardinality: 'many_to_one' }),
   ]);
-  const after = (await call('relationship:list', { projectId: P })).relationships;
-  ok('two concurrent saves and a re-check all land', r1.ok === true && r2.ok === true && after.length === before + 2 && [r1, r2].every((r) => after.some((x: any) => x.id === r.relationship.id)), `${before} -> ${after.length}`);
-  await call('relationship:delete', { projectId: P, id: r1.relationship.id });
-  await call('relationship:delete', { projectId: P, id: r2.relationship.id });
-  ok('relationship:delete still removes one, and a second delete says no', (await call('relationship:list', { projectId: P })).relationships.length === before && (await call('relationship:delete', { projectId: P, id: r1.relationship.id })).ok === false);
+  (recordFs as any).readFile = realRead;
+  const after = await rel.listRelationships(P);
+  ok('two writers that read the file at once both land: the lock serializes them', !!w1 && !!w2 && after.length === before + 2 && after.some((x) => x.id === w1.id) && after.some((x) => x.id === w2.id), `${before} -> ${after.length}, ${reads} read(s)`);
+  ok('…and each did read the file (the harness was in the way)', reads >= 2, `${reads} read(s)`);
+  await call('relationship:delete', { projectId: P, id: w1!.id });
+  await call('relationship:delete', { projectId: P, id: w2!.id });
+  ok('relationship:delete still removes one, and a second delete says no', (await call('relationship:list', { projectId: P })).relationships.length === before && (await call('relationship:delete', { projectId: P, id: w1!.id })).ok === false);
+
+  // A key count that throws does not skip the re-check of the relationships into the dataset.
+  await call('catalog:setTable', { projectId: P, datasetId: CUST, patch: { key: 'customer_id' } });
+  const realWriteCheck = store.writeKeyCheck;
+  (store as any).writeKeyCheck = async (): Promise<never> => { throw new Error('boom'); };
+  await datasets.updateDatasetData(P, CUST, { columns: CUSTCOLS, rows: custRows(['1', '2', '2', '4']) });
+  await qualityRun.runQualityChecks(P, CUST);
+  (store as any).writeKeyCheck = realWriteCheck;
+  ok('a key count that throws still lets the hook re-verify the relationships (repeats back)', JSON.stringify(await warningOf(relId)) === JSON.stringify({ kind: 'repeats', repeats: 1 }), JSON.stringify(await warningOf(relId)));
+  await datasets.updateDatasetData(P, CUST, { columns: CUSTCOLS, rows: custRows(['1', '2', '3', '4']) });
+  await qualityRun.runQualityChecks(P, CUST);
+  await call('catalog:setTable', { projectId: P, datasetId: CUST, patch: { key: '' } });
+
+  // A re-check that counted under an older key must not overwrite what the newer key's re-check wrote.
+  const realGetDoc = store.getTableDoc;
+  let fired = false;
+  (store as any).getTableDoc = async (...a: any[]): Promise<any> => {
+    const doc = await (realGetDoc as any)(...a); // the key as this re-check sees it: none
+    if (!fired) { fired = true; await call('catalog:setTable', { projectId: P, datasetId: CUST, patch: { key: 'email' } }); } // a person declares email meanwhile
+    return doc;
+  };
+  await tableIpc.recheckRelationshipsTo(P, CUST);
+  (store as any).getTableDoc = realGetDoc;
+  ok('a re-check that counted under the old key leaves the new key\'s not_key warning alone', JSON.stringify(await warningOf(relId)) === JSON.stringify({ kind: 'not_key', key: 'email' }), JSON.stringify(await warningOf(relId)));
+  await call('catalog:setTable', { projectId: P, datasetId: CUST, patch: { key: '' } });
+
+  // relationship:save reads each key column BY NAME in the columns its source returns (resident and JS), as the key check does.
+  const baseline = await call('relationship:save', { projectId: P, relationship: edge });
+  (datasets as any).getDatasetMeta = reversed; // the metadata lists every dataset's columns in another order than its source
+  const viaMeta = await call('relationship:save', { projectId: P, relationship: edge });
+  (datasets as any).residentSource = async (): Promise<null> => null;
+  const viaMetaJs = await call('relationship:save', { projectId: P, relationship: edge });
+  (datasets as any).residentSource = realResident;
+  (datasets as any).getDatasetMeta = realMeta;
+  ok('relationship:save counts the named columns when the metadata order differs (resident)', baseline.ok === true && JSON.stringify(viaMeta.stats) === JSON.stringify(baseline.stats), JSON.stringify([baseline.stats, viaMeta.stats]));
+  ok('…and the JS reference does too', JSON.stringify(viaMetaJs.stats) === JSON.stringify(baseline.stats), JSON.stringify(viaMetaJs.stats));
+  const listed0 = (await call('relationship:list', { projectId: P })).relationships.length;
+  (datasets as any).getDatasetMeta = async (...a: any[]): Promise<any> => { const m = await (realMeta as any)(...a); return m && { ...m, columns: [...m.columns, T('ghost')] }; };
+  const ghostEdge = await call('relationship:save', { projectId: P, relationship: { ...edge, from: { datasetId: ORD, column: 'ghost' } } });
+  (datasets as any).getDatasetMeta = realMeta;
+  ok('a key column gone from its source saves no relationship (never a count of zeros)', ghostEdge.ok === false && (await call('relationship:list', { projectId: P })).relationships.length === listed0, JSON.stringify(ghostEdge));
 
   // A refresh that drops the key column clears the count (the key stays: it is the person's); one that brings it back counts again.
   await call('catalog:setTable', { projectId: P, datasetId: D, patch: { key: 'line_id' } });
@@ -338,6 +397,16 @@ async function main(): Promise<void> {
   await datasets.updateDatasetData(P, D, { columns: [N('qty'), T('line_id')], rows: [[1, 'L1'], [2, 'L2'], [3, 'L2'], [4, 'L3']] });
   await qualityRun.runQualityChecks(P, D);
   ok('…and one that brings it back (in another position) counts it again, by name', JSON.stringify(counts((await call('catalog:getTable', { projectId: P, datasetId: D })).table)) === JSON.stringify(COUNTS));
+
+  // A recapture (replace, append) is a data change the quality hook now sees: the key is counted again.
+  require('../src/ipc/captureDataset').register();
+  const CAP = (await datasets.saveDataset(P, { name: 'Captured', sourceKind: 'capture', columns: [T('code')], rows: [['A'], ['B'], ['B']] }))!.id;
+  const capKeyed = await call('catalog:setTable', { projectId: P, datasetId: CAP, patch: { key: 'code' } });
+  ok('setup: the captured table\'s key is counted (3 rows, 1 repeated key)', JSON.stringify(counts(capKeyed.table)) === JSON.stringify({ rows: 3, empty: 0, repeatedKeys: 1 }), JSON.stringify(capKeyed));
+  const recap = await call('captureDataset:save', { projectId: P, columns: [{ name: 'code', type: 'text' }], rows: [['A'], ['B'], ['C'], ['D']], target: { mode: 'replace', datasetId: CAP } });
+  ok('a recapture that replaces the rows recounts the key: 4 rows, none repeated', recap.ok === true && JSON.stringify(counts(await store.getTableDoc(P, CAP))) === JSON.stringify({ rows: 4, empty: 0, repeatedKeys: 0 }), JSON.stringify(recap).slice(0, 200));
+  const appended = await call('captureDataset:save', { projectId: P, columns: [{ name: 'code', type: 'text' }], rows: [['D']], target: { mode: 'append', datasetId: CAP } });
+  ok('…and one that appends recounts it: 5 rows, D repeated', appended.ok === true && JSON.stringify(counts(await store.getTableDoc(P, CAP))) === JSON.stringify({ rows: 5, empty: 0, repeatedKeys: 1 }), JSON.stringify(appended).slice(0, 200));
 
   // Nothing documented, nothing related: the hook reads no rows.
   hydrated = 0;
@@ -362,6 +431,20 @@ async function main(): Promise<void> {
     ok('Live: a key save, the hook and a refresh send the warehouse nothing', lsave.ok === true && !('keyCheck' in lsave.table) && lrefresh?.ok === true && calls() === c0, `${calls() - c0} call(s) ${JSON.stringify(lsave)}`);
     const lcheck = await call('catalog:checkKey', { projectId: P, datasetId: lv2.id });
     ok('…then Check now sends exactly one, and stores its count (240 rows, 4 regions repeated)', calls() === c0 + 1 && lcheck.ok === true && JSON.stringify(counts(lcheck.table)) === JSON.stringify({ rows: 240, empty: 0, repeatedKeys: 4 }), `${calls() - c0} call(s) ${JSON.stringify(lcheck)}`);
+    // A relationship FROM a Live dataset has no rows here to re-verify: the re-check skips it before reading, and says nothing.
+    const liveEdge = await rel.saveRelationship(P, { from: { datasetId: lv2.id, column: 'region' }, to: { datasetId: CUST, column: 'customer_id' }, cardinality: 'many_to_one' });
+    const touched: string[] = [];
+    const wasGet = datasets.getDataset;
+    const wasRes = datasets.residentSource;
+    (datasets as any).getDataset = async (p: string, id: string, ...r: any[]): Promise<any> => { touched.push(id); return (wasGet as any)(p, id, ...r); };
+    (datasets as any).residentSource = async (p: string, id: string, ...r: any[]): Promise<any> => { touched.push(id); return (wasRes as any)(p, id, ...r); };
+    const cap = captureLogs();
+    await tableIpc.recheckRelationshipsTo(P, CUST);
+    cap.restore();
+    (datasets as any).getDataset = wasGet;
+    (datasets as any).residentSource = wasRes;
+    ok('a Live FROM side is skipped: its rows are never asked for, and nothing is logged as an error', !!liveEdge && !touched.includes(lv2.id) && touched.includes(ORD) && cap.at('error').length === 0, `${touched.length} read(s) ${JSON.stringify(cap.at('error'))}`);
+    if (liveEdge) await rel.deleteRelationship(P, liveEdge.id);
     await tableIpc.afterTableData(P, lv2.id);
     ok('…and the hook still leaves that Live count alone', calls() === c0 + 1 && counts(await store.getTableDoc(P, lv2.id))?.rows === 240);
   } else {

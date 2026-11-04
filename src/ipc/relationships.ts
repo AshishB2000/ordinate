@@ -28,6 +28,7 @@ import type { JoinSource } from '../engine/joinResident';
 import * as trace from '../engine/residentTrace';
 import { isValidId } from '../app/ids';
 import { getTableDoc } from '../app/tableDocs';
+import { closedToCaller } from '../data/rowAccess';
 
 type Infos = Map<string, DsInfo>;
 
@@ -210,27 +211,33 @@ export async function relatedColumnNames(projectId: string, datasetId: string): 
 
 interface SideRef { parquetPath: string; index: number; type: 'text' | 'number' | 'date' }
 
-async function side(projectId: string, info: DsInfo, column: string): Promise<{ ref: SideRef | null; cells: () => Promise<any[]> }> {
-  const index = info.columns.findIndex((c) => c.name === column);
+/**
+ * One key column, found BY NAME in the columns each read returns — a refresh between two reads can reorder or drop
+ * them, so an index (or a type) from the metadata read is never reused against a later source read. `ref` is the
+ * Parquet when resident; `cells` hydrates the column, or is null when the column is gone from that source.
+ */
+async function side(projectId: string, info: DsInfo, column: string): Promise<{ ref: SideRef | null; cells: () => Promise<{ cells: any[]; type: SideRef['type'] } | null> }> {
   const src = isResident() ? await datasets.residentSource(projectId, info.id) : null;
-  const ref = src && index >= 0 ? { parquetPath: src.parquetPath, index, type: info.columns[index].type } : null;
-  const cells = async (): Promise<any[]> => {
+  const index = src ? src.columns.findIndex((c) => c.name === column) : -1;
+  const ref = src && index >= 0 ? { parquetPath: src.parquetPath, index, type: src.columns[index].type } : null;
+  const cells = async (): Promise<{ cells: any[]; type: SideRef['type'] } | null> => {
     const ds = await datasets.getDataset(projectId, info.id);
-    return ds && index >= 0 ? ds.rows.map((r) => r[index]) : [];
+    const at = ds ? ds.columns.findIndex((c) => c.name === column) : -1;
+    return ds && at >= 0 ? { cells: ds.rows.map((r) => r[at]), type: ds.columns[at].type } : null;
   };
   return { ref, cells };
 }
 
-export async function keyStats(projectId: string, from: DsInfo, fromCol: string, to: DsInfo, toCol: string): Promise<KeyStats> {
+/** Null: a key column is gone from its source — there is no count to give (never a count of zeros). */
+export async function keyStats(projectId: string, from: DsInfo, fromCol: string, to: DsInfo, toCol: string): Promise<KeyStats | null> {
   const a = await side(projectId, from, fromCol);
   const b = await side(projectId, to, toCol);
   if (a.ref && b.ref) {
     const s = await keyStatsResident(a.ref, b.ref);
     if (s) return s;
   }
-  const fType = from.columns.find((c) => c.name === fromCol)?.type || 'text';
-  const tType = to.columns.find((c) => c.name === toCol)?.type || 'text';
-  return keyStatsJs(await a.cells(), fType, await b.cells(), tType);
+  const [f, t] = [await a.cells(), await b.cells()];
+  return f && t ? keyStatsJs(f.cells, f.type, t.cells, t.type) : null;
 }
 
 /** Ranked key pairs for FROM → TO, each with its sampled match rate and the cardinality the data supports. */
@@ -275,6 +282,7 @@ async function save(projectId: string, raw: any): Promise<any> {
     return { ok: false, error: 'That column no longer exists.' };
   }
   const stats = await keyStats(projectId, from, rel.from.column, to, rel.to.column);
+  if (!stats) return { ok: false, error: 'That column no longer exists.' };
   rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
   rel.warning = rels.relWarning(stats, (await getTableDoc(projectId, rel.to.datasetId)).key, rel.to.column); // always fresh: never the caller's
   const saved = await rels.saveRelationship(projectId, rel);
@@ -282,10 +290,24 @@ async function save(projectId: string, raw: any): Promise<any> {
   return { ok: true, relationship: withMatchPct(saved), stats };
 }
 
+/**
+ * A warning's `repeats` counts every row of the TO dataset, so a caller the dataset's row rules close it to gets the edge
+ * without it (REDACT, as `catalog:getTable` withholds `keyCheck`). A writer is never closed, so `relationship:save` needs no such step.
+ */
+async function withheldWarnings(projectId: string, list: Relationship[]): Promise<Relationship[]> {
+  const out: Relationship[] = [];
+  for (const r of list) {
+    if (!r.warning || !(await closedToCaller(projectId, r.to.datasetId))) { out.push(r); continue; }
+    const { warning: _withheld, ...open } = r;
+    out.push(open);
+  }
+  return out;
+}
+
 export function register(): void {
   ipcMain.handle('relationship:list', async (_e, { projectId }: any = {}) => {
     try {
-      return { ok: true, relationships: (await rels.listRelationships(projectId)).map(withMatchPct) };
+      return { ok: true, relationships: (await withheldWarnings(projectId, await rels.listRelationships(projectId))).map(withMatchPct) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read relationships' };
     }

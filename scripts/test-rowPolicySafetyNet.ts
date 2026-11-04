@@ -206,6 +206,15 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('redact: catalog:getTable — east gets no keyCheck', tEast.body?.ok === true && !('keyCheck' in tEast.body.table), tEast.text.slice(0, 200));
     ok('…and still gets the key and the guide, which are words, not counts', tEast.body.table.key === 'customer' && tEast.body.table.guide === 'One row per order.');
     ok('NEGATIVE CONTROL: the editor gets it', tEd.body?.ok === true && tEd.body.table.keyCheck?.rows === 126, tEd.text.slice(0, 200));
+    // A relationship's stored warning counts every row of its TO dataset (`repeats`): east, closed to Orders, gets the edge without it.
+    const edge = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: east, column: 'customer' }, to: { datasetId: orders, column: 'customer' }, cardinality: 'many_to_one' } });
+    const relEast = await W.call('east', 'relationship:list', { projectId: P });
+    const relEd = await W.call('ed', 'relationship:list', { projectId: P });
+    eastReplies.push(relEast.text);
+    ok('setup: an edge into Orders carries a repeats warning', edge.body?.ok === true && edge.body.relationship.warning?.kind === 'repeats', edge.text.slice(0, 200));
+    ok('redact: relationship:list — east gets the edge without its warning', relEast.body?.ok === true && relEast.body.relationships.length === 1 && !('warning' in relEast.body.relationships[0]) && relEast.body.relationships[0].to.datasetId === orders, relEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor gets the warning', relEd.body?.ok === true && relEd.body.relationships[0]?.warning?.kind === 'repeats', relEd.text.slice(0, 240));
+    await W.call('boss', 'relationship:delete', { projectId: P, id: edge.body.relationship.id });
     ok('write: east gets 403 from catalog:setTable and catalog:checkKey',
       (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
         && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);

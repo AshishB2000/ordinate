@@ -156,13 +156,14 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
 /**
  * Every write to relationships.json: read, change and write under one lock (`recordFs.locked`, every pod), so a
  * person's save and the re-check after a refresh cannot lose each other's edit. `fn` returns the new list — the same
- * array to change nothing, which writes nothing. False when the write failed.
+ * array to change nothing, which writes nothing — and may be async (it holds the lock meanwhile: keep it short).
+ * False when the write failed.
  */
-export async function updateRelationships(projectId: string, fn: (list: Relationship[]) => Relationship[]): Promise<boolean> {
+export async function updateRelationships(projectId: string, fn: (list: Relationship[]) => Relationship[] | Promise<Relationship[]>): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   return recordFs.locked(modelFile(projectId), async () => {
     const list = await listRelationships(projectId);
-    const next = fn(list);
+    const next = await fn(list);
     return next === list ? true : writeAll(projectId, next);
   });
 }

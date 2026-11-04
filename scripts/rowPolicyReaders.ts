@@ -133,7 +133,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'rebuild:match': 'NET',
   'rebuild:read': 'META',
   'recent:list': 'META',
-  'relationship:list': 'META',
+  'relationship:list': 'REDACT', // a warning's `repeats` counts every row of the TO dataset: withheld from a caller closed to it
   'relationship:related': 'META',
   'relationship:suggest': 'NET',
   'report:build': 'EXPORT',

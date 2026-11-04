@@ -112,8 +112,9 @@ async function countedAfterSave(projectId: string, datasetId: string, saved: Tab
  * Recompute `verified` and `warning` of every relationship whose TO side is this dataset, from full-table counts over
  * the rows it has now and the key it declares now. The counts run outside the lock; the write goes through
  * `updateRelationships` and touches only those two fields of an entry that still joins the same two columns, so a
- * person's save made meanwhile is never lost. Nothing is written when the counts did not move. Never throws: one
- * relationship that cannot be counted stays as it was.
+ * person's save made meanwhile is never lost. Nothing is written when the counts did not move, or when the declared key
+ * moved since they were made (the re-check that follows that key owns the warnings). Never throws: a relationship that
+ * cannot be counted (a Live side, a column gone) stays as it was.
  */
 export async function recheckRelationshipsTo(projectId: string, datasetId: string): Promise<void> {
   try {
@@ -123,16 +124,21 @@ export async function recheckRelationshipsTo(projectId: string, datasetId: strin
     const fresh = new Map<string, { counted: Relationship; verified: Relationship['verified']; warning: RelWarning | undefined }>();
     for (const r of into) {
       try {
-        const [from, to] = [await infoFor(projectId, r.from.datasetId), await infoFor(projectId, r.to.datasetId)];
-        if (!from || !to || !from.columns.some((c) => c.name === r.from.column) || !to.columns.some((c) => c.name === r.to.column)) continue;
+        const fromMeta = await datasets.getDatasetMeta(projectId, r.from.datasetId);
+        if (!fromMeta || isLive(fromMeta)) continue; // a Live side has no rows here: its relationships are not re-verified
+        const from = { id: r.from.datasetId, name: fromMeta.name, columns: fromMeta.columns };
+        const to = await infoFor(projectId, r.to.datasetId);
+        if (!to || !from.columns.some((c) => c.name === r.from.column) || !to.columns.some((c) => c.name === r.to.column)) continue;
         const stats = await keyStats(projectId, from, r.from.column, to, r.to.column);
-        fresh.set(r.id, { counted: r, verified: { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom }, warning: relWarning(stats, key, r.to.column) });
+        if (stats) fresh.set(r.id, { counted: r, verified: { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom }, warning: relWarning(stats, key, r.to.column) });
       } catch (err) {
         logger.error('[tableDocs] a relationship could not be re-verified:', err instanceof Error ? err.message : 'failed');
       }
     }
     if (!fresh.size) return;
-    await updateRelationships(projectId, (list) => {
+    await updateRelationships(projectId, async (list) => {
+      // The key moved while this counted: the warnings were judged against the old one, and the re-check that follows the new key owns them.
+      if ((await getTableDoc(projectId, datasetId)).key !== key) return list;
       let changed = false;
       const next = list.map((r) => {
         const f = fresh.get(r.id);
@@ -162,8 +168,12 @@ export async function afterTableData(projectId: string, datasetId: string): Prom
     const { key } = await getTableDoc(projectId, datasetId);
     const into = (await listRelationships(projectId)).some((r) => r.to.datasetId === datasetId);
     if (key) {
-      if (meta.columns.some((c) => c.name === key)) await runKeyCheck(projectId, datasetId);
-      else await writeKeyCheck(projectId, datasetId, key, null); // the column is gone: its old count would be a stale "✓ unique"
+      try {
+        if (meta.columns.some((c) => c.name === key)) await runKeyCheck(projectId, datasetId);
+        else await writeKeyCheck(projectId, datasetId, key, null); // the column is gone: its old count would be a stale "✓ unique"
+      } catch (err) {
+        logger.error('[tableDocs] the key was not re-counted after its rows changed:', err instanceof Error ? err.message : 'failed'); // the relationships below do not depend on it
+      }
     }
     if (into) await recheckRelationshipsTo(projectId, datasetId);
   } catch (err) {
