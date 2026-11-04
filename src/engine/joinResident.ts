@@ -104,7 +104,7 @@ function measureLabel(m: ResidentMeasure): string {
 // `visualsResident.filterCannotWarn` over merged names: a step that would make
 // the JS reference warn must be answered BY the JS reference, warning included.
 function cannotWarn(f: FilterStep, names: Set<string>): boolean {
-  if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
+  if (!f || f.type !== 'filter' || f.via || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false; // via: the reference warns
   if (f.op === 'within_km' && !(f.radius && names.has(f.radius.lngColumn))) return false; // r6:geo
   return !(LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0));
 }

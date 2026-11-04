@@ -47,6 +47,7 @@ const FilterStep = z.strictObject({
   period: z.unknown().optional(),
   radius: z.unknown().optional(),
   context: z.boolean().optional(),
+  via: Uuid.optional(),
 });
 
 export const datasets = {

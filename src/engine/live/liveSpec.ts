@@ -231,6 +231,7 @@ export function adaptFilter(
   warnings: string[],
 ): LiveFilter | null | LiveRefusal {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
+  if (s.via) return refuse('related'); // a related table's column: Live joins stay off
   const col = columnOf(columns, s.column);
   if (!col && s.lock === true) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (!col) {

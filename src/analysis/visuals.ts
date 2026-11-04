@@ -69,6 +69,8 @@ export interface VizMeasure {
    * own dataset — every visual saved before relationships existed.
    */
   datasetId?: string;
+  /** The relationship (id) `datasetId` is reached through; kept only beside `datasetId`. */
+  via?: string;
   /**
    * "Calculate as" — a table calculation over this measure's AGGREGATED
    * figures (analysis/tableCalc.ts), run after the grid exists. Absent = the
@@ -112,6 +114,8 @@ export interface VizEncoding {
   /** The related dataset `category` / `series` come from (analysis/joinPlan.ts); absent = the visual's own. */
   categoryDatasetId?: string;
   seriesDatasetId?: string;
+  /** The relationship (id) `categoryDatasetId` is reached through; kept only beside it. */
+  categoryVia?: string;
   /**
    * OPTIONAL roll-up for a DATE category (day/week/month/quarter/year). Absent
    * means "pick the finest grain that keeps the axis readable", which is what
@@ -310,6 +314,7 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     // metricId, for the same reason: this id reaches a path in the metrics store.
     if (typeof vo.metricId === 'string' && UUID_RE.test(vo.metricId)) measure.metricId = vo.metricId;
     if (typeof vo.datasetId === 'string' && UUID_RE.test(vo.datasetId)) measure.datasetId = vo.datasetId;
+    if (measure.datasetId && typeof vo.via === 'string' && UUID_RE.test(vo.via)) measure.via = vo.via;
     const calc = sanitizeTableCalc(vo.calc);
     if (calc) measure.calc = calc;
     values.push(measure);
@@ -319,6 +324,7 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   if (typeof o.series === 'string' && o.series) enc.series = o.series;
   const catDs = o.categoryDatasetId;
   if (typeof catDs === 'string' && UUID_RE.test(catDs)) enc.categoryDatasetId = catDs;
+  if (enc.categoryDatasetId && typeof o.categoryVia === 'string' && UUID_RE.test(o.categoryVia)) enc.categoryVia = o.categoryVia;
   const serDs = o.seriesDatasetId;
   if (enc.series && typeof serDs === 'string' && UUID_RE.test(serDs)) enc.seriesDatasetId = serDs;
   // Whitelisted against DATE_GRAINS, like every other enum here: a model- or

@@ -194,6 +194,16 @@ export function resolveColumnOwner(
   return null;
 }
 
+/** Until the planner can walk a named relationship, a chart that names one is refused, never drawn through the first. */
+export const VIA_UNSUPPORTED =
+  'This chart joins a table through a named relationship, which this server cannot do yet. Ask your admin to finish upgrading Ordinate.';
+
+/** Does any reference name a relationship (`via`, `categoryVia`, a filter's `via`)? */
+export function hasVia(encoding: VizEncoding, filters: FilterStep[]): boolean {
+  return !!(encoding && (encoding.categoryVia || (encoding.values || []).some((v) => v && v.via)))
+    || (filters || []).some((f) => f && f.via);
+}
+
 /**
  * The join a visual needs, or `null` when it needs none — every field and every
  * filter column is the primary's own, which is today's single-dataset path,
@@ -207,6 +217,7 @@ export function resolveVizJoin(
   rels: Relationship[],
   infos: Map<string, DsInfo>,
 ): Result<VizJoin> | null {
+  if (hasVia(encoding, filters)) return { ok: false, error: VIA_UNSUPPORTED };
   if (!encoding || encoding.pivot || !infos.has(primary)) return null;
   if (encoding.cohort || encoding.eventFunnel) return null; // their shelves name the primary's own columns
   const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';

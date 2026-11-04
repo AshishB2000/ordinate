@@ -1,0 +1,142 @@
+// A relationship's `label` and a reference's `via` survive every sanitizer, and until the planner
+// can walk a named relationship (step 09) a `via` is REFUSED, never answered through the first one.
+// Old pods of a rolling deploy must not drop a field a later release writes (plan 09, "Old pods").
+//
+//   § guard   sanitizeSteps / sanitizeEncoding / sanitizeRelationship keep the new fields (and drop
+//             a malformed one); a chart with `via` is refused by the planner; a `via` filter is
+//             skipped with the unknown-column warning on the JS fold, declined by the resident
+//             predicate, refused by Live; a KPI and a chart reached through `vizJoin` / `metricJoin`
+//             refuse it even in a project with NO relationships. Every guard has a negative control.
+//   § order   a re-saved relationship keeps its place and its id, so "the first relationship" holds
+//
+//   npm run build:ts && node scripts/test-joinsVia.js
+
+import { ok, finish } from './selfcheck';
+import type { FilterStep } from '../src/data/transforms';
+import type { LiveRefusal } from '../src/engine/live/liveSpec';
+import type { VizEncoding } from '../src/analysis/visuals';
+import * as fx from './joinsViaFixture';
+
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+
+process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-joinsvia-data-'));
+
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
+const jp: typeof import('../src/analysis/joinPlan') = require('../src/analysis/joinPlan');
+const { applyPipeline, sanitizeSteps }: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const { sanitizeEncoding }: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const { filterPredicate }: typeof import('../src/engine/residentFilter') = require('../src/engine/residentFilter');
+const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
+const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+
+const { SALES, DATES, R_ORDER, R_SHIP, RELS, infos } = fx;
+const show = (v: unknown): string => JSON.stringify(v);
+const F = (column: string, op: string, value: number | string): FilterStep => ({ type: 'filter', column, op, value } as FilterStep);
+
+async function main(): Promise<void> {
+  const salesTable = fx.tables.get(SALES.id) as import('../src/data/transforms').TableData;
+  ok('fixture: 40 sales, and the ship-year column is not all 2024 (so a wrongly filtered primary shows)',
+    salesTable.rows.length === 40 && salesTable.rows.some((r) => r[5] === 2025) && salesTable.rows.some((r) => r[5] === 2024));
+  ok('fixture: Dates repeats 2024-03-01 and RELS lists Order date first',
+    DATES.rows.filter((r) => r[0] === '2024-03-01').length === 2 && RELS.map((r) => r.id).join() === [R_ORDER, R_SHIP, fx.R_RET].join());
+
+  // ── § guard: the sanitizers keep the new fields ────────────────────────────
+  const viaStep = { ...F('year', '=', 2024), via: R_SHIP };
+  ok('sanitizeSteps keeps a UUID via on a filter step, drops another', show(sanitizeSteps([viaStep, { ...viaStep, via: '../x' }])) === show([viaStep, F('year', '=', 2024)]));
+  ok('sanitizeSteps: a non-string via is dropped too (negative control)', show(sanitizeSteps([{ ...viaStep, via: 7 }])) === show([F('year', '=', 2024)]));
+
+  const enc: VizEncoding = {
+    category: 'month', categoryDatasetId: DATES.id, categoryVia: R_SHIP,
+    values: [{ column: 'year', aggregation: 'max', datasetId: DATES.id, via: R_SHIP }],
+  };
+  const e = sanitizeEncoding(enc);
+  ok('sanitizeEncoding keeps categoryVia and a measure via only beside their datasetId',
+    e.categoryVia === R_SHIP && e.values[0].via === R_SHIP && sanitizeEncoding({ ...enc, categoryDatasetId: undefined }).categoryVia === undefined);
+  ok('sanitizeEncoding: a measure via without its datasetId, and a non-UUID via, are dropped (negative control)',
+    sanitizeEncoding({ ...enc, values: [{ column: 'amount', aggregation: 'sum', via: R_SHIP }] }).values[0].via === undefined
+    && sanitizeEncoding({ ...enc, categoryVia: '../x', values: [{ ...enc.values[0], via: '../x' }] }).categoryVia === undefined
+    && sanitizeEncoding({ ...enc, values: [{ ...enc.values[0], via: '../x' }] }).values[0].via === undefined);
+
+  const r = { id: R_ORDER, from: { datasetId: SALES.id, column: 'order_date' }, to: { datasetId: DATES.id, column: 'date' } };
+  ok('sanitizeRelationship keeps a label, trimmed; drops one over 60',
+    rels.sanitizeRelationship({ ...r, label: '  Ship date ' })!.label === 'Ship date' && rels.sanitizeRelationship({ ...r, label: 'x'.repeat(61) })!.label === undefined);
+  ok('sanitizeRelationship: a blank, control-character or non-string label is dropped, the relationship stays (negative control)',
+    ['   ', 'a\nb', 'a\u0000b', 7, null].every((label) => { const s = rels.sanitizeRelationship({ ...r, label }); return !!s && s.label === undefined; })
+    && rels.sanitizeRelationship({ ...r, label: 'x'.repeat(60) })!.label === 'x'.repeat(60));
+  ok('the fixture relationships carry their labels', RELS[0].label === 'Order date' && RELS[1].label === 'Ship date' && RELS[2].label === undefined);
+
+  // ── § guard: the planner refuses via ───────────────────────────────────────
+  const viaEnc: VizEncoding = { category: 'month', categoryDatasetId: DATES.id, categoryVia: R_SHIP, values: [{ column: 'amount', aggregation: 'sum' }] };
+  ok('09a: a chart with via is refused, never drawn through the first relationship',
+    show(jp.resolveVizJoin(SALES.id, viaEnc, [], RELS, infos)) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('09a: a via on a measure, or on a filter alone, is refused too',
+    show(jp.resolveVizJoin(SALES.id, { category: 'region', values: [{ column: 'year', aggregation: 'max', datasetId: DATES.id, via: R_SHIP }] }, [], RELS, infos))
+      === show({ ok: false, error: jp.VIA_UNSUPPORTED })
+    && show(jp.resolveVizJoin(SALES.id, { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, [viaStep], RELS, infos))
+      === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  const plain: VizEncoding = { ...viaEnc, categoryVia: undefined };
+  const planned = jp.resolveVizJoin(SALES.id, plain, [], RELS, infos);
+  ok('negative control: the same chart without via still plans through the first relationship', !!planned && planned.ok);
+  ok('hasVia sees a categoryVia, a measure via and a filter via, and nothing else',
+    jp.hasVia(viaEnc, []) && jp.hasVia(enc, []) && jp.hasVia(plain, [viaStep]) && !jp.hasVia(plain, [F('year', '=', 2024)])
+    && !jp.hasVia({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, []));
+
+  // ── § guard: the fold, the resident predicate and Live never filter the primary's own column ──
+  const t = applyPipeline(salesTable, [viaStep]);
+  ok('a via filter reaching applyPipeline skips with the unknown-column warning; the primary\'s own `year` is NOT filtered',
+    t.rowCount === salesTable.rows.length && show(t.warnings) === show(['Filter skipped: unknown column "year"']));
+  const control = applyPipeline(salesTable, [F('year', '=', 2024)]);
+  ok('negative control: without via the same step does filter the primary\'s year', control.rowCount < salesTable.rows.length && control.warnings.length === 0);
+  ok('resident declines it so JS answers with the warning',
+    filterPredicate(SALES.columns, viaStep, []) === null && !filterCannotWarn(viaStep, new Set(['year'])));
+  ok('negative control: without via the resident predicate exists and the step cannot warn',
+    filterPredicate(SALES.columns, F('year', '=', 2024), []) !== null && filterCannotWarn(F('year', '=', 2024), new Set(['year'])));
+  ok('Live refuses a via filter (related)', (spec.adaptFilter(viaStep, SALES.columns, {}, []) as LiveRefusal).code === 'related');
+  ok('negative control: Live adapts the same filter without via', !spec.isRefusal(spec.adaptFilter(F('year', '=', 2024), SALES.columns, {}, [])));
+
+  // ── § guard: a KPI and a chart in a project with no relationships ──────────
+  await projects.init();
+  const P = (await projects.createProject('Joins via')).id;
+  const sales = (await datasets.saveDataset(P, {
+    name: 'Sales', sourceKind: 'csv',
+    columns: [{ name: 'amount', type: 'number' }, { name: 'year', type: 'number' }],
+    rows: [[10, 2024], [20, 2025], [30, 2024]],
+  }))!;
+  const sum = { column: 'amount', aggregation: 'sum' as const };
+  ok('a via filter on a KPI with no relationships is refused (no value), not skipped into a total',
+    show(await ipcRels.joinedMetricFor(P, sales.id, sum, [viaStep])) === show({ ok: true, value: null })
+    && (await ipcRels.metricReads(P, sales.id, 'amount', [viaStep])).length === 0);
+  ok('negative control: without via the KPI falls through to the single-dataset path (null)', (await ipcRels.joinedMetricFor(P, sales.id, sum, [F('year', '=', 2024)])) === null);
+  const salesEnc: VizEncoding = { category: 'year', values: [{ column: 'amount', aggregation: 'sum' }] };
+  ok('a via filter on a chart with no relationships is refused with the typed sentence',
+    show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('negative control: without via the chart needs no join (null)', (await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [F('year', '=', 2024)])) === null);
+
+  // ── § order: "first" holds across saves ────────────────────────────────────
+  await rels.saveRelationship(P, RELS[0]);
+  await rels.saveRelationship(P, RELS[1]);
+  await rels.saveRelationship(P, { ...RELS[0], cardinality: 'one_to_one' });
+  const after = await rels.listRelationships(P);
+  ok('re-saving the first relationship keeps it first', after[0].id === R_ORDER && after[1].id === R_SHIP && after.length === 2);
+  ok('re-saving it replaces it in place (the new cardinality, the label kept)', after[0].cardinality === 'one_to_one' && after[0].label === 'Order date');
+  ok('saving an identical edge again keeps the existing id', (await rels.saveRelationship(P, { ...RELS[1], id: undefined }))!.id === R_SHIP);
+  const last = await rels.listRelationships(P);
+  ok('...and does not stack a duplicate or reorder', last.map((x) => x.id).join() === [R_ORDER, R_SHIP].join());
+  const added = await rels.saveRelationship(P, RELS[2]);
+  ok('a new edge goes to the end (negative control)', (await rels.listRelationships(P)).map((x) => x.id).join() === [R_ORDER, R_SHIP, added!.id].join());
+
+  fx.removeFixture();
+  fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
+  finish();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+  finish();
+});
