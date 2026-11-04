@@ -34,6 +34,7 @@ import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
 import { liveDistinct } from '../ipc/liveProfile';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isTermNotExpandedError } from '../data/termStep';
 import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
@@ -499,8 +500,9 @@ export async function buildDashboard(
                 : { error: 'Source removed' };
             }
           } catch (err) {
-            // A Live KPI its warehouse could not give (L2.4): this tile says so, as a chart tile does — the page still publishes.
-            if (!isLiveFigureError(err)) throw err;
+            // A Live KPI its warehouse could not give (L2.4), or a glossary term this pod cannot apply: this tile says so,
+            // as a chart tile does — the page still publishes.
+            if (!isLiveFigureError(err) && !isTermNotExpandedError(err)) throw err;
             payload = { error: err.message };
           }
           if (!payload.error) {
