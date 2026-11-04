@@ -4,8 +4,9 @@
 // src/transforms.ts for `calculated_field` steps.
 //
 // SECURITY: this is a hand-written tokenizer + recursive-descent parser +
-// tree-walking evaluator, across four files — this one (the public API),
-// formulaTokens.ts, formulaEval.ts and formulaParse.ts. There is deliberately
+// tree-walking evaluator, across the formula*.ts files beside this one (the
+// public API): formulaTokens, formulaParse (over formulaBuilder's interface),
+// formulaJs (the row closures) and formulaEval. There is deliberately
 // NO `eval` and NO `new Function` in ANY of them — an expression is DATA, never
 // code. A malformed
 // expression (syntax error, unknown function, injection like "1; process.exit")
@@ -21,7 +22,8 @@
 // its own decimal expansion, which the >15-digit guard would reject.
 
 import { FormulaError, tokenize, type Tok } from './formulaTokens';
-import { Parser, type LodSpec } from './formulaParse';
+import { parseTokens, type LodSpec } from './formulaParse';
+import { jsBuilder } from './formulaJs';
 import { isFormulaBudgetError } from './formulaBudget';
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -112,12 +114,11 @@ export function compile(expression: string): CompileResult {
  */
 export function compileTokens(tokens: Tok[], src: string): CompileResult {
   try {
-    const parser = new Parser(tokens);
-    const fn = parser.parse();
-    const refs = Array.from(parser.refs);
+    const b = jsBuilder();
+    const { root: fn, refs } = parseTokens(tokens, b);
     const compiled: Compiled = {
       refs,
-      lods: parser.lods,
+      lods: b.lods,
       cost: tokens.length,
       evaluate(row: Record<string, FValue>): FValue {
         try {

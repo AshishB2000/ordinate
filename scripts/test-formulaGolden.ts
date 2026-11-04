@@ -12,12 +12,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ok, finish } from './selfcheck';
 import { golden } from './golden';
-import { answers, corpus, CORPUS_FUNCTIONS, CORPUS_ROWS, CORPUS_SIZE, type Answer } from './formulaCorpus';
+import { answers, corpus, corpusRow, CORPUS_FUNCTIONS, CORPUS_ROWS, CORPUS_SIZE, type Answer } from './formulaCorpus';
 import { encode } from '../src/server/wire';
 import { stableStringify } from '../src/engine/queryCache';
 import type { FValue, SourceSpan } from '../src/formula/formula';
-import { FUNCTIONS } from '../src/formula/formulaEval';
+import { FUNCTIONS, type EvalFn } from '../src/formula/formulaEval';
 import { tokenize } from '../src/formula/formulaTokens';
+import { parseTokens } from '../src/formula/formulaParse';
+import { jsBuilder } from '../src/formula/formulaJs';
+import type { CompareOp, FormulaBuilder } from '../src/formula/formulaBuilder';
 import { isServerMode } from '../src/server/mode';
 
 const G = golden<ReturnType<typeof answers>>('formula-corpus/answers');
@@ -76,5 +79,25 @@ ok('every function is in the frozen list, reads the clock, or has its own newer 
   uncovered(live, NEWER).join(', '));
 ok('NEGATIVE CONTROL: a function added with no cases is named',
   uncovered([...live, 'zz_new'], NEWER).join() === 'zz_new');
+
+// The builder is what the golden guards: one operator built differently shows.
+function evaluateWith(g: Answer, b: FormulaBuilder<EvalFn>): FValue[] {
+  const { root } = parseTokens(tokenize(g.expr), b);
+  return CORPUS_ROWS.map((_r, i) => {
+    try {
+      const v = root(corpusRow(i, g.lods?.length ?? 0));
+      return v === undefined ? null : v;
+    } catch {
+      return null;
+    }
+  });
+}
+const compiled = G.entries.filter((g) => g.ok);
+ok('parseTokens over jsBuilder() gives every recorded value', compiled.every((g) => sameList(g.values, evaluateWith(g, jsBuilder()))));
+const js = jsBuilder();
+const broken = { ...js, compare: (op: CompareOp, l: EvalFn, r: EvalFn, at: number): EvalFn =>
+  (op === '=' ? (row) => l(row) === r(row) : js.compare(op, l, r, at)) };
+const caught = compiled.filter((g) => !sameList(g.values, evaluateWith(g, broken))).length;
+ok('NEGATIVE CONTROL: a builder whose `=` is `===` changes some recorded answers', caught > 0, String(caught));
 
 finish();
