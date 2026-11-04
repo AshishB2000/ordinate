@@ -7,7 +7,9 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import { toast } from '../../ui/Toast';
 import { replyError } from '../live/refusal';
+import type { FilterStep } from '../visuals/api';
 
 /** src/ipc/liveProfile.ts SchemaColumn. */
 export interface SchemaColumn {
@@ -42,6 +44,8 @@ export interface LiveSchema {
   note: string | null;
   columns: SchemaColumn[];
   missing: MissingColumn[];
+  /** The always-applied filters (D13). A caller row access rules restrict gets each one's column and operator only. */
+  baseFilters: FilterStep[];
 }
 
 type Fail = { ok: false; error?: string; code?: string };
@@ -50,6 +54,8 @@ export const useLiveSchema = (projectId: string, datasetId: string, on = true) =
   useQuery({
     queryKey: ['dataset:liveSchema', projectId, datasetId],
     enabled: on,
+    // A sync another door queued (a filter change, a create) lands with no event when the columns stay the same.
+    refetchInterval: (q) => (q.state.data?.syncing ? 1500 : false),
     queryFn: async () => {
       const r = (await rpc('dataset:liveSchema', { projectId, datasetId })) as LiveSchema | Fail;
       if (!r.ok) throw replyError(r, 'The schema could not be read.');
@@ -66,12 +72,12 @@ export type SyncReply =
 /** What a sync or a cache change moves on screen. */
 const AFTER = ['dataset:liveSchema', 'dataset:columns', 'dataset:list', 'dataset:source', 'lineage:get', 'dataset:distinct'] as const;
 
-function useLiveWrite<R>(call: () => Promise<R>) {
+function useLiveWrite<R, V = void>(call: (v: V) => Promise<R>, after: readonly string[] = AFTER) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: call,
     onSuccess: () => {
-      for (const key of AFTER) void client.invalidateQueries({ queryKey: [key] });
+      for (const key of after) void client.invalidateQueries({ queryKey: [key] });
     },
   });
 }
@@ -91,6 +97,16 @@ export const useSetCacheAge = (projectId: string, datasetId: string) => {
     },
   });
 };
+
+export type SetBaseFiltersReply = { ok: true; baseFilters: FilterStep[]; epoch: number } | Fail;
+
+/** "Always applied": save a Live dataset's base filters. A refusal is the server's sentence, as a toast; the caller keeps the edit. */
+export const useSetBaseFilters = (projectId: string, datasetId: string) =>
+  useLiveWrite(async (filters: FilterStep[]) => {
+    const r = (await rpc('live:setBaseFilters', { projectId, datasetId, filters })) as SetBaseFiltersReply;
+    if (!r.ok) toast(r.error || 'The filters could not be saved.', { kind: 'error' });
+    return r;
+  }, ['dataset:liveSchema', 'dataset:distinct']); // the columns stay; figures elsewhere hear the server's refresh event
 
 /** "Refresh now" on a Live dataset: the cache epoch moves, so the next figure asks the warehouse. */
 export const useResetCache = (projectId: string, datasetId: string) =>

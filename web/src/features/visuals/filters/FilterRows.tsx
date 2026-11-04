@@ -33,6 +33,7 @@ export function FilterRows({
   filters,
   onChange,
   terms = true,
+  lod = true,
 }: {
   projectId: string;
   datasetId: string;
@@ -41,6 +42,8 @@ export function FilterRows({
   onChange: (next: FilterStep[]) => void;
   /** Offer the project's glossary terms (false in a term's own filters: no term inside a term). */
   terms?: boolean;
+  /** Offer the "context" (before LOD expressions) toggle: a chart's filter, not a dataset's. */
+  lod?: boolean;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const cur = editing === null ? null : filters[editing];
@@ -97,7 +100,7 @@ export function FilterRows({
           column={cur.column}
           type={cols.find((c) => c.name === cur.column)?.type ?? 'text'}
           existing={cur}
-          lodToggle
+          lodToggle={lod}
           onClose={() => setEditing(null)}
           // A min/max range is TWO steps: splice them in place, each editable and removable on its own.
           onApply={(steps) => {

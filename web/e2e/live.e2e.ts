@@ -6,7 +6,8 @@
 //   1. The page: the Live badge, the Live switch, the cache age (5 min, the
 //      default), Refresh now; the Data tab says what works, what needs a copy.
 //   2. Schema: not profiled yet → Sync schema reads the warehouse → the sample's
-//      figures (240 rows), each column's values.
+//      figures (240 rows), each column's values. Always applied: region ≠ North,
+//      saved, re-sampled under it (180 rows, no North), then removed again.
 //   3. Settings: a new cache age reaches the server; Refresh now resets the cache.
 //   4. Off for Live: Quality, Prepare and Statistics say why and offer a copy —
 //      without calling the channel they guard (a refusal would be a console error
@@ -69,6 +70,32 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   for (const v of ['North', 'South', 'East', 'West']) await region.getByText(v, { exact: true }).waitFor();
   assert.match((await page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'amount', exact: true }) }).textContent()) ?? '', /100%/);
   await screens(page, 'live-schema');
+
+  // …Always applied: an editor keeps North out of every figure; the queued sync samples under it.
+  // Its own page load, for its own RPC budget.
+  await page.goto(`/data/${P}/${D}?tab=schema`);
+  await ready(page);
+  const always = page.getByRole('region', { name: 'Always applied' });
+  await always.getByText(/^No always-applied filters\./).waitFor();
+  await always.getByRole('button', { name: 'Add filter' }).click();
+  await always.getByRole('button', { name: 'Edit the filter on region' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Filter: region' });
+  await dialog.getByRole('checkbox', { name: 'North' }).click();
+  await dialog.getByRole('checkbox', { name: 'Exclude these' }).click();
+  await dialog.getByRole('button', { name: 'Apply' }).click();
+  await always.getByRole('button', { name: 'Save' }).click();
+  await always.getByRole('button', { name: 'Save' }).waitFor({ state: 'detached' });
+  await page.getByText(/^Profiled from a sample of 180 rows · /).waitFor({ timeout: 30_000 });
+  assert.equal(await region.getByText('North', { exact: true }).count(), 0, 'North is gone from the region values');
+  const based = (await (await post(s, 'dataset:liveSchema', { projectId: P, datasetId: D })).json()) as { baseFilters: unknown[] };
+  assert.deepEqual(based.baseFilters, [{ type: 'filter', column: 'region', op: 'not in', values: ['North'] }], 'the server keeps the filter');
+  await screens(page, 'live-base-filters');
+  await always.getByRole('button', { name: 'Remove filter' }).click();
+  await always.getByRole('button', { name: 'Save' }).click();
+  await page.getByText(/^Profiled from a sample of 240 rows · /).waitFor({ timeout: 30_000 });
+  await always.getByText(/^No always-applied filters\./).waitFor();
+  await page.goto(`/data/${P}/${D}?tab=schema`);
+  await ready(page);
 
   // ── 3. Settings: the cache age, Refresh now ───────────────────────────────
   await page.getByRole('combobox', { name: 'Cache age of Orders (live)' }).click();
