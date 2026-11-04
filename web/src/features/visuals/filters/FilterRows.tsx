@@ -10,7 +10,7 @@ import { Button, IconButton } from '../../../ui/Button';
 import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../api';
 import type { Column } from '../model';
-import { isKeptStep } from '../keptStep';
+import { isKeptStep, KEPT_STEP_WORDS } from '../keptStep';
 import { FilterDialog } from './FilterDialog';
 import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
@@ -47,7 +47,7 @@ export function FilterRows({
         isKeptStep(f) ? (
           // A step this version cannot edit (a glossary term, a newer release's): kept through every save, shown, and removable.
           <div key={i} className={s.row}>
-            <span className={s.kept}>A filter from a newer version</span>
+            <span className={s.kept}>{KEPT_STEP_WORDS}</span>
             <IconButton icon="x" size="sm" label="Remove filter from a newer version" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
           </div>
         ) : (

@@ -20,7 +20,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { useTile, type Card, type Step, type VisualDef, type VisualTile } from '../analyses/api';
 import { boardPath, type EditorApi } from '../analyses/editor/context';
 import { DrawnVisual, mergeFilters, vizLabel } from '../analyses/VisualTile';
-import { isKeptStep } from '../visuals/keptStep';
+import { isKeptStep, KEPT_STEP_WORDS } from '../visuals/keptStep';
 import { stashNavigation, stepKey } from './useViewer';
 import s from './Dashboards.module.css';
 import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
@@ -170,6 +170,7 @@ export function TooltipVisual({ ed, tip, column, category, at }: { ed: EditorApi
 
 /** One filter step as a chip's words (dashSelStepLabel). */
 export function stepLabel(st: Step): string {
+  if (isKeptStep(st)) return KEPT_STEP_WORDS;
   if (st.op === 'period') return `${String(st.column)}: a period`;
   if (Array.isArray(st.values)) return `${String(st.column)}${st.op === 'not in' ? ' not' : ''}: ${st.values.join(', ')}`;
   const sign: Record<string, string> = { '!=': '≠', '>=': '≥', '<=': '≤' };

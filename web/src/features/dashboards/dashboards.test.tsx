@@ -164,6 +164,9 @@ describe('Category / Period quick filters', () => {
     const f = [{ type: 'filter', column: 'region', op: '=', value: 'East' }, { type: 'filter', column: 'year', op: '>=', value: 2024 }];
     deepStrictEqual(upsertFilter(f, { type: 'filter', column: 'region', op: '=', value: 'West' }).map((x) => x.value), ['West', 2024]);
     equal(upsertFilter(f, { type: 'filter', column: 'segment', op: '=', value: 'B2B' }).length, 3);
+    // A kept step (a newer release's, with a `column` of its own) is never the filter replaced.
+    const kept = { type: 'future_x', column: 'region', op: '=', value: 'East' };
+    deepStrictEqual(upsertFilter([kept], { type: 'filter', column: 'region', op: '=', value: 'West' }), [kept, { type: 'filter', column: 'region', op: '=', value: 'West' }]);
   });
 });
 

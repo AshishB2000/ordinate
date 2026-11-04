@@ -66,6 +66,7 @@ export function decodeQuestion(raw: string | null | undefined): Question | null 
   if (str(series) && series) encoding.series = series;
   if (isObj(geo) && str(geo.level)) encoding.geo = { level: geo.level as NonNullable<Encoding['geo']>['level'] };
   // A step this page cannot edit (a glossary term, a newer release's) rides through the link whole, as on every save.
+  // It passes this predicate typed FilterStep but has no `column` or `op`: check isKeptStep before reading either.
   const filters = (Array.isArray(o.f) ? o.f : []).filter((f): f is FilterStep => isObj(f) && ((f.type === 'filter' && str(f.column) && str(f.op)) || isKeptStep(f)));
   return { chartType: str(o.t) ? o.t : '', encoding, filters };
 }

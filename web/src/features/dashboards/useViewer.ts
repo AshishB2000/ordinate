@@ -118,6 +118,13 @@ const merged = (base: Step[], steps: Step[]): Step[] => {
   return [...base.filter((x) => !keys.has(stepKey(x))), ...steps];
 };
 
+/** `sel` with `step` toggled: a second click takes it away; a click on a column already picked by `=` replaces that pick (dashSelToggle). A kept step (a term) is never that pick. */
+export function toggled(sel: Step[], step: Step): Step[] {
+  const k = stepKey(step);
+  if (sel.some((x) => stepKey(x) === k)) return sel.filter((x) => stepKey(x) !== k);
+  return [...sel.filter((x) => !(x.type === 'filter' && x.column === step.column && x.op === '=' && step.op === '=')), step];
+}
+
 export function useViewer(projectId: string, analysisId: string, opening?: Opening | null): Viewer & { arrivedSheet?: string } {
   const [arrived] = useState(() => takeNavigation(analysisId));
   // The opening view's selection first, then a navigation's carry.
@@ -144,14 +151,7 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
   const fx = useFx(projectId);
   const currency = fx.data?.settings.dashboards[analysisId] || undefined;
 
-  const toggleSelection = useCallback((step: Step) => {
-    setSelection((sel) => {
-      const k = stepKey(step);
-      if (sel.some((x) => stepKey(x) === k)) return sel.filter((x) => stepKey(x) !== k);
-      // A click on a column already selected by `=` replaces that pick (dashSelToggle).
-      return [...sel.filter((x) => !(x.column === step.column && x.op === '=' && step.op === '=')), step];
-    });
-  }, []);
+  const toggleSelection = useCallback((step: Step) => setSelection((sel) => toggled(sel, step)), []);
   const narrow = useCallback((tiles: string[], steps: Step[]) => {
     setNarrowed((m) => {
       const k = JSON.stringify(steps.map(stepKey));

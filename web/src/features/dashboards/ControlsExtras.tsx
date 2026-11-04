@@ -59,7 +59,8 @@ export function ResetControls() {
 
 /** Replace a filter on the same column, else add it (dashFiltersUi.ts upsertDashFilter). */
 export function upsertFilter(filters: readonly Step[], step: Step): Step[] {
-  const at = filters.findIndex((f) => f.column === step.column);
+  // A kept step (a term) is no filter on any column, even if a newer release gave it a `column`.
+  const at = filters.findIndex((f) => f.type === 'filter' && f.column === step.column);
   return at >= 0 ? filters.map((f, i) => (i === at ? step : f)) : [...filters, step];
 }
 

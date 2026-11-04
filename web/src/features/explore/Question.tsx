@@ -13,6 +13,7 @@ import { Popover } from '../../ui/Popover';
 import type { Agg, FilterStep } from '../visuals/api';
 import { FilterDialog } from '../visuals/filters/FilterDialog';
 import { FilterSummary } from '../visuals/filters/FilterRows';
+import { isKeptStep, KEPT_STEP_WORDS } from '../visuals/keptStep';
 import { AGG_LABELS, GRAINS } from '../visuals/model';
 import { FieldList } from './FieldList';
 import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
@@ -222,21 +223,33 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
         </Well>
 
         <Well label="Filters">
-          {question.filters.map((f, i) => (
-            <span key={`${f.column}:${i}`} className={s.pill} data-kind="filter">
-              <button type="button" className={s.pillMain} aria-label={`Change the filter on ${f.column}`} onClick={() => setEditing({ index: i, column: f.column })}>
-                <Icon name="filter" size={16} />
-                <span className={s.pillText}>
-                  <b className={s.filterCol}>{f.column}</b> <FilterSummary step={f} />
+          {question.filters.map((f, i) =>
+            isKeptStep(f) ? (
+              // A step this version cannot edit (a glossary term, a newer release's): shown and removable, never opened.
+              <span key={`kept:${i}`} className={s.pill} data-kind="filter">
+                <span className={s.pillKept}>
+                  <Icon name="filter" size={16} />
+                  <span className={s.pillText}>{KEPT_STEP_WORDS}</span>
                 </span>
-              </button>
-              <Remove label="Remove filter" title={`Stop filtering on ${f.column}`} onClick={() => setFilters(question.filters.filter((_, j) => j !== i))} />
-            </span>
-          ))}
+                <Remove label="Remove filter from a newer version" title="Stop applying this filter" onClick={() => setFilters(question.filters.filter((_, j) => j !== i))} />
+              </span>
+            ) : (
+              <span key={`${f.column}:${i}`} className={s.pill} data-kind="filter">
+                <button type="button" className={s.pillMain} aria-label={`Change the filter on ${f.column}`} onClick={() => setEditing({ index: i, column: f.column })}>
+                  <Icon name="filter" size={16} />
+                  <span className={s.pillText}>
+                    <b className={s.filterCol}>{f.column}</b> <FilterSummary step={f} />
+                  </span>
+                </button>
+                <Remove label="Remove filter" title={`Stop filtering on ${f.column}`} onClick={() => setFilters(question.filters.filter((_, j) => j !== i))} />
+              </span>
+            ),
+          )}
           {picker('Filter on', ['dimension', 'date', 'measure'], <Add label="Add filter" text="Filter" />, (f) => setEditing({ index: question.filters.length, column: f.name }))}
         </Well>
       </div>
-      {editing && (
+      {/* Never on a kept step, even if the question changed under an open dialog: an apply would splice a plain filter over it. */}
+      {editing && !isKeptStep(question.filters[editing.index]) && (
         <FilterDialog
           projectId={projectId}
           datasetId={datasetId}

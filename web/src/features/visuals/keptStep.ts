@@ -8,6 +8,9 @@ import type { KeptStep } from './encoding';
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
+/** What every screen calls a kept step it cannot edit: a row, a pill, a selection chip. */
+export const KEPT_STEP_WORDS = 'A filter from a newer version';
+
 /** src/data/transforms.ts STEP_TYPES: Prepare steps, none of which belongs in a filter list ('filter' is the one that does). */
 export const PREPARE_STEP_TYPES: ReadonlySet<string> = new Set([
   'calculated_field', 'filter', 'group_aggregate', 'dedupe', 'fill_empty', 'trim', 'drop_column', 'rename_column',
