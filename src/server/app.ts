@@ -608,7 +608,7 @@ export function registerHandlers(): void {
   (require('../ipc/explore') as typeof import('../ipc/explore')).register();
 
   // Prepare and pipelines (T2.6). Pipelines' cron rides the server's own tick job (./jobs/schedules.ts), so headless here.
-  for (const mod of ['../ipc/preparePower', '../ipc/text', '../ipc/formula']) (require(mod) as { register: () => void }).register();
+  for (const mod of ['../ipc/preparePower', '../ipc/text', '../ipc/formula', '../ipc/liveCalcs']) (require(mod) as { register: () => void }).register();
   (require('../ipc/pipelines') as typeof import('../ipc/pipelines')).register({ headless: true });
 
   // Analytics workbenches A (T2.10): statistics, key drivers, scenarios, segments.

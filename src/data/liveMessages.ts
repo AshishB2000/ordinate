@@ -92,3 +92,45 @@ export function liveBaseFiltersNotLiveMessage(): string {
 export function liveBaseFilterInvalidMessage(): string {
   return t('liveMessages.these_filters_can_t_be_always');
 }
+
+// ── Calculated fields on a Live dataset (semantic layer part 8, step 04) ─────
+
+/** `live:setCalculated` asked of an extract: its calculated fields are Prepare steps. */
+export function liveCalcNotLiveMessage(): string {
+  return t('liveMessages.this_dataset_is_not_live_add');
+}
+
+/** A calc name that is blank, too long, or holds a character no record can store. */
+export function liveCalcNameInvalidMessage(): string {
+  return t('liveMessages.give_the_calculated_field_a_name');
+}
+
+/** A formula holding a character no record can store. */
+export function liveCalcExpressionInvalidMessage(): string {
+  return t('liveMessages.this_formula_holds_a_character_ordinate');
+}
+
+/** `lv_` and `o_` are the Live compiler's own aliases. */
+export function liveCalcNameReservedMessage(name: string): string {
+  return t('liveMessages.starts_with_lv_or_o_which', { name });
+}
+
+/** A calc named like a warehouse column, ignoring case (BigQuery and Databricks names are case-insensitive). */
+export function liveCalcNameIsColumnMessage(name: string): string {
+  return t('liveMessages.is_already_a_column_of_this', { name });
+}
+
+/** Two calcs whose names differ only by case. */
+export function liveCalcNameTakenMessage(name: string): string {
+  return t('liveMessages.two_calculated_fields_are_named_names', { name });
+}
+
+/** Databricks has no real-engine parity run yet (owner's answer 1). */
+export function liveCalcDatabricksMessage(): string {
+  return t('liveMessages.calculated_fields_can_t_run_on');
+}
+
+/** The check of a Live calc shows no rows: a statement per keystroke would spend the daily query limit. */
+export function liveCalcNoPreviewMessage(): string {
+  return t('liveMessages.a_live_calculated_field_shows_no');
+}

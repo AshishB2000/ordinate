@@ -84,4 +84,24 @@ export const live = {
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid, filters: z.array(BaseFilterStep).max(20) }),
     project: byProjectId,
   }),
+  // A Live dataset's calculated fields (src/ipc/liveCalcs.ts, semantic layer part 8 D1): the whole list,
+  // in order, each a name and a formula; the server checks each against the columns and the calcs before
+  // it and stores its type. Caps as data/liveCalcs (50, 200, 4,000). `write`: it changes what every
+  // figure on the dataset can read, as a Prepare step does on a copy.
+  'live:setCalculated': rpc({
+    access: 'write',
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid,
+      calculated: z.array(z.strictObject({ name: z.string().min(1).max(200), expression: z.string().min(1).max(4_000) })).max(50),
+    }),
+    project: byProjectId,
+  }),
+  // The formula editor's check of a Live calc: tokens, the error and its span, the refs, the type. No
+  // warehouse call and no rows. `before`: the calc's place in the list (the calcs before it are columns).
+  'live:checkCalc': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, expression: z.string().max(4_000), before: z.number().int().min(0).max(50).optional() }),
+    project: byProjectId,
+  }),
 } as const;

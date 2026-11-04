@@ -37,6 +37,9 @@ export interface FunctionDoc {
   /** r7:lod — what a click inserts when it is not `name(`, and what kind of entry it is. */
   insert?: string;
   kind?: 'keyword' | 'recipe';
+  /** Set by `formula:functions` (ipc/formula): whether a Live calculated field may call it, and if not why (a sentence). */
+  live?: boolean;
+  liveWhy?: string;
 }
 
 type Entry = Omit<FunctionDoc, 'name'>;
