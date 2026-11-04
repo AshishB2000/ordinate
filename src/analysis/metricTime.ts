@@ -23,10 +23,20 @@ export const controlPeriodMoved = (filters: FilterStep[], timeColumn: string): b
   !!timeColumn && filters.some((s) => controlPeriod(s) && s.column !== timeColumn);
 
 /**
- * `filters` with each control period on `timeColumn` (left on its column when that is `''`, unset),
- * every filter step's mark stripped, and a step identical to an earlier one dropped only when one of
- * the two was a control's: a tile's own date filter equal to the control's survives a move, and the
- * pair collapses to one as today when nothing moves. The same array when nothing is marked.
+ * Whether date controls set different periods on the metric's date: two or more control periods (on
+ * different columns, or with different periods) would all land on `timeColumn` and narrow it to their
+ * overlap, which nobody asked for. The doors refuse it (D9: conflicts are refused, never guessed). The
+ * same period twice merges as today; unset, nothing moves.
+ */
+export const controlPeriodsConflict = (filters: FilterStep[], timeColumn: string): boolean =>
+  !!timeColumn && new Set(filters.filter(controlPeriod).map(stepKey)).size > 1;
+
+/**
+ * `filters` with each control period on `timeColumn` (a column of the metric's own dataset, so with
+ * no `via`; left on its column when that is `''`, unset), every filter step's mark stripped, and a
+ * step identical to an earlier one dropped only when one of the two was a control's: a tile's own
+ * date filter equal to the control's survives a move, and the pair collapses to one as today when
+ * nothing moves. The same array when nothing is marked.
  */
 export function rewriteControlPeriods(filters: FilterStep[], timeColumn: string): FilterStep[] {
   if (!filters.some((s) => s.fromControl === true && !isKeptStep(s))) return filters;
@@ -39,7 +49,10 @@ export function rewriteControlPeriods(filters: FilterStep[], timeColumn: string)
     }
     const step: FilterStep = { ...s };
     delete step.fromControl;
-    if (timeColumn && controlPeriod(s)) step.column = timeColumn;
+    if (timeColumn && controlPeriod(s)) {
+      step.column = timeColumn;
+      delete step.via; // the metric's date is a column of its own dataset, never a related table's
+    }
     const k = stepKey(step);
     const first = seen.get(k);
     if (first !== undefined && (first || marked(s))) continue;

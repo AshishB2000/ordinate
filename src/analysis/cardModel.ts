@@ -90,9 +90,10 @@
   const isKept = (s: any): boolean => require('../data/filterList').isKeptStep(s);
 
   function stepKey(s: any): string {
-    // `period`, `via` and `fromControl`, as web useViewer.stepKey: two periods on one column, the same predicate through a
-    // relationship, or a date control's step beside a tile's identical one (D9), are two filters (dropping one widens the figure).
-    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null, s.period === undefined ? null : s.period, s.via === undefined ? null : s.via, s.fromControl === true]);
+    // `period`, `via`, `fromControl` and `lock`, as web useViewer.stepKey: two periods on one column, the same predicate through a
+    // relationship, a date control's step beside a tile's identical one (D9), or a row lock beside the same predicate unlocked,
+    // are two filters (dropping one widens the figure, or loses the lock).
+    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null, s.period === undefined ? null : s.period, s.via === undefined ? null : s.via, s.fromControl === true, s.lock === true]);
   }
 
   /**

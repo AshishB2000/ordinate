@@ -8,8 +8,9 @@
 import { ok, finish } from './selfcheck';
 import type { FilterStep } from '../src/data/transforms';
 
-const { rewriteControlPeriods, hasControlPeriod, controlPeriodMoved } = require('../src/analysis/metricTime') as typeof import('../src/analysis/metricTime');
+const { rewriteControlPeriods, hasControlPeriod, controlPeriodMoved, controlPeriodsConflict } = require('../src/analysis/metricTime') as typeof import('../src/analysis/metricTime');
 const { mergeDashboardFilters } = require('../src/analysis/dashboardFilters') as typeof import('../src/analysis/dashboardFilters');
+const msg = require('../src/analysis/metricCheckMessages') as typeof import('../src/analysis/metricCheckMessages');
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -41,5 +42,30 @@ ok('NEGATIVE CONTROL: a marked non-period step, a kept step or a lock is no cont
 ok('controlPeriodMoved: the control names another column', controlPeriodMoved([CTRL], 'ship_date'));
 ok('NEGATIVE CONTROL: not moved when unset, on the same column or unmarked',
   !controlPeriodMoved([CTRL], '') && !controlPeriodMoved([CTRL], 'order_date') && !controlPeriodMoved([OWN], 'ship_date'));
+
+// "Only when one of the pair was marked": two identical unmarked steps both stay, as they came in.
+const OWN2 = { type: 'filter', column: 'region', op: '=', value: 'East' } as FilterStep;
+ok('two identical unmarked steps beside a control both stay', same(rewriteControlPeriods([CTRL, OWN2, OWN2], 'ship_date'), [{ ...OWN, column: 'ship_date' }, OWN2, OWN2]));
+// A row lock is never merged away in favour of an identical unlocked step: the lock is in the key.
+const MARKED_X = { type: 'filter', column: 'region', op: '=', value: 'West', fromControl: true } as FilterStep;
+ok('a lock beside its identical marked step stays', same(rewriteControlPeriods([MARKED_X, LOCK], 'ship_date'), [{ type: 'filter', column: 'region', op: '=', value: 'West' }, LOCK]));
+ok('mergeDashboardFilters keeps a lock and an identical unlocked step', mergeDashboardFilters([{ ...LOCK, lock: undefined } as FilterStep], [LOCK]).length === 2);
+ok('NEGATIVE CONTROL: the same lock twice is one', mergeDashboardFilters([LOCK], [{ ...LOCK }]).length === 1);
+// The metric's date is a column of its own dataset: a moved period is no longer read through a relationship.
+const VIA = '44444444-4444-4444-8444-444444444444';
+ok('a moved period drops its via', same(rewriteControlPeriods([{ ...CTRL, via: VIA } as FilterStep], 'ship_date'), [{ ...OWN, column: 'ship_date' }]));
+ok('NEGATIVE CONTROL: unset, nothing moves and the via stays', same(rewriteControlPeriods([{ ...CTRL, via: VIA } as FilterStep], ''), [{ ...OWN, via: VIA }]));
+
+// Two date controls that would land on one date with different periods: the doors refuse (D9).
+const APRIL = { ...CTRL, column: 'ship_date', period: { preset: 'custom', from: '2024-04-01', to: '2024-04-30' } } as FilterStep;
+ok('conflict: two controls on different columns', controlPeriodsConflict([CTRL, APRIL], 'ship_date'));
+ok('conflict: two controls on one column with different periods', controlPeriodsConflict([CTRL, { ...APRIL, column: 'order_date' } as FilterStep], 'ship_date'));
+ok('conflict: the same period on two columns still names two dates', controlPeriodsConflict([CTRL, { ...CTRL, column: 'ship_date' } as FilterStep], 'ship_date'));
+ok('NEGATIVE CONTROL: the same period twice merges, no conflict', !controlPeriodsConflict([CTRL, { ...CTRL }], 'ship_date'));
+ok('NEGATIVE CONTROL: one control is no conflict', !controlPeriodsConflict([CTRL, OWN, LOCK], 'ship_date'));
+ok('NEGATIVE CONTROL: unset, nothing lands on a metric date', !controlPeriodsConflict([CTRL, APRIL], ''));
+ok('NEGATIVE CONTROL: a tile\'s own date filter, a lock or a kept step is no second control',
+  !controlPeriodsConflict([CTRL, { ...APRIL, fromControl: undefined } as FilterStep, { ...APRIL, lock: true } as FilterStep, TERM], 'ship_date'));
+ok('the refusal sentence', msg.controlPeriodsDisagree() === 'This metric counts by its own date, and two date controls set different periods on it.');
 
 finish();

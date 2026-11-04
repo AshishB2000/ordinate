@@ -39,7 +39,8 @@ export function stepKey(s: FilterStep): string {
   // `context` too (r7:lod): the same predicate before and after LODs is two filters.
   // `via` too: the same predicate through a relationship reads another table's column (refused until it can be walked).
   // `fromControl` too (D9): a date control's period may move onto a metric's date, a tile's own identical one stays.
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true]);
+  // `lock` too: a row lock is never merged away in favour of the same predicate unlocked (a warehouse compares it byte for byte).
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true, s.lock === true]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:

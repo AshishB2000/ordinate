@@ -401,6 +401,7 @@
   "metricCheckMessages.the_measure_is_calculated_from_parts": "La mesure « {name} » est calculée à partir de parties totalisées séparément, qui ne peuvent pas être alignées sur une catégorie découpée en intervalles ou repliée dans « Other ». Choisissez une catégorie d’au plus 50 valeurs.",
   "metricCheckMessages.the_measure_uses_a_level_of": "La mesure « {name} » utilise une expression de niveau de détail, qu’un graphique ne peut pas encore ventiler par sa catégorie.",
   "metricCheckMessages.this_chart_counts_a_metric_by": null,
+  "metricCheckMessages.this_metric_counts_by_its_own": null,
   "metricTreeMessages.a_metric_in_this_tree_was": "Une métrique de cet arbre a été supprimée.",
   "metricTreeMessages.did_not_change": "{metric} n’a pas changé {compare}.",
   "metricTreeMessages.explains_of_it": "{lead} en explique {share}.",

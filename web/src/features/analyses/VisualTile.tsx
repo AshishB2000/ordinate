@@ -38,14 +38,14 @@ export function vizGlyph(type: string): IconName {
 
 export const vizLabel = (type: string): string => VIZ_LABELS[type as VizId] ?? type;
 
-/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters); a `via` or a date control's mark (`fromControl`) makes it another filter. A step the web cannot edit (a term) is kept once, whole. */
+/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters); a `via`, a date control's mark (`fromControl`) or a row lock makes it another filter. A step the web cannot edit (a term) is kept once, whole. */
 export function mergeFilters(dash: readonly Step[], own: readonly Step[]): Step[] {
   const out: Step[] = [];
   const seen = new Set<string>();
   for (const st of [...dash, ...own]) {
     const kept = isKeptStep(st);
     if (!st || (st.type !== 'filter' && !kept)) continue;
-    const k = kept ? keptKey(st) : JSON.stringify([st.column, st.op, st.value ?? null, st.values ?? null, st.period ?? null, st.radius ?? null, st.context === true, st.via ?? null, st.fromControl === true]);
+    const k = kept ? keptKey(st) : JSON.stringify([st.column, st.op, st.value ?? null, st.values ?? null, st.period ?? null, st.radius ?? null, st.context === true, st.via ?? null, st.fromControl === true, st.lock === true]);
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(st);

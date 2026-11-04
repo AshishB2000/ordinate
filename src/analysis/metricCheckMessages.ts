@@ -69,6 +69,11 @@ export function measureTimeColumnPending(): string {
   return t('metricCheckMessages.this_chart_counts_a_metric_by');
 }
 
+/** Two dashboard date controls set different periods, and both land on the date a metric counts by. */
+export function controlPeriodsDisagree(): string {
+  return t('metricCheckMessages.this_metric_counts_by_its_own');
+}
+
 /** A running total, percent of total or moving sum of a measure that cannot be added up. `calc` is its name in prose. */
 export function calcNotAdditive(measure: string, calc: string): string {
   return t('metricCheckMessages.can_t_be_shown_as_it', { measure, calc });
