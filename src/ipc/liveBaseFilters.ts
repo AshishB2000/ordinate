@@ -47,7 +47,8 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
   if (!live) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
   queryCache.invalidateDataset(datasetId, projectId);
   announceRefreshed({ projectId, datasetId, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
-  void startSchemaSync(projectId, datasetId).catch(() => undefined);
+  // Queued before the reply (not waited for): the panel's next read already says a sync is on its way.
+  await startSchemaSync(projectId, datasetId).catch(() => null);
   return { ok: true, baseFilters: steps, epoch: live.epoch };
 }
 

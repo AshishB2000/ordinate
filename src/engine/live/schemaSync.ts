@@ -298,8 +298,15 @@ function diffColumns(before: ParsedColumn[], after: ParsedColumn[]): { added: st
   };
 }
 
-/** Sync one Live dataset's schema and profile. Call it through ./schemaSyncJob (one at a time per dataset). Never throws. */
-export async function syncLiveSchema(projectId: string, datasetId: string, signal: AbortSignal = new AbortController().signal): Promise<SyncReply> {
+/** The base filters a Live block holds, as one comparable value. */
+const baseKey = (live: LiveTarget['live']): string => JSON.stringify([live.baseFilters ?? [], live.baseFiltersUnreadable === true]);
+
+/**
+ * Sync one Live dataset's schema and profile. Call it through ./schemaSyncJob (one at a time per dataset). Never throws.
+ * `again`: when the base filters changed while it read (an editor saved them, and the sync they queued found this one
+ * running), it reads once more under the new ones — its own figures were not stored (`sampledUnder`).
+ */
+export async function syncLiveSchema(projectId: string, datasetId: string, signal: AbortSignal = new AbortController().signal, again = true): Promise<SyncReply> {
   const found = await liveTarget(projectId, datasetId, { base: 'skip' }); // adapted below, against the columns the sync reads
   if (!found.ok) {
     return found.kind === 'unavailable'
@@ -344,5 +351,7 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
   const declared: ParsedColumn[] = next.map((c) => ({ name: c.name, type: c.type }));
   await scanDataset(projectId, { id: datasetId, columns: declared, rows: sampleMatrix(declared, profile) });
   if (changed) announceRefreshed({ projectId, datasetId, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
+  const after = await datasets.getDatasetMeta(projectId, datasetId);
+  if (again && !signal.aborted && after?.live && baseKey(after.live) !== baseKey(t.live)) return syncLiveSchema(projectId, datasetId, signal, false);
   return { ok: true, schemaSyncedAt: now, columns: next.length, ...diff, missing, sample: sampled.outcome };
 }

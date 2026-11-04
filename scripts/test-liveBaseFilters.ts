@@ -302,6 +302,21 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await syncWrite(BASE);
   ok('NEGATIVE CONTROL: one sampled under the same filters stores them', (await raw()).live.profile.sampleRows === 9);
 
+  // Filters changed WHILE a sync reads: its figures are not stored, and it reads once more under the new ones.
+  const SOUTH = [F('region', 'not in', undefined, { values: ['South'] })];
+  let changedOnce = false;
+  fake.hook = async () => {
+    if (!changedOnce) { changedOnce = true; await setBase(L, SOUTH); }
+    return undefined;
+  };
+  const during = await sends(L, async (x) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: x })).value);
+  fake.hook = null;
+  const resampled = (await meta()).live.profile.columns.find((c: Reply) => c.name === 'region');
+  ok('a base change during a sync: it samples again under the new filters (no South, North back)',
+    during.r.ok === true && during.sent.length === 2 && canaried(during.sent[0]) && during.sent[1].params.some((p) => p.value === 'South') && !canaried(during.sent[1])
+      && resampled.values.includes('North') && !resampled.values.includes('South'), show({ sent: during.sent.length, values: resampled?.values }));
+  await setBase(L, BASE);
+
   // A base column the warehouse dropped: every question refuses, the sync still syncs the columns.
   await H.as(ORG_A, () => H.fx.loadWarehouse('live_drop', H.fx.COLUMNS, H.fx.fixtureRows()));
   const third = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_drop' }, H.fx.COLUMNS));
