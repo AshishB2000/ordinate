@@ -14,6 +14,10 @@
 // 4. `dataset:list` and `pipelines:get`: a warehouse driver's refresh error ("relation … does not exist") names the table,
 //    so a viewer gets the failure without its text; a dataset not from a connection keeps its text.
 //    NEGATIVE CONTROL: the editor reads the text. The runner stores the editor's run under the web import's real id.
+//    The same error reaches a viewer a second way, in the alert a failed pipeline run raises (`alerts:list`, the `alerts:fired`
+//    push) and in the scheduled refresh's `hub:dataset-refreshed` push: both say it failed, not why.
+//    Channels checked for a refresh or run error: dataset:list, pipelines:get, pipelines:changed, alerts:list, alerts:fired,
+//    hub:dataset-refreshed. NOT closed here: the dashboard summary's alert sentence (summary:compute) reads the same stored message.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -24,6 +28,9 @@ import * as H from './rowPolicyHarness';
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const pipelineStore: typeof import('../src/app/pipelineStore') = require('../src/app/pipelineStore');
+const pipelineRunner: typeof import('../src/app/pipelineRunner') = require('../src/app/pipelineRunner');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const schedules: typeof import('../src/server/jobs/schedules') = require('../src/server/jobs/schedules');
 const { randomUUID }: typeof import('crypto') = require('crypto');
 const { sourceView }: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
 const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('../src/data/sourceNames');
@@ -38,6 +45,7 @@ const REFRESH_ERROR = `relation "${TABLE}" does not exist`;
 const WEB_HOST = 'canary-host-web-9f3.internal';
 const WEB_URL = `https://${WEB_HOST}/export.csv`;
 const T = new Date().toISOString();
+const FAILED_SENTENCE = 'A refresh failed. Ask an editor for the details.';
 const FIXTURES = [HOST, DATABASE, DB_USER, TABLE, CONN_QUERY, SAVED_SQL, REFRESH_ERROR, WEB_HOST, WEB_URL];
 /** Every fixture above matches (the hyphenated hosts too): a leak of any of them is visible to a text assert. */
 const CANARY = /canary[-_](tbl|db|user|host)/;
@@ -128,6 +136,33 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('pipelines:get: no run error text for a viewer, the failure stays', !CANARY.test(pipeViewer.text) && runsOf(pipeViewer, D)[0].status === 'failed' && runsOf(pipeViewer, D)[0].errors.length === 0, JSON.stringify(runsOf(pipeViewer, D)));
     ok('NEGATIVE CONTROL: the editor reads the run error through pipelines:get', /canary_tbl_9f3/.test(runsOf(pipeEditor, D)[0].errors.join()), JSON.stringify(runsOf(pipeEditor, D)));
     ok('pipelines:get: a run of a dataset not from a connection keeps its text for a viewer', runsOf(pipeViewer, U)[0].errors[0] === 'HTTP 500', JSON.stringify(runsOf(pipeViewer, U)));
+
+    // A failed pipeline run raises an alert whose message carries the run's error (pipelineRunner.raiseFailures),
+    // for a dataset from a connection (D), one that is not (U), and next to an ordinary rule's alert on D.
+    const planted = await W.as('boss', async () => {
+      const node = (id: string, name: string) => ({ id: 'dataset:' + id, kind: 'dataset' as const, stage: 1, name, sub: '', ref: { type: 'dataset', id } });
+      const failed = (id: string, error: string) => ({ nodeId: 'dataset:' + id, status: 'failed' as const, attempts: 1, startedAt: 0, finishedAt: 1, result: { ok: false, error } });
+      await pipelineRunner.raiseFailures(P, { nodes: [node(D, 'Orders'), node(U, 'Open data')], edges: [] }, [failed(D, REFRESH_ERROR), failed(U, 'HTTP 500')]);
+      await alertStore.recordEvents(P, [{ id: randomUUID(), ruleId: randomUUID(), ruleName: 'Revenue dips', datasetId: D, at: T, value: 1, previous: 2, delta: -1, deltaPct: -50, message: 'Revenue fell 50%', seen: false }]);
+      return (await alertStore.load(P)).events;
+    });
+    const alertOf = (r: H.Reply, id: string, ruleName: string): string => r.body.events.find((e: { datasetId: string; ruleName: string }) => e.datasetId === id && e.ruleName === ruleName)?.message ?? '';
+    const [alertsViewer, alertsEditor] = [await W.call('nobody', 'alerts:list', { projectId: P }), await W.call('ed', 'alerts:list', { projectId: P })];
+    ok('alerts:list: a viewer reads a fixed sentence for a failed run, not the driver\'s error', alertOf(alertsViewer, D, 'Pipeline') === FAILED_SENTENCE && !CANARY.test(alertsViewer.text), alertsViewer.text);
+    ok('NEGATIVE CONTROL: the editor reads the run error in the alert', /canary_tbl_9f3/.test(alertOf(alertsEditor, D, 'Pipeline')), alertsEditor.text);
+    ok('alerts:list: a failure of a dataset not from a connection, and a rule\'s own alert on D, keep their text for a viewer',
+      /HTTP 500/.test(alertOf(alertsViewer, U, 'Pipeline')) && alertOf(alertsViewer, D, 'Revenue dips') === 'Revenue fell 50%', alertsViewer.text);
+    const pushed: Array<{ channel: string; payload: unknown }> = [];
+    await W.as('boss', () => schedules.pushFired(P, planted, (_p, channel, payload) => { pushed.push({ channel, payload }); }));
+    const pushedText = JSON.stringify(pushed);
+    ok('NEGATIVE CONTROL: the events handed to the push carry the run error', /canary_tbl_9f3/.test(JSON.stringify(planted)));
+    ok('alerts:fired: the push carries the fixed sentence, not the run error', pushed.length === 1 && pushed[0].channel === 'alerts:fired' && pushedText.includes(FAILED_SENTENCE) && !CANARY.test(pushedText), pushedText);
+    ok('alerts:fired: …and still the failure of a dataset not from a connection and a rule\'s alert', pushedText.includes('HTTP 500') && pushedText.includes('Revenue fell 50%'), pushedText);
+    // A scheduled refresh that fails tells every reader's tabs that it failed (the web reads ok, projectId, datasetId), never why.
+    const outcome = { projectId: P, datasetId: D, name: 'Orders', ok: false, error: REFRESH_ERROR, rowsBefore: 1, rowsAfter: 1 };
+    const tabs = schedules.failedRefreshPayload(outcome);
+    ok('NEGATIVE CONTROL: the outcome a failed scheduled refresh reports carries the error', CANARY.test(JSON.stringify(outcome)));
+    ok('hub:dataset-refreshed: a failed refresh\'s push says which dataset, not why', tabs.ok === false && tabs.datasetId === D && tabs.projectId === P && !('error' in tabs) && !CANARY.test(JSON.stringify(tabs)), JSON.stringify(tabs));
 
     // The runner draws its graph unrestricted: node ids are persisted, so an editor's run is stored under the web import's real id.
     // Run the web source with its dataset paused, so nothing is fetched.

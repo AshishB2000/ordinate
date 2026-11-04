@@ -12,3 +12,8 @@ export function fastCadenceNeedsIncremental(): string {
 export function refreshAlreadyRunning(): string {
   return t('refreshMessages.this_dataset_is_already_being_refreshed');
 }
+
+/** The reason a refresh failed names the warehouse's own tables, which this reader may not see (an alert in a viewer's bell). */
+export function refreshFailedForViewer(): string {
+  return t('refreshMessages.a_refresh_failed_ask_an_editor');
+}

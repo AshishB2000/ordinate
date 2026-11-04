@@ -23,6 +23,8 @@ import { closedToCaller, policyClosed, rowPolicyRefusal } from '../data/rowAcces
 import { rowReaderMessage } from '../data/rowAccessMessages';
 
 import * as store from '../analysis/alertStore';
+import { withoutRunError } from '../analysis/pipelineAlerts';
+import { unreadableErrorIds } from '../data/sourceNames';
 import * as alerts from '../analysis/alerts';
 import type { AlertEvent, AlertRule } from '../analysis/alerts';
 import * as copilot from '../ai/copilot';
@@ -116,7 +118,8 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
 /**
  * Alerts on a dataset whose row access rules restrict the caller keep their ids,
  * names and times but none of their figures, sentences or diagnoses — those were
- * computed over every row (docs/row-policy, REDACT).
+ * computed over every row (docs/row-policy, REDACT). A caller who may not see source names
+ * also reads a fixed sentence, not the driver's error, in a failed pipeline run's alert.
  */
 async function redactAlerts<F extends { rules: AlertRule[]; events: AlertEvent[] }>(projectId: string, file: F): Promise<F> {
   const closed = new Map<string, boolean>();
@@ -131,7 +134,7 @@ async function redactAlerts<F extends { rules: AlertRule[]; events: AlertEvent[]
     rules.push(kept as AlertRule);
   }
   const events: AlertEvent[] = [];
-  for (const e of file.events) {
+  for (const e of await withoutRunError(projectId, file.events, unreadableErrorIds)) {
     if (!(await isClosed(e.datasetId))) { events.push(e); continue; }
     const { diagnosis: _d, ...kept } = e;
     events.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: rowReaderMessage() } as AlertEvent);

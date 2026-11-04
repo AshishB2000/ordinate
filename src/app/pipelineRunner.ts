@@ -120,8 +120,8 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
   return { ok: false, error: 'Unknown step.' };
 }
 
-/** The alert a failure raises: which step, why, and how much it stopped. */
-async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: NodeOutcome[]): Promise<void> {
+/** The alert a failure raises: which step, why, and how much it stopped. Its message holds the run's error: a viewer's copy is cut (analysis/pipelineAlerts). Exported for its test. */
+export async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: NodeOutcome[]): Promise<void> {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const at = new Date().toISOString();
   const UUID = /^[0-9a-f-]{36}$/i;
@@ -209,7 +209,7 @@ async function runLocked(projectId: string, start: string[], trigger: 'manual' |
   const state = new Map<string, 'queued' | 'running'>();
   live.set(key, state);
   try {
-    // Unrestricted on purpose: a run is stored under its node id (source:url:<url>), and a viewer-trimmed graph would store another.
+    // Its callers (pipelines:run is write; the schedule is the system identity) see source names, so the graph is untrimmed; a viewer's would persist other node ids.
     const g = await loadGraph(projectId);
     if ('error' in g) return { ok: false, error: g.error };
     const graph = g.graph;
