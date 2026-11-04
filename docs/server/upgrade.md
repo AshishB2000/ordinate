@@ -203,9 +203,11 @@ write. Each item says what a pod older than this release does, and what this rel
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
   column, and an alert saved from a KPI counts by the control's column instead of the metric's.
   This release keeps both. Where a dashboard's date control is on another column than the metric's
-  own date, it refuses the chart, Explain, the alert and the drivers ("This chart counts a metric by
-  its own date, which this server cannot do yet"), and the metric's KPI (the Summary card's too)
-  shows no figure, because the later release counts by the metric's date.
+  own date, the later release counts by the metric's date, so this release gives no figure for that
+  metric: it refuses a chart of it, Explain, an alert on it and its drivers ("This chart counts a
+  metric by its own date, which this server cannot do yet"), and the metric's own KPI tile and the
+  Summary card's KPI for it show none. Three places still give a figure: see
+  [What stays open](#what-stays-open).
 - **Snapshot metrics**, which take the last (or first) value by date, as for a balance, instead of
   adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
   duplicate erases the setting. This release keeps it and shows no figure for it: a KPI shows none,
@@ -224,7 +226,7 @@ dashboard's date column instead of the metric's, and a snapshot metric summed ov
 you roll back below this release anyway, remove the always-applied filters from your Live datasets
 first, and check the charts that use a named join afterwards.
 
-Three things stay open even with every pod on this release, for as long as its pods run beside the
+These stay open even with every pod on this release, for as long as its pods run beside the
 release that adds these features:
 
 - **The metric editor's preview** on a pod of this release shows a plain total for a snapshot
@@ -233,6 +235,13 @@ release that adds these features:
   column: the metric keeps the one it has now.
 - **Explain refuses a saved chart with more than 8 filters** instead of narrating it: it reads at
   most 8, and narrating fewer would describe a wider chart.
+- **A metric that counts by its own date, under a dashboard date control on another column**, still
+  gets a figure in three places on a pod of this release. It counts by the control's date there,
+  while a pod of the later release counts by the metric's own date, until every pod runs the later
+  release:
+  - a KPI card's comparison period (the figure it compares with);
+  - a what-if (scenario) card;
+  - a formula built on such a metric, in a chart, in its drivers and in the Summary card.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 

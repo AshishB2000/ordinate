@@ -250,7 +250,8 @@ function skip(t: TableData, warning: string): StepResult {
 // ── applyPipeline ────────────────────────────────────────────────────────────
 
 // Fold each step left→right over a deep copy of `source`, accumulating warnings.
-// A step referencing a missing column is skipped with a warning; only a row access lock's step throws (RowPolicyError).
+// A step referencing a missing column is skipped with a warning. It throws only to refuse: a row access lock's
+// step (RowPolicyError) or a glossary term no door expanded (TermNotExpandedError).
 // `ctx.salt` is the project's masking key for a mask_hash step (maskSteps.ts);
 // without it that step is skipped, never hashed unsalted. `ctx.tables` are the
 // datasets a union / lookup step reads (stepRefs.ts); without them it is skipped.
