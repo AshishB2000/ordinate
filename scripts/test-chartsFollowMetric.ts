@@ -343,13 +343,29 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok('facts: under a split only the first measure is drawn, so a filtered second one is not worded', (await asked({ ...filtered.encoding, series: 'cat', values: [plainAmtM, filtered.encoding.values[0]] })).every((t) => t === undefined));
     ok('NEGATIVE CONTROL: … and a filtered first measure under the same split is', typeof (await asked({ ...filtered.encoding, series: 'cat', values: [filtered.encoding.values[0], plainAmtM] }))[0] === 'string');
 
+    // The dataset's own facts word every metric of it (copilot factMetrics → describeDefinition): the same rule hides the literal there.
+    // (Before the kept-step metric below: a metric this pod cannot read leaves the whole list out of those facts.)
+    const mark = (datasetId: string, column: string, sensitivity: string) => H.as(ORG_A, () => catalog.setColumn(P, datasetId, column, { sensitivity } as never));
+    await save('Probe tier', X, { column: 'qty', aggregation: 'sum' }, [eq('tier', 4242)]);
+    await save('Probe region', X, { column: 'qty', aggregation: 'sum' }, [eq('region', 'Nowhere')]);
+    const datasetLine = async (name: string): Promise<string> => {
+      const text = (await H.as(ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'dataset', id: X }))).text;
+      return text.split('\n').find((l) => l.startsWith(`- "${name}" =`)) ?? `(no line for ${name}) ${text.slice(0, 300)}`;
+    };
+    await mark(X, 'tier', 'personal');
+    const markedTier = await datasetLine('Probe tier');
+    ok('dataset facts: a metric filtered on a marked column names the column and not the value', markedTier.startsWith('- "Probe tier" = sum of qty, where tier (withheld). ') && !markedTier.includes('4242'), markedTier);
+    const openRegion = await datasetLine('Probe region');
+    ok('NEGATIVE CONTROL: dataset facts print the value of an unmarked column', openRegion.startsWith('- "Probe region" = sum of qty, where region = Nowhere. '), openRegion);
+    await mark(X, 'tier', 'none');
+    ok('NEGATIVE CONTROL: unmarked, the dataset facts show the same column\'s value', (await datasetLine('Probe tier')).startsWith('- "Probe tier" = sum of qty, where tier = 4242. '));
+
     // A filter list may carry a step this pod cannot read (a glossary term, a later release's step): named by its kind, never a crash.
     const kept = await save('Kept qty', X, { column: 'qty', aggregation: 'sum' }, [eq('tier', 2), { type: 'later_step', column: 'tier', via: randomUUID(), values: 'not a list' }]);
     const keptV = await mk('Facts kept step', [{ column: 'qty', aggregation: 'sum', metricId: kept }]);
     ok('facts: a kept step is named by its kind and does not break the Assistant', (await measuresOf(keptV.id)) === '"Kept qty" = sum(qty) where tier = 2 and later step', await factsText(keptV.id).catch((e) => String(e)));
 
     // The withheld guarantee, through buildFacts: the column's mark in the catalog hides the filter's value from the prompt.
-    const mark = (datasetId: string, column: string, sensitivity: string) => H.as(ORG_A, () => catalog.setColumn(P, datasetId, column, { sensitivity } as never));
     await mark(X, 'tier', 'personal');
     const hiddenText = await factsText(filtered.id);
     ok('facts: a filter on a column the user marked names the column and not the value', /Measures: "Tier 3 qty" = sum\(qty\) where tier \(withheld\)\./.test(hiddenText) && !hiddenText.includes('tier = 2'), hiddenText.slice(0, 600));

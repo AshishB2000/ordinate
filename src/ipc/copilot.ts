@@ -14,7 +14,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { followedEncoding } from '../analysis/metricMeasures';
-import { followedMeasureTexts } from './copilotMeasures';
+import { followedMeasureTexts, metricDefinitionText } from './copilotMeasures';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -158,6 +158,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const list = await metrics.listMetrics(projectId);
     const byName = await metrics.metricsByName(projectId);
     const out: FactMetric[] = [];
+    const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
@@ -167,7 +168,11 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       });
       if (!r) continue;
       const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
-      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, additivity, description: s.description });
+      // Its filters are worded as the Assistant is told a chart's: a value of a column marked personal or financial is withheld.
+      const stored = await metrics.getMetric(projectId, s.id);
+      if (!stored) continue;
+      const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description });
     }
     return out;
   } catch (_) {

@@ -97,13 +97,16 @@ export function describeDefinitionShort(definition: MetricDefinition): string {
  * A formula metric describes itself — `[Profit] / [Revenue]` is already the
  * clearest sentence available for it, and paraphrasing an expression into prose
  * loses the exact thing the reader wants to check.
+ *
+ * `filterWords`: how one filter reads. A model is told a filter on a column the
+ * user marked personal or financial without its value (ipc/copilotMeasures).
  */
-export function describeDefinition(metric: Pick<Metric, 'definition' | 'filters'>): string {
+export function describeDefinition(metric: Pick<Metric, 'definition' | 'filters'>, filterWords: (s: FilterStep) => string = describeFilter): string {
   const head = describeDefinitionShort(metric.definition);
   const filters = Array.isArray(metric.filters) ? metric.filters : [];
   if (!filters.length) return head;
   // "where", not "excluding": a filter states what is KEPT. `status ≠ refunded`
   // reads as an exclusion, but `region = West` is the same field and is not one,
   // and one clause cannot be worded for both.
-  return `${head}, where ${filters.map(describeFilter).join(' and ')}`;
+  return `${head}, where ${filters.map(filterWords).join(' and ')}`;
 }

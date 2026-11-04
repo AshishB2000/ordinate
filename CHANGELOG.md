@@ -89,8 +89,8 @@ All notable changes to Ordinate are documented here. Format based on
   aggregation the chart stored when the measure was picked are only the fallback for a metric that is
   gone.
 - **Charts built from a metric with filters, or from a metric edited since, change their numbers once.**
-  The Metrics page marks them per metric ("2 charts changed", with the chart names on hover). A chart
-  that draws what it always drew is not marked.
+  The Metrics page marks them per metric ("2 charts changed"), and the chart names are on hover and in
+  text a screen reader reads. A chart that draws what it always drew is not marked.
 - **Pivots still draw their saved copy.** On a Live dataset a chart with two differently filtered metrics
   asks the warehouse once per filter list.
 - **A chart that cannot follow its metric says why instead of drawing a number that ignores the metric's
@@ -98,7 +98,8 @@ All notable changes to Ordinate are documented here. Format based on
   column, small multiples of measures with different filters, and a filtered metric beside another
   measure on a folded ("Other") or binned axis.
 - **The Assistant is told a followed metric by its name, definition and filters**, not as the bare
-  column's total. A filter on a column marked personal or financial names the column and never its value.
+  column's total. In chart and dataset facts alike, a filter on a column marked personal or financial
+  names the column and never its value.
 
 ### Breaking — Ordinate is now a self-hosted web app (Phase 7)
 
