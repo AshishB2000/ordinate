@@ -108,6 +108,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/distinctNarrow.ts': { count: 2, how: 'prepare' },
   // a Live dataset's base filters are a dataset setting: a term is dropped on purpose, like Prepare
   'src/data/liveBaseFilters.ts': { count: 2, how: 'prepare' },
+  // a term's own filters are plain steps: a term inside a term is refused on save (termProblem), dropped on read
+  'src/analysis/terms.ts': { count: 2, how: 'prepare' },
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/data/stepSanitize.ts': { count: 3, how: 'prepare' },
   'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },

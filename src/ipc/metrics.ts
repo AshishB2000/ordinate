@@ -58,6 +58,8 @@ import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
 import { contentTag, isRecordChanged } from '../app/editConflict';
+import { termHolding } from '../analysis/termNames';
+import { termNameTaken } from '../data/termMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 
@@ -465,10 +467,17 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
  * entirely. Exported for scripts/test-metrics.ts.
  */
 export async function nameTaken(projectId: string, name: unknown, exceptId?: string): Promise<boolean> {
+  return (await nameRefusal(projectId, name, exceptId)) !== null;
+}
+
+/** The sentence a name is refused with — another metric's, or a glossary term's name or alias (semantic D10) — or null. */
+export async function nameRefusal(projectId: string, name: unknown, exceptId?: string): Promise<string | null> {
   const key = String(name || '').trim().toLowerCase();
-  if (!key) return false;
+  if (!key) return null;
   const list = await metrics.listMetrics(projectId);
-  return list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId);
+  if (list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId)) return nameTakenMessage(name);
+  const term = await termHolding(projectId, String(name));
+  return term ? termNameTaken(String(name).trim(), term) : null;
 }
 
 export function register() {
@@ -503,7 +512,8 @@ export function register() {
     try {
       const raw = input && typeof input === 'object' ? input : {};
       // `field`: which box of the editor the sentence belongs beside.
-      if (await nameTaken(projectId, raw.name)) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const taken = await nameRefusal(projectId, raw.name);
+      if (taken) return { ok: false, error: taken, field: 'name' };
       const when = await settleOnSave(projectId, raw);
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const m = await metrics.saveMetric(projectId, {
@@ -523,7 +533,8 @@ export function register() {
   ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
-      if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
+      if (taken) return { ok: false, error: taken, field: 'name' };
       const before = await metrics.getMetric(projectId, id);
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };

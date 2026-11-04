@@ -151,6 +151,7 @@ export function sentence(c: Change): string {
     case 'metric.direction': return M.directionChanged();
     case 'metric.tree': return M.metricTreeChanged(s('from'), s('to'));
     case 'metric.timeColumn': return M.metricTimeColumnChanged(s('from'), s('to'));
+    case 'term.aliases': return M.termAliasesChanged(s('from'), s('to'));
     case 'report.format': return M.reportFormat(s('from'), s('to'));
     case 'report.dashboard': return M.reportDashboard();
     case 'report.pagesAdded': return M.pagesAdded(n('n'));
@@ -193,7 +194,7 @@ export function summaryLine(c: Counts): string {
 }
 
 interface Pair {
-  type: 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
+  type: 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'term';
   projectId: string;
   id: string;
   a: versions.VersionFile;

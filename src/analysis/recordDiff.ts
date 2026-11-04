@@ -21,7 +21,7 @@
 // each branch reads only the fields it names, so a loose type is the honest one.
 type Rec = Record<string, any>;
 
-export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
+export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'term';
 
 // A version's content: everything a save of the record can change that a
 // restore should put back. (Parameters, a visual's overlays and a report's
@@ -36,10 +36,11 @@ const CONTENT_KEYS: Record<DiffType, string[]> = {
   // exception is an INPUT table (src/data/inputTable/), whose data is authored
   // here: its version also carries `table`, and a restore puts it back.
   dataset: ['steps', 'table'],
+  term: ['name', 'aliases', 'description', 'filters'], // a glossary term (./terms); its dataset never moves
 };
 
 /** A whole-document editor's save channel (src/app/editConflict.ts). A metric has two: its fields, and its tree. */
-export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
+export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'term';
 
 /**
  * What each editor's save can write — replace-or-keep — and so all its
@@ -56,6 +57,7 @@ export const SAVE_KEYS: Record<SaveKind, readonly string[]> = {
   story: ['name', 'blocks'],
   scorecard: ['name', 'period', 'rows', 'description'],
   scenario: ['name', 'baseMetricIds', 'drivers'],
+  term: ['name', 'aliases', 'description', 'filters'], // term:update: no `datasetId`
 };
 
 /** What an absent key means — its store's own default — so a version saved
@@ -221,6 +223,13 @@ function diffMetric(a: Rec, b: Rec, parts: string[]): void {
   if ((a.timeColumn || '') !== (b.timeColumn || '')) parts.push('changed the date it counts by');
 }
 
+function diffTerm(a: Rec, b: Rec, parts: string[]): void {
+  if (a.name !== b.name) parts.push('renamed the term');
+  if (!same(arr(a.aliases), arr(b.aliases))) parts.push('changed what it is also called');
+  if ((a.description || '') !== (b.description || '')) parts.push('edited the description');
+  listChange(arr(a.filters), arr(b.filters), 'filter', parts);
+}
+
 function diffReport(a: Rec, b: Rec, parts: string[]): void {
   if (a.name !== b.name) parts.push('renamed the report');
   if (a.analysisId !== b.analysisId) parts.push('pointed it at another dashboard');
@@ -317,6 +326,7 @@ const DIFFERS: Record<DiffType, (a: Rec, b: Rec, parts: string[]) => void> = {
   metric: diffMetric,
   report: diffReport,
   dataset: diffDataset,
+  term: diffTerm,
 };
 
 /** How many clauses a line carries before the rest become "and N more". */

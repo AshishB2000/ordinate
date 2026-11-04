@@ -39,6 +39,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^analyses/${UUID}\\.json$`, 'i'), count: 'dashboards' },
   { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
   { re: new RegExp(`^verified/${UUID}\\.json$`, 'i'), count: 'verified' }, // p3-02 — the Assistant's verified questions
+  { re: new RegExp(`^terms/${UUID}\\.json$`, 'i'), count: 'terms' }, // glossary terms (semantic D10); a pre-terms server refuses the bundle
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
   { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^scenarios/${UUID}\\.json$`, 'i'), count: 'scenarios' },
@@ -47,7 +48,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   // No `count`: the manifest's counts stay as they were. The id swap follows both names and bodies.
   { re: new RegExp(`^connections/${UUID}\\.tables\\.json$`, 'i') }, // the index
   { re: new RegExp(`^connections/${UUID}/tables/${UUID}\\.json$`, 'i') }, // one doc
-  { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
+  { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report|term)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
   { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
   { re: new RegExp(`^notebooks/${UUID}\\.json$`, 'i'), count: 'notebooks' }, // r7:notebooks
   { re: new RegExp(`^boundaries/${UUID}\\.json$`, 'i'), count: 'boundaries' },

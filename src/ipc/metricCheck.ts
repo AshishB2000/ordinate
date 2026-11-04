@@ -20,7 +20,7 @@ import { compileMetricFormula } from '../analysis/metricFormula';
 import * as datasets from '../data/datasets';
 import { relatedColumnNames } from './relationships';
 import { liveCodeOf } from './liveRoute';
-import { nameTaken, nameTakenMessage, previewDefinition } from './metrics';
+import { nameRefusal, previewDefinition } from './metrics';
 
 /** The handler names this limit itself; the contract's bound is the transport's. */
 const MAX_EXPRESSION = 2000;
@@ -77,7 +77,8 @@ export async function checkMetric(input: {
     chart: input.chart === true,
   });
   const check: MetricCheckReply = { ...verdict, valid: verdict.ok };
-  if (name && (await nameTaken(projectId, name, id))) check.nameError = nameTakenMessage(name);
+  const taken = name ? await nameRefusal(projectId, name, id) : null;
+  if (taken) check.nameError = taken;
   if (!check.valid) return check;
   try {
     check.preview = await previewDefinition(projectId, datasetId, { formula: expression }, [], input.format, name || undefined);

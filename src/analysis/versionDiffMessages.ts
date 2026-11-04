@@ -234,6 +234,11 @@ export function directionChanged(): string {
 }
 
 /** A metric's date, before and after (semantic D9): each side is a column, or "the dashboard’s date". */
+/** A glossary term's "Also called" names, each list joined by commas. */
+export function termAliasesChanged(from: string, to: string): string {
+  return t('versionDiffMessages.also_called_changed_from_to', { from, to });
+}
+
 export function metricTimeColumnChanged(from: string, to: string): string {
   return t('versionDiffMessages.date_it_counts_by_changed_from', { from, to });
 }
