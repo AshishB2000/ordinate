@@ -192,7 +192,8 @@ export function buildGraph(input: LineageInput): LineageGraph {
     } else if (o.kind === 'url') {
       let host = str(o.url);
       try { host = new URL(host).hostname || host; } catch (_) { /* keep the raw string */ }
-      sid = add({ id: 'source:url:' + str(o.url), kind: 'source', name: host, sub: 'Web address' });
+      // No url: a viewer's copy (src/ipc/lineage.loadInput). One node per dataset, so two sites are not drawn as one.
+      sid = add({ id: 'source:url:' + (host ? str(o.url) : '#' + did), kind: 'source', name: host || 'Web address', sub: 'Web address' });
     } else if (o.kind === 'capture') {
       sid = add({
         id: 'source:capture:' + str(o.captureId), kind: 'source',

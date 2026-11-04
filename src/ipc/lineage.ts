@@ -27,6 +27,9 @@ const PREFIX: Record<string, string> = {
 
 const present = <T>(list: Array<T | null>): T[] => list.filter((x): x is T => x !== null);
 
+/** The origin field that names a source to a reader: a warehouse table, a web import's URL (and so its host). */
+const NAME_FIELD: Record<string, string> = { connection: 'table', url: 'url' };
+
 export async function loadInput(projectId: string): Promise<LineageInput> {
   const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs, sees] = await Promise.all([
     datasets.listDatasets(projectId).catch(() => []),
@@ -41,8 +44,10 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     seesSourceNames(projectId),
   ]);
   // the one input lineage:get and pipelines:get share; a job (system admin) still sees names
-  const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T =>
-    !sees && d.origin?.kind === 'connection' ? { ...d, origin: { ...d.origin, table: undefined } } : d;
+  const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T => {
+    const field = NAME_FIELD[d.origin?.kind ?? ''];
+    return !sees && field ? { ...d, origin: { ...d.origin, [field]: undefined } } : d;
+  };
   return {
     datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))).map(unnamed),
     visuals: present(await Promise.all(visList.map((v) => visuals.getVisual(projectId, v.id)))),
