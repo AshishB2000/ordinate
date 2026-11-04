@@ -197,7 +197,8 @@ write. Each item says what a pod older than this release does, and what this rel
 - **Notes on a table, labels for a column's values, and warnings on a join.** An older pod drops
   them the next time it saves a project's notes (any tag or note edit does) or a join. This
   release keeps the notes and the labels. The column notes a browser reads carry no value labels,
-  so a viewer with row access rules never sees them. A join's warning is dropped when this release
+  so a viewer with row access rules never sees them, and a project bundle shaped by the Share policy
+  (mask or drop) from this release carries none either. A join's warning is dropped when this release
   saves the join: it is worked out again later, so losing it never changes a figure.
 - **A metric's date column, and the mark on a date filter that came from a dashboard's date
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
