@@ -11,7 +11,8 @@
 //      the column profile (server figures), the lineage drawer.
 //   3. Quality: add a rule with its live preview, run the checks, show the
 //      failing rows. Columns: a description saved in place; an "Also called"
-//      name refused at the field, another saved and still there after a reload.
+//      name refused at the field, another saved and still there after a reload; value labels filled
+//      from the data, two of them saved, "2 labels" after a reload.
 //   4. Catalog: details saved from the popover; Relationships: a relationship
 //      from the suggested key, drawn and listed with its match rate.
 //   4b. About: a table's role, key, grain and guide, its key counted by the
@@ -232,6 +233,57 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await screens(page, 'dataset-columns');
   await alsoCalled();
   assert.equal(await page.getByRole('textbox', { name: 'Also called, for state' }).inputValue(), '', 'the refused name was never saved');
+
+  // Value labels: region's codes filled from the data, two of them labelled and saved; the cell says "2 labels", after a reload too.
+  const labelsDialog = page.getByRole('dialog', { name: 'Value labels of region' });
+  const openLabels = async (count: string) => {
+    await page.getByRole('button', { name: `Value labels of region: ${count}` }).click();
+    await labelsDialog.waitFor();
+  };
+  await dialogShots(page, async () => {
+    await openLabels('Add labels');
+    await labelsDialog.getByRole('heading', { name: 'No labels yet' }).waitFor();
+  }, 'dataset-value-labels-empty');
+  // What lives in memory (the values being read, a half-labelled list, a rule broken) is shot in place, in both themes.
+  const inPlace = async (name: string) => {
+    for (const t of ['light', 'dark'] as const) {
+      await page.evaluate((v) => (document.documentElement.dataset.theme = v), t);
+      await page.screenshot({ path: path.join(SCREENS, `${name}-${t}.png`), fullPage: true, animations: 'disabled' });
+    }
+    await page.evaluate((v) => (document.documentElement.dataset.theme = v), theme);
+  };
+  await openLabels('Add labels');
+  let readValues = () => {};
+  const valuesRead = new Promise<void>((go) => (readValues = go));
+  const distinctUrl = '**/api/rpc/dataset%3Adistinct';
+  await page.route(distinctUrl, async (route) => {
+    await valuesRead;
+    await route.continue();
+  });
+  await labelsDialog.getByRole('button', { name: 'Fill from the data' }).first().click();
+  await labelsDialog.getByRole('status', { name: "Reading the column's values" }).waitFor();
+  await inPlace('dataset-value-labels-loading');
+  readValues();
+  await labelsDialog.getByRole('textbox', { name: 'Label for East' }).fill('Eastern region');
+  await page.unroute(distinctUrl);
+  await labelsDialog.getByRole('textbox', { name: 'Label for West' }).fill('Western region');
+  await labelsDialog.getByRole('status').filter({ hasText: 'Added 5 values.' }).waitFor();
+  await inPlace('dataset-value-labels');
+  // The server's rule, said before a save: one label on two values.
+  await labelsDialog.getByRole('textbox', { name: 'Label for South' }).fill('Eastern region');
+  await labelsDialog.getByRole('alert').filter({ hasText: '“Eastern region” would name both “East” and “South”. A label can name one value only.' }).waitFor();
+  assert.equal(await labelsDialog.getByRole('button', { name: 'Save' }).isDisabled(), true, 'a list the server would refuse is not sent');
+  await inPlace('dataset-value-labels-refused');
+  await labelsDialog.getByRole('textbox', { name: 'Label for South' }).fill('');
+  const labelled = page.waitForResponse((r) => r.url().endsWith('/api/rpc/catalog%3AsetColumn') && r.status() === 200);
+  await labelsDialog.getByRole('button', { name: 'Save' }).click();
+  const labelsSaved = (await (await labelled).json()) as { ok: boolean; column?: { values?: unknown } };
+  assert.deepEqual(labelsSaved.column?.values, [{ value: 'East', label: 'Eastern region' }, { value: 'West', label: 'Western region' }], 'only the labelled rows are saved, values as stored');
+  await labelsDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Value labels of region: 2 labels' }).waitFor();
+  await page.reload();
+  await settled(page);
+  await page.getByRole('button', { name: 'Value labels of region: 2 labels' }).waitFor();
 
   // ── 4. Catalog and relationships ────────────────────────────────────────
   await page.goto(`/data/${pid}?tab=catalog`);
