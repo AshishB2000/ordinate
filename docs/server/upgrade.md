@@ -299,7 +299,7 @@ an older release, use the same two ways through as for terms: **go through this 
 `ORDINATE_IMAGE` in Compose). An older pod shows the hidden values, and drops the rules the next time
 it saves the dataset.
 
-## Viewers no longer read source names
+## Viewers no longer read source names (`p2-01`)
 
 From this release, a project viewer (someone who can read a project but not edit it) no longer sees a
 connection's host, database, user or saved queries, a dataset's warehouse table or a web import's host, or
