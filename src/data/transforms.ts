@@ -105,6 +105,8 @@ export interface FilterStep {
   context?: boolean;
   /** A row access / embed lock (data/rowLock.ts): a warehouse compares it byte for byte (row-policy D13). */
   lock?: true;
+  /** Made by a dashboard date control (semantic D9): the server may move its period onto the metric's timeColumn. */
+  fromControl?: true;
   /**
    * The relationship (id) `column` is read through, when it belongs to a RELATED table (the join
    * planner, analysis/joinPlan.ts). Kept by every sanitizer so an older pod never drops it, and
