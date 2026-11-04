@@ -27,6 +27,7 @@ const metricsMod: typeof import('../src/analysis/metrics') = require('../src/ana
 const msg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
 const measures: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
 const vmm: typeof import('../src/ipc/vizMetricMeasures') = require('../src/ipc/vizMetricMeasures');
+const { followedMeasureTexts }: typeof import('../src/ipc/copilotMeasures') = require('../src/ipc/copilotMeasures');
 const visualStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
@@ -112,12 +113,43 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok(`"${label}": after the edit, the tier-2 total (reference, Object.is)`, Object.is(after.data.series[0].values[i], tierQty(label, 2)), show([after.data.series[0].values[i], tierQty(label, 2)]));
   }
 
+  // ── 5a. The rows behind a bar carry the metric's filters (the drill's "Show the rows") ─
+  // enc3's metric now filters tier = 2 (section 5), so the rows behind West's bar are West's tier-2 rows.
+  const drill = (enc: unknown): Promise<Reply> => post('visual:rows', { projectId: P, datasetId: X, encoding: enc, filters: [], mark: { category: 'West' } }).then((r) => r.value);
+  const rows2 = await drill(enc3);
+  ok('drill: the metric\'s filter is in the row scope', rows2.ok && rows2.filters.some((f: Reply) => f.column === 'tier' && f.value === 2), show(rows2.filters));
+  ok('drill: the count is the rows behind the bar', rows2.total === inRegion('West').filter((r) => r[COL.tier] === 2).length, show([rows2.total, inRegion('West').length]));
+  const plainRows = await drill({ category: 'region', values: [{ column: 'qty', aggregation: 'sum' }] });
+  ok('NEGATIVE CONTROL: a plain chart\'s drill has no tier filter', plainRows.ok && !plainRows.filters.some((f: Reply) => f.column === 'tier'), show(plainRows.filters));
+  ok('NEGATIVE CONTROL: and lists all of West\'s rows', plainRows.total === inRegion('West').length, show(plainRows.total));
+  const perMeasureRows = await drill(threeEnc);
+  ok('a per-measure chart keeps today\'s rows: no one set of rows adds up to two filter lists', perMeasureRows.ok && !perMeasureRows.filters.some((f: Reply) => f.column === 'tier') && perMeasureRows.total === inRegion('West').length, show(perMeasureRows.filters));
+
+  // A dated axis asks the chart for its grain (the tile's cached answer): the month's rows still carry the metric's filter.
+  const dated = { category: 'd', grain: 'month', values: [enc3.values[0]] };
+  const month = await chart(X, dated);
+  const monthRows = await post('visual:rows', { projectId: P, datasetId: X, encoding: dated, filters: [], mark: { category: month.ok ? month.data.labels[0] : '' } }).then((r) => r.value);
+  ok('drill on a month: the metric\'s filter and the month\'s range are both in the row scope', month.ok && monthRows.available === true && monthRows.filters.some((f: Reply) => f.column === 'tier' && f.value === 2) && monthRows.filters.some((f: Reply) => f.column === 'd'), show(monthRows.reason ?? monthRows.filters));
+
   // ── 6. Small multiples ─────────────────────────────────────────────────────
   const f1 = await chart(X, { ...enc3, facet: { rows: 'cat' } });
   const f0 = await chart(X, { category: 'region', values: [{ column: 'qty', aggregation: 'sum' }], facet: { rows: 'cat' } }, { filters: [eq('tier', 2)] });
   ok('a faceted chart with one filtered metric draws, equal to the hand-filtered chart', f1.ok === true && f0.ok === true && JSON.stringify(f1.data) === JSON.stringify(f0.data), show([f1, f0]));
   const f2 = await chart(X, { ...threeEnc, facet: { rows: 'cat' } });
   ok('measures with different metric filters on small multiples are refused with the sentence', f2.ok === false && /small multiples/.test(String(f2.error)), show(f2));
+
+  // ── 6a. The accepted refusal: parts that need separate questions cannot share a folded or binned axis ─
+  // A filtered metric beside a plain measure asks two questions (section 4); "Other" keeps the top 50 BY THE FIRST
+  // MEASURE and bins span the filtered range, so the two answers would not line up (vizMetricMeasures' ponytail).
+  const folded = (values: unknown[], category: string) => chart(X, { category, values });
+  const plainAmtMeasure = { column: 'amt', aggregation: 'sum' };
+  for (const [what, category, shows] of [['a text axis folded into "Other"', 'many', 'note'], ['a binned numeric axis', 'qty', 'binned']] as const) {
+    const both = await folded([enc3.values[0], plainAmtMeasure], category);
+    ok(`${what}: a filtered metric beside a plain measure is refused with the sentence`, both.ok === false && both.error === msg.measureNeedsOneAxis('sum of qty'), show(both));
+    const alone = await folded([enc3.values[0]], category);
+    ok(`NEGATIVE CONTROL (${what}): the same chart with only the filtered metric draws`, alone.ok === true && alone.data.labels.length > 0, show(alone));
+    ok(`NEGATIVE CONTROL (${what}): … and its axis really is ${shows === 'note' ? 'folded' : 'binned'}`, alone.ok === true && !!alone.category?.[shows], show(alone.category));
+  }
 
   // ── 7. Resident ≡ JS, byte for byte ────────────────────────────────────────
   {
@@ -228,6 +260,26 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok('the plan preview refuses the edited chart', ev?.kind === 'existing' && ev.data === null && ev.note === refusal, show(ev));
     const kv = (await planOf('Still summed')).sheets[0]?.visuals[0];
     ok('NEGATIVE CONTROL: the plan preview draws the chart over a metric still summed', kv?.kind === 'existing' && kv.data !== null && kv.data.series[0].values.length === 5, show(kv));
+  }
+
+  // ── 11a. The Assistant is told a followed metric by its name and its filters ─
+  // `sum(qty)` alone would let the model narrate tier-2 figures as the total.
+  {
+    const west = await save('West qty', X, { column: 'qty', aggregation: 'sum' }, [eq('region', 'West')]);
+    const mk = (name: string, values: unknown[]) => H.as(ORG_A, () => visualStore.saveVisual(P, { datasetId: X, name, chartType: 'column', encoding: { category: 'tier', values } } as never)).then((v) => v!);
+    const measuresOf = async (id: string): Promise<string> => /Measures: ([^\n]*)\./.exec((await H.as(ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'visual', id }))).text)?.[1] ?? '';
+    const filtered = await mk('Facts filtered', [{ column: 'qty', aggregation: 'sum', metricId: t3 }]);
+    ok('facts: a followed simple metric is its name, its definition and its filters', (await measuresOf(filtered.id)) === '"Tier 3 qty" = sum(qty) where tier = 2', await measuresOf(filtered.id));
+    const quotedV = await mk('Facts quoted', [{ column: 'qty', aggregation: 'sum', metricId: west }]);
+    ok('facts: a text cell value is quoted, as the other facts quote data', (await measuresOf(quotedV.id)) === '"West qty" = sum(qty) where region = "West"', await measuresOf(quotedV.id));
+    const mixed = await mk('Facts mixed', [{ column: 'qty', aggregation: 'sum', metricId: t3 }, { column: 'amt', aggregation: 'avg' }]);
+    ok('facts: a measure with no metric keeps its line byte for byte', (await measuresOf(mixed.id)) === '"Tier 3 qty" = sum(qty) where tier = 2, avg(amt)', await measuresOf(mixed.id));
+    const plainV = await mk('Facts plain', [{ column: 'qty', aggregation: 'sum' }]);
+    ok('NEGATIVE CONTROL: a plain measure is the bare line', (await measuresOf(plainV.id)) === 'sum(qty)', await measuresOf(plainV.id));
+    const bareV = await mk('Facts unfiltered metric', [{ column: 'amt', aggregation: 'sum', metricId: sales }]);
+    ok('NEGATIVE CONTROL: a followed metric with no filters is the bare line of what it draws', (await measuresOf(bareV.id)) === 'sum(qty)', await measuresOf(bareV.id));
+    const marked = await H.as(ORG_A, () => followedMeasureTexts(P, X, filtered.encoding, { tier: { sensitivity: 'personal' } }));
+    ok('facts: a filter on a withheld column names the column and not the value', marked[0] === '"Tier 3 qty" = sum(qty) where tier (withheld)', show(marked));
   }
 
   // ── 12. A snapshot metric is refused until step 07 ─────────────────────────

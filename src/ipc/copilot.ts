@@ -14,6 +14,7 @@ import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { followedEncoding } from '../analysis/metricMeasures';
+import { followedMeasureTexts } from './copilotMeasures';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -253,7 +254,7 @@ export async function buildFacts(
       for (const rid of [v.encoding.categoryDatasetId, v.encoding.seriesDatasetId]) {
         if (rid && rid !== v.datasetId && !relatedDocs[rid]) relatedDocs[rid] = await catalogColumns(projectId, rid);
       }
-      return copilot.visualFacts({ ...v, encoding: drawn }, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId));
+      return copilot.visualFacts({ ...v, encoding: drawn }, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId), await followedMeasureTexts(projectId, v.datasetId, drawn, columnDocs));
     }
   }
 
