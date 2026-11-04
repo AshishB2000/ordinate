@@ -187,6 +187,7 @@ async function main(): Promise<void> {
 
   await everyProjectFile();
   await sourceDocs();
+  await verifiedQuestions();
   finish();
 }
 
@@ -300,6 +301,58 @@ async function sourceDocs(): Promise<void> {
     const r = await bundle.importBundle(bundle.writeZip([...bundle.readZip(out.bytes), { name: bad, data: Buffer.from('{}') }]));
     ok(`NEGATIVE CONTROL: "${bad.replace(C, '<C>').replace(DOC, '<DOC>')}" is still refused`, r.ok === false && /refused|does not import/.test(r.error || ''), r.error);
   }
+}
+
+// ── 7. verified questions travel (semantic layer part 3, release A) ───────────
+// Nothing writes verified/<id>.json yet: a pod of this release only keeps the files a newer one will. The
+// manifest names them as `verified`, export counts by rule and import compares counts, so both learn the key
+// together. Import swaps every UUID in a JSON body, so a question's dataset id follows its dataset.
+async function verifiedQuestions(): Promise<void> {
+  const p = await projects.createProject('Verified');
+  const dir = path.join(tmpUserData, 'projects', p.id);
+  const D = '0b7c2c1e-0f4d-4c59-9d3b-2a8e6f1c0a22';
+  const V = 'a1b2c3d4-0000-4000-8000-0000000000a1';
+  const put = (rel: string, data: string): void => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), data);
+  };
+  put(`datasets/${D}.json`, JSON.stringify({ id: D, name: 'Orders' }));
+  put(`verified/${V}.json`, JSON.stringify({ id: V, projectId: p.id, question: 'Revenue by region', spec: { datasetId: D, measures: [] }, schemaVersion: 1 }));
+
+  const out = await bundle.exportProject(p.id);
+  if (!out) throw new Error('export returned nothing');
+  const entries = bundle.readZip(out.bytes);
+  ok('the bundle carries verified questions', entries.some((e) => e.name === `verified/${V}.json`), JSON.stringify(entries.map((e) => e.name)));
+  ok('the manifest counts them', out.manifest.counts.verified === 1 && out.manifest.counts.datasets === 1, JSON.stringify(out.manifest.counts));
+
+  // Same machine: the dataset's id (and the question's own) collide, so both are remapped.
+  const res = await bundle.importBundle(out.bytes);
+  ok('a bundle holding a verified question imports', res.ok === true && res.counts?.verified === 1, res.error);
+  const ndir = path.join(tmpUserData, 'projects', res.project!.id);
+  const files = fs.readdirSync(path.join(ndir, 'verified'));
+  const nds = fs.readdirSync(path.join(ndir, 'datasets'))[0].replace(/\.json$/, '');
+  const back = JSON.parse(fs.readFileSync(path.join(ndir, 'verified', files[0]), 'utf8'));
+  ok('the question came across under a new id, named for its body', files.length === 1 && files[0] !== `${V}.json` && back.id + '.json' === files[0], files.join());
+  ok('its spec points at the REMAPPED dataset', nds !== D && back.spec.datasetId === nds, JSON.stringify({ nds, back }));
+  ok('…and the question is otherwise as written', back.question === 'Revenue by region' && back.schemaVersion === 1);
+  ok('no id from the source project survives in the question', !JSON.stringify(back).includes(p.id));
+
+  // Negative controls: the rule is the whitelist, not a prefix, and the counts must agree.
+  const count0 = (await projects.listProjects()).length;
+  const refusedWith = async (name: string): Promise<boolean> => {
+    const r = await bundle.importBundle(bundle.writeZip([...entries, { name, data: Buffer.from('{}') }]));
+    return r.ok === false && /refused|does not import/.test(r.error || '');
+  };
+  ok('NEGATIVE CONTROL: verified/not-a-uuid.json is refused whole', await refusedWith('verified/not-a-uuid.json'));
+  ok('NEGATIVE CONTROL: …so is a nested name, a non-json name and an upper-case id',
+    (await refusedWith(`verified/x/${V}.json`)) && (await refusedWith(`verified/${V}.txt`)) && (await refusedWith(`verified/${V.toUpperCase()}.json`)));
+  const withoutQuestion = await bundle.importBundle(bundle.writeZip(entries.filter((e) => !e.name.startsWith('verified/'))));
+  ok('NEGATIVE CONTROL: a manifest naming a question the bundle lacks is refused', !withoutQuestion.ok && /manifest/.test(withoutQuestion.error || ''), withoutQuestion.error);
+  const unlisted = entries.map((e) => e.name === 'manifest.json'
+    ? { name: e.name, data: Buffer.from(JSON.stringify({ ...out.manifest, counts: { ...out.manifest.counts, verified: undefined } })) } : e);
+  const noCount = await bundle.importBundle(bundle.writeZip(unlisted));
+  ok('NEGATIVE CONTROL: a question the manifest does not count is refused', !noCount.ok && /manifest/.test(noCount.error || ''), noCount.error);
+  ok('…and no refused import leaves a project behind', (await projects.listProjects()).length === count0);
 }
 
 main().catch((err) => {

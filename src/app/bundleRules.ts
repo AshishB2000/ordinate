@@ -38,6 +38,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^visuals/${UUID}\\.json$`, 'i'), count: 'visuals' },
   { re: new RegExp(`^analyses/${UUID}\\.json$`, 'i'), count: 'dashboards' },
   { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
+  { re: new RegExp(`^verified/${UUID}\\.json$`, 'i'), count: 'verified' }, // p3-02 — the Assistant's verified questions
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
   { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^scenarios/${UUID}\\.json$`, 'i'), count: 'scenarios' },
