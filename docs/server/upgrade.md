@@ -318,7 +318,7 @@ know when you roll it out:
   find. It is replaced when the connection is next saved on a pod of this release, or when the index is
   rebuilt after the last old pod is gone.
 
-## Source table docs are read before they are written (part 2, release 1)
+## Source table docs a newer release writes are kept (`p2-02`)
 
 A later release adds a doc for each table a connection reads (an owner, a guide, a refresh note) and
 lets a dataset list the source tables it reads. This release has none of that: no screen, no setting,
@@ -331,6 +331,8 @@ release or later:
 - deleting a connection deletes its docs with it.
 
 That is all it promises. It does not show the docs, check them or use them.
+
+### The release that adds source table docs and linked tables needs this release first
 
 **The release that adds source table docs and linked tables needs this release (or a later one) on
 every pod first.** Once docs exist, a pod older than this one:
