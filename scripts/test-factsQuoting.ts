@@ -6,6 +6,8 @@
 //   §2 datasets and captures: sample rows, most common values, insights
 //   §3 visuals and answer narration: chart labels, split series, calc lines,
 //      highest/lowest/share/latest lines, caption, summary points, filters
+//   §4 the sweep: one hostile cell into every builder `buildFacts`, `narrate`,
+//      the dataset prompts, the dashboard summary's Rewrite and a follow-up reach
 //
 //   npm run build:ts && node scripts/test-factsQuoting.js
 
@@ -20,7 +22,15 @@ const C: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFac
 const DP: typeof import('../src/ai/datasetPrompt') = require('../src/ai/datasetPrompt');
 const stats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const AF: typeof import('../src/ai/answerFacts') = require('../src/ai/answerFacts');
+const DF: typeof import('../src/ai/driversFacts') = require('../src/ai/driversFacts');
+const SF: typeof import('../src/ai/statsFacts') = require('../src/ai/statsFacts');
+const SC: typeof import('../src/ai/scorecardFacts') = require('../src/ai/scorecardFacts');
+const SN: typeof import('../src/ai/scenarioFacts') = require('../src/ai/scenarioFacts');
+const SM: typeof import('../src/analysis/scenarioModel') = require('../src/analysis/scenarioModel');
+const SUM: typeof import('../src/analysis/summaryCard') = require('../src/analysis/summaryCard');
+const RUN: typeof import('../src/analysis/stats/run') = require('../src/analysis/stats/run');
 type Dataset = import('../src/data/datasets').Dataset;
+type StatsSpec = import('../src/analysis/stats/spec').StatsSpec;
 type Visual = import('../src/analysis/visuals').Visual;
 type VizDataResult = import('../src/analysis/vizData').VizDataResult;
 type Row = (string | number | null)[];
@@ -100,5 +110,74 @@ ok('answer: the card\'s bullets and headline are unchanged', JSON.stringify([a.b
   [`${EVIL} is highest at 7, 58.3% of the 12 total.`, 'West is lowest at 5.', '2 categories shown.', `Filtered to region = ${EVIL}.`], head('Highest')]));
 ok('answer: …and on a date axis', JSON.stringify([dated.bullets, dated.headline]) === JSON.stringify([
   [`The latest period, ${EVIL}, is 7, up 40% on West.`, `The peak is ${EVIL} at 7; the low is West at 5.`, '2 periods shown.', `Filtered to region = ${EVIL}.`], head('Latest')]));
+
+// ── §4 the sweep ────────────────────────────────────────────────────────────
+// Every builder whose text reaches a model, each fed `bad` wherever it takes a VALUE (a cell, or an app sentence
+// that embeds one), and — where D3 says so — the editor text beside it (sheet and tile names, scorecard groups).
+function allBuilders(bad: string): [string, string][] {
+  const r: Row[] = [[bad, 5], ['West', 7]];
+  const d = { ...ds, rows: r } as Dataset;
+  const ec = [{ name: 'region', type: 'text' as const }];
+  const drivers = {
+    ok: true, metric: { name: 'Revenue', kind: 'additive' }, periods: { a: 'Mar 2026', b: 'Feb 2026', column: 'month' },
+    totals: { a: 12, b: 10, delta: 2, pct: 20, aText: '12', bText: '10', deltaText: '+2' },
+    dimensions: [{ column: 'region', explained: 0.5, memberCount: 2, lead: bad }],
+    selected: { column: 'region', explained: 0.5, memberCount: 2, offsetting: false, members: [], waterfall: {
+      start: 10, end: 12, startText: '10', endText: '12', other: { delta: 0, deltaText: '0', count: 0, from: 12, to: 12 },
+      steps: [{ key: bad, label: bad, delta: 2, deltaText: '+2', share: 100, moveShare: 100, aText: '12', bText: '10', from: 10, to: 12 }] } },
+    headline: '', caption: `${bad} drove the change.`, events: [{ title: bad, kind: 'launch', when: 'Mar 3' }],
+    path: [{ column: 'region', value: bad, label: bad }], alert: null, spec: {},
+  } as unknown as Parameters<typeof DF.driversFacts>[0];
+  // The workbench's own results (analysis/stats/run), over a region column whose levels are hostile.
+  const region = [bad, bad, bad, bad, `${bad}2`, `${bad}2`, 'West', 'West'];
+  const vectors = { rows: 8, number: new Map([['amount', [1, 2, 3, 4, 5, 6, 7, 9]], ['units', [2, 1, 4, 3, 6, 5, 8, 7]]]),
+    label: new Map([['region', region], ['channel', ['a', bad, 'a', bad, 'a', bad, bad, 'a']]]) };
+  const statSpec = (o: Partial<StatsSpec>): StatsSpec => ({ kind: 'groups', datasetId: 'd', columns: [], ...o });
+  const statSpecs = [statSpec({ kind: 'correlation', columns: ['amount', 'units'] }), statSpec({ kind: 'regression', target: 'amount', predictors: ['region'] }),
+    statSpec({ group: 'region', outcome: 'amount', levels: [bad, 'West'] }), statSpec({ group: 'region', outcome: 'channel', levels: [bad, 'West'] }),
+    statSpec({ kind: 'distribution', columns: ['amount'] })];
+  const statItems = statSpecs.map((sp) => ({ spec: sp, result: RUN.runStats(sp, vectors) }));
+  statItems.push({ spec: statSpec({}), result: { ok: false, kind: 'groups', error: `Each group needs at least 2 values: “${bad}” has fewer.` } });
+  const driver = { kind: 'pct' as const, value: 5, target: { column: 'units', filter: { type: 'filter' as const, column: 'region', op: '=' as const, value: bad } } };
+  const scenario = {
+    name: 'What if', metrics: [{ name: 'Revenue', baseline: 10, baselineDisplay: '10', value: 11, display: '11', delta: 1, pct: 10 }],
+    drivers: [{ index: 0, label: SM.driverLabel(driver), kind: 'pct', value: 5, target: driver.target, targetText: `Column units, rows ${SM.filterWords(driver.target.filter)}`, applied: true }],
+    tornado: { metricId: 'm', name: 'Revenue', value: 11, display: '11', step: 0.1, bars: [{ label: SM.driverLabel(driver), low: 10, high: 12, swing: 2 }] }, notes: [],
+  } as unknown as Parameters<typeof SN.scenarioFacts>[0];
+  const live = { name: 'Live orders', columns: ec, withheld: new Set<string>(),
+    profile: { sampledAt: '2026-11-01T00:00:00Z', sampleRows: 10, columns: [{ name: 'region', distinct: 2, filled: 10, values: [bad, 'West'] }] } };
+  const answerSpec = { ...spec, filters: [{ column: 'region', op: '=', value: bad }] } as unknown as AnswerSpec;
+  return [
+    // A metric's definition words its filters, values and all (analysis/metricFormat `describeDefinition`).
+    ['datasetFacts', C.datasetFacts(d, summaries(cols, r), [], [{ detail: `Sales in ${bad} rose`, column: 'region' }],
+      [{ name: 'West revenue', definitionText: `sum of amount, where region = ${bad}`, value: 12, display: '12' }]).text],
+    ['captureFacts', C.captureFacts('Cap', ec, summaries(ec, [[bad]]), [[bad]]).text],
+    ['visualFacts', C.visualFacts(visual('channel'), 'Orders', viz([bad, 'West'], [{ name: bad, values: [5, 7], raw: [5, 7], calc: { kind: 'running_total' } }])).text],
+    ['analysisFacts', C.analysisFacts({ id: 'a', name: 'Dash', sheets: [{ name: bad, cards: [] }] } as unknown as Parameters<typeof C.analysisFacts>[0], [],
+      [{ cardId: 'c', pageIndex: 0, type: 'visual', title: bad, category: 'region' }]).text],
+    ['driversFacts', DF.driversFacts(drivers).text],
+    ['statsFacts', SF.statsFacts(statItems, 'Orders').text],
+    ['scorecardFacts', SC.scorecardFacts({ name: 'Board', period: 'month', windowLabel: 'March', groups: [{ group: bad, onTrack: 0, scored: 0, total: 1 }],
+      rows: [{ name: 'Revenue', value: 1, display: '1', target: null, targetDisplay: '', attainment: null, status: 'none', delta: null, pct: null, group: bad, owner: bad }] }).text],
+    ['scenarioFacts', SN.scenarioFacts(scenario).text],
+    ['answerFacts', AF.cardFacts({ ...INPUT, filterLabels: [`region = ${bad}`], caption: `${bad} leads`, categoryIsDate: true,
+      data: { labels: ['West', bad], series: [{ name: bad, values: [5, 7] }] } }, { category: 'region', series: 'channel' }, new Set()).text],
+    ['liveDatasetFacts', L.liveDatasetFacts(live).text],
+    ['projectFacts', C.projectFacts('P', { datasets: ['Live orders'], visuals: [], dashboards: [] }, [{ name: 'Live orders', columns: ec, notes: L.liveColumnNotes(live) }]).text],
+    ['datasetPrompt', DP.buildDatasetSummaryText(d, summaries(cols, r), [], r)],
+    ['summaryFacts', SUM.summaryFacts('Dash', [{ kind: 'insight', text: `Sales in ${bad} rose.`, magnitude: 1, tone: 'info', cardId: null, figures: [] }]).text],
+    ['previousAnswerBlock', PA.previousAnswerBlock(answerSpec, 'Orders', new Set()).text],
+  ];
+}
+const swept = allBuilders(EVIL);
+for (const [name, text] of swept) {
+  ok(`sweep: ${name} is handed the cell`, text.includes('GUIDANCE'), text);
+  ok(`sweep: ${name} opens no line with a cell`, !opensLine(text), text);
+}
+ok('sweep: every builder is in it', swept.map(([n]) => n).join() === 'datasetFacts,captureFacts,visualFacts,analysisFacts,driversFacts,statsFacts,'
+  + 'scorecardFacts,scenarioFacts,answerFacts,liveDatasetFacts,projectFacts,datasetPrompt,summaryFacts,previousAnswerBlock');
+ok('sweep: the stats fixtures computed (none fell back to an error)', swept.length > 0 && !/Not computed: (?!Each group)/.test(swept[5][1]), swept[5][1]);
+// The same sweep with a harmless cell: every builder still says it, so a quote that ate the value would show here.
+for (const [name, text] of allBuilders('Northwest')) ok(`sweep: ${name} still names a plain cell`, text.includes('Northwest'), text);
 
 finish();

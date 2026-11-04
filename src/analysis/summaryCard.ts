@@ -20,6 +20,7 @@
 import type { CopilotFacts } from '../ai/copilot';
 import { harvestAppNumbers } from '../ai/numberAudit';
 import type { LedgerEntry, LedgerUnit } from '../ai/numberAudit';
+import { oneLine } from '../ai/promptText';
 import type { Insight } from './insightsAgg';
 
 export type SummaryKind = 'kpi' | 'driver' | 'insight' | 'quality' | 'alert';
@@ -267,7 +268,7 @@ export function summaryFacts(dashboardName: string, sentences: SummarySentence[]
   const lines = [GUARD_LINE, '', `The app's summary of the dashboard "${dashboardName}", most important first:`];
   const ledger: LedgerEntry[] = [];
   for (const s of sentences) {
-    lines.push(`- ${s.text}`);
+    lines.push(`- ${oneLine(s.text)}`); // D3: a sentence may quote a cell; the model reads it on one line
     for (const f of s.figures) ledger.push({ label: f.label, value: f.value, unit: f.unit, source: 'summaryCard' });
   }
   const text = lines.join('\n');

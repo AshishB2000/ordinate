@@ -128,7 +128,7 @@ export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: Fac
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}" = ${m.definitionText}. Currently ${m.display}.` + (m.description ? ` Means: ${m.description}` : ''));
+    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.` + (m.description ? ` Means: ${m.description}` : ''));
     num(ledger, m.name, m.value, 'number', 'metrics');
   });
 }
@@ -419,7 +419,7 @@ export function analysisFacts(
       const counts = new Map<string, number>();
       cards.forEach((c) => counts.set(c.type, (counts.get(c.type) || 0) + 1));
       const breakdown = Array.from(counts.entries()).map(([t, n]) => `${n} ${t}`).join(', ');
-      lines.push(`- Sheet ${i + 1} "${s.name}": ${cards.length} card(s)${breakdown ? ` (${breakdown})` : ''}.`);
+      lines.push(`- Sheet ${i + 1} "${oneLine(s.name)}": ${cards.length} card(s)${breakdown ? ` (${breakdown})` : ''}.`);
       num(ledger, `sheet ${i + 1} ("${s.name}") card count`, cards.length, 'count', 'dashboard');
       counts.forEach((n, t) => num(ledger, `sheet ${i + 1} ${t} cards`, n, 'count', 'dashboard'));
       // Each tile BY NAME, which is the whole point: a model that can only see
@@ -432,7 +432,7 @@ export function analysisFacts(
         if (t.chartType) bits.push(t.chartType);
         if (t.category) bits.push(`by ${t.category}`);
         if (t.measures && t.measures.length) bits.push(t.measures.join(', '));
-        lines.push(`  - "${t.title}" (${t.type}${bits.length ? ': ' + bits.join(' · ') : ''})`);
+        lines.push(`  - "${oneLine(t.title)}" (${t.type}${bits.length ? ': ' + bits.join(' · ') : ''})`);
       });
     });
   }

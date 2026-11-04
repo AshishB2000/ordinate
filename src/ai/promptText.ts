@@ -44,5 +44,5 @@ export function oneLine(s: string): string {
 
 /** JSON for a prompt, with the line separators JSON.stringify leaves raw escaped. */
 export function promptJson(v: unknown): string {
-  return escapeSeparators(JSON.stringify(v));
+  return escapeSeparators(String(JSON.stringify(v))); // undefined prints as it always did, never throws
 }
