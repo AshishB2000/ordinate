@@ -434,6 +434,16 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   ok('a snapshot metric with no column is still refused, with the snapshot sentence', noneChart.ok === false && noneChart.error === msg.measureSnapshotPending('Stock none'), show(noneChart));
   ok('… although the planner has nothing to follow in it', (await H.as(ORG_A, () => measures.planMetricMeasures(P, X, noneEnc as never))) === null);
 
+  // ── 12b. A glossary term in a followed metric's filters refuses the chart; it is never skipped (scripts/termSites.ts) ──
+  const termSentence = (require('../src/data/termMessages') as typeof import('../src/data/termMessages')).termUnreadable();
+  const termM = await save('Term qty', X, { column: 'qty', aggregation: 'sum' }, [eq('tier', 3), { type: 'term', term: randomUUID() }]);
+  const withTerm = [{ column: 'qty', aggregation: 'sum', metricId: termM }];
+  for (const [what, values] of [['alone (one question)', withTerm], ['beside a plain measure (separate questions)', withTerm.concat([{ column: 'amt', aggregation: 'sum' } as never])]] as const) {
+    const refusedTerm = await chart(X, { category: 'region', values });
+    ok(`a term in the metric's filters refuses the chart ${what}, with the term sentence`, refusedTerm.ok === false && refusedTerm.code === 'term' && refusedTerm.error === termSentence, show(refusedTerm));
+  }
+  ok('NEGATIVE CONTROL: the same metric without the term draws', (await chart(X, enc3)).ok === true);
+
   // ── 13. The share policy follows the edit ──────────────────────────────────
   await H.as(ORG_A, async () => {
     await catalog.setColumn(P, X, 'amt', { sensitivity: 'financial' });

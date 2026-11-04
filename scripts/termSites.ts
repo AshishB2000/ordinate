@@ -18,7 +18,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/analysis/dashboardFilters.ts': { count: 2, how: 'keeps' },
   'src/analysis/dashboards.ts': { count: 3, how: 'keeps' },
   'src/analysis/driverShape.ts': { count: 1, how: 'keeps' },
-  'src/analysis/metricMeasures.ts': { count: 1, how: 'keeps' },
+  // a followed metric's stored filters, params bound (resolveFilterParams keeps a term). Every use asks the chart door
+  // again (vizMetricMeasures `ask` = vizDataFor), whose lockedViz expands the list first or refuses it typed.
+  'src/analysis/metricMeasures.ts': { count: 2, how: 'keeps' },
   'src/analysis/metrics.ts': { count: 4, how: 'keeps' },
   // resolveFilterParams keeps; paramRefs reads filter steps only (a Prepare-style pass-through)
   'src/analysis/params.ts': { count: 4, how: 'keeps' },
@@ -37,6 +39,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   // also two specFilterSteps calls after the door (throws); the strictest wins
   'src/ipc/answers.ts': { count: 3, how: 'keeps' },
   'src/ipc/copilotCards.ts': { count: 2, how: 'keeps' },
+  // resolveFilterParams keeps a term; the Assistant's sentence names it by its kind (isKeptStep), no figure is computed
+  'src/ipc/copilotMeasures.ts': { count: 1, how: 'keeps' },
   'src/ipc/dashboards.ts': { count: 2, how: 'keeps' },
   // also pageFor's lock merge (door) and sanitizeSteps (prepare); the strictest wins
   'src/ipc/datasets.ts': { count: 3, how: 'keeps' },
