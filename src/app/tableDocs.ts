@@ -5,8 +5,9 @@
 import { isValidId } from './ids';
 import { clip } from './clip';
 import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
-import { load, loadStrict, mutateCatalog, osUser } from './catalog';
+import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
 import { closedToCaller } from '../data/rowAccess';
+import type { FactTableDoc } from '../ai/columnNotes';
 
 export type TableRole = '' | 'fact' | 'dimension';
 const ROLES: readonly string[] = ['fact', 'dimension'];
@@ -133,4 +134,24 @@ export async function readableTableDoc(projectId: string, datasetId: string): Pr
   if (!doc.keyCheck || !(await closedToCaller(projectId, datasetId))) return doc;
   const { keyCheck: _withheld, ...open } = doc;
   return open;
+}
+
+/**
+ * The doc as the Assistant reads it, or undefined when nothing is written. A key with no grain reads as "One row per"
+ * the key's name as the user calls it; `keyState` is left out when the key was never counted or the caller may not
+ * count rows it cannot see (`readableTableDoc`).
+ */
+export async function tableFacts(projectId: string, datasetId: string): Promise<FactTableDoc | undefined> {
+  const doc = await readableTableDoc(projectId, datasetId);
+  if (!doc.role && !doc.key && !doc.grain && !doc.guide) return undefined;
+  const out: FactTableDoc = {};
+  if (doc.role) out.role = doc.role;
+  if (doc.key) {
+    out.key = doc.key;
+    if (doc.keyCheck) out.keyState = doc.keyCheck.repeatedKeys > 0 ? 'repeats' : 'unique';
+  }
+  if (doc.grain) out.grain = doc.grain;
+  else if (doc.key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[doc.key]?.displayName || doc.key}`;
+  if (doc.guide) out.guide = doc.guide;
+  return out;
 }

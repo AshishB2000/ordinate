@@ -206,6 +206,17 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('redact: catalog:getTable — east gets no keyCheck', tEast.body?.ok === true && !('keyCheck' in tEast.body.table), tEast.text.slice(0, 200));
     ok('…and still gets the key and the guide, which are words, not counts', tEast.body.table.key === 'customer' && tEast.body.table.guide === 'One row per order.');
     ok('NEGATIVE CONTROL: the editor gets it', tEd.body?.ok === true && tEd.body.table.keyCheck?.rows === 126, tEd.text.slice(0, 200));
+    // …and so do the two other readers of the same doc: the Assistant's facts and the MCP reply carry the key and the guide, never the counts.
+    const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+    const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+    const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };
+    const factsOf = (who: string) => W.as(who, () => tableDocs.tableFacts(P, orders));
+    const describedBy = (who: string) => W.as(who, () => automation.datasetsDescribe(mcpCtx, orders)) as Promise<{ table: { key: string; guide: string; keyCheck?: unknown } }>;
+    const [fEast, fEd, mEast, mEd] = [await factsOf('east'), await factsOf('ed'), await describedBy('east'), await describedBy('ed')];
+    ok('redact: the Assistant\'s table facts — east gets the key and the guide, no keyState', fEast?.key === 'customer' && fEast.guide === 'One row per order.' && !('keyState' in fEast), JSON.stringify(fEast));
+    ok('NEGATIVE CONTROL: the editor\'s table facts carry the key state', fEd?.keyState !== undefined, JSON.stringify(fEd));
+    ok('redact: describe_dataset — east gets the key and the guide, no keyCheck', mEast.table.key === 'customer' && mEast.table.guide === 'One row per order.' && !('keyCheck' in mEast.table), JSON.stringify(mEast.table));
+    ok('NEGATIVE CONTROL: the editor\'s describe_dataset carries the keyCheck', JSON.stringify(mEd.table.keyCheck).includes('"rows":126'), JSON.stringify(mEd.table));
     // A relationship's stored warning counts every row of its TO dataset (`repeats`): east, closed to Orders, gets the edge without it.
     const edge = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: east, column: 'customer' }, to: { datasetId: orders, column: 'customer' }, cardinality: 'many_to_one' } });
     const relEast = await W.call('east', 'relationship:list', { projectId: P });

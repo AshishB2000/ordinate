@@ -39,6 +39,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
 const versions: typeof import('../src/app/versions') = require('../src/app/versions');
+const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
 const jobs: typeof import('../src/app/jobs') = require('../src/app/jobs');
 const publishing: typeof import('../src/publish/publish') = require('../src/publish/publish');
 const vis: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -98,6 +99,17 @@ async function main(): Promise<void> {
   ok('describe_dataset: the SQL name', d.sqlName === 'retail_orders' && d.queryable === true);
   ok('describe_dataset: by id works, a missing one is not_found',
     (await call('describe_dataset', { dataset: ds.id })).id === ds.id && (await refusal('describe_dataset', { dataset: 'Nope' })).code === 'not_found');
+
+  // The user's notes on the table ride in the same reply: empty strings and no key check until they are written.
+  ok('describe_dataset: no table notes yet — empty fields, no keyCheck',
+    JSON.stringify(d.table) === JSON.stringify({ role: '', key: '', grain: '', guide: '' }), JSON.stringify(d.table));
+  await tableDocs.setTableDoc(pid, ds.id, { role: 'dimension', guide: 'g', key: meta.columns[0].name });
+  const noted = await call('describe_dataset', { dataset: ds.name });
+  ok('describe_dataset: the table notes after catalog:setTable — role and guide', noted.table.role === 'dimension' && noted.table.guide === 'g' && noted.table.key === meta.columns[0].name && noted.table.grain === '' && !('keyCheck' in noted.table), JSON.stringify(noted.table));
+  await tableDocs.writeKeyCheck(pid, ds.id, meta.columns[0].name, { rows: 4, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-04T00:00:00.000Z' });
+  ok('describe_dataset: …and the key check once it was counted',
+    JSON.stringify((await call('describe_dataset', { dataset: ds.id })).table.keyCheck) === JSON.stringify({ rows: 4, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-04T00:00:00.000Z' }));
+  ok('describe_dataset: the rest of the reply is what it was (columns, SQL name)', noted.columns.length === meta.columns.length && noted.sqlName === 'retail_orders');
 
   // Secrets: an origin with a token in its URL, and one with a file path.
   const secretUrl = 'https://data.example/export.csv?token=SEKRET-TOKEN-123';

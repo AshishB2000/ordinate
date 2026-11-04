@@ -30,6 +30,7 @@ import { refreshRunning } from '../data/refreshJob';
 import { detectColumn } from '../data/sensitivity';
 import { getReview } from '../app/privacyStore';
 import { assistantColumnDocs, withheldColumns } from '../app/sharePolicy';
+import { tableFacts } from '../app/tableDocs';
 import { missingDependents, type MissingColumn } from '../analysis/liveDependents';
 import { liveColumnNotes, liveDatasetFacts } from '../ai/liveFacts';
 import type { CopilotFacts } from '../ai/copilot';
@@ -84,6 +85,7 @@ export async function liveCopilotFacts(
     schemaSyncedAt: meta.live.schemaSyncedAt,
     withheld: await liveWithheld(projectId, datasetId, meta),
     docs: await assistantColumnDocs(projectId, datasetId),
+    table: await tableFacts(projectId, datasetId),
     metrics,
   });
   return { name: meta.name, facts, metrics: metrics.length };
