@@ -174,4 +174,5 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   // One Home URL carries this whole flow — three project switches, two archives, an import and a delete,
   // each re-reading Home for another project: 25 calls of the flow's own, plus the two Home makes for any
   // project since it went ask-first (one batched `visual:thumbs` for every preview card, and `ai:status`).
-}, { rpcBudget: 28 });
+  // Your numbers adds one `numbers:get` to each Home read: the busiest load went from 25 calls to 29.
+}, { rpcBudget: 32 });
