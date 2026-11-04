@@ -14,6 +14,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { byCatalog, recorder, refusing } from './factsHarness';
 
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
@@ -140,6 +141,7 @@ Module._load = function (request: string, ...rest: unknown[]): unknown {
 
 // ponytail: compiled sibling of the .ts source.
 const mssql: typeof import('../src/connectors/mssql') = require('../src/connectors/mssql');
+const mssqlFacts: typeof import('../src/connectors/mssqlFacts') = require('../src/connectors/mssqlFacts');
 
 type ConnectorContext = import('../src/connectors/types').ConnectorContext;
 type ConnectorDef = import('../src/connectors/types').ConnectorDef;
@@ -417,6 +419,97 @@ async function main(): Promise<void> {
   resetState();
   const empty = await sqlserver.run(ctxFor(), '   ');
   ok('an empty query is rejected before connecting', empty.ok === false && state.lastConfig === null);
+
+  // ── a table's facts ────────────────────────────────────────────────────────
+  //
+  // UNVERIFIED: every statement is written from the SQL Server, Azure SQL and Synapse documentation; no server
+  // answered it. A fixture answers by catalog, and what is pinned is THIS side of the socket: a name is bound
+  // (@p0 the schema, @p1 the name) or refused before a connection, every statement is limited, a refused catalog
+  // costs its field, and the pdw views are asked only of a Synapse dedicated pool.
+
+  const ORDERS = byCatalog([
+    [/INFORMATION_SCHEMA\.COLUMNS/, [['line_id', 'bigint', 'NO', 'dbo'], ['order_date', 'date', 'NO', 'dbo'], ['customer_id', 'int', 'YES', 'dbo']]],
+    [/sys\.extended_properties/, [[0, null, 'Orders'], [3, 'customer_id', 'Who bought it']]],
+    [/sys\.indexes/, [
+      ['pk_orders', true, true, 'CLUSTERED', 'line_id', 1, 0],
+      ['pk_orders', true, true, 'CLUSTERED', 'order_date', 2, 1],
+      ['ix_customer', false, false, 'NONCLUSTERED', 'customer_id', 1, 0],
+      ['cci_orders', false, false, 'CLUSTERED COLUMNSTORE', 'line_id', 0, 0],
+    ]],
+    [/dm_db_partition_stats/, [[1200, 65536]]],
+    [/serverproperty/i, [[6]]],
+    [/pdw_table_distribution_properties/, [['HASH', 'customer_id']]],
+  ]);
+  const readFacts = async (answer = ORDERS, name = 'dbo.orders', synapse = false) => {
+    const h = recorder(answer);
+    return { h, r: await mssqlFacts.mssqlTableFacts(name, h.open, { synapse }) };
+  };
+  const pdw = (rec: { sql: string }[]): boolean => rec.some((x) => /pdw_/i.test(x.sql));
+
+  let m = await readFacts();
+  const mf = m.r.ok ? m.r : null;
+  ok('mssql facts: the table and column descriptions', JSON.stringify([mf?.comment, mf?.columns.map((c) => c.comment ?? null)]) === '["Orders",[null,null,"Who bought it"]]', JSON.stringify(m.r));
+  ok('mssql facts: columns, types and nullability', JSON.stringify(mf?.columns.map((c) => [c.name, c.type, c.nullable])) === '[["line_id","bigint",false],["order_date","date",false],["customer_id","int",true]]');
+  ok('mssql facts: the key in its own order (enforced), flagging its columns', JSON.stringify(mf?.primaryKey) === '{"columns":["line_id","order_date"],"enforced":true}' && mf?.columns.map((c) => !!c.key).join() === 'true,true,false', JSON.stringify(mf?.primaryKey));
+  ok('mssql facts: indexes (a columnstore index keeps its kind) without the key', JSON.stringify(mf?.indexes) ===
+    '[{"name":"ix_customer","columns":["customer_id"],"unique":false,"kind":"NONCLUSTERED"},{"name":"cci_orders","columns":["line_id"],"unique":false,"kind":"CLUSTERED COLUMNSTORE"}]', JSON.stringify(mf?.indexes));
+  ok('mssql facts: the partition column, and the estimate and size', JSON.stringify([mf?.partition, mf?.rowEstimate, mf?.bytes]) === '[{"columns":["order_date"],"method":"RANGE"},1200,65536]', JSON.stringify([mf?.partition, mf?.rowEstimate, mf?.bytes]));
+  ok('mssql facts: the schema and the name are bound (@p0, @p1), never in the text of any statement',
+    m.h.rec.every((x) => x.params.join() === 'dbo,orders') && m.h.rec.every((x) => !x.sql.includes('orders') && !x.sql.includes('dbo')), JSON.stringify(m.h.rec.map((x) => x.params)));
+  ok('mssql facts: every statement is TOP-limited', m.h.rec.length === 4 && m.h.rec.every((x) => /^\s*select\s+top\s*\(\d+\)/i.test(x.sql)), m.h.rec.map((x) => x.sql.trim().slice(0, 16)).join(' | '));
+  ok('azure sql / sql server: no pdw statement and no SERVERPROPERTY is sent', !pdw(m.h.rec) && !m.h.rec.some((x) => /serverproperty/i.test(x.sql)));
+  ok('mssql facts: one connection, asked for once', m.h.opened() === 1);
+
+  m = await readFacts(ORDERS, 'dbo.x]; drop table y; --');
+  ok('mssql facts: the name only ever as a bound value', m.h.rec.length > 0 && m.h.rec.every((x) => !/drop table/i.test(x.sql)) && m.h.rec.some((x) => x.params.includes('x]; drop table y; --')));
+  const mrefused = [];
+  for (const bad of ['a.b.c', '', '.x', 'x.', '  ']) {
+    const g = await readFacts(ORDERS, bad);
+    mrefused.push(g.h.opened() === 0 && !g.r.ok && g.r.error === 'Invalid table name');
+  }
+  ok('mssql facts: three parts, an empty part or no name never open a connection', mrefused.every(Boolean), mrefused.join());
+  m = await readFacts(byCatalog([[/INFORMATION_SCHEMA\.COLUMNS/, [['id', 'int', 'NO', 'sales'], ['id', 'int', 'NO', 'dbo']]], [/sys\.indexes/, [['ix', false, false, 'NONCLUSTERED', 'id', 1, 0]]]]), 'orders');
+  ok('mssql facts: an unqualified name asks with a blank schema, then settles on the first schema that has the table',
+    m.h.rec[0].params.join() === ',orders' && m.h.rec.length > 1 && m.h.rec.slice(1).every((x) => x.params.join() === 'sales,orders') && m.r.ok && m.r.columns.length === 1, JSON.stringify(m.h.rec.map((x) => x.params)));
+
+  m = await readFacts(refusing(ORDERS, /dm_db_partition_stats/));
+  ok('mssql facts: a refused partition_stats (no VIEW DATABASE STATE) costs only the size', m.r.ok && !('rowEstimate' in m.r) && !('bytes' in m.r) && m.r.comment === 'Orders' && !!m.r.indexes);
+  m = await readFacts(refusing(ORDERS, /sys\.extended_properties/));
+  ok('mssql facts: a refused extended_properties costs only the descriptions', m.r.ok && !('comment' in m.r) && m.r.columns.every((c) => !('comment' in c)) && !!m.r.primaryKey);
+  m = await readFacts(refusing(ORDERS, /sys\.indexes/));
+  ok('mssql facts: a refused sys.indexes costs the key, the indexes and the partition', m.r.ok && !('primaryKey' in m.r) && !('indexes' in m.r) && !('partition' in m.r) && m.r.bytes === 65536);
+  m = await readFacts(refusing(ORDERS, /INFORMATION_SCHEMA\.COLUMNS/)).catch((e: Error) => ({ h: recorder(ORDERS), r: { ok: false as const, error: e.message } }));
+  ok('mssql facts: a refused COLUMNS fails the read', !m.r.ok && /permission denied/.test(m.r.error));
+  m = await readFacts(byCatalog([]));
+  ok('mssql facts: no column is no such table', !m.r.ok && m.r.error === 'No such table: orders', JSON.stringify(m.r));
+  m = await readFacts(byCatalog([[/INFORMATION_SCHEMA\.COLUMNS/, [['id', 'int', 'NO', 'dbo']]], [/sys\.indexes/, Array.from({ length: 60 }, (_, i) => [`ix${i}`, false, false, 'NONCLUSTERED', 'id', 1, 0])]]));
+  ok('mssql facts: indexes fold to at most 50', m.r.ok && m.r.indexes?.length === 50, m.r.ok ? m.r.indexes?.length : '');
+
+  // Synapse: only the variant that is Synapse asks what engine this is; only a dedicated pool (6) has the pdw views.
+  m = await readFacts(ORDERS, 'dbo.orders', true);
+  ok('synapse dedicated (6): hash distribution, an informational key', JSON.stringify([m.r.ok && m.r.distribution, m.r.ok && m.r.primaryKey]) ===
+    '[{"style":"HASH","columns":["customer_id"]},{"columns":["line_id","order_date"],"enforced":false}]', JSON.stringify(m.r));
+  ok('synapse dedicated (6): the engine is asked once, before the pdw read', m.h.rec.filter((x) => /serverproperty/i.test(x.sql)).length === 1
+    && m.h.rec.findIndex((x) => /serverproperty/i.test(x.sql)) < m.h.rec.findIndex((x) => /pdw_/i.test(x.sql)));
+  m = await readFacts(byCatalog([[/INFORMATION_SCHEMA\.COLUMNS/, [['id', 'int', 'NO', 'dbo']]], [/serverproperty/i, [[11]]], [/pdw_/, [['HASH', 'id']]]]), 'dbo.orders', true);
+  ok('synapse serverless (11): no pdw read', m.r.ok && !pdw(m.h.rec) && !('distribution' in m.r) && m.h.rec.some((x) => /serverproperty/i.test(x.sql)));
+  m = await readFacts(refusing(ORDERS, /serverproperty/i), 'dbo.orders', true);
+  ok('synapse: a refused SERVERPROPERTY costs the distribution only', m.r.ok && !('distribution' in m.r) && !pdw(m.h.rec) && !!m.r.primaryKey);
+  m = await readFacts(byCatalog([[/INFORMATION_SCHEMA\.COLUMNS/, [['id', 'int', 'NO', 'dbo']]], [/serverproperty/i, [[6]]], [/pdw_/, [['ROUND_ROBIN', null]]]]), 'dbo.orders', true);
+  ok('synapse dedicated: round-robin names no column', m.r.ok && JSON.stringify(m.r.distribution) === '{"style":"ROUND_ROBIN","columns":[]}', JSON.stringify(m.r));
+
+  // Through the real connector, over the fake tedious: the adapter that binds @p0… and reads the rows.
+  ok('every SQL Server variant has tableFacts', mssql.CONNECTORS.every((d) => typeof d.tableFacts === 'function'));
+  resetState();
+  state.rowsToEmit = 1;
+  const wired = await byId('azure-sql').tableFacts!(ctxFor(), 'dbo.orders');
+  ok('mssql facts, wired: the rows of the driver are the columns', wired.ok && wired.columns.length === 1, JSON.stringify(wired));
+  ok('mssql facts, wired: positional params are @p0, @p1 (schema, name), never in the text', state.lastParams.length >= 2 && state.lastParams.every((p, i) => p.name === `p${i % 2}` && p.value === ['dbo', 'orders'][i % 2]) && !/orders/.test(state.lastSql), JSON.stringify(state.lastParams));
+  ok('mssql facts, wired: the connection is closed', state.closed === true);
+  resetState();
+  state.connectError = new Error('Login failed (password sup3r-s3cret-pw)');
+  const down = await byId('azure-sql').tableFacts!(ctxFor(), 'dbo.orders').catch((e: Error) => ({ ok: false as const, error: e.message }));
+  ok('mssql facts, wired: a connect failure is a failure of the read, not a crash (the door redacts it)', !down.ok);
 
   // ── source hygiene ─────────────────────────────────────────────────────────
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'connectors', 'mssql.ts'), 'utf8');
