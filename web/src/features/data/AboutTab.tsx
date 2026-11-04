@@ -19,7 +19,7 @@ import { MarkdownView } from '../dashboards/Markdown';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import { useCanEdit, useRoles } from '../projects/api';
-import { ago, day, formatNumber } from './format';
+import { ago, day, dayInYear, formatNumber } from './format';
 import { useTableDoc, useTableWrites, type KeyCheck, type TableDoc, type TablePatch, type TableReply } from './tableApi';
 import a from './About.module.css';
 import s from './Data.module.css';
@@ -49,7 +49,7 @@ function dayOf(iso: string): string {
   const now = new Date();
   if (Number.isNaN(d.getTime())) return '';
   if (d.toDateString() === now.toDateString()) return 'today';
-  return d.getFullYear() === now.getFullYear() ? day.format(d) : `${day.format(d)}, ${d.getFullYear()}`;
+  return (d.getFullYear() === now.getFullYear() ? day : dayInYear).format(d); // the browser's own order for the year
 }
 
 const plural = (n: number, one: string, many: string): string => `${formatNumber(n)} ${n === 1 ? one : many}`;
@@ -59,8 +59,8 @@ function keyCounts(key: string, c: KeyCheck): { text: string; unique: boolean; w
   const unique = c.repeatedKeys === 0;
   const parts = [`Key ${key}`, unique ? 'unique' : plural(c.repeatedKeys, 'value repeats', 'values repeat')];
   if (c.empty > 0) parts.push(`${plural(c.empty, 'row has', 'rows have')} no key`);
-  const day = dayOf(c.checkedAt);
-  return { text: parts.join(' · '), unique, when: day ? `checked ${day}` : '' };
+  const on = dayOf(c.checkedAt);
+  return { text: parts.join(' · '), unique, when: on ? `checked ${on}` : '' };
 }
 
 function Line({ icon, tone, children }: { icon: 'circle-check' | 'alert' | 'info' | 'refresh'; tone?: 'ok' | 'warn' | 'bad'; children: ReactNode }) {
@@ -141,7 +141,7 @@ function Guide({ guide, canEdit, problem, onSave }: { guide: string; canEdit: bo
     setEditing(true);
   };
   // Leaving a draft that differs from the stored guide asks first (up to 8,000 characters are easy to lose to one Escape).
-  const leave = () => (draft.trim() === guide ? setEditing(false) : setAsking(true));
+  const leave = () => (saving ? undefined : draft.trim() === guide ? setEditing(false) : setAsking(true)); // not mid-save: Escape as Cancel
   const save = async () => {
     if (draft.trim() === guide) return setEditing(false);
     setSaving(true);

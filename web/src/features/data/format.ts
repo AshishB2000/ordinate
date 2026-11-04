@@ -37,6 +37,7 @@ export const sourceLabel = (kind: string): string => SOURCE_LABELS[kind] || kind
 
 const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
 export const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+export const dayInYear = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
 /** "2:14 PM" today, "Mar 4 · 2:14 PM" otherwise (hubCapture.ts formatSidebarTime). */
 export function stamp(iso: string | undefined): string {

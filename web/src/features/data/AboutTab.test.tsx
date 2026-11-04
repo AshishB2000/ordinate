@@ -178,6 +178,36 @@ describe('About tab: an editor', () => {
     expect(await keyLine()).toMatch(/^Key order_id · 1 value repeats/);
   });
 
+  it('an older refusal does not show over a newer save of the same field', async () => {
+    const sentence = 'That grain could not be saved.';
+    const saved = store(doc());
+    renderTab({ ...saved, [SET]: (payload) => ((payload as { patch: { grain?: string } }).patch.grain === 'First' ? { body: { ok: false, error: sentence } } : (saved[SET] as (p: unknown) => Plain)(payload)) });
+    const grain = await grainBox();
+    const releases = holdEach('setTable');
+    fireEvent.change(grain, { target: { value: 'First' } });
+    fireEvent.blur(grain);
+    fireEvent.focus(grain);
+    fireEvent.change(grain, { target: { value: 'Second' } });
+    fireEvent.blur(grain);
+    await waitFor(() => expect(releases).toHaveLength(2));
+    releases[1](); // the newer save lands first…
+    await waitFor(() => expect(grain.value).toBe('Second'));
+    releases[0](); // …then the older one's refusal
+    await act(async () => {});
+    await act(async () => {});
+    expect(screen.queryByText(sentence)).toBeNull();
+    expect(grain.value).toBe('Second');
+  });
+
+  it('NEGATIVE CONTROL: the same refusal, when it is the newest, is said at the field', async () => {
+    const sentence = 'That grain could not be saved.';
+    renderTab({ [GET]: reply(doc()), [SET]: { body: { ok: false, error: sentence } } });
+    const grain = await grainBox();
+    fireEvent.change(grain, { target: { value: 'First' } });
+    fireEvent.blur(grain);
+    expect(await screen.findByText(sentence)).toBeTruthy();
+  });
+
   it('says it is counting while a new key on an extract is counted, then the server\'s verdict', async () => {
     const calls = renderTab(store(doc(), counts(1)));
     await keyBox();
@@ -302,10 +332,17 @@ describe('About tab: an editor', () => {
   });
 
   it('announces the key line: it lives in a polite status region that is there before "Check now" answers', async () => {
-    renderTab({ [GET]: reply(doc({ key: 'line_id', keyCheck: counts(0) })) });
+    let now = doc({ key: 'line_id', keyCheck: counts(0) });
+    renderTab({ [GET]: () => reply(now), [CHECK]: () => ((now = doc({ key: 'line_id', keyCheck: counts(2) })), reply(now)) });
     await screen.findByRole('button', { name: 'Check now' });
     const line = await screen.findByText((_, el) => el?.hasAttribute('data-key-line') ?? false);
-    expect(line.closest('[role="status"]')).not.toBeNull();
+    const region = line.closest('[role="status"]');
+    expect(region).not.toBeNull();
+    expect(region?.textContent).toMatch(/^Key line_id · unique/);
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }));
+    // The same region, never a new one, carries what the check found: a screen reader hears the change.
+    await waitFor(() => expect(region?.textContent).toMatch(/^Key line_id · 2 values repeat/));
+    expect(screen.getByText((_, el) => el?.hasAttribute('data-key-line') ?? false).closest('[role="status"]')).toBe(region);
   });
 
   it('saves the grain trimmed, once for Enter and the blur after it, and shows what the server kept', async () => {
@@ -374,6 +411,20 @@ describe('About tab: an editor', () => {
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Guide' })).toBeNull());
     expect(screen.getByText('Old note.')).toBeTruthy();
     expect(to(calls, SET)).toHaveLength(0);
+  });
+
+  it('Escape while the guide is saving leaves it alone: no "Discard" over a save already on its way', async () => {
+    renderTab(store(doc({ guide: 'Old note.' })));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Guide' }), { target: { value: 'New note.' } });
+    const release = hold('setTable');
+    fireEvent.click(screen.getByRole('button', { name: 'Save guide' }));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Guide' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    release();
+    expect(await screen.findByText('New note.')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Guide' })).toBeNull();
   });
 
   it('keeps the guide editor open, with the server\'s sentence, when the save is refused', async () => {
