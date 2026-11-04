@@ -20,7 +20,7 @@
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
-import { TermNotExpandedError } from '../data/termStep';
+import { hasTermType, termError } from '../data/termStep';
 import { FILTER_OPS, LIST_OPS, VALUELESS_OPS } from '../data/filterOps';
 import type { FilterOp } from '../data/filterOps';
 import type { VizAggregation, VizMeasure } from '../analysis/visuals';
@@ -511,7 +511,7 @@ export function specFilterSteps(
   const steps: FilterStep[] = [];
   const labels: string[] = [];
   for (const f of spec.filters) {
-    if ('term' in f) throw new TermNotExpandedError('not_expanded'); // a door expands it; never skipped, never dropped
+    if ('term' in f || hasTermType(f)) throw termError(f); // a door expands it; never skipped, never dropped
     const ci = columns.findIndex((c) => c.name === f.column);
     if (ci < 0) continue;
     if ('period' in f) {

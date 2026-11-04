@@ -68,6 +68,25 @@ ok('Live answer compile throws on a term', throwsTerm(() => fromAnswerSpec({ ...
 ok('resident predicate throws on a term', throwsTerm(() => filterPredicate([...COLS], T, [])));
 ok('answer steps throw on a term', throwsTerm(() => specFilterSteps({ filters: [{ term: U }] }, [...COLS], ROWS)));
 ok('a term in a resident list throws, and the resident warning gate hands it to the JS fold (which throws)', throwsTerm(() => filterPredicates([...COLS], [T], [])) && filterCannotWarn(T, new Set(['region', 'sales'])) === false);
+// A malformed `type: 'term'` step (no id, a non-string id) is kept by the list sanitizer and refused by the JS
+// fold, so every engine refuses it too — 'unreadable', since there is no term to expand. Never a skip.
+const reasonOf = (fn: () => unknown): string | null => {
+  try { fn(); } catch (e) { return isTermNotExpandedError(e) ? e.reason : null; }
+  return null;
+};
+const BAD = [{ type: 'term' }, { type: 'term', term: 5 }] as unknown as FilterStep[];
+for (const b of BAD) {
+  const tag = JSON.stringify(b);
+  ok(`resident predicate throws unreadable on ${tag}`, reasonOf(() => filterPredicate([...COLS], b, [])) === 'unreadable');
+  ok(`Live KPI throws unreadable on ${tag}`, reasonOf(() => fromMetric({ column: 'sales', aggregation: 'sum' }, [b], LIVE_COLS)) === 'unreadable');
+  ok(`Live chart throws unreadable on ${tag}`, reasonOf(() => fromVizEncoding(ENC, [b], LIVE_COLS)) === 'unreadable');
+  ok(`Live answer and answer steps throw unreadable on ${tag}`, reasonOf(() => fromAnswerSpec({ ...SPEC, filters: [b as never] }, LIVE_COLS)) === 'unreadable'
+    && reasonOf(() => specFilterSteps({ filters: [b as never] }, [...COLS], ROWS)) === 'unreadable');
+  ok(`the JS fold refuses ${tag} too`, isTermNotExpandedError((() => { try { applyPipeline(SRC, [b]); } catch (e) { return e; } return null; })()));
+}
+ok('a term inside the Live lock throws', throwsTerm(() => fromAnswerSpec(SPEC, LIVE_COLS, { lock: [T] }))
+  && reasonOf(() => fromAnswerSpec(SPEC, LIVE_COLS, { lock: [BAD[0]] })) === 'unreadable');
+ok('a well-formed term is not_expanded, not unreadable', reasonOf(() => filterPredicate([...COLS], T, [])) === 'not_expanded' && reasonOf(() => specFilterSteps({ filters: [{ term: U }] }, [...COLS], ROWS)) === 'not_expanded');
 ok('NEGATIVE CONTROL: an unknown column still skips with its warning', (() => {
   const w: string[] = [];
   return adaptFilter({ type: 'filter', column: 'zz', op: '=', value: 1 }, LIVE_COLS, {}, w) === null && w[0] === 'Filter skipped: unknown column "zz"';

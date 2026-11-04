@@ -21,6 +21,11 @@ export function isTermStep(s: unknown): s is TermStep {
   return !!o && typeof o === 'object' && o.type === 'term' && typeof o.term === 'string';
 }
 
+/** Any step claiming `type: 'term'`, well-formed or not: what the JS fold refuses, so every engine refuses exactly that. */
+export function hasTermType(s: unknown): boolean {
+  return !!s && typeof s === 'object' && (s as { type?: unknown }).type === 'term';
+}
+
 export const TERM_CODE = 'term';
 export type TermReason = 'not_expanded' | 'unreadable' | 'deleted' | 'unreachable' | 'column_gone';
 
@@ -33,6 +38,12 @@ export class TermNotExpandedError extends Error {
     this.name = 'TermNotExpandedError';
     this.reason = reason;
   }
+}
+
+/** The refusal for a term-shaped step an engine met: 'not_expanded' when it names its term (a string id), 'unreadable' when it does not. */
+export function termError(s: unknown): TermNotExpandedError {
+  const id = (s as { term?: unknown } | null | undefined)?.term;
+  return new TermNotExpandedError(typeof id === 'string' ? 'not_expanded' : 'unreadable');
 }
 
 /** True for a TermNotExpandedError — by class, or by name and code when it crossed a module copy. */

@@ -32,7 +32,7 @@
 
 import type { ParsedColumn } from '../../data/parse';
 import { RowPolicyError } from '../../data/rowPolicyError';
-import { isTermStep, TermNotExpandedError } from '../../data/termStep';
+import { hasTermType, termError } from '../../data/termStep';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -232,7 +232,7 @@ export function adaptFilter(
   opts: AdaptOpts,
   warnings: string[],
 ): LiveFilter | null | LiveRefusal {
-  if (isTermStep(s)) throw new TermNotExpandedError('not_expanded'); // a door expands it; never skipped, never dropped
+  if (hasTermType(s)) throw termError(s); // a door expands it; never skipped, never dropped
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return refuse('related'); // a related table's column: Live joins stay off
   const col = columnOf(columns, s.column);
@@ -407,7 +407,7 @@ export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: Ad
 
   const warnings: string[] = [];
   for (const f of spec.filters || []) {
-    if ('term' in f) throw new TermNotExpandedError('not_expanded'); // a door expands it; never skipped, never dropped
+    if ('term' in f || hasTermType(f)) throw termError(f); // a door expands it; never skipped, never dropped
     if ('period' in f) {
       const col = columnOf(columns, f.column)!;
       if (col.type !== 'date') return refuse('periodNotDate', col.name);
