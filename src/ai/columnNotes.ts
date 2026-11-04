@@ -1,10 +1,11 @@
-// The user's COLUMN NOTES as a model reads them — PURE: no fs, no model.
+// The user's COLUMN and TABLE NOTES as a model reads them — PURE: no fs, no model.
 //
 // Split out of ./copilotFacts.ts near its size cap (.claude/rules/file-size.md).
-// One format for a column's catalog notes (src/app/catalog.ts), shared by every
-// facts block that prints them: the dataset, visual and project facts
-// (./copilotFacts), a Live dataset's (./liveFacts) and the dashboard draft's
-// (src/analysis/planFacts.ts).
+// One format for the notes a person wrote in the catalog (src/app/catalog.ts: a
+// column's meaning and names; src/app/tableDocs.ts: a table's role, grain, key
+// and guide), shared by every facts block that prints them: the dataset, visual
+// and project facts (./copilotFacts), a Live dataset's (./liveFacts) and the
+// dashboard draft's (src/analysis/planFacts.ts).
 
 /** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). */
 export interface FactColumnDoc { description?: string; displayName?: string; aliases?: string[]; sensitivity?: string }
@@ -64,10 +65,10 @@ function oneLine(raw: unknown, max: number): string {
   return s.slice(0, high >= 0xd800 && high <= 0xdbff ? max - 1 : max) + '…';
 }
 
-/** "fact table; one row per order line" — a table in one clause (the project inventory); '' when it says neither. */
+/** "fact table; One row per order line" — a table in one clause (the project inventory); '' when it says neither. */
 export function tableHeadline(t: FactTableDoc | undefined): string {
   if (!t) return '';
-  const grain = oneLine(t.grain, FIELD_FACT_MAX).replace(/\.+$/, '').replace(/^[A-Z](?=[^A-Z]|$)/, (c) => c.toLowerCase());
+  const grain = oneLine(t.grain, FIELD_FACT_MAX).replace(/\.+$/, ''); // as written; a closing period would sit oddly in the clause
   return [t.role === 'fact' ? 'fact table' : t.role === 'dimension' ? 'dimension table' : '', grain].filter(Boolean).join('; ');
 }
 

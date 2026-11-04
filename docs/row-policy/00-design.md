@@ -506,7 +506,7 @@ call modules directly, never the RPC handlers — which is why nothing here is e
 | `metric_value` | `automation/handlers.ts:198` → `resolveMetric` → `computeCardMetric` | DOOR |
 | `query_sql` | `handlers.ts:161` → `runSql` → `compile` → `residentSource` | NET |
 | `insights` | `handlers.ts:209` → `insightsForDataset` | EXPLICIT (before the cache) |
-| `list_projects`, `list_datasets`, `describe_dataset`, `list_metrics`, `list_dashboards` | `handlers.ts:53/66/89/187/223` | META (`rowCount` is a ceiling; `describe_dataset` drops profile, quality and incremental values) |
+| `list_projects`, `list_datasets`, `describe_dataset`, `list_metrics`, `list_dashboards` | `handlers.ts:53/66/89/187/223` | META (`rowCount` is a ceiling; `describe_dataset` drops profile, quality and incremental values, and the table notes' key check counts (`readableTableDoc`); the same strip applies to the Assistant's `tableFacts`) |
 | `create_visual`, `create_dashboard` and the other write tools | `creators.ts`, `handlers.ts` | need `write`: never a restricted caller |
 
 ### Background jobs (they run as the system identity, an org admin: unrestricted)

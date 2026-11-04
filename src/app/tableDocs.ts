@@ -7,6 +7,7 @@ import { clip } from './clip';
 import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
 import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
 import { closedToCaller } from '../data/rowAccess';
+import { getDatasetMeta } from '../data/datasets';
 import type { FactTableDoc } from '../ai/columnNotes';
 
 export type TableRole = '' | 'fact' | 'dimension';
@@ -139,19 +140,21 @@ export async function readableTableDoc(projectId: string, datasetId: string): Pr
 /**
  * The doc as the Assistant reads it, or undefined when nothing is written. A key with no grain reads as "One row per"
  * the key's name as the user calls it; `keyState` is left out when the key was never counted or the caller may not
- * count rows it cannot see (`readableTableDoc`).
+ * count rows it cannot see (`readableTableDoc`). The key (and the grain derived from it) is told only while the
+ * column is still one of the dataset's: a name left behind by a rename or a refresh names nothing a spec could use.
  */
 export async function tableFacts(projectId: string, datasetId: string): Promise<FactTableDoc | undefined> {
   const doc = await readableTableDoc(projectId, datasetId);
   if (!doc.role && !doc.key && !doc.grain && !doc.guide) return undefined;
+  const key = doc.key && (await getDatasetMeta(projectId, datasetId))?.columns.some((c) => c.name === doc.key) ? doc.key : '';
   const out: FactTableDoc = {};
   if (doc.role) out.role = doc.role;
-  if (doc.key) {
-    out.key = doc.key;
+  if (key) {
+    out.key = key;
     if (doc.keyCheck) out.keyState = doc.keyCheck.repeatedKeys > 0 ? 'repeats' : 'unique';
   }
   if (doc.grain) out.grain = doc.grain;
-  else if (doc.key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[doc.key]?.displayName || doc.key}`;
+  else if (key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[key]?.displayName || key}`;
   if (doc.guide) out.guide = doc.guide;
   return out;
 }
