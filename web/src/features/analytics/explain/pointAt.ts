@@ -7,10 +7,10 @@
 // The drawn axis is not always the server's: a re-sorted chart reorders it and
 // a first-of-month axis is rewritten ("2025-03-01" → "Mar 2025", build.ts
 // asMonthLabels). The label sent back is always the server's own, looked up by
-// the drawn one — never a date worked out here.
+// the drawn one — never a date worked out here. A value label ("EU" drawn "Europe") goes back the same way.
 
 import type { ChartHandle } from '../../../charts/Chart';
-import { asMonthLabels } from '../../../charts/build';
+import { drawnLabels, rawOf, type ValueLabelPairs } from '../../../charts/valueLabelMap';
 import type { Cx } from '../../../charts/types';
 
 export interface ChartPoint {
@@ -18,7 +18,8 @@ export interface ChartPoint {
   series?: string;
 }
 
-export function pointAt(chart: ChartHandle | null, e: MouseEvent, serverLabels: readonly unknown[]): ChartPoint | null {
+/** `pairs`: the reply's value labels, so a bar drawn "Europe" is the bucket EU and a line drawn "Europe" the series EU. */
+export function pointAt(chart: ChartHandle | null, e: MouseEvent, serverLabels: readonly unknown[], pairs?: ValueLabelPairs): ChartPoint | null {
   const c = chart as (ChartHandle & { getElementsAtEventForMode?: (...a: Cx[]) => Cx[] }) | null;
   if (!c || typeof c.getElementsAtEventForMode !== 'function') return null;
   // Bars and lines index their marks by axis label. A matrix, a treemap or a radar does not, so a point there names no bucket.
@@ -33,11 +34,11 @@ export function pointAt(chart: ChartHandle | null, e: MouseEvent, serverLabels: 
   if (!hit.length) return null;
   const drawn = ((c.data && c.data.labels) || [])[hit[0].index];
   if (drawn === undefined || drawn === null) return null;
-  const shown = asMonthLabels(serverLabels as Cx[]);
+  const shown = drawnLabels(serverLabels as Cx[], pairs);
   const at = shown.findIndex((l) => String(l) === String(drawn));
   // A label the server never sent (a forecast's) goes back as drawn: the server says it is not a period.
   const bucket = String(at >= 0 ? serverLabels[at] : drawn);
   const sets: Cx[] = (c.data && c.data.datasets) || [];
   const split = sets.length > 1 ? sets[hit[0].datasetIndex] : null;
-  return { bucket, ...(split && typeof split.label === 'string' ? { series: split.label } : {}) };
+  return { bucket, ...(split && typeof split.label === 'string' ? { series: String(rawOf(split.label, pairs?.series)) } : {}) };
 }

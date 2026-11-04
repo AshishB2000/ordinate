@@ -19,6 +19,7 @@ import { ChartPicker } from './ChartPicker';
 import { ChartStage, StageNote } from './ChartStage';
 import { DrillPanel, type DrillTarget } from './drill/DrillPanel';
 import { markAt } from './drill/mark';
+import { rawOf } from '../../charts/valueLabelMap';
 import { chartCanRender, GRID_TYPES, needsText, PICKER_POOL } from './eligibility';
 import { NameDialog } from './NameDialog';
 import { Button } from '../../ui/Button';
@@ -67,7 +68,10 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
     const m = markAt(c, e);
     if (!m) return;
     const split = !!b.eff.series;
-    setDrill(target({ category: m.category, ...(split && (m.series ?? seriesName) ? { series: m.series ?? seriesName } : {}) }, steps));
+    // A mark drawn by its value label ("Europe") drills into its stored value (EU).
+    const series = m.series ?? seriesName;
+    const pairs = data?.valueLabels;
+    setDrill(target({ category: rawOf(m.category, pairs?.category), ...(split && series ? { series: rawOf(series, pairs?.series) } : {}) }, steps));
   };
   const drawable = !!fit && !!current && !GRID_TYPES.has(current) && current !== 'table' && !current.startsWith('map_') && chartCanRender(current, fit, hasGeo);
 

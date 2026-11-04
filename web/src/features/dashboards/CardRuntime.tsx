@@ -11,7 +11,7 @@ import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import type { Card, Layout, VisualDef } from '../analyses/api';
 import type { EditorApi } from '../analyses/editor/context';
-import { clickFilterOn } from '../analyses/editor/filters';
+import { clickFilterOn, type ClickMark } from '../analyses/editor/filters';
 import { mergeFilters, VisualTileBody } from '../analyses/VisualTile';
 import { kpiDrillTarget } from '../analyses/editor/MetricCard';
 import { AlertDialog, subjectOf, type AlertSubject } from './AlertDialog';
@@ -195,13 +195,13 @@ export function VisualCard({
   card: Card;
   def: VisualDef;
   asTable: boolean;
-  onMark?: (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }) => void;
+  onMark?: (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }, drawn?: ClickMark['drawn']) => void;
 }) {
   const run = useRunAction(ed);
   const actions = actionsOf(card);
   const clicks = actions.filter((a) => a.trigger === 'click' && a.kind !== 'tooltip_visual');
   const tip = actions.find((a) => a.kind === 'tooltip_visual' && a.tooltipVisualId);
-  const [hover, setHover] = useState<{ category: string | number; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<{ category: string | number; drawn?: string; x: number; y: number } | null>(null);
   const filters = tileFilters(ed, card.id);
   // The card's comment pins, drawn by the chart engine's annotations (commentStore.ts cmtWithPins).
   const comments = useComments(ed.projectId);
@@ -229,7 +229,7 @@ export function VisualCard({
     () => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : hint ? { ...compared, overrides: { ...compared.overrides, tooltipHint: hint } } : compared),
     [compared, phone, hint],
   );
-  const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string } | null>(null);
+  const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string; drawn?: ClickMark['drawn'] } | null>(null);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   // A right-click on a bar or a point: its context menu, then a panel. Apart from the left click above.
@@ -252,10 +252,10 @@ export function VisualCard({
       const now = picked(col) ?? [];
       const on = now.some((v) => String(v) === String(at.value));
       const add = { metaKey: true, ctrlKey: false };
-      if (on) out.push({ label: `Remove “${at.shown}” from the filter`, hint: 'The other cards stop narrowing to it', icon: 'x', run: () => onMark(at.value, series, add) });
+      if (on) out.push({ label: `Remove “${at.shown}” from the filter`, hint: 'The other cards stop narrowing to it', icon: 'x', run: () => onMark(at.value, series, add, at.drawn) });
       else {
-        out.push({ label: `Filter to “${at.shown}”`, hint: `Every other card shows ${col}: ${at.shown}`, icon: 'target', run: () => onMark(at.value, series) });
-        if (now.length) out.push({ label: `Add “${at.shown}” to the filter`, hint: `Keeps ${now.length === 1 ? 'the value' : `the ${now.length} values`} already picked`, icon: 'plus', run: () => onMark(at.value, series, add) });
+        out.push({ label: `Filter to “${at.shown}”`, hint: `Every other card shows ${col}: ${at.shown}`, icon: 'target', run: () => onMark(at.value, series, undefined, at.drawn) });
+        if (now.length) out.push({ label: `Add “${at.shown}” to the filter`, hint: `Keeps ${now.length === 1 ? 'the value' : `the ${now.length} values`} already picked`, icon: 'plus', run: () => onMark(at.value, series, add, at.drawn) });
       }
     }
     out.push({ label: 'Show the rows behind this point', hint: 'Every row that adds up to it', icon: 'table', run: () => rowsAt(at.point) });
@@ -284,18 +284,18 @@ export function VisualCard({
           if (col) ed.view.toggleSelection({ type: 'filter', column: col, op: '=', value: category });
         }}
         onPinAt={(category, series) => ed.view.openComments({ kind: 'card', id: card.id, point: { label: String(category), ...(series ? { series } : {}) } })}
-        onHover={tip ? (category, e) => setHover(category === null ? null : { category, x: e.clientX, y: e.clientY }) : undefined}
+        onHover={tip ? (category, e, drawn) => setHover(category === null ? null : { category, drawn, x: e.clientX, y: e.clientY }) : undefined}
         // The drill names a mark as the SERVER labelled it ("2025-03", not the axis's "Mar 2025"): a dated bar resolves to its dates.
         serverMark={!onMark && !clicks.length}
         onMarkMenu={(point, e, time) => setPointMenu({ x: e.clientX, y: e.clientY, point, time })}
         // The author's own click actions still run on a tap: they chose what a click does.
-        onMarkTap={phone && !clicks.length ? (point, time, value, shown) => setTap({ point, time, value, shown }) : undefined}
+        onMarkTap={phone && !clicks.length ? (point, time, value, shown, drawn) => setTap({ point, time, value, shown, drawn }) : undefined}
       />
-      {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} onClose={() => setTap(null)} />}
+      {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.drawn?.series ?? tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} onClose={() => setTap(null)} />}
       <PointMenu key={pointMenu ? `${pointMenu.x}:${pointMenu.y}` : ''} at={pointMenu} items={pointItems} label="Chart point actions" onClose={() => setPointMenu(null)} />
       {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}
-      {tip && hover && <TooltipVisual ed={ed} tip={ed.visuals.get(tip.tooltipVisualId as string)} column={def.encoding.category} category={hover.category} at={hover} />}
+      {tip && hover && <TooltipVisual ed={ed} tip={ed.visuals.get(tip.tooltipVisualId as string)} column={def.encoding.category} category={hover.category} drawn={hover.drawn} at={hover} />}
     </>
   );
 }

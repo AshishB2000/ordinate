@@ -73,6 +73,8 @@ export interface ClickMark {
   value: unknown;
   seriesColumn?: string;
   series?: unknown;
+  /** The mark as the chart DREW it, when it drew a value label ("Europe" for EU): what a chip says. Never a filter. */
+  drawn?: { category: string; series?: string };
 }
 
 const clickText = (v: unknown): string => (v == null ? '' : String(v as string));

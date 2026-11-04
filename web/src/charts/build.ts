@@ -31,6 +31,7 @@ import { legendOnByDefault } from './traits';
 import { resolveChartType } from './typeSpec';
 import type { ChartCtx, ChartDataShape, ChartSeriesShape, Cx, Overrides } from './types';
 import { buildChartPlugins } from './valueLabels';
+import { drawnLabels, shownName, shownText } from './valueLabelMap';
 import type { WcTheme } from './wordCloud';
 
 /**
@@ -128,7 +129,8 @@ export function buildChart(
   const { chartType, opts, isRound, isMatrix, isTreemap, isFunnel, isSankey,
           isGauge, isCandlestick, isBoxplot, isHistogram, isHoriz } = spec;
   // A word cloud is not a Chart.js chart: wordCloudRender.js draws it on this canvas.
-  if (spec.isWordCloud) return { kind: 'wordCloud', labels, series, overrides, theme: { palette, fmt, textColor, titleColor, fontFamily, surfColor } };
+  const pairs = data.valueLabels; // drawn below, after everything that keys by the stored value
+  if (spec.isWordCloud) return { kind: 'wordCloud', labels: shownText(labels, pairs?.category), series, overrides, theme: { palette, fmt, textColor, titleColor, fontFamily, surfColor } };
   // A type that draws the server's figures (src/analysis/chartShapes.ts) draws nothing without them — never works them out.
   let figures = data.figures ?? {};
   if (figuresMissing(spec, figures)) return null;
@@ -156,9 +158,11 @@ export function buildChart(
   // stored `sortOrder` first, every label it does not name after, as it came)
   // reorder the same set — a sort never adds, drops or changes a figure. Both
   // read the RAW labels, so a month axis sorts as 2023-01 < 2023-04, not as
-  // the "Apr 2023" < "Jan 2023" its display text would.
+  // the "Apr 2023" < "Jan 2023" its display text would. A labelled text column sorts A→Z by what it draws ("Europe"):
+  // only a text column has labels, so a date axis still sorts raw.
   const byLabel = overrides.sort === 'label_asc' || overrides.sort === 'label_desc';
   const rawLabels: Cx[] = Array.isArray(data.labels) ? data.labels : [];
+  const sortText = shownText(rawLabels, pairs?.category);
   if (canSort && (overrides.sort === 'asc' || overrides.sort === 'desc' || byLabel || overrides.sort === 'custom')) {
     const totals = labels.map((_: Cx, i: number) =>
       series.reduce((sum: number, s: ChartSeriesShape) => sum + (typeof s.values[i] === 'number' ? s.values[i] : 0), 0));
@@ -168,7 +172,7 @@ export function buildChart(
     const order = labels.map((_: Cx, i: number) => i).sort((a: number, b: number) => {
       if (overrides.sort === 'custom') return pos(a) - pos(b);
       if (byLabel) {
-        const d = String(rawLabels[a]).localeCompare(String(rawLabels[b]), undefined, { numeric: true });
+        const d = String(sortText[a]).localeCompare(String(sortText[b]), undefined, { numeric: true });
         return overrides.sort === 'label_asc' ? d : -d;
       }
       return overrides.sort === 'asc' ? totals[a] - totals[b] : totals[b] - totals[a];
@@ -204,6 +208,11 @@ export function buildChart(
   // Formatting depth (./fmtApply, T2.7): series colours into the palette, and
   // the project's colour per category.
   const fmtCat = fmtResolve(labels, series, overrides, palette, type);
+  // Value labels drawn only now (./valueLabelMap): colours, the custom order and hidden series were resolved on the stored values.
+  if (pairs) {
+    labels = shownText(labels, pairs.category);
+    if (pairs.series) series = series.map((s: ChartSeriesShape) => ({ ...s, name: shownName(s.name, pairs) }));
+  }
 
   // ── The parameter object every family module reads ───────────────────────
   const c: ChartCtx = {
@@ -320,7 +329,7 @@ export function buildChart(
   const evMarks = evDrawable(data, spec, !!sortOrder, overrides);
   if (evMarks.length) inlinePlugins.push(eventsPlugin({ events: evMarks, fontFamily, isStatic: !!overrides.devicePixelRatio }));
   // Click-to-filter (./selection): the marks the reader picked on THIS chart stay at full strength, the rest dim.
-  if (overrides.markSelection) inlinePlugins.push(selectionPlugin(overrides.markSelection, rawLabels, asMonthLabels(rawLabels)));
+  if (overrides.markSelection) inlinePlugins.push(selectionPlugin(overrides.markSelection, rawLabels, drawnLabels(rawLabels, pairs), pairs?.series));
 
   // ── Series filter (period multi-select) ────────────────────────────────────
   // Hide deselected series. Indices align with `series` (both use chartSeries()).

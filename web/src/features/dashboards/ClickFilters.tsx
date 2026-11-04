@@ -19,6 +19,7 @@ import type { ClickFilter } from '../analyses/editor/filters';
 import { IS_MAC } from '../palette/registry';
 import { clickColumns } from './CardRuntime';
 import { isPhoneReader } from './phone/phoneBlocks';
+import { clickName } from './useViewer';
 import s from './ClickFilters.module.css';
 
 /** How many values a chip spells out before "+N". */
@@ -27,11 +28,14 @@ const SPELLED = 3;
 const MOD = IS_MAC ? '⌘' : 'Ctrl';
 const word = (v: string) => (v === '' ? '(blank)' : v);
 
-/** "California, Texas, Ohio +2" — the chip's values; `all` spells every one (the tooltip, the accessible name). */
-export function clickValues(c: ClickFilter, all = false): string {
+/**
+ * "California, Texas, Ohio +2" — the chip's values; `all` spells every one (the tooltip, the accessible name). A value
+ * the chart drew by its label says that label (`names`, the viewer's `clickNames`); the filter keeps the value.
+ */
+export function clickValues(c: ClickFilter, all = false, names?: ReadonlyMap<string, string>): string {
   const shown = all ? c.values : c.values.slice(0, SPELLED);
   const more = c.values.length - shown.length;
-  return shown.map(word).join(', ') + (more > 0 ? ` +${more}` : '');
+  return shown.map((v) => names?.get(clickName(c.column, v)) ?? word(v)).join(', ') + (more > 0 ? ` +${more}` : '');
 }
 
 export function ClickFilterBar({ ed }: { ed: EditorApi }) {
@@ -74,12 +78,12 @@ export function ClickFilterBar({ ed }: { ed: EditorApi }) {
       </span>
       <ul className={s.chips}>
         {clicks.map((c) => {
-          const text = `${c.column}: ${clickValues(c, true)}`;
+          const text = `${c.column}: ${clickValues(c, true, ed.view.clickNames)}`;
           return (
             <li key={`${c.origin}\u0000${c.column}`}>
               <button type="button" className={s.chip} aria-label={`Remove click filter ${text}`} title={`${text}${from(c)}. Click to remove.`} onClick={() => ed.view.clearClicks(c)}>
                 <span className={s.col}>{c.column}:</span>
-                <span className={s.vals}>{clickValues(c)}</span>
+                <span className={s.vals}>{clickValues(c, false, ed.view.clickNames)}</span>
                 <Icon name="x" size={12} />
               </button>
             </li>

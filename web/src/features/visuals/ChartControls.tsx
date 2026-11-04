@@ -11,6 +11,7 @@ import type { ChartHandle } from '../../charts/Chart';
 import { canvasToPng } from '../../charts/png';
 import { chartHasPeriodDropdown, chartIsSmallMultiple, NO_VALUE_LABEL_TYPES } from '../../charts/traits';
 import type { ChartDataShape, Overrides } from '../../charts/types';
+import { shownData } from '../../charts/valueLabelMap';
 import { Button, IconButton } from '../../ui/Button';
 import { Checkbox, Switch } from '../../ui/Choice';
 import { Input } from '../../ui/Field';
@@ -53,7 +54,8 @@ const NUMBER_FORMATS = [
 ];
 
 /** {labels, series} as tab-separated text: the header row, then one row per label. */
-export function dataToTsv(data: ChartDataShape): string {
+export function dataToTsv(raw: ChartDataShape): string {
+  const data = shownData(raw); // each value by its label, as the chart draws it
   const labels = data.labels ?? [];
   const series = data.series ?? [];
   const head = ['Label', ...series.map((x) => x.name ?? '')].join('\t');
