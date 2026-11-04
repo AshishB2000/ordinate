@@ -11,7 +11,7 @@ import { DIALECT_IDS, dialectFor } from '../src/engine/live/dialects';
 import { likeAffix, likePattern } from '../src/engine/live/dialect';
 import { ParamSink } from '../src/engine/live/sqlParams';
 import { LIVE_FUNCTIONS, SPELL, V1_FUNCTIONS, liveFn } from '../src/engine/live/formulaSqlFunctions';
-import { checkCalc, compileCalcSql, MAX_CALC_SQL } from '../src/engine/live/formulaSql';
+import { CalcError, SqlFormulaBuilder, checkCalc, compileCalcSql, MAX_CALC_SQL } from '../src/engine/live/formulaSql';
 import type { CalcRefusalCode } from '../src/engine/live/formulaSql';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
 import type { CompileDialectId } from '../src/engine/live/dialect';
@@ -45,6 +45,7 @@ ok('trimJs is caseKey without the lower', DIALECT_IDS.every((id) => {
 ok('likeAffix escapes % _ and the escape, and places %', likeAffix('a%_\\', '\\', 'starts') === 'a\\%\\_\\\\%'
   && likeAffix('a!', '!', 'ends') === '%a!!' && likeAffix('a', '!', 'contains') === '%a%');
 ok('likePattern is likeAffix contains', likePattern('5%_!x', '!') === likeAffix('5%_!x', '!', 'contains'));
+ok('NEGATIVE CONTROL: a function added to FUNCTIONS alone breaks the key check', show(Object.keys(LIVE_FUNCTIONS).sort()) !== show([...Object.keys(FUNCTIONS), 'zz_new'].sort()));
 ok('every v1 function has a spelling, and only those (round is the builder\'s own)',
   show(Object.keys(SPELL).sort()) === show(V1_FUNCTIONS.filter((n) => n !== 'round').sort()));
 
@@ -109,6 +110,10 @@ refuses('abs([amt], 1)', 'arity'); refuses('if([amt] > 0, 1)', 'arity'); refuses
 refuses('1e999 + 1', 'types');
 refuses('lower([cat])', 'function'); refuses('upper([cat])', 'function'); refuses('today()', 'function');
 
+const unknownFn = ((): unknown => {
+  try { return new SqlFormulaBuilder({ d: dialectFor('duckdb'), b: new ParamSink(), columns: COLS, earlier: [] }).call('zz_new', [], 0); } catch (e) { return e; }
+})();
+ok('a function the table does not know is refused, never spelled', unknownFn instanceof CalcError && unknownFn.code === 'function' && unknownFn.tokenIndex === 0, show(unknownFn));
 const r1 = checkCalc('len([cat])', COLS, []);
 ok('a refused function names the function, says why, and underlines it', !r1.ok && r1.code === 'function'
   && r1.error === "len() can't run on a Live table: warehouses count characters differently." && show(r1.at) === '{"start":0,"end":3}', show(r1));
