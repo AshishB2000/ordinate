@@ -114,6 +114,17 @@ export function sameEdge(a: Relationship, b: { from: RelEnd; to: RelEnd }): bool
   return (eq(a.from, b.from) && eq(a.to, b.to)) || (eq(a.from, b.to) && eq(a.to, b.from));
 }
 
+/**
+ * The label another relationship between the same two datasets (either direction) already has, ignoring
+ * case, or null. The same edge is no clash: a save replaces it.
+ */
+export function labelClash(list: Relationship[], rel: Relationship): string | null {
+  const name = rel.label?.toLowerCase();
+  if (!name) return null;
+  const pair = (r: Relationship): string => [r.from.datasetId, r.to.datasetId].sort().join();
+  return list.find((r) => r.id !== rel.id && !sameEdge(r, rel) && pair(r) === pair(rel) && r.label?.toLowerCase() === name)?.label ?? null;
+}
+
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
 function modelFile(projectId: string): string {
@@ -181,8 +192,9 @@ export async function saveRelationship(projectId: string, raw: unknown): Promise
     const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
     // A save without a label (every release-1 save) keeps the same edge's own; a changed edge does not. Never the
     // warning: it is derived, and the release that writes it recomputes it (absent once the edge no longer warns).
-    const same = old && sameEdge(old, parsed) ? old : null;
-    const rel = old ? { ...parsed, id: old.id, ...(same && parsed.label === undefined && same.label !== undefined && { label: same.label }) } : parsed;
+    // An empty label that IS sent clears it (Rename to nothing).
+    const same = old && sameEdge(old, parsed) && !(raw && typeof raw === 'object' && 'label' in raw) ? old : null;
+    const rel = old ? { ...parsed, id: old.id, ...(same && same.label !== undefined && { label: same.label }) } : parsed;
     const next = (old ? list.map((r) => (r === old ? rel : r)) : [...list, rel]).filter((r) => r === rel || (r.id !== rel.id && !sameEdge(r, rel)));
     if (next.length > MAX_RELATIONSHIPS) return list;
     saved = rel;

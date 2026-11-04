@@ -10,6 +10,8 @@
 //             predicate, refused by Live; a KPI and a chart reached through `vizJoin` / `metricJoin`
 //             refuse it even in a project with NO relationships. Every guard has a negative control.
 //   § order   a re-saved relationship keeps its place and its id, so "the first relationship" holds
+//   § server  the pickers offer each labelled relationship's columns; a label clash is refused; row
+//             access reads each dataset once; a via KPI through a deleted relationship has no figure
 //   § golden  no-via answers over a table related twice are byte-identical to scripts/fixtures/golden/joinsNoVia.json,
 //             recorded from the planner before it learned via (never re-recorded)
 //
@@ -259,6 +261,57 @@ async function main(): Promise<void> {
   const moved = (await rels.listRelationships(Q))[0];
   ok('negative control: a re-save that changes the edge\'s columns does not inherit its label (nor its warning)',
     moved.id === R_ORDER && moved.from.column === 'sale_id' && moved.label === undefined && moved.warning === undefined, show(moved));
+
+  // ── § server: pickers, labels, doors ───────────────────────────────────────
+  const groups = jp.relatedColumnGroups(SALES.id, RELS, infos);
+  ok('pickers: Dates once by default, then a "Ship date" group carrying its via', show(groups.map((x) => [x.name, x.via ?? null])) === show([['Dates', null], ['Ship date', R_SHIP]]), show(groups.map((x) => [x.name, x.via])));
+  ok('negative control: a project with one relationship per pair has no via group', jp.relatedColumnGroups(SALES.id, [RELS[0], RELS[2]], infos).every((x) => x.via === undefined));
+  ok('labels: a second "ship date" between Sales and Dates clashes; another pair does not',
+    rels.labelClash(RELS, { ...RELS[0], id: fx.ID(77), label: 'ship date' }) === 'Ship date' && rels.labelClash(RELS, { ...RELS[2], label: 'Ship date' }) === null);
+  ok('labels: re-saving a relationship under its own label is no clash, by id or by the same edge',
+    rels.labelClash(RELS, RELS[1]) === null && rels.labelClash(RELS, { ...RELS[1], id: fx.ID(78) }) === null);
+  ok('row access reads each dataset once', show(jp.planReads(planOf(V.both).plan)) === show([DATES.id]));
+  const o2o = RELS.map((x) => (x.id === R_SHIP ? { ...x, cardinality: 'one_to_one' as const } : x));
+  const back = jp.viaPath(DATES.id, R_SHIP, o2o);
+  ok('a one-to-one walked from its far side takes ONE hop back (its near side is not reached through itself)',
+    back.ok && back.value.length === 1 && back.value[0].to.datasetId === SALES.id, show(back));
+
+  if (!handlers.has('relationship:save')) ipcRels.register();
+  const save = handlers.get('relationship:save')!;
+  const R = (await projects.createProject('Joins server')).id;
+  const sv = async (name: string, f: typeof SALES) => (await datasets.saveDataset(R, { name, sourceKind: 'csv', columns: f.columns, rows: f.rows }))!.id;
+  const rs = await sv('Sales', SALES);
+  const rd = await sv('Dates', DATES);
+  const edge = (from: string, label?: string) => ({ from: { datasetId: rs, column: from }, to: { datasetId: rd, column: 'date' }, cardinality: 'many_to_one', ...(label !== undefined && { label }) });
+  const order = await save(null, { projectId: R, relationship: edge('order_date', 'Order date') });
+  const shipped = await save(null, { projectId: R, relationship: edge('ship_date', 'Ship date') });
+  ok('relationship:save stores a label', order.ok === true && shipped.ok === true && shipped.relationship.label === 'Ship date', show(shipped));
+  const clash = await save(null, { projectId: R, relationship: edge('sale_id', 'ship DATE') });
+  ok('relationship:save refuses a label another relationship between the same two datasets has', clash.ok === false
+    && clash.error === 'Another relationship between these two datasets is already called “Ship date”.' && (await rels.listRelationships(R)).length === 2, show(clash));
+  const cleared = await save(null, { projectId: R, relationship: { ...edge('ship_date', ''), id: shipped.relationship.id } });
+  ok('an empty label that is sent clears it', cleared.ok === true && cleared.relationship.label === undefined && (await rels.listRelationships(R))[1].label === undefined, show(cleared));
+  await save(null, { projectId: R, relationship: { ...edge('ship_date', 'Ship date'), id: shipped.relationship.id } });
+  ok('negative control: a save with no label key still keeps the edge\'s own', (await save(null, { projectId: R, relationship: edge('ship_date') })).relationship.label === 'Ship date');
+
+  const related = await handlers.get('relationship:related')!(null, { projectId: R, datasetId: rs });
+  ok('relationship:related keeps `groups` as it was and sends the Ship date group apart, with its via',
+    show(related.groups.map((x: { name: string }) => x.name)) === show(['Dates']) && show(related.viaGroups.map((x: { name: string; via: string }) => [x.name, x.via])) === show([['Ship date', shipped.relationship.id]]), show(related));
+  const relatedOne = await handlers.get('relationship:related')!(null, { projectId: R, datasetId: rd });
+  ok('negative control: from Dates (no second walkable join) the reply has no viaGroups key', relatedOne.ok === true && !('viaGroups' in relatedOne), show(relatedOne));
+  const shipKpi = [{ ...F('quarter', '=', 'Q1'), via: shipped.relationship.id as string }];
+  const live = await ipcRels.joinedMetricFor(R, rs, sum, shipKpi);
+  ok('the server\'s via KPI is the pure plan\'s figure (Ship date, Q1)', !!live && live.ok && Object.is(live.value, kpi(kShip)), show([live, kpi(kShip)]));
+  ok('metricReads reads Dates once', show(await ipcRels.metricReads(R, rs, 'amount', [...shipKpi, F('month', '=', '2024-01')])) === show([rd]));
+  ok('chartReads reads Dates once for a chart joined both ways', show(await ipcRels.chartReads(R, rs,
+    { category: 'month', categoryDatasetId: rd, values: [M('amount', 'sum'), M('quarter', 'count', rd, shipped.relationship.id)] }, [])) === show([rd]));
+  const kpiAfterDelete = async () => {
+    await rels.deleteRelationship(R, shipped.relationship.id);
+    return (await ipcRels.joinedMetricFor(R, rs, sum, shipKpi))!;
+  };
+  ok('a via filter on a KPI with the relationship deleted: no figure (null), never the unfiltered total', (await kpiAfterDelete()).value === null);
+  ok('negative control: the same KPI through the remaining Order date relationship still has a figure',
+    typeof (await ipcRels.joinedMetricFor(R, rs, sum, [{ ...F('quarter', '=', 'Q1'), via: order.relationship.id as string }]))?.value === 'number');
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });

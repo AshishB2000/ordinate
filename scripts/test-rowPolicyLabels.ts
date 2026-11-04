@@ -189,6 +189,18 @@ const totalsOf = (r: H.Reply): string[] =>
     } finally {
       doors.setRelatedGateForTest(true);
     }
+    // A filter naming a relationship (`via`) reads that relationship's table even when its column is the
+    // locked dataset's own: under the lock it reaches another dataset (plan 09).
+    const relO = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: orders, column: 'region' }, to: { datasetId: custDim, column: 'region' }, cardinality: 'many_to_one' } });
+    const viaId = String(relO.body?.relationship?.id ?? '');
+    const eastStep = (via?: string) => [{ type: 'filter', column: 'region', op: '=', value: 'East', ...(via && { via }) }];
+    const viaChart = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: eastStep(viaId) });
+    const viaKpi = await W.call('east', 'dashboard:metric', { projectId: P, datasetId: orders, column: 'sales', aggregation: 'sum', filters: eastStep(viaId) });
+    ok('B1 (lock): east\'s chart on its locked dataset with a via filter on its own column is refused `related`', /^[0-9a-f-]{36}$/.test(viaId) && H.refused(viaChart, 'related'), `${viaChart.status} ${viaChart.text.slice(0, 200)}`);
+    ok('B1 (lock): …and so is the KPI', H.refused(viaKpi, 'related'), `${viaKpi.status} ${viaKpi.text.slice(0, 200)}`);
+    const plainChart = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: eastStep() });
+    const plainKpi = await W.call('east', 'dashboard:metric', { projectId: P, datasetId: orders, column: 'sales', aggregation: 'sum', filters: eastStep() });
+    ok('NEGATIVE CONTROL (lock): the same filter without via answers, chart and KPI', plainChart.body?.ok === true && plainKpi.body?.ok === true, `${plainChart.text.slice(0, 120)} ${plainKpi.text.slice(0, 120)}`);
   } finally {
     await W.close();
   }

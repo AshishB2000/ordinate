@@ -463,6 +463,29 @@ snapshot metric and refuses its charts, Explain, alerts, tree and drivers, and i
 shows a plain total; an alert it evaluates shows no figure. The difference ends when the rollout
 does. A rollback to `05a` keeps every snapshot and shows the refusals again.
 
+## Charts can go through a named join (`09`)
+
+A join (a relationship) can have a name, and one table can be joined two ways: Sales to Dates by
+order date ("Order date") and by ship date ("Ship date"). A chart's field, measure or filter can then
+say which join it goes through (`via`). A chart that names no join goes through the first join
+between its tables, exactly as before, and the Relationships list keeps that order when a join is
+saved again.
+
+**This release needs the release that keeps join names and `via` (see
+[Other saved data this release keeps](#other-saved-data-this-release-keeps)) on every pod first.**
+While pods of that release run beside this one, they refuse a chart that names a join ("…finish
+upgrading Ordinate"), keep the names and `via`, and cannot rename a join. No figure is wrong.
+
+The limits:
+
+- **Skipping that release** without stopping every pod first, or **rolling back below it**, leaves
+  pods that draw a chart that names a join through the first join instead, which can be the wrong
+  date, and drop every join name in the project and every `via` they save. Use the two ways through
+  in [The release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first).
+- **Rolling back to that release** keeps the names. Its charts that name a join show no figure until
+  you roll forward, and a join cannot be renamed there.
+- **A browser tab opened before the upgrade** lists only each table's first join until it reloads.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the

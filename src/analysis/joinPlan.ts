@@ -17,6 +17,7 @@ import type { FilterStep } from '../data/transforms';
 import type { Relationship } from './relationships';
 import type { VizEncoding } from './visuals';
 import { termNoJoinHere } from '../data/termMessages';
+import { viaElsewhere, viaGone, viaNoColumn } from './joinMessages';
 
 export interface Hop {
   relId: string;
@@ -149,21 +150,31 @@ function hopLabel(h: Hop, rels: Relationship[], nameOf: (id: string) => string):
 
 /**
  * The hops a reference naming relationship `relId` takes: the DEFAULT path to the relationship's near
- * side, then that one hop. The near side is its `from` when the primary reaches it; otherwise, for a
- * one-to-one, its `to`. Walking a many-to-one backwards is refused as a fan-out, never re-routed.
+ * side, then that one hop. The near side is its `from` when the primary reaches it (not through this
+ * relationship); otherwise, for a one-to-one, its `to`. Walking a many-to-one backwards is refused as
+ * a fan-out, never re-routed.
  */
 export function viaPath(primary: string, relId: string, rels: Relationship[], nameOf: (id: string) => string = (id) => id): Result<Hop[]> {
   const r = rels.find((x) => x.id === relId);
-  if (!r) return { ok: false, error: 'A relationship this chart joins through no longer exists.' };
+  if (!r) return { ok: false, error: viaGone() };
   const reach = reachable(primary, rels);
-  const at = (ds: string): Hop[] | undefined => (ds === primary ? [] : reach.get(ds));
-  const back = at(r.to.datasetId);
-  if (!at(r.from.datasetId) && back) {
-    if (r.cardinality === 'one_to_one') return { ok: true, value: [...back, { relId, from: r.to, to: r.from }] };
-    return { ok: false, error: fanOutError(r.from.datasetId, primary, r, nameOf) };
-  }
-  const p = findPath(primary, r.from.datasetId, rels, nameOf);
+  // A one-to-one's far side is reached THROUGH it; that is no near side (the hop would walk straight back).
+  const near = (ds: string): Hop[] | undefined => {
+    const p = ds === primary ? [] : reach.get(ds);
+    return p && !p.some((h) => h.relId === relId) ? p : undefined;
+  };
+  const fwd = near(r.from.datasetId);
+  if (fwd) return { ok: true, value: [...fwd, { relId, from: r.from, to: r.to }] };
+  const back = near(r.to.datasetId);
+  if (back && r.cardinality === 'one_to_one') return { ok: true, value: [...back, { relId, from: r.to, to: r.from }] };
+  if (back) return { ok: false, error: fanOutError(r.from.datasetId, primary, r, nameOf) };
+  const p = findPath(primary, r.from.datasetId, rels, nameOf); // neither side is reached: findPath says why
   return p.ok ? { ok: true, value: [...p.value, { relId, from: r.from, to: r.to }] } : p;
+}
+
+/** The OTHER datasets a plan reads, each once (row access rules gate exactly these). */
+export function planReads(plan: JoinPlan): string[] {
+  return [...new Set(plan.tables.map((t) => t.datasetId))].filter((id) => id !== plan.tables[0].datasetId);
 }
 
 /**
@@ -290,8 +301,8 @@ function resolveRefs(primary: string, refs: Ref[], rels: Relationship[], infos: 
     if (r.via) {
       const last = p.value[p.value.length - 1];
       const label = hopLabel(last, rels, nameOf);
-      if (r.ds && last.to.datasetId !== r.ds) return { ok: false, error: `${label} does not lead to ${nameOf(r.ds)}.` };
-      if (!infos.get(last.to.datasetId)?.columns.some((c) => c.name === r.column)) return { ok: false, error: `${label} has no column "${r.column}".` };
+      if (r.ds && last.to.datasetId !== r.ds) return { ok: false, error: viaElsewhere(label, nameOf(r.ds)) };
+      if (!infos.get(last.to.datasetId)?.columns.some((c) => c.name === r.column)) return { ok: false, error: viaNoColumn(label, r.column) };
     }
     paths.push(p.value);
     keys.set(r, pathKey(p.value));
@@ -402,16 +413,27 @@ export function planMetricJoin(
   return { ok: true, value: { plan, layout, column: name(m), table: table(m), filters: renamedFilters(filters, flts, name) } };
 }
 
-/** Reachable datasets and their columns, nearest first — what the builder's pickers list. */
-export function relatedColumnGroups(
-  primary: string,
-  rels: Relationship[],
-  infos: Map<string, DsInfo>,
-): { datasetId: string; name: string; columns: ParsedColumn[] }[] {
-  const out: { datasetId: string; name: string; columns: ParsedColumn[] }[] = [];
-  for (const id of reachable(primary, rels).keys()) {
+export interface ColumnGroup { datasetId: string; name: string; columns: ParsedColumn[]; via?: string }
+
+/**
+ * Reachable datasets and their columns, nearest first — what the builder's pickers list — then one
+ * group per walkable relationship that is NOT its dataset's default hop ("Ship date"), carrying its `via`.
+ */
+export function relatedColumnGroups(primary: string, rels: Relationship[], infos: Map<string, DsInfo>): ColumnGroup[] {
+  const out: ColumnGroup[] = [];
+  const reach = reachable(primary, rels);
+  for (const id of reach.keys()) {
     const info = infos.get(id);
     if (info) out.push({ datasetId: id, name: info.name, columns: info.columns });
+  }
+  const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
+  for (const r of rels) {
+    const p = viaPath(primary, r.id, rels, nameOf);
+    if (!p.ok) continue;
+    const last = p.value[p.value.length - 1];
+    const info = infos.get(last.to.datasetId);
+    const dflt = last.to.datasetId === primary ? '' : pathKey(reach.get(last.to.datasetId) ?? []);
+    if (info && pathKey(p.value) !== dflt) out.push({ datasetId: info.id, name: hopLabel(last, rels, nameOf), columns: info.columns, via: r.id });
   }
   return out;
 }

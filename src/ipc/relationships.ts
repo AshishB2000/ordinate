@@ -13,9 +13,10 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import type { VizEncoding } from '../analysis/visuals';
 import * as rels from '../analysis/relationships';
 import type { Relationship } from '../analysis/relationships';
-import { findPath, planMetricJoin, relatedColumnGroups, resolveColumnOwner, resolveVizJoin } from '../analysis/joinPlan';
+import { findPath, planMetricJoin, planReads, relatedColumnGroups, resolveColumnOwner, resolveVizJoin } from '../analysis/joinPlan';
 import { TermNotExpandedError, termRefusal } from '../data/termStep';
 import { termNoJoinHere } from '../data/termMessages';
+import { labelTaken } from '../analysis/joinMessages';
 import type { DsInfo, JoinPlan } from '../analysis/joinPlan';
 import { joinRateJs, joinedMetricJs, joinedVizDataJs, keyStatsJs } from '../analysis/joinJs';
 import type { KeyStats } from '../analysis/joinJs';
@@ -113,7 +114,7 @@ export async function columnOwner(projectId: string, datasetId: string, column: 
 /** The OTHER datasets a chart's question reads — its join plan's tables (row access rules gate exactly these). */
 export async function chartReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
   const j = await vizJoin(projectId, datasetId, encoding, filters);
-  return j && j.join.ok ? j.join.value.plan.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
+  return j && j.join.ok ? planReads(j.join.value.plan) : [];
 }
 
 export async function joinedVizDataFor(
@@ -163,7 +164,7 @@ export async function metricColumnOwner(projectId: string, datasetId: string, co
 /** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
 export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
   const mj = await metricJoin(projectId, datasetId, column, filters);
-  return mj && mj.planned.ok ? mj.planned.value.plan.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
+  return mj && mj.planned.ok ? planReads(mj.planned.value.plan) : [];
 }
 
 /**
@@ -279,6 +280,8 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
 async function save(projectId: string, raw: any): Promise<any> {
   const rel = rels.sanitizeRelationship(raw);
   if (!rel) return { ok: false, error: 'Pick two different datasets and a column on each.' };
+  const clash = rels.labelClash(await rels.listRelationships(projectId), rel);
+  if (clash) return { ok: false, error: labelTaken(clash) };
   const from = await infoFor(projectId, rel.from.datasetId);
   const to = await infoFor(projectId, rel.to.datasetId);
   if (!from || !to) return { ok: false, error: 'Dataset not found' };
@@ -289,7 +292,8 @@ async function save(projectId: string, raw: any): Promise<any> {
   if (!stats) return { ok: false, error: 'That column no longer exists.' };
   rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
   rel.warning = rels.relWarning(stats, (await getTableDoc(projectId, rel.to.datasetId)).key, rel.to.column); // always fresh: never the caller's
-  const saved = await rels.saveRelationship(projectId, rel);
+  // A label that IS sent, even empty, is the user's (an empty one clears it); only an absent one keeps the edge's own.
+  const saved = await rels.saveRelationship(projectId, raw && typeof raw === 'object' && 'label' in raw ? { ...rel, label: rel.label ?? '' } : rel);
   if (!saved) return { ok: false, error: 'Could not save the relationship.' };
   return { ok: true, relationship: withMatchPct(saved), stats };
 }
@@ -339,7 +343,10 @@ export function register(): void {
       const list = await rels.listRelationships(projectId);
       if (list.length === 0) return { ok: true, groups: [] };
       const infos = await modelInfos(projectId, datasetId, list);
-      return { ok: true, groups: relatedColumnGroups(datasetId, live(list, infos), infos) };
+      const all = relatedColumnGroups(datasetId, live(list, infos), infos);
+      // A labelled join's group goes apart, so `groups` stays as it was and an older tab never lists it without its via.
+      const viaGroups = all.filter((g) => g.via);
+      return { ok: true, groups: all.filter((g) => !g.via), ...(viaGroups.length > 0 && { viaGroups }) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read relationships' };
     }
