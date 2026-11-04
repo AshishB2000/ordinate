@@ -26,6 +26,7 @@ const Fields = {
   format: Format.optional(),
   description: z.string().max(2_000).optional(),
   direction: z.enum(['', 'up_good', 'down_good']).optional(),
+  timeColumn: z.string().max(512).optional(), // the date column it counts by; '' clears (semantic D9)
 };
 const ParamPayload = z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50);
 const ById = z.strictObject({ projectId: Uuid, id: Uuid });
@@ -50,7 +51,7 @@ export const metrics = {
       id: Uuid,
       base: Base.optional(), // the editor's tag (contract.ts Base)
       // No datasetId: the store would ignore it, so the contract refuses it.
-      patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction }),
+      patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction, timeColumn: Fields.timeColumn }),
     }),
     project: byProjectId,
   }),

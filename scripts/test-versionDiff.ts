@@ -223,6 +223,16 @@ function trees(): void {
   ok('…a product replaced by a split', ipcDiff.sentence(d.changes[0]) === 'Tree changed from a product of 2 metrics (1 broken down further) to a split by channel', ipcDiff.sentence(d.changes[0]));
   d = vd.diffVersions('metric', { ...m, tree: product }, { ...m, tree: clone(product) }, titleOf);
   ok('NEGATIVE CONTROL: the same tree is no change', d.changes.length === 0, kinds(d));
+
+  // The date a metric counts by (semantic layer D9): one change, in words, with the unset side named.
+  d = vd.diffVersions('metric', m, { ...m, timeColumn: 'ship_date' }, titleOf);
+  ok('a metric that gains a date → metric.timeColumn, the unset side being the dashboard\'s date', kinds(d) === 'metric.timeColumn' && ipcDiff.sentence(d.changes[0]) === 'Date it counts by changed from the dashboard’s date to ship_date', ipcDiff.sentence(d.changes[0]));
+  d = vd.diffVersions('metric', { ...m, timeColumn: 'ship_date' }, { ...m, timeColumn: 'order_date' }, titleOf);
+  ok('…one date replaced by another', kinds(d) === 'metric.timeColumn' && ipcDiff.sentence(d.changes[0]) === 'Date it counts by changed from ship_date to order_date', ipcDiff.sentence(d.changes[0]));
+  d = vd.diffVersions('metric', { ...m, timeColumn: 'ship_date' }, m, titleOf);
+  ok('…and a date dropped', ipcDiff.sentence(d.changes[0]) === 'Date it counts by changed from ship_date to the dashboard’s date', ipcDiff.sentence(d.changes[0]));
+  d = vd.diffVersions('metric', { ...m, timeColumn: 'ship_date' }, { ...m, timeColumn: 'ship_date' }, titleOf);
+  ok('NEGATIVE CONTROL: the same date is no change', d.changes.length === 0, kinds(d));
 }
 
 async function engine(): Promise<void> {

@@ -83,3 +83,31 @@ export function calcNotAdditive(measure: string, calc: string): string {
 export function calcNotAdditiveOverTime(measure: string, calc: string): string {
   return t('metricCheckMessages.can_t_be_shown_as_along', { measure, calc });
 }
+
+// ── The date a metric counts by (semantic layer D9) ──────────────────────────
+// A date is a column name, or `dashboardDate()` for "no date of its own".
+
+/** A metric's date names a column that is not a date column of its dataset. */
+export function notADateColumn(column: string): string {
+  return t('metricCheckMessages.is_not_a_date_column_of', { column });
+}
+
+/** What a metric or measure with no date of its own counts by, inside a sentence. */
+export function dashboardDate(): string {
+  return t('metricCheckMessages.the_dashboard_s_date');
+}
+
+/** A formula's own date is not the date one of its parts counts by. */
+export function formulaDatesDiffer(name: string, part: string, partDate: string, ownDate: string): string {
+  return t('metricCheckMessages.counts_by_but_its_part_counts', { name, ownDate, part, partDate });
+}
+
+/** A formula with no date of its own, over parts that count by different dates: it has none to take. */
+export function formulaPartsDiffer(name: string, a: string, aDate: string, b: string, bDate: string): string {
+  return t('metricCheckMessages.is_calculated_from_which_counts_by', { name, a, aDate, b, bDate });
+}
+
+/** One chart draws measures that count by different dates, under a date control. */
+export function measuresCountByDifferentDates(a: string, aDate: string, b: string, bDate: string): string {
+  return t('metricCheckMessages.counts_by_and_by_so_one', { a, aDate, b, bDate });
+}

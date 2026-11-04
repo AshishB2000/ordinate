@@ -57,6 +57,7 @@ import type { AsOf } from '../api/asOf';
 import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
+import { metricDate, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
@@ -475,7 +476,8 @@ export function register() {
   ipcMain.handle('metric:get', async (_e, { projectId, id }: any = {}) => {
     const t = await metrics.readMetric(projectId, id);
     if (!t) return { ok: false, error: 'Metric not found' };
-    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag }; // tag: the metric dialog's base
+    const timeColumnGone = !!t.rec.timeColumn && !(await metricDate(projectId, t.rec)); // counts as unset (./metricTimeScope); the editor says so
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
@@ -483,9 +485,12 @@ export function register() {
       const raw = input && typeof input === 'object' ? input : {};
       // `field`: which box of the editor the sentence belongs beside.
       if (await nameTaken(projectId, raw.name)) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const when = await settleOnSave(projectId, raw);
+      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const m = await metrics.saveMetric(projectId, {
         ...raw,
         filters: sanitizeDashboardFilters(raw.filters),
+        ...when,
       });
       if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
       await versions.record(projectId, 'metric', m);
@@ -500,9 +505,11 @@ export function register() {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
       if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
-      const next = { ...raw };
-      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const before = await metrics.getMetric(projectId, id);
+      const when = before ? await settleOnUpdate(projectId, before, raw) : {};
+      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
+      const next = { ...raw, ...when };
+      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const m = await metrics.updateMetric(projectId, id, next, base);
       if (!m) return { ok: false, error: 'Metric not found' };
       await versions.record(projectId, 'metric', m, { before });

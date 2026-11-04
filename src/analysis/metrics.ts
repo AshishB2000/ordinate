@@ -110,6 +110,8 @@ export interface MetricSummary {
   format: MetricFormat;
   description?: string;
   direction?: 'up_good' | 'down_good';
+  /** The date column it counts by, when it has one (a column that is no longer a date reads as none: ./metricTimeScope). */
+  timeColumn?: string;
   /** Set when the metric has a tree (the Metrics table's "Open tree"). */
   hasTree?: true;
   updatedAt: string;
@@ -258,6 +260,7 @@ export function toSummary(m: Metric): MetricSummary {
   if (m.description) s.description = m.description;
   if (m.direction) s.direction = m.direction;
   if (m.tree) s.hasTree = true;
+  if (m.timeColumn) s.timeColumn = m.timeColumn;
   return s;
 }
 
@@ -415,7 +418,7 @@ export async function updateMetric(
       format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
       updatedAt: new Date().toISOString(),
     };
-    // Both are CLEARABLE, so "key present" decides, not truthiness: passing '' is
+    // These are CLEARABLE, so "key present" decides, not truthiness: passing '' is
     // how the editor removes a description, and `undefined` is how it leaves one
     // alone. A truthiness test would make an emptied box a no-op.
     if (patch.description !== undefined) {
@@ -426,6 +429,11 @@ export async function updateMetric(
     if (patch.direction !== undefined) {
       if (patch.direction === 'up_good' || patch.direction === 'down_good') updated.direction = patch.direction;
       else delete updated.direction;
+    }
+    if (patch.timeColumn !== undefined) {
+      const c = trimTo(patch.timeColumn, 512);
+      if (c) updated.timeColumn = c;
+      else delete updated.timeColumn;
     }
     if (patch.tree !== undefined) {
       const tree = sanitizeTree(patch.tree, id);
