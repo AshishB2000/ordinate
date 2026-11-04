@@ -370,6 +370,7 @@
   "metricCheckMessages.the_measure_cannot_be_calculated": "Die Kennzahl „{name}“ kann nicht berechnet werden: {reason}.",
   "metricCheckMessages.the_measure_is_calculated_from_parts": "Die Kennzahl „{name}“ wird aus Teilen berechnet, die getrennt summiert werden; diese lassen sich über einer in Klassen eingeteilten oder in „Other“ zusammengefassten Kategorie nicht ausrichten. Wählen Sie eine Kategorie mit höchstens 50 Werten.",
   "metricCheckMessages.the_measure_uses_a_level_of": "Die Kennzahl „{name}“ verwendet einen Level-of-Detail-Ausdruck, den ein Diagramm noch nicht nach seiner Kategorie aufschlüsseln kann.",
+  "metricCheckMessages.this_chart_counts_a_metric_by": null,
   "metricTreeMessages.a_metric_in_this_tree_was": "Eine Kennzahl in diesem Baum wurde gelöscht.",
   "metricTreeMessages.did_not_change": "{metric} hat sich {compare} nicht verändert.",
   "metricTreeMessages.explains_of_it": "{lead} erklärt {share} davon.",

@@ -63,3 +63,8 @@ export function measureNeedsOneAxis(name: string): string {
 export function measureSnapshotPending(name: string): string {
   return t('metricCheckMessages.is_a_snapshot_metric_which_this', { name });
 }
+
+/** A metric that counts by its own date, under a dashboard date control on another column: a later release moves the period onto that date. */
+export function measureTimeColumnPending(): string {
+  return t('metricCheckMessages.this_chart_counts_a_metric_by');
+}

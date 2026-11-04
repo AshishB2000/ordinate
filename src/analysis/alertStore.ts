@@ -34,7 +34,7 @@ import * as datasets from '../data/datasets';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
-import { snapshotMetric } from './snapshotGuards';
+import { snapshotMetric, timeColumnControlRefusal } from './snapshotGuards';
 import { sanitizeDashboardFilters } from './dashboards';
 import { detectAnomalies } from './anomalies';
 import { detectAnomaliesResident } from '../engine/anomaliesResident';
@@ -326,6 +326,8 @@ export async function metricFor(
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   // A rule made from a snapshot metric's KPI stores only its column and total: no figure until a later release, never the plain sum.
   if (await snapshotMetric(projectId, rule.metric.metricId)) return { value: null, previous: null };
+  // …nor one counted by the metric's own date under a dashboard date control on another column (a later release moves it).
+  if (await timeColumnControlRefusal(projectId, { category: '', values: [rule.metric] }, filters)) return { value: null, previous: null };
 
   if (rule.compare === 'change' && rule.change?.vs === 'previous_period' && rule.change.periodColumn) {
     const periods = await recentPeriods(projectId, rule.datasetId, rule.change.periodColumn);

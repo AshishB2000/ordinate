@@ -63,7 +63,7 @@ import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
-import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { snapshotMeasureRefusal, timeColumnControlRefusal } from '../analysis/snapshotGuards';
 import { hasVia } from '../analysis/joinPlan';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
@@ -456,6 +456,9 @@ export function register(guard: Guard): void {
           name: typeof tile.name === 'string' && tile.name.trim() ? tile.name.trim() : 'this chart',
         };
       }
+      // A spec keeps no `fromControl`, so the tile's own filters are asked here, before they become one.
+      const timeRefusal = src ? await timeColumnControlRefusal(projectId, src.encoding, src.filters) : null;
+      if (timeRefusal) return { ok: false, reason: timeRefusal };
       const spec = src ? tileSpec(src) : null;
       if (!spec || !src) return { ok: false, reason: 'This chart cannot be explained.' };
       const built = await computeCard(projectId, spec);
