@@ -180,6 +180,8 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'summary:rewrite': 'EXPLICIT',
   'template:list': 'NET',
   'template:plan': 'NET',
+  'term:get': 'REDACT', // a restricted caller gets no filter value (ipc/terms termForCaller)
+  'term:list': 'REDACT', // …and a definition without one
   'text:preview': 'NET',
   'text:profile': 'NET',
   'themes:list': 'META',

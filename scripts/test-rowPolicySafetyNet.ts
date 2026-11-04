@@ -302,6 +302,35 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ok(`NEGATIVE CONTROL: ${channel} — the editor gets them`, H.leaks(theirs.text), `${vkeys.length} ${theirs.text.slice(0, 160)}`);
     }
 
+    // A glossary term's filter values can name rows (semantic D12): east reads its names, never its values, nor through a version.
+    const canary = `${H.W_CANARY}_1`;
+    const ts = await W.call('boss', 'term:save', { projectId: P, input: { name: 'EMEA', aliases: ['Europe'], description: 'Big customers', datasetId: W.orders, filters: [{ type: 'filter', column: 'customer', op: 'in', values: [canary, 'c1'] }] } });
+    const TERM: string = ts.body?.term?.id ?? '';
+    ok('fixture: a term naming a West value', /^[0-9a-f-]{36}$/.test(TERM), ts.text.slice(0, 200));
+    await W.call('boss', 'term:update', { projectId: P, id: TERM, patch: { filters: [{ type: 'filter', column: 'customer', op: 'in', values: [canary] }] } });
+    const termEast = await W.call('east', 'term:get', { projectId: P, id: TERM });
+    eastReplies.push(termEast.text);
+    ok('redact: east reads the name, aliases and description, but no value', termEast.body?.term?.name === 'EMEA' && termEast.body.term.aliases[0] === 'Europe' && termEast.body.term.description === 'Big customers'
+      && !termEast.text.includes(H.W_CANARY) && termEast.body.term.valuesHidden === true && termEast.body.term.filters[0].column === 'customer', termEast.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor reads the values', (await W.call('ed', 'term:get', { projectId: P, id: TERM })).text.includes(H.W_CANARY));
+    const eastList = await W.call('east', 'term:list', { projectId: P });
+    eastReplies.push(eastList.text);
+    ok('redact: east\'s list words the definition without a value', eastList.body?.ok === true && eastList.body.terms[0].definition === 'customer in …' && !eastList.text.includes(H.W_CANARY), eastList.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor\'s list words it with the value', (await W.call('ed', 'term:list', { projectId: P })).text.includes(H.W_CANARY));
+    const hist = await W.call('boss', 'versions:list', { projectId: P, type: 'term', id: TERM });
+    const [K1, K0] = (hist.body as { key: string }[]).map((v) => v.key);
+    const vEast = await W.call('east', 'versions:get', { projectId: P, type: 'term', id: TERM, key: K0 });
+    eastReplies.push(vEast.text);
+    ok('east gets no term version content', vEast.status === 200 && vEast.body === null, vEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor gets the version', (await W.call('ed', 'versions:get', { projectId: P, type: 'term', id: TERM, key: K0 })).text.includes(H.W_CANARY));
+    const say: typeof import('../src/analysis/versionDiffMessages') = require('../src/analysis/versionDiffMessages');
+    for (const ch of ['versions:diff', 'versions:figures']) {
+      const r = await W.call('east', ch, { projectId: P, type: 'term', id: TERM, from: K0, to: K1 });
+      eastReplies.push(r.text);
+      ok(`east's ${ch} of a term answers versionGone`, r.body?.ok === false && r.body.error === say.versionGone() && !r.text.includes(H.W_CANARY), r.text.slice(0, 200));
+    }
+    ok('NEGATIVE CONTROL: the editor\'s diff words the values', (await W.call('ed', 'versions:diff', { projectId: P, type: 'term', id: TERM, from: K0, to: K1 })).text.includes(H.W_CANARY));
+
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {
       ok(`admin only: ${who} gets 403 from dataset:rowPolicy and dataset:setRowPolicy`,

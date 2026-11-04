@@ -24,6 +24,7 @@ import { sanitizeAliases } from '../app/columnNames';
 import { logger } from '../app/logger';
 import * as msg from '../data/termMessages';
 import { nameClash } from './termNames';
+import { describeFilter, describeFilterHidden } from './metricFormat';
 
 export const MAX_TERM_FILTERS = 50;
 const MAX_DESCRIPTION = 500;
@@ -221,4 +222,9 @@ export async function updateTerm(projectId: string, id: string, patch: Partial<T
     await writeJsonAtomic(file, updated);
     return updated;
   });
+}
+
+/** A term's filters in words — "region in EU, ME, AF and status = active". `hide`: the steps worded without their values. */
+export function describeTermFilters(t: Pick<Term, 'filters'>, hide: (s: FilterStep) => boolean = () => false): string {
+  return t.filters.map((s) => (hide(s) ? describeFilterHidden(s) : describeFilter(s))).join(' and ');
 }

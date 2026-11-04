@@ -18,7 +18,7 @@ import { t } from '../app/i18n';
 import { computeCardMetric } from './dashboards';
 import { previewDefinition, resolveMetric } from './metrics';
 import { liveCodeOf } from './liveRoute';
-import { gateRows } from '../data/rowAccess';
+import { gateRows, restrictedOn } from '../data/rowAccess';
 
 // What changed between two saved versions (docs/version-diff/00-design.md).
 //
@@ -212,6 +212,8 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   if (type === 'dataset') await gateRows(projectId, id);
   // A dashboard's history is its draft's: a viewer reads none of it (docs/analysis/00-model.md), as for a missing one.
   if (type === 'dashboard' && (await analysis.readsPublishedOnly(projectId))) return { ok: false, error: M.versionGone() };
+  // A term's versions hold its filter values: a caller row access rules restrict reads none (semantic D12).
+  if (type === 'term' && (await restrictedOn(projectId))) return { ok: false, error: M.versionGone() };
   const keys: [string, string] = [String(input.from || ''), String(input.to || '')];
   const [a, b] = await Promise.all(keys.map((k) => versions.get(projectId, type, id, k)));
   if (!a || !b) return { ok: false, error: M.versionGone() };

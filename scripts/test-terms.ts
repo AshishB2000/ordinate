@@ -7,10 +7,9 @@
 //                 idempotent; a stale base refuses the update (409 record_changed); Trash round-trips;
 //                 the bundle carries `terms/` and a term's history
 //   § contracts   term:list / get / save / update / delete over HTTP; a version is recorded and restored
-//   § viewers     (DATABASE_URL) a row-restricted viewer reads names, aliases and the description, never
-//                 a filter value — nor through a version (scripts/rowPolicyHarness world)
+// What a row-restricted viewer reads of a term is pinned in scripts/test-rowPolicySafetyNet.ts (its world).
 //
-//   npm run build:ts && [DATABASE_URL=…] node scripts/test-terms.js
+//   npm run build:ts && node scripts/test-terms.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
@@ -108,6 +107,40 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   ok('the bundle carries terms and their history', bundleRules.ruleFor(`terms/${t.id}.json`)?.count === 'terms'
     && bundleRules.ruleFor(`history/term/${t.id}/2026-11-04T10-00-00-000Z.json`)?.count === 'versions');
   ok('NEGATIVE CONTROL: a term file outside its folder is not carried', bundleRules.ruleFor(`term/${t.id}.json`) === undefined);
+
+  // ── § contracts ───────────────────────────────────────────────────────────
+  const saved = await call('term:save', { projectId: P, input: { name: 'Big markets', aliases: ['Majors'], datasetId: CUST, filters: [{ type: 'filter', column: 'region', op: 'in', values: ['EU', 'US'] }] } });
+  ok('term:save answers the term', saved.body?.ok === true && saved.body.term?.name === 'Big markets', saved.text.slice(0, 300));
+  const T: string = saved.body?.term?.id ?? '';
+  const refused = await call('term:save', { projectId: P, input: { name: 'revenue', datasetId: CUST, filters: [EMEA_F] } });
+  ok('term:save refuses a taken name with the sentence, beside the name', refused.body?.ok === false && refused.body.field === 'name' && refused.body.error === msg.termNameTaken('revenue', 'Revenue'), refused.text);
+  const inTerm = await call('term:save', { projectId: P, input: { name: 'Nested', datasetId: CUST, filters: [{ type: 'term', term: T }] } });
+  ok('term:save refuses a term inside a term', inTerm.body?.ok === false && inTerm.body.field === 'filters' && inTerm.body.error === msg.termInTerm(), inTerm.text);
+  const list = await call('term:list', { projectId: P });
+  const row = (list.body?.terms ?? []).find((x: { id: string }) => x.id === T);
+  ok('term:list: the summary, its dataset and its definition in words, by name', list.body?.ok === true && row?.definition === 'region in EU, US' && row.datasetName === 'Customers'
+    && list.body.terms.map((x: { name: string }) => x.name).join('|') === 'Big markets|EMEA', list.text.slice(0, 400));
+  const got = await call('term:get', { projectId: P, id: T });
+  ok('term:get: the term and its tag', got.body?.ok === true && got.body.term.id === T && typeof got.body.tag === 'string' && got.body.term.valuesHidden === undefined, got.text.slice(0, 300));
+  const up = await call('term:update', { projectId: P, id: T, base: got.body?.tag, patch: { filters: [{ type: 'filter', column: 'region', op: 'in', values: ['EU'] }] } });
+  ok('term:update with the open tag lands, and says the next tag', up.body?.ok === true && up.body.term.filters[0].values.join() === 'EU' && typeof up.body.tag === 'string' && up.body.tag !== got.body.tag, up.text.slice(0, 300));
+  const stale = await call('term:update', { projectId: P, id: T, base: got.body?.tag, patch: { name: 'Stale' } });
+  ok('term:update from a stale tag is 409 record_changed', stale.status === 409 && stale.body?.code === 'record_changed', stale.text.slice(0, 200));
+  const badCol = await call('term:update', { projectId: P, id: T, patch: { filters: [{ type: 'filter', column: 'nope', op: 'not_empty' }] } });
+  ok('term:update checks the columns against the term\'s own dataset', badCol.body?.ok === false && badCol.body.field === 'filters', badCol.text.slice(0, 200));
+  const hist = await call('versions:list', { projectId: P, type: 'term', id: T });
+  const keys: string[] = Array.isArray(hist.body) ? hist.body.map((v: { key: string }) => v.key) : [];
+  ok('a save and an update are two versions, worded', keys.length === 2 && hist.body[0].summary === 'Changed 1 filter', hist.text.slice(0, 300));
+  const K0 = keys[keys.length - 1];
+  const restore = await call('versions:restore', { projectId: P, type: 'term', id: T, key: K0 });
+  const after = await as(() => terms.getTerm(P, T));
+  ok('restore of a term version is a save', restore.body?.ok === true && after?.filters[0].values?.join() === 'EU,US', restore.text.slice(0, 300));
+  const vdiff = await call('versions:diff', { projectId: P, type: 'term', id: T, from: keys[1], to: keys[0] });
+  ok('versions:diff words a term\'s change', vdiff.body?.ok === true && vdiff.body.changes.some((c: { group: string }) => c.group === 'filters'), vdiff.text.slice(0, 300));
+  const del = await call('term:delete', { projectId: P, id: T });
+  const inTrash = (await call('trash:list', { projectId: P })).body;
+  ok('term:delete moves it to the Trash', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string }) => e.type === 'term' && e.id === T), JSON.stringify(inTrash).slice(0, 200));
+  ok('term:get of a deleted term says so', (await call('term:get', { projectId: P, id: T })).body?.ok === false);
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });
