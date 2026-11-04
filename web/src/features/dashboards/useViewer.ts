@@ -25,6 +25,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Step } from '../analyses/api';
 import { toggleClickFilter, type ClickFilter, type ClickMark } from '../analyses/editor/filters';
+import { isKeptStep, keptKey } from '../visuals/keptStep';
 import { useFx, type TargetKind } from './api';
 import { linkedThread } from './CommentsPanel';
 
@@ -81,8 +82,8 @@ export interface Opening {
   asOf: string | null;
 }
 
-/** One step's identity — two clicks on the same mark are the same step (dashSelKey). */
-export const stepKey = (s: Step): string => JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null]);
+/** One step's identity — two clicks on the same mark are the same step (dashSelKey). A step the web cannot edit is its whole body, never a filter's key. */
+export const stepKey = (s: Step): string => (isKeptStep(s) ? keptKey(s) : JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null]));
 
 interface Pending {
   to: string;

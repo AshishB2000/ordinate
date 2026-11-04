@@ -5,6 +5,7 @@
 // rules `=` uses, on the column's DECLARED type.
 
 import type { FilterStep } from '../api';
+import { isKeptStep } from '../keptStep';
 
 export const isListOp = (op: string | null | undefined): boolean => op === 'in' || op === 'not in';
 export const isValuelessOp = (op: string | null | undefined): boolean => op === 'is_empty' || op === 'not_empty';
@@ -47,12 +48,14 @@ export function stepSummary(step: FilterStep | null | undefined, periodLabel?: s
 /**
  * The steps the server reads: rows with no column or no operator are inert and
  * dropped (`= ''` would match EMPTY cells, which is why a new row has no
- * operator until the dialog gives it one).
+ * operator until the dialog gives it one). A step this screen cannot edit (a
+ * glossary term, a newer release's) is no row: it rides through whole, in place.
  */
 export function liveFilters(rows: readonly FilterStep[]): FilterStep[] {
   return rows
-    .filter((f) => f && f.column && f.op)
+    .filter((f) => isKeptStep(f) || (f && f.column && f.op))
     .map((f) => {
+      if (isKeptStep(f)) return f;
       const s: FilterStep = { type: 'filter', column: f.column, op: f.op };
       if (isListOp(f.op)) s.values = Array.isArray(f.values) ? f.values.slice() : [];
       else if (f.op === 'period') s.period = f.period;

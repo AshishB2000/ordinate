@@ -20,6 +20,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { useTile, type Card, type Step, type VisualDef, type VisualTile } from '../analyses/api';
 import { boardPath, type EditorApi } from '../analyses/editor/context';
 import { DrawnVisual, mergeFilters, vizLabel } from '../analyses/VisualTile';
+import { isKeptStep } from '../visuals/keptStep';
 import { stashNavigation, stepKey } from './useViewer';
 import s from './Dashboards.module.css';
 import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
@@ -56,6 +57,7 @@ export function actionUrl(template: unknown, value: unknown): { ok: true; url: s
  * What an action carries, as filter steps (cardModel.carrySteps): nothing; the
  * clicked mark's `column = value`; or the sheet's filters and selection then
  * the click — a click on a column the sheet already filters by `=` REPLACES it.
+ * A step the web cannot edit (a term) travels whole: dropping it would widen the destination.
  */
 export function carrySteps(action: TileAction, clicked: { column: string; value: unknown } | null, filters: readonly Step[]): Step[] {
   const click: Step[] = clicked && clicked.column && clicked.value !== undefined ? [{ type: 'filter', column: clicked.column, op: '=', value: clicked.value }] : [];
@@ -66,8 +68,10 @@ export function carrySteps(action: TileAction, clicked: { column: string; value:
   const seen = new Set<string>();
   const out: Step[] = [];
   for (const st of filters) {
-    if (!st || st.type !== 'filter' || typeof st.column !== 'string') continue;
-    if (replaced.has(st.column) && st.op === '=') continue;
+    if (!isKeptStep(st)) {
+      if (!st || st.type !== 'filter' || typeof st.column !== 'string') continue;
+      if (replaced.has(st.column) && st.op === '=') continue;
+    }
     const k = stepKey(st);
     if (seen.has(k)) continue;
     seen.add(k);

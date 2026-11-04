@@ -46,6 +46,16 @@ export interface Encoding {
   [shelf: string]: unknown;
 }
 
+/**
+ * A step in a filter list this version cannot edit: a glossary `term`, or a step a newer release
+ * added. The server keeps it through every save (data/filterList.ts); the web carries it whole
+ * (keptStep.ts `isKeptStep`) and never reads inside it.
+ */
+export interface KeptStep {
+  type: string;
+  [k: string]: unknown;
+}
+
 /** A visual-level row filter (a transforms `filter` step). */
 export interface FilterStep {
   type: 'filter';
