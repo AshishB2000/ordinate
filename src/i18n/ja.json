@@ -360,6 +360,7 @@
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "計算メジャーは、まだスモールマルチプルとして描画できません。スモールマルチプルのフィールドを外すか、列を集計してください。",
   "metricCheckMessages.is_a_column_a_measure_is": "「{column}」は列です。メジャーは合計のあとに計算されるため、集計方法を指定してください（例: sum([{column}])）。",
+  "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "「{name}」は循環しています: {path}。メトリックを自身の数式の一部にすることはできません。",
   "metricCheckMessages.is_measured_on_another_dataset_so": "「{name}」は別のデータセットで計測されているため、このグラフのカテゴリ別に分けることはできません。",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} には数値列が必要ですが、「{column}」は数値列ではありません。count([{column}]) は入力済みの値を数えます。",

@@ -156,6 +156,7 @@ class Shaper {
     const filters = resolveFilterParams(rawFilters, this.params).steps;
     if (!isFormulaDefinition(def)) {
       if (!def.column) fail('This metric has no column.');
+      if (def.snapshot) fail('It is a snapshot, which keeps only the latest rows, so it does not split into members.');
       return this.aggregate(def.column, def.aggregation, filters);
     }
     if (depth > MAX_DEPTH) fail('Its formula references metrics too deeply.');

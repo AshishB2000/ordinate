@@ -8,6 +8,7 @@ import * as residentQuery from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { computeMetric } from '../analysis/metricValue';
 import type { MetricAggregation } from '../analysis/metricValue';
+import type { MetricSnapshot } from '../analysis/snapshot';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { joinedMetricFor } from './relationships';
@@ -149,10 +150,11 @@ async function loadMetricTarget(projectId: string, datasetId: string): Promise<M
 export function computeCardMetric(
   projectId: string,
   datasetId: string,
-  spec: { column: string; aggregation: MetricAggregation },
+  spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot },
   filters: FilterStep[] = [],
   params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
+  if (spec.snapshot) return Promise.resolve({ ok: true, value: null }); // shortcut: snapshots are computed from step 07; until then no figure, never a sum over every date
   return lockedMetric(projectId, datasetId, spec, filters, params, computeCardMetricUnlocked);
 }
 

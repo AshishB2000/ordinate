@@ -30,6 +30,8 @@ import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
+import { sanitizeSnapshot } from './snapshot';
+import type { MetricSnapshot } from './snapshot';
 import type { TreeNode } from './metricTree';
 import { logger } from '../app/logger';
 
@@ -57,6 +59,8 @@ export interface MetricFormat {
 export interface MetricSimpleDefinition {
   column: string;
   aggregation: MetricAggregation;
+  /** Read only the latest (or earliest) rows, not every date (./snapshot). Written by a later release; kept by this one. */
+  snapshot?: MetricSnapshot;
 }
 
 /** An expression over OTHER metrics and over aggregations of this dataset's
@@ -171,7 +175,8 @@ export function sanitizeDefinition(raw: unknown): MetricDefinition {
     typeof o.aggregation === 'string' && AGG_FNS.has(o.aggregation)
       ? (o.aggregation as MetricAggregation)
       : 'sum';
-  return { column, aggregation };
+  const snapshot = sanitizeSnapshot(o.snapshot);
+  return snapshot ? { column, aggregation, snapshot } : { column, aggregation };
 }
 
 /**
