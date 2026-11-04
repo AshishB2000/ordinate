@@ -19,6 +19,7 @@ import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
 import * as metrics from '../analysis/metrics';
+import { metricDate } from '../analysis/metricTimeScope';
 import { resolveMetric } from './metrics';
 import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
@@ -172,7 +173,8 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       const stored = await metrics.getMetric(projectId, s.id);
       if (!stored) continue;
       const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
-      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description });
+      const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}) });
     }
     return out;
   } catch (_) {

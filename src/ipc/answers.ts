@@ -263,6 +263,7 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
         id: s.id, name: s.name, datasetId: s.datasetId,
         column: s.definition.column, aggregation: s.definition.aggregation,
         hasFilters: !!(full && full.filters.length),
+        ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
       });
     }
   } catch (_) { /* no metric vocabulary — the spec must name columns */ }

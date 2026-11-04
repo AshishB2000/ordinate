@@ -87,6 +87,8 @@ export function refineSpec(
   for (const f of ([] as unknown[]).concat(p.filters ?? [])) {
     const o = f && typeof f === 'object' ? (f as Record<string, unknown>) : {};
     const name = real(o.column);
+    // A period with no column lands on a metric's own date (the validator's D9 rule): it replaces the stored period, never stacks on it.
+    if (o.period !== undefined && (o.column == null || o.column === '')) for (const x of previous.filters) if ('period' in x) gone.add(x.column);
     // The block prints the value on a personal or financial column as "(withheld)"
     // (./previousAnswer), so a filter that says the token back names a value the
     // model never read. The same comparison as a stored filter is that filter

@@ -460,6 +460,13 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   const ordOn = (await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'count', filters: [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: scoreTwo.window.from, to: scoreTwo.window.to } }] })).value.value;
   ok('two metrics on one dataset, two dates: each row on its own (the memo is per metric)', Object.is(scoreTwo.rows[1].value, ordOn) && Object.is(scoreTwo.rows[0].value, score.rows[0].value), show(scoreTwo.rows));
 
+  // ── Agents are told which date a metric counts by (Task 8's tail) ───────────
+  const handlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+  const listed = (await H.as(ORG_A, () => handlers.metricsList({ projectId: P } as never))) as Reply[];
+  const countsBy = (id: string) => listed.find((m) => m.id === id)?.counts_by;
+  ok('list_metrics: counts_by is the date a metric counts by', countsBy(REV) === 'ship_date', show(listed.find((m) => m.id === REV)));
+  ok('NEGATIVE CONTROL: … null for a metric with none, and for one whose date column is gone', countsBy(ORD) === null && countsBy(GONE) === null && countsBy(NOTDATE) === null);
+
   const kl = await hydrates(DL, () => tile(REVL, [CTRL], undefined, DL));
   ok('Live KPI: the extract\'s figure on the metric\'s date, never hydrated', kl.hydrated === false && Object.is(kl.value.value, k1.value) && kl.value.periodOn === 'ship_date', show(kl.value));
   const klc = await hydrates(DL, () => tile(REVL, [CTRL], { mode: 'previous_period' }, DL));

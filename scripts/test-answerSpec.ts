@@ -326,4 +326,36 @@ ok('prompt: offers "story" as a WRITTEN piece, distinct from a dashboard', /"sto
 ok('prompt: offers "answer" and describes its spec', /"answer"/.test(sa.CHAT_SYSTEM_PROMPT) && /"spec":\{"dataset"/.test(sa.CHAT_SYSTEM_PROMPT)
   && /NEVER contains a computed number/.test(sa.CHAT_SYSTEM_PROMPT));
 
+// ── A metric's own date (semantic layer D9): "last month" lands on it ─────────
+{
+  const facts: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
+  const DST = { ...DS, columns: COLS.concat([{ name: 'ship_date', type: 'date' }]) };
+  const REV_ID = '33333333-3333-4333-8333-333333333333';
+  const SHIPPED = { id: REV_ID, name: 'Shipped revenue', datasetId: DST.id, column: 'revenue', aggregation: 'sum', timeColumn: 'ship_date' };
+  const metricsT = [SHIPPED];
+  const colOf = (f: unknown): string | undefined => (f as { column?: string }).column;
+  const ask = (filters: unknown[], measures: unknown[] = [{ metric: 'Shipped revenue' }], metrics: import('../src/ai/answerSpec').SpecMetric[] = metricsT) =>
+    A.validateAnswerSpec({ dataset: DST.name, category: 'region', measures, filters }, [DST], { metrics });
+  const v1 = ask([{ period: 'last_month' }]);
+  ok('a period with no column lands on the metric\'s date', v1.ok && JSON.stringify(v1.spec.filters) === JSON.stringify([{ column: 'ship_date', period: 'last_month' }]), JSON.stringify(v1));
+  const v2 = ask([{ column: 'order_date', period: 'last_month' }]);
+  ok('an explicit date column is kept', v2.ok && colOf(v2.spec.filters[0]) === 'order_date', JSON.stringify(v2));
+  const v3 = A.validateAnswerSpec({ dataset: DST.name, category: 'region', measures: [{ column: 'revenue' }], filters: [{ period: 'last_month' }] }, [DST], {});
+  ok('NEGATIVE CONTROL: with no metric date a period needs its column (today\'s refusal)', v3.ok === false, JSON.stringify(v3));
+  ok('NEGATIVE CONTROL: … and a metric with no date is the same', ask([{ period: 'last_month' }], undefined, [{ ...SHIPPED, timeColumn: undefined }]).ok === false);
+  const both = [SHIPPED, { ...SHIPPED, id: '44444444-4444-4444-8444-444444444444', name: 'Ordered revenue', timeColumn: 'order_date' }];
+  ok('NEGATIVE CONTROL: two metric measures on two dates leave no default', ask([{ period: 'last_month' }], [{ metric: 'Shipped revenue' }, { metric: 'Ordered revenue' }], both).ok === false);
+  ok('… and two on one date share it', (() => { const r = ask([{ period: 'last_month' }], [{ metric: 'Shipped revenue' }, { metric: 'Ordered revenue' }], [both[0], { ...both[1], timeColumn: 'ship_date' }]); return r.ok && colOf(r.spec.filters[0]) === 'ship_date'; })());
+  ok('NEGATIVE CONTROL: a metric date that is not a date column of the dataset is no default', ask([{ period: 'last_month' }], undefined, [{ ...SHIPPED, timeColumn: 'region' }]).ok === false);
+  ok('NEGATIVE CONTROL: a non-period filter with no column is still refused', ask([{ op: '=', value: 'West' }]).ok === false);
+
+  const lines: string[] = [];
+  facts.metricLines(lines, [], [{ name: 'Shipped revenue', definitionText: 'sum of revenue', value: 3, display: '3', timeColumn: 'ship_date' }]);
+  ok('the Assistant is told which date a metric counts by', lines.some((l) => l.includes('"Shipped revenue"') && l.includes(' Counts by ship_date.')), JSON.stringify(lines));
+  const plainLines: string[] = [];
+  facts.metricLines(plainLines, [], [{ name: 'Revenue', definitionText: 'sum of revenue', value: 3, display: '3' }]);
+  ok('NEGATIVE CONTROL: … and nothing for a metric with none', !plainLines.some((l) => l.includes('Counts by')), JSON.stringify(plainLines));
+  ok('prompt: a period may leave its column out to use a metric\'s own date', /leave "column" out to use a metric's own date/.test(sa.CHAT_SYSTEM_PROMPT));
+}
+
 finish();

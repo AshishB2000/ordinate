@@ -411,7 +411,8 @@ from its KPI, "Why did this change?", the Summary card, a what-if card, and a fo
 formula over metrics of several datasets counts each part by its own date. A date filter that is the
 tile's own stays on its column. The tile says which date it used ("Date range applied to
 ship_date"). Scorecards and the Metrics page sparkline run along the metric's date too, with or
-without a control.
+without a control, and the Assistant puts a period like "last month" on it. `list_metrics` (MCP)
+carries it as `counts_by`.
 
 Some figures are refused with a sentence instead of guessed:
 

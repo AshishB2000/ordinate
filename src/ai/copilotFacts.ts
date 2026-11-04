@@ -124,6 +124,8 @@ export interface FactMetric {
   additivity?: Additivity;
   /** What the metric means, in the user's words (Metric.description). */
   description?: string;
+  /** The date it counts by (D9): the Assistant's "last month" of it is on that date. */
+  timeColumn?: string;
 }
 
 /** The sentence that keeps the model from adding up what does not add (an average, a stock over time), or ''. */
@@ -138,7 +140,7 @@ export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: Fac
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}` + (m.description ? ` Means: ${m.description}` : ''));
+    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}` + (m.timeColumn ? ` Counts by ${m.timeColumn}.` : '') + (m.description ? ` Means: ${m.description}` : ''));
     num(ledger, m.name, m.value, 'number', 'metrics');
   });
 }

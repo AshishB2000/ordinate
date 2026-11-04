@@ -81,6 +81,8 @@ export interface SpecMetric {
   aggregation?: string;
   /** A metric with its own row filters means something a bare column cannot, so it never becomes a chart measure. */
   hasFilters?: boolean;
+  /** The date it counts by (D9): a period the spec gives no column lands on it. */
+  timeColumn?: string;
 }
 
 /**
@@ -253,10 +255,11 @@ function coerce(v: unknown, col: ParsedColumn): Cell | undefined {
   return undefined;
 }
 
-function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<string, string[]>): AnswerFilter | string | Unknown {
+/** `periodOn`: the column a period with none of its own lands on (the date the spec's metrics count by), or ''. */
+function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<string, string[]>, periodOn = ''): AnswerFilter | string | Unknown {
   if (!raw || typeof raw !== 'object') return 'A filter must be an object.';
   const o = raw as Record<string, unknown>;
-  const col = resolveColumn(o.column, columns, names);
+  const col = resolveColumn(o.period !== undefined && (o.column === undefined || o.column === null || o.column === '') && periodOn ? periodOn : o.column, columns, names);
   if (!col) return { unknown: o.column };
 
   if (o.period !== undefined) {
@@ -346,8 +349,12 @@ export function validateAnswerSpec(
   const filtersRaw = Array.isArray(o.filters) ? o.filters : [];
   if (filtersRaw.length > MAX_FILTERS) return { ok: false, reason: `At most ${MAX_FILTERS} filters.` };
   const filters: AnswerFilter[] = [];
+  // D9: the one date the spec's metric measures count by, when it is a date column here — where "last month" lands.
+  const dates = new Set(measures.filter((m) => m.metricId).map((m) => (opts.metrics || []).find((x) => x.id === m.metricId)?.timeColumn ?? ''));
+  const shared = dates.size === 1 ? [...dates][0] : '';
+  const periodOn = shared && ds.columns.some((c) => c.name === shared && c.type === 'date') ? shared : '';
   for (const [i, f] of filtersRaw.entries()) {
-    const r = resolveFilter(f, ds.columns, ds.names);
+    const r = resolveFilter(f, ds.columns, ds.names, periodOn);
     if (typeof r === 'string') return { ok: false, reason: r };
     if ('unknown' in r) return unknownName('filter', 'filter column', r.unknown, ds.id, i);
     filters.push(r);
