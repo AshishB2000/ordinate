@@ -58,8 +58,7 @@ import { fxScope, fxVizContext, fxVizData } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
-import { followedEncoding, hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
-import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { followedEncoding, planMetricMeasures } from '../analysis/metricMeasures';
 import { chartScope } from '../analysis/metricTimeScope';
 import { followMetricMeasures } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
@@ -474,12 +473,9 @@ async function vizDataForUnlocked(
   filters: FilterStep[],
   opts: VizOpts,
 ): Promise<VizDataReply> {
-  // A snapshot metric is not computed until a later release.
-  const laterRefusal = await snapshotMeasureRefusal(projectId, encoding);
-  if (laterRefusal) return { ok: false, error: laterRefusal };
-  // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures).
-  const planned = hasMetricMeasure(encoding) ? await planMetricMeasures(projectId, datasetId, encoding, opts.params) : null;
-  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : { ok: false, error: planned.error };
+  // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures); a snapshot pivot refuses.
+  const planned = await planMetricMeasures(projectId, datasetId, encoding, opts.params);
+  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : planned;
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
   const live = await liveMetaOf(projectId, datasetId);
   if (live) return liveChart(projectId, live, encoding, filters);

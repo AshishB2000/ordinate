@@ -8,12 +8,14 @@
 
 import type { MetricAggregation } from '../analysis/metricValue';
 import type { MetricSnapshot } from '../analysis/snapshot';
-import { latestDay, onDay } from '../analysis/snapshot';
+import { latestDay, onDay, pickPerBucket } from '../analysis/snapshot';
+import type { VizEncoding } from '../analysis/visuals';
 import type { ParamValues } from '../analysis/params';
 import type { FxInfo } from '../analysis/fx';
 import type { FilterStep } from '../data/transforms';
 import type { AsOf } from '../api/asOf';
 import { vizDataFor } from './visuals';
+import type { VizDataReply } from './visuals';
 
 type Figure = { ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf };
 
@@ -41,4 +43,32 @@ export async function snapshotCardMetric(
   const day = latestDay(days.data.labels, snap.take);
   if (day === null) return { ok: true, value: spec.aggregation === 'count' ? 0 : null };
   return figure({ column: spec.column, aggregation: spec.aggregation }, filters.concat([onDay(snap.column, day)]));
+}
+
+/**
+ * A chart's snapshot leaves (./vizMetricMeasures), asked through `ask` (the chart door).
+ *
+ * By the snapshot's own date: the chart at day grain, then each bucket's latest (or earliest) day — a series with no
+ * row on that day is null there, never its older value. The grain is the plain chart's (an auto grain is chosen from
+ * the same rows first). By anything else: the latest day over the whole scope, then the chart on that day — so a
+ * region with no row on it has no bar (D8: never per category).
+ */
+export async function snapshotAnswer(snap: MetricSnapshot, enc: VizEncoding, filters: FilterStep[], ask: (e: VizEncoding, f: FilterStep[]) => Promise<VizDataReply>): Promise<VizDataReply> {
+  if (enc.category === snap.column) {
+    let grain = enc.grain;
+    if (!grain) {
+      const axis = await ask({ ...enc, values: [{ column: enc.category, aggregation: 'count' }] }, filters);
+      if (!axis.ok) return axis;
+      grain = axis.category?.grain;
+    }
+    const day = await ask({ ...enc, grain: 'day' }, filters);
+    if (!day.ok) return day;
+    if (!grain) return { ...day, data: { ...day.data, labels: [], series: [] } }; // no date axis (the column is no longer a date): no figure
+    return { ...day, data: pickPerBucket(day.data, grain, snap.take), category: { kind: 'date', grain } };
+  }
+  const days = await ask({ category: snap.column, grain: 'day', values: [{ column: snap.column, aggregation: 'count' }] }, filters);
+  if (!days.ok) return days;
+  const day = days.category?.kind === 'date' ? latestDay(days.data.labels, snap.take) : null;
+  if (day === null) return { ok: true, data: { labels: [], series: [] }, recommendedShape: days.recommendedShape, warnings: days.warnings };
+  return ask(enc, filters.concat([onDay(snap.column, day)]));
 }

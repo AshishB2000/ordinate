@@ -168,14 +168,14 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     const vAvg = await saveV('Sum copy of avg', sumCopy);
     const uAvg = await H.as(ORG_A, () => usage.metricUsage(P, avgU));
     ok('usage marks a chart whose copy differs only by aggregation', uAvg.refs.find((r) => r.id === vAvg.id)?.change === 'definition', show(uAvg.refs));
-    // A snapshot metric's chart shows the refusal (step 07 draws it), not other numbers: it is never "changed".
-    const snapF = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock filtered', datasetId: X, definition: { column: 'qty', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } }, filters: [eq('tier', 2)] } as never)))!;
+    // A snapshot metric's chart draws its latest day's rows (step 07): other numbers than its stored copy, so "filters".
+    const snapF = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock unfiltered', datasetId: X, definition: { column: 'qty', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } } } as never)))!;
     const snapEncF = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: snapF.id }] };
-    ok('chartChange: a snapshot metric\'s refused chart is not marked changed', change(snapF, snapEncF) === null);
-    ok('NEGATIVE CONTROL: the same filters without a snapshot are "filters"', change({ ...snapF, definition: { column: 'qty', aggregation: 'sum' } }, snapEncF) === 'filters');
+    ok('chartChange: a snapshot metric with no filters is still "filters" (it reads one day\'s rows)', change(snapF, snapEncF) === 'filters');
+    ok('NEGATIVE CONTROL: the same definition without a snapshot is unchanged', change({ ...snapF, definition: { column: 'qty', aggregation: 'sum' } }, snapEncF) === null);
     const vSnap = await saveV('Stock chart', snapEncF);
     const uSnap = await H.as(ORG_A, () => usage.metricUsage(P, snapF.id));
-    ok('usage: a snapshot metric\'s chart is listed but not marked', uSnap.refs.some((r) => r.id === vSnap.id) && uSnap.refs.every((r) => r.change === undefined), show(uSnap.refs));
+    ok('usage: a snapshot metric\'s chart is marked', uSnap.refs.find((r) => r.id === vSnap.id)?.change === 'filters', show(uSnap.refs));
     const f = await save('Half qty', X, { formula: 'sum(qty) / 2' });
     const mf = (await H.as(ORG_A, () => metricsMod.getMetric(P, f)))!;
     ok('chartChange: a formula metric is drawn as it always was', change(mf, { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: f }] }) === null);
@@ -420,19 +420,19 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     await H.as(ORG_A, () => rels.deleteRelationship(P, relC.id));
   }
 
-  // ── 12. A snapshot metric is refused until step 07 ─────────────────────────
+  // ── 12. A snapshot metric is followed as its own leaf (step 07; the matrix is scripts/test-snapshot.ts) ──
   const stock = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock', datasetId: X, definition: { column: 'qty', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } } })))!;
   const snapEnc = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] };
-  ok('a snapshot metric is refused until step 07', (await chart(X, snapEnc)).ok === false);
+  ok('a snapshot metric draws', (await chart(X, snapEnc)).ok === true);
   const snapPlan = await H.as(ORG_A, () => measures.planMetricMeasures(P, X, snapEnc as never));
-  ok('… and the planner refuses it with the sentence (no copy is followed)', !!snapPlan && snapPlan.ok === false && snapPlan.error === msg.measureSnapshotPending('Stock'), show(snapPlan));
+  ok('… and the planner makes it its own leaf, carrying its snapshot', !!snapPlan && snapPlan.ok === true && !!snapPlan.plan && snapPlan.plan.leaves.length === 1 && snapPlan.plan.leaves[0].snapshot?.column === 'd', show(snapPlan));
 
-  // A snapshot metric with no column has nothing for the planner to follow, so the door's own guard must still refuse it.
+  // A snapshot metric with no column has no figure (as its KPI), never its stored copy summed over every date.
   const stockNone = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock none', datasetId: X, definition: { column: '', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } } })))!;
   const noneEnc = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stockNone.id }] };
   const noneChart = await chart(X, noneEnc);
-  ok('a snapshot metric with no column is still refused, with the snapshot sentence', noneChart.ok === false && noneChart.error === msg.measureSnapshotPending('Stock none'), show(noneChart));
-  ok('… although the planner has nothing to follow in it', (await H.as(ORG_A, () => measures.planMetricMeasures(P, X, noneEnc as never))) === null);
+  ok('a snapshot metric with no column draws no figure, never its stored copy', noneChart.ok === true && noneChart.data.series[0].values.every((v: unknown) => v === null), show(noneChart));
+  ok('NEGATIVE CONTROL: its stored copy alone has figures', (await chart(X, { category: 'region', values: [{ column: 'qty', aggregation: 'sum' }] })).data.series[0].values.some((v: unknown) => typeof v === 'number'));
 
   // ── 12b. A glossary term in a followed metric's filters refuses the chart; it is never skipped (scripts/termSites.ts) ──
   // 05b: a term id no record has is refused as deleted for good (termPurged), as test-termDoors expects; still typed `term`.

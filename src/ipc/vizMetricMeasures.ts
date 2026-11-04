@@ -16,6 +16,10 @@
 // each leaf is its own question there. Replies are lined up by label (and by
 // series name under a split).
 //
+// A snapshot leaf (D8) is its own question too, answered on its latest day
+// (./snapshotDoors.snapshotAnswer): a region with no row on that day has no
+// figure, never its own older one.
+//
 // ponytail: several questions cannot be lined up when the axis itself depends
 // on the rows asked — a text axis folded into "Other" keeps the top 50 BY THE
 // FIRST MEASURE, numeric bins span the filtered range — so that combination is
@@ -29,7 +33,9 @@ import { evaluateOperand } from '../analysis/metricMeasures';
 import type { MeasurePlan, PlanResult } from '../analysis/metricMeasures';
 import { mergeFx } from '../analysis/fx';
 import * as msg from '../analysis/metricCheckMessages';
+import type { MetricSnapshot } from '../analysis/snapshot';
 import type { VizDataReply } from './visuals';
+import { snapshotAnswer } from './snapshotDoors';
 
 type Ok = Extract<VizDataReply, { ok: true }>;
 type Series = Ok['data']['series'][number];
@@ -38,20 +44,22 @@ type Ask = (encoding: VizEncoding, filters: FilterStep[]) => Promise<VizDataRepl
 /** One question for the door, and which leaves its series answer (in order, after `plain`). */
 interface Call {
   own: FilterStep[];
+  /** Its leaves' snapshot: the call is asked on that day (./snapshotDoors). */
+  snapshot?: MetricSnapshot;
   /** `encoding.values` indexes of the plain measures leading this call. */
   plain: number[];
   leaves: number[];
 }
 
 function callsFor(plan: MeasurePlan, values: VizMeasure[], split: boolean): Call[] {
-  if (split && plan.leaves.length) return plan.leaves.map((l, i) => ({ own: l.filters, plain: [], leaves: [i] }));
+  if (split && plan.leaves.length) return plan.leaves.map((l, i) => ({ own: l.filters, ...(l.snapshot ? { snapshot: l.snapshot } : {}), plain: [], leaves: [i] }));
   const plain = values.map((_, i) => i).filter((i) => !plan.formulas.has(i));
   const byFilters = new Map<string, Call>();
   // The plain measures are under the chart's filters alone — the unfiltered leaves' call.
-  if (plain.length) byFilters.set('[]', { own: [], plain, leaves: [] });
+  if (plain.length) byFilters.set(JSON.stringify([[], null]), { own: [], plain, leaves: [] });
   plan.leaves.forEach((l, i) => {
-    const key = JSON.stringify(l.filters);
-    const call = byFilters.get(key) ?? { own: l.filters, plain: [], leaves: [] };
+    const key = JSON.stringify([l.filters, l.snapshot ?? null]);
+    const call = byFilters.get(key) ?? { own: l.filters, ...(l.snapshot ? { snapshot: l.snapshot } : {}), plain: [], leaves: [] };
     call.leaves.push(i);
     byFilters.set(key, call);
   });
@@ -78,7 +86,8 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
   const run = (c: Call, enc: VizEncoding): Promise<VizDataReply> => {
     const asked = c.plain.map((i) => bare(values[i])).concat(c.leaves.map((i) => ({ column: plan.leaves[i].column, aggregation: plan.leaves[i].aggregation })));
     // The axis-only question counts the category: its labels are read, its figures are not.
-    return ask({ ...enc, values: asked.length ? asked : [{ column: enc.category, aggregation: 'count' }] }, c.own.concat(filters));
+    const e = { ...enc, values: asked.length ? asked : [{ column: enc.category, aggregation: 'count' as const }] };
+    return c.snapshot ? snapshotAnswer(c.snapshot, e, c.own.concat(filters), ask) : ask(e, c.own.concat(filters));
   };
 
   const first = await run(calls[0], encoding);

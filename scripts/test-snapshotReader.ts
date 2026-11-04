@@ -87,7 +87,8 @@ void (async () => {
 
   const f = (await metrics.saveMetric(pid, { name: 'Double', datasetId: ds.id, definition: { formula: '[Stock on hand] * 2' } }))!;
   const c = await viz(null, { projectId: pid, datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'Double', aggregation: 'sum', metricId: f.id }] } });
-  ok('a chart over it says why', c.ok === false && c.error === msg.measureSnapshotPending('Stock on hand'), JSON.stringify(c).slice(0, 300));
+  // The last day (2024-02-20) holds East's one row of 49: by region, East alone (West has no row that day).
+  ok('a chart of a formula over it is the snapshot\'s, per cell (step 07)', c.ok === true && JSON.stringify(c.data.labels) === '["East"]' && c.data.series[0].values[0] === 2 * lastDay, JSON.stringify(c).slice(0, 300));
   const fp = (await metrics.saveMetric(pid, { name: 'Double units', datasetId: ds.id, definition: { formula: '[Units] * 2' } }))!;
   const cp = await viz(null, { projectId: pid, datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'Double units', aggregation: 'sum', metricId: fp.id }] } });
   ok('NEGATIVE CONTROL: the same chart over a metric without a snapshot draws', cp.ok === true, JSON.stringify(cp).slice(0, 300));
@@ -99,14 +100,14 @@ void (async () => {
   // ── every other reader of a SIMPLE definition (the metricId on a chart, a tree part, a KPI-shaped lookup) ──
   const U = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const drawn = (encoding: Record<string, unknown>) => viz(null, { projectId: pid, datasetId: ds.id, encoding });
-  const pending = msg.measureSnapshotPending('Stock on hand');
+  const pending = msg.snapshotInAnswer('Stock on hand'); // the answer door still draws a measure's stored column
   const direct = await drawn({ category: 'region', values: [{ column: 'units', aggregation: 'sum', metricId: m.id }] });
-  ok('chart door: a measure that is a simple snapshot metric is refused', direct.ok === false && direct.error === pending, JSON.stringify(direct).slice(0, 300));
+  ok('chart door: a measure that is a simple snapshot metric draws its latest day (step 07)', direct.ok === true && JSON.stringify(direct.data.labels) === '["East"]' && direct.data.series[0].values[0] === lastDay, JSON.stringify(direct).slice(0, 300));
   const directPlain = await drawn({ category: 'region', values: [{ column: 'units', aggregation: 'sum', metricId: plain.id }] });
   ok('NEGATIVE CONTROL: the same chart over the metric without a snapshot draws its total', directPlain.ok === true && typeof directPlain.data.series[0].values[0] === 'number');
   const asPivot = (metricId: string) => drawn({ values: [], pivot: { rows: [{ column: 'region' }], columns: [], values: [{ column: 'units', aggregation: 'sum', metricId }], totals: { rows: true, columns: true, grand: true } } });
   const pivotSnap = await asPivot(m.id);
-  ok('chart door: a pivot value that is a snapshot metric is refused', pivotSnap.ok === false && pivotSnap.error === pending, JSON.stringify(pivotSnap).slice(0, 300));
+  ok('chart door: a pivot value that is a snapshot metric is refused', pivotSnap.ok === false && pivotSnap.error === msg.snapshotInPivot('Stock on hand'), JSON.stringify(pivotSnap).slice(0, 300));
   ok('NEGATIVE CONTROL: the same pivot over the metric without a snapshot draws', (await asPivot(plain.id)).ok === true);
   const split = (second: string) => drawn({ category: 'region', series: 'day', values: [{ column: 'units', aggregation: 'sum', metricId: plain.id }, { column: 'units', aggregation: 'sum', metricId: second }] });
   ok('NEGATIVE CONTROL: with a split only the first measure is drawn, so a snapshot second one is not refused', (await split(m.id)).ok === true);

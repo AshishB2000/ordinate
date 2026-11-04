@@ -40,6 +40,8 @@ const { periodDay }: typeof import('../src/analysis/dateIntel') = require('../sr
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { computeMetric }: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
+const { buildVizData }: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
+const { dateBucket, parseDateCell }: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 type Metric = import('../src/analysis/metrics').Metric;
 type FilterStep = import('../src/data/transforms').FilterStep;
 
@@ -161,6 +163,68 @@ void (async () => {
   ok('a later day after refresh → that day\'s figure, not a cached old one', (await kpi(stock, [])) === 41);
   await datasets.updateDatasetData(pid, ds, { columns: COLS, rows: ROWS } as Any); // back, for the sections below
   ok('…and back', Object.is(await kpi(stock, []), ref(stock, [])));
+
+  // ── chart ──────────────────────────────────────────────────────────────────
+  const viz = handlers.get('visual:data')!;
+  const chart = (encoding: object, filters: object[] = []): Promise<Any> => viz(null, { projectId: pid, datasetId: ds, encoding, filters });
+  const M = (m: Metric) => ({ column: m.name, aggregation: (m.definition as { aggregation: string }).aggregation, metricId: m.id });
+  const sameItems = (a: unknown[], b: unknown[]): boolean => a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
+  const refChart = (enc: Any, m: Metric, f: FilterStep[]) => {
+    const t = table(m.filters.concat(f));
+    const part = enc.category === 'day' ? (row: unknown[]) => { const c = parseDateCell(row[0] as string); return c ? String(dateBucket(c, enc.grain)) : null; } : undefined;
+    return buildVizData(t.columns, snap.snapshotRows(t.columns, t.rows, snapOf(m), part as Any), { ...enc, values: [{ column: 'units', aggregation: (m.definition as Any).aggregation }] }, []);
+  };
+  const c0 = trace.snapshot();
+  for (const [name, enc, m, f] of [
+    ['by month', { category: 'day', grain: 'month', values: [M(stock)] }, stock, []],
+    ['by quarter, earliest', { category: 'day', grain: 'quarter', values: [M(opening)] }, opening, []],
+    ['by week, average', { category: 'day', grain: 'week', values: [M(level)] }, level, []],
+    ['by region', { category: 'region', values: [M(stock)] }, stock, []],
+    ['by sku, a count', { category: 'sku', values: [M(lines)] }, lines, []],
+    ['by month × region', { category: 'day', grain: 'month', series: 'region', values: [M(stock)] }, stock, []],
+    ['by region × sku', { category: 'region', series: 'sku', values: [M(peak)] }, peak, []],
+    ['by month, filtered', { category: 'day', grain: 'month', values: [M(eastStock)] }, eastStock, [{ type: 'filter', column: 'sku', op: '=', value: 'A' }]],
+    ['by region, in spring', { category: 'region', values: [M(stock)] }, stock, SPRING],
+    ['by region, nothing in scope', { category: 'region', values: [M(stock)] }, stock, NONE],
+    ['by month, nothing in scope', { category: 'day', grain: 'month', values: [M(stock)] }, stock, NONE],
+  ] as Array<[string, Any, Metric, FilterStep[]]>) {
+    const got = await chart(enc, f);
+    const want = refChart(enc, m, f);
+    ok(`${name}: labels = reference`, got.ok && sameItems(got.data.labels, want.data.labels), show([got, want.data]));
+    // By series NAME under a split: the door's day grid can carry a series with no kept row (all null) that the reference never sees.
+    const gotOf = (sr: { name: string }, i: number) => (enc.series ? got.data.series.find((g: Any) => g.name === sr.name) : got.data.series[i]);
+    ok(`${name}: every cell = reference (Object.is)`, got.ok && want.data.series.every((sr, i) => !!gotOf(sr, i) && sameItems(gotOf(sr, i)!.values, sr.values))
+      && (!enc.series || got.data.series.filter((g: Any) => !want.data.series.some((sr) => sr.name === g.name)).every((g: Any) => g.values.every((v: unknown) => v === null))), show([got.data, want.data]));
+  }
+  ok('resident: the chart\'s questions ran in place', (trace.snapshot().vizAggregate?.resident ?? 0) > (c0.vizAggregate?.resident ?? 0));
+  const byRegion = await chart({ category: 'region', values: [M(stock)] });
+  ok('West, with no row on the latest day, has no bar — not its older value', byRegion.ok && !byRegion.data.labels.includes('West') && byRegion.data.labels.includes('East'), show(byRegion));
+  const two = await chart({ category: 'region', values: [M(stock), { column: 'units', aggregation: 'sum' }] });
+  const w = two.ok ? two.data.labels.indexOf('West') : -1;
+  ok('beside a plain measure, West is an empty cell', w >= 0 && two.data.series[0].values[w] === null && typeof two.data.series[1].values[w] === 'number', show(two));
+  ok('…and the other cells are the snapshot\'s', two.ok && byRegion.data.labels.every((l: string, i: number) => Object.is(two.data.series[0].values[two.data.labels.indexOf(l)], byRegion.data.series[0].values[i])));
+  const twoSnaps = await chart({ category: 'region', values: [M(stock), M(opening)] });
+  ok('two snapshots with no filters are still two questions (latest ≠ earliest)', twoSnaps.ok && !sameItems(twoSnaps.data.series[0].values, twoSnaps.data.series[1].values), show(twoSnaps));
+  const auto = await chart({ category: 'day', values: [M(stock)] });
+  const plainAuto = await chart({ category: 'day', values: [{ column: 'units', aggregation: 'sum' }] });
+  ok('auto grain is the plain chart\'s', auto.ok && plainAuto.ok && auto.category?.grain === plainAuto.category?.grain && sameItems(auto.data.labels, plainAuto.data.labels.filter((l: string) => l !== '')), show([auto.category, plainAuto.category]));
+  ok('NEGATIVE CONTROL: the plain chart by month is not the snapshot\'s', !sameItems((await chart({ category: 'day', grain: 'month', values: [{ column: 'units', aggregation: 'sum' }] })).data.series[0].values, (await chart({ category: 'day', grain: 'month', values: [M(stock)] })).data.series[0].values));
+  const other = await chart({ category: 'counted', grain: 'month', values: [M(stock)] });
+  ok('a chart by another date is refused, naming both', other.ok === false && other.error === msg.snapshotOtherDate('Stock', 'day', 'counted'), show(other));
+  ok('NEGATIVE CONTROL: the same chart of a plain metric draws', (await chart({ category: 'counted', grain: 'month', values: [M(units)] })).ok === true);
+  const piv = await chart({ category: 'region', values: [M(stock)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(stock)] } });
+  ok('a pivot is refused', piv.ok === false && piv.error === msg.snapshotInPivot('Stock'), show(piv));
+  ok('NEGATIVE CONTROL: the same pivot of a plain metric draws', (await chart({ category: 'region', values: [M(units)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(units)] } })).ok === true);
+  const rt = await chart({ category: 'day', grain: 'month', values: [{ ...M(stock), calc: { kind: 'running_total', along: 'across' } }] });
+  ok('step 02 end to end: running total along months refused (time)', rt.ok === false && rt.error === msg.calcNotAdditiveOverTime('Stock', 'a running total'), show(rt));
+  ok('…and percent of total across regions allowed', (await chart({ category: 'region', values: [{ ...M(stock), calc: { kind: 'pct_of_total', along: 'across' } }] })).ok === true);
+  const dbl = await chart({ category: 'region', values: [M(double)] });
+  ok('a formula over it per cell: [Stock] * 2', dbl.ok && sameItems(dbl.data.labels, byRegion.data.labels) && dbl.data.series[0].values.every((v: number | null, i: number) => Object.is(v, byRegion.data.series[0].values[i] === null ? null : 2 * byRegion.data.series[0].values[i])), show(dbl));
+  const binned = await chart({ category: 'units', values: [M(stock), { column: 'units', aggregation: 'count' }] });
+  ok('a binned axis beside a plain measure is refused: two questions, two bin plans', binned.ok === false && binned.error === msg.measureNeedsOneAxis('sum of units'), show(binned));
+  ok('NEGATIVE CONTROL: the snapshot alone on that axis draws, binned over its own day', (await chart({ category: 'units', values: [M(stock)] })).ok === true);
+  const facet = await chart({ category: 'region', values: [M(stock)], facet: { cols: 'sku' } });
+  ok('small multiples of a snapshot are refused (one question per facet cannot be lined up)', facet.ok === false && facet.error === msg.measureNoFacets(), show(facet));
   const gone = (await metrics.saveMetric(pid, { name: 'Gone day', datasetId: ds, definition: { column: 'units', aggregation: 'count', snapshot: { column: 'removed', take: 'last' } } }))!;
   ok('a snapshot day column that is gone gives no figure, never a count of 0', (await ipcMetrics.resolveMetric(pid, gone.id))!.value === null);
   ok('NEGATIVE CONTROL: the same count on the real day column is a figure', (await kpi(lines, [])) !== null && (await kpi(lines, [])) !== 0);
