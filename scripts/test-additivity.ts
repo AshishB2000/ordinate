@@ -37,6 +37,7 @@ const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copi
 const copilotFacts: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
 const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
 const { paramValues }: typeof import('../src/analysis/params') = require('../src/analysis/params');
+const { savedScope }: typeof import('../src/ipc/copilotCards') = require('../src/ipc/copilotCards');
 const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const { buildStory }: typeof import('../src/publish/storyData') = require('../src/publish/storyData');
 type Additivity = import('../src/analysis/additivity').Additivity;
@@ -223,7 +224,7 @@ async function main(): Promise<void> {
   ok('facts: the sentence comes before the description, which keeps its own ending', said({ categories: false, time: false }, true).endsWith(" Can't be added up across groups or over time. Means: Means it."), said({ categories: false, time: false }, true));
 
   await metric('Avg basket', { column: 'amount', aggregation: 'avg' });
-  await metric('Twice', { formula: '[Scaled] * 2' });
+  const twice = await metric('Twice', { formula: '[Scaled] * 2' });
   const ratioK = await metric('Ratio k', { formula: '[Revenue] / [Cost] * [[k]]' });
   const rows = await automation.metricsList({ projectId: pid } as never) as Array<{ name: string; adds_up: unknown }>;
   const addsUp = (name: string) => rows.find((r) => r.name === name)?.adds_up;
@@ -240,6 +241,10 @@ async function main(): Promise<void> {
   ok('list_metrics: a formula that follows one is unknown too', addsUp('Twice') === null);
   const k2 = paramValues([{ name: 'k', kind: 'number', value: 2 }]);
   ok('NEGATIVE CONTROL: with the value known the parameter formulas read', same((await A.metricAdditivity(pid, scaled.id, byNames, k2))!, true, true) && same((await A.metricAdditivity(pid, ratioK.id, byNames, k2))!, false, false));
+  ok('NEGATIVE CONTROL: with the value known the formula that follows one reads too', same((await A.metricAdditivity(pid, twice.id, byNames, k2))!, true, true));
+  ok('the formula that follows one is unknown while the value is not', (await A.metricAdditivity(pid, twice.id, byNames)) === null);
+  const empty = (kind: string, value: unknown) => A.metricAdditivity(pid, scaled.id, byNames, paramValues([{ name: 'k', kind, value }]));
+  ok('a parameter defined but empty is unknown, not "no"', (await empty('number', null)) === null && (await empty('list', ['a', 'b'])) === null && (await A.metricAdditivity(pid, twice.id, byNames, paramValues([{ name: 'k', kind: 'number', value: null }]))) === null);
   ok('a parameter the dashboard does not define stays unknown', (await A.metricAdditivity(pid, scaled.id, byNames, paramValues([{ name: 'other', kind: 'number', value: 2 }]))) === null);
   ok('a metric that is gone is unknown', (await A.metricAdditivity(pid, gone.id, byNames)) === null);
 
@@ -251,7 +256,9 @@ async function main(): Promise<void> {
   ok('NEGATIVE CONTROL: the dataset facts leave a sum and an unknown unmarked', lineOf(onDataset, 'Revenue') !== '' && !lineOf(onDataset, 'Revenue').includes('added up') && lineOf(onDataset, 'Ratio k') !== '' && !lineOf(onDataset, 'Ratio k').includes('added up'), lineOf(onDataset, 'Ratio k'));
   const withK2 = (await analysisStore.saveAnalysis(pid, { name: 'With k', sheets: [{ id: randomUUID(), name: 'Main', cards: [] }], parameters: [{ name: 'k', kind: 'number', value: 2 }] } as never))!;
   const onDashboard = (await ipcCopilot.buildFacts(pid, { kind: 'analysis', id: withK2.id })).text;
+  const saved = savedScope(withK2).params;
   ok('the dashboard facts: a parameter formula is read with its saved values', lineOf(onDashboard, 'Ratio k').includes("Can't be added up") && lineOf(onDashboard, 'Scaled') !== '' && !lineOf(onDashboard, 'Scaled').includes('added up'), lineOf(onDashboard, 'Ratio k'));
+  ok('the dashboard\'s saved values make the unmarked formula a known additive one, not an unknown', same((await A.metricAdditivity(pid, scaled.id, byNames, saved))!, true, true) && same((await A.metricAdditivity(pid, ratioK.id, byNames, saved))!, false, false));
 }
 
 main()

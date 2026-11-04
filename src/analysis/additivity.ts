@@ -50,13 +50,14 @@ export function additivityOf(
   return { categories: adds, time: adds };
 }
 
-/** Whether this formula, or a metric it follows, names a `[[parameter]]` that `params` does not hold. */
+/** Whether this formula, or a metric it follows, names a `[[parameter]]` that `params` does not hold or holds empty (null, or a list, which binds to null). */
 function needsUnknownParam(formula: string, byName: Map<string, Metric>, params: ParamValues | undefined, seen: Set<string>): boolean {
   let toks;
   try { toks = tokenize(formula); } catch { return false; }
   for (const t of toks) {
     if (t.kind === 'param') {
-      if (!params?.has(t.value.toLowerCase())) return true;
+      const p = params?.get(t.value.toLowerCase());
+      if (!p || p.value == null || Array.isArray(p.value)) return true;
     } else if (t.kind === 'col' || t.kind === 'name') {
       const key = t.value.toLowerCase();
       const followed = byName.get(key)?.definition;
@@ -70,7 +71,7 @@ function needsUnknownParam(formula: string, byName: Map<string, Metric>, params:
 
 /**
  * A saved metric's additivity, or null when it is not known: the metric is gone, or its formula (or one it follows)
- * names a `[[parameter]]` whose value is not in `params` (a dashboard supplies them). Reads the dataset's column list for
+ * names a `[[parameter]]` whose value is not in `params` or is empty (a dashboard supplies them). Reads the dataset's column list for
  * a formula only, never a row. Never throws.
  */
 export async function metricAdditivity(projectId: string, id: string, byName: Map<string, Metric>, params?: ParamValues): Promise<Additivity | null> {
