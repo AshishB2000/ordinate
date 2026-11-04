@@ -406,7 +406,6 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       f['quality:list — the last run and the rules\' args'] = ql.body?.latest != null && /"max":100/.test(ql.text);
       f['alerts:list — an alert\'s figures'] = ((await ask('alerts:list', { projectId: P })).body?.events as { id: string; value: number | null }[] | undefined ?? []).find((e) => e.id === evId)?.value === MARK.alert;
       f['summary:compute — an alert found through the analysis id'] = (await ask('summary:compute', { projectId: P, analysisId: recs[orders].dash, pages: [] })).text.includes('765,432');
-      f['connections:list — a refresh failure\'s text'] = rowOf(await ask('connections:list', { projectId: P }), feedCols.conn)?.lastError === MARK.conn;
       f['pipelines:get — a failed run\'s errors and warnings'] = ((t) => t.includes(MARK.err) && t.includes(MARK.warn))((await ask('pipelines:get', { projectId: P })).text);
       f['incremental:get — the high-water mark'] = (await ask('incremental:get', { projectId: P, datasetId: feedCols.ds })).text.includes(String(MARK.hw));
       for (const [channel, payload] of [['visual:get', { projectId: P, id: plainRec.visualId }], ['visual:thumbs', { projectId: P, ids: [plainRec.visualId] }], ['analysis:gallery', { projectId: P }],
@@ -426,7 +425,11 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const shown = await observe('east');
     for (const d of carriers) await setColumns(d, true);
     const [withheld, editorSees] = [await observe('east'), await observe('ed')];
-    ok(`…${Object.keys(shown).length} facts are observed`, Object.keys(shown).length === 17, Object.keys(shown).length);
+    ok(`…${Object.keys(shown).length} facts are observed`, Object.keys(shown).length === 16, Object.keys(shown).length);
+    // A viewer gets no refresh failure text at all since the source-names rule (the redact checks above), so it is no fact
+    // east is shown before the key; what column rules must not change is that the editor still reads it.
+    const connError = async (who: string) => rowOf(await W.call(who, 'connections:list', { projectId: P }), feedCols.conn)?.lastError;
+    ok('columns: connections:list — east gets no refresh failure text with column rules either, and the editor still does', (await connError('east')) === undefined && (await connError('ed')) === MARK.conn);
     for (const key of Object.keys(shown)) {
       ok(`columns: ${key} — east is shown it without the key (the fixture carries it)`, shown[key]);
       ok(`columns: ${key} — withheld, skipped or flagged for east with column rules`, !withheld[key]);
