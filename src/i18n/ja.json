@@ -604,6 +604,8 @@
   "subscriptionText.untitled_subscription": "無題のサブスクリプション",
   "subscriptionText.view": "ビュー: {name}",
   "subscriptionText.you_receive_this_as_a_member": "Ordinate の {name} のメンバーとしてこれを受け取っています。このリストは組織の管理者が管理しています。",
+  "tableDocMessages.could_not_read_the_table_notes": null,
+  "tableDocMessages.could_not_save_the_table_notes": null,
   "tableDocMessages.is_not_a_column_of_this": null,
   "tableDocMessages.pick_the_key_column_first": null,
   "tableDocMessages.the_key_could_not_be_counted": null,

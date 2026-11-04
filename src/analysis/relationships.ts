@@ -21,6 +21,7 @@ import { isValidId } from '../app/ids';
 import * as queryCache from '../engine/queryCache';
 import * as recordFs from '../app/recordFs';
 import { logger } from '../app/logger';
+import type { KeyStats } from './joinJs';
 
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
@@ -97,6 +98,16 @@ export function sanitizeRelationship(raw: unknown): Relationship | null {
   };
 }
 
+/**
+ * What is wrong with the TO column as the "one" side, from a full-table count: `not_key` when the dataset's
+ * declared key is another column (`declaredKey` '' = none declared), else `repeats` (keyed rows minus distinct keys)
+ * when the column repeats. Nothing when it is the key, or unique.
+ */
+export function relWarning(stats: KeyStats, declaredKey: string, toColumn: string): RelWarning | undefined {
+  if (declaredKey !== '' && declaredKey !== toColumn) return { kind: 'not_key', key: declaredKey };
+  return stats.toKeys !== stats.toKeyed ? { kind: 'repeats', repeats: stats.toKeyed - stats.toKeys } : undefined;
+}
+
 /** Same two datasets on the same two columns, in either direction. */
 export function sameEdge(a: Relationship, b: { from: RelEnd; to: RelEnd }): boolean {
   const eq = (x: RelEnd, y: RelEnd): boolean => x.datasetId === y.datasetId && x.column === y.column;
@@ -143,29 +154,49 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
 }
 
 /**
+ * Every write to relationships.json: read, change and write under one lock (`recordFs.locked`, every pod), so a
+ * person's save and the re-check after a refresh cannot lose each other's edit. `fn` returns the new list — the same
+ * array to change nothing, which writes nothing. False when the write failed.
+ */
+export async function updateRelationships(projectId: string, fn: (list: Relationship[]) => Relationship[]): Promise<boolean> {
+  if (!isValidId(projectId)) return false;
+  return recordFs.locked(modelFile(projectId), async () => {
+    const list = await listRelationships(projectId);
+    const next = fn(list);
+    return next === list ? true : writeAll(projectId, next);
+  });
+}
+
+/**
  * Create, or replace IN PLACE: by id, else the same edge (which keeps that entry's id). "The first
  * relationship" is the default a chart joins through, so a re-save must not move it. A second edge
  * between the same two columns replaces the first rather than stacking a duplicate.
  */
 export async function saveRelationship(projectId: string, raw: unknown): Promise<Relationship | null> {
-  if (!isValidId(projectId)) return null;
   const parsed = sanitizeRelationship(raw);
   if (!parsed) return null;
-  const list = await listRelationships(projectId);
-  const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
-  // A save without a label (every release-1 save) keeps the same edge's own; a changed edge does not. Never the
-  // warning: it is derived, and the release that writes it recomputes it (absent once the edge no longer warns).
-  const same = old && sameEdge(old, parsed) ? old : null;
-  const rel = old ? { ...parsed, id: old.id, ...(same && parsed.label === undefined && same.label !== undefined && { label: same.label }) } : parsed;
-  const next = (old ? list.map((r) => (r === old ? rel : r)) : [...list, rel]).filter((r) => r === rel || (r.id !== rel.id && !sameEdge(r, rel)));
-  if (next.length > MAX_RELATIONSHIPS) return null;
-  return (await writeAll(projectId, next)) ? rel : null;
+  let saved: Relationship | null = null;
+  const written = await updateRelationships(projectId, (list) => {
+    const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
+    // A save without a label (every release-1 save) keeps the same edge's own; a changed edge does not. Never the
+    // warning: it is derived, and the release that writes it recomputes it (absent once the edge no longer warns).
+    const same = old && sameEdge(old, parsed) ? old : null;
+    const rel = old ? { ...parsed, id: old.id, ...(same && parsed.label === undefined && same.label !== undefined && { label: same.label }) } : parsed;
+    const next = (old ? list.map((r) => (r === old ? rel : r)) : [...list, rel]).filter((r) => r === rel || (r.id !== rel.id && !sameEdge(r, rel)));
+    if (next.length > MAX_RELATIONSHIPS) return list;
+    saved = rel;
+    return next;
+  });
+  return written ? saved : null;
 }
 
 export async function deleteRelationship(projectId: string, id: string): Promise<boolean> {
-  if (!isValidId(projectId) || !isValidId(id)) return false;
-  const list = await listRelationships(projectId);
-  const next = list.filter((r) => r.id !== id);
-  if (next.length === list.length) return false;
-  return writeAll(projectId, next);
+  if (!isValidId(id)) return false;
+  let found = false;
+  const written = await updateRelationships(projectId, (list) => {
+    const next = list.filter((r) => r.id !== id);
+    found = next.length !== list.length;
+    return found ? next : list;
+  });
+  return written && found;
 }

@@ -27,6 +27,7 @@ import {
 import type { JoinSource } from '../engine/joinResident';
 import * as trace from '../engine/residentTrace';
 import { isValidId } from '../app/ids';
+import { getTableDoc } from '../app/tableDocs';
 
 type Infos = Map<string, DsInfo>;
 
@@ -39,7 +40,7 @@ export function withMatchPct(r: Relationship): Relationship & { matchPct: number
   return { ...r, matchPct: n ? pct1(r.verified.matched / n) : 0 };
 }
 
-async function infoFor(projectId: string, id: string): Promise<DsInfo | null> {
+export async function infoFor(projectId: string, id: string): Promise<DsInfo | null> {
   const meta = await datasets.getDatasetMeta(projectId, id);
   return meta ? { id, name: meta.name, columns: meta.columns } : null;
 }
@@ -220,7 +221,7 @@ async function side(projectId: string, info: DsInfo, column: string): Promise<{ 
   return { ref, cells };
 }
 
-async function keyStats(projectId: string, from: DsInfo, fromCol: string, to: DsInfo, toCol: string): Promise<KeyStats> {
+export async function keyStats(projectId: string, from: DsInfo, fromCol: string, to: DsInfo, toCol: string): Promise<KeyStats> {
   const a = await side(projectId, from, fromCol);
   const b = await side(projectId, to, toCol);
   if (a.ref && b.ref) {
@@ -275,6 +276,7 @@ async function save(projectId: string, raw: any): Promise<any> {
   }
   const stats = await keyStats(projectId, from, rel.from.column, to, rel.to.column);
   rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
+  rel.warning = rels.relWarning(stats, (await getTableDoc(projectId, rel.to.datasetId)).key, rel.to.column); // always fresh: never the caller's
   const saved = await rels.saveRelationship(projectId, rel);
   if (!saved) return { ok: false, error: 'Could not save the relationship.' };
   return { ok: true, relationship: withMatchPct(saved), stats };

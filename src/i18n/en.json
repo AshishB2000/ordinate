@@ -601,6 +601,8 @@
   "subscriptionText.untitled_subscription": "Untitled subscription",
   "subscriptionText.view": "View: {name}",
   "subscriptionText.you_receive_this_as_a_member": "You receive this as a member of {name} in Ordinate. An organization admin manages that list.",
+  "tableDocMessages.could_not_read_the_table_notes": "Could not read the table notes.",
+  "tableDocMessages.could_not_save_the_table_notes": "Could not save the table notes.",
   "tableDocMessages.is_not_a_column_of_this": "“{key}” is not a column of this dataset.",
   "tableDocMessages.pick_the_key_column_first": "Pick the key column first.",
   "tableDocMessages.the_key_could_not_be_counted": "The key could not be counted. Try again.",

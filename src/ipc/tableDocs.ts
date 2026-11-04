@@ -5,17 +5,22 @@
 // (analysis/keyCheck.ts) behind it. A Live dataset is counted ONLY here, on "Check now": one statement
 // through `liveLookup` — its budget, daily limit, timeout and typed failure. A key save never asks the warehouse.
 //
+// When a dataset's rows change (`afterTableData`, riding the quality hook) the key is counted again and every
+// relationship into the dataset is re-verified, its stored warning with it.
+//
 // `updatedBy` and `updatedAt` are stamped in the store; a payload carries only what a person typed.
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
-import { isLive } from '../data/liveDataset';
+import { isLive, isLiveDatasetError } from '../data/liveDataset';
 import { isRowPolicyError } from '../data/rowAccess';
-import type { ParsedColumn } from '../data/parse';
 import { getTableDoc, readableTableDoc, setTableDoc, writeKeyCheck } from '../app/tableDocs';
 import type { TableDoc, TablePatch } from '../app/tableDocs';
-import { keyCheckFailed, keyNotAColumn, noKeyToCheck } from '../app/tableDocMessages';
+import { keyCheckFailed, keyNotAColumn, noKeyToCheck, tableNotesNotRead, tableNotesNotSaved } from '../app/tableDocMessages';
 import { logger } from '../app/logger';
+import { listRelationships, relWarning, updateRelationships } from '../analysis/relationships';
+import type { RelWarning, Relationship } from '../analysis/relationships';
+import { infoFor, keyStats } from './relationships';
 import { keyCheckFromRow, keyCheckJs } from '../analysis/keyCheck';
 import type { KeyCheckCounts } from '../analysis/keyCheck';
 import { keyCheckResident } from '../engine/keyCheckResident';
@@ -28,10 +33,17 @@ export type KeyCheckReply = { ok: true; table: TableDoc } | { ok: false; error: 
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-/** An extract's counts: SQL over the Parquet when it can, else the JS reference over the hydrated column. */
-async function extractCounts(projectId: string, datasetId: string, index: number, type: ParsedColumn['type']): Promise<KeyCheckCounts | null> {
+/**
+ * An extract's counts: SQL over the Parquet when it can, else the JS reference over the hydrated column. The key's
+ * column is found BY NAME in the columns each source returns: a refresh between two reads can reorder or drop them,
+ * so an index taken from an earlier read is never reused. Null: not counted (the column is gone from that source).
+ */
+async function extractCounts(projectId: string, datasetId: string, key: string): Promise<KeyCheckCounts | null> {
   const src = await datasets.residentSource(projectId, datasetId);
   if (src) {
+    const index = src.columns.findIndex((c) => c.name === key);
+    if (index < 0) return null;
+    const type = src.columns[index].type;
     const fast = await keyCheckResident({ parquetPath: src.parquetPath, index, type });
     if (fast) {
       trace.record('keyCheck', 'resident');
@@ -42,7 +54,8 @@ async function extractCounts(projectId: string, datasetId: string, index: number
     trace.record('keyCheck', 'skipped');
   }
   const ds = await datasets.getDataset(projectId, datasetId);
-  return ds ? keyCheckJs(ds.rows.map((r) => r[index]), type) : null;
+  const index = ds ? ds.columns.findIndex((c) => c.name === key) : -1;
+  return ds && index >= 0 ? keyCheckJs(ds.rows.map((r) => r[index]), ds.columns[index].type) : null;
 }
 
 /**
@@ -55,8 +68,7 @@ export async function runKeyCheck(projectId: string, datasetId: string): Promise
   if (!meta) return { ok: false, error: 'Dataset not found' };
   const { key } = await getTableDoc(projectId, datasetId);
   if (!key) return { ok: false, error: noKeyToCheck() };
-  const index = meta.columns.findIndex((c) => c.name === key);
-  if (index < 0) return { ok: false, error: keyNotAColumn(key) };
+  if (!meta.columns.some((c) => c.name === key)) return { ok: false, error: keyNotAColumn(key) };
   let counts: KeyCheckCounts | null;
   let checkedAt = new Date().toISOString();
   if (isLive(meta)) {
@@ -65,19 +77,101 @@ export async function runKeyCheck(projectId: string, datasetId: string): Promise
     counts = keyCheckFromRow(r.rows[0]);
     checkedAt = r.asOf.at;
   } else {
-    counts = await extractCounts(projectId, datasetId, index, meta.columns[index].type);
+    counts = await extractCounts(projectId, datasetId, key);
   }
   if (!counts) return { ok: false, error: keyCheckFailed() };
   const table = await writeKeyCheck(projectId, datasetId, key, { ...counts, checkedAt });
   return { ok: true, table: table ?? (await getTableDoc(projectId, datasetId)) };
 }
 
+/** A refusal the route types (a Live dataset, a row lock) passes through; everything else is the handler's to say. */
+const typed = (err: unknown): boolean => isLiveDatasetError(err) || isRowPolicyError(err);
+
 /** A typed refusal passes through to the route; anything else is logged here and said as `fallback`, never as the error's own words (a path, a driver message). */
 function failure(err: unknown, fallback: string): { ok: false; error: string } {
-  if (isRowPolicyError(err)) throw err;
+  if (typed(err)) throw err;
   logger.error('[tableDocs]', err instanceof Error ? err.message : 'failed');
   return { ok: false, error: fallback };
 }
+
+/** A new key's count, stored before the reply. A count that throws does not undo the save that already happened: the saved doc stands and "Check now" retries. */
+async function countedAfterSave(projectId: string, datasetId: string, saved: TableDoc): Promise<TableDoc> {
+  try {
+    const checked = await runKeyCheck(projectId, datasetId);
+    return checked.ok ? checked.table : saved;
+  } catch (err) {
+    if (typed(err)) throw err;
+    logger.error('[tableDocs] the key could not be counted after the save:', err instanceof Error ? err.message : 'failed');
+    return saved;
+  }
+}
+
+// ── The rows changed ─────────────────────────────────────────────────────────
+
+/**
+ * Recompute `verified` and `warning` of every relationship whose TO side is this dataset, from full-table counts over
+ * the rows it has now and the key it declares now. The counts run outside the lock; the write goes through
+ * `updateRelationships` and touches only those two fields of an entry that still joins the same two columns, so a
+ * person's save made meanwhile is never lost. Nothing is written when the counts did not move. Never throws: one
+ * relationship that cannot be counted stays as it was.
+ */
+export async function recheckRelationshipsTo(projectId: string, datasetId: string): Promise<void> {
+  try {
+    const into = (await listRelationships(projectId)).filter((r) => r.to.datasetId === datasetId);
+    if (!into.length) return;
+    const { key } = await getTableDoc(projectId, datasetId);
+    const fresh = new Map<string, { counted: Relationship; verified: Relationship['verified']; warning: RelWarning | undefined }>();
+    for (const r of into) {
+      try {
+        const [from, to] = [await infoFor(projectId, r.from.datasetId), await infoFor(projectId, r.to.datasetId)];
+        if (!from || !to || !from.columns.some((c) => c.name === r.from.column) || !to.columns.some((c) => c.name === r.to.column)) continue;
+        const stats = await keyStats(projectId, from, r.from.column, to, r.to.column);
+        fresh.set(r.id, { counted: r, verified: { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom }, warning: relWarning(stats, key, r.to.column) });
+      } catch (err) {
+        logger.error('[tableDocs] a relationship could not be re-verified:', err instanceof Error ? err.message : 'failed');
+      }
+    }
+    if (!fresh.size) return;
+    await updateRelationships(projectId, (list) => {
+      let changed = false;
+      const next = list.map((r) => {
+        const f = fresh.get(r.id);
+        const same = f && r.from.datasetId === f.counted.from.datasetId && r.from.column === f.counted.from.column && r.to.datasetId === f.counted.to.datasetId && r.to.column === f.counted.to.column;
+        if (!f || !same || (r.verified.matched === f.verified.matched && r.verified.unmatchedFrom === f.verified.unmatchedFrom && JSON.stringify(r.warning) === JSON.stringify(f.warning))) return r;
+        changed = true;
+        const { warning: _old, ...rest } = r;
+        return { ...rest, verified: f.verified, ...(f.warning && { warning: f.warning }) };
+      });
+      return changed ? next : list;
+    });
+  } catch (err) {
+    logger.error('[tableDocs] relationships were not re-verified:', err instanceof Error ? err.message : 'failed');
+  }
+}
+
+/**
+ * The hook for "this dataset's rows changed" — `runQualityChecks` calls it, which every save, refresh, recapture and
+ * pipeline change already reaches. Counts the declared key again (or clears the count when its column is gone) and
+ * re-verifies the relationships into the dataset. A Live dataset has no rows here: its key is counted on "Check now"
+ * only (D2). With no key and no relationship into it, it returns before reading a row. Never throws.
+ */
+export async function afterTableData(projectId: string, datasetId: string): Promise<void> {
+  try {
+    const meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (!meta || isLive(meta)) return;
+    const { key } = await getTableDoc(projectId, datasetId);
+    const into = (await listRelationships(projectId)).some((r) => r.to.datasetId === datasetId);
+    if (key) {
+      if (meta.columns.some((c) => c.name === key)) await runKeyCheck(projectId, datasetId);
+      else await writeKeyCheck(projectId, datasetId, key, null); // the column is gone: its old count would be a stale "✓ unique"
+    }
+    if (into) await recheckRelationshipsTo(projectId, datasetId);
+  } catch (err) {
+    logger.error('[tableDocs] the table was not re-checked after its rows changed:', err instanceof Error ? err.message : 'failed');
+  }
+}
+
+// ── Channels ─────────────────────────────────────────────────────────────────
 
 interface Args { projectId?: unknown; datasetId?: unknown; patch?: TablePatch }
 
@@ -86,7 +180,7 @@ export function register(): void {
     try {
       return { ok: true, table: await readableTableDoc(str(projectId), str(datasetId)) };
     } catch (err) {
-      return failure(err, 'Could not read the table notes.');
+      return failure(err, tableNotesNotRead());
     }
   });
 
@@ -99,17 +193,17 @@ export function register(): void {
       if (!meta) return { ok: false, error: 'Dataset not found' };
       const asked = str(patch?.key);
       if (asked && !meta.columns.some((c) => c.name === asked)) return { ok: false, error: keyNotAColumn(asked) };
-      const before = (await getTableDoc(p, d)).key;
-      const table = await setTableDoc(p, d, patch ?? {});
-      if (!table) return { ok: false, error: 'Could not save the table notes.' };
-      // A new key on an extract is counted before the reply. A failed count does not undo the save: "Check now" retries it.
-      if (table.key && table.key !== before && !isLive(meta)) {
-        const checked = await runKeyCheck(p, d);
-        return { ok: true, table: checked.ok ? checked.table : table };
+      const saved = await setTableDoc(p, d, patch ?? {});
+      if (!saved) return { ok: false, error: tableNotesNotSaved() };
+      let table = saved.table;
+      // A new key on an extract is counted before the reply, and the relationships into the dataset are re-judged against it.
+      if (saved.keyChanged && !isLive(meta)) {
+        if (table.key) table = await countedAfterSave(p, d, table);
+        await recheckRelationshipsTo(p, d);
       }
       return { ok: true, table };
     } catch (err) {
-      return failure(err, 'Could not save the table notes.');
+      return failure(err, tableNotesNotSaved());
     }
   });
 

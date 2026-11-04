@@ -85,8 +85,12 @@ export async function getTableDoc(projectId: string, datasetId: string, strict =
 /** What a person typed: the fields PRESENT are merged. Clipped by `sanitizeTableDoc`; never `keyCheck`, `updatedBy` or `updatedAt`. */
 export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown }
 
-/** Merge the fields present in `patch`. A changed `key` drops the old key's `keyCheck`. Stamps who and when, here. */
-export async function setTableDoc(projectId: string, datasetId: string, patch: TablePatch): Promise<TableDoc | null> {
+/**
+ * Merge the fields present in `patch`. A changed `key` drops the old key's `keyCheck`. Stamps who and when, here.
+ * `keyChanged` is the store's own answer, taken under the lock against the key it replaced: a caller that must act on a
+ * new key (count it) asks this, never a read of its own.
+ */
+export async function setTableDoc(projectId: string, datasetId: string, patch: TablePatch): Promise<{ table: TableDoc; keyChanged: boolean } | null> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
   const p = patch && typeof patch === 'object' ? patch : {};
   return mutateCatalog(projectId, (file) => {
@@ -102,7 +106,7 @@ export async function setTableDoc(projectId: string, datasetId: string, patch: T
     });
     const tables = (file.tables ??= Object.create(null) as Record<string, TableDoc>);
     tables[datasetId] = next;
-    return next;
+    return { table: next, keyChanged: next.key !== cur.key };
   });
 }
 

@@ -604,6 +604,8 @@
   "subscriptionText.untitled_subscription": "Suscripción sin título",
   "subscriptionText.view": "Vista: {name}",
   "subscriptionText.you_receive_this_as_a_member": "Recibe esto como miembro de {name} en Ordinate. Un administrador de la organización gestiona esa lista.",
+  "tableDocMessages.could_not_read_the_table_notes": null,
+  "tableDocMessages.could_not_save_the_table_notes": null,
   "tableDocMessages.is_not_a_column_of_this": null,
   "tableDocMessages.pick_the_key_column_first": null,
   "tableDocMessages.the_key_could_not_be_counted": null,

@@ -16,3 +16,13 @@ export function noKeyToCheck(): string {
 export function keyCheckFailed(): string {
   return t('tableDocMessages.the_key_could_not_be_counted');
 }
+
+/** `catalog:getTable` failed on something other than a refusal (an unreadable catalog). */
+export function tableNotesNotRead(): string {
+  return t('tableDocMessages.could_not_read_the_table_notes');
+}
+
+/** `catalog:setTable` failed before the notes were stored. */
+export function tableNotesNotSaved(): string {
+  return t('tableDocMessages.could_not_save_the_table_notes');
+}

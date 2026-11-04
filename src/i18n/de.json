@@ -604,6 +604,8 @@
   "subscriptionText.untitled_subscription": "Unbenanntes Abonnement",
   "subscriptionText.view": "Ansicht: {name}",
   "subscriptionText.you_receive_this_as_a_member": "Sie erhalten dies als Mitglied von {name} in Ordinate. Ein Administrator der Organisation verwaltet diese Liste.",
+  "tableDocMessages.could_not_read_the_table_notes": null,
+  "tableDocMessages.could_not_save_the_table_notes": null,
   "tableDocMessages.is_not_a_column_of_this": null,
   "tableDocMessages.pick_the_key_column_first": null,
   "tableDocMessages.the_key_could_not_be_counted": null,
