@@ -11,11 +11,10 @@
 
 import { buildContext, guardHost, unknownConnector } from './connectionRun';
 import { getConnector } from './index';
-import { sanitizeFacts, type TableFacts } from './tableFacts';
+import { FACTS_ROWS, sanitizeFacts, type TableFacts } from './tableFacts';
 import { redactSecrets, safeError } from './types';
 
-/** The most rows one catalog statement may return (a table's columns are the largest answer). */
-export const FACTS_ROWS = 2_000;
+export { FACTS_ROWS }; // defined beside the sanitizer so a family's reader can read it without importing the registry
 
 /** Every string in `v` (array items and object values) through `redactSecrets`. */
 function redacted<T>(v: T, secrets: Record<string, string>): T {
