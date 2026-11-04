@@ -8,7 +8,7 @@
 
 import type { FilterStep } from '../data/transforms';
 import type { AnswerSpec } from '../ai/answerSpec';
-import { TermNotExpandedError } from '../data/termStep';
+import { hasTermType, TermNotExpandedError } from '../data/termStep';
 
 export interface TermExpansion {
   steps: FilterStep[];
@@ -26,6 +26,6 @@ export async function expandTerms(projectId: string, datasetId: string, steps: r
 
 /** An answer spec with its `{ term }` filters expanded, and the steps they became. In 05a: the refusal on any term. */
 export async function expandAnswerTerms(projectId: string, spec: AnswerSpec): Promise<{ spec: AnswerSpec; steps: FilterStep[] }> {
-  if (((spec && spec.filters) || []).some((f) => 'term' in f)) throw new TermNotExpandedError('unreadable');
+  if (((spec && spec.filters) || []).some((f) => 'term' in f || hasTermType(f))) throw new TermNotExpandedError('unreadable'); // specFilterSteps' rule
   return { spec, steps: [] };
 }

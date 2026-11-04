@@ -2,12 +2,12 @@
 // MAIN PROCESS.
 //
 // `vizDataFor`, `computeCardMetric` and `computeCard` (and the grid's `pageFor`)
-// wrap their unchanged bodies with these. For a caller nothing restricts on the
-// dataset, the body runs as it always did. For a restricted caller:
+// wrap their unchanged bodies with these. First, for EVERY caller, a filter step
+// this pod cannot apply (a glossary term, a newer release's step) refuses, typed
+// `term` (../analysis/termExpand): the lock below would otherwise drop it. Then,
+// for a caller nothing restricts on the dataset, the body runs as it always did.
+// For a restricted caller:
 //
-//   - before anything, for every caller: a filter step this pod cannot apply (a glossary term,
-//     a newer release's step) refuses, typed `term` (../analysis/termExpand) — the lock below
-//     would otherwise drop it;
 //   - the refusals (data/rowAccess.rowLockFor: fan-out, export, as-of, derived,
 //     column, pipeline, no entitlement), and here: a question that reaches a
 //     related dataset (a column a relationship supplies, labels from another

@@ -57,14 +57,6 @@ const COLUMNS: ParsedColumn[] = [
 const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   `r${i % 5}`, (i * 37) % 101, `2024-0${1 + (i % 9)}-1${i % 9}`, `c${i % 17}`, (i * 7) % 13,
 ]);
-const WAREHOUSE_TYPE: Record<string, string> = { text: 'VARCHAR', number: 'DOUBLE', date: 'DATE' };
-
-async function loadWarehouseTable(table: string): Promise<void> {
-  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${COLUMNS.map((c) => `"${c.name}" ${WAREHOUSE_TYPE[c.type]}`).join(', ')})`);
-  const params: Cell[] = [];
-  const tuples = ROWS.map((r) => `(${COLUMNS.map((c, i) => { params.push(r[i]); return `CAST($${params.length} AS ${WAREHOUSE_TYPE[c.type]})`; }).join(', ')})`);
-  await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params as (string | number | null)[]);
-}
 
 const U = '7d2c1f4e-1111-4222-8333-444455556666';
 const F0 = { type: 'filter', column: 'qty', op: '>', value: 0 };
@@ -85,7 +77,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
     await projects.init();
     const projectId = (await projects.createProject('Term doors')).id;
     const extract = await datasets.saveDataset(projectId, { name: 'Orders copy', sourceKind: 'csv', columns: COLUMNS, rows: ROWS });
-    await loadWarehouseTable('term_doors_orders');
+    await fakeMod.loadWarehouseTable('term_doors_orders', COLUMNS, ROWS);
     const conn = await connections.saveConnection(projectId, { name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
     const live = conn && await liveRecord.saveLiveRecord(projectId, {
       name: 'Orders live', columns: COLUMNS, origin: { kind: 'connection', connId: conn.id, table: 'term_doors_orders' },
@@ -243,6 +235,10 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
       ok('expandTerms: plain filters come back as they are, with no notes', exp.steps.length === 1 && exp.steps[0] === F0 && exp.notes.length === 0);
       ok('expandTerms: a term, a malformed term, a future step and a Prepare step each refuse, unreadable',
         (await Promise.all([TERM, { type: 'term' }, { type: 'term', term: 5 }, FUTURE, { type: 'dedupe' }, null].map((s) => rejects(termExpand.expandTerms(P, seed.extract, [F0, s] as FilterStep[]))))).every(Boolean));
+      const answerSpec = (filters: unknown[]) => ({ datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters }) as never;
+      ok('expandAnswerTerms refuses as specFilterSteps does — a { term } and a filter typed term; NEGATIVE CONTROL: a column filter passes',
+        await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ term: U }]))) && await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ type: 'term', column: 'region', op: '=', value: 'r1' }])))
+          && (await termExpand.expandAnswerTerms(P, answerSpec([ANSWER_F0]))).steps.length === 0);
     });
   } finally {
     (rowAccess as { rowLockFor: unknown }).rowLockFor = realLockFor;
@@ -267,9 +263,12 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
       && termStep.tagTermRefusals<{ ok: false; error: string; code?: string }>({ ok: false, error: 'Dataset not found' }).code === undefined);
   const { applyPipelineAsync }: typeof import('../src/data/regexOffThread') = require('../src/data/regexOffThread');
   const REGEX = { type: 'replace_values', column: 'region', mode: 'regex', rules: [{ from: 'r', to: 'x' }] };
-  const folded = await context.runInContext(ADMIN, 'fold', () => applyPipelineAsync({ columns: COLUMNS, rows: ROWS }, [REGEX, TERM] as never)
-    .then(() => null, (e: unknown) => e));
+  const fold = (steps: unknown[]) => context.runInContext(ADMIN, 'fold', () => applyPipelineAsync({ columns: COLUMNS, rows: ROWS }, steps as never)
+    .then((r) => r, (e: unknown) => e));
+  const folded = await fold([REGEX, TERM]);
+  const regexOnly = await fold([REGEX]) as { rowCount?: number; rows?: Cell[][] };
   ok('the request fold (applyPipelineAsync, off the request thread) rejects a term, typed', termStep.isTermNotExpandedError(folded), String(folded));
+  ok('NEGATIVE CONTROL: the same fold without the term resolves, the regex applied', regexOnly.rowCount === ROWS.length && regexOnly.rows?.[0]?.[0] === 'x0', JSON.stringify(regexOnly).slice(0, 200));
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });

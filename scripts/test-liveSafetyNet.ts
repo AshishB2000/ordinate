@@ -63,15 +63,6 @@ const COLUMNS: ParsedColumn[] = [
 const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   `r${i % 5}`, (i * 37) % 101, `2024-0${1 + (i % 9)}-1${i % 9}`, `c${i % 17}`, (i * 7) % 13,
 ]);
-const WAREHOUSE_TYPE: Record<string, string> = { text: 'VARCHAR', number: 'DOUBLE', date: 'DATE' };
-
-/** The fake warehouse's table: ROWS typed as a warehouse holds them, in the current org's DuckDB worker. */
-async function loadWarehouseTable(table: string): Promise<void> {
-  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${COLUMNS.map((c) => `"${c.name}" ${WAREHOUSE_TYPE[c.type]}`).join(', ')})`);
-  const params: Cell[] = [];
-  const tuples = ROWS.map((r) => `(${COLUMNS.map((c, i) => { params.push(r[i]); return `CAST($${params.length} AS ${WAREHOUSE_TYPE[c.type]})`; }).join(', ')})`);
-  await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params as (string | number | null)[]);
-}
 
 (async () => {
   context.enterServerMode(DATA);
@@ -90,7 +81,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
     const projectId = (await projects.createProject('Live safety net')).id;
     const extract = await datasets.saveDataset(projectId, { name: 'Orders copy', sourceKind: 'csv', columns: COLUMNS, rows: ROWS });
     // The Live dataset under test: the same rows in the fake warehouse, over a real connection record.
-    await loadWarehouseTable('live_net_orders');
+    await fakeMod.loadWarehouseTable('live_net_orders', COLUMNS, ROWS);
     const conn = await connections.saveConnection(projectId, { name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
     const live = conn && await liveRecord.saveLiveRecord(projectId, {
       name: 'Orders live', columns: COLUMNS, origin: { kind: 'connection', connId: conn.id, table: 'live_net_orders' },

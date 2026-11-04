@@ -6,6 +6,7 @@
 // the resident filter and the Live compiler can throw it without importing a door.
 
 import * as msg from './termMessages';
+import { tagRefusals } from './refusalTag';
 
 /** A reference to a glossary term, in a `filters` / `liveFilters` list. NOT a Prepare step (`sanitizeSteps` drops it). */
 export interface TermStep {
@@ -66,30 +67,8 @@ export function termRaised(): number {
   return raised;
 }
 
-/**
- * Type the refusals a handler caught: every `{ok:false}` whose `error` (or `reason`) IS one of the two
- * sentences gets the code and the reason — per item in a batch, a few levels deep, as
- * `tagRowPolicyRefusals` does. Mutates and returns.
- */
+/** Type the refusals a handler caught (./refusalTag): an `{ok:false}` carrying one of the two sentences gets the code and the reason. Mutates and returns. */
 // shortcut: matches the two fixed sentences only; 05b's deleted/unreachable/column_gone messages name their term, so they must be typed where they are thrown
 export function tagTermRefusals<T>(reply: T, depth = 3): T {
-  const bySentence = new Map<string, TermReason>([[msg.termUnreadable(), 'unreadable'], [msg.termNotExpanded(), 'not_expanded']]);
-  const walk = (v: unknown, d: number): void => {
-    if (d < 0 || !v || typeof v !== 'object' || ArrayBuffer.isView(v)) return;
-    if (Array.isArray(v)) {
-      for (const item of v) walk(item, d - 1);
-      return;
-    }
-    const o = v as Record<string, unknown>;
-    const said = typeof o.error === 'string' ? o.error : typeof o.reason === 'string' ? o.reason : '';
-    const reason = o.ok === false && o.code === undefined ? bySentence.get(said) : undefined;
-    if (reason) {
-      o.code = TERM_CODE;
-      if (typeof o.reason !== 'string') o.reason = reason; // an answer card's `reason` is its sentence: kept
-      if (typeof o.error !== 'string') o.error = said;
-    }
-    for (const x of Object.values(o)) if (x && typeof x === 'object') walk(x, d - 1);
-  };
-  walk(reply, depth);
-  return reply;
+  return tagRefusals(reply, new Map<string, TermReason>([[msg.termUnreadable(), 'unreadable'], [msg.termNotExpanded(), 'not_expanded']]), TERM_CODE, depth);
 }

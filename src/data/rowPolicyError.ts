@@ -4,6 +4,7 @@
 // can throw it for a lock that cannot be honoured without importing the gate.
 
 import * as msg from './rowAccessMessages';
+import { tagRefusals } from './refusalTag';
 
 export const ROW_POLICY_CODE = 'row_policy';
 export type RowPolicyReason = 'none' | 'column' | 'pipeline' | 'reader' | 'related' | 'asOf' | 'fanout' | 'export' | 'derived' | 'unreadable';
@@ -58,23 +59,5 @@ export function rowPolicyRefusal(reason: RowPolicyReason): { ok: false; code: ty
  * a batch, a few levels deep, as `tagLiveRefusals` does. Mutates and returns.
  */
 export function tagRowPolicyRefusals<T>(reply: T, depth = 3): T {
-  const bySentence = new Map((Object.keys(SENTENCES) as RowPolicyReason[]).map((r) => [SENTENCES[r](), r]));
-  const walk = (v: unknown, d: number): void => {
-    if (d < 0 || !v || typeof v !== 'object' || ArrayBuffer.isView(v)) return;
-    if (Array.isArray(v)) {
-      for (const item of v) walk(item, d - 1);
-      return;
-    }
-    const o = v as Record<string, unknown>;
-    const said = typeof o.error === 'string' ? o.error : typeof o.reason === 'string' ? o.reason : '';
-    const reason = o.ok === false && o.code === undefined ? bySentence.get(said) : undefined;
-    if (reason) {
-      o.code = ROW_POLICY_CODE;
-      if (typeof o.reason !== 'string') o.reason = reason; // an answer card's `reason` is its sentence: kept
-      if (typeof o.error !== 'string') o.error = said;
-    }
-    for (const x of Object.values(o)) if (x && typeof x === 'object') walk(x, d - 1);
-  };
-  walk(reply, depth);
-  return reply;
+  return tagRefusals(reply, new Map((Object.keys(SENTENCES) as RowPolicyReason[]).map((r) => [SENTENCES[r](), r])), ROW_POLICY_CODE, depth);
 }
