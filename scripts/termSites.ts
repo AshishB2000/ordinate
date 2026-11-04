@@ -100,6 +100,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ai/planCheck.ts': { count: 1, how: 'prepare' },
   'src/data/datasets.ts': { count: 3, how: 'prepare' },
   'src/data/inputTable/store.ts': { count: 1, how: 'prepare' },
+  // a cascading picker's parent picks: plain filter steps only, a term is dropped on purpose (narrows less, never more)
+  'src/ipc/distinctNarrow.ts': { count: 2, how: 'prepare' },
   // a Live dataset's base filters are a dataset setting: a term is dropped on purpose, like Prepare
   'src/data/liveBaseFilters.ts': { count: 2, how: 'prepare' },
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },

@@ -177,7 +177,7 @@ export const datasets = {
     }),
     project: byProjectId,
   }),
-  // preload: invoke('dataset:distinct', { projectId, datasetId, column, limit, search })
+  // preload: invoke('dataset:distinct', { projectId, datasetId, column, limit, search, filters })
   // — a column's distinct values, searched in SQL, with the true total (an
   // input table's lookup list; a quality rule's allowed-values prefill, T2.3).
   'dataset:distinct': rpc({
@@ -188,6 +188,8 @@ export const datasets = {
       column: z.string().max(512),
       limit: z.number().int().min(1).max(200).optional(),
       search: z.string().max(200).optional(),
+      // Parent picks of a cascading picker (p6-05a): plain filter steps, narrowed server side (ipc/distinctNarrow).
+      filters: z.array(z.looseObject({ type: z.literal('filter'), column: z.string().max(512), op: z.string().max(16) })).max(6).optional(),
     }),
     project: byProjectId,
   }),

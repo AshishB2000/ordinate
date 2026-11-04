@@ -100,6 +100,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ['grid search', 'dataset:page', (d) => ({ projectId: P, datasetId: d, offset: 0, limit: 200, search: 'c' })],
       ['filter values, the rule column', 'dataset:distinct', (d) => ({ projectId: P, datasetId: d, column: 'region' })],
       ['filter values, another column', 'dataset:distinct', (d) => ({ projectId: P, datasetId: d, column: 'customer', search: '' })],
+      // A cascading picker's parent picks (p6-05a) come AFTER the lock: they narrow what east may see, never widen it.
+      ['filter values, narrowed by a parent pick', 'dataset:distinct', (d) => ({ projectId: P, datasetId: d, column: 'customer', filters: [{ type: 'filter', column: 'qty', op: '>=', value: 5 }] })],
+      ['filter values, a parent pick outside the lock', 'dataset:distinct', (d) => ({ projectId: P, datasetId: d, column: 'customer', filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] })],
       ['column panel, number', 'dataset:profile', (d) => ({ projectId: P, datasetId: d, column: 'sales' })],
       ['column panel, text', 'dataset:profile', (d) => ({ projectId: P, datasetId: d, column: 'customer' })],
       ['rows behind a mark', 'visual:rows', (d) => ({ projectId: P, datasetId: d, encoding: enc, mark: { category: 'c3' } })],
@@ -115,6 +118,13 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ok(`door: ${label} (${channel}) — east on Orders ≡ the editor on East's rows`, mine.status === 200 && truth.status === 200 && d === '', `${d} | ${mine.status} ${mine.text.slice(0, 200)}`);
       ok(`NEGATIVE CONTROL: ${label} — the editor on Orders sees more`, diff(whole, truth) !== '', `${whole.text.slice(0, 200)} | ${truth.text.slice(0, 200)}`);
     }
+    // The pick of a region east is not in: nothing, not West's customers — and not a hint that they exist.
+    const westPick = { projectId: P, datasetId: orders, column: 'customer', filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] };
+    const outside = await W.call('east', 'dataset:distinct', westPick);
+    ok('lock first: east picking West lists nothing — a parent pick cannot widen the lock', outside.status === 200 && JSON.stringify(outside.body) === '{"values":[],"total":0}' && !outside.text.includes(H.W_CANARY), outside.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the same pick by the editor lists West\'s customers', (await W.call('ed', 'dataset:distinct', westPick)).text.includes(H.W_CANARY));
+    const noOnes = await W.call('east', 'dataset:distinct', { ...westPick, filters: [{ type: 'filter', column: 'region', op: '=', value: 'east' }] });
+    ok('lock first: east picking the lowercase `east` (no one\'s rows) lists nothing', noOnes.status === 200 && JSON.stringify(noOnes.body) === '{"values":[],"total":0}', noOnes.text.slice(0, 200));
     const figs = async (who: string, d: string, chartType: string) => (await W.call(who, 'visual:data', { projectId: P, datasetId: d, encoding: enc, chartType })).body?.data?.figures;
     for (const t of ['waterfall', 'pareto']) {
       const mine = await figs('east', orders, t);

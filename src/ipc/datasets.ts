@@ -2,6 +2,7 @@ import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
 import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, withLockSteps } from '../data/rowAccess';
 import { distinctFor } from './distinctFor';
+import { narrowSteps } from './distinctNarrow';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
 import * as importIpc from './datasetImport';
@@ -474,20 +475,21 @@ export function register() {
   // This exists so the renderer stops hydrating a whole table to collect at most
   // 200 options. Never throws; an unreadable dataset yields no values, which the
   // caller already renders as "no values to filter on".
-  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit, search }: any = {}) => {
+  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit, search, filters }: any = {}) => {
     try {
       const col = typeof column === 'string' ? column : '';
       const cap = typeof limit === 'number' && limit > 0 ? limit : MAX_DISTINCT;
+      const parents = narrowSteps(filters); // a cascading picker's parent picks, applied AFTER the row lock (./distinctFor)
       // The search runs IN SQL, not in the caller. Fetching every distinct value
       // and filtering in the renderer is the pattern that capped datasets at 50k
       // before this module existed. `total` comes back with it so the picker can
       // say "showing the first 200 of 4,812" instead of implying 200 is all.
-      const req = { limit: cap, search: typeof search === 'string' ? search : '' };
+      const req = { limit: cap, search: typeof search === 'string' ? search : '', filters: parents };
       if (!col) return { values: [], total: 0 };
       // A Live dataset answers from its profile's sample (L2.5) — or, with no list to give, a typed
       // refusal saying which case it is (never synced, not sampled, not listed). Never an empty list (D6).
       const live = await liveDistinct(projectId, datasetId, col, req);
-      if (live) return live;
+      if (live) return parents.length && !('ok' in live) ? { ...live, narrowed: false } : live; // a sample is not narrowed: say so (p6-05a)
 
       // Under the caller's row access lock (./distinctFor): only values that exist in their rows.
       return (await distinctFor(projectId, datasetId, col, req, 'datasetDistinct')) ?? { values: [], total: 0 };
