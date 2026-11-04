@@ -154,6 +154,11 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     // The reference path reads the lists (the index is the other path): searchNames asks the same question.
     const named = async (who: string) => (await W.as(who, () => searchMod.searchNames(P, NAMED_DB))).map((h) => h.name);
     ok('searchNames: a viewer finds nothing by the database name; the editor finds the stored name', (await named('nobody')).length === 0 && (await named('ed')).includes(NAMED_DB));
+    // search:query falls back to searchNames when the index answers null, so the search asserts above pass without the index: ask it directly.
+    const indexed = async (who: string, viewer: boolean) => W.as(who, () => searchMod.searchIndexed(P, NAMED_DB, viewer, 20));
+    const [idxViewer, idxEditor] = [await indexed('nobody', true), await indexed('ed', false)];
+    ok('searchIndexed: the index itself answers a viewer with nothing for the database name', idxViewer !== null && idxViewer.length === 0, JSON.stringify(idxViewer));
+    ok('NEGATIVE CONTROL: …and answers an editor with the stored name', idxEditor !== null && idxEditor.some((h) => h.name === NAMED_DB), JSON.stringify(idxEditor));
 
     // Lineage and Pipelines draw the source node from the dataset's origin: `loadInput` trims the table and the web address for a viewer.
     const lin = (who: string, id = D) => W.call(who, 'lineage:get', { projectId: P, type: 'dataset', id });
