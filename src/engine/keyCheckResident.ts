@@ -16,12 +16,13 @@ export async function keyCheckResident(
   try {
     const k = keySql(`c${src.index}`, src.type);
     const out = await duck.queryAsync(
-      `SELECT CAST(SUM(n) AS DOUBLE), ` +
-        `CAST(SUM(CASE WHEN k IS NULL THEN n ELSE 0 END) AS DOUBLE), ` +
-        `CAST(SUM(CASE WHEN k IS NOT NULL AND n > 1 THEN 1 ELSE 0 END) AS DOUBLE) ` +
+      `SELECT CAST(SUM(n) AS DOUBLE) AS k_rows, ` +
+        `CAST(SUM(CASE WHEN k IS NULL THEN n ELSE 0 END) AS DOUBLE) AS k_empty, ` +
+        `CAST(SUM(CASE WHEN k IS NOT NULL AND n > 1 THEN 1 ELSE 0 END) AS DOUBLE) AS k_repeated ` +
         `FROM (SELECT ${k} AS k, count(*) AS n FROM ${relationSql(src.parquetPath)} GROUP BY 1);`,
     );
-    return keyCheckFromRow(out[0] && Object.values(out[0]));
+    const r = out[0];
+    return keyCheckFromRow(r && [r.k_rows, r.k_empty, r.k_repeated]);
   } catch (_) {
     return null;
   }

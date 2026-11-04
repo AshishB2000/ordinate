@@ -1,11 +1,13 @@
-// Self-check for the key check (spec D2): analysis/keyCheck.ts (the JS reference) and
-// engine/keyCheckResident.ts (its DuckDB twin) held to `Object.is` agreement over the SAME rows,
-// saved as a resident Parquet by `datasets.saveDataset`.
+// Self-check for the key check (spec D2): analysis/keyCheck.ts (the JS reference) held to `Object.is`
+// agreement by engine/keyCheckResident.ts (its DuckDB twin, over the SAME rows saved as a resident
+// Parquet by `datasets.saveDataset`) and by compileKeyCheck (the Live statement, over a typed
+// DuckDB table loaded as a warehouse would hold it).
 //
 //   npm run build:ts && node scripts/test-keyCheck.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { loadWarehouse, runDuck } from './liveParityFixture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -17,6 +19,8 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const { keyCheckJs, keyCheckFromRow }: typeof import('../src/analysis/keyCheck') = require('../src/analysis/keyCheck');
 const { keyCheckResident }: typeof import('../src/engine/keyCheckResident') = require('../src/engine/keyCheckResident');
+const { compileKeyCheck }: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+const { DIALECT_IDS }: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 
 type Cell = import('../src/data/transforms').Cell;
 type ColType = import('../src/data/parse').ParsedColumn['type'];
@@ -64,6 +68,40 @@ const CASES: Case[] = [
   ok('keyCheckFromRow: a non-number is a failure', keyCheckFromRow(['x', 0, 0]) === null);
   ok('keyCheckFromRow: no row is a failure', keyCheckFromRow(undefined) === null);
   ok('keyCheckFromRow: a short row is a failure', keyCheckFromRow([1, 2]) === null);
+  ok('resident: a query that fails is null',
+    (await keyCheckResident({ parquetPath: path.join(os.tmpdir(), 'ordinate-keycheck-missing.parquet'), index: 0, type: 'text' })) === null);
+
+  // ── Live: compileKeyCheck over a typed warehouse table, row for row against the JS reference. The
+  // date case is ISO only (a warehouse DATE has no other spelling).
+  const WAREHOUSE: Case[] = [
+    ...CASES.filter((c) => c.name !== 'date'),
+    { name: 'date', type: 'date', cells: ['2024-01-01', '2024-01-01', '2024-01-02', null], rows: 4, empty: 1, repeatedKeys: 1 },
+  ];
+  for (const c of WAREHOUSE) {
+    const cols = [{ name: 'k', type: c.type }];
+    const table = `kc_${c.name.replace(/\W/g, '_')}`;
+    await loadWarehouse(table, cols, c.cells.map((v) => [v]));
+    const q = compileKeyCheck('k', { dialect: 'duckdb', source: { kind: 'table', parts: [table] }, columns: cols });
+    ok(`live ${c.name}: the statement compiled`, q.ok);
+    if (!q.ok) continue;
+    const live = keyCheckFromRow((await runDuck(q.query))[0]);
+    const js = keyCheckJs(c.cells, c.type);
+    ok(`live ${c.name}: the check ran`, live !== null);
+    for (const f of ['rows', 'empty', 'repeatedKeys'] as const) {
+      ok(`live ${c.name}: ${f} agrees (Object.is)`, live !== null && Object.is(js[f], live[f]), `${js[f]} vs ${live?.[f]}`);
+      ok(`live ${c.name}: ${f} is ${c[f]}`, js[f] === c[f], js[f]);
+    }
+  }
+
+  const env = { dialect: 'duckdb' as const, source: { kind: 'table' as const, parts: ['t'] }, columns: [{ name: 'region', type: 'text' as const }] };
+  const unknown = compileKeyCheck('nope', env);
+  ok('live: an undeclared column is refused, typed', !unknown.ok && unknown.code === 'unknownColumn');
+  const hostile = compileKeyCheck('region', { ...env, source: { kind: 'table', parts: ['t"; DROP TABLE x; --'] } });
+  ok('live: a hostile source part compiles to quoted identifiers only',
+    hostile.ok && !/DROP TABLE x;/.test(hostile.query.sql.replace(/"[^"]*"/g, '')));
+  for (const id of DIALECT_IDS) ok(`live ${id}: the statement compiles`, compileKeyCheck('region', { ...env, dialect: id }).ok);
+  ok('live: the columns are k_rows, k_empty, k_repeated',
+    hostile.ok && JSON.stringify(hostile.query.columns) === '["k_rows","k_empty","k_repeated"]');
 
   finish();
 })().catch((err) => {
