@@ -90,8 +90,9 @@
   const isKept = (s: any): boolean => require('../data/filterList').isKeptStep(s);
 
   function stepKey(s: any): string {
-    // `via`: the same predicate through a relationship is another filter (web useViewer.stepKey says the same).
-    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null, s.via === undefined ? null : s.via]);
+    // `period` and `via`, as web useViewer.stepKey: two periods on one column, or the same predicate through a
+    // relationship, are two filters (dropping one widens the figure).
+    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null, s.period === undefined ? null : s.period, s.via === undefined ? null : s.via]);
   }
 
   /**

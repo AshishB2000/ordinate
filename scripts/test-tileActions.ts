@@ -47,6 +47,11 @@ const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(
   ok('carry all_selection: a click on a filtered column REPLACES its equality filter',
     onRegion.filter((s: any) => s.column === 'region').length === 1 && onRegion[onRegion.length - 1].value === 'East', JSON.stringify(onRegion));
   ok('carry: a number value stays a number', cm.carrySteps({ carry: 'clicked_value' }, { clicked: { column: 'year', value: 2024 } })[0].value === 2024);
+  // A period is part of a filter's identity (as dashboardFilters and the web key it): dropping one would widen the figure.
+  const period = (n: number) => ({ type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n } });
+  ok('carry all_selection: two periods on one column are both carried',
+    JSON.stringify(cm.carrySteps({ carry: 'all_selection' }, { filters: [period(30), period(7)] })) === JSON.stringify([period(30), period(7)]));
+  ok('carry all_selection: the same period twice travels once (negative control)', cm.carrySteps({ carry: 'all_selection' }, { filters: [period(7), period(7)] }).length === 1);
 }
 
 // ── URLs: encoding and scheme refusal ────────────────────────────────────────

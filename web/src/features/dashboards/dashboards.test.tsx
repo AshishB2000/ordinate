@@ -103,6 +103,10 @@ describe('tile actions — differential against cardModel', () => {
     { type: 'filter', column: 'region', op: '=', value: 'East', via: '44444444-4444-4444-8444-444444444444' },
     { type: 'future_y', a: 1, b: 2 },
     { type: 'future_y', b: 2, a: 1 },
+    // Two periods on one column are two filters (dropping one widens the figure); the same period twice is one.
+    { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 30 } },
+    { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 7 } },
+    { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 7 } },
   ];
   const clicks = [null, { column: 'region', value: 'West' }, { column: 'segment', value: 'B2B' }];
   it('carries the same steps for every carry mode and click', () => {
