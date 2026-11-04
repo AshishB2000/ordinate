@@ -9,11 +9,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useDatasetColumns, type DatasetSummary } from '../../api/datasets';
 import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
+import { Input } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
 import { call, useWrite, type Relationship, type Suggestion } from './api';
 import { formatNumber, pctText } from './format';
+import { LABEL_HINT } from './RelationshipLabelDialog';
 import s from './Data.module.css';
 import ms from './Model.module.css';
 
@@ -32,6 +34,7 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
   const [fromCol, setFromCol] = useState<string | null>(null);
   const [toCol, setToCol] = useState<string | null>(null);
   const [kind, setKind] = useState<Cardinality>('many_to_one');
+  const [label, setLabel] = useState('');
   const [error, setError] = useState('');
   const fromCols = useDatasetColumns(projectId, fromDs);
   const toCols = useDatasetColumns(projectId, toDs);
@@ -101,7 +104,8 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
             loading={save.isPending}
             onClick={() => {
               setError('');
-              save.mutate({ projectId, relationship: { from: { datasetId: fromDs, column: fromCol! }, to: { datasetId: toDs, column: toCol! }, cardinality: kind } });
+              const named = label.trim(); // empty: no label key, so re-saving an existing edge keeps its name
+              save.mutate({ projectId, relationship: { from: { datasetId: fromDs, column: fromCol! }, to: { datasetId: toDs, column: toCol! }, cardinality: kind, ...(named && { label: named }) } });
             }}
           >
             Save relationship
@@ -173,6 +177,7 @@ export function RelationshipDialog({ projectId, datasets: all, onClose }: { proj
         options={KINDS}
         onValueChange={(v) => setKind(v as Cardinality)}
       />
+      <Input label="Label" hint={LABEL_HINT} value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} />
       {best?.stats && best.stats.toKeys !== best.stats.toKeyed && (
         <p className={s.muted} role="status">
           {toName} repeats some {best.to} values. Each lookup uses the first matching row.

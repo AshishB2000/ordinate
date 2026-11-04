@@ -20,6 +20,7 @@ import { useRelationships, useWrite, type Relationship } from './api';
 import { formatNumber, fromControl, pctText } from './format';
 import { RelationshipDialog } from './RelationshipDialog';
 import { relWarningText } from './tableApi';
+import { RelationshipLabelDialog } from './RelationshipLabelDialog';
 import s from './Data.module.css';
 import ms from './Model.module.css';
 
@@ -94,7 +95,10 @@ function Canvas({ datasets, rels, selected, onSelect }: {
         const q = at(r.to.datasetId, r.to.column, back ? 'r' : 'l');
         if (!p || !q) continue;
         const dx = Math.max(40, Math.abs(q.x - p.x) / 2) * (back ? -1 : 1);
-        out.push({ id: r.id, d: `M${p.x},${p.y} C${p.x + dx},${p.y} ${q.x - dx},${q.y} ${q.x},${q.y}`, end: q, mid: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 } });
+        const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+        // Two joins between the same two cards would stack their labels: a later one moves below.
+        while (out.some((o) => Math.abs(o.mid.x - mid.x) < 140 && Math.abs(o.mid.y - mid.y) < 24)) mid.y += 24;
+        out.push({ id: r.id, d: `M${p.x},${p.y} C${p.x + dx},${p.y} ${q.x - dx},${q.y} ${q.x},${q.y}`, end: q, mid });
       }
       setEdges(out);
       setSize({ w: el.scrollWidth, h: el.scrollHeight });
@@ -153,10 +157,10 @@ function Canvas({ datasets, rels, selected, onSelect }: {
             type="button"
             className={`${ms.relLabel} ${e.id === selected ? ms.relLabelOn : ''}`}
             style={{ left: e.mid.x, top: e.mid.y }}
-            aria-label={`${name(r.from.datasetId)}.${r.from.column} to ${name(r.to.datasetId)}.${r.to.column}, ${r.cardinality === 'one_to_one' ? 'one to one' : 'many to one'}, ${pctText(r.matchPct)} matched`}
+            aria-label={`${r.label ? `${r.label}: ` : ''}${name(r.from.datasetId)}.${r.from.column} to ${name(r.to.datasetId)}.${r.to.column}, ${r.cardinality === 'one_to_one' ? 'one to one' : 'many to one'}, ${pctText(r.matchPct)} matched`}
             onClick={() => onSelect(e.id)}
           >
-            {kindShort(r.cardinality)} · {pctText(r.matchPct)}
+            {r.label && `${r.label} · `}{kindShort(r.cardinality)} · {pctText(r.matchPct)}
           </button>
         );
       })}
@@ -165,11 +169,12 @@ function Canvas({ datasets, rels, selected, onSelect }: {
   );
 }
 
-function End({ name, column }: { name: string; column: string }) {
+function End({ name, column, label }: { name: string; column: string; label?: string }) {
   return (
     <span className={ms.relEnd}>
       <span className={s.strong}>{name}</span>
       <span className={s.mono}>{column}</span>
+      {label && <span className={s.meta}>{label}</span>}
     </span>
   );
 }
@@ -207,6 +212,7 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState('');
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Relationship | null>(null);
+  const [renaming, setRenaming] = useState<Relationship | null>(null);
   // Adding and deleting a relationship are writes; a viewer reads the model and selects a row to see it on the diagram.
   const canEdit = useCanEdit(projectId);
   const select = (id: string) => setSelected((cur) => (cur === id ? '' : id));
@@ -279,7 +285,7 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
                       <End name={name(r.from.datasetId)} column={r.from.column} />
                     </td>
                     <td>
-                      <End name={name(r.to.datasetId)} column={r.to.column} />
+                      <End name={name(r.to.datasetId)} column={r.to.column} label={r.label} />
                     </td>
                     <td>{r.cardinality === 'one_to_one' ? 'One to one' : 'Many to one'}</td>
                     <td className={s.num}>
@@ -293,6 +299,7 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
                           trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${name(r.from.datasetId)} to ${name(r.to.datasetId)}`} />}
                           items={[
                             { label: 'Show on diagram', icon: 'eye', onSelect: () => setSelected(r.id) },
+                            { label: 'Rename…', icon: 'pencil', onSelect: () => setRenaming(r) },
                             { kind: 'separator' },
                             { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
                           ]}
@@ -318,6 +325,7 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
         </div>
       )}
       {adding && <RelationshipDialog projectId={projectId} datasets={datasets} onClose={(id) => { setAdding(false); if (id) setSelected(id); }} />}
+      {renaming && <RelationshipLabelDialog projectId={projectId} rel={renaming} onClose={() => setRenaming(null)} />}
       {deleting && <DeleteRel projectId={projectId} r={deleting} name={name} onClose={() => setDeleting(null)} />}
     </section>
   );

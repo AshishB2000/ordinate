@@ -7,10 +7,13 @@ import { ColumnsTab } from './ColumnsTab';
 import { ColumnDetails } from './Details';
 import { everyWord, freshness, fromControl, pctText, SCHEDULES } from './format';
 import { cadenceOptions } from './cadence';
-import { laneLayout } from './RelationshipsTab';
+import { MemoryRouter } from 'react-router';
+import { laneLayout, RelationshipsTab } from './RelationshipsTab';
+import { RelationshipDialog } from './RelationshipDialog';
 import { columnsFor, ruleWords } from './ruleWords';
 import { normTag } from './tags';
 import type { Relationship } from './api';
+import type { DatasetSummary } from '../../api/datasets';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -445,5 +448,110 @@ describe('Data helpers', () => {
     const b = document.createElement('button');
     expect(fromControl(b)).toBe(true);
     expect(fromControl(document.createElement('td'))).toBe(false);
+  });
+});
+
+describe('Relationships: labels (plan 09)', { timeout: 20_000 }, () => {
+  const A = '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+  const B = '3b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+  const R1 = '4b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+  const SAVE = 'relationship:save';
+  const CLASH = 'Another relationship between these two datasets is already called “Ship date”.';
+  const ds = (id: string, name: string) => ({ id, name, sourceKind: 'csv', rowCount: 40, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' }) as DatasetSummary;
+  const DS = [ds(A, 'Sales'), ds(B, 'Dates')];
+  const REL: Relationship = {
+    id: R1, from: { datasetId: A, column: 'order_date' }, to: { datasetId: B, column: 'date' }, cardinality: 'many_to_one',
+    verified: { matched: 40, unmatchedFrom: 0 }, matchPct: 100, label: 'Booked',
+  };
+  const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function renderTab(routes: Record<string, Reply> = {}, role = 'editor') {
+    vi.stubGlobal('CSS', { escape: (x: string) => x }); // the diagram's edge lookup; jsdom has no CSS.escape
+    const calls = serve({
+      'relationship:list': { body: { ok: true, relationships: [REL] } },
+      'dataset:list': { body: DS },
+      'projects:roles': { body: { [P]: role } },
+      ...routes,
+    });
+    render(
+      <QueryClientProvider client={client()}>
+        <MemoryRouter>
+          <RelationshipsTab projectId={P} />
+        </MemoryRouter>
+        <Toaster />
+      </QueryClientProvider>,
+    );
+    return calls;
+  }
+  const saves = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === SAVE).map((c) => c.payload);
+  async function openRename() {
+    const more = await screen.findByRole('button', { name: 'Actions for Sales to Dates' });
+    act(() => more.focus());
+    fireEvent.keyDown(more, { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename…' }));
+    return screen.findByRole('dialog', { name: 'Rename relationship' });
+  }
+
+  it('shows the label under the one side', async () => {
+    renderTab();
+    const row = (await screen.findByText('Booked')).closest('tr')!;
+    expect(within(row).getByText('date')).toBeTruthy();
+  });
+
+  it('the New relationship dialog sends the label typed', async () => {
+    const cand = { from: 'ship_date', to: 'date', name: 0.5, typeMatch: true, rate: 1, ratePct: 100 };
+    const calls = serve({
+      'dataset:columns': { body: { id: A, name: 'Sales', rowCount: 40, columns: [{ name: 'ship_date', type: 'date' }, { name: 'date', type: 'date' }] } },
+      'relationship:suggest': { body: { ok: true, candidates: [cand], best: { ...cand, cardinality: 'many_to_one', stats: { toKeys: 1, toKeyed: 1 } } } },
+      [SAVE]: { body: { ok: true, relationship: { ...REL, from: { datasetId: A, column: 'ship_date' }, label: 'Ship date' } } },
+    });
+    render(
+      <QueryClientProvider client={client()}>
+        <RelationshipDialog projectId={P} datasets={DS} onClose={() => {}} />
+      </QueryClientProvider>,
+    );
+    const label = await screen.findByRole('textbox', { name: 'Label' });
+    expect(screen.getByText('Names this join in charts, e.g. Ship date. Optional.')).toBeTruthy();
+    fireEvent.change(label, { target: { value: '  Ship date ' } });
+    const go = screen.getByRole('button', { name: 'Save relationship' });
+    await waitFor(() => expect((go as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(go);
+    await waitFor(() => expect(saves(calls)).toEqual([{ projectId: P, relationship: {
+      from: { datasetId: A, column: 'ship_date' }, to: { datasetId: B, column: 'date' }, cardinality: 'many_to_one', label: 'Ship date' } }]));
+  });
+
+  it('Rename… prefills the label and saves the relationship with the new one', async () => {
+    const calls = renderTab({ [SAVE]: { body: { ok: true, relationship: { ...REL, label: 'Order date' } } } });
+    const dialog = await openRename();
+    const input = within(dialog).getByRole('textbox', { name: 'Label' }) as HTMLInputElement;
+    expect(input.value).toBe('Booked');
+    fireEvent.change(input, { target: { value: 'Order date' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saves(calls)).toEqual([{ projectId: P, relationship: { id: R1, from: REL.from, to: REL.to, cardinality: 'many_to_one', label: 'Order date' } }]));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Rename relationship' })).toBeNull());
+  });
+
+  it('an emptied label is sent empty, which clears it', async () => {
+    const calls = renderTab({ [SAVE]: { body: { ok: true, relationship: { ...REL, label: undefined } } } });
+    const dialog = await openRename();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Label' }), { target: { value: '   ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect((saves(calls)[0] as { relationship: { label: string } }).relationship.label).toBe(''));
+  });
+
+  it('a clash shows the server sentence under the field and keeps the dialog open', async () => {
+    renderTab({ [SAVE]: { body: { ok: false, error: CLASH } } });
+    const dialog = await openRename();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Label' }), { target: { value: 'ship date' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await within(dialog).findByText(CLASH)).toBeTruthy();
+    expect(within(dialog).getByRole('textbox', { name: 'Label' }).getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Rename relationship' })).toBeTruthy();
+  });
+
+  it('a viewer sees the label but has no Rename…', async () => {
+    renderTab({}, 'viewer');
+    await screen.findByText('Booked');
+    expect(screen.queryByRole('button', { name: 'Actions for Sales to Dates' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Rename…' })).toBeNull();
   });
 });
