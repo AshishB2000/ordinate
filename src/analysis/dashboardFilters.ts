@@ -33,12 +33,13 @@ import { radiusControlSteps } from './geo/radius';
 // comparison, and re-ordering a list produces the same rows but a different
 // step, which is cheap to keep and wrong to guess at. A step this pod cannot read (a glossary
 // term) is keyed by its WHOLE body under its own prefix, so it never merges with a filter.
-function stepKey(s: FilterStep): string {
+export function stepKey(s: FilterStep): string {
   if (isKeptStep(s)) return 'kept:' + stableStringify(s);
   // `period` too: two different relative ranges on one column are two filters.
   // `context` too (r7:lod): the same predicate before and after LODs is two filters.
   // `via` too: the same predicate through a relationship reads another table's column (refused until it can be walked).
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null]);
+  // `fromControl` too (D9): a date control's period may move onto a metric's date, a tile's own identical one stays.
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
