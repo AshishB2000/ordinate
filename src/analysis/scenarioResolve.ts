@@ -36,6 +36,7 @@ import { bindFormulaText, resolveFilterParams } from './params';
 import type { ParamValues } from './params';
 import { formatMetricValue } from './metricFormat';
 import type { MetricAggregation } from './metricValue';
+import type { MetricSnapshot } from './snapshot';
 import { periodChange } from './scorecardModel';
 import { computeCardMetric } from '../ipc/dashboards';
 import { resolveMetric } from '../ipc/metrics';
@@ -188,7 +189,8 @@ function inputsFor(ctx: Ctx, datasetId: string, column: string, all: FilterStep[
 
 // ── the mirror of metrics.ts resolveDefinition ───────────────────────────────
 
-async function operand(pass: Pass, datasetId: string, spec: { column: string; aggregation: MetricAggregation }, all: FilterStep[]): Promise<number | null> {
+async function operand(pass: Pass, datasetId: string, spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot }, all: FilterStep[]): Promise<number | null> {
+  if (spec.snapshot) return null; // no figure until a later release, and a nudge must not re-sum it over every date
   // Scenarios are off for a Live dataset in v1 (plan L2.6): refused, typed — though its
   // KPIs are routed (L2.4), a driver's partitions read rows, so never a half-live figure.
   requireExtract(await datasets.getDatasetMeta(pass.ctx.projectId, datasetId));

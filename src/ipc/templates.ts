@@ -50,7 +50,7 @@ export function register() {
       // scored highest — the user already said which one is Revenue. Formula
       // metrics are skipped: a role resolves to a COLUMN and a ratio is not one.
       const defined: DefinedMeasure[] = (await metrics.listMetrics(projectId))
-        .filter((m) => m.datasetId === ds.id)
+        .filter((m) => m.datasetId === ds.id && !(m.definition as { snapshot?: unknown }).snapshot) // a snapshot's column is not its figure
         .map((m) => {
           const def = m.definition as { column?: string };
           return { id: m.id, name: m.name, column: def && def.column ? def.column : '' };

@@ -242,11 +242,12 @@ export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
     .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]), shown: shownNames(m.columns, docs[m.id]) }));
 }
 
-async function specMetrics(projectId: string): Promise<SpecMetric[]> {
+/** The saved metrics a spec may name. Exported for scripts/test-snapshotReader.ts. */
+export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     for (const s of await metrics.listMetrics(projectId)) {
-      if (metrics.isFormulaDefinition(s.definition)) continue;
+      if (metrics.isFormulaDefinition(s.definition) || s.definition.snapshot) continue; // a snapshot is not a plain total
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,
