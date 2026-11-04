@@ -21,6 +21,8 @@ import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
+import { withoutRunError } from '../analysis/pipelineAlerts';
+import { connectionDatasetIds, unreadableErrorIds } from '../data/sourceNames';
 import * as execConfig from '../app/execConfig';
 import * as sharePolicy from '../app/sharePolicy';
 import { sanitizeCard, sanitizeDashboardFilters } from '../analysis/dashboards';
@@ -209,9 +211,12 @@ async function alertCandidate(projectId: string, events: AlertEvent[], scope: Pi
 
 async function alertFact(projectId: string, ids: string[], analysisId: string, tiles: Tile[], scope: SummaryScope): Promise<SummarySentence | null> {
   const file = await alertStore.load(projectId);
-  const open = await alertCandidate(projectId, file.events, scope);
+  // A failed run's alert quotes the warehouse driver's error: a reader who may not see source names, and a page that
+  // leaves the app (a report, a published site, the model), get a fixed sentence instead.
+  const events = await withoutRunError(projectId, file.events, scope.outbound ? connectionDatasetIds : unreadableErrorIds);
+  const open = await alertCandidate(projectId, events, scope);
   const cutoff = asOfIso();
-  const candidates = file.events
+  const candidates = events
     // Quality alerts have their own sentence; an "as of" view sees only what had fired by then.
     .filter((e) => open(e) && e.ruleName !== 'Data quality' && (ids.includes(e.datasetId) || (!!analysisId && e.analysisId === analysisId)))
     .filter((e) => !cutoff || e.at <= cutoff)

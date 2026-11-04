@@ -16,8 +16,10 @@
 //    NEGATIVE CONTROL: the editor reads the text. The runner stores the editor's run under the web import's real id.
 //    The same error reaches a viewer a second way, in the alert a failed pipeline run raises (`alerts:list`, the `alerts:fired`
 //    push) and in the scheduled refresh's `hub:dataset-refreshed` push: both say it failed, not why.
+//    So does the dashboard Summary card's alert sentence (summary:compute, and summary:rewrite, which narrates the same
+//    sentences for a model): a viewer, and any page that leaves the app, read the fixed sentence.
 //    Channels checked for a refresh or run error: dataset:list, pipelines:get, pipelines:changed, alerts:list, alerts:fired,
-//    hub:dataset-refreshed. NOT closed here: the dashboard summary's alert sentence (summary:compute) reads the same stored message.
+//    hub:dataset-refreshed, summary:compute, summary:rewrite.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -31,6 +33,7 @@ const pipelineStore: typeof import('../src/app/pipelineStore') = require('../src
 const pipelineRunner: typeof import('../src/app/pipelineRunner') = require('../src/app/pipelineRunner');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const schedules: typeof import('../src/server/jobs/schedules') = require('../src/server/jobs/schedules');
+const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
 const { randomUUID }: typeof import('crypto') = require('crypto');
 const { sourceView }: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
 const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('../src/data/sourceNames');
@@ -158,6 +161,19 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('NEGATIVE CONTROL: the events handed to the push carry the run error', /canary_tbl_9f3/.test(JSON.stringify(planted)));
     ok('alerts:fired: the push carries the fixed sentence, not the run error', pushed.length === 1 && pushed[0].channel === 'alerts:fired' && pushedText.includes(FAILED_SENTENCE) && !CANARY.test(pushedText), pushedText);
     ok('alerts:fired: …and still the failure of a dataset not from a connection and a rule\'s alert', pushedText.includes('HTTP 500') && pushedText.includes('Revenue fell 50%'), pushedText);
+    // The Summary card names the newest unseen alert on its datasets, so a fresh failed run of D is the one it names.
+    await W.as('boss', () => pipelineRunner.raiseFailures(P, { nodes: [{ id: 'dataset:' + D, kind: 'dataset', stage: 1, name: 'Orders', sub: '', ref: { type: 'dataset', id: D } }], edges: [] }, [{ nodeId: 'dataset:' + D, status: 'failed', attempts: 1, startedAt: 0, finishedAt: 1, result: { ok: false, error: REFRESH_ERROR } }]));
+    const pages = [{ cards: [{ id: randomUUID(), type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: D, column: 'sales', aggregation: 'sum' } }] }];
+    const summaryOf = (who: string) => W.call(who, 'summary:compute', { projectId: P, pages, filters: [] });
+    const alertLine = (r: H.Reply): string => (r.body.sentences ?? []).find((x: { kind: string }) => x.kind === 'alert')?.text ?? '';
+    const [sumViewer, sumEditor] = [await summaryOf('nobody'), await summaryOf('ed')];
+    ok('summary:compute: a viewer\'s alert sentence says a refresh failed, not why', alertLine(sumViewer).includes(FAILED_SENTENCE) && !CANARY.test(sumViewer.text), sumViewer.text);
+    ok('NEGATIVE CONTROL: the editor\'s card says the run failed, and why', /canary_tbl_9f3/.test(alertLine(sumEditor)), sumEditor.text);
+    // A report, a published site and the model (summary:rewrite) ask outbound; the contract has no such key, the server's own callers do.
+    const out = await W.as('ed', () => summary.computeSummary(P, pages, { filters: [], params: new Map(), outbound: true }));
+    const outLine = out.find((x) => x.kind === 'alert')?.text ?? '';
+    ok('computeSummary: a page that leaves the app (outbound) never quotes it, even for an editor', outLine.includes(FAILED_SENTENCE) && !CANARY.test(JSON.stringify(out)), JSON.stringify(out));
+
     // A scheduled refresh that fails tells every reader's tabs that it failed (the web reads ok, projectId, datasetId), never why.
     const outcome = { projectId: P, datasetId: D, name: 'Orders', ok: false, error: REFRESH_ERROR, rowsBefore: 1, rowsAfter: 1 };
     const tabs = schedules.failedRefreshPayload(outcome);
