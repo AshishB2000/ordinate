@@ -4,6 +4,7 @@
 
 import { isValidId } from './ids';
 import { clip } from './clip';
+import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
 
 export type TableRole = '' | 'fact' | 'dimension';
 const ROLES: readonly string[] = ['fact', 'dimension'];
@@ -18,6 +19,8 @@ export interface TableDoc {
   grain: string;
   guide: string;
   keyCheck?: KeyCheck;
+  /** Drill hierarchies over this dataset's columns; present only when there are any. */
+  hierarchies?: Hierarchy[];
   updatedBy: string;
   updatedAt: string;
 }
@@ -41,12 +44,14 @@ function sanitizeKeyCheck(raw: unknown): KeyCheck | undefined {
 export function sanitizeTableDoc(raw: unknown): TableDoc {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const keyCheck = sanitizeKeyCheck(r.keyCheck);
+  const hierarchies = sanitizeHierarchies(r.hierarchies);
   return {
     role: ROLES.includes(r.role as string) ? (r.role as TableRole) : '',
     key: typeof r.key === 'string' && r.key.length <= MAX_KEY ? r.key : '',
     grain: clip(r.grain, MAX_GRAIN),
     guide: clip(r.guide, MAX_GUIDE),
     ...(keyCheck && { keyCheck }),
+    ...(hierarchies.length > 0 && { hierarchies }),
     updatedBy: clip(r.updatedBy, MAX_STAMP),
     updatedAt: clip(r.updatedAt, MAX_STAMP),
   };
