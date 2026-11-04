@@ -209,6 +209,7 @@ async function runLocked(projectId: string, start: string[], trigger: 'manual' |
   const state = new Map<string, 'queued' | 'running'>();
   live.set(key, state);
   try {
+    // Unrestricted on purpose: a run is stored under its node id (source:url:<url>), and a viewer-trimmed graph would store another.
     const g = await loadGraph(projectId);
     if ('error' in g) return { ok: false, error: g.error };
     const graph = g.graph;

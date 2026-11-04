@@ -160,6 +160,18 @@ async function main(): Promise<void> {
   ok('an unknown focus is an empty graph, not a throw', lineage.focus(comb, 'dataset:nope').nodes.length === 0);
   ok('the handler refuses a traversal id', (await get(pid, 'dataset', '../../x')) === null);
 
+  // ── 5. web imports: a viewer's copy has no url (src/ipc/lineage.loadInput) ───
+  const [W1, W2] = ['40000000-0000-4000-8000-000000000021', '40000000-0000-4000-8000-000000000022'];
+  const webSources = (urls: Array<string | undefined>) => lineage.buildGraph({
+    datasets: [W1, W2].map((id, i) => ({ id, name: 'Web ' + i, sourceKind: 'url', steps: [], origin: { kind: 'url', url: urls[i] } })),
+    metrics: [], visuals: [], dashboards: [], reports: [], alerts: [],
+  }).nodes.filter((n) => n.kind === 'source').map((n) => n.name);
+  ok('two web imports with no url are two "Web address" nodes, not one shared by two sites',
+    webSources([undefined, undefined]).join() === 'Web address,Web address', webSources([undefined, undefined]).join());
+  ok('…with real distinct urls, one node per url (the editor\'s dedupe, unchanged)',
+    webSources(['https://a.example.com/x', 'https://b.example.com/y']).join() === 'a.example.com,b.example.com');
+  ok('…and the same url is still one node', webSources(['https://a.example.com/x', 'https://a.example.com/x']).join() === 'a.example.com');
+
   finish();
 }
 
