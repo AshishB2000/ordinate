@@ -2,8 +2,9 @@
 // Task 3 saves and reads the date (below); the doors that rewrite a dashboard control's period onto it join it.
 //
 //   save      a column that is not a date is refused beside its field; a formula takes the date its parts share
-//   update    set, clear, and re-checked only when the patch can change the answer
-//   read      the list carries it; a column that is gone is flagged by metric:get and counts as unset
+//   datasets  a formula's parts are compared within one dataset only; an inherited date is a column of the formula's own
+//   update    set, clear, and re-checked only when the patch can change the answer; a new definition re-takes its parts' date
+//   read      the list carries it; a column that is gone is flagged by metric:get, counts as unset and blocks no edit
 //   restore   a version brings the date back, or clears it
 //
 // NEGATIVE CONTROLS sit beside each refusal: the same save on a valid date, a formula whose parts agree, a patch that
@@ -16,6 +17,8 @@ import { ok, finish } from './selfcheck';
 import type { Reply } from './liveRouteHarness';
 import { H, close, hydrates, post } from './liveRouteHarness';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
+
+const { randomUUID }: typeof import('crypto') = require('crypto');
 
 const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const scope: typeof import('../src/analysis/metricTimeScope') = require('../src/analysis/metricTimeScope');
@@ -42,8 +45,8 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
     if (!m) throw new Error(`metric ${id} is not stored`);
     return m.timeColumn;
   };
-  const SUM = { column: 'amt', aggregation: 'sum' };
-  const COUNT = { column: 'amt', aggregation: 'count' };
+  const SUM = { column: 'amt', aggregation: 'sum' } as const;
+  const COUNT = { column: 'amt', aggregation: 'count' } as const;
 
   // ── Save: the column must be a date column of the dataset ──────────────────
   const bad = await save({ name: 'Bad', definition: SUM, timeColumn: 'region' });
@@ -58,6 +61,12 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   ok('NEGATIVE CONTROL: a date column saves, and a metric without one carries none',
     (await storedDate(REV)) === 'ship_date' && (await storedDate(ORD)) === undefined);
   ok('NEGATIVE CONTROL: a blank timeColumn on save is no date', (await save({ name: 'Blank', definition: COUNT, timeColumn: '' })).metric.timeColumn === undefined);
+  const padded = await save({ name: 'Padded', definition: COUNT, timeColumn: ' ship_date ' });
+  ok('a date with spaces around it is checked and stored trimmed', padded.ok === true && padded.metric.timeColumn === 'ship_date' && (await storedDate(padded.metric.id)) === 'ship_date', show(padded));
+  const orphan = await save({ name: 'Orphan', datasetId: randomUUID(), definition: COUNT, timeColumn: 'ship_date' });
+  ok('a dataset that is not there says so, not that the date is wrong', orphan.ok === false && orphan.field === undefined && /dataset still exists/.test(orphan.error), show(orphan));
+  const check = (timeColumn: string | undefined) => H.as(ORG_A, () => scope.checkTimeColumn(P, { name: 'Probe', datasetId: D, definition: SUM, timeColumn }));
+  ok('checkTimeColumn: the sentence for a column that is not a date, null for one that is or for none', (await check('region')) === msg.notADateColumn('region') && (await check('ship_date')) === null && (await check(undefined)) === null);
 
   // ── Save: a formula counts by one date, the one its parts share ────────────
   const inherits = await save({ name: 'Double', definition: { formula: '[Revenue] * 2' } });
@@ -100,15 +109,46 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   ok('update refuses a column that is not a date beside its field, and stores nothing', badUp.ok === false && badUp.field === 'timeColumn' && (await storedDate(ORD)) === undefined, show(badUp));
 
   const DBL = inherits.metric.id as string;
-  ok('a formula whose definition is patched is checked against its date',
-    (await update(DBL, { definition: { formula: '[Orders] * 3' } })).error === msg.formulaDatesDiffer('Double', 'Orders', msg.dashboardDate(), 'ship_date'));
-  ok('NEGATIVE CONTROL: the same patch on parts that match saves', (await update(DBL, { definition: { formula: '[Revenue] * 3' } })).ok === true);
+  const keeps = await update(DBL, { definition: { formula: '[Orders] * 3' } });
+  ok('a definition patch whose new parts carry no date keeps the stored date', keeps.ok === true && keeps.metric.timeColumn === 'ship_date', show(keeps));
+  ok('NEGATIVE CONTROL: the same patch on parts with a date saves', (await update(DBL, { definition: { formula: '[Revenue] * 3' } })).ok === true);
   ok('a formula patched to a date its part does not count by is refused', (await update(DBL, { timeColumn: 'order_date' })).error === msg.formulaDatesDiffer('Double', 'Revenue', 'ship_date', 'order_date'));
   ok('clearing a formula\'s date gives it back the date its part counts by', (await update(DBL, { timeColumn: '' })).metric.timeColumn === 'ship_date');
   await update(REV, { timeColumn: 'order_date' }); // a part's date moves; nothing re-checks the formulas over it
-  ok('NEGATIVE CONTROL: a patch of the name alone is not re-checked', (await update(DBL, { name: 'Double (renamed)' })).ok === true);
-  ok('… but a patch of the definition is', (await update(DBL, { definition: { formula: '[Revenue] * 4' } })).field === 'timeColumn');
+  const renamed = await update(DBL, { name: 'Double renamed' });
+  ok('NEGATIVE CONTROL: a patch of the name alone is not re-checked, and keeps the date', renamed.ok === true && renamed.metric.timeColumn === 'ship_date', show(renamed));
+  const moved = await update(DBL, { definition: { formula: '[Revenue] * 4' } });
+  ok('a definition patch with no date takes its new parts\' shared date, replacing the stored one', moved.ok === true && moved.metric.timeColumn === 'order_date' && (await storedDate(DBL)) === 'order_date', show(moved));
+  const apart = await update(DBL, { definition: { formula: '[Revenue] / [Orders]' } });
+  ok('… and parts that disagree are refused, the stored date being no excuse', apart.field === 'timeColumn' && apart.error === msg.formulaPartsDiffer('Double renamed', 'Revenue', 'order_date', 'Orders', msg.dashboardDate()), show(apart));
+  const named = await update(DBL, { definition: { formula: '[Revenue] * 5' }, timeColumn: 'ship_date' });
+  ok('NEGATIVE CONTROL: a date named in the patch is checked, not replaced', named.field === 'timeColumn' && named.error === msg.formulaDatesDiffer('Double renamed', 'Revenue', 'order_date', 'ship_date') && (await storedDate(DBL)) === 'order_date', show(named));
   await update(REV, { timeColumn: 'ship_date' });
+
+  // ── Formulas over metrics of other datasets: dates are compared within one dataset ──
+  const TCOLS: LiveColumn[] = [{ name: 'region', type: 'text' }, { name: 'target', type: 'number' }, { name: 'month', type: 'date' }];
+  const Y = (await H.as(ORG_A, () => H.datasets.saveDataset(P, { name: 'Targets', sourceKind: 'csv', ...fx.importTyped(TCOLS, [['North', 100, '2024-01-01'], ['South', 90, '2024-02-01']]) })))!.id;
+  await save({ datasetId: Y, name: 'Target', definition: { column: 'target', aggregation: 'sum' }, timeColumn: 'month' });
+  await save({ name: 'Shipped', definition: COUNT, timeColumn: 'ship_date' });
+  const KPI = { formula: '[Revenue] / [Target]' }; // revenue counts by ship_date on Orders, the target by month on Targets
+  const onX = await save({ name: 'Revenue per target', definition: KPI });
+  ok('parts on different datasets do not conflict on a column name: the formula saves', onX.ok === true, show(onX));
+  ok('… and takes the date of the part on its own dataset', onX.metric.timeColumn === 'ship_date', show(onX));
+  const onY = await save({ datasetId: Y, name: 'Target per revenue', definition: KPI });
+  ok('… from either side', onY.ok === true && onY.metric.timeColumn === 'month', show(onY));
+  ok('NEGATIVE CONTROL: its own date still has to match the part on its dataset', (await save({ name: 'Mixed', definition: KPI, timeColumn: 'order_date' })).error === msg.formulaDatesDiffer('Mixed', 'Revenue', 'ship_date', 'order_date'));
+  ok('an explicit date saves beside a part on another dataset', (await save({ name: 'Mixed', definition: KPI, timeColumn: 'ship_date' })).ok === true);
+  const onLive = await save({ datasetId: DL, name: 'Live KPI', definition: KPI });
+  ok('a formula on a dataset none of its parts is on takes no date', onLive.ok === true && onLive.metric.timeColumn === undefined, show(onLive));
+  const shared = { formula: '[Revenue] + [Shipped]' }; // both on Orders, both ship_date
+  const away = await save({ datasetId: Y, name: 'Shipped away', definition: shared });
+  const away2 = (await post('metric:get', { projectId: P, id: away.metric.id })).value;
+  ok('parts that share a date, on a dataset without that column, give the formula none: it is not flagged gone', away.ok === true && away.metric.timeColumn === undefined && away2.timeColumnGone === undefined, show([away, away2]));
+  ok('NEGATIVE CONTROL: the same formula on the parts\' own dataset takes it', (await save({ name: 'Shipped home', definition: shared })).metric.timeColumn === 'ship_date');
+  await update(ORD, { timeColumn: 'order_date' });
+  const crossSplit = await save({ datasetId: Y, name: 'Cross split', definition: { formula: '[Revenue] / [Orders]' } });
+  ok('two parts on one dataset with different dates are refused wherever the formula sits', crossSplit.field === 'timeColumn' && crossSplit.error === msg.formulaPartsDiffer('Cross split', 'Revenue', 'ship_date', 'Orders', 'order_date'), show(crossSplit));
+  await update(ORD, { timeColumn: '' });
 
   // ── Read: the list, and a date that is gone ────────────────────────────────
   ok('the list carries it', (await post('metric:list', { projectId: P })).value.metrics.find((m: Reply) => m.id === REV).timeColumn === 'ship_date');
@@ -127,10 +167,24 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   ok('metricDate: unset is unset', (await date({ datasetId: D })) === '');
   ok('NEGATIVE CONTROL: a date column is itself', (await date({ datasetId: D, timeColumn: 'ship_date' })) === 'ship_date');
 
+  // ── A date that is gone counts as unset and blocks no edit ──────────────────
+  const E = (await H.as(ORG_A, () => H.datasets.saveDataset(P, { name: 'Shortlived', sourceKind: 'csv', ...fx.importTyped(COLS, rows.slice(0, 50)) })))!.id;
+  const STALE = (await save({ datasetId: E, name: 'Stale date', definition: SUM, timeColumn: 'ship_date' })).metric.id as string;
+  await H.as(ORG_A, () => H.datasets.updateSteps(P, E, [{ type: 'drop_column', column: 'ship_date' }]));
+  ok('the dropped column is flagged by metric:get', (await post('metric:get', { projectId: P, id: STALE })).value.timeColumnGone === true);
+  ok('a patch of the name saves', (await update(STALE, { name: 'Stale date renamed' })).ok === true);
+  const redefined = await update(STALE, { definition: COUNT });
+  ok('a patch of the definition saves too, and leaves the stale date as it was', redefined.ok === true && (await storedDate(STALE)) === 'ship_date', show(redefined));
+  ok('NEGATIVE CONTROL: naming that column again is refused', (await update(STALE, { timeColumn: 'ship_date' })).error === msg.notADateColumn('ship_date'));
+  const overStale = await save({ datasetId: E, name: 'Over stale', definition: { formula: '[Stale date renamed] * 2' } });
+  ok('a part whose date is gone counts as unset: the formula over it takes none', overStale.ok === true && overStale.metric.timeColumn === undefined, show(overStale));
+
   // ── A Live dataset: schema only, never hydrated ────────────────────────────
   const liveOk = await hydrates(DL, async () => (await post('metric:save', { projectId: P, input: { name: 'Live revenue', datasetId: DL, definition: SUM, timeColumn: 'ship_date' } })).value);
   ok('a Live metric saves its date from the schema', liveOk.value.ok === true && liveOk.value.metric.timeColumn === 'ship_date', show(liveOk.value));
   ok('… and the check read no rows', liveOk.hydrated === false);
+  const liveFormula = await hydrates(DL, async () => (await post('metric:save', { projectId: P, input: { name: 'Live twice', datasetId: DL, definition: { formula: '[Live revenue] * 2' } } })).value);
+  ok('a formula on a Live dataset takes its part\'s date, reading no rows', liveFormula.value.ok === true && liveFormula.value.metric.timeColumn === 'ship_date' && liveFormula.hydrated === false, show(liveFormula.value));
   const liveBad = await post('metric:save', { projectId: P, input: { name: 'Live bad', datasetId: DL, definition: SUM, timeColumn: 'amt' } });
   ok('a Live column that is not a date is refused', liveBad.value.ok === false && liveBad.value.field === 'timeColumn', show(liveBad.value));
   ok('metricDate on a Live dataset', (await date({ datasetId: DL, timeColumn: 'ship_date' })) === 'ship_date' && (await date({ datasetId: DL, timeColumn: 'gone' })) === '');

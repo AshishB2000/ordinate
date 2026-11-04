@@ -144,6 +144,8 @@ const MAX_DECIMALS = 6;
 /** An expression longer than this is not a metric, it is a program. */
 const MAX_FORMULA = 2000;
 const MAX_DESCRIPTION = 500;
+/** A column name's length (the contract's `max(512)` for a column). */
+const MAX_TIME_COLUMN = 512;
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
 // visuals.ts, per-write tmp suffix and all.
@@ -243,7 +245,7 @@ function normalize(data: any, projectId: string): Metric {
   if (data.direction === 'up_good' || data.direction === 'down_good') m.direction = data.direction;
   const tree = sanitizeTree(data.tree, m.id);
   if (tree) m.tree = tree;
-  const timeColumn = trimTo(data.timeColumn, 512);
+  const timeColumn = trimTo(data.timeColumn, MAX_TIME_COLUMN);
   if (timeColumn) m.timeColumn = timeColumn;
   return m;
 }
@@ -431,7 +433,7 @@ export async function updateMetric(
       else delete updated.direction;
     }
     if (patch.timeColumn !== undefined) {
-      const c = trimTo(patch.timeColumn, 512);
+      const c = trimTo(patch.timeColumn, MAX_TIME_COLUMN);
       if (c) updated.timeColumn = c;
       else delete updated.timeColumn;
     }
