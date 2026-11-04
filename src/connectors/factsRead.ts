@@ -41,3 +41,19 @@ export function foldIndexes(rows: { name: string; column: string; unique: boolea
   }
   return [...byName.values()];
 }
+
+/** Split on the commas outside parentheses and quotes: `a, date_trunc('day', ts)` is two items. */
+export function splitTop(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0, quote = '', from = 0;
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (ch === ',' && depth === 0) { out.push(list.slice(from, i)); from = i + 1; }
+  }
+  out.push(list.slice(from));
+  return out.map((x) => x.trim()).filter(Boolean);
+}

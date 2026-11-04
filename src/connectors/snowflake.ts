@@ -45,6 +45,7 @@ import { accountOrigin, authFor, type SfAccount, type SfAuth } from './snowflake
 import { snowflakeFetch, SfAbortError, type SfHttpResponse, type SfTransport } from './snowflakeHttp';
 import { connectorColumns, shapeFirst, shapePartition, statusOf, type Cell, type ShapeMode } from './snowflakeShape';
 import { buildBindings, cappedStatement, countPlaceholders, type SfBinding } from './snowflakeSql';
+import { IDENT_RE, snowflakeTableFacts } from './snowflakeFacts';
 import { safeError } from './types';
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, ConnectorSchema, ConnectorTables, LiveParam } from './types';
 
@@ -120,12 +121,13 @@ function queryTag(ctx: ConnectorContext): string {
 export function buildRequest(
   ctx: ConnectorContext,
   statement: string,
-  opts: { bindings?: Record<string, SfBinding>; requestId?: string; nowMs?: number } = {},
+  opts: { bindings?: Record<string, SfBinding>; requestId?: string; nowMs?: number; catalog?: boolean } = {},
 ): SfRequest | ConnectorError {
   const account = accountOrigin(ctx.values.account, bool(ctx, 'privatelink'));
   if (!account.ok) return account;
   const warehouse = str(ctx, 'warehouse');
-  if (!warehouse) return { ok: false, error: 'Warehouse is required' };
+  // A catalog statement (SHOW) runs on cloud services, so it may go without a warehouse (UNVERIFIED: the nightly asks a real account).
+  if (!warehouse && !opts.catalog) return { ok: false, error: 'Warehouse is required' };
   const role = str(ctx, 'role');
   if (!role) return { ok: false, error: 'Role is required' };
   const auth = authFor(ctx, account, opts.nowMs);
@@ -137,7 +139,7 @@ export function buildRequest(
   const payload: Record<string, unknown> = {
     statement,
     timeout: Math.max(1, Math.ceil(budgetMs(ctx) / 1000)),
-    warehouse,
+    ...(warehouse ? { warehouse } : {}),
     role,
     parameters: { QUERY_TAG: queryTag(ctx), WEEK_START: 1, TIMEZONE: 'UTC', MULTI_STATEMENT_COUNT: 1 },
   };
@@ -211,8 +213,8 @@ function failureOf(res: SfHttpResponse, json: unknown, budget: number): string {
 }
 
 /** Run one statement to completion and read its partitions, under ctx's caps, deadline and signal. */
-async function execute(ctx: ConnectorContext, statement: string, mode: ShapeMode, bindings?: Record<string, SfBinding>): Promise<ConnectorRows | ConnectorError> {
-  const req = buildRequest(ctx, statement, { bindings });
+async function execute(ctx: ConnectorContext, statement: string, mode: ShapeMode, bindings?: Record<string, SfBinding>, catalog = false): Promise<ConnectorRows | ConnectorError> {
+  const req = buildRequest(ctx, statement, { bindings, catalog });
   if (!req.ok) return req;
   const redact = { ...ctx.secrets, bearer: req.auth.token };
   const fail = (e: unknown): ConnectorError => ({ ok: false, error: safeError(e, redact) });
@@ -363,8 +365,6 @@ async function listTables(ctx: ConnectorContext): Promise<ConnectorTables | Conn
   return admin ? { ok: true, tables, warnings: [adminRoleWarning(admin)] } : { ok: true, tables };
 }
 
-const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
-
 /** One table's columns from INFORMATION_SCHEMA, the schema and table name BOUND. */
 async function describeTable(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError> {
   const parts = String(table ?? '').split('.');
@@ -395,6 +395,16 @@ async function describeTable(ctx: ConnectorContext, table: string): Promise<Conn
   }));
   const estimate = Number(r.rows[0][5]);
   return r.rows[0][5] !== null && Number.isFinite(estimate) ? { ok: true, columns, rowEstimate: estimate } : { ok: true, columns };
+}
+
+/** A table's facts: each SHOW statement through `execute`, the whole read inside one budget. The first row of an answer is its column names. */
+function tableFacts(ctx: ConnectorContext, table: string) {
+  const until = Date.now() + budgetMs(ctx);
+  return snowflakeTableFacts(table, (read) => read(async (sql) => {
+    const r = await execute({ ...ctx, timeoutMs: Math.max(1, until - Date.now()) }, sql, 'extract', undefined, true);
+    if (!r.ok) throw new Error(r.error); // already redacted; the door cuts it again
+    return [r.columns.map((c) => c.name.toLowerCase()), ...r.rows];
+  }));
 }
 
 // ── the definition ──────────────────────────────────────────────────────────
@@ -438,6 +448,7 @@ export const CONNECTORS: ConnectorDef[] = [
     listTables,
     run,
     describeTable,
+    tableFacts,
     live: { dialect: 'snowflake', runBound },
   },
 ];
