@@ -30,7 +30,7 @@ import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
-import { sanitizeSnapshot } from './snapshot';
+import { mergeSnapshot } from './snapshot';
 import type { MetricSnapshot } from './snapshot';
 import type { TreeNode } from './metricTree';
 import { logger } from '../app/logger';
@@ -166,7 +166,7 @@ function trimTo(raw: unknown, max: number): string {
  * rather than to a wrong figure — the same thing `computeMetric` already does
  * with an unknown column.
  */
-export function sanitizeDefinition(raw: unknown): MetricDefinition {
+export function sanitizeDefinition(raw: unknown, stored?: unknown): MetricDefinition {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const formula = trimTo(o.formula, MAX_FORMULA);
   if (formula) return { formula };
@@ -175,7 +175,7 @@ export function sanitizeDefinition(raw: unknown): MetricDefinition {
     typeof o.aggregation === 'string' && AGG_FNS.has(o.aggregation)
       ? (o.aggregation as MetricAggregation)
       : 'sum';
-  const snapshot = sanitizeSnapshot(o.snapshot);
+  const snapshot = mergeSnapshot(o.snapshot, stored);
   return snapshot ? { column, aggregation, snapshot } : { column, aggregation };
 }
 
@@ -413,7 +413,7 @@ export async function updateMetric(
     const updated: Metric = {
       ...existing,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-      definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition) : existing.definition,
+      definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition, (existing.definition as { snapshot?: unknown }).snapshot) : existing.definition,
       filters: patch.filters !== undefined ? sanitizeMetricFilters(patch.filters) : existing.filters,
       format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
       updatedAt: new Date().toISOString(),

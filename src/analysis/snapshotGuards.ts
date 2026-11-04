@@ -2,8 +2,15 @@
 // computes snapshots. Its own file because ./snapshot is imported BY ./metrics and so cannot import it back.
 
 import * as metrics from './metrics';
+import type { Metric } from './metrics';
 import * as msg from './metricCheckMessages';
 import type { VizEncoding } from './visuals';
+
+/** The saved metric `metricId` names when it is a SIMPLE snapshot one (its stored column and total are not its figure), else null. */
+export async function snapshotMetric(projectId: string, metricId: unknown): Promise<Metric | null> {
+  const m = typeof metricId === 'string' ? await metrics.getMetric(projectId, metricId) : null;
+  return m && !metrics.isFormulaDefinition(m.definition) && m.definition.snapshot ? m : null;
+}
 
 /**
  * The sentence refusing a chart whose measure IS a saved snapshot metric, or null.
@@ -18,8 +25,8 @@ export async function snapshotMeasureRefusal(projectId: string, encoding: VizEnc
   const all = encoding.pivot ? encoding.pivot.values : encoding.values;
   const measures = Array.isArray(all) ? (encoding.series && !encoding.pivot ? all.slice(0, 1) : all) : [];
   for (const v of measures) {
-    const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m && !metrics.isFormulaDefinition(m.definition) && m.definition.snapshot) return msg.measureSnapshotPending(m.name);
+    const m = await snapshotMetric(projectId, v?.metricId);
+    if (m) return msg.measureSnapshotPending(m.name);
   }
   return null;
 }

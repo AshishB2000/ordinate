@@ -16,3 +16,12 @@ export function sanitizeSnapshot(raw: unknown): MetricSnapshot | undefined {
   if (o.take !== 'last' && o.take !== 'first') return undefined;
   return { column: o.column, take: o.take };
 }
+
+/**
+ * The snapshot an UPDATED simple definition carries. An editor that knows no snapshots sends `{column, aggregation}`
+ * with the key left out, and that must not erase the one the record has; only an explicit `null` clears it. A valid
+ * incoming one replaces the stored one. `stored` is the stored definition's `snapshot` value.
+ */
+export function mergeSnapshot(incoming: unknown, stored: unknown): MetricSnapshot | undefined {
+  return incoming === null ? undefined : (sanitizeSnapshot(incoming) ?? sanitizeSnapshot(stored));
+}

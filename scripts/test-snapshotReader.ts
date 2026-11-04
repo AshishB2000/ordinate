@@ -37,6 +37,8 @@ const ipcTemplates: typeof import('../src/ipc/templates') = require('../src/ipc/
 const scenarioResolve: typeof import('../src/analysis/scenarioResolve') = require('../src/analysis/scenarioResolve');
 const scenarioModel: typeof import('../src/analysis/scenarioModel') = require('../src/analysis/scenarioModel');
 const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const versions: typeof import('../src/ipc/versions') = require('../src/ipc/versions');
 
 const U1 = '11111111-1111-4111-8111-111111111111';
 const U2 = '22222222-2222-4222-8222-222222222222';
@@ -66,7 +68,10 @@ void (async () => {
   // A record a newer pod wrote. The store API is what step 07's writer calls.
   const m = (await metrics.saveMetric(pid, { name: 'Stock', datasetId: ds.id, definition: def }))!;
   await metrics.updateMetric(pid, m.id, { name: 'Stock on hand' });
-  ok('a rename keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
+  ok('a rename that sends only the name keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
+  // The release-1 editor sends every field on every save, its definition as {column, aggregation} (MetricEditor.tsx).
+  await metrics.updateMetric(pid, m.id, { name: 'Stock on hand', definition: { column: 'units', aggregation: 'sum' }, filters: [], format: { kind: 'number', decimals: 0 } });
+  ok('a rename as the editor sends it (the full simple definition, no snapshot key) keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
   await metrics.updateMetric(pid, m.id, { tree: { relation: 'sum', children: [{ metricId: U1 }, { metricId: U2 }] } }, undefined, 'metricTree');
   ok('a tree save keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
   ok('a duplicate keeps it', isDeepStrictEqual((await metrics.duplicateMetric(pid, m.id))!.definition, def));
@@ -176,6 +181,44 @@ void (async () => {
   };
   ok('templates: a role does not take a snapshot metric\'s column', !(await roleMetrics(ds.id)).includes(snapRev.id));
   ok('NEGATIVE CONTROL: the same name on a plain metric is taken by a role', (await roleMetrics(ds2.id)).includes(plainRev.id));
+
+  // ── an edit through updateMetric: only an explicit null clears the snapshot ──
+  const fresh = async (name: string, definition: unknown) => (await metrics.saveMetric(pid, { name, datasetId: ds.id, definition }))!;
+  const editedWith = async (id: string, definition: unknown) => {
+    await metrics.updateMetric(pid, id, { definition });
+    return (await metrics.getMetric(pid, id))!.definition;
+  };
+  const cleared = await fresh('Clear me', def);
+  ok('an update with `snapshot: null` clears it, and writes no key', JSON.stringify(await editedWith(cleared.id, { column: 'units', aggregation: 'sum', snapshot: null })) === '{"column":"units","aggregation":"sum"}');
+  const replaced = await fresh('Replace me', def);
+  ok('an update with a valid snapshot replaces it', isDeepStrictEqual(await editedWith(replaced.id, { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'first' } }), { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'first' } }));
+  const junk = await fresh('Junk me', def);
+  ok('an update with a malformed snapshot is not a clear: the stored one stays', isDeepStrictEqual(await editedWith(junk.id, { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'middle' } }), def));
+  const toFormula = await fresh('Formula me', def);
+  ok('a formula definition never carries one', JSON.stringify(await editedWith(toFormula.id, { formula: '[Units]', snapshot: def.snapshot })) === '{"formula":"[Units]"}');
+  const aPlain = await fresh('Stays plain', { column: 'units', aggregation: 'sum' });
+  const afterPlain = await editedWith(aPlain.id, { column: 'units', aggregation: 'avg' });
+  ok('NEGATIVE CONTROL: a plain metric\'s update writes no snapshot key, in the record or on disk',
+    JSON.stringify(afterPlain) === '{"column":"units","aggregation":"avg"}'
+    && !fs.readFileSync(path.join(process.env.ORDINATE_LOCAL_DIR as string, 'projects', pid, 'metrics', aPlain.id + '.json'), 'utf8').includes('snapshot'));
+  // Restoring a version that had no snapshot restores to none (the update that omits the key would keep the stored one).
+  const restored = await fresh('Restore me', def);
+  await versions.writeBack(pid, 'metric', restored.id, { name: 'Restore me', definition: { column: 'units', aggregation: 'sum' }, filters: [], format: { kind: 'number', decimals: 0 } });
+  ok('restoring a version without a snapshot makes the metric plain again', JSON.stringify((await metrics.getMetric(pid, restored.id))!.definition) === '{"column":"units","aggregation":"sum"}');
+  await versions.writeBack(pid, 'metric', restored.id, { name: 'Restore me', definition: def, filters: [], format: { kind: 'number', decimals: 0 } });
+  ok('restoring a version that had one brings it back', isDeepStrictEqual((await metrics.getMetric(pid, restored.id))!.definition, def));
+
+  // ── the alert job: a rule made from a snapshot metric's KPI keeps only its column and total ──
+  const rule = (metric: Record<string, unknown>) => ({ name: 'Units above 0', datasetId: ds.id, metric: { column: 'units', aggregation: 'sum', ...metric }, compare: 'threshold', threshold: { op: '>', value: 0 } });
+  const alertOn = await alertStore.testRule(pid, rule({ metricId: m.id }));
+  ok('alerts: a rule on a snapshot metric reads no figure and does not fire', alertOn.ok && alertOn.value === null && alertOn.fire === false, JSON.stringify(alertOn));
+  const alertPlain = await alertStore.testRule(pid, rule({ metricId: plain.id }));
+  ok('NEGATIVE CONTROL: the same rule on a plain metric reads the total and fires', alertPlain.ok && typeof alertPlain.value === 'number' && alertPlain.fire === true, JSON.stringify(alertPlain));
+  const alertBare = await alertStore.testRule(pid, rule({}));
+  ok('NEGATIVE CONTROL: the same rule with no saved metric reads the total, as before', alertBare.ok && Object.is(alertBare.value, alertPlain.value), JSON.stringify(alertBare));
+  const changeRule = { ...rule({ metricId: m.id }), compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } };
+  const alertChange = await alertStore.testRule(pid, changeRule);
+  ok('alerts: a previous-period rule on a snapshot metric reads no figure either', alertChange.value === null && alertChange.previous === null && alertChange.fire === false, JSON.stringify(alertChange));
 
   finish();
 })();
