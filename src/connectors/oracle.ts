@@ -38,6 +38,8 @@ import type {
 import { MAX_RESULT_BYTES, rowBytes, safeError } from './types';
 import { checkHost, guardOn, withPinnedLookups, type PinnedHost } from './ssrf';
 import { walletRefused } from './connectorMessages';
+import { oracleTableFacts } from './oracleFacts';
+import { FACTS_ROWS } from './tableFacts';
 
 /**
  * Every host an Oracle connect string can dial: each `(HOST=…)` and
@@ -611,6 +613,7 @@ function defFor(v: OracleVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, q: string) => run(v, ctx, q),
     describeTable: (ctx: ConnectorContext, t: string) => describeTable(v, ctx, t),
+    tableFacts: (ctx: ConnectorContext, t: string) => oracleTableFacts(t, (read) => withConnection(v, ctx, (conn) => read(async (sql, params) => (await execute(conn, sql, params, FACTS_ROWS)).rows))),
   };
 }
 
