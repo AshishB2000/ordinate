@@ -63,6 +63,8 @@ import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
+import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { hasVia } from '../analysis/joinPlan';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -149,6 +151,8 @@ export async function computeCard(projectId: string, asked: AnswerSpec, loose = 
 }
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null): Promise<Built | Failure> {
+  const snapshot = await snapshotMeasureRefusal(projectId, { category: asked.category, values: asked.measures }); // extract and Live alike
+  if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
   const live = await liveCardFor(projectId, asked, lock ? lock.steps : []);
   if (live) return live;
@@ -369,6 +373,7 @@ export async function answerFromAction(
 export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters: FilterStep[]; chartType: string; name: string }): AnswerSpec | null {
   // A step this pod cannot read (not a filter, not a term) has no place in a spec: none, never a widened chart.
   if ((t.filters || []).some((f) => isKeptStep(f) && !isTermStep(f))) return null;
+  if (hasVia(t.encoding, t.filters)) return null; // a spec has no `via`: it would read the primary's same-named column
   const enc = t.encoding;
   const category = enc.category || (enc.pivot && enc.pivot.rows && enc.pivot.rows[0]) || '';
   const measures = (enc.values || []).map((m) => (m.aggregation === 'none' ? { ...m, aggregation: 'sum' as const } : m));

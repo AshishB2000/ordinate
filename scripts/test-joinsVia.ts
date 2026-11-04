@@ -34,6 +34,9 @@ const { filterPredicate }: typeof import('../src/engine/residentFilter') = requi
 const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const { generateSql }: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
+const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply is narrowed by its check
 
 const { SALES, DATES, R_ORDER, R_SHIP, RELS, infos } = fx;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -125,6 +128,16 @@ async function main(): Promise<void> {
   ok('a via filter on a chart with no relationships is refused with the typed sentence',
     show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
   ok('negative control: without via the chart needs no join (null)', (await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [F('year', '=', 2024)])) === null);
+
+  // ── § guard: Explain declines a via filter, never narrating the primary's same-named `year` ──
+  copilotIpc.register();
+  const tileWith = (filters: FilterStep[]) => ({ datasetId: sales.id, encoding: { category: 'year', values: [sum] }, filters, chartType: 'column', name: 'Amount by year' });
+  ok('tileSpec: a chart with a via filter has no spec', answers.tileSpec(tileWith([viaStep])) === null);
+  const explainVia = await handlers.get('answer:explain')!(null, { projectId: P, tile: tileWith([viaStep]) });
+  ok('answer:explain on a via filter declines, and starts no conversation', explainVia.ok === false && !explainVia.threadId, show(explainVia));
+  ok('negative control: tileSpec keeps the same filter without via', show(answers.tileSpec(tileWith([F('year', '=', 2024)]))!.filters) === show([{ column: 'year', op: '=', value: 2024 }]));
+  const explainPlain = await handlers.get('answer:explain')!(null, { projectId: P, tile: tileWith([F('year', '=', 2024)]) });
+  ok('negative control: the same chart without via still explains', explainPlain.ok === true && typeof explainPlain.threadId === 'string', show(explainPlain));
 
   // ── § order: "first" holds across saves ────────────────────────────────────
   await rels.saveRelationship(P, RELS[0]);
