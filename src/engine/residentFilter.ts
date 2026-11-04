@@ -11,6 +11,7 @@
 
 import type { ColumnType, ParsedColumn } from '../data/parse';
 import { RowPolicyError } from '../data/rowPolicyError';
+import { isTermStep, TermNotExpandedError } from '../data/termStep';
 import { coerceValue } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
@@ -58,6 +59,7 @@ export function filterPredicates(
  * Exported for the same reason as `filterPredicates`.
  */
 export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
+  if (isTermStep(s)) throw new TermNotExpandedError('not_expanded'); // a door expands it; a caller turns this into null and the JS fold throws it again
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return null; // a related table's column: the JS fold skips it with the unknown-column warning (transforms.stepFilter)
   const ci = colIndex(cols, s.column);

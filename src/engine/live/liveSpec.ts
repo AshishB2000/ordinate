@@ -32,7 +32,7 @@
 
 import type { ParsedColumn } from '../../data/parse';
 import { RowPolicyError } from '../../data/rowPolicyError';
-import { TermNotExpandedError } from '../../data/termStep';
+import { isTermStep, TermNotExpandedError } from '../../data/termStep';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -232,6 +232,7 @@ export function adaptFilter(
   opts: AdaptOpts,
   warnings: string[],
 ): LiveFilter | null | LiveRefusal {
+  if (isTermStep(s)) throw new TermNotExpandedError('not_expanded'); // a door expands it; never skipped, never dropped
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return refuse('related'); // a related table's column: Live joins stay off
   const col = columnOf(columns, s.column);

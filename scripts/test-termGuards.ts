@@ -1,18 +1,28 @@
 // A glossary `term` filter step (semantic layer, PR 05a) is a step this pod does not know how to
 // expand. Every reader that cannot read it REFUSES the figure with a typed `code: 'term'` — never
-// skips it, never drops it. This suite grows task by task; part 1: the JS fold and Prepare.
+// skips it, never drops it. This suite grows task by task; part 1: the JS fold and Prepare; part 2:
+// the resident predicate, the Live compiler and the answer spec's steps.
 //
-//   § fold   a term reaching applyPipeline throws TermNotExpandedError (typed, with the catalog's
-//            sentence); an unknown Prepare step still skips with its warning; Prepare never keeps a term
+//   § fold    a term reaching applyPipeline throws TermNotExpandedError (typed, with the catalog's
+//             sentence); an unknown Prepare step still skips with its warning; Prepare never keeps a term
+//   § engines the resident predicate, every Live adapter and the answer spec's steps throw the same
+//             error; an unknown column still skips with its warning (negative control)
 //
 //   npm run build:ts && node scripts/test-termGuards.js
 
 import { ok, finish } from './selfcheck';
 import type { FilterStep, TableData, TransformStep } from '../src/data/transforms';
+import type { LiveColumn } from '../src/engine/live/liveSpec';
+import type { AnswerSpec } from '../src/ai/answerSpec';
+import type { VizEncoding } from '../src/analysis/visuals';
 
 const { applyPipeline, sanitizeSteps } = require('../src/data/transforms') as typeof import('../src/data/transforms');
 const ts: typeof import('../src/data/termStep') = require('../src/data/termStep');
 const msgs: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
+const { filterPredicate, filterPredicates }: typeof import('../src/engine/residentFilter') = require('../src/engine/residentFilter');
+const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
+const { fromVizEncoding, fromMetric, fromAnswerSpec, adaptFilter }: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const { specFilterSteps }: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
 const { isTermNotExpandedError, isTermStep, TermNotExpandedError, termRefusal, TERM_CODE } = ts;
 
 const SRC: TableData = {
@@ -39,5 +49,31 @@ ok('the other reasons take the not-expanded sentence unless given one', new Term
 ok('isTermNotExpandedError also recognises a copy of the class by name and code', isTermNotExpandedError({ name: 'TermNotExpandedError', code: 'term' }) && !isTermNotExpandedError(new Error('x')) && !isTermNotExpandedError(null));
 const refusal = termRefusal(new TermNotExpandedError('unreadable'));
 ok('termRefusal is {ok:false, code, reason, error}', refusal.ok === false && refusal.code === 'term' && refusal.reason === 'unreadable' && refusal.error === msgs.termUnreadable());
+
+// ── § engines ───────────────────────────────────────────────────────────────
+const U = '7d2c1f4e-1111-4222-8333-444455556666';
+const throwsTerm = (fn: () => unknown): boolean => {
+  try { fn(); } catch (e) { return isTermNotExpandedError(e) && (e as InstanceType<typeof TermNotExpandedError>).reason === 'not_expanded'; }
+  return false;
+};
+const COLS = [{ name: 'region', type: 'text' }, { name: 'sales', type: 'number' }] as const;
+const LIVE_COLS: LiveColumn[] = COLS.map((c) => ({ ...c }));
+const ENC: VizEncoding = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
+const SPEC: AnswerSpec = { datasetId: 'd', category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'bar', title: 't' };
+const ROWS = [['East', 1], ['West', 2]];
+
+ok('Live chart compile throws on a term', throwsTerm(() => fromVizEncoding(ENC, [T], LIVE_COLS)));
+ok('Live KPI compile throws on a term', throwsTerm(() => fromMetric({ column: 'sales', aggregation: 'sum' }, [T], LIVE_COLS)));
+ok('Live answer compile throws on a term', throwsTerm(() => fromAnswerSpec({ ...SPEC, filters: [{ term: U }] }, LIVE_COLS)));
+ok('resident predicate throws on a term', throwsTerm(() => filterPredicate([...COLS], T, [])));
+ok('answer steps throw on a term', throwsTerm(() => specFilterSteps({ filters: [{ term: U }] }, [...COLS], ROWS)));
+ok('a term in a resident list throws, and the resident warning gate hands it to the JS fold (which throws)', throwsTerm(() => filterPredicates([...COLS], [T], [])) && filterCannotWarn(T, new Set(['region', 'sales'])) === false);
+ok('NEGATIVE CONTROL: an unknown column still skips with its warning', (() => {
+  const w: string[] = [];
+  return adaptFilter({ type: 'filter', column: 'zz', op: '=', value: 1 }, LIVE_COLS, {}, w) === null && w[0] === 'Filter skipped: unknown column "zz"';
+})());
+ok('NEGATIVE CONTROL: the resident predicate still skips an unknown column and still compiles a known one', filterPredicate([...COLS], { type: 'filter', column: 'zz', op: '=', value: 1 }, []) === null
+  && typeof filterPredicate([...COLS], { type: 'filter', column: 'sales', op: '>', value: 1 }, []) === 'string');
+ok('NEGATIVE CONTROL: a term-free list still compiles on every Live adapter', fromVizEncoding(ENC, [], LIVE_COLS).ok === true && fromMetric({ column: 'sales', aggregation: 'sum' }, [], LIVE_COLS).ok === true);
 
 finish();
