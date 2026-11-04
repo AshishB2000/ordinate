@@ -55,11 +55,13 @@ import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './com
 import { keyOf } from './profileSql';
 import type { Total } from './compileDistinct';
 import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
+import type { LiveCalc } from '../../data/liveCalcs';
+import { namesCalc } from './calcLayers';
 
 export type { CompiledQuery } from './sqlParams';
 
-/** Where a live dataset's rows are: a table (quoted per dialect) or its defining query. */
-export type LiveSource = { kind: 'table'; parts: string[] } | { kind: 'sql'; sql: string };
+/** Where a live dataset's rows are: a table (quoted per dialect) or its defining query; and its calculated fields, in every cache key. */
+export type LiveSource = ({ kind: 'table'; parts: string[] } | { kind: 'sql'; sql: string }) & { calcs?: LiveCalc[] };
 
 export interface CompileEnv {
   dialect: CompileDialectId | SqlDialect;
@@ -150,7 +152,9 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   const d = dialectFor(env.dialect);
   if (!d) return refuse('badQuery');
   const columns = Array.isArray(env.columns) ? env.columns : [];
-  for (const name of namesOf(ir)) {
+  const names = namesOf(ir);
+  if (namesCalc(names, env.source)) return refuse('calculated', names.find((n) => namesCalc([n], env.source)));
+  for (const name of names) {
     if (badName(name)) return refuse('badIdentifier');
     if (!columnOf(columns, name)) return refuse('unknownColumn', name);
   }

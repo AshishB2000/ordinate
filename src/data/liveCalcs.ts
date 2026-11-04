@@ -1,10 +1,12 @@
-// A Live dataset's calculated fields (semantic layer part 8, step 00a). PURE.
+// A Live dataset's calculated fields (semantic layer part 8, steps 00a and 04). PURE.
 //
 // Stored at the TOP LEVEL of the dataset record, beside `baseFilters` and `rowPolicy`, never inside `live`:
 // every Live writer rebuilds `raw.live` from `sanitizeLive`, which never reads this key, so none can erase
-// it or copy it. `applyLive` reads it into `meta.live.calculated` (in memory only), and never into
-// `meta.columns`: this pod cannot compute a calc, so a picker must not offer one. Until a pod can, every
-// question over a dataset that has them is refused (liveTarget, ipc/liveDatasets).
+// it or copy it. `applyLive` reads it into `meta.live.calculated` (in memory only) and appends each calc to
+// `meta.columns` as a typed column (`calcColumns`), so every column reader sees it. Nothing writes a calc
+// into `raw.columns`, which a schema sync rewrites from the warehouse: `declaredColumns` is what it read.
+
+import type { ParsedColumn } from './parse';
 
 export type LiveCalcType = 'number' | 'text';
 export interface LiveCalc { name: string; expression: string; type: LiveCalcType }
@@ -41,4 +43,15 @@ export function sanitizeLiveCalcs(raw: unknown): LiveCalc[] {
     out.push({ name: n, expression, type });
   }
   return out;
+}
+
+/** The calcs as columns: name and type, in list order. */
+export function calcColumns(calcs: readonly LiveCalc[]): ParsedColumn[] {
+  return calcs.map((c) => ({ name: c.name, type: c.type }));
+}
+
+/** The warehouse's columns of a Live record as read: `meta.columns` minus the calcs `applyLive` appended. */
+export function declaredColumns<C extends ParsedColumn>(meta: { columns: C[]; live?: { calculated?: readonly LiveCalc[] } }): C[] {
+  const calcs = new Set((meta.live?.calculated ?? []).map((c) => c.name));
+  return calcs.size ? meta.columns.filter((c) => !calcs.has(c.name)) : meta.columns;
 }

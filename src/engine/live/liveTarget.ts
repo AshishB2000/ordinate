@@ -23,7 +23,6 @@ import type { ConnectorDef, LiveDialectId } from '../../connectors/types';
 import { loadSecrets } from '../../ipc/connectionSecrets';
 import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
-import { hasLiveCalcs } from '../../data/liveCalcs';
 import type { LiveSettings } from '../../data/liveDataset';
 import type { FilterStep } from '../../data/transforms';
 import * as liveMsg from '../../data/liveMessages';
@@ -91,8 +90,8 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   if (!isLive(meta) || !meta.live) return { ok: false, kind: 'unavailable', error: msg.liveNotLive() };
   // b0: a dataset that asks another tool's semantic layer (part 7) has no table or SQL here: refused first, before base filters and calcs.
   if (meta.live.semanticPending) return { ok: false, kind: 'refused', refusal: refuse('semanticPending') };
-  // 00a: this pod can't compute a Live dataset's calculated fields (part 8), so a question would answer wider or skip a filter on one.
-  if (hasLiveCalcs(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
+  // 00a: a stored list of calculated fields this pod cannot read in full answers nothing: a calc it dropped would read as an unknown column.
+  if (meta.live.calculatedUnreadable) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;
   if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
   const conn = await connections.getConnection(projectId, origin.connId);
@@ -103,8 +102,10 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   const refusal = liveOfferRefusal(def, conn.values);
   if (refusal || !def || !def.live) return { ok: false, kind: 'unavailable', error: refusal ?? liveMsg.liveNotOfferedMessage() };
   const dialect = def.live.dialect;
-  const source = liveSourceOf(origin, def, dialect);
-  if (!source) return { ok: false, kind: 'refused', refusal: refuse('badSource'), dialect };
+  const found = liveSourceOf(origin, def, dialect);
+  if (!found) return { ok: false, kind: 'refused', refusal: refuse('badSource'), dialect };
+  // The calcs travel with the source, so they are in every cache key; none: today's source, today's key.
+  const source: LiveSource = meta.live.calculated?.length ? { ...found, calcs: meta.live.calculated } : found;
   // The warehouse's own type names, where a schema sync recorded them (L2.5): the
   // dialects that cannot safe-cast a typed value (Snowflake, Redshift) read them.
   const sourceTypes = new Map((meta.live.profile?.columns ?? []).map((p) => [p.name, p.sourceType]));
