@@ -48,6 +48,7 @@ import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
+import { isTermNotExpandedError, TERM_CODE } from '../data/termStep';
 import { seedRank, register as registerCaller } from './authz/caller';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
@@ -481,6 +482,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // Row access rules (docs/row-policy): a typed 409 with the catalog's sentence — never a figure, never another team's value.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: ROW_POLICY_CODE, code: ROW_POLICY_CODE, reason: err.reason, message: err.message });
+      }
+      if (isTermNotExpandedError(err)) {
+        // A glossary term no door expanded, or a filter this pod cannot read (PR 05a): a typed 409 with the catalog's sentence — never a figure.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: TERM_CODE, code: TERM_CODE, reason: err.reason, message: err.message });
       }
       if ((err as { code?: unknown } | null)?.code === 'ERECORDBUSY') {
         // Another save held the record past the lock wait (src/app/recordFs.ts):

@@ -380,6 +380,7 @@ export const MAIN_FILES = [
   'src/app/bundleMessages.ts',
   'src/server/idpMessages.ts',
   'src/data/workBudgetMessages.ts',
+  'src/data/termMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
