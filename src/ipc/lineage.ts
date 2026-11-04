@@ -44,9 +44,10 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     seesSourceNames(projectId),
   ]);
   // the one input lineage:get and pipelines:get share; a job (system admin) still sees names
+  // (`readsTables` names warehouse tables too: spec D11)
   const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T => {
     const field = NAME_FIELD[d.origin?.kind ?? ''];
-    return !sees && field ? { ...d, origin: { ...d.origin, [field]: undefined } } : d;
+    return !sees && field ? { ...d, origin: { ...d.origin, [field]: undefined, readsTables: undefined } } : d;
   };
   return {
     datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))).map(unnamed),

@@ -50,7 +50,9 @@ export type DatasetOrigin =
    * saved query this came from so the UI can name it — and `table` likewise.
    * Neither is consulted to decide what to run.
    */
-  | { kind: 'connection'; connId: string; table?: string; queryId?: string; sql?: string }
+  | { kind: 'connection'; connId: string; table?: string; queryId?: string; sql?: string;
+      /** a label (spec D11): which source tables an editor says a query reads; nothing runs it */
+      readsTables?: string[] }
   | {
       kind: 'combined';
       leftId: string;
@@ -107,6 +109,27 @@ export type DatasetOrigin =
 /** Same ceiling as connections.MAX_QUERY_SQL. A dataset record is read on
  *  every list; an unbounded statement pasted into it is a slow Data page. */
 export const MAX_ORIGIN_SQL = 20_000;
+/** Source tables one dataset may name as read (spec D11). */
+export const MAX_READS_TABLES = 16;
+/** The `Table` cap of the connection contracts (src/api/connections.ts). */
+const MAX_TABLE_NAME = 1_000;
+
+/**
+ * The names kept from a stored `readsTables`: trimmed strings of 1 to 1,000 characters, deduped by exact
+ * string (never case-folded), first order kept, at most MAX_READS_TABLES. Anything else is dropped, never clipped,
+ * so a second pass changes nothing.
+ */
+export function sanitizeReadsTables(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Set<string>();
+  for (const v of raw) {
+    const name = typeof v === 'string' ? v.trim() : '';
+    if (name && name.length <= MAX_TABLE_NAME) out.add(name);
+    if (out.size === MAX_READS_TABLES) break;
+  }
+  return [...out];
+}
+
 /** Datasets one query may read. A query naming more is not a query, it is a join plan. */
 const MAX_SQL_DEPS = 64;
 
@@ -157,6 +180,8 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
       if (isValidId(queryId)) out.queryId = queryId;
       const sql = typeof o.sql === 'string' ? o.sql.slice(0, MAX_ORIGIN_SQL) : '';
       if (sql.trim()) out.sql = sql;
+      const readsTables = sanitizeReadsTables(o.readsTables);
+      if (readsTables.length) out.readsTables = readsTables;
       return out;
     }
     case 'capture': {

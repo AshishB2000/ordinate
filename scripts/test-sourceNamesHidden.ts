@@ -42,6 +42,7 @@ const { randomUUID }: typeof import('crypto') = require('crypto');
 const { sourceView }: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
 const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('../src/data/sourceNames');
 const searchMod: typeof import('../src/ipc/search') = require('../src/ipc/search');
+const lineageMod: typeof import('../src/ipc/lineage') = require('../src/ipc/lineage');
 
 const HOST = 'canary-host-9f3.internal';
 const DATABASE = 'canary_db_9f3';
@@ -93,7 +94,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
         return c.id;
       };
       const [byDb, byHost] = [await named(NAMED_DB, { host: 'h.internal', database: NAMED_DB }), await named(`Replica of ${NAMED_HOST.toUpperCase()}`, { host: NAMED_HOST })];
-      const ds = await datasets.saveDataset(P, { name: 'Orders', sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: conn.id, table: TABLE } });
+      const ds = await datasets.saveDataset(P, { name: 'Orders', sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: conn.id, table: TABLE, readsTables: [TABLE] } });
       if (!ds) throw new Error('saveDataset refused');
       await datasets.markRefresh(P, ds.id, 'error', REFRESH_ERROR);
       // A dataset read from the connection named after its database: dataset:source, lineage and pipelines draw that name.
@@ -179,6 +180,11 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     const [linDbViewer, linDbEditor] = [await lin('nobody', dDb), await lin('ed', dDb)];
     ok('lineage:get and pipelines:get: a connection named after its database reads as the connector for a viewer', srcNode(linDbViewer).name === 'PostgreSQL' && connNode(pipeViewer, byDb).name === 'PostgreSQL' && !CANARY.test(linDbViewer.text), linDbViewer.text);
     ok('NEGATIVE CONTROL: the editor reads the stored name in lineage and in pipelines', srcNode(linDbEditor).name === NAMED_DB && connNode(pipeEditor, byDb).name === NAMED_DB, linDbEditor.text);
+    // The input both read: `readsTables` (spec D11) names warehouse tables, so it is trimmed with `table`.
+    const originOf = async (who: string) => JSON.parse(JSON.stringify((await W.as(who, () => lineageMod.loadInput(P))).datasets.find((d) => d.id === D)?.origin));
+    const [inViewer, inEditor] = [await originOf('nobody'), await originOf('ed')];
+    ok('loadInput: a viewer\'s dataset origin carries neither the table nor readsTables', inViewer.table === undefined && inViewer.readsTables === undefined, JSON.stringify(inViewer));
+    ok('NEGATIVE CONTROL: the editor\'s carries both', inEditor.table === TABLE && inEditor.readsTables?.join() === TABLE, JSON.stringify(inEditor));
     const pipeBoss = await pipe('boss');
     const drawn = (r: H.Reply) => JSON.stringify(r.body.nodes.map((n: N & { id: string }) => [n.id, n.name, n.sub]));
     ok('an editor and an org admin get the same bytes', linEditor.text === linBoss.text);
