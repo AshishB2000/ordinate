@@ -267,6 +267,15 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('east\'s chart by customer pairs only East\'s own values: ["c1","Customer one"]', JSON.stringify(chartEast.body?.data?.valueLabels) === '{"category":[["c1","Customer one"]]}', JSON.stringify(chartEast.body?.data?.valueLabels));
     const chartEd = await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
     ok('NEGATIVE CONTROL: the editor\'s chart pairs the West value too', JSON.stringify(chartEd.body?.data?.valueLabels) === JSON.stringify({ category: labelRows.map((r) => [r.value, r.label]) }), JSON.stringify(chartEd.body?.data?.valueLabels));
+    // A filter picker finds a value by its label only inside the caller's rows: the label search asks again through the lock.
+    const pick = (who: string, search: string) => W.call(who, 'dataset:distinct', { projectId: P, datasetId: orders, column: 'customer', search });
+    const pickWest = await pick('east', 'three');
+    const pickOwn = await pick('east', 'customer one');
+    const pickWestEd = await pick('ed', 'three');
+    eastReplies.push(pickWest.text, pickOwn.text);
+    ok('locked: east\'s picker searched by a West value\'s label finds nothing, and says no label', JSON.stringify(pickWest.body) === '{"values":[],"total":0}', pickWest.text.slice(0, 200));
+    ok('east\'s picker finds its own c1 by its label, the pair beside it', JSON.stringify(pickOwn.body) === '{"values":["c1"],"total":1,"valueLabels":[["c1","Customer one"]]}', pickOwn.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s picker finds the West value by its label', JSON.stringify(pickWestEd.body) === JSON.stringify({ values: [`${H.W_CANARY}_3`], total: 1, valueLabels: [[`${H.W_CANARY}_3`, 'West three']] }), pickWestEd.text.slice(0, 200));
     // An answer card's filter text (bullet, chips, "did you mean") says a label only for a value east's own rows hold.
     const cardOf = (who: string, column: string, value: string) => W.call(who, 'answer:card', { projectId: P, spec: spec(orders, { filters: [{ column, op: '=', value }] }) });
     const ownCard = await cardOf('east', 'customer', 'c1');

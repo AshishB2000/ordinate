@@ -26,6 +26,9 @@ import { MATCH_OPS } from '../ai/answerValues';
 import { exactKey } from '../analysis/valueMatch';
 import type { Cell } from '../data/transforms';
 import type { VizDataReply } from './visuals';
+import type { LiveValuesRefusal } from './liveProfile';
+import { MAX_DISTINCT } from '../engine/datasetPage';
+import type { DistinctRequest, DistinctResult } from '../engine/datasetPage';
 
 /**
  * The lists a chart's category and split read, each from its own dataset's column doc, and only for a column
@@ -80,13 +83,45 @@ export function labelShaped<D extends LabelledAxes>(stored: LabelledAxes, shaped
  */
 export async function labelPairsForValues(projectId: string, datasetId: string, column: string, values: readonly string[]): Promise<[string, string][] | undefined> {
   const list = (await labelListsFor(projectId, datasetId, { category: column, values: [] })).category;
-  if (!list) return undefined;
+  return list ? optionPairs(list, values) : undefined;
+}
+
+/** labelPairsForValues' rule over a list already read. */
+function optionPairs(list: ValueLabel[], values: readonly string[]): [string, string][] | undefined {
   const present = new Set(values);
   const said = list.filter((l) => present.has(l.value) && l.label !== l.value).map((l): [string, string] => [l.value, present.has(l.label) ? `${l.label} (${l.value})` : l.label]);
   const count = new Map<string, number>();
   for (const [, text] of said) count.set(text, (count.get(text) ?? 0) + 1);
   const pairs = said.filter(([value, text]) => count.get(text) === 1 && (!present.has(text) || text === value));
   return pairs.length ? pairs : undefined;
+}
+
+/**
+ * `dataset:distinct` with value labels (a filter picker): the stored values `read` lists, then, with a search, the values
+ * whose LABEL holds it (case-insensitive), asked again through `read` as one `in` filter so the same row lock decides, and
+ * appended after the value matches up to the limit. Each value is listed and counted in `total` once (ruling F12). A Live
+ * sample runs no filter, so its list is filtered here and counted from it. Pairs (ruling F11's option text) for the values
+ * returned only; none → the reply as it came. A refusal or a gone dataset passes through.
+ */
+export async function distinctWithLabels<R extends DistinctResult & { approximate?: true }>(
+  projectId: string, datasetId: string, column: string, req: DistinctRequest, read: (r: DistinctRequest) => Promise<R | LiveValuesRefusal | null>,
+): Promise<R | (R & { valueLabels: [string, string][] }) | LiveValuesRefusal | null> {
+  const first = await read(req);
+  if (!first || !('values' in first)) return first;
+  const list = (await labelListsFor(projectId, datasetId, { category: column, values: [] })).category;
+  if (!list) return first;
+  let out: R = first;
+  const needle = (req.search ?? '').toLowerCase();
+  const wanted = needle ? list.filter((l) => l.label.toLowerCase().includes(needle) && !l.value.toLowerCase().includes(needle)).map((l) => l.value) : [];
+  const more = wanted.length ? await read({ limit: MAX_DISTINCT, search: '', filters: [{ type: 'filter', column, op: 'in', values: wanted }] }) : null;
+  if (more && 'values' in more) {
+    const want = new Set(wanted);
+    const found = more.values.filter((v) => want.has(v));
+    const cap = Math.min(req.limit ?? MAX_DISTINCT, MAX_DISTINCT);
+    out = { ...first, values: [...first.values, ...found].slice(0, cap), total: first.total + (more.approximate ? found.length : more.total) };
+  }
+  const pairs = optionPairs(list, out.values);
+  return pairs ? { ...out, valueLabels: pairs } : out;
 }
 
 /** Why each left-off label shows its value as stored, naming the axis's column. */
