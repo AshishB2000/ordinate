@@ -399,6 +399,7 @@
   "metricCheckMessages.is_circular_a_metric_cannot_be": "« {name} » est circulaire : {path}. Une métrique ne peut pas faire partie de sa propre formule.",
   "metricCheckMessages.is_measured_on_another_dataset_so": "« {name} » est mesurée sur un autre jeu de données ; ce graphique ne peut donc pas la ventiler par sa catégorie.",
   "metricCheckMessages.is_not_a_date_column_of": "« {column} » n’est pas une colonne de date de ce jeu de données.",
+  "metricCheckMessages.is_not_a_date_column_so": "« {column} » n’est pas une colonne de date, donc ce ne peut pas être la date d’un instantané.",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} a besoin d’une colonne numérique, et « {column} » n’en est pas une. count([{column}]) compte ses valeurs renseignées.",
   "metricCheckMessages.no_metric_is_called": "Aucune métrique ne s’appelle « {name} ».",
   "metricCheckMessages.no_metric_is_called_did_you": "Aucune métrique ne s’appelle « {name} ». Vouliez-vous dire [{near}] ?",

@@ -64,6 +64,11 @@ export function measureSnapshotPending(name: string): string {
   return t('metricCheckMessages.is_a_snapshot_metric_which_this', { name });
 }
 
+/** A snapshot metric's date names a column that is not a date column of its dataset. */
+export function snapshotNotDate(column: string): string {
+  return t('metricCheckMessages.is_not_a_date_column_so', { column });
+}
+
 /** Two dashboard date controls set different periods, and both land on the date a metric counts by. */
 export function controlPeriodsDisagree(): string {
   return t('metricCheckMessages.this_metric_counts_by_its_own');

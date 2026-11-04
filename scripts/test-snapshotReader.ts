@@ -77,7 +77,7 @@ void (async () => {
   await metrics.updateMetric(pid, m.id, { tree: { relation: 'sum', children: [{ metricId: U1 }, { metricId: U2 }] } }, undefined, 'metricTree');
   ok('a tree save keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
   ok('a duplicate keeps it', isDeepStrictEqual((await metrics.duplicateMetric(pid, m.id))!.definition, def));
-  ok('the contract still refuses a writer', !api.metrics['metric:save'].input.safeParse({ projectId: pid, input: { name: 'x', datasetId: ds.id, definition: def } }).success);
+  ok('the contract takes a writer (step 07)', api.metrics['metric:save'].input.safeParse({ projectId: pid, input: { name: 'x', datasetId: ds.id, definition: def } }).success);
 
   ok('no figure until step 07, never the sum over every date', (await ipcMetrics.resolveMetric(pid, m.id))!.value === null);
   const plain = (await metrics.saveMetric(pid, { name: 'Units', datasetId: ds.id, definition: { column: 'units', aggregation: 'sum' } }))!;

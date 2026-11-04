@@ -399,6 +399,7 @@
   "metricCheckMessages.is_circular_a_metric_cannot_be": "「{name}」は循環しています: {path}。メトリックを自身の数式の一部にすることはできません。",
   "metricCheckMessages.is_measured_on_another_dataset_so": "「{name}」は別のデータセットで計測されているため、このグラフのカテゴリ別に分けることはできません。",
   "metricCheckMessages.is_not_a_date_column_of": "「{column}」はこのデータセットの日付列ではありません。",
+  "metricCheckMessages.is_not_a_date_column_so": "「{column}」は日付列ではないため、スナップショットの日付にはできません。",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} には数値列が必要ですが、「{column}」は数値列ではありません。count([{column}]) は入力済みの値を数えます。",
   "metricCheckMessages.no_metric_is_called": "「{name}」という名前のメトリックはありません。",
   "metricCheckMessages.no_metric_is_called_did_you": "「{name}」という名前のメトリックはありません。[{near}] のことですか？",
