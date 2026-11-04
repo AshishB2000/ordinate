@@ -5,10 +5,11 @@
 import { getConnector } from '../connectors';
 import * as connections from '../connectors/connections';
 import type { Connection } from '../connectors/connections';
+import { estimateLabel } from '../connectors/bigqueryShape';
 import type { ConnectorDef } from '../connectors/types';
 import * as datasets from '../data/datasets';
 import { sourceTablesOf } from '../data/sourceTableOf';
-import { listSourceIndex } from './sourceTables';
+import { listSourceIndex, type SourceTableDoc } from './sourceTables';
 
 /** Also the rank: a gap earlier in the list is shown first. */
 export type SourceTodoKind = 'used_no_doc' | 'never_read' | 'no_owner' | 'no_guide' | 'stale_read';
@@ -30,6 +31,12 @@ export function readsFactsOf(def: ConnectorDef | null): boolean {
 export function connectionHead(c: Connection): Omit<SourceConn, 'rows'> {
   const def = getConnector(c.connectorId);
   return { connId: c.id, name: c.name, connectorId: c.connectorId, readsFacts: readsFactsOf(def), ...(def?.factsWake ? { factsWake: true as const } : {}) };
+}
+
+/** A doc as `:get` and `:read` reply, built key by key (`dismissed` never leaves). The server formats the size; the web never divides it. */
+export function docView(docId: string, d: SourceTableDoc) {
+  const facts = d.facts && { ...d.facts, ...(d.facts.bytes !== undefined ? { sizeLabel: estimateLabel(d.facts.bytes) } : {}) };
+  return { docId, table: d.table, owner: d.owner, refresh: d.refresh, requiredFilters: d.requiredFilters, guide: d.guide, ...(facts ? { facts } : {}), updatedBy: d.updatedBy, updatedAt: d.updatedAt };
 }
 
 function gapsOf(c: SourceConn, r: SourceRow, now: number): SourceTodoKind[] {

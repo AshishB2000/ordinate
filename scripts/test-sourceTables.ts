@@ -10,6 +10,9 @@
 //    index and the tables datasets are built from (D4, D9), the strip, open, save (create / edit /
 //    409), delete, a connection of another project; and that none of it touches a warehouse or a
 //    dataset's rows. The viewer's 403 on each is in test-sourceNamesHidden (it needs Postgres roles).
+// 5. read: `sourceTable:read` (p2-04, D6, D15): the facts stored with who and when, one catalog call
+//    and nothing else touched, 60 an hour per connection, a connector with no catalog, a secret in a
+//    comment. The cross-pod limit is in test-sourceNamesHidden.
 //
 //   npm run build:ts && node scripts/test-sourceTables.js
 
@@ -357,11 +360,73 @@ async function channels(): Promise<void> {
   ok('a call that is neither create nor edit is refused before a handler (400)', bad.status === 400);
 }
 
+// ── 5. The read ────────────────────────────────────────────────────────────
+
+async function reads(): Promise<void> {
+  const { fakeMod, fake, ORG_A } = H;
+  const T = fakeMod.ORDERS_TABLE;
+  const GUIDE = '# Filter on day';
+  registry.registerTestConnector({
+    id: 'sources-no-catalog', label: 'No catalog (tests)', family: 'sources-test', category: 'Apps & SaaS', readOnly: true, fields: [],
+    async listTables() { return { ok: true, tables: [] }; }, async run() { return { ok: false, error: 'not here' }; },
+  });
+  const seed = await H.as(ORG_A, async () => {
+    const pid = (await H.projects.createProject('Source reads')).id;
+    const live = await H.liveOver(pid, { table: T }, fakeMod.ORDERS_COLUMNS, fakeMod.LIVE_FAKE_ID, { fixture: 'orders' });
+    const second = await H.liveOver(pid, { table: T }, fakeMod.ORDERS_COLUMNS, fakeMod.LIVE_FAKE_ID, { fixture: 'orders' });
+    const saas = await H.connections.saveConnection(pid, { name: 'No catalog', connectorId: 'sources-no-catalog', values: {} });
+    if (!saas) throw new Error('connection not saved');
+    const make = async (connId: string, table: string) => { const r = await store.createSourceDoc(pid, connId, table, { owner: 'Data', guide: GUIDE }); if (!r.ok) throw new Error(r.error); return r.docId; };
+    return { P: pid, C: live.connId, liveId: live.liveId, D: await make(live.connId, T), C2: second.connId, D2: await make(second.connId, T), SAAS: saas.id, D3: await make(saas.id, 'anything') };
+  });
+  const { P, C, C2, SAAS, D, D2, D3, liveId } = seed;
+  const read = (connId = C, docId = D) => post('sourceTable:read', { projectId: P, connId, docId });
+  const contract = (api.contracts as unknown as Record<string, { access: string; project(i: unknown): unknown }>)['sourceTable:read'];
+  ok('contract: write, scoped by projectId', contract?.access === 'write' && contract.project({ projectId: P }) === P);
+
+  const tagBefore = (await post('sourceTable:get', { projectId: P, connId: C, docId: D })).value.tag;
+  const n0 = fake.catalogCalls;
+  const live0 = JSON.stringify(H.liveCounts());
+  const runs0 = fake.calls.length;
+  await post('sourceTable:list', { projectId: P });
+  await post('sourceTable:get', { projectId: P, connId: C, docId: D });
+  ok('opening reads no warehouse', fake.catalogCalls === n0);
+
+  const r = await hydrates(liveId, () => read());
+  const got = r.value.value;
+  ok('read: facts stored with who and when', got.ok === true && got.doc.facts.readBy === ORG_A.user.email && typeof got.doc.facts.readAt === 'string' && got.doc.facts.comment === 'Orders, one row per line', r.value.body.slice(0, 300));
+  ok('read: one catalog call, no Live statement, nothing hydrated', fake.catalogCalls === n0 + 1 && fake.calls.length === runs0 && JSON.stringify(H.liveCounts()) === live0 && !r.hydrated);
+  ok('read: the reply is the doc view, with no dismissals', JSON.stringify(Object.keys(got.doc).sort()) === '["docId","facts","guide","owner","refresh","requiredFilters","table","updatedAt","updatedBy"]' && !r.value.body.includes('dismissed'));
+  ok('read: the index carries readAt (the strip drops never_read)', !(await post('sourceTable:list', { projectId: P })).value.todo.some((t: Reply) => t.docId === D && t.kind === 'never_read'));
+  const after = (await post('sourceTable:get', { projectId: P, connId: C, docId: D })).value;
+  ok('read: the human fields and the tag are untouched', after.doc.guide === GUIDE && after.doc.owner === 'Data' && after.tag === tagBefore && after.doc.facts.readAt === got.doc.facts.readAt);
+
+  fake.factsHook = async (ctx) => ({ ok: true, comment: `pw ${ctx.secrets.password}`, columns: [{ name: 'a', type: 'int' }], bytes: 1_288_490_188 });
+  const sized = await read();
+  ok('read: the server formats the size (the web never divides it), in :read and in :get', sized.value.doc.facts.sizeLabel === '~1.2 GB' && (await post('sourceTable:get', { projectId: P, connId: C, docId: D })).value.doc.facts.sizeLabel === '~1.2 GB');
+  const stored = await H.as(ORG_A, () => store.readSourceDoc(P, C, D));
+  ok('read: a password in a comment reaches neither the reply nor the doc', !sized.body.includes(H.SECRET_CANARY) && sized.body.includes('pw ***') && !JSON.stringify(stored).includes(H.SECRET_CANARY));
+  fake.factsHook = async () => ({ ok: false, error: 'permission denied for table' });
+  const failed = await read();
+  ok('read: a warehouse refusal is the sentence, and the stored facts stay', failed.value.ok === false && failed.value.error === 'permission denied for table' && (await H.as(ORG_A, () => store.readSourceDoc(P, C, D)))!.rec.facts!.comment === `pw ***`);
+
+  // 60 an hour, per connection. One read (the first) and the two above were taken; failed reads count.
+  for (let i = 4; i <= 60; i++) await read();
+  const refused = (await read()).value;
+  ok('the 61st read in an hour is refused, with the wait, and never reached the warehouse', refused.ok === false && /^This connection's tables were read 60 times in the last hour\. Try again in \d+ min\.$/.test(refused.error) && refused.retryAfterSec > 0 && fake.catalogCalls === n0 + 60, JSON.stringify(refused));
+  ok('NEGATIVE CONTROL: another connection is not limited (its read reaches the warehouse)', (await read(C2, D2)).value.error === 'permission denied for table');
+  fake.factsHook = null;
+  ok('NEGATIVE CONTROL: …and reads', (await read(C2, D2)).value.ok === true);
+  ok('no catalog: the sentence', (await read(SAAS, D3)).value.error === messages.factsNotReadable() && messages.factsNotReadable() === 'This source has no catalog Ordinate can read. Write its notes by hand.');
+  ok('a doc that is gone, and a connection that is not there', (await read(C, randomUUID())).value.error === 'Those notes are gone.' && (await post('sourceTable:read', { projectId: P, connId: randomUUID(), docId: D })).value.error === 'Those notes are gone.');
+}
+
 (async () => {
   shape();
   await storing();
   strip();
   await channels();
+  await reads();
   await close();
   finish();
 })().catch((err: unknown) => {

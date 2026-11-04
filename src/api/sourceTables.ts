@@ -27,4 +27,6 @@ export const sourceTables = {
     project: byProjectId,
   }),
   'sourceTable:delete': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
+  // Read the table's facts from the warehouse, on an editor's click only (60 an hour per connection, any pod).
+  'sourceTable:read': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
 } as const;
