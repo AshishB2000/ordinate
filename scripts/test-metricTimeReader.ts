@@ -63,10 +63,10 @@ void (async () => {
   ok('NEGATIVE CONTROL: no change, no date sentence', !recordDiff.summarize('metric', m, { ...m, name: 'Other' }).includes('date it counts by'));
 
   // ── a metric's own date under a dashboard date control: release 1 refused it; release 2 moves the period onto it ──
-  // The chart door and Explain move it (PR 04 Task 4, scripts/test-metricTimeDoors.ts); the KPI paths below still refuse until Task 5.
+  // Every door below moves it (PR 04, figure by figure in scripts/test-metricTimeDoors.ts): the chart, Explain, alerts,
+  // the KPI, a formula over it (refused when its dates differ), the Summary and the drivers.
   ipcVisuals.register();
   copilotIpc.register();
-  const pending = msg.measureTimeColumnPending();
   const plainM = (await metrics.saveMetric(P, { name: 'Plain revenue', datasetId: D, definition: def }))!;
   const control = (column: string, extra: object = { fromControl: true }) =>
     ({ type: 'filter', column, op: 'period', period: { preset: 'custom', from: '2026-01-01', to: '2026-12-31' }, ...extra });
@@ -84,25 +84,26 @@ void (async () => {
   ok('NEGATIVE CONTROL: the tile with the control on the metric\'s own date still explains', explainedPlain.ok === true, JSON.stringify(explainedPlain));
   const rule = (metricId: string, filters: unknown[]) => ({ name: 'Revenue above 0', datasetId: D, metric: { column: 'amt', aggregation: 'sum', metricId, filters }, compare: 'threshold', threshold: { op: '>', value: 0 } });
   const alertOn = await alertStore.testRule(P, rule(m!.id, [control('order_date')]));
-  ok('alerts: a rule on that metric under the control reads no figure and does not fire', alertOn.ok && alertOn.value === null && alertOn.fire === false, JSON.stringify(alertOn));
+  ok('alerts: a rule on that metric under the control counts it by ship_date and fires', alertOn.ok && alertOn.value === 1 && alertOn.fire === true, JSON.stringify(alertOn));
   const alertOwn = await alertStore.testRule(P, rule(m!.id, [control('ship_date')]));
   ok('NEGATIVE CONTROL: the same rule with the control on the metric\'s own date reads its figure and fires', alertOwn.ok && typeof alertOwn.value === 'number' && alertOwn.fire === true, JSON.stringify(alertOwn));
   const alertPlain = await alertStore.testRule(P, rule(plainM.id, [control('order_date')]));
   ok('NEGATIVE CONTROL: a rule on a metric with no timeColumn under the control reads its figure', alertPlain.ok && typeof alertPlain.value === 'number', JSON.stringify(alertPlain));
 
-  // ── the KPI paths: a KPI of such a metric has no figure (a snapshot metric's no-figure state), wherever it is computed ──
+  // ── the KPI paths: a KPI of such a metric is counted by its date, wherever it is computed ──
   ipcMetrics.register();
   const kpi = (id: string, filters: unknown[]) => ipcMetrics.resolveMetric(P, id, { filters: filters as never });
   const kpiOff = await kpi(m!.id, [control('order_date')]);
-  ok('KPI: resolveMetric gives no figure for a metric counted by ship_date under a control on order_date', !!kpiOff && kpiOff.value === null && kpiOff.display === '—', JSON.stringify(kpiOff));
+  ok('KPI: resolveMetric counts a metric by ship_date under a control on order_date, and says so', !!kpiOff && kpiOff.value === 1 && kpiOff.periodOn === 'ship_date' && kpiOff.refused === undefined, JSON.stringify(kpiOff));
   const tileOff = await handlers.get('metric:value')!(null, { projectId: P, id: m!.id, filters: [control('order_date')] });
-  ok('KPI: the metric:value door (every KPI tile, metric:values, publish) gives no figure either', tileOff.ok !== false && tileOff.value === null, JSON.stringify(tileOff));
+  ok('KPI: the metric:value door (every KPI tile, metric:values, publish) counts it so too', tileOff.ok !== false && tileOff.value === 1 && tileOff.periodOn === 'ship_date', JSON.stringify(tileOff));
   ok('NEGATIVE CONTROL: the control on the metric\'s own date gives the figure', (await kpi(m!.id, [control('ship_date')]))!.value === 1);
   ok('NEGATIVE CONTROL: the same period with no fromControl gives the figure', (await kpi(m!.id, [control('order_date', {})]))!.value === 1);
   ok('NEGATIVE CONTROL: a metric with no timeColumn under the control gives the figure', (await kpi(plainM.id, [control('order_date')]))!.value === 1);
   await metrics.saveMetric(P, { name: 'Shipped', datasetId: D, definition: def, timeColumn: 'ship_date' }); // the formula below names it
   const twice = (await metrics.saveMetric(P, { name: 'Shipped twice', datasetId: D, definition: { formula: '[Shipped] * 2' } }))!;
-  ok('KPI: a formula over such a metric gives no figure under the control', (await kpi(twice.id, [control('order_date')]))!.value === null);
+  const twiceOff = await kpi(twice.id, [control('order_date')]);
+  ok('KPI: a formula with no date over such a metric gives no figure under the control, saying why', twiceOff!.value === null && twiceOff!.refused === msg.formulaDatesDiffer('Shipped twice', 'Shipped', 'ship_date', msg.dashboardDate()), JSON.stringify(twiceOff));
   ok('NEGATIVE CONTROL: the same formula under the control on ship_date gives its figure', (await kpi(twice.id, [control('ship_date')]))!.value === 2);
 
   // The Summary card's KPI asks the drivers first (two periods of a date column), then the metric itself.
@@ -114,12 +115,12 @@ void (async () => {
   const own = (await metrics.saveMetric(P, { name: 'Shipped revenue', datasetId: D2, definition: def, timeColumn: 'ship_date' }))!;
   const sum = (filters: unknown[]) => summary.computeSummary(P, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: D2, column: 'amt', aggregation: 'sum', metricId: own.id } }] }], { filters: filters as never, params: new Map() });
   const sumOff = await sum([control('order_date')]);
-  ok('Summary: the KPI of such a metric under the control says no figure', !sumOff.some((x) => x.kind === 'kpi' || x.kind === 'driver'), JSON.stringify(sumOff.filter((x) => x.kind === 'kpi' || x.kind === 'driver')));
+  ok('Summary: the KPI of such a metric under the control gives its figure', sumOff.some((x) => x.kind === 'kpi' && x.figures.some((f) => typeof f.value === 'number')), JSON.stringify(sumOff.filter((x) => x.kind === 'kpi' || x.kind === 'driver')));
   const sumOwn = await sum([control('ship_date')]);
   ok('NEGATIVE CONTROL: the same KPI under the control on its own date gives its figure', sumOwn.some((x) => x.kind === 'kpi' && x.figures.some((f) => typeof f.value === 'number')), JSON.stringify(sumOwn));
   const asked = (filters: unknown[]) => drivers.driversFor(P, { datasetId: D2, metric: { metricId: own.id }, filters: filters as never, compare: { mode: 'latest', column: 'order_date' }, path: [] });
   const drOff = await asked([control('order_date')]);
-  ok('drivers: the change of such a metric under the control is refused with the sentence', drOff.ok === false && drOff.error === pending, JSON.stringify(drOff).slice(0, 300));
+  ok('drivers: the change of such a metric under the control is explained, the period on ship_date and no mark kept', drOff.ok === true && drOff.totals.a === 5 && drOff.totals.b === 3 && !JSON.stringify(drOff.spec).includes('fromControl'), JSON.stringify(drOff).slice(0, 300));
   const drOwn = await asked([control('ship_date')]);
   ok('NEGATIVE CONTROL: under the control on its own date the drivers answer', drOwn.ok === true && drOwn.totals.a !== null, JSON.stringify(drOwn).slice(0, 300));
 

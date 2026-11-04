@@ -7,6 +7,7 @@ import * as trace from '../engine/residentTrace';
 import { withAsOf } from '../data/asOf';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { FilterStep, TransformStep } from '../data/transforms';
+import { rewriteControlPeriods } from '../analysis/metricTime';
 import { sanitizeStatsSpec, vectorNeeds } from '../analysis/stats/spec';
 import type { StatsSpec, VectorNeed } from '../analysis/stats/spec';
 import type { PairScatter, StatsResult } from '../analysis/stats/run';
@@ -115,7 +116,8 @@ async function compute<T extends StatsResult | PairScatter>(
 
 /** Dashboard filters + parameters → the filter steps both read paths apply. */
 function tileFilters(filters: unknown, params: unknown): FilterStep[] {
-  return resolveFilterParams(dashboards.sanitizeDashboardFilters(filters), paramValues(params)).steps;
+  // A statistics card draws no metric: a date control's period stays on its column, and its mark goes no further (D9).
+  return rewriteControlPeriods(resolveFilterParams(dashboards.sanitizeDashboardFilters(filters), paramValues(params)).steps, '');
 }
 
 /** A spec's result, computed; exported for the Assistant and the published site. */

@@ -324,6 +324,103 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   const lv = await hydrates(DL, () => chart(DL, byRegion(REVL), { filters: [CTRL] }));
   ok('Live: same figures as the extract, never hydrated', lv.hydrated === false && lv.value.ok === true && lv.value.periodOn === 'ship_date' && cmp.compareCharts(a.data, lv.value.data, () => true, false).length === 0, show(lv.value));
 
+  // ── KPIs, their compare, the tree, alerts, the drivers, the Summary, what-ifs (Task 5) ─────────────
+  const tile = async (metricId: string, filters: unknown[], compare?: unknown, datasetId = D): Promise<Reply> => (await post('analysis:tiles', { projectId: P, items: [{ kind: 'metric', metricId, datasetId, column: 'amt', aggregation: 'sum', filters, ...(compare ? { compare } : {}) }] })).value[0];
+  const k1 = await tile(REV, [CTRL]);
+  const kShip = await tile(REV, [ON('ship_date')]);
+  ok('KPI: the control lands on the metric\'s date, and says so', typeof k1.value === 'number' && Object.is(k1.value, kShip.value) && k1.periodOn === 'ship_date', show([k1, kShip]));
+  ok('NEGATIVE CONTROL: on the control\'s column it is another figure', !Object.is(k1.value, (await tile(REV, [ON('order_date')])).value));
+  const kU = await tile(ORD, [CTRL]);
+  const kU0 = await tile(ORD, [ON('order_date')]);
+  ok('KPI unset: today\'s reply byte for byte, no caption', JSON.stringify(kU) === JSON.stringify(kU0) && !('periodOn' in kU), show([kU, kU0]));
+  const cU = await tile(ORD, [CTRL], { mode: 'previous_year' });
+  ok('… and its compare too', JSON.stringify(cU) === JSON.stringify(await tile(ORD, [ON('order_date')], { mode: 'previous_year' })), show(cU));
+  ok('KPI: no mark, no periodOn key', !('periodOn' in kShip));
+  const c1 = await tile(REV, [CTRL], { mode: 'previous_period' });
+  const c0 = await tile(REV, [ON('ship_date')], { mode: 'previous_period' });
+  ok('compare: the previous period on the metric\'s date', typeof c1.compare?.previous === 'number' && Object.is(c1.compare.previous, c0.compare.previous) && Object.is(c1.compare.value, k1.value), show([c1.compare, c0.compare]));
+  ok('NEGATIVE CONTROL: on the control\'s column the previous period is another figure', !Object.is(c1.compare.previous, (await tile(REV, [ON('order_date')], { mode: 'previous_period' })).compare.previous));
+  const feb = { type: 'filter', column: 'ship_date', op: 'period', period: FEB };
+  const cc = await tile(REV, [], { mode: 'custom', from: FEB.from, to: FEB.to });
+  ok('custom compare with nothing in scope uses the metric\'s date', typeof cc.compare?.previous === 'number' && Object.is(cc.compare.previous, (await tile(REV, [feb])).value), show(cc.compare));
+  ok('NEGATIVE CONTROL: … the first date column is another figure', !Object.is(cc.compare.previous, (await tile(REV, [{ ...feb, column: 'order_date' }])).value));
+  const kClash = await tile(REV, [CTRL, APRIL]);
+  ok('KPI under two controls that disagree: no figure, the sentence, never the stored column\'s', kClash.ok === false && kClash.error === msg.controlPeriodsDisagree(), show(kClash));
+  ok('NEGATIVE CONTROL: the compare under them is refused too', (await tile(REV, [CTRL, APRIL], { mode: 'previous_period' })).ok === false);
+  const kStale = await tile(DBL, [CTRL]);
+  ok('a formula whose part counts by another date: no figure, the sentence (F-8)', kStale.ok === false && kStale.error === msg.formulaDatesDiffer('Double renamed', 'Revenue', 'ship_date', 'order_date'), show(kStale));
+  const idOf = async (name: string): Promise<string> => (await post('metric:list', { projectId: P })).value.metrics.find((m: Reply) => m.name === name).id;
+  const kAgreed = await tile(await idOf('Agreed twice'), [CTRL]);
+  ok('a formula whose parts share its date: the KPI on it', Object.is(kAgreed.value, k1.value * 2) && kAgreed.periodOn === 'ship_date', show(kAgreed));
+
+  // A formula across datasets: each part counts by its own date (Revenue by ship_date, Target by month), compare too.
+  const FM = { preset: 'custom', from: '2024-02-01', to: '2024-03-31' }; // Target: South's 90 in it, North's 100 in the 60 days before
+  const shipFM = { ...feb, period: FM };
+  const tFM = await tile(onX.metric.id, [{ ...CTRL, period: FM }], { mode: 'previous_period' });
+  const revFM = await tile(REV, [shipFM], { mode: 'previous_period' });
+  ok('a formula across datasets: each part counts by its own date', typeof revFM.value === 'number' && Object.is(tFM.value, revFM.value / 90) && tFM.periodOn === 'ship_date', show([tFM, revFM]));
+  ok('… and its previous period too', Object.is(tFM.compare.previous, revFM.compare.previous / 100), show([tFM.compare, revFM.compare]));
+  ok('NEGATIVE CONTROL: with no control the target is not narrowed', Object.is((await tile(onX.metric.id, [shipFM])).value, revFM.value / 190));
+
+  const onOrderSum = (await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'sum', filters: [ON('order_date')] })).value;
+  const tree = (await post('metricTree:compute', { projectId: P, id: REV, filters: [CTRL] })).value;
+  ok('tree: the period is the control\'s, on the metric\'s date', tree.ok === true && tree.period.from === '2024-03-01' && Object.is(tree.root.current, k1.value), show(tree));
+  const t0 = (await post('metricTree:compute', { projectId: P, id: REV })).value;
+  ok('tree with no scope: its latest month is on the metric\'s date', t0.ok === true && Object.is(t0.root.current, (await tile(REV, [{ ...feb, period: { preset: 'custom', from: t0.period.from, to: t0.period.to } }])).value), show(t0));
+  const tU = (await post('metricTree:compute', { projectId: P, id: ORD, filters: [CTRL] })).value;
+  const tU0 = (await post('metricTree:compute', { projectId: P, id: ORD, filters: [ON('order_date')] })).value;
+  ok('NEGATIVE CONTROL: a tree of a metric with no date is today\'s, byte for byte', JSON.stringify({ ...tU, tag: 0 }) === JSON.stringify({ ...tU0, tag: 0 }), show([tU, tU0]));
+  const kids = [(await save({ name: 'Shipped amount', definition: SUM, timeColumn: 'ship_date' })).metric.id, (await save({ name: 'Placed amount', definition: SUM })).metric.id];
+  const treeSaved = (await post('metricTree:save', { projectId: P, id: ORD, tree: { metricId: ORD, relation: 'sum', children: kids.map((metricId) => ({ metricId })) } })).value;
+  const tKids = (await post('metricTree:compute', { projectId: P, id: ORD, filters: [CTRL] })).value;
+  const shippedMarch = kShip.value;
+  const placedMarch = onOrderSum.value;
+  ok('tree: each node counts by its own date (F-14)', treeSaved.ok === true && tKids.ok === true && Object.is(tKids.root.children[0].current, shippedMarch) && Object.is(tKids.root.children[1].current, placedMarch) && Object.is(tKids.root.current, kU0.value), show([treeSaved, tKids.root]));
+  ok('NEGATIVE CONTROL: the two dates are two figures', !Object.is(shippedMarch, placedMarch));
+  await post('metricTree:save', { projectId: P, id: REV, tree: { metricId: REV, split: 'region' } });
+  const tSplit = (await post('metricTree:compute', { projectId: P, id: REV, filters: [CTRL] })).value;
+  ok('tree: a split\'s segments are on the metric\'s date too', tSplit.ok === true && tSplit.root.children.length === 4 && Object.is(tSplit.root.children.reduce((n: number, c: Reply) => n + c.current, 0), k1.value), show(tSplit.root));
+
+  const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+  const rule = { id: '55555555-5555-4555-8555-555555555555', name: 'r', datasetId: D, metric: { column: 'amt', aggregation: 'sum', metricId: REV, filters: [CTRL] }, compare: 'threshold', threshold: { op: '<', value: 1 }, enabled: true };
+  ok('an alert saved from the KPI counts the KPI\'s figure', Object.is((await H.as(ORG_A, () => alertStore.metricFor(P, rule as never))).value, k1.value));
+  const bareRule = await H.as(ORG_A, () => alertStore.metricFor(P, { ...rule, metric: { ...rule.metric, metricId: undefined } } as never));
+  const onOrder = (await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'sum', filters: [ON('order_date')] })).value;
+  ok('NEGATIVE CONTROL: an alert on a bare column keeps the control\'s column', Object.is(bareRule.value, onOrder.value));
+  ok('a bare column under a control: the mark is stripped, the figure today\'s', Object.is((await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'sum', filters: [CTRL] })).value.value, onOrder.value));
+  ok('an alert under two controls that disagree reads no figure', (await H.as(ORG_A, () => alertStore.metricFor(P, { ...rule, metric: { ...rule.metric, filters: [CTRL, APRIL] } } as never))).value === null);
+
+  const why = async (filters: unknown[], metricId = REV): Promise<Reply> => (await post('drivers:explain', { projectId: P, request: { datasetId: D, metric: { metricId }, filters, compare: { mode: 'previous_period' }, path: [] } })).value;
+  const w1 = await why([CTRL]);
+  const w0 = await why([ON('ship_date')]);
+  ok('Why did this change: both periods on the metric\'s date', w1.ok === true && Object.is(w1.totals.a, k1.value) && Object.is(w1.totals.b, w0.totals.b) && w1.periods.column === 'ship_date', show([w1.totals, w0.totals]));
+  ok('NEGATIVE CONTROL: … on the control\'s column it is another change', !Object.is(w1.totals.a, (await why([ON('order_date')])).totals.a));
+  ok('… and two controls that disagree are refused with the sentence', (await why([CTRL, APRIL])).error === msg.controlPeriodsDisagree());
+  const drivers: typeof import('../src/ipc/drivers') = require('../src/ipc/drivers');
+  const dr = await H.as(ORG_A, () => drivers.driversFor(P, { datasetId: D, metric: { metricId: REV }, filters: [CTRL] as never[], compare: { mode: 'previous_period' }, path: [] }));
+  ok('driversFor itself (the Summary, alerts, the waterfall): its question carries no mark', dr.ok === true && !JSON.stringify(dr.spec.filters).includes('fromControl') && Object.is(dr.totals.a, k1.value), show(dr));
+
+  const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
+  const sum = (filters: unknown[]) => H.as(ORG_A, () => summary.computeSummary(P, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: D, column: 'amt', aggregation: 'sum', metricId: REV } }] }], { filters: filters as never, params: new Map() }));
+  const sm = (await sum([CTRL])).find((x) => x.kind === 'kpi');
+  ok('Summary: the KPI sentence is the KPI\'s figure', !!sm && sm.figures.some((f) => Object.is(f.value, k1.value)), show(sm));
+
+  const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
+  const SC = (await H.as(ORG_A, () => scenarios.saveScenario(P, { name: 'Price up', baseMetricIds: [REV], drivers: [{ name: 'Price', kind: 'pct', value: 10, target: { column: 'amt' } }] } as never)))!.id;
+  const whatIf = async (filters: unknown[]): Promise<Reply> => (await post('analysis:tiles', { projectId: P, items: [{ kind: 'metric', metricId: REV, datasetId: D, column: 'amt', aggregation: 'sum', scenarioId: SC, filters }] })).value[0].scenario;
+  const s1 = await whatIf([CTRL]);
+  const s0 = await whatIf([ON('ship_date')]);
+  ok('a what-if: its baseline and its moved figure both on the metric\'s date', s1.ok === true && Object.is(s1.baseline, k1.value) && Object.is(s1.value, s0.value) && s1.value !== s1.baseline, show([s1, s0]));
+  ok('NEGATIVE CONTROL: on the control\'s column the what-if is another figure', !Object.is(s1.value, (await whatIf([ON('order_date')])).value));
+
+  const kDrill = (await post('visual:rows', { projectId: P, datasetId: D, encoding: { category: '', values: [{ column: 'amt', aggregation: 'sum' }] }, filters: [CTRL], metricId: REV })).value;
+  ok('a KPI\'s rows are the rows of its own date (F-7)', kDrill.ok === true && kDrill.filters.some((f: Reply) => f.column === 'ship_date' && f.op === 'period') && !kDrill.filters.some((f: Reply) => f.column === 'order_date' || 'fromControl' in f), show(kDrill));
+
+  const kl = await hydrates(DL, () => tile(REVL, [CTRL], undefined, DL));
+  ok('Live KPI: the extract\'s figure on the metric\'s date, never hydrated', kl.hydrated === false && Object.is(kl.value.value, k1.value) && kl.value.periodOn === 'ship_date', show(kl.value));
+  const klc = await hydrates(DL, () => tile(REVL, [CTRL], { mode: 'previous_period' }, DL));
+  ok('Live KPI compare: the extract\'s previous period, never hydrated', klc.hydrated === false && Object.is(klc.value.compare.previous, c1.compare.previous), show(klc.value));
+
   await close();
   finish();
 })().catch((err) => {

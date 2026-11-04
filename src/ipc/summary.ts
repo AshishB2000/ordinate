@@ -44,6 +44,8 @@ import type { QualityFact, SummaryCandidates, SummarySentence } from '../analysi
 import { driversFor } from './drivers';
 import { listInsights } from './insights';
 import { resolveMetric } from './metrics';
+import { getMetric } from '../analysis/metrics';
+import { metricDate } from '../analysis/metricTimeScope';
 import { computeCardMetric } from './dashboards';
 import { guardAnswer } from './copilot';
 import { isLive } from '../data/liveDataset';
@@ -111,12 +113,14 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
   const metric = { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) };
   // A Live dataset's KPI is its level alone: the drivers read rows, which live has none of here (L2.4).
   const live = isLive(meta);
-  const dateCol = live ? undefined : meta.columns.find((c) => c.type === 'date');
+  // The latest two periods of the date the metric counts by (D9), else the first date column.
+  const saved = m.metricId && !live ? await getMetric(projectId, m.metricId) : null;
+  const dateCol = live ? undefined : (saved && (await metricDate(projectId, saved))) || meta.columns.find((c) => c.type === 'date')?.name;
   // The card's own Compare first (but not under "as of": it moves TODAY's
   // periods), then the two latest periods the data has.
   const compares: unknown[] = [];
   if (m.compare && m.compare.mode && !asOfIso() && !live) compares.push(m.compare);
-  if (dateCol) compares.push({ mode: 'latest', column: dateCol.name });
+  if (dateCol) compares.push({ mode: 'latest', column: dateCol });
   for (const compare of compares) {
     const spec = sanitizeDriversSpec({ datasetId: m.datasetId, metric, compare, path: [] }, filters);
     const r = spec ? await driversFor(projectId, spec, params) : null;

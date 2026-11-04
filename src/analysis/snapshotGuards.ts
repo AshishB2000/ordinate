@@ -1,12 +1,11 @@
 // Where a chart of a saved metric refuses what only a later release computes (semantic layer part 1): a snapshot
-// metric (PR 02a), and a metric's own date under a dashboard date control (04a). Its own file because ./snapshot is
-// imported BY ./metrics and so cannot import it back.
+// metric (PR 02a). Its own file because ./snapshot is imported BY ./metrics and so cannot import it back. (A metric's
+// own date under a dashboard date control, refused here in release 1, is counted since PR 04: ./metricTimeScope.)
 
 import * as metrics from './metrics';
 import type { Metric } from './metrics';
 import * as msg from './metricCheckMessages';
 import type { VizEncoding } from './visuals';
-import type { FilterStep } from '../data/transforms';
 
 /** The saved metric `metricId` names when it is a SIMPLE snapshot one (its stored column and total are not its figure), else null. */
 export async function snapshotMetric(projectId: string, metricId: unknown): Promise<Metric | null> {
@@ -28,29 +27,6 @@ export async function snapshotMeasureRefusal(projectId: string, encoding: VizEnc
     if (m) return msg.measureSnapshotPending(m.name);
   }
   return null;
-}
-
-/**
- * The sentence refusing a chart whose measure is a saved metric with its own `timeColumn`, under a dashboard date
- * control (`fromControl`) on another column, or null. A later release moves the control's period onto the metric's
- * date and this one applies it to the control's column, so during a rolling upgrade the two would draw two figures.
- */
-export async function timeColumnControlRefusal(projectId: string, encoding: VizEncoding | null | undefined, filters: readonly FilterStep[] | null | undefined): Promise<string | null> {
-  if (!(Array.isArray(filters) && filters.some((f) => f && f.fromControl === true))) return null; // no control: no metric read
-  for (const v of snapshotDrawn(encoding)) {
-    const m = typeof v?.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m && controlOffOwnDate(m.timeColumn, filters)) return msg.measureTimeColumnPending();
-  }
-  return null;
-}
-
-/**
- * THE rule every door shares (a chart, Explain, an alert, a KPI, the drivers): a metric with its own `timeColumn`
- * under a dashboard date control (`fromControl`) on another column. A later release moves the control's period onto
- * the metric's date; this one would apply it to the control's column, so it gives no figure instead.
- */
-export function controlOffOwnDate(timeColumn: string | undefined, filters: readonly FilterStep[] | null | undefined): boolean {
-  return !!timeColumn && (Array.isArray(filters) ? filters : []).some((f) => f && f.fromControl === true && f.column !== timeColumn);
 }
 
 /** The measures a chart draws, for the guards here (not metricMeasures.drawnMeasures, which leaves a pivot to its copy): a pivot's values, else its values (only the first under a split, as vizData.buildPivot); none for the grids beside it. */

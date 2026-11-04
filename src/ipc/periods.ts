@@ -23,6 +23,9 @@ import { formatMetricValue } from '../analysis/metricFormat';
 import { daysFromIso, describeCompare, describePeriod, getCalendar, resolvePeriodNow, sanitizeCompare, sanitizePeriod, todayIso } from '../analysis/dateIntel';
 import { bucketStartOf, weekCalOf, weekLabel, weekPos } from '../analysis/retailCalendar';
 import { compareScope } from '../analysis/periodScope';
+import type { FilterStep } from '../data/transforms';
+import { hasControlPeriod } from '../analysis/metricTime';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
 import { liveCodeOf } from './liveRoute';
@@ -73,7 +76,10 @@ export async function compareMetric(
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, error: 'Dataset not found' };
 
-  const moved = compareScope(filters, meta.columns, cmp);
+  // D9: a saved metric's control period moves onto its own date BEFORE the range moves; a custom range with none in scope lands on it.
+  const scoped = metric ? await metricScope(projectId, metric, filters) : null;
+  if (scoped && !scoped.ok) return { ok: false, error: scoped.error };
+  const moved = compareScope(scoped ? scoped.filters : filters, meta.columns, cmp, (metric && (await metricDate(projectId, metric))) || undefined);
   const label = describeCompare(cmp.mode);
   if (!moved) return { ok: true, reason: 'no_date_filter', label };
 
@@ -82,9 +88,13 @@ export async function compareMetric(
   const out: CompareResult = { ok: true, label, prior: moved.prior };
   let metricFx: FxInfo | undefined;
   if (metric) {
+    // The earlier range is still the control's (withRange puts it last): a part on another dataset moves it onto its own date too.
+    const prior = hasControlPeriod(filters) ? moved.filters.map((s, i, all): FilterStep => (i === all.length - 1 ? { ...s, fromControl: true as const } : s)) : moved.filters;
     const a = await resolveMetric(projectId, metric.id, { filters, params, reads });
-    const b = await resolveMetric(projectId, metric.id, { filters: moved.filters, params });
+    const b = await resolveMetric(projectId, metric.id, { filters: prior, params });
     if (!a || !b) return { ok: false, error: 'Metric not found' };
+    const refused = a.refused || b.refused;
+    if (refused) return { ok: false, error: refused };
     value = finite(a.value);
     previous = finite(b.value);
     metricFx = a.fx;

@@ -403,7 +403,6 @@
   "metricCheckMessages.the_measure_cannot_be_calculated": "The measure “{name}” cannot be calculated: {reason}.",
   "metricCheckMessages.the_measure_is_calculated_from_parts": "The measure “{name}” is calculated from parts that are totalled separately, which cannot be lined up over a binned category or one folded into “Other”. Choose a category with at most 50 values.",
   "metricCheckMessages.the_measure_uses_a_level_of": "The measure “{name}” uses a level-of-detail expression, which a chart cannot break out by its category yet.",
-  "metricCheckMessages.this_chart_counts_a_metric_by": "This chart counts a metric by its own date, which this server cannot do yet. Ask your admin to finish upgrading Ordinate.",
   "metricCheckMessages.this_metric_counts_by_its_own": "This metric counts by its own date, and two date controls set different periods on it.",
   "metricTreeMessages.a_metric_in_this_tree_was": "A metric in this tree was deleted.",
   "metricTreeMessages.did_not_change": "{metric} did not change {compare}.",
