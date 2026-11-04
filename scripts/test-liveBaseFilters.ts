@@ -27,6 +27,8 @@ const rec: typeof import('../src/data/datasetRecord') = require('../src/data/dat
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const refusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
+const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
 
 const { fake, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -62,6 +64,11 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   ]));
   ok('sanitize caps at 20', base.MAX_BASE_FILTERS === 20 && base.sanitizeBaseFilters(Array(25).fill(F('region', '!=', 'x'))).length === 20);
   ok('sanitize of a non-list is empty', base.sanitizeBaseFilters(undefined).length === 0 && base.sanitizeBaseFilters({ 0: F('a', '=', 1) }).length === 0);
+  const list = (n: number) => F('region', 'in', undefined, { values: Array.from({ length: n }, (_, i) => `v${i}`) });
+  ok('sanitize drops a step of more than 1,000 values (so the stored list reads as unreadable), and keeps one of 1,000',
+    base.MAX_BASE_FILTER_VALUES === 1000 && base.sanitizeBaseFilters([list(1001)]).length === 0 && base.sanitizeBaseFilters([list(1000)]).length === 1);
+  const messy = [{ ...F('region', '!=', 'x'), context: true }, F('d', 'period', undefined, { period: { preset: 'last_n_months', n: 6 } }), list(3), 7];
+  ok('sanitize twice is sanitize once', show(base.sanitizeBaseFilters(base.sanitizeBaseFilters(messy))) === show(base.sanitizeBaseFilters(messy)));
 
   // ── 2. Where it is stored ─────────────────────────────────────────────────
   const meta = () => H.as(ORG_A, () => H.datasets.getDatasetMeta(P, L)) as Promise<Reply>;
@@ -96,6 +103,32 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ok(`${name} keeps raw.baseFilters and never writes it into raw.live`, !!done && show(r.baseFilters) === show(BASE) && !('baseFilters' in r.live), show(r));
   }
   ok('…and the writers\' changes landed', (await meta()).live.maxCacheAgeSec === 60 && (await raw()).live.syncAttemptAt === stamp);
+
+  // ── 2b. The write, and the adapter every builder shares ───────────────────
+  const setBase = (d: string, steps: FilterStep[]) => H.as(ORG_A, () => H.liveDataset.setBaseFilters(P, d, steps));
+  const PROFILE = { sampledAt: stamp, sampleRows: 9, method: 'limit', columns: [{ name: 'region', sourceType: 'VARCHAR', filled: 9, distinct: 2, values: ['North', 'South'], counts: [5, 4] }] };
+  await H.as(ORG_A, () => rec.serialized(rec.datasetFilePath(P, L), (r) => { (r.live as Reply).profile = PROFILE; }));
+  const e0 = (await meta()).live.epoch;
+  ok('setBaseFilters writes the top-level key and bumps the epoch once', !!(await setBase(L, BASE)) && show((await raw()).baseFilters) === show(BASE) && (await meta()).live.epoch === e0 + 1 && !('baseFilters' in (await raw()).live));
+  ok('…and drops the sampled figures read under the old filters, keeping the warehouse\'s type names', show((await raw()).live.profile) === show({ columns: [{ name: 'region', sourceType: 'VARCHAR' }] }), show((await raw()).live.profile));
+  ok('…so a picker answers "not sampled yet", never a value the new filters exclude', liveProfile.profileDistinct((await meta()) as never, 'region') === 'notSampled');
+  ok('[] deletes the key (and bumps again)', !!(await setBase(L, [])) && !('baseFilters' in (await raw())) && (await meta()).live.epoch === e0 + 2);
+  ok('refused on an extract', (await setBase(s.extractId, BASE)) === false && !('baseFilters' in JSON.parse(await H.as(ORG_A, () => fs.promises.readFile(rec.datasetFilePath(P, s.extractId), 'utf8')))));
+  const cols = H.fx.COLUMNS;
+  ok('liveBaseOf adapts', show(liveBase.liveBaseOf(BASE, cols)) === show({ ok: true, base: [{ kind: 'in', column: 'region', values: ['North', CANARY], negate: true }] }), show(liveBase.liveBaseOf(BASE, cols)));
+  ok('liveBaseOf of nothing is an empty base', show(liveBase.liveBaseOf(undefined, cols)) === show({ ok: true, base: [] }));
+  for (const [label, st] of [
+    ['unknown column', F('gone', '=', 1)],
+    ['empty in-list', F('region', 'in', undefined, { values: [] })],
+    ['period on text', F('region', 'period', undefined, { period: { preset: 'last_n_months', n: 6 } })],
+    ['a period that resolves to nothing', F('d', 'period', undefined, { period: { preset: 'custom' } })],
+  ] as [string, FilterStep][]) {
+    const r = liveBase.liveBaseOf([BASE[0], st], cols);
+    ok(`a base filter never skips: ${label} refuses`, !r.ok && (r.code === 'baseFilter' ? r.params.column === st.column : true), show(r));
+  }
+  ok('a skipped step refuses as baseFilter, naming its column', show(liveBase.liveBaseOf([F('gone', '=', 1)], cols)) === show(spec.refuse('baseFilter', 'gone')));
+  ok('a radius step refuses (withinKm), never skips', !liveBase.liveBaseOf([{ ...F('lat', 'within_km'), radius: { lat: 1, lon: 2, km: 3 } } as unknown as FilterStep], [...cols, { name: 'lat', type: 'number' }]).ok);
+  await setBase(L, BASE); // § 3 starts from the planted filters
 
   // ── 3. The guard (08a). A later task replaces this section with the real answers. ──
   const second = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));

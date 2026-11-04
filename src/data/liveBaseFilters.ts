@@ -11,6 +11,8 @@ import { RADIUS_OP } from '../analysis/geo/radius';
 
 /** The most base filters a dataset keeps. */
 export const MAX_BASE_FILTERS = 20;
+/** The most values one base filter's list holds (the write refuses more; a stored step with more is unreadable). */
+export const MAX_BASE_FILTER_VALUES = 1000;
 
 /**
  * Does this Live block carry base filters this pod must honour: some it read, or a stored list it could
@@ -23,7 +25,7 @@ export function hasBaseFilters(live: { baseFilters?: readonly unknown[]; baseFil
 /**
  * The plain `filter` steps of an untrusted stored list, rebuilt with the keys a base filter may carry:
  * no `lock`, `context` or `via`, no radius, and nothing that is not a filter step (a term, a stray
- * value). Capped at MAX_BASE_FILTERS.
+ * value). Capped at MAX_BASE_FILTERS; a step listing more than MAX_BASE_FILTER_VALUES is dropped, never cut.
  */
 export function sanitizeBaseFilters(raw: unknown): FilterStep[] {
   if (!Array.isArray(raw)) return [];
@@ -32,7 +34,7 @@ export function sanitizeBaseFilters(raw: unknown): FilterStep[] {
     if (out.length >= MAX_BASE_FILTERS) break;
     if (!o || typeof o !== 'object' || (o as { type?: unknown }).type !== 'filter') continue;
     const s = sanitizeFilterStep(o as Record<string, unknown>);
-    if (!s || s.op === RADIUS_OP) continue;
+    if (!s || s.op === RADIUS_OP || (s.values?.length ?? 0) > MAX_BASE_FILTER_VALUES) continue;
     const step: FilterStep = { type: 'filter', column: s.column, op: s.op };
     if (s.value !== undefined) step.value = s.value;
     if (s.values !== undefined) step.values = s.values;

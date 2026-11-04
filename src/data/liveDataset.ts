@@ -261,6 +261,32 @@ export function setMaxCacheAge(projectId: string, id: string, maxCacheAgeSec: nu
   }).then((r) => r || false);
 }
 
+/** A profile without its sampled figures: the column names and the warehouse's type names (the compiler reads those). */
+export function unsampled(profile: LiveProfile): LiveProfile {
+  return { columns: profile.columns.map(({ name, sourceType }) => (sourceType ? { name, sourceType } : { name })) };
+}
+
+/**
+ * Set a Live dataset's base filters (./liveBaseFilters): the top-level key (`[]` deletes it) and an epoch
+ * bump, in ONE write (D5). The validated steps are stored as given; `applyLive` reads them. The sampled
+ * figures go in the same write — they were read under the old filters, and a value picker must never offer
+ * a value the new ones exclude — so pickers say "not sampled yet" until the caller's queued sync lands.
+ * False when the record is missing or not Live.
+ */
+export function setBaseFilters(projectId: string, id: string, steps: FilterStep[]): Promise<LiveSettings | false> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const live = sanitizeLive(raw);
+    if (!live) return false;
+    if (steps.length) raw.baseFilters = steps;
+    else delete raw.baseFilters;
+    const next: LiveSettings = { ...live, epoch: live.epoch + 1 };
+    if (live.profile) next.profile = unsampled(live.profile);
+    raw.live = next;
+    return next;
+  }).then((r) => r || false);
+}
+
 /** What a schema sync writes (L2.5, src/engine/live/schemaSync.ts). */
 export interface SchemaSyncWrite {
   columns: ParsedColumn[];
