@@ -193,13 +193,14 @@ export function controlSteps(
     // as strings (so `03/01/2024` is not "before" `12/31/2023`).
     if ('preset' in state && typeof state.preset === 'string' && state.preset !== 'custom') {
       const period = sanitizePeriod(state);
-      return period ? [{ type: 'filter', column, op: 'period', period }] : [];
+      return period ? [{ type: 'filter', column, op: 'period', period, fromControl: true }] : [];
     }
     const from = 'from' in state ? state.from : undefined;
     const to = 'to' in state ? state.to : undefined;
     if (!from && !to) return []; // neither end set → []
     const period = sanitizePeriod({ preset: 'custom', from, to });
-    return period ? [{ type: 'filter', column, op: 'period', period }] : [];
+    // `fromControl` (D9): the server moves this period onto the date a metric counts by; a tile's own date filter stays put.
+    return period ? [{ type: 'filter', column, op: 'period', period, fromControl: true }] : [];
   }
 
   return []; // a `state` shape that doesn't match this control's own kind

@@ -416,6 +416,34 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   const kDrill = (await post('visual:rows', { projectId: P, datasetId: D, encoding: { category: '', values: [{ column: 'amt', aggregation: 'sum' }] }, filters: [CTRL], metricId: REV })).value;
   ok('a KPI\'s rows are the rows of its own date (F-7)', kDrill.ok === true && kDrill.filters.some((f: Reply) => f.column === 'ship_date' && f.op === 'period') && !kDrill.filters.some((f: Reply) => f.column === 'order_date' || 'fromControl' in f), show(kDrill));
 
+  // ── Date controls mark their steps, wherever the server makes them (Task 6) ─────────────
+  const dashFilters: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
+  const savedViews: typeof import('../src/analysis/savedViews') = require('../src/analysis/savedViews');
+  const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+  const rel = dashFilters.controlSteps({ kind: 'date_range', column: 'd' }, { preset: 'last_n_days', n: 30 });
+  const fixed = dashFilters.controlSteps({ kind: 'date_range', column: 'd' }, { from: '2024-01-01', to: '2024-01-31' });
+  ok('a date control marks its period step, relative or fixed', rel[0].fromControl === true && fixed[0].fromControl === true, show([rel, fixed]));
+  ok('NEGATIVE CONTROL: a dropdown or a multi step carries no mark', !('fromControl' in dashFilters.controlSteps({ kind: 'dropdown', column: 'region' }, { value: 'West' })[0])
+    && !('fromControl' in dashFilters.controlSteps({ kind: 'multi', column: 'region' }, { values: ['West'] })[0]));
+  const L = (y: number) => ({ x: 0, y, w: 3, h: 2 });
+  const boardOf = (metricId: string) => [{ id: randomUUID(), name: 'Main', cards: [
+    { id: randomUUID(), type: 'control', layout: L(0), control: { kind: 'date_range', label: 'Ordered', datasetId: D, column: 'order_date', default: { from: '2024-03-01', to: '2024-03-31' } } },
+    { id: randomUUID(), type: 'metric', layout: L(2), metric: { datasetId: D, column: 'amt', aggregation: 'sum', metricId } },
+  ] }];
+  const published = async (metricId: string): Promise<Reply | undefined> => {
+    const dash = (await H.as(ORG_A, () => analysisStore.saveAnalysis(P, { name: `By date ${metricId}`, sheets: boardOf(metricId) } as never)))!;
+    const built = await H.as(ORG_A, () => buildDashboard(P, dash.id, 4));
+    const card = built?.sheets[0].cards.find((c) => c.kind === 'metric') as Reply | undefined;
+    return card ? card.payloads[card.variants[0]] : undefined;
+  };
+  const pub = await published(REV);
+  ok('a published dashboard: its KPI counts by the metric\'s date under the control\'s default', typeof pub?.value === 'number' && Object.is(pub.value, kShip.value), show(pub));
+  ok('NEGATIVE CONTROL: … a metric with no date stays on the control\'s column', Object.is((await published(ORD))?.value, kU0.value));
+  ok('… and one whose dates disagree says why, never the stored column\'s figure', (await published(DBL))?.error === msg.formulaDatesDiffer('Double renamed', 'Revenue', 'ship_date', 'order_date'));
+  const vs = savedViews.viewScope(null, { sheets: boardOf(REV) as never });
+  ok('a view\'s scope (reports, subscriptions) marks the control\'s step', vs.filters.some((f) => f.column === 'order_date' && f.op === 'period' && f.fromControl === true), show(vs.filters));
+
   const kl = await hydrates(DL, () => tile(REVL, [CTRL], undefined, DL));
   ok('Live KPI: the extract\'s figure on the metric\'s date, never hydrated', kl.hydrated === false && Object.is(kl.value.value, k1.value) && kl.value.periodOn === 'ship_date', show(kl.value));
   const klc = await hydrates(DL, () => tile(REVL, [CTRL], { mode: 'previous_period' }, DL));

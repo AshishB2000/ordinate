@@ -220,6 +220,12 @@
   font-size: var(--t-11);
   color: var(--warn);
 }
+/* The date a dashboard date control's period was moved onto (D9). */
+.periodOn {
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
 .skValue {
   display: block;
   width: 60%;

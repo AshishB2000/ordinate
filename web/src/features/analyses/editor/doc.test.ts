@@ -58,7 +58,7 @@ describe('controls and parameters', () => {
   it('a selection is one filter step of the server shape', () => {
     expect(controlSteps(ctl('dropdown'), { value: 'East' })).toEqual([{ type: 'filter', column: 'region', op: '=', value: 'East' }]);
     expect(controlSteps(ctl('multi'), { values: ['E', 'W'] })).toEqual([{ type: 'filter', column: 'region', op: 'in', values: ['E', 'W'] }]);
-    expect(controlSteps(ctl('date_range'), { from: '2024-01-01' })).toEqual([{ type: 'filter', column: 'region', op: 'period', period: { preset: 'custom', from: '2024-01-01' } }]);
+    expect(controlSteps(ctl('date_range'), { from: '2024-01-01' })).toEqual([{ type: 'filter', column: 'region', op: 'period', period: { preset: 'custom', from: '2024-01-01' }, fromControl: true }]);
   });
   it('{{name}} shows a value; an unknown name stays as typed', () => {
     const p = [{ name: 'min', kind: 'number', value: 2500.5 }];

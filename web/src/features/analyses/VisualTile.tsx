@@ -266,6 +266,7 @@ export function VisualTileBody({
         <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} onMapMark={thumb ? undefined : onMapMark} />
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
+      {!thumb && q.data.periodOn && <p className={s.periodOn}>Date range applied to {q.data.periodOn}</p>}
     </div>
   );
 }
