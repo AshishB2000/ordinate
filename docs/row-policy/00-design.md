@@ -280,9 +280,12 @@ sensitive columns (fail open); it now refuses the search.
 ## The inventory
 
 Every channel a viewer can call is a `read` contract: **192** of the 388 contracts (`write` and
-`admin` channels need an editor or an admin, who are never restricted). Every one is listed here
-exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code and fails when a
-`read` contract is missing from it.
+`admin` channels need an editor or an admin, who are never restricted). The inventory of record is
+the table as code, `scripts/rowPolicyReaders.ts`: it classifies every one exactly once, and
+`scripts/test-rowPolicySafetyNet.ts` fails when a `read` contract is missing from it. The counts
+below are its. The per-channel rows after them are the design-time inventory with the reasons; some
+predate a later reclassification (a channel now REDACT may still sit under META) or a newer channel,
+and where a row and the code disagree, the code wins.
 
 | Treatment | Count | Meaning |
 |---|---|---|
@@ -296,8 +299,6 @@ exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code 
 | FANOUT | 3 | Builds what is sent to others: refused for everyone. |
 | EXPORT | 4 | Builds a file: refused for a restricted caller. |
 | META | 100 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
-
-The counts are the code's table (`scripts/rowPolicyReaders.ts`), which wins where a row below still lags it.
 
 Handler paths are under `src/`.
 

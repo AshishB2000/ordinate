@@ -41,10 +41,8 @@ import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
-import { cardTextAsSeen, filterPairs, labelCardData, saidFilters } from './valueLabelReplies';
-
-/** The operators the case fix applies to — `answers.canonicaliseTextFilters`'s. */
-const CASE_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
+import { MATCH_OPS } from '../ai/answerValues';
+import { cardTextAsSeen, filterText, labelCardData, saidFilters } from './valueLabelReplies';
 
 /** How the case fix compares a stored and an asked value: JS's own trim and lower case. */
 const caseKey = (v: string): string => v.trim().toLowerCase();
@@ -77,7 +75,7 @@ export async function liveCaseFix(
 ): Promise<{ ok: true; filters: AnswerFilter[]; held: ReadonlyMap<string, ReadonlyMap<string, string>> } | LiveFailure> {
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
-    if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) continue;
+    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) continue;
     const col = columns.find((c) => c.name === f.column);
     if (!col || col.type !== 'text') continue;
     const keys = asked.get(col.name) ?? new Set<string>();
@@ -109,7 +107,7 @@ export async function liveCaseFix(
     ok: true,
     held: stored,
     filters: filters.map((f): AnswerFilter => {
-      if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) return f;
+      if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) return f;
       const byKey = stored.get(f.column);
       if (!byKey) return f;
       const fix = (v: Cell): Cell => (typeof v === 'string' ? byKey.get(caseKey(v)) ?? v : v);
@@ -202,14 +200,15 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
   const facts = cardFacts(factsIn, spec, withheld);
   // As computeCard: what a person reads says the labels (F5), its filters' too; the model's facts keep the stored values.
   const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
-  const shown = saidFilters(spec.filters, await filterPairs(projectId, meta.id, fixed.held));
+  const filterSaid = await filterText(projectId, meta.id, spec.filters, fixed.held);
+  const shown = saidFilters(spec.filters, filterSaid, fixed.held);
   const shownLabels = shown === spec.filters ? filterLabels : cardLabels({ ...spec, filters: shown }, meta.columns, r.filterLabels);
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category) }),
-      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes.concat(labelled.notes), asOf: r.asOf,
+      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes.concat(labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n))), asOf: r.asOf,
     },
     factsText: facts.text,
     ledger: facts.ledger,

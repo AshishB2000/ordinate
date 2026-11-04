@@ -267,6 +267,30 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('east\'s chart by customer pairs only East\'s own values: ["c1","Customer one"]', JSON.stringify(chartEast.body?.data?.valueLabels) === '{"category":[["c1","Customer one"]]}', JSON.stringify(chartEast.body?.data?.valueLabels));
     const chartEd = await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
     ok('NEGATIVE CONTROL: the editor\'s chart pairs the West value too', JSON.stringify(chartEd.body?.data?.valueLabels) === JSON.stringify({ category: labelRows.map((r) => [r.value, r.label]) }), JSON.stringify(chartEd.body?.data?.valueLabels));
+    // An answer card's filter text (bullet, chips, "did you mean") says a label only for a value east's own rows hold.
+    const cardOf = (who: string, column: string, value: string) => W.call(who, 'answer:card', { projectId: P, spec: spec(orders, { filters: [{ column, op: '=', value }] }) });
+    const ownCard = await cardOf('east', 'customer', 'c1');
+    eastReplies.push(ownCard.text);
+    ok('east\'s card filtered to its own c1 says "Customer one" in its chip and bullet', JSON.stringify(ownCard.body?.filterLabels) === '["customer = Customer one"]'
+      && ownCard.body.bullets.includes('Filtered to customer = Customer one.'), ownCard.text.slice(0, 240));
+    // The asked West value is echoed by design (it is east's own question), so these replies stay out of the leak sweep.
+    const westCard = await cardOf('east', 'customer', `${H.W_CANARY}_3`);
+    const westCardEd = await cardOf('ed', 'customer', `${H.W_CANARY}_3`);
+    ok('redact: east\'s card filtered to a West value says no label of it', westCard.status === 200 && westCard.body?.ok === true && !westCard.text.includes('West three')
+      && JSON.stringify(westCard.body.filterLabels) === JSON.stringify([`customer = ${H.W_CANARY}_3`]), westCard.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor\'s card filtered to it says "West three"', JSON.stringify(westCardEd.body?.filterLabels) === '["customer = West three"]'
+      && westCardEd.body.bullets.includes('Filtered to customer = West three.'), westCardEd.text.slice(0, 240));
+    // "Did you mean": east is offered its own region, by its label; never the West one, which the editor is offered.
+    await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'region', patch: { values: [{ value: 'East', label: 'Eastern' }, { value: 'West', label: 'Western' }] } });
+    const meant = (r: H.Reply): string => JSON.stringify(r.body?.noMatch?.options?.map((o: { label: string; spec: { filters: { value: unknown }[] } }) => [o.label, o.spec.filters[0].value]));
+    const eas = await cardOf('east', 'region', 'Eas');
+    const wesEast = await cardOf('east', 'region', 'Wes');
+    const wesEd = await cardOf('ed', 'region', 'Wes');
+    eastReplies.push(eas.text, wesEast.text);
+    ok('east\'s "did you mean" offers its own region by its label, the spec keeping the value', meant(eas) === '[["Eastern","East"]]', meant(eas));
+    ok('redact: east is never offered the West region or its label', wesEast.status === 200 && !wesEast.text.includes('Western') && !/"West"/.test(wesEast.text), wesEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor is offered it, by its label', meant(wesEd) === '[["Western","West"]]', meant(wesEd));
+    await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'region', patch: { values: [] } });
 
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');

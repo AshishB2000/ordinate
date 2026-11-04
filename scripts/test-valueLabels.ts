@@ -318,6 +318,7 @@ async function charts(P: string): Promise<void> {
   const { valueLabels: _pairs, ...rawData } = byRegion.data;
   const bare = await stubbed(() => chart(S, enc));
   ok('labels ADD the pairs and change nothing else: the labelled reply minus valueLabels is the unlabelled one', keyless(bare) && differ({ ...byRegion, data: rawData }, bare) === '', differ({ ...byRegion, data: rawData }, bare));
+  ok('control: differ sees a difference — the pairs are the one it names', differ(byRegion, bare) === '.data.valueLabels', differ(byRegion, bare));
   ok('an unlabelled column of a labelled project: the same reply', differ(await chart(S, { category: 'tier', values: M }), await stubbed(() => chart(S, { category: 'tier', values: M }))) === '');
 
   // A label that is also a stored value: two bars would both read "Europe". The pair is left off, and said.
@@ -372,18 +373,37 @@ async function charts(P: string): Promise<void> {
     && json(fPlain.filterLabels) === '["region = EU"]' && differ(fPlain, fPlainStub) === '' && json(fPlain) === json(fPlainStub), differ(fPlain, fPlainStub));
   ok('NEGATIVE CONTROL: …its keys in the order the card always had', Object.keys(fPlain).join() === 'ok,spec,title,chartType,datasetName,data,caption,headline,bullets,chips,filterLabels,steps,notes,asOf', Object.keys(fPlain).join());
   // (A code under MIN_LOOSE characters is never suggested, so this one is longer.)
-  const E = (await datasets.saveDataset(P, { name: 'Codes', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['EMEA', 1], ['APAC', 2]] }))!.id;
-  await label(E, 'key', [{ value: 'EMEA', label: 'Europe and Africa' }]);
+  const LONG = `Region code ${'x'.repeat(90)}`; // longer than an option's 80-character cut
+  const E = (await datasets.saveDataset(P, { name: 'Codes', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['EMEA', 1], ['APAC', 2], [LONG, 3]] }))!.id;
+  await label(E, 'key', [{ value: 'EMEA', label: 'Europe and Africa' }, { value: LONG, label: 'Long region' }]);
   const near = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: E, category: 'key', filters: [{ column: 'key', op: '=', value: 'EME' }] } });
   ok('a value not stored: the "did you mean" option says the label, and picks the raw value', near.noMatch?.options.length === 1
     && near.noMatch.options[0].label === 'Europe and Africa' && json(near.noMatch.options[0].spec.filters) === '[{"column":"key","op":"=","value":"EMEA"}]', json(near.noMatch));
   ok('…while the filter it fixes says what was asked: "EME" is no stored value, so it has no label', json(near.filterLabels) === '["key = EME"]', json(near.filterLabels));
+  const nearLong = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: E, category: 'key', filters: [{ column: 'key', op: '=', value: LONG.slice(0, 85) }] } });
+  ok('a "did you mean" over 80 characters is looked up by the whole stored value: it says its label', nearLong.noMatch?.options[0]?.label === 'Long region'
+    && nearLong.noMatch.options[0].spec.filters[0].value === LONG, json(nearLong.noMatch).slice(0, 300));
+  // A spelling the steps fix ("eu" → EU) is said by the label of the value it is; a value MATCHED to a stored one is noted by its label.
+  const caseFixed = await call('answer:card', { projectId: P, spec: { ...spec, filters: [{ column: 'region', op: '=', value: 'eu ' }] } });
+  ok('a case-fixed filter value is said by its label; the step holds the stored value', json(caseFixed.filterLabels) === '["region = Europe"]' && caseFixed.steps[0].value === 'EU', json([caseFixed.filterLabels, caseFixed.steps]));
+  // Loose, as answer:rerun and a model's spec are (computeCard's `loose`): "EME" is matched to EMEA.
+  const rerun = await answers.computeCard(P, { ...spec, datasetId: E, category: 'key', filters: [{ column: 'key', op: '=', value: 'EME' }] } as never, true);
+  const matched = 'card' in rerun ? rerun.card : null;
+  ok('a value matched to a stored one: the note and the chip name its label, the step keeps the value', !!matched
+    && matched.notes.some((n: string) => n.includes('Europe and Africa') && !n.includes('EMEA')) && json(matched.filterLabels) === '["key = Europe and Africa"]' && matched.steps[0].value === 'EMEA', json(matched ? [matched.notes, matched.filterLabels] : rerun));
 
   // A card's label that is also a stored value is left off, and the card says why, as a chart reply does.
   const clashCard = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: C } });
   ok('a card whose label is also a stored value: the pair is left off and the note says why', json(clashCard.data.valueLabels) === '{"category":[["NA","North America"]]}'
     && clashCard.notes.includes('“Europe” is also a value of region, so its labelled value shows as stored.'), json([clashCard.data.valueLabels, clashCard.notes]));
   ok('control: without that row the card has no such note', !card.notes.some((n: string) => n.includes('also a value')), json(card.notes));
+  // …and so does a FILTER's label: "Filtered to region = Europe" would not say which.
+  const clashFilter = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: C, category: 'tier', filters: [{ column: 'region', op: '=', value: 'EU' }] } });
+  ok('a filter whose label is also a stored value says the value, and the card notes why', json(clashFilter.filterLabels) === '["region = EU"]'
+    && clashFilter.notes.filter((n: string) => n === '“Europe” is also a value of region, so its labelled value shows as stored.').length === 1, json([clashFilter.filterLabels, clashFilter.notes]));
+  ok('control: a filter on a label no value shares has no such note', !fCard.notes.some((n: string) => n.includes('also a value')), json(fCard.notes));
+  const bothClash = await call('answer:card', { projectId: P, spec: { ...spec, datasetId: C, filters: [{ column: 'region', op: 'in', values: ['EU', 'Europe'] }] } });
+  ok('the axis and the filter leaving off one label say it once', bothClash.notes.filter((n: string) => n.includes('also a value')).length === 1, json(bothClash.notes));
 
   // Which lists a chart reads (labelListsFor): its category's and its split's, text columns only, never the six raw-valued kinds.
   const replies: typeof import('../src/ipc/valueLabelReplies') = require('../src/ipc/valueLabelReplies');

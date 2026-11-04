@@ -313,6 +313,16 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('Live card: its filter chip and bullet say the label; the step keeps the stored value', show(liveFiltered.filterLabels) === show(['region in The north'])
     && liveFiltered.bullets.includes('Filtered to region in The north.') && show(liveFiltered.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['North'] }]), show(liveFiltered).slice(0, 300));
   ok('…and the model\'s facts keep "region in North"', 'factsText' in liveFilteredFacts && liveFilteredFacts.factsText.includes('Filtered to: region in North.') && !liveFilteredFacts.factsText.includes('The north'));
+  // Under a row lock the case fix looks up the caller's rows only: a value outside them has no label to say (the unlocked card above is the control).
+  const liveAnswersIpc: typeof import('../src/ipc/liveAnswers') = require('../src/ipc/liveAnswers');
+  const lockedCard = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['North']), [{ type: 'filter', column: 'region', op: '=', value: 'South' }]));
+  ok('Live card under a lock that holds no North: its filter text says North as asked, never its label', !!lockedCard && 'card' in lockedCard
+    && show(lockedCard.card.filterLabels) === show(['region in North']) && !show(lockedCard.card).includes('The north'), show(lockedCard).slice(0, 300));
+  // A label that is another value the case fix found is left off, and the card says why, as on an extract.
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'region', { values: [{ value: 'North', label: 'South' }] }));
+  const liveClash = (await post('answer:card', { projectId: P, spec: spec(['North', 'South']) })).value;
+  ok('Live card: a filter label that is also a found value says the value, and the note says why', show(liveClash.filterLabels) === show(['region in North, South'])
+    && liveClash.notes.includes('“South” is also a value of region, so its labelled value shows as stored.'), show([liveClash.filterLabels, liveClash.notes]));
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'region', { values: [] }));
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   ok('control: the list removed, the Live card says the stored value and carries no pairs', !('valueLabels' in (await post('answer:card', { projectId: P, spec: bare })).value.data));

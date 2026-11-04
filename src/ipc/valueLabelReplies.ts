@@ -22,6 +22,9 @@ import type { CaptionInput } from '../analysis/captions';
 import { answerFacts } from '../ai/answerFacts';
 import type { AnswerFactsInput, Headline } from '../ai/answerFacts';
 import type { AnswerFilter } from '../ai/answerSpec';
+import { MATCH_OPS } from '../ai/answerValues';
+import { exactKey } from '../analysis/valueMatch';
+import type { Cell } from '../data/transforms';
 import type { VizDataReply } from './visuals';
 
 /**
@@ -74,38 +77,62 @@ export async function labelCardData(
   return { data: labelled.data, notes: droppedNotes(labelled.dropped, encoding) };
 }
 
-/** Per filtered text column, the pairs a card's filter text may say. */
-export type FilterPairs = ReadonlyMap<string, [string, string][]>;
+/** What each filtered TEXT column holds under the caller's row lock: stored text by `exactKey` (answerValues.Held, or the Live case fix's lookup). */
+export type HeldText = ReadonlyMap<string, ReadonlyMap<string, string>>;
+
+/** Per filtered text column, the pairs its filter text may say, and a note for each label left off. */
+export interface FilterText { pairs: ReadonlyMap<string, [string, string][]>; notes: string[] }
+
+/** A filter's value as the steps compare it: the stored text it is in any case or surrounding space, else as given. */
+const storedOf = (held: HeldText, column: string, value: string): string => held.get(column)?.get(exactKey(value)) ?? value;
+
+/** The text values the filters of a column say. */
+const filterValues = (filters: AnswerFilter[], column: string): string[] =>
+  filters.flatMap((f) => ('op' in f && MATCH_OPS.has(f.op) && f.column === column ? [f.value, ...(f.values ?? [])] : [])).filter((v): v is string => typeof v === 'string');
 
 /**
- * The pairs of each filtered column, for values the caller's own rows hold: `held` is what each filtered TEXT column
- * holds under the row lock (answerValues.heldValues, or the Live case fix's lookup), so a value outside the caller's
- * rows has no label to say. A label that is another held value is left off, as on an axis. One catalog read, only
- * when some text column is filtered.
+ * The pairs of each filtered column, for values the caller's own rows hold (`held`), so a value outside them has no label
+ * to say. A label that is another held value is left off, as on an axis, and when a filter would have said it the card
+ * notes why (the sentence a chart reply warns with). The scope is `held`: every value the locked column holds on an
+ * extract, the spellings the case fix found on Live. One catalog read, only when some text column is filtered.
  */
-export async function filterPairs(projectId: string, datasetId: string, held: ReadonlyMap<string, ReadonlyMap<string, string>>): Promise<FilterPairs> {
-  const out = new Map<string, [string, string][]>();
-  if (!held.size) return out;
+export async function filterText(projectId: string, datasetId: string, filters: AnswerFilter[], held: HeldText): Promise<FilterText> {
+  const pairs = new Map<string, [string, string][]>();
+  const notes: string[] = [];
+  if (!held.size) return { pairs, notes };
   const docs = (await catalog.load(projectId)).columns[datasetId];
   for (const [column, values] of held) {
     const list = docs?.[column]?.values;
-    const pairs = list?.length ? applyValueLabels({ labels: [...values.values()], series: [] }, { category: list }).data.valueLabels?.category : undefined;
-    if (pairs) out.set(column, pairs);
+    if (!list?.length) continue;
+    const labelled = applyValueLabels({ labels: [...values.values()], series: [] }, { category: list });
+    if (labelled.data.valueLabels?.category) pairs.set(column, labelled.data.valueLabels.category);
+    const said = new Set(filterValues(filters, column).map((v) => storedOf(held, column, v)));
+    for (const d of labelled.dropped) if (list.some((l) => l.label === d.label && said.has(l.value))) notes.push(labelNotShown(d.label, column));
   }
-  return out;
+  return { pairs, notes };
 }
 
-/** The operators whose values are stored values (answerValues' MATCH_OPS): `contains EU` is not the value EU. */
-const SAID_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
+/** A stored value as a person reads it: its label, found by the stored text it is (a case-fixed spelling too); else as given. */
+export function saidValue<T>(text: FilterText, held: HeldText, column: string, value: T): T | string {
+  const p = typeof value === 'string' ? text.pairs.get(column) : undefined;
+  if (!p) return value;
+  const stored = storedOf(held, column, value as string);
+  const label = shownText([stored], p)[0];
+  return label === stored ? value : label;
+}
 
-/** The filters as a PERSON reads them: each stored value said by its label. Text only: the steps keep the raw value. No pairs → the same array. */
-export function saidFilters(filters: AnswerFilter[], pairs: FilterPairs): AnswerFilter[] {
-  if (!pairs.size) return filters;
-  return filters.map((f) => {
-    const p = 'op' in f && SAID_OPS.has(f.op) ? pairs.get(f.column) : undefined;
-    if (!p || !('op' in f)) return f;
-    return { ...f, ...(f.value !== undefined ? { value: shownText([f.value], p)[0] } : {}), ...(f.values ? { values: shownText(f.values, p) } : {}) };
+/** The filters as a PERSON reads them: each stored value said by its label. Text only: the steps keep the raw value. Nothing said differently → the same array. */
+export function saidFilters(filters: AnswerFilter[], text: FilterText, held: HeldText): AnswerFilter[] {
+  let changed = false;
+  const out = filters.map((f) => {
+    if (!('op' in f) || !MATCH_OPS.has(f.op) || !text.pairs.has(f.column)) return f;
+    const say = (v: Cell): Cell => saidValue(text, held, f.column, v);
+    const g = { ...f, ...(f.value !== undefined ? { value: say(f.value) } : {}), ...(f.values ? { values: f.values.map(say) } : {}) };
+    if (g.value === f.value && (g.values ?? []).every((v, i) => v === f.values?.[i])) return f;
+    changed = true;
+    return g;
   });
+  return changed ? out : filters;
 }
 
 interface CardText { caption: string; headline: Headline[]; bullets: string[] }
