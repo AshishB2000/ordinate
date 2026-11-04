@@ -32,6 +32,7 @@ const metrics: typeof import('../src/analysis/metrics') = require('../src/analys
 const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const msg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
+const snap: typeof import('../src/analysis/snapshot') = require('../src/analysis/snapshot');
 const { metrics: api }: typeof import('../src/api/metrics') = require('../src/api/metrics');
 const { describeDefinition }: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const { civilFromDays }: typeof import('../src/analysis/civilDays') = require('../src/analysis/civilDays');
@@ -95,6 +96,21 @@ void (async () => {
   await update(r.metric.id, { definition: { column: 'units', aggregation: 'sum', snapshot: null } });
   ok('null clears it, byte-identical to a plain metric', JSON.stringify((await metrics.getMetric(pid, r.metric.id))!.definition) === '{"column":"units","aggregation":"sum"}');
   ok('NEGATIVE CONTROL: a plain metric\'s words are today\'s', describeDefinition((await metrics.getMetric(pid, r.metric.id))!) === 'sum of units');
+
+  // ── pure ───────────────────────────────────────────────────────────────────
+  const C = [{ name: 'day', type: 'date' }, { name: 'units', type: 'number' }] as Any;
+  const R = [['2024-03-30', 1], ['03/31/2024', 2], ['2024-03-31', 3], ['', 9], ['2024-04-02', 4]];
+  ok('latest day: only 2024-04-02', isDeepStrictEqual(snap.snapshotRows(C, R, { column: 'day', take: 'last' }), [['2024-04-02', 4]]));
+  ok('latest per month: 31 March twice, 2 April once', isDeepStrictEqual(snap.snapshotRows(C, R, { column: 'day', take: 'last' }, (row) => (String(row[0]).includes('03') ? 'm3' : 'm4')), [['03/31/2024', 2], ['2024-03-31', 3], ['2024-04-02', 4]]));
+  ok('earliest day: 30 March', isDeepStrictEqual(snap.snapshotRows(C, R, { column: 'day', take: 'first' }), [['2024-03-30', 1]]));
+  ok('an undated row is never kept', !snap.snapshotRows(C, R, { column: 'day', take: 'first' }).some((row) => row[0] === ''));
+  ok('a column the table lacks keeps no row', snap.snapshotRows(C, R, { column: 'gone', take: 'last' }).length === 0);
+  ok('latestDay', snap.latestDay(['2024-01-02', '', '2024-01-09', 'Other'], 'last') === '2024-01-09' && snap.latestDay(['2024-01-02', '2024-01-09'], 'first') === '2024-01-02' && snap.latestDay([], 'last') === null);
+  const day = { labels: ['2024-01-30', '2024-01-31', '2024-02-03'], series: [{ name: 'East', values: [5, null, 7] }, { name: 'West', values: [1, 2, null] }] };
+  ok('per month: each bucket\'s latest day, never an older value', isDeepStrictEqual(snap.pickPerBucket(day, 'month', 'last'), { labels: ['2024-01', '2024-02'], series: [{ name: 'East', values: [null, 7] }, { name: 'West', values: [2, null] }] }), show(snap.pickPerBucket(day, 'month', 'last')));
+  ok('per month, earliest: each bucket\'s first day', isDeepStrictEqual(snap.pickPerBucket(day, 'month', 'first'), { labels: ['2024-01', '2024-02'], series: [{ name: 'East', values: [5, 7] }, { name: 'West', values: [1, null] }] }));
+  ok('a label that is no day is skipped', isDeepStrictEqual(snap.pickPerBucket({ labels: ['', '2024-01-02'], series: [{ name: 'x', values: [9, 1] }] }, 'year', 'last'), { labels: ['2024'], series: [{ name: 'x', values: [1] }] }));
+  ok('onDay', isDeepStrictEqual(snap.onDay('day', '2024-01-31'), { type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2024-01-31', to: '2024-01-31' } }));
 
   finish();
 })().catch((err) => {
