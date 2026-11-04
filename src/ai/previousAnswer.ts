@@ -16,12 +16,13 @@ import type { AnswerFilter, AnswerSpec } from './answerSpec';
 import { WITHHELD } from './columnNotes';
 import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry } from './numberAudit';
+import { promptJson } from './promptText';
 
 /** The block's first words — what ./suggestedAction's prompt calls it. */
 export const PREVIOUS_ANSWER = 'PREVIOUS ANSWER';
 
 /** A name or a text value as the block says it. A quote inside is escaped: left bare it would close the name, and what follows would read as fields the answer does not have. */
-const quoted = (s: string): string => JSON.stringify(s);
+const quoted = (s: string): string => promptJson(s); // uncut: the model may write a filter value back
 
 const valuesOf = (f: Exclude<AnswerFilter, { period: unknown } | { term: string }>): Cell[] => (f.values ? f.values : f.value !== undefined ? [f.value] : []);
 
