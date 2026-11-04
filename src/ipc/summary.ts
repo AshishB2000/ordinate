@@ -146,9 +146,8 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
 async function kpiLevel(projectId: string, card: Card, m: NonNullable<Card['metric']>, filters: FilterStep[], params: ParamValues): Promise<SummarySentence | null> {
   if (m.metricId) {
     const r = await resolveMetric(projectId, m.metricId, { filters, params });
-    if (r && r.ok && r.value !== null) {
-      return kpiSentence({ cardId: card.id, metric: m.label || r.name, a: r.value, b: null, delta: null, pct: null, aText: r.display, bText: '', deltaText: '', aLabel: '', bLabel: '' });
-    }
+    // A saved metric is the card's figure, never its stored copy: a snapshot one has no value yet, and so no sentence.
+    if (r) return r.ok && r.value !== null ? kpiSentence({ cardId: card.id, metric: m.label || r.name, a: r.value, b: null, delta: null, pct: null, aText: r.display, bText: '', deltaText: '', aLabel: '', bLabel: '' }) : null;
   }
   const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, filters, params);
   const text = r.ok && r.value !== null ? formatValue(r.value, m.format || 'auto') : '';

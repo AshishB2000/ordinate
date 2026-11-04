@@ -39,6 +39,7 @@ const scenarioModel: typeof import('../src/analysis/scenarioModel') = require('.
 const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const versions: typeof import('../src/ipc/versions') = require('../src/ipc/versions');
+const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
 
 const U1 = '11111111-1111-4111-8111-111111111111';
 const U2 = '22222222-2222-4222-8222-222222222222';
@@ -219,6 +220,15 @@ void (async () => {
   const changeRule = { ...rule({ metricId: m.id }), compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } };
   const alertChange = await alertStore.testRule(pid, changeRule);
   ok('alerts: a previous-period rule on a snapshot metric reads no figure either', alertChange.value === null && alertChange.previous === null && alertChange.fire === false, JSON.stringify(alertChange));
+
+  // ── the Summary card: a KPI of a snapshot metric never falls back to the card's stored {column, aggregation} ──
+  const plainSum = rows.reduce((s, r) => s + r[2], 0);
+  const summarised = async (metricId: string) => summary.computeSummary(pid, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds.id, column: 'units', aggregation: 'sum', metricId } }] }], { filters: [], params: new Map() });
+  const sumSnap = await summarised(m.id);
+  ok('summary: a snapshot metric\'s KPI says no figure, never the plain sum over every date',
+    !sumSnap.some((s) => s.kind === 'kpi') && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
+  const sumPlain = await summarised(plain.id);
+  ok('NEGATIVE CONTROL: the same KPI of a plain metric gives its figure', sumPlain.some((s) => s.kind === 'kpi' && s.figures.some((x) => typeof x.value === 'number')), JSON.stringify(sumPlain).slice(0, 400));
 
   finish();
 })();
