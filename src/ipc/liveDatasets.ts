@@ -43,8 +43,9 @@ import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
 import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
-import { liveBaseFilterRefused } from '../engine/liveRefusals';
+import { liveBaseFilterRefused, liveCalculatedRefused } from '../engine/liveRefusals';
 import { hasBaseFilters } from '../data/liveBaseFilters';
+import { hasLiveCalcs } from '../data/liveCalcs';
 import { safeError } from '../connectors/types';
 import { logger } from '../app/logger';
 
@@ -173,6 +174,12 @@ function baseFilterRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'
   return { ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(meta.live?.baseFilters?.[0]?.column ?? '') };
 }
 
+/** The same for calculated fields (part 8, 00a): a copy would hold none of them, so a filter on one would be gone. */
+function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'calculated'; error: string } | null {
+  if (!hasLiveCalcs(meta.live)) return null;
+  return { ok: false, code: 'live_refused', reason: 'calculated', error: liveCalculatedRefused(meta.live?.calculated?.[0]?.name ?? '') };
+}
+
 /**
  * The Live dataset's column notes onto its copy — display names, descriptions,
  * examples and, above all, the personal / financial marks, so a copy is never
@@ -204,7 +211,7 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta) return { ok: false, error: liveDatasetMissing() };
   if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveCopyNotLiveMessage() };
-  const held = baseFilterRefusal(meta);
+  const held = baseFilterRefusal(meta) ?? calcRefusal(meta);
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) {
@@ -261,7 +268,7 @@ export async function setDatasetMode(p: Record<string, unknown>) {
   }
 
   if (!isLive(meta)) return { ok: true, mode: 'extract', dataset: header(meta) };
-  const held = baseFilterRefusal(meta);
+  const held = baseFilterRefusal(meta) ?? calcRefusal(meta);
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) return { ok: false, error: ran.error };

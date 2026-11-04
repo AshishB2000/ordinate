@@ -25,6 +25,8 @@ import { liveRefusedMessage } from './liveMessages';
 import type { LiveProfile } from './liveProfile';
 import { sanitizeMissing, sanitizeProfile, sanitizeStamp } from './liveProfile';
 import { sanitizeBaseFilters } from './liveBaseFilters';
+import type { LiveCalc } from './liveCalcs';
+import { sanitizeLiveCalcs } from './liveCalcs';
 import type { FilterStep } from './transforms';
 
 export type DatasetMode = 'extract' | 'live';
@@ -55,6 +57,13 @@ export interface LiveSettings {
    * none of it, so the guard refuses on it just as on `baseFilters` (./liveBaseFilters `hasBaseFilters`).
    */
   baseFiltersUnreadable?: true;
+  /**
+   * Calculated fields (./liveCalcs), stored at the record's top level like `baseFilters` and filled by `applyLive`, in
+   * memory only. NOT in `Dataset.columns`: this pod cannot compute them, so it refuses every question instead (liveTarget).
+   */
+  calculated?: LiveCalc[];
+  /** The stored list held something `sanitizeLiveCalcs` dropped, or was no list. In memory only; refused like `calculated` (`hasLiveCalcs`). */
+  calculatedUnreadable?: true;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -192,7 +201,7 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
  */
 export function applyLive(
   target: { mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
-  data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown },
+  data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown; calculated?: unknown },
 ): void {
   const live = sanitizeLive(data);
   if (!live) return;
@@ -201,6 +210,11 @@ export function applyLive(
   // A stored list is read in full or the dataset answers nothing: a dropped step, or a stored value that is no list, must never read as "no step".
   const stored = data.baseFilters;
   if (stored != null && (!Array.isArray(stored) || stored.length !== baseFilters.length)) live.baseFiltersUnreadable = true;
+  const calculated = sanitizeLiveCalcs(data.calculated);
+  if (calculated.length) live.calculated = calculated;
+  // Same rule: a calc this pod cannot read in full must never read as "no calcs".
+  const storedCalcs = data.calculated;
+  if (storedCalcs != null && (!Array.isArray(storedCalcs) || storedCalcs.length !== calculated.length)) live.calculatedUnreadable = true;
   target.mode = 'live';
   target.live = live;
   delete target.autoRefresh;
