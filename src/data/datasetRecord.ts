@@ -26,6 +26,7 @@ import { sanitizeIncremental } from './incremental';
 import type { IncrementalSettings } from './incremental';
 import { cadenceAllowed, needsIncremental, sanitizeRunMs } from './refreshCadence';
 import * as recordFs from '../app/recordFs';
+import { entryPath } from '../app/trashStore';
 
 
 function getProjectsBase(): string {
@@ -268,14 +269,15 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
 }
 
 /**
- * The keys every record write keeps from the STORED record, raw (a pod that cannot read one must not "repair"
- * it): the row access rules, and the column access rules a newer release writes (semantic layer part 4).
- * The Live-only top-level keys `baseFilters` (part 1 08), and `calculated` (part 8) and `semantic` (part 7)
- * that later releases write, are deliberately NOT kept: the only `persist` of a Live record is
- * `liveRecord.toExtractRecord`, so keeping them would leave stale Live keys on an extract. In this release
- * that switch and "Make a copy" refuse a dataset with base filters (ipc/liveDatasets `baseFilterRefusal`); a
- * later release folds base filters and calcs into Prepare steps there, or refuses. Never widen this list to
- * "every unknown key".
+ * The keys a whole-record write (`persist`, through writeRecordKeepingPolicy) keeps from the STORED record,
+ * raw (a pod that cannot read one must not "repair" it), and that a copy is born with: the row access rules,
+ * and the column access rules a newer release writes (semantic layer part 4). The metadata writers
+ * (`serialized`) and the Trash keep every key anyway. The Live-only top-level keys `baseFilters` (part 1 08),
+ * `calculated` (part 8) and `semantic` (part 7), all written by later releases, are deliberately NOT kept: the
+ * only `persist` of a Live record is `liveRecord.toExtractRecord`, so keeping them would leave stale Live keys
+ * on an extract. This release only reads `baseFilters`, and that switch and "Make a copy" refuse a dataset with
+ * them (ipc/liveDatasets `baseFilterRefusal`); a later release folds base filters and calcs into Prepare steps
+ * there, or refuses. Never widen this list to "every unknown key".
  */
 export const KEPT_RECORD_KEYS = ['rowPolicy', 'columnAccess'] as const;
 export type KeptRules = Partial<Record<typeof KEPT_RECORD_KEYS[number], unknown>>;
@@ -324,17 +326,22 @@ export async function writeRecordKeepingPolicy(file: string, obj: object): Promi
 }
 
 /**
- * The record's stored rules (only the keys it has) — what a copy is born with. A record that is not there
- * has none; any other failure THROWS, so the copy refuses rather than being born without rules.
+ * The record's stored rules (only the keys it has) — what a copy is born with. Read from the live record,
+ * else its Trash entry, as the row access check reads it (NV-16): a source trashed while its copy is made
+ * still hands its rules over. A record in neither place has none; any other failure THROWS, so the copy
+ * refuses rather than being born without rules.
  */
 export async function storedRules(projectId: string, id: string): Promise<KeptRules> {
   if (!isValidId(projectId) || !isValidId(id)) return {};
-  let text: string;
-  try {
-    text = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
-  } catch (err) {
-    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return {};
-    throw err;
+  for (const file of [datasetFilePath(projectId, id), entryPath(projectId, 'dataset', id)]) {
+    let text: string;
+    try {
+      text = await recordFs.readFile(file, 'utf8');
+    } catch (err) {
+      if ((err as { code?: unknown } | null)?.code === 'ENOENT') continue;
+      throw err;
+    }
+    return keptOf(JSON.parse(text)); // a record that does not parse: throws too
   }
-  return keptOf(JSON.parse(text)); // a record that does not parse: throws too
+  return {};
 }

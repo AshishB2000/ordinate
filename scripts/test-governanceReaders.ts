@@ -6,9 +6,12 @@
 //              or versionKey (missing, not a string, malformed) drops that one field and keeps the entry;
 //              sanitizing twice gives what sanitizing once gives
 //   § columnAccess  a dataset record's `columnAccess` survives every writer (persist, the metadata writers,
-//              dataset:setRowPolicy, Trash and restore, a re-import, the Live writers) and is born on every
-//              copy (savedFrom, "Make a copy" of a Live dataset), raw; a copy closed only by an upstream
-//              dataset's rules is born with closed row rules, one with only its own columnAccess is not.
+//              fresh on ask, dataset:setRowPolicy, Trash and restore, a re-import, an input table's save, the
+//              Live writers, the mode switch both ways) and is born on every copy (savedFrom, "Make a copy" of
+//              a Live dataset), raw; a copy closed only by an upstream dataset's rules is born with closed row
+//              rules, one with only its own columnAccess is not; a source with rules that goes to the Trash
+//              mid-copy, or whose record is gone by the time its rules are read, never gives an open copy.
+//              NEGATIVE CONTROL: with 'columnAccess' taken out of KEPT_RECORD_KEYS, the writers drop it.
 //              Runs in server mode (the fake warehouse), after § status, which runs outside it.
 //
 //   npm run build:ts && node scripts/test-governanceReaders.js
@@ -92,21 +95,17 @@ async function main(): Promise<void> {
   await columnAccess();
 }
 
-/** The merge `writeRecordKeepingPolicy` made before this release: `rowPolicy` was the only key it kept. */
-function oldKeepRowPolicyOnly(stored: Record<string, unknown>, obj: object): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
-  delete next.rowPolicy;
-  if (Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
-  return next;
-}
-
 async function columnAccess(): Promise<void> {
   // ── columnAccess ───────────────────────────────────────────────────────────
   const H: typeof import('./liveQueryHarness') = require('./liveQueryHarness'); // enters server mode
   const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
   const trash: typeof import('../src/app/trash') = require('../src/app/trash');
-  const { savedFrom } = require('../src/data/rowAccess') as typeof import('../src/data/rowAccess');
-  const { copyLiveDataset } = require('../src/ipc/liveDatasets') as typeof import('../src/ipc/liveDatasets');
+  const access: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+  const { savedFrom } = access;
+  const { copyLiveDataset, setDatasetMode } = require('../src/ipc/liveDatasets') as typeof import('../src/ipc/liveDatasets');
+  const { setFreshOnAsk } = require('../src/data/freshOnAskRecord') as typeof import('../src/data/freshOnAskRecord');
+  const inputTables: typeof import('../src/data/inputTable/store') = require('../src/data/inputTable/store');
+  const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
   const { handlers } = require('../src/server/rpc') as typeof import('../src/server/rpc');
   const { datasets, liveDataset, fakeMod } = H;
   const as = <T>(fn: () => Promise<T>): Promise<T> => H.as(H.ORG_A, fn);
@@ -128,6 +127,8 @@ async function columnAccess(): Promise<void> {
       const r = await as(() => copyLiveDataset({ projectId: P, datasetId: source }));
       return r.ok && 'dataset' in r && r.dataset ? r.dataset.id : `not copied: ${JSON.stringify(r)}`;
     };
+    const setRules = async (id: string, column: string, value: string) =>
+      ((await handlers.get('dataset:setRowPolicy')!(null, { projectId: P, datasetId: id, policy: { column, rules: [{ teamId: TEAM, values: [value] }] } })) as { ok?: boolean }).ok === true;
     const live = async () => (await as(() => H.liveOver(P, { table: fakeMod.ORDERS_TABLE }, fakeMod.ORDERS_COLUMNS, fakeMod.LIVE_FAKE_ID, { fixture: 'orders' }))).liveId;
 
     const DS = await save('Pay');
@@ -139,7 +140,8 @@ async function columnAccess(): Promise<void> {
       ['setAutoRefresh', async (id) => (await rec.setAutoRefresh(P, id, { every: null })) !== false],
       ['writeQuality', async (id) => (await rec.writeQuality(P, id, () => undefined)) !== false],
       ['writeIncremental', async (id) => (await rec.writeIncremental(P, id, () => undefined)) !== false],
-      ['dataset:setRowPolicy (its serialized save)', async (id) => ((await handlers.get('dataset:setRowPolicy')!(null, { projectId: P, datasetId: id, policy: { column: 'dept', rules: [{ teamId: TEAM, values: ['Ops'] }] } })) as { ok?: boolean }).ok === true],
+      ['setFreshOnAsk', async (id) => (await setFreshOnAsk(P, id, null)).ok],
+      ['dataset:setRowPolicy (its serialized save)', (id) => setRules(id, 'dept', 'Ops')],
       ['trash → restore', async (id) => (await trash.trashRecord(P, 'dataset', id)).ok && (await trash.restore(P, 'dataset', id)).ok],
       ['a re-import over the same id (updateDatasetData)', async (id) => (await datasets.updateDatasetData(P, id, { columns: COLS, rows: ROWS })) !== null],
     ];
@@ -150,11 +152,21 @@ async function columnAccess(): Promise<void> {
     }
     const ruled = (await raw(DS)).rowPolicy;
     ok('setup: the dataset has row access rules now', !!ruled && (ruled as { column?: string }).column === 'dept');
+    const created = await as(() => inputTables.createInputTable(P, { name: 'Ledger', columns: [{ name: 'dept', type: 'text' }] }));
+    const IN = created.ok ? created.id : '';
+    await plant(IN);
+    const saved = await as(() => inputTables.saveInputBatches(P, IN, [{ label: 'Add', ops: [{ t: 'ins', at: 0, rows: [['Ops']] }] }]));
+    ok('an input table\'s save keeps columnAccess', saved.ok && saved.rows.length === 1 && (await kept(IN)), JSON.stringify(saved).slice(0, 160));
 
     const LV = await live();
     const LIVE_WRITERS: [string, (id: string) => Promise<boolean>][] = [
       ['bumpEpoch', async (id) => (await liveDataset.bumpEpoch(P, id)) !== false],
       ['writeSchemaSync', (id) => liveDataset.writeSchemaSync(P, id, { columns: fakeMod.ORDERS_COLUMNS, profile: { columns: [] }, missingColumns: [], syncedAt: new Date().toISOString(), changed: true })],
+      ['setMaxCacheAge', async (id) => (await liveDataset.setMaxCacheAge(P, id, 60)) !== false],
+      ['stampSyncAttempt', (id) => liveDataset.stampSyncAttempt(P, id, new Date().toISOString())],
+      // Live → extract is the one persist of a Live record (toExtractRecord); extract → Live is a serialized rewrite (toLiveRecord).
+      ['the switch to an extract (dataset:setMode)', async (id) => ((await setDatasetMode({ projectId: P, datasetId: id, mode: 'extract' })) as { ok?: boolean; mode?: string }).mode === 'extract'],
+      ['the switch back to Live (dataset:setMode)', async (id) => ((await setDatasetMode({ projectId: P, datasetId: id, mode: 'live', confirmDrop: true })) as { ok?: boolean; mode?: string }).mode === 'live'],
     ];
     for (const [name, write] of LIVE_WRITERS) {
       await plant(LV);
@@ -187,7 +199,62 @@ async function columnAccess(): Promise<void> {
     const PLAIN = await save('Plain');
     const plainCopy = await raw(await copyOf(PLAIN));
     ok('a copy of a source with no rules carries none', !('columnAccess' in plainCopy) && !('rowPolicy' in plainCopy));
-    ok('NEGATIVE CONTROL: the old one-key rule would drop it', !('columnAccess' in oldKeepRowPolicyOnly(await raw(DS), { id: DS })));
+
+    // A source with rules that goes to the Trash mid-copy (here: once the warehouse has answered) still hands its rules over.
+    const midCopyTrash = async (source: string) => {
+      const realRun = connectionRun.runConnection;
+      (connectionRun as { runConnection: unknown }).runConnection = async (...args: Parameters<typeof realRun>) => {
+        const out = await realRun(...args);
+        await trash.trashRecord(P, 'dataset', source);
+        return out;
+      };
+      try { return await liveCopyOf(source); } finally { (connectionRun as { runConnection: unknown }).runConnection = realRun; }
+    };
+    const RULED_LIVE = await live();
+    await as(() => setRules(RULED_LIVE, 'region', 'East'));
+    await plant(RULED_LIVE);
+    const liveRules = (await raw(RULED_LIVE)).rowPolicy;
+    const trashedCopy = await midCopyTrash(RULED_LIVE);
+    ok('setup: the source was trashed mid-copy', !(await as(() => datasets.getDatasetMeta(P, RULED_LIVE))) && !!liveRules);
+    ok('a copy whose source with rules went to the Trash mid-copy is born with its row rules and its columnAccess',
+      stableStringify((await raw(trashedCopy)).rowPolicy) === stableStringify(liveRules) && (await kept(trashedCopy)), trashedCopy);
+    const OPEN_LIVE = await live();
+    const openCopy = await raw(await midCopyTrash(OPEN_LIVE));
+    ok('NEGATIVE CONTROL: the same copy of an open source is open', !('rowPolicy' in openCopy) && !('columnAccess' in openCopy));
+    const TRASHED_OWN = await save('Own column rules, trashed');
+    await plant(TRASHED_OWN);
+    await as(() => trash.trashRecord(P, 'dataset', TRASHED_OWN));
+    ok('a copy of a source with only columnAccess, trashed before its rules are read, keeps it', await kept(await copyOf(TRASHED_OWN)));
+    // Its rules judged, then its record gone from the live store and the Trash before they are read: closed, never open.
+    const GONE = await save('Gone');
+    await as(() => setRules(GONE, 'dept', 'Ops'));
+    const goneRules = await as(async () => {
+      await access.policyClosed(P, GONE); // the request remembers this read
+      await fs.promises.rm(rec.datasetFilePath(P, GONE));
+      return access.rulesForCopyOf(P, GONE);
+    });
+    ok('a source with rules whose record is gone when its rules are read gives the closed policy', stableStringify(goneRules) === stableStringify({ rowPolicy: CLOSED }), JSON.stringify(goneRules));
+
+    // NEGATIVE CONTROL: the real guard, with 'columnAccess' taken out of KEPT_RECORD_KEYS, drops it on every persist and copy.
+    const keys = rec.KEPT_RECORD_KEYS as unknown as string[];
+    const at = keys.indexOf('columnAccess');
+    keys.splice(at, 1);
+    try {
+      await plant(DS);
+      await as(() => datasets.updateSteps(P, DS, [{ type: 'filter', column: 'dept', op: 'not_empty' }]));
+      const persisted = !(await kept(DS));
+      await plant(DS);
+      await as(() => datasets.updateDatasetData(P, DS, { columns: COLS, rows: ROWS }));
+      const reimported = !(await kept(DS));
+      await plant(OWN);
+      const uncopied = !(await kept(await copyOf(OWN)));
+      ok('NEGATIVE CONTROL: without columnAccess in KEPT_RECORD_KEYS, persist, a re-import and a copy drop it', at >= 0 && persisted && reimported && uncopied, `${persisted} ${reimported} ${uncopied}`);
+    } finally {
+      keys.splice(at, 0, 'columnAccess');
+    }
+    await plant(DS);
+    await as(() => datasets.updateSteps(P, DS, [{ type: 'filter', column: 'dept', op: 'not_empty' }]));
+    ok('…and with it put back, persist keeps it again', stableStringify(rec.KEPT_RECORD_KEYS) === '["rowPolicy","columnAccess"]' && (await kept(DS)));
   } finally {
     H.cleanup();
   }

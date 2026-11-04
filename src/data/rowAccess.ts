@@ -330,17 +330,17 @@ export function rulesChanged(projectId: string): void {
 
 /**
  * The rules a NEW dataset made from `sourceId`'s rows is born with (round 2, #3): none when the source has
- * none; the source's own stored rules (row and column); and, for a source closed by an upstream dataset's
- * rules with no row rules of its own, row rules that open nothing (a closed policy). Pass the result to
- * `datasetRecord.withFirstWritePolicy` around the save. A source whose rules cannot be read THROWS — no copy
- * is made without them.
+ * none; the source's own stored rules (row and column); and, for a closed source with no row rules on its
+ * record (closed by an upstream dataset's rules, or its record gone since the check read it), row rules that
+ * open nothing (a closed policy). Pass the result to `datasetRecord.withFirstWritePolicy` around the save.
+ * A source whose rules cannot be read THROWS — no copy is made without them.
  */
 export async function rulesForCopyOf(projectId: string, sourceId: string): Promise<KeptRules | undefined> {
   if (!isValidId(projectId) || !isValidId(sourceId)) return undefined;
   const { kind } = await effective(projectId, sourceId);
   const own = await storedRules(projectId, sourceId);
   if (kind === 'none' && !('columnAccess' in own)) return undefined;
-  return kind === 'derived' && own.rowPolicy == null ? { ...own, rowPolicy: { column: '', rules: [], stepsHash: '' } } : own;
+  return kind !== 'none' && own.rowPolicy == null ? { ...own, rowPolicy: { column: '', rules: [], stepsHash: '' } } : own;
 }
 
 /** Saves a new dataset made from `sourceId`'s rows so that its first record write carries `rulesForCopyOf`. */
