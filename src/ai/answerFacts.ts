@@ -34,7 +34,7 @@ export function describeAnswer(spec: AnswerSpec): string {
  * and never its value; the card a person sees is labelled from the real ones.
  */
 export function withheldFilters(filters: AnswerFilter[], withheld: ReadonlySet<string>): AnswerFilter[] {
-  return filters.map((f) => ('period' in f || !withheld.has(f.column) || (f.value === undefined && !f.values)
+  return filters.map((f) => ('term' in f || 'period' in f || !withheld.has(f.column) || (f.value === undefined && !f.values)
     ? f : { column: f.column, op: f.op, value: WITHHELD }));
 }
 

@@ -157,7 +157,7 @@ export function sanitizeLearn(raw: unknown, spec: AnswerSpec): AnswerLearn | und
   if (!raw || typeof raw !== 'object') return undefined;
   const { said, column } = raw as Record<string, unknown>;
   if (typeof said !== 'string' || typeof column !== 'string') return undefined;
-  const uses = [spec.category, spec.series, ...spec.measures.map((m) => m.column), ...spec.filters.map((f) => f.column)];
+  const uses = [spec.category, spec.series, ...spec.measures.map((m) => m.column), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))];
   const one = sanitizeAliases(said, column);
   return uses.includes(column) && one.length === 1 && one[0] === said ? { said, column } : undefined;
 }

@@ -20,6 +20,7 @@
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
+import { TermNotExpandedError } from '../data/termStep';
 import { FILTER_OPS, LIST_OPS, VALUELESS_OPS } from '../data/filterOps';
 import type { FilterOp } from '../data/filterOps';
 import type { VizAggregation, VizMeasure } from '../analysis/visuals';
@@ -36,10 +37,11 @@ import type { ValueMatch } from './answerValues';
 export type AnswerPeriod = 'last_month' | 'last_quarter' | 'last_year';
 const PERIODS: ReadonlySet<string> = new Set(['last_month', 'last_quarter', 'last_year']);
 
-/** One filter as the APP stores it: an ordinary comparison, or a relative period. */
+/** One filter as the APP stores it: an ordinary comparison, a relative period, or a reference to a glossary term (a door expands it). */
 export type AnswerFilter =
   | { column: string; op: FilterOp; value?: Cell; values?: Cell[] }
-  | { column: string; period: AnswerPeriod; yearsBack?: number };
+  | { column: string; period: AnswerPeriod; yearsBack?: number }
+  | { term: string };
 
 /** A spec whose every name resolved against a real dataset. What a turn persists. */
 export interface AnswerSpec {
@@ -411,6 +413,10 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   if (!measures.length) return undefined;
   const filters: AnswerFilter[] = [];
   for (const f of Array.isArray(o.filters) ? o.filters.slice(0, MAX_FILTERS) : []) {
+    if (f && typeof f.column !== 'string' && typeof f.term === 'string' && UUID_RE.test(f.term)) {
+      filters.push({ term: f.term }); // a reference to a glossary term: kept whole, nothing else of it
+      continue;
+    }
     if (!f || typeof f.column !== 'string') continue;
     if (typeof f.period === 'string' && PERIODS.has(f.period)) {
       const yb = Number.isInteger(f.yearsBack) && f.yearsBack > 0 && f.yearsBack <= 20 ? f.yearsBack : 0;
@@ -505,6 +511,7 @@ export function specFilterSteps(
   const steps: FilterStep[] = [];
   const labels: string[] = [];
   for (const f of spec.filters) {
+    if ('term' in f) throw new TermNotExpandedError('not_expanded'); // a door expands it; never skipped, never dropped
     const ci = columns.findIndex((c) => c.name === f.column);
     if (ci < 0) continue;
     if ('period' in f) {

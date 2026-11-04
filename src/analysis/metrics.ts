@@ -24,7 +24,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
-import { sanitizeSteps } from '../data/transforms';
+import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
@@ -213,12 +213,9 @@ export function sanitizeFormat(raw: unknown): MetricFormat {
   return out;
 }
 
-// Whitelist metric-level filters. Delegates to transforms.sanitizeSteps so
-// filter validation stays single-source, then keeps ONLY 'filter' steps — a
-// Metric never carries an aggregate/rename step, its aggregation IS its
-// definition. Same rule, same reason, as visuals.sanitizeFilters.
+// Whitelist metric-level filters: data/filterList.ts, as visuals.sanitizeFilters does.
 export function sanitizeMetricFilters(raw: unknown): FilterStep[] {
-  return sanitizeSteps(raw).filter((s): s is FilterStep => s.type === 'filter');
+  return sanitizeFilterList(raw);
 }
 
 function isValidMetric(data: any): boolean {

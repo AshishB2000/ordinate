@@ -52,6 +52,7 @@ function sameLeaves(a: unknown, b: unknown): boolean {
 function strangers(spec: import('../src/ai/answerSpec').AnswerSpec): string[] {
   const out: string[] = [];
   for (const f of spec.filters) {
+    if ('term' in f) continue;
     const ci = table.columns.findIndex((c) => c.name === f.column);
     if ('period' in f || table.columns[ci].type !== 'text' || !['=', '!=', 'in', 'not in'].includes(f.op)) continue;
     const held = new Set(table.rows.map((r) => String(r[ci] ?? '').trim().toLowerCase()));

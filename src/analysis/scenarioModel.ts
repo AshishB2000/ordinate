@@ -18,7 +18,7 @@
 // This file owns what needs no I/O: the record whitelist, the driver algebra,
 // the tornado's ordering and the labels.
 
-import { sanitizeSteps } from '../data/transforms';
+import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
 import type { ParamValues } from './params';
@@ -103,10 +103,10 @@ export function sanitizeDriver(raw: unknown): Driver | null {
     const column = typeof t.column === 'string' ? t.column.trim().slice(0, 200) : '';
     if (!column) return null;
     target = { column };
-    // The filter is an ordinary FilterStep, whitelisted by the pipeline's own
-    // sanitizer — the same one a dashboard filter goes through.
-    const f = t.filter ? sanitizeSteps([t.filter])[0] : undefined;
-    if (f && f.type === 'filter') target.filter = f;
+    // The filter is ONE step, whitelisted by the same list sanitizer a dashboard filter goes through;
+    // a step this pod cannot read (a glossary term) is kept as the target and refused at scenario:card.
+    const f = t.filter ? sanitizeFilterList([t.filter])[0] : undefined;
+    if (f) target.filter = f;
   }
   const value = o.kind === 'pct' ? Math.min(PCT_MAX, Math.max(PCT_MIN, o.value)) : o.value;
   const d: Driver = { name: typeof o.name === 'string' ? o.name.trim().slice(0, 120) : '', kind: o.kind, target, value };

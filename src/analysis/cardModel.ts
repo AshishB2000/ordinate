@@ -86,6 +86,9 @@
     return { ok: true, url: u.href };
   }
 
+  // A step this pod cannot read (a glossary term) travels whole: dropping it would widen the destination.
+  const isKept = (s: any): boolean => require('../data/filterList').isKeptStep(s);
+
   function stepKey(s: any): string {
     return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null]);
   }
@@ -112,9 +115,10 @@
     const seen = new Set<string>();
     const out: any[] = [];
     for (const s of [...((ctx && ctx.filters) || []), ...((ctx && ctx.selection) || [])]) {
-      if (!s || s.type !== 'filter' || typeof s.column !== 'string') continue;
-      if (replaced.has(s.column) && s.op === '=') continue;
-      const k = stepKey(s);
+      const kept = isKept(s);
+      if (!kept && (!s || s.type !== 'filter' || typeof s.column !== 'string')) continue;
+      if (!kept && replaced.has(s.column) && s.op === '=') continue;
+      const k = kept ? 'kept:' + JSON.stringify(s) : stepKey(s);
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(s);

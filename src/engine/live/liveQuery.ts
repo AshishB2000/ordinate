@@ -379,7 +379,7 @@ function answerFilterLabels(spec: AnswerSpec, columns: LiveTarget['columns'], pe
   const periods = periodLabels.slice();
   const out: string[] = [];
   for (const f of spec.filters || []) {
-    if (!columns.some((c) => c.name === f.column)) continue;
+    if ('term' in f || !columns.some((c) => c.name === f.column)) continue;
     if ('period' in f) {
       const l = periods.shift();
       if (l !== undefined) out.push(l);

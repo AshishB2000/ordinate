@@ -77,7 +77,7 @@ const hostile = sanitizeViewState({
     '99999999-9999-4999-8999-999999999999': { value: 'Ghost' }, // no such card
   },
   params: { [PARAM]: 9000, nope: 1 },
-  selection: [{ type: 'rename', from: 'a', to: 'b' }, { type: 'filter', column: 'x', op: '=', value: '1' }],
+  selection: [{ type: 'rename_column', from: 'a', to: 'b' }, { type: 'filter', column: 'x', op: '=', value: '1' }],
   tiles: { '99999999-9999-4999-8999-999999999999': [{ type: 'filter', column: 'x', op: '=', value: '1' }] },
   groupTabs: { [TABS]: 'not-a-tab', [CHART]: TAB_A },
   asOf: 'yesterday-ish',

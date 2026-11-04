@@ -45,6 +45,7 @@
 
 import type { ParsedColumn } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
 import { compile } from '../formula/formula';
 import type { ColumnSummary } from '../data/datasetStats';
 import * as datasets from '../data/datasets';
@@ -684,6 +685,7 @@ function validateVisual(
   // exactly what the encoding says, just unfiltered, and the user is told.
   const keptFilters: FilterStep[] = [];
   for (const f of filters) {
+    if (isKeptStep(f)) { keptFilters.push(f); continue; } // a glossary term has no column to check
     if (!known(f.column)) {
       dropped.push({
         kind: 'filter',

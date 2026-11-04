@@ -73,7 +73,7 @@ function fail(f: LiveFailure): Failure {
 export async function liveCaseFix(projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = []): Promise<{ ok: true; filters: AnswerFilter[] } | LiveFailure> {
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
-    if ('period' in f || !CASE_OPS.has(f.op)) continue;
+    if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) continue;
     const col = columns.find((c) => c.name === f.column);
     if (!col || col.type !== 'text') continue;
     const keys = asked.get(col.name) ?? new Set<string>();
@@ -104,7 +104,7 @@ export async function liveCaseFix(projectId: string, datasetId: string, columns:
   return {
     ok: true,
     filters: filters.map((f): AnswerFilter => {
-      if ('period' in f || !CASE_OPS.has(f.op)) return f;
+      if ('term' in f || 'period' in f || !CASE_OPS.has(f.op)) return f;
       const byKey = stored.get(f.column);
       if (!byKey) return f;
       const fix = (v: Cell): Cell => (typeof v === 'string' ? byKey.get(caseKey(v)) ?? v : v);
@@ -126,7 +126,7 @@ function cardSteps(filters: AnswerFilter[], columns: ParsedColumn[], ranges: Per
   const steps: FilterStep[] = [];
   const left = ranges.slice();
   for (const f of filters) {
-    if (!columns.some((c) => c.name === f.column)) continue;
+    if ('column' in f && !columns.some((c) => c.name === f.column)) continue; // a term reaches specFilterSteps, which refuses it
     if (!('period' in f)) {
       steps.push(...specFilterSteps({ filters: [f] }, columns, []).steps);
       continue;
@@ -147,7 +147,7 @@ function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[
   const out: string[] = [];
   let i = 0;
   for (const f of spec.filters) {
-    if (!columns.some((c) => c.name === f.column)) continue;
+    if ('column' in f && !columns.some((c) => c.name === f.column)) continue;
     const label = answered[i++];
     if ('period' in f) {
       if (label !== undefined) out.push(label);
@@ -167,7 +167,7 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
   if (gone) return { ok: false, reason: gone.message, code: 'live_refused' };
   // computeCard's own first check, with its own words.
   const has = (n: string): boolean => meta.columns.some((c) => c.name === n);
-  const used = [spec.category, ...spec.measures.map((m) => m.column), ...spec.filters.map((f) => f.column)].concat(spec.series ? [spec.series] : []);
+  const used = [spec.category, ...spec.measures.map((m) => m.column), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))].concat(spec.series ? [spec.series] : []);
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${meta.name}.` };
 

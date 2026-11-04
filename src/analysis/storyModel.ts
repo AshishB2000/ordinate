@@ -15,7 +15,7 @@
 
 import { randomUUID } from 'crypto';
 import type { FilterStep } from '../data/transforms';
-import { sanitizeSteps } from '../data/transforms';
+import { sanitizeFilterList } from '../data/filterList';
 
 export type StoryBlockKind = 'text' | 'visual' | 'metric' | 'metrics_row' | 'image' | 'divider' | 'callout';
 export const STORY_BLOCK_KINDS: readonly StoryBlockKind[] = ['text', 'visual', 'metric', 'metrics_row', 'image', 'divider', 'callout'];
@@ -65,7 +65,7 @@ function optCaption(v: unknown): string | undefined {
 }
 
 function filtersOf(v: unknown): FilterStep[] {
-  return sanitizeSteps(v).filter((s): s is FilterStep => s.type === 'filter');
+  return sanitizeFilterList(v);
 }
 
 /**

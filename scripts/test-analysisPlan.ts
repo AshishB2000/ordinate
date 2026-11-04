@@ -709,6 +709,18 @@ async function checkGarbage(): Promise<void> {
      && badFilter.dropped.length === 1 && badFilter.dropped[0].kind === 'filter',
      badFilter.dropped[0]?.message);
 
+  // A glossary term has no column to check: it is kept, and nothing is reported dropped (05a).
+  const term = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' };
+  const keptTerm = plan.validatePlan(
+    { name: 'X', sheets: [{ name: 'S', visuals: [{ dataset: 'Sales', chartType: 'bar',
+      encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] },
+      filters: [term, { type: 'filter', column: 'ghost', op: '=', value: 1 }] }] }] },
+    ctx,
+  );
+  ok('a term filter is kept without a column check, a ghost filter beside it still goes',
+     JSON.stringify(keptTerm.plan.sheets[0].visuals[0].filters) === JSON.stringify([term]) && keptTerm.dropped.length === 1,
+     JSON.stringify([keptTerm.plan.sheets[0].visuals[0].filters, keptTerm.dropped]));
+
   // A reference to a saved visual that does not exist.
   const ghostRef = plan.validatePlan(
     { name: 'X', sheets: [{ name: 'S', visuals: [{ visual: 'No such visual' }] }] }, ctx,

@@ -265,6 +265,13 @@ function checkRefusals(): void {
      badFilter.ops.length === 1 && badFilter.ops[0].filters.length === 0
      && badFilter.dropped.length === 1 && badFilter.dropped[0].kind === 'filter',
      JSON.stringify(badFilter.dropped));
+
+  // A glossary term has no column to check: it is kept, and nothing is reported dropped (05a).
+  const term = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' };
+  const keptTerm = one({ op: 'addTile', datasetId: SALES, chartType: 'bar', encoding: enc('region', 'revenue'), filters: [term, { type: 'filter', column: 'ghost', op: '=', value: 1 }] });
+  ok('a term filter is kept without a column check, a ghost filter beside it still goes',
+     keptTerm.ops.length === 1 && JSON.stringify(keptTerm.ops[0].filters) === JSON.stringify([term]) && keptTerm.dropped.length === 1,
+     JSON.stringify([keptTerm.ops[0]?.filters, keptTerm.dropped]));
 }
 
 // ── §4 Blast radius — a bad op does not take its siblings ──────────────────

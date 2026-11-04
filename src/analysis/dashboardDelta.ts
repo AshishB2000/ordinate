@@ -30,6 +30,7 @@
 
 import type { ParsedColumn } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
 import * as visuals from './visuals';
 import type { VizEncoding } from './visuals';
 import type { ControlKind, MetricAggregation } from './dashboards';
@@ -297,13 +298,14 @@ function mapError(chartType: string, enc: VizEncoding, ds: PlanDataset, at: stri
 }
 
 /** Filters on columns that do not exist lose the FILTER, not the op — the same
- *  severity `validatePlan` gives them. */
+ *  severity `validatePlan` gives them. A kept step (a glossary term) has no column to check: it stays. */
 function keepFilters(
   raw: unknown, ds: PlanDataset, where: string, at: string, dropped: DeltaDrop[],
 ): FilterStep[] {
   const out: FilterStep[] = [];
   const types = columnTypes(ds);
   for (const f of visuals.sanitizeFilters(raw)) {
+    if (isKeptStep(f)) { out.push(f); continue; }
     if (!types.has(f.column)) {
       dropped.push({
         kind: 'filter',

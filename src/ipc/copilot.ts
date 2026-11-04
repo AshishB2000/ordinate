@@ -41,6 +41,7 @@ import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } f
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
 import { logger } from '../app/logger';
+import { isKeptStep } from '../data/filterList';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -295,7 +296,7 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       // Statistics tiles (src/ipc/stats.ts): their results, recomputed under the same filters, as facts.
-      const filteredBy = [...new Set(scope.filters.map((f) => f.column))];
+      const filteredBy = [...new Set(scope.filters.flatMap((f) => (isKeptStep(f) ? [] : [f.column])))];
       return withStatsTiles(projectId, a.sheets, copilot.analysisFacts(a, cards, tiles, defined, filteredBy), scope.filters);
     }
   }
