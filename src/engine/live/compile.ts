@@ -50,7 +50,7 @@ import { dialectFor } from './dialects';
 import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
-import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate } from './compileFilter';
+import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './compileFilter';
 import { keyOf } from './profileSql';
 
 export type { CompiledQuery } from './sqlParams';
@@ -63,6 +63,8 @@ export interface CompileEnv {
   source: LiveSource;
   /** The dataset's DECLARED columns — the only identifiers a statement may name. */
   columns: LiveColumn[];
+  /** The dataset's base filters (./liveBase), AND-ed into every statement over its rows. */
+  base?: LiveFilter[];
 }
 
 /** The category key once its probe has answered: what `compileChart` groups by. */
@@ -93,6 +95,7 @@ export function partsOf(m: LiveMeasure): Part[] {
 interface Prepared {
   c: Ctx;
   from: string;
+  base: LiveFilter[];
 }
 
 function badName(name: unknown): boolean {
@@ -144,16 +147,13 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   }
   const from = fromItem(d, env.source);
   if (isRefusal(from)) return from;
-  return { c: { d, b: new ParamSink(), columns }, from };
+  return { c: { d, b: new ParamSink(), columns }, from, base: env.base ?? [] };
 }
 
+/** The dataset's base filters, then the question's: every statement's WHERE. */
 function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
-  const preds: string[] = [];
-  for (const f of ir.filters) {
-    const s = predicate(p.c, f);
-    if (isRefusal(s)) return s;
-    preds.push(s);
-  }
+  const preds = predicates(p.c, [...p.base, ...ir.filters]);
+  if (isRefusal(preds)) return preds;
   return preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
 }
 
@@ -203,11 +203,11 @@ export function latestColumns(ir: LiveIR): string[] {
 }
 
 /**
- * The latest day per period column, as an epoch day. Over ALL rows, no WHERE:
- * `answerSpec.latestDate` reads every cell of the column, not the filtered ones.
+ * The latest day per period column, as an epoch day. Over every row a copy would hold, not the filtered
+ * ones: `answerSpec.latestDate` reads every cell of the column.
  */
 export function compileLatestDates(ir: LiveIR, env: CompileEnv): Compiled {
-  // Only a row access lock narrows the anchor: "last quarter" ends at the latest date the caller may see (row-policy D13).
+  // Only a row lock and the dataset's base filters narrow the anchor: "last quarter" ends at the latest date the caller may see (row-policy D13).
   const locked: LiveIR = { ...ir, filters: ir.filters.filter((f) => 'binary' in f && f.binary === true) };
   const p = prepare(locked, env);
   if (isRefusal(p)) return p;
