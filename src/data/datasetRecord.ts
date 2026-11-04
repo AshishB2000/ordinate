@@ -267,57 +267,74 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
   }).catch(() => false);
 }
 
-const firstWritePolicy = new AsyncLocalStorage<{ rowPolicy: unknown }>();
+/**
+ * The keys every record write keeps from the STORED record, raw (a pod that cannot read one must not "repair"
+ * it): the row access rules, and the column access rules a newer release writes (semantic layer part 4).
+ * The Live-only top-level keys `baseFilters` (part 1 08), and `calculated` (part 8) and `semantic` (part 7)
+ * that later releases write, are deliberately NOT kept: the only `persist` of a Live record is
+ * `liveRecord.toExtractRecord`, so keeping them would leave stale Live keys on an extract. In this release
+ * that switch and "Make a copy" refuse a dataset with base filters (ipc/liveDatasets `baseFilterRefusal`); a
+ * later release folds base filters and calcs into Prepare steps there, or refuses. Never widen this list to
+ * "every unknown key".
+ */
+export const KEPT_RECORD_KEYS = ['rowPolicy', 'columnAccess'] as const;
+export type KeptRules = Partial<Record<typeof KEPT_RECORD_KEYS[number], unknown>>;
+
+/** The kept keys `from` has, as stored. */
+function keptOf(from: unknown): KeptRules {
+  const out: KeptRules = {};
+  if (!from || typeof from !== 'object') return out;
+  for (const k of KEPT_RECORD_KEYS) if (Object.prototype.hasOwnProperty.call(from, k)) out[k] = (from as KeptRules)[k];
+  return out;
+}
+
+const firstWritePolicy = new AsyncLocalStorage<{ rules: KeptRules }>();
 
 /**
  * Runs `fn` (a save that creates ONE new dataset) so that dataset's FIRST record write already
- * carries `rowPolicy` — "Make a copy" of a dataset with row access rules (docs/row-policy D14).
+ * carries `rules` — "Make a copy" of a dataset with access rules (docs/row-policy D14).
  */
-export function withFirstWritePolicy<T>(rowPolicy: unknown, fn: () => Promise<T>): Promise<T> {
-  return firstWritePolicy.run({ rowPolicy }, fn);
+export function withFirstWritePolicy<T>(rules: KeptRules, fn: () => Promise<T>): Promise<T> {
+  return firstWritePolicy.run({ rules }, fn);
 }
 
 /**
  * A data write's record write (`datasets.persist`): a LOCKED read-merge-write
- * that copies `rowPolicy` from the STORED record and never from what the writer
- * holds — the in-memory Dataset does not carry it. So rules an admin saves while
- * a long fold runs survive that fold's write, and narrowed rules are never
+ * that copies the KEPT_RECORD_KEYS from the STORED record and never from what the
+ * writer holds — the in-memory Dataset does not carry them. So rules an admin saves
+ * while a long fold runs survive that fold's write, and narrowed rules are never
  * widened back (docs/row-policy/00-design.md D2b). A record that is missing or
  * unreadable has no rules to keep.
  */
 export async function writeRecordKeepingPolicy(file: string, obj: object): Promise<void> {
   const first = firstWritePolicy.getStore();
   await recordFs.locked(file, async () => {
-    let stored: Record<string, unknown> | null = null;
+    let stored: unknown = null;
     try {
-      stored = JSON.parse(await recordFs.readFile(file, 'utf8')) as Record<string, unknown>;
+      stored = JSON.parse(await recordFs.readFile(file, 'utf8'));
     } catch {
       stored = null; // a first save, or a record no reader can open
     }
     const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
-    delete next.rowPolicy;
-    if (stored && typeof stored === 'object') {
-      if (Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
-    } else if (first !== undefined) {
-      next.rowPolicy = first.rowPolicy; // a copy of a dataset with rules is born with them: no moment without
-    }
+    for (const k of KEPT_RECORD_KEYS) delete next[k];
+    // A copy of a dataset with rules is born with them: no moment without.
+    Object.assign(next, stored && typeof stored === 'object' ? keptOf(stored) : keptOf(first?.rules));
     await writeJsonAtomic(file, next);
   });
 }
 
 /**
- * The record's stored `rowPolicy` (undefined when it has none) — what a copy is born with. A record that is
- * not there has none; any other failure THROWS, so the copy refuses rather than being born without rules.
+ * The record's stored rules (only the keys it has) — what a copy is born with. A record that is not there
+ * has none; any other failure THROWS, so the copy refuses rather than being born without rules.
  */
-export async function storedRowPolicy(projectId: string, id: string): Promise<unknown> {
-  if (!isValidId(projectId) || !isValidId(id)) return undefined;
+export async function storedRules(projectId: string, id: string): Promise<KeptRules> {
+  if (!isValidId(projectId) || !isValidId(id)) return {};
   let text: string;
   try {
     text = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
   } catch (err) {
-    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return undefined;
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return {};
     throw err;
   }
-  const raw = JSON.parse(text) as Record<string, unknown> | null; // a record that does not parse: throws too
-  return raw && typeof raw === 'object' ? raw.rowPolicy : undefined;
+  return keptOf(JSON.parse(text)); // a record that does not parse: throws too
 }

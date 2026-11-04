@@ -254,7 +254,7 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     ok('NEGATIVE CONTROL: a dataset with no record at all (ENOENT) is "not found", not a row access refusal', !H.refused(ghost) && ghost.body?.ok === false, show(ghost));
     failing(orders);
     const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
-    const copyRefused: string = await W.as('boss', () => rec.storedRowPolicy(P, orders).then(() => 'read', (err: Error) => err.message));
+    const copyRefused: string = await W.as('boss', () => rec.storedRules(P, orders).then(() => 'read', (err: Error) => err.message));
     (recordFs as { readFile: unknown }).readFile = realRead;
     ok('unreadable: what a copy is born with cannot be read → the copy refuses (no copy without rules)', /EIO/.test(copyRefused));
 

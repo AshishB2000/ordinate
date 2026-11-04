@@ -5,6 +5,11 @@
 //              a bad ref, a kind status does not cover, a bad replacement are dropped; an unreadable pin
 //              or versionKey (missing, not a string, malformed) drops that one field and keeps the entry;
 //              sanitizing twice gives what sanitizing once gives
+//   § columnAccess  a dataset record's `columnAccess` survives every writer (persist, the metadata writers,
+//              dataset:setRowPolicy, Trash and restore, a re-import, the Live writers) and is born on every
+//              copy (savedFrom, "Make a copy" of a Live dataset), raw; a copy closed only by an upstream
+//              dataset's rules is born with closed row rules, one with only its own columnAccess is not.
+//              Runs in server mode (the fake warehouse), after § status, which runs outside it.
 //
 //   npm run build:ts && node scripts/test-governanceReaders.js
 
@@ -83,6 +88,109 @@ async function main(): Promise<void> {
   ok('a status that is not an object reads as no section', !('status' in catalog.sanitizeCatalog({ status: [1] })) && !('status' in catalog.sanitizeCatalog({ status: 'x' })));
   ok('parseStatusRef: a covered kind and a uuid, nothing else', parseStatusRef(`term:${U8}`)?.kind === 'term' && parseStatusRef(`term:${U8}`)?.id === U8
     && parseStatusRef(`visual:${U8}`) === null && parseStatusRef(`:${U8}`) === null && parseStatusRef(U8) === null && parseStatusRef(7) === null);
+
+  await columnAccess();
+}
+
+/** The merge `writeRecordKeepingPolicy` made before this release: `rowPolicy` was the only key it kept. */
+function oldKeepRowPolicyOnly(stored: Record<string, unknown>, obj: object): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+  delete next.rowPolicy;
+  if (Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
+  return next;
+}
+
+async function columnAccess(): Promise<void> {
+  // ── columnAccess ───────────────────────────────────────────────────────────
+  const H: typeof import('./liveQueryHarness') = require('./liveQueryHarness'); // enters server mode
+  const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+  const trash: typeof import('../src/app/trash') = require('../src/app/trash');
+  const { savedFrom } = require('../src/data/rowAccess') as typeof import('../src/data/rowAccess');
+  const { copyLiveDataset } = require('../src/ipc/liveDatasets') as typeof import('../src/ipc/liveDatasets');
+  const { handlers } = require('../src/server/rpc') as typeof import('../src/server/rpc');
+  const { datasets, liveDataset, fakeMod } = H;
+  const as = <T>(fn: () => Promise<T>): Promise<T> => H.as(H.ORG_A, fn);
+  // dataset:setRowPolicy checks the team is the org's with one Postgres count: a pool answering 1 stands in for it.
+  (require('../src/ipc/rowPolicy') as typeof import('../src/ipc/rowPolicy')).register(() => ({ query: async () => ({ rows: [{ n: 1 }] }) }) as unknown as import('pg').Pool);
+  try {
+    const TEAM = uuid(10);
+    const COLS = [{ name: 'dept', type: 'text' as const }, { name: 'salary', type: 'number' as const }];
+    const ROWS = [['Ops', 10], ['Eng', 20]];
+    const CA = { columns: [{ column: 'salary', visibleTo: [TEAM] }], readersHash: 'h', updatedBy: 'boss@x', updatedAt: '2026-11-04T00:00:00.000Z' };
+    const CLOSED = { column: '', rules: [], stepsHash: '' };
+    const P = await as(async () => { await H.projects.init(); return (await H.projects.createProject('Column access')).id; });
+    const save = (name: string) => as(async () => (await datasets.saveDataset(P, { name, sourceKind: 'csv', columns: COLS, rows: ROWS }))!.id);
+    const raw = (id: string) => as(async () => JSON.parse(await fs.promises.readFile(rec.datasetFilePath(P, id), 'utf8')) as Record<string, unknown>);
+    const plant = (id: string) => as(() => rec.serialized(rec.datasetFilePath(P, id), (r) => { r.columnAccess = CA; return true; }));
+    const kept = async (id: string) => stableStringify((await raw(id)).columnAccess) === stableStringify(CA);
+    const copyOf = async (source: string) => (await as(() => savedFrom(P, source, () => datasets.saveDataset(P, { name: 'copy', sourceKind: 'combined', columns: COLS, rows: ROWS }))))!.id;
+    const liveCopyOf = async (source: string) => {
+      const r = await as(() => copyLiveDataset({ projectId: P, datasetId: source }));
+      return r.ok && 'dataset' in r && r.dataset ? r.dataset.id : `not copied: ${JSON.stringify(r)}`;
+    };
+    const live = async () => (await as(() => H.liveOver(P, { table: fakeMod.ORDERS_TABLE }, fakeMod.ORDERS_COLUMNS, fakeMod.LIVE_FAKE_ID, { fixture: 'orders' }))).liveId;
+
+    const DS = await save('Pay');
+    await plant(DS);
+    await as(() => datasets.updateSteps(P, DS, [{ type: 'filter', column: 'dept', op: 'not_empty' }]));
+    ok('a data write (persist) keeps columnAccess', await kept(DS));
+    const WRITERS: [string, (id: string) => Promise<boolean>][] = [
+      ['markRefresh', (id) => rec.markRefresh(P, id, 'ok', null)],
+      ['setAutoRefresh', async (id) => (await rec.setAutoRefresh(P, id, { every: null })) !== false],
+      ['writeQuality', async (id) => (await rec.writeQuality(P, id, () => undefined)) !== false],
+      ['writeIncremental', async (id) => (await rec.writeIncremental(P, id, () => undefined)) !== false],
+      ['dataset:setRowPolicy (its serialized save)', async (id) => ((await handlers.get('dataset:setRowPolicy')!(null, { projectId: P, datasetId: id, policy: { column: 'dept', rules: [{ teamId: TEAM, values: ['Ops'] }] } })) as { ok?: boolean }).ok === true],
+      ['trash → restore', async (id) => (await trash.trashRecord(P, 'dataset', id)).ok && (await trash.restore(P, 'dataset', id)).ok],
+      ['a re-import over the same id (updateDatasetData)', async (id) => (await datasets.updateDatasetData(P, id, { columns: COLS, rows: ROWS })) !== null],
+    ];
+    for (const [name, write] of WRITERS) {
+      await plant(DS);
+      const wrote = await as(() => write(DS));
+      ok(`${name} keeps columnAccess`, wrote && (await kept(DS)), `wrote: ${wrote}`);
+    }
+    const ruled = (await raw(DS)).rowPolicy;
+    ok('setup: the dataset has row access rules now', !!ruled && (ruled as { column?: string }).column === 'dept');
+
+    const LV = await live();
+    const LIVE_WRITERS: [string, (id: string) => Promise<boolean>][] = [
+      ['bumpEpoch', async (id) => (await liveDataset.bumpEpoch(P, id)) !== false],
+      ['writeSchemaSync', (id) => liveDataset.writeSchemaSync(P, id, { columns: fakeMod.ORDERS_COLUMNS, profile: { columns: [] }, missingColumns: [], syncedAt: new Date().toISOString(), changed: true })],
+    ];
+    for (const [name, write] of LIVE_WRITERS) {
+      await plant(LV);
+      const wrote = await as(() => write(LV));
+      ok(`Live: ${name} keeps columnAccess`, wrote && (await kept(LV)), `wrote: ${wrote}`);
+    }
+
+    // The copies: born with the source's rules on their first write.
+    await plant(LV);
+    const liveCopy = await liveCopyOf(LV);
+    ok('a copyLive copy is born with the source\'s columnAccess, and no closed row rules', (await kept(liveCopy)) && !('rowPolicy' in (await raw(liveCopy))), liveCopy);
+    const LV2 = await live();
+    // No writer gives a Live dataset a parent; a hand edit can: a union step on the dataset with rules.
+    await as(() => rec.serialized(rec.datasetFilePath(P, LV2), (r) => { r.steps = [{ type: 'union', datasetId: DS }]; return true; }));
+    const closedLiveCopy = await liveCopyOf(LV2);
+    ok('a copyLive copy of a Live dataset closed by an upstream dataset\'s rules is born closed', stableStringify((await raw(closedLiveCopy)).rowPolicy) === stableStringify(CLOSED), closedLiveCopy);
+
+    const copy = await copyOf(DS);
+    ok('a copy is born with the source\'s columnAccess (first write), and its row rules', (await kept(copy)) && stableStringify((await raw(copy)).rowPolicy) === stableStringify(ruled));
+    const OWN = await save('Own column rules');
+    await plant(OWN);
+    const ownCopy = await copyOf(OWN);
+    ok('a copy of a source with only its own columnAccess keeps it, and gets no closed row rules', (await kept(ownCopy)) && !('rowPolicy' in (await raw(ownCopy))));
+    const BUILT = await save('Built on Pay');
+    await as(() => datasets.updateSteps(P, BUILT, [{ type: 'union', datasetId: DS }]));
+    await plant(BUILT);
+    const builtCopy = await copyOf(BUILT);
+    ok('a copy of a source closed by an upstream dataset\'s rules keeps its columnAccess and is born closed',
+      (await kept(builtCopy)) && stableStringify((await raw(builtCopy)).rowPolicy) === stableStringify(CLOSED));
+    const PLAIN = await save('Plain');
+    const plainCopy = await raw(await copyOf(PLAIN));
+    ok('a copy of a source with no rules carries none', !('columnAccess' in plainCopy) && !('rowPolicy' in plainCopy));
+    ok('NEGATIVE CONTROL: the old one-key rule would drop it', !('columnAccess' in oldKeepRowPolicyOnly(await raw(DS), { id: DS })));
+  } finally {
+    H.cleanup();
+  }
 }
 
 main()
