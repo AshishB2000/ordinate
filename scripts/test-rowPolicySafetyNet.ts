@@ -263,6 +263,10 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const chartEast = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
     eastReplies.push(chartEast.text);
     ok('east\'s chart by customer holds no West value and no label of one', chartEast.status === 200 && !H.leaks(chartEast.text) && !chartEast.text.includes('West three'), chartEast.text.slice(0, 200));
+    // Its pairs are for the values in its own locked reply, never the stored list (the list above is withheld from east).
+    ok('east\'s chart by customer pairs only East\'s own values: ["c1","Customer one"]', JSON.stringify(chartEast.body?.data?.valueLabels) === '{"category":[["c1","Customer one"]]}', JSON.stringify(chartEast.body?.data?.valueLabels));
+    const chartEd = await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
+    ok('NEGATIVE CONTROL: the editor\'s chart pairs the West value too', JSON.stringify(chartEd.body?.data?.valueLabels) === JSON.stringify({ category: labelRows.map((r) => [r.value, r.label]) }), JSON.stringify(chartEd.body?.data?.valueLabels));
 
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');

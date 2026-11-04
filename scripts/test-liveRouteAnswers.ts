@@ -296,6 +296,19 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     && (await H.as(ORG_A, () => alertStore.load(P))).rules.filter((r) => r.name === 'Copy sales').every((r) => (r.history || []).length >= 2), show(warned.lines).slice(0, 200));
   fake.hook = null;
 
+  // Value labels on a Live card (PR 06): what a person reads says the label; the chart keeps the warehouse's value beside it,
+  // and the model's facts keep the value (F5). Before THE SPY: labelling reads the record, never the rows.
+  const bare = { ...spec([]), filters: [] };
+  const v0 = String((await post('answer:card', { projectId: P, spec: bare })).value.data?.labels?.[0]);
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [{ value: v0, label: 'Top cat' }] }));
+  const labelledCard = (await post('answer:card', { projectId: P, spec: bare })).value;
+  const namedFacts = await H.as(ORG_A, () => answers.computeCard(P, bare));
+  ok('Live card: its caption and headline say the label; its chart keeps the stored value, the pair beside it', labelledCard.ok === true && labelledCard.caption.includes('Top cat')
+    && labelledCard.headline.some((h: { label: string }) => h.label === 'Highest · Top cat') && labelledCard.data.labels[0] === v0 && show(labelledCard.data.valueLabels) === show({ category: [[v0, 'Top cat']] }), show(labelledCard).slice(0, 300));
+  ok('…and the model\'s facts keep the stored value', 'factsText' in namedFacts && namedFacts.factsText.includes(`${v0}=`) && !namedFacts.factsText.includes('Top cat'));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
+  ok('control: the list removed, the Live card says the stored value and carries no pairs', !('valueLabels' in (await post('answer:card', { projectId: P, spec: bare })).value.data));
+
   ok('THE SPY: nothing here asked getDataset for the Live dataset', !hydrated.slice(from).includes(L), show(hydrated.slice(from)));
 
   // AFTER the spy, because this case IS the safety net: a saved filter that reaches the Live dataset through a

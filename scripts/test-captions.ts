@@ -473,5 +473,17 @@ for (const f of PARETO) {
   ok('control: the caption states the figures it is given (a planted end of 999 is what it says)', tileCaption({ chartType: 'waterfall', data }).includes('to 999'));
 }
 
+// ── value labels (semantic layer PR 06) ──────────────────────────────────────
+// A caption says what the chart draws: a stored value's label ("Europe"), never the code under it ("EU").
+{
+  const coded = { labels: ['EU', 'NA'], series: [{ name: 'sum of amount', values: [5, 3] }] };
+  const said = tileCaption({ chartType: 'column', data: { ...coded, valueLabels: { category: [['EU', 'Europe']] } } });
+  ok('value labels: the caption leads with the label, not the stored value', said.startsWith('Europe') && !/\bEU\b/.test(said) && said.includes('NA'), said);
+  ok('value labels control: without pairs the caption says the stored value', tileCaption({ chartType: 'column', data: coded }).startsWith('EU'));
+  const split = tileCaption({ chartType: 'line', data: { labels: ['2024-01-01', '2024-02-01'], series: [{ name: 'EU', values: [1, 4] }], valueLabels: { series: [['EU', 'Europe']] } } });
+  ok('value labels: a split names its series by the label too', split.includes('Europe') && !/\bEU\b/.test(split), split);
+  ok('value labels: a malformed reply is still a sentence, never a throw', typeof tileCaption({ chartType: 'column', data: { labels: null, series: null, valueLabels: { category: [['EU', 'Europe']] } } as never }) === 'string');
+}
+
 if (!failureCount()) console.log('\nAll caption checks passed.');
 finish();

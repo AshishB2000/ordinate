@@ -23,7 +23,10 @@ export async function readableColumns(projectId: string, datasetId: string, docs
   return Object.fromEntries(Object.entries(docs).map(([name, doc]) => [name, closed ? withoutValues(doc) : doc]));
 }
 
-/** One doc, as `readableColumns` reads it: what a save or an alias reply carries. */
+/**
+ * One doc, as `readableColumns` reads it: what a save or an alias reply carries. It runs AFTER the write, so rules
+ * that cannot be read withhold the list (fail closed) rather than report a save that worked as failed.
+ */
 export async function readableColumn(projectId: string, datasetId: string, doc: ColumnDoc): Promise<ColumnDoc> {
-  return doc.values && (await closedToCaller(projectId, datasetId)) ? withoutValues(doc) : doc;
+  return doc.values && (await closedToCaller(projectId, datasetId).catch(() => true)) ? withoutValues(doc) : doc;
 }

@@ -41,6 +41,7 @@ import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
+import { cardTextAsSeen, labelCardData } from './valueLabelReplies';
 
 /** The operators the case fix applies to — `answers.canonicaliseTextFilters`'s. */
 const CASE_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
@@ -182,21 +183,25 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
   // The figures the card draws (analysis/chartShapes), off the warehouse's answer — and its caption reads them.
   const data: ChartData = withChartFigures({ labels: r.data.labels, series: r.data.series }, figureAsk(chartType));
-  const caption = tileCaption({ chartType, data, names: await displayNames(projectId, meta.id).catch(() => ({})) });
+  const names = await displayNames(projectId, meta.id).catch(() => ({}));
+  const caption = tileCaption({ chartType, data, names });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const filterLabels = [...cardLabels(spec, meta.columns, r.filterLabels), ...termLabels];
   // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
   // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.
   const withheld = await liveWithheld(projectId, meta.id, meta);
   const said = withheldFilters(spec.filters, withheld);
-  const facts = cardFacts({
+  const factsIn = {
     title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
     saidFilterLabels: [...cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), ...termLabels], caption, asOf: utcLabel(r.asOf.at),
-  }, spec, withheld);
+  };
+  const facts = cardFacts(factsIn, spec, withheld);
+  // As computeCard: what a person reads says the labels (F5), the model's facts keep the stored values.
+  const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
+  const seen = cardTextAsSeen(labelled, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets });
   return {
     card: {
-      ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data, caption,
-      headline: facts.headline, bullets: facts.bullets,
+      ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category) }),
       filterLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes, asOf: r.asOf,
     },

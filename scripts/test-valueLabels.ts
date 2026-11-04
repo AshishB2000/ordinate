@@ -242,6 +242,148 @@ async function main(): Promise<void> {
   await set('amount', { description: 'money' });
   ok('[] is allowed on a column that is not text (a stale list can always be removed)', (await set('amount', { values: [] })).ok === true);
   ok('a patch with no values never writes the key', !/"values"/.test(stored()));
+
+  // A save that worked is reported as saved even when the rules read after it fails: the list is withheld instead (fail closed).
+  const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+  const realClosed = rowAccess.closedToCaller;
+  (rowAccess as { closedToCaller: unknown }).closedToCaller = async () => { throw new Error('policy store down'); };
+  const afterWrite = await set('region', { values: L });
+  const afterAlias = await call('catalog:addAlias', { projectId: P, datasetId: D, column: 'region', alias: 'zone' });
+  (rowAccess as { closedToCaller: unknown }).closedToCaller = realClosed;
+  ok('a save that worked is not reported as failed when the rules cannot be read after it: saved, the list withheld',
+    afterWrite.ok === true && !('values' in afterWrite.column) && afterAlias.ok === true && !('values' in afterAlias.column) && /"Europe"/.test(stored()), json([afterWrite, afterAlias]));
+  ok('control: with the rules readable the same save returns the list', json((await set('region', { values: L })).column.values) === json(L));
+  await set('region', { values: [] });
+
+  await charts(P);
+}
+
+// ── 8. Chart replies, answer cards and captions carry the labels ────────────
+// Pairs ride BESIDE the raw values, only for values in that reply, after the Share policy; a reply with none is byte-identical.
+require('../src/ipc/visuals').register();
+require('../src/ipc/vizSample').register();
+require('../src/ipc/copilot').register();
+const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const OTHER_NOTE = categoryKey.OTHER_NOTE;
+
+/** The first path where two replies differ, leaf by leaf with Object.is; '' when none. */
+function differ(a: unknown, b: unknown, at = ''): string {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return Object.is(a, b) ? '' : at || '(root)';
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const d = differ((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${at}.${k}`);
+    if (d) return d;
+  }
+  return '';
+}
+
+async function charts(P: string): Promise<void> {
+  const save = async (name: string, rows: (string | number)[][], pid = P): Promise<string> => (await datasets.saveDataset(pid, {
+    name, sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'tier', type: 'text' }, { name: 'amount', type: 'number' }], rows,
+  }))!.id;
+  const ROWS = [['EU', 'gold', 5], ['NA', 'gold', 3], ['APAC', 'silver', 1], ['EU', 'silver', 2]];
+  const S = await save('Sales', ROWS);
+  const label = (datasetId: string, column: string, values: unknown) => call('catalog:setColumn', { projectId: P, datasetId, column, patch: { values } });
+  ok('setup: region is labelled', (await label(S, 'region', L)).ok === true);
+  const M = [{ column: 'amount', aggregation: 'sum' }];
+  const enc = { category: 'region', values: M };
+  const chart = (datasetId: string, encoding: unknown, extra: object = {}, pid = P): Promise<any> => call('visual:data', { projectId: pid, datasetId, encoding, ...extra });
+  const keyless = (r: any): boolean => r.ok === true && !('valueLabels' in r.data);
+
+  const PAIRS = '{"category":[["EU","Europe"],["NA","North America"]]}';
+  const byRegion = await chart(S, enc);
+  ok('visual:data carries the category\'s labels', byRegion.ok === true && json(byRegion.data.valueLabels) === PAIRS, json(byRegion));
+  ok('…beside the raw labels, untouched', byRegion.data.labels.includes('EU') && byRegion.data.labels.includes('APAC') && !byRegion.data.labels.includes('Europe'));
+  const geo = await chart(S, { ...enc, geo: { level: 'country' } }, { chartType: 'map_choropleth' });
+  ok('a map keeps its region names: no valueLabels', keyless(geo), json(geo).slice(0, 200));
+  const pivot = await chart(S, { ...enc, pivot: { rows: [{ column: 'region' }], columns: [], values: M } });
+  ok('a pivot keeps its headers: no valueLabels, though its rows are the labelled values', keyless(pivot) && pivot.data.labels.includes('EU'), json(pivot).slice(0, 200));
+  const split = await chart(S, { category: 'tier', values: M, series: 'region' });
+  ok('a split by region carries the legend\'s labels', split.ok === true && json(split.data.valueLabels) === '{"series":[["EU","Europe"],["NA","North America"]]}', json(split));
+  const preview = await call('visual:preview', { projectId: P, datasetId: S, encoding: enc });
+  ok('visual:preview carries them too', preview.ok === true && json(preview.data.valueLabels) === PAIRS, json(preview).slice(0, 200));
+  const batch = await call('visual:dataBatch', { projectId: P, items: [{ datasetId: S, encoding: enc }] });
+  ok('visual:dataBatch carries them too', json(batch[0].data.valueLabels) === PAIRS && json(batch[0]) === json(byRegion));
+
+  // Byte-identical without labels: the same reply as one built with no label list at all (catalog stubbed empty).
+  const stubbed = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const real = catalog.load;
+    (catalog as { load: unknown }).load = async () => catalog.emptyCatalog();
+    try { return await fn(); } finally { (catalog as { load: unknown }).load = real; }
+  };
+  const P2 = (await projects.createProject('no labels')).id;
+  const S2 = await save('Sales', ROWS, P2);
+  const plain = await chart(S2, enc, {}, P2);
+  const plainStub = await stubbed(() => chart(S2, enc, {}, P2));
+  ok('a project without labels: the reply is the one built with no label list, key by key (Object.is) and as text', keyless(plain) && differ(plain, plainStub) === '' && json(plain) === json(plainStub), differ(plain, plainStub));
+  const { valueLabels: _pairs, ...rawData } = byRegion.data;
+  const bare = await stubbed(() => chart(S, enc));
+  ok('labels ADD the pairs and change nothing else: the labelled reply minus valueLabels is the unlabelled one', keyless(bare) && differ({ ...byRegion, data: rawData }, bare) === '', differ({ ...byRegion, data: rawData }, bare));
+  ok('an unlabelled column of a labelled project: the same reply', differ(await chart(S, { category: 'tier', values: M }), await stubbed(() => chart(S, { category: 'tier', values: M }))) === '');
+
+  // A label that is also a stored value: two bars would both read "Europe". The pair is left off, and said.
+  const C = await save('Sales and a Europe row', [...ROWS, ['Europe', 'gold', 4]]);
+  await label(C, 'region', L);
+  const clash = await chart(C, enc);
+  ok('a row region = "Europe": the pair for EU is gone, the others stay', clash.ok === true && json(clash.data.valueLabels) === '{"category":[["NA","North America"]]}', json(clash));
+  ok('…and the warning says why', clash.warnings.includes('“Europe” is also a value of region, so its labelled value shows as stored.'), json(clash.warnings));
+  ok('control: without that row no such warning', !byRegion.warnings.some((w: string) => w.includes('also a value')), json(byRegion.warnings));
+
+  // The capped axis's "Other" is the app's bucket, not the stored value Other.
+  const K = (await datasets.saveDataset(P, { name: 'Keys', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: Array.from({ length: 60 }, (_, i) => [`k${i}`, 60 - i]) }))!.id;
+  await label(K, 'key', [{ value: 'Other', label: 'Misc' }, { value: 'k0', label: 'Key zero' }]);
+  const capped = await chart(K, { category: 'key', values: M });
+  ok('the capped axis\'s Other bucket gets no pair; a value on it does', capped.ok === true && capped.category?.note === OTHER_NOTE && capped.data.labels.includes('Other')
+    && json(capped.data.valueLabels) === '{"category":[["k0","Key zero"]]}', json({ note: capped.category, pairs: capped.data.valueLabels }));
+  const O = (await datasets.saveDataset(P, { name: 'Other is a value', sourceKind: 'csv', columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['Other', 1], ['k0', 2]] }))!.id;
+  await label(O, 'key', [{ value: 'Other', label: 'Misc' }]);
+  ok('control: with no cap, a stored value called Other is labelled like any other', json((await chart(O, { category: 'key', values: M })).data.valueLabels) === '{"category":[["Other","Misc"]]}');
+
+  // Share policy first, labels after: a masked region gets no pair, and no raw value rides in the reply.
+  await catalog.setColumn(P, S, 'region', { sensitivity: 'personal' });
+  const shared = await chart(S, enc, { share: 'export' });
+  ok('the Share policy masks region: no valueLabels, and the reply holds neither EU nor Europe', keyless(shared) && !/EU|Europe|North America/.test(json(shared)), json(shared).slice(0, 300));
+  ok('control: the same chart in the app carries them', json((await chart(S, enc)).data.valueLabels) === PAIRS);
+  await catalog.setColumn(P, S, 'region', { sensitivity: 'none' });
+
+  // An answer card: the text a person reads says the labels; the chart keeps the raw values beside them; the model's facts keep the values (F5).
+  const spec = { datasetId: S, category: 'region', measures: M, filters: [], chartType: 'column', title: 'By region' };
+  const card = await call('answer:card', { projectId: P, spec });
+  ok('answer:card by region: its caption says Europe, not EU', card.ok === true && card.caption.startsWith('Europe') && !/\bEU\b/.test(card.caption), json(card).slice(0, 300));
+  ok('…its headline and bullets say the labels', card.headline.some((h: { label: string }) => h.label === 'Highest · Europe') && card.bullets[0].startsWith('Europe is highest')
+    && !/\bEU\b|\bNA\b/.test(json([card.headline, card.bullets])), json([card.headline, card.bullets]));
+  ok('…its chart keeps the raw labels, the pairs beside them', card.data.labels.includes('EU') && json(card.data.valueLabels) === PAIRS, json(card.data));
+  const built = await answers.computeCard(P, spec as never);
+  ok('…and the model\'s facts keep the stored values', 'factsText' in built && built.factsText.includes('EU=7') && !built.factsText.includes('Europe'), 'factsText' in built ? built.factsText : json(built));
+  const unlabelled = await call('answer:card', { projectId: P2, spec: { ...spec, datasetId: S2 } });
+  ok('control: unlabelled, the card says the stored value and carries no pairs', unlabelled.caption.startsWith('EU') && !('valueLabels' in unlabelled.data), json(unlabelled).slice(0, 200));
+
+  // Which lists a chart reads (labelListsFor): its category's and its split's, text columns only, never the six raw-valued kinds.
+  const replies: typeof import('../src/ipc/valueLabelReplies') = require('../src/ipc/valueLabelReplies');
+  const lists = (e: object): Promise<string> => replies.labelListsFor(P, S, e as never).then(json);
+  ok('labelListsFor: the category\'s list, and the split\'s', await lists(enc) === json({ category: L }) && await lists({ category: 'tier', values: M, series: 'region' }) === json({ series: L }));
+  for (const kind of ['geo', 'pivot', 'cohort', 'eventFunnel', 'facet', 'drivers']) {
+    ok(`labelListsFor: nothing for a ${kind} chart`, await lists({ ...enc, series: 'region', [kind]: {} }) === '{}');
+  }
+  await catalog.setColumn(P, S, 'amount', { values: [{ value: '5', label: 'Five' }] }); // the store knows no types: a list left on a column that is not text
+  ok('labelListsFor: a column not declared text gets none, though a list is stored for it', await lists({ category: 'amount', values: M }) === '{}');
+  const R = await save('Regions', ROWS);
+  await label(R, 'region', [{ value: 'EU', label: 'Europa' }]);
+  ok('labelListsFor: a category or split from another dataset reads that dataset\'s list',
+    await lists({ ...enc, categoryDatasetId: R }) === '{"category":[{"value":"EU","label":"Europa"}]}'
+    && await lists({ category: 'tier', values: M, series: 'region', seriesDatasetId: R }) === '{"series":[{"value":"EU","label":"Europa"}]}');
+  let loads = 0;
+  let metas = 0;
+  const realLoad = catalog.load;
+  const realMeta = datasets.getDatasetMeta;
+  (catalog as { load: unknown }).load = (pid: string) => { loads += 1; return realLoad(pid); };
+  (datasets as { getDatasetMeta: unknown }).getDatasetMeta = (pid: string, id: string) => { metas += 1; return realMeta(pid, id); };
+  await lists({ ...enc, series: 'region', seriesDatasetId: R });
+  const both = [loads, metas];
+  loads = 0; metas = 0;
+  await lists({ category: 'tier', values: M });
+  (catalog as { load: unknown }).load = realLoad;
+  (datasets as { getDatasetMeta: unknown }).getDatasetMeta = realMeta;
+  ok('labelListsFor: ONE catalog read for both axes, a meta read per labelled dataset; none for a column without labels', json(both) === '[1,2]' && loads === 1 && metas === 0, json([both, loads, metas]));
 }
 
 void main()
