@@ -32,6 +32,7 @@ const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engin
 const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
 const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+const { isLive } = H.liveDataset;
 
 const { fake, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -74,7 +75,8 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   ok('sanitize twice is sanitize once', show(base.sanitizeBaseFilters(base.sanitizeBaseFilters(messy))) === show(base.sanitizeBaseFilters(messy)));
 
   // ── 2. Where it is stored ─────────────────────────────────────────────────
-  const meta = () => H.as(ORG_A, () => H.datasets.getDatasetMeta(P, L)) as Promise<Reply>;
+  const metaOf = (d: string) => H.as(ORG_A, () => H.datasets.getDatasetMeta(P, d)) as Promise<Reply>;
+  const meta = () => metaOf(L);
   const raw = (): Promise<Reply> => H.as(ORG_A, async () => JSON.parse(await fs.promises.readFile(rec.datasetFilePath(P, L), 'utf8')));
   const plant = (value: unknown) => H.as(ORG_A, () => rec.serialized(rec.datasetFilePath(P, L), (r) => {
     if (value === undefined) delete r.baseFilters;
@@ -174,11 +176,12 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
       !built && looked.ok === false && looked.code === 'live_refused' && looked.reason === 'baseFilterUnreadable' && looked.error === unreadable, show(looked));
     const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
     replies.push(copy);
-    ok(`${what}: Make a copy refuses typed and saves nothing`, copy.ok === false && copy.code === 'live_refused' && (await count()) === n0, show(copy));
+    ok(`${what}: Make a copy refuses typed and saves nothing`,
+      copy.ok === false && copy.code === 'live_refused' && copy.reason === 'baseFilterUnreadable' && copy.error === unreadable && (await count()) === n0, show(copy));
     const toExtract = (await post('dataset:setMode', { projectId: P, datasetId: L, mode: 'extract' })).value;
     replies.push(toExtract);
     ok(`${what}: Copy the data instead refuses typed; the record stays Live`,
-      toExtract.ok === false && toExtract.code === 'live_refused' && (await meta()).mode === 'live', show(toExtract));
+      toExtract.ok === false && toExtract.code === 'live_refused' && toExtract.reason === 'baseFilterUnreadable' && (await meta()).mode === 'live', show(toExtract));
     ok(`${what}: none of it spent a warehouse call`, fake.calls.length === calls0, show(fake.calls.length - calls0));
     return replies;
   }
@@ -304,8 +307,15 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   const third = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_drop' }, H.fx.COLUMNS));
   await setBase(third.liveId, BASE);
   await H.warehouseExec(ORG_A, 'ALTER TABLE live_drop DROP COLUMN region');
-  const dropSync = (await post('dataset:syncLiveSchema', { projectId: P, datasetId: third.liveId })).value;
   const dropped = refusals.liveBaseFilterRefused('region');
+  // Not synced yet: the record still declares `region`, the warehouse no longer has it.
+  const n2 = await count();
+  for (const [label, channel, extra] of [['Make a copy', 'dataset:copyLive', {}], ['Copy the data instead', 'dataset:setMode', { mode: 'extract' }]] as [string, string, Reply][]) {
+    const r = (await post(channel, { projectId: P, datasetId: third.liveId, ...extra })).value;
+    ok(`a base column gone from the fetched rows: ${label} refuses typed (baseFilter), saves nothing, stays Live`,
+      r.ok === false && r.code === 'live_refused' && r.reason === 'baseFilter' && r.error === dropped && (await count()) === n2 && isLive(await metaOf(third.liveId)), show(r));
+  }
+  const dropSync = (await post('dataset:syncLiveSchema', { projectId: P, datasetId: third.liveId })).value;
   ok('a dropped base column: the sync syncs the columns, its sample refused typed (baseFilter)',
     dropSync.ok === true && dropSync.removed.includes('region') && dropSync.sample.ok === false && dropSync.sample.code === 'live_refused' && dropSync.sample.reason === 'baseFilter' && dropSync.sample.error === dropped, show(dropSync));
   for (const [label, call] of DOORS.slice(0, 2)) {
@@ -314,6 +324,36 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ok(`a dropped base column: ${label} refuses baseFilter, no warehouse call`, r.ok === false && r.code === 'live_refused' && r.reason === 'baseFilter' && r.error === dropped && fake.calls.length === before, show(r));
   }
   ok('the sentence names the column and who can fix it', /“region”/.test(dropped) && /until an editor changes it/.test(dropped), dropped);
+  for (const [label, channel, extra] of [['Make a copy', 'dataset:copyLive', {}], ['Copy the data instead', 'dataset:setMode', { mode: 'extract' }]] as [string, string, Reply][]) {
+    const before = fake.calls.length;
+    const r = (await post(channel, { projectId: P, datasetId: third.liveId, ...extra })).value;
+    ok(`a dropped base column, synced: ${label} refuses typed (baseFilter) before it fetches`, r.ok === false && r.reason === 'baseFilter' && (await count()) === n2 && fake.calls.length === before && isLive(await metaOf(third.liveId)), show(r));
+  }
+
+  // ── 5. Copies keep the base filters as Prepare steps (never wider than the dataset) ──
+  await setBase(L, BASE);
+  H.queryCache.clear();
+  const kpi = async (d: string, column: string, aggregation: string): Promise<Reply> => (await post('dashboard:metric', { projectId: P, datasetId: d, column, aggregation })).value;
+  const liveCount = await kpi(L, 'qty', 'count');
+  const liveSum = await kpi(L, 'amt', 'sum');
+  const writes: Reply[] = [];
+  const realPersist = H.datasets.persist;
+  (H.datasets as { persist: typeof realPersist }).persist = (projectId, ds, progress) => { writes.push({ id: ds.id, steps: ds.steps }); return realPersist(projectId, ds, progress); };
+  const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
+  (H.datasets as { persist: typeof realPersist }).persist = realPersist;
+  const copyMeta = await metaOf(copy.dataset.id);
+  ok('Make a copy: the copy carries the base filters as its Prepare steps', copy.ok === true && show(copyMeta.steps) === show(BASE), show(copy));
+  ok('…written once, already filtered: no moment holds the rows the filters exclude', show(writes) === show([{ id: copy.dataset.id, steps: BASE }]), show(writes));
+  ok('…its KPIs are the Live KPIs (Object.is)', Object.is((await kpi(copy.dataset.id, 'qty', 'count')).value, liveCount.value) && Object.is((await kpi(copy.dataset.id, 'amt', 'sum')).value, liveSum.value), show([liveCount.value, liveSum.value]));
+  ok('…its rows are the filtered ones, and the fetched table is its Prepare source', copy.dataset.rowCount < H.fx.fixtureRows().length && copyMeta.sourceColumns?.length === H.fx.COLUMNS.length, show({ rows: copy.dataset.rowCount, source: copyMeta.sourceColumns }));
+  ok('NEGATIVE CONTROL: the same KPI on the Live dataset without base filters differs', !Object.is((await kpi(second.liveId, 'qty', 'count')).value, liveCount.value));
+  const plainCopy = (await post('dataset:copyLive', { projectId: P, datasetId: second.liveId })).value;
+  ok('NEGATIVE CONTROL: a copy of a Live dataset without base filters has no steps (today\'s copy)', plainCopy.ok === true && show((await metaOf(plainCopy.dataset.id)).steps) === show([]) && plainCopy.dataset.rowCount === H.fx.fixtureRows().length);
+
+  const switched = (await post('dataset:setMode', { projectId: P, datasetId: L, mode: 'extract' })).value;
+  ok('Copy the data instead: same id, the steps, the same KPIs, no baseFilters key left',
+    switched.ok === true && switched.mode === 'extract' && show((await metaOf(L)).steps) === show(BASE) && Object.is((await kpi(L, 'qty', 'count')).value, liveCount.value)
+      && Object.is((await kpi(L, 'amt', 'sum')).value, liveSum.value) && !('baseFilters' in (await raw())) && !isLive(await meta()), show(switched));
 
   await close();
   finish();

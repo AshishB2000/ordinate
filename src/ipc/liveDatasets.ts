@@ -33,7 +33,7 @@ import { savedFrom } from '../data/rowAccess';
 import { loadSecrets } from './connectionSecrets';
 import { liveColumns, type DeclaredColumn, type SourceColumn } from '../data/liveSchema';
 import { bumpEpoch, isLive, parseMaxCacheAge, setMaxCacheAge } from '../data/liveDataset';
-import { saveLiveRecord, toExtractRecord, toLiveRecord } from '../data/liveRecord';
+import { extractData, saveFilteredCopy, saveLiveRecord, toExtractRecord, toLiveRecord } from '../data/liveRecord';
 import * as msg from '../data/liveMessages';
 import * as queryCache from '../engine/queryCache';
 import { scanDataset } from '../app/privacyStore';
@@ -44,8 +44,10 @@ import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { liveBaseFilterRefused, liveCalculatedRefused } from '../engine/liveRefusals';
-import { hasBaseFilters } from '../data/liveBaseFilters';
 import { hasLiveCalcs } from '../data/liveCalcs';
+import { baseOfLive } from '../engine/live/liveBase';
+import type { LiveRefusalCode } from '../engine/live/liveSpec';
+import type { FilterStep } from '../data/transforms';
 import { safeError } from '../connectors/types';
 import { logger } from '../app/logger';
 
@@ -165,13 +167,17 @@ async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ o
   return ran.ok ? { ok: true, result: ran.result } : { ok: false, error: ran.error, source: true };
 }
 
+type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; error: string };
+
 /**
- * A copy would hold every row, wider than the dataset's own always-applied filters allow (08a: this pod
- * cannot apply them). Refused typed, before the source is read, so nothing is fetched or saved.
+ * The base filters a copy keeps as its Prepare steps (D13), or why it cannot be made: a list this pod
+ * cannot read, or a step its declared columns cannot take. Asked before the source is read, so a
+ * refused copy fetches and saves nothing. A copy is never wider than the dataset.
  */
-function baseFilterRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'baseFilter'; error: string } | null {
-  if (!hasBaseFilters(meta.live)) return null;
-  return { ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(meta.live?.baseFilters?.[0]?.column ?? '') };
+function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
+  const b = meta.live ? baseOfLive(meta.live, meta.columns) : null;
+  if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
+  return { ok: true, steps: meta.live?.baseFilters ?? [] };
 }
 
 /** The same for calculated fields (part 8, 00a): a copy would hold none of them, so a filter on one would be gone. */
@@ -179,6 +185,9 @@ function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reas
   if (!hasLiveCalcs(meta.live)) return null;
   return { ok: false, code: 'live_refused', reason: 'calculated', error: liveCalculatedRefused(meta.live?.calculated?.[0]?.name ?? '') };
 }
+
+/** A base filter the fetched rows cannot take (its column is gone from the warehouse since the last sync). */
+const skippedBase = (column: string): BaseRefused => ({ ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(column) });
 
 /**
  * The Live dataset's column notes onto its copy — display names, descriptions,
@@ -213,7 +222,9 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta) return { ok: false, error: liveDatasetMissing() };
   if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveCopyNotLiveMessage() };
-  const held = baseFilterRefusal(meta) ?? calcRefusal(meta);
+  const base = copySteps(meta);
+  if (!base.ok) return base;
+  const held = calcRefusal(meta);
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) {
@@ -221,13 +232,12 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
     logger.warn(`[live] make a copy of dataset ${id}: the source refused: ${ran.error}`);
     return { ok: false, error: msg.liveCopyReadFailedMessage() };
   }
-  const save = () => datasets.saveDataset(projectId, {
-    name: `${meta.name} (copy)`,
-    sourceKind: meta.sourceKind,
-    columns: ran.result.columns,
-    rows: ran.result.rows,
-    origin: meta.origin,
-  });
+  const data = await extractData(ran.result, base.steps);
+  if (!data.ok) return skippedBase(data.column);
+  const input = { name: `${meta.name} (copy)`, sourceKind: meta.sourceKind, origin: meta.origin };
+  const save = () => base.steps.length
+    ? saveFilteredCopy(projectId, input, data.data)
+    : datasets.saveDataset(projectId, { ...input, columns: ran.result.columns, rows: ran.result.rows });
   // A copy of a dataset with access rules is born with them — never a moment without (docs/row-policy D14).
   const saved = await savedFrom(projectId, id, save);
   if (!saved) return { ok: false, error: msg.liveCopySaveFailedMessage() };
@@ -270,11 +280,15 @@ export async function setDatasetMode(p: Record<string, unknown>) {
   }
 
   if (!isLive(meta)) return { ok: true, mode: 'extract', dataset: header(meta) };
-  const held = baseFilterRefusal(meta) ?? calcRefusal(meta);
+  const base = copySteps(meta);
+  if (!base.ok) return base;
+  const held = calcRefusal(meta);
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) return { ok: false, error: ran.error };
-  const ds = await toExtractRecord(projectId, id, ran.result);
+  const data = await extractData(ran.result, base.steps);
+  if (!data.ok) return skippedBase(data.column);
+  const ds = await toExtractRecord(projectId, id, data.data);
   if (!ds) return { ok: false, error: 'Could not copy the data' };
   await scanDataset(projectId, ds);
   return { ok: true, mode: 'extract', dataset: header(ds), warnings: ran.result.warnings ?? [] };
