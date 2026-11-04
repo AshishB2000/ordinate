@@ -152,6 +152,25 @@ async function main(): Promise<void> {
   const added = await rels.saveRelationship(P, RELS[2]);
   ok('a new edge goes to the end (negative control)', (await rels.listRelationships(P)).map((x) => x.id).join() === [R_ORDER, R_SHIP, added!.id].join());
 
+  // ── § keep: a release-1 save (its contract has no label; it derives no warning) keeps the same edge's own ──
+  const Q = (await projects.createProject('Joins keep')).id;
+  const warned = { kind: 'repeats', repeats: 2 } as const;
+  await rels.saveRelationship(Q, { ...RELS[0], warning: warned });
+  const bare = (extra: object) => ({ from: RELS[0].from, to: RELS[0].to, cardinality: 'one_to_one', ...extra }); // relationship:save's release-1 shape
+  await rels.saveRelationship(Q, bare({ id: R_ORDER }));
+  const byId = (await rels.listRelationships(Q))[0];
+  ok('a same-edge re-save by id without a label or warning keeps both (and takes the new cardinality)',
+    byId.label === 'Order date' && show(byId.warning) === show(warned) && byId.cardinality === 'one_to_one', show(byId));
+  await rels.saveRelationship(Q, bare({}));
+  const byEdge = await rels.listRelationships(Q);
+  ok('…and a same-edge re-save with no id keeps both too', byEdge.length === 1 && byEdge[0].id === R_ORDER && byEdge[0].label === 'Order date' && show(byEdge[0].warning) === show(warned), show(byEdge));
+  await rels.saveRelationship(Q, bare({ id: R_ORDER, label: 'Booked' }));
+  ok('negative control: a label that IS sent replaces the stored one', (await rels.listRelationships(Q))[0].label === 'Booked');
+  await rels.saveRelationship(Q, { id: R_ORDER, from: { datasetId: SALES.id, column: 'sale_id' }, to: RELS[0].to, cardinality: 'many_to_one' });
+  const moved = (await rels.listRelationships(Q))[0];
+  ok('negative control: a re-save that changes the edge\'s columns inherits neither its label nor its warning',
+    moved.id === R_ORDER && moved.from.column === 'sale_id' && moved.label === undefined && moved.warning === undefined, show(moved));
+
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
   finish();
