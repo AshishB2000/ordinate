@@ -21,6 +21,7 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { computeColumnSummary, type ColumnSummary } from '../data/datasetStats';
 import { sourceView } from '../data/datasetOrigin';
+import { seesSourceNames } from '../data/sourceNames';
 import { columnProfile, PROFILE_BINS } from '../data/profileView';
 import { medianOf } from '../data/columnProfile';
 import { computeColumnSummariesResident } from '../engine/statsResident';
@@ -97,7 +98,7 @@ export function register(): void {
     const meta = await datasets.getDatasetMeta(str(projectId), str(id));
     if (!meta) return null;
     const conns = meta.origin?.kind === 'connection' ? await listConnections(str(projectId)).catch(() => []) : [];
-    const view = sourceView(meta.sourceKind, meta.origin, (cid) => conns.find((c) => c.id === cid)?.name);
+    const view = sourceView(meta.sourceKind, meta.origin, (cid) => conns.find((c) => c.id === cid)?.name, { hideTable: !(await seesSourceNames(str(projectId))) });
     // Live (L2.1): the mode and the cache age, and whether this one COULD be
     // Live — flags and a number, never the selection's SQL or the address.
     return { ...view, ...liveView(meta, (cid) => conns.find((c) => c.id === cid)) };

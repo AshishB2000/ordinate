@@ -264,8 +264,11 @@ const SOURCE_WORD: Record<string, string> = {
   input: 'Input table', sql: 'SQL query', notebook: 'Notebook',
 };
 
-/** The redacted view of where a dataset's rows came from. `connName` names a connection by id. */
-export function sourceView(sourceKind: string, origin: DatasetOrigin | undefined, connName: (id: string) => string | undefined): SourceView {
+/**
+ * The redacted view of where a dataset's rows came from. `connName` names a connection by id;
+ * `hideTable` (a viewer, `seesSourceNames` false) leaves the warehouse table out of a connection's label.
+ */
+export function sourceView(sourceKind: string, origin: DatasetOrigin | undefined, connName: (id: string) => string | undefined, opts?: { hideTable?: boolean }): SourceView {
   const word = SOURCE_WORD[sourceKind] || 'Import';
   if (!origin) return { kind: sourceKind, label: word, refreshable: false };
   const view = (label: string): SourceView => ({ kind: origin.kind, label, refreshable: origin.kind !== 'capture' });
@@ -284,8 +287,9 @@ export function sourceView(sourceKind: string, origin: DatasetOrigin | undefined
     }
     case 'connection': {
       const parts = ['Connection', connName(origin.connId) || 'a deleted connection'];
-      if (origin.table) parts.push(origin.table);
-      else if (origin.sql) parts.push('a query');
+      if (origin.table) {
+        if (!opts?.hideTable) parts.push(origin.table);
+      } else if (origin.sql) parts.push('a query');
       return view(parts.join(' · '));
     }
     case 'capture':
