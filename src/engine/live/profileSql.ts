@@ -121,7 +121,7 @@ export function samples(env: CompileEnv, plan: SamplePlan): boolean {
 }
 
 /** A column's key: NULL when empty, else a number's finite value or any other column's text. */
-function keyOf(c: Ctx, col: LiveColumn): string {
+export function keyOf(c: Ctx, col: LiveColumn): string {
   if (col.type === 'number') return numberOf(c, col);
   return `CASE WHEN ${emptyOf(c, col)} THEN NULL ELSE ${textOf(c, col)} END`;
 }

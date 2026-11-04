@@ -10,9 +10,11 @@
 //   compileChart        the chart itself — categories, series, measures
 //   compileMetric       one number
 //
-// …and one lookup an AI answer asks before them (L2.4): compileCaseMatches,
-// the stored spellings of the text values a question names. And compileKeyCheck,
-// a declared key's rows, empties and repeats ("Check now", spec D2).
+// …and two lookups asked on their own:
+//
+//   compileCaseMatches  the stored spellings of the text values a question names
+//                       (an AI answer asks it before the five above, L2.4)
+//   compileKeyCheck     a declared key's rows, empties and repeats ("Check now", spec D2)
 //
 // THE RULES (copied from the resident layer so live and extract mean the same):
 //   - Identifiers come ONLY from the declared schema, quoted per dialect; a name
@@ -48,7 +50,8 @@ import { dialectFor } from './dialects';
 import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
-import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate, textOf } from './compileFilter';
+import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate } from './compileFilter';
+import { keyOf } from './profileSql';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -471,11 +474,10 @@ export function compileKeyCheck(column: string, env: CompileEnv): Compiled {
   if (isRefusal(p)) return p;
   const { c } = p;
   const col = columnOf(c.columns, column)!;
-  const key = col.type === 'number' ? numberOf(c, col) : `CASE WHEN ${emptyOf(c, col)} THEN NULL ELSE ${textOf(c, col)} END`;
   const sql =
     `SELECT ${c.d.toDouble('SUM(lv_n)')} AS k_rows, ` +
     `${c.d.toDouble('SUM(CASE WHEN lv_k IS NULL THEN lv_n ELSE 0 END)')} AS k_empty, ` +
     `${c.d.toDouble('SUM(CASE WHEN lv_k IS NOT NULL AND lv_n > 1 THEN 1 ELSE 0 END)')} AS k_repeated ` +
-    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${key} AS lv_k FROM ${p.from}) lv_s GROUP BY lv_k) lv_g`;
+    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${keyOf(c, col)} AS lv_k FROM ${p.from}) lv_s GROUP BY lv_k) lv_g`;
   return { ok: true, query: c.b.finish(sql, c.d, ['k_rows', 'k_empty', 'k_repeated']) };
 }

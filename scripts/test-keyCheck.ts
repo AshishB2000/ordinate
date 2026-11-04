@@ -100,6 +100,12 @@ const CASES: Case[] = [
   ok('live: a hostile source part compiles to quoted identifiers only',
     hostile.ok && !/DROP TABLE x;/.test(hostile.query.sql.replace(/"[^"]*"/g, '')));
   for (const id of DIALECT_IDS) ok(`live ${id}: the statement compiles`, compileKeyCheck('region', { ...env, dialect: id }).ok);
+  // The key holds a bound value, so it must appear ONCE: a `GROUP BY <key>` beside `SELECT <key>` makes two
+  // placeholders (@p0, @p1) that BigQuery and the other bound-class dialects do not match. DuckDB inlines its
+  // whitespace class and would not notice, so this is pinned on the compiled text.
+  const bq = compileKeyCheck('region', { ...env, dialect: 'bigquery' });
+  ok('live bigquery: the text key is bound once (one parameter, one @p0)',
+    bq.ok && bq.query.params.length === 1 && (bq.query.sql.match(/@p\d+/g) ?? []).join() === '@p0', bq.ok ? bq.query.sql : '');
   ok('live: the columns are k_rows, k_empty, k_repeated',
     hostile.ok && JSON.stringify(hostile.query.columns) === '["k_rows","k_empty","k_repeated"]');
 
