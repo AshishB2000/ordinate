@@ -68,3 +68,13 @@ export function measureSnapshotPending(name: string): string {
 export function measureTimeColumnPending(): string {
   return t('metricCheckMessages.this_chart_counts_a_metric_by');
 }
+
+/** A running total, percent of total or moving sum of a measure that cannot be added up. `calc` is its name in prose. */
+export function calcNotAdditive(measure: string, calc: string): string {
+  return t('metricCheckMessages.can_t_be_shown_as_it', { measure, calc });
+}
+
+/** The same, for a snapshot measure along dates: it adds across categories but not across time. */
+export function calcNotAdditiveOverTime(measure: string, calc: string): string {
+  return t('metricCheckMessages.can_t_be_shown_as_along', { measure, calc });
+}

@@ -384,6 +384,8 @@
   "mentionMessages.you_can_only_mention_people_who": "You can only mention people who can read this project.",
   "mentionMessages.you_get_this_email_because_mentioned": "You get this email because {by} mentioned you in Ordinate. Turn these emails off in Settings → You.",
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "A calculated measure cannot be drawn as small multiples yet. Remove the small-multiples field, or measure a column.",
+  "metricCheckMessages.can_t_be_shown_as_along": "{measure} can't be shown as {calc} along dates: it is a snapshot, and a snapshot can't be added up across time.",
+  "metricCheckMessages.can_t_be_shown_as_it": "{measure} can't be shown as {calc}: it can't be added up, so a total of it would be wrong.",
   "metricCheckMessages.is_a_column_a_measure_is": "“{column}” is a column. A measure is calculated after totals, so say how to total it, for example sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": "{name} is a snapshot metric, which this version of Ordinate can't chart yet.",
   "metricCheckMessages.is_circular_a_metric_cannot_be": "“{name}” is circular: {path}. A metric cannot be part of its own formula.",

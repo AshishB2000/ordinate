@@ -387,6 +387,8 @@
   "mentionMessages.you_can_only_mention_people_who": null,
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "計算メジャーは、まだスモールマルチプルとして描画できません。スモールマルチプルのフィールドを外すか、列を集計してください。",
+  "metricCheckMessages.can_t_be_shown_as_along": null,
+  "metricCheckMessages.can_t_be_shown_as_it": null,
   "metricCheckMessages.is_a_column_a_measure_is": "「{column}」は列です。メジャーは合計のあとに計算されるため、集計方法を指定してください（例: sum([{column}])）。",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "「{name}」は循環しています: {path}。メトリックを自身の数式の一部にすることはできません。",
