@@ -40,6 +40,8 @@ import type { DatasetMeta } from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import * as msg from './metricCheckMessages';
 import type { MetricSnapshot } from './snapshot';
+import { isLive } from '../data/liveDataset';
+import { liveSnapshotRefused } from '../engine/liveRefusals';
 
 /** How deep `[A]` → `[B]` may go — ipc/metrics.ts's MAX_FORMULA_DEPTH, for the same reason. */
 const MAX_DEPTH = 10;
@@ -65,15 +67,19 @@ export interface MeasurePlan {
  * `values`: the encoding's measures, each drawn simple metric's `column`/`aggregation` replaced by its metric's.
  * `filters`: the metric filters every measure shares, params bound. `plan`: only when the measures need separate questions.
  */
-export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string };
+export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string; code?: 'live_refused'; reason?: 'snapshot' };
 
 /** Whether a simple metric reads other rows than its column's plain total: its own filters, or a snapshot's day. */
 export function needsMetricPlan(m: Metric): boolean {
   return m.filters.length > 0 || (!isFormulaDefinition(m.definition) && !!m.definition.snapshot);
 }
 
-/** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}`. */
-class PlanError extends Error {}
+/** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}` (typed when `live`). */
+class PlanError extends Error {
+  constructor(message: string, readonly live = false) {
+    super(message);
+  }
+}
 
 /** The simple snapshot metric a pivot value names, if any: a pivot plots the stored column (pivotData), a sum over every date. */
 async function pivotSnapshot(projectId: string, encoding: VizEncoding | null | undefined): Promise<Metric | null> {
@@ -155,8 +161,10 @@ export async function planMetricMeasures(
   };
 
   // A snapshot is per bucket only along its OWN date (D8); along another date it would be neither, so it is refused.
+  // On a Live dataset it is not compiled yet: a typed refusal, before any statement is sent.
   const checkSnapshot = async (m: Metric, snap: MetricSnapshot): Promise<void> => {
     if (meta === undefined) meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (isLive(meta)) throw new PlanError(liveSnapshotRefused(), true);
     const cat = meta?.columns.find((c) => c.name === encoding.category);
     if (cat && cat.type === 'date' && cat.name !== snap.column) throw new PlanError(msg.snapshotOtherDate(m.name, snap.column, cat.name));
   };
@@ -239,7 +247,7 @@ export async function planMetricMeasures(
       plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name, snap), simple: true });
     }
   } catch (err) {
-    if (err instanceof PlanError) return { ok: false, error: err.message };
+    if (err instanceof PlanError) return err.live ? { ok: false, error: err.message, code: 'live_refused', reason: 'snapshot' } : { ok: false, error: err.message };
     throw err;
   }
   return { ok: true, values, filters: [], plan };

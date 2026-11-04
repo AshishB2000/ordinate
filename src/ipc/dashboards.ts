@@ -23,7 +23,8 @@ import { ensureFresh } from '../data/freshOnAsk';
 import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 import type { AsOf } from '../api/asOf';
-import { liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
+import { LiveFigureError, liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
+import { liveSnapshotRefused } from '../engine/liveRefusals';
 import { snapshotCardMetric } from './snapshotDoors';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
@@ -171,6 +172,7 @@ async function computeCardMetricUnlocked(
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
   const live = await liveMetaOf(projectId, datasetId);
+  if (live && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
   if (live) return liveCardMetric(projectId, live, spec, filters);
   // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key.
   if (spec.snapshot) return snapshotCardMetric(projectId, datasetId, { ...spec, snapshot: spec.snapshot }, filters, params, (s, f) => computeCardMetricUnlocked(projectId, datasetId, s, f, params));

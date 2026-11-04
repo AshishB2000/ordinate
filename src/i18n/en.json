@@ -360,6 +360,7 @@
   "liveRefusals.a_map_cannot_be_drawn_from": "A map cannot be drawn from a live dataset yet. Make a copy of the dataset to use one.",
   "liveRefusals.a_period_filter_reached_the_live": "A period filter reached the live query before its dates were worked out.",
   "liveRefusals.a_pivot_table_cannot_be_drawn": "A pivot table cannot be drawn from a live dataset yet. Make a copy of the dataset to use one.",
+  "liveRefusals.a_snapshot_metric_can_t_be": "A snapshot metric can't be worked out from a Live dataset yet. Make a copy of the dataset to use it.",
   "liveRefusals.a_table_or_column_name_of": "A table or column name of this live dataset cannot be used in a query.",
   "liveRefusals.an_event_funnel_cannot_be_drawn": "An event funnel cannot be drawn from a live dataset yet. Make a copy of the dataset to use one.",
   "liveRefusals.choose_a_category_for_this_chart": "Choose a category for this chart.",

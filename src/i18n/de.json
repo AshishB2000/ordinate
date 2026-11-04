@@ -363,6 +363,7 @@
   "liveRefusals.a_map_cannot_be_drawn_from": "Eine Karte kann noch nicht aus einem Live-Datensatz erstellt werden. Erstellen Sie eine Kopie des Datensatzes, um eine zu verwenden.",
   "liveRefusals.a_period_filter_reached_the_live": "Ein Zeitraumfilter hat die Live-Abfrage erreicht, bevor seine Daten ermittelt wurden.",
   "liveRefusals.a_pivot_table_cannot_be_drawn": "Eine Pivot-Tabelle kann noch nicht aus einem Live-Datensatz erstellt werden. Erstellen Sie eine Kopie des Datensatzes, um eine zu verwenden.",
+  "liveRefusals.a_snapshot_metric_can_t_be": "Ein Stichtagswert kann noch nicht aus einem Live-Datensatz berechnet werden. Erstellen Sie eine Kopie des Datensatzes, um ihn zu verwenden.",
   "liveRefusals.a_table_or_column_name_of": "Ein Tabellen- oder Spaltenname dieses Live-Datensatzes kann nicht in einer Abfrage verwendet werden.",
   "liveRefusals.an_event_funnel_cannot_be_drawn": "Ein Ereignistrichter kann noch nicht aus einem Live-Datensatz erstellt werden. Erstellen Sie eine Kopie des Datensatzes, um einen zu verwenden.",
   "liveRefusals.choose_a_category_for_this_chart": "Wählen Sie eine Kategorie für dieses Diagramm.",

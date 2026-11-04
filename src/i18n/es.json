@@ -363,6 +363,7 @@
   "liveRefusals.a_map_cannot_be_drawn_from": "Todavía no se puede dibujar un mapa a partir de un conjunto de datos en vivo. Haga una copia del conjunto de datos para usarlo.",
   "liveRefusals.a_period_filter_reached_the_live": "Un filtro de periodo llegó a la consulta en vivo antes de que se calcularan sus fechas.",
   "liveRefusals.a_pivot_table_cannot_be_drawn": "Todavía no se puede crear una tabla dinámica a partir de un conjunto de datos en vivo. Haga una copia del conjunto de datos para usarla.",
+  "liveRefusals.a_snapshot_metric_can_t_be": "Todavía no se puede calcular una métrica de instantánea a partir de un conjunto de datos en vivo. Haga una copia del conjunto de datos para usarla.",
   "liveRefusals.a_table_or_column_name_of": "Un nombre de tabla o de columna de este conjunto de datos en vivo no se puede usar en una consulta.",
   "liveRefusals.an_event_funnel_cannot_be_drawn": "Todavía no se puede dibujar un embudo de eventos a partir de un conjunto de datos en vivo. Haga una copia del conjunto de datos para usarlo.",
   "liveRefusals.choose_a_category_for_this_chart": "Elija una categoría para este gráfico.",
