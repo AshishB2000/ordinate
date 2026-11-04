@@ -3,6 +3,7 @@
 // sanitizers are what keep a stored doc through every catalog read and re-save.
 
 import { isValidId } from './ids';
+import { clip } from './clip';
 
 export type TableRole = '' | 'fact' | 'dimension';
 const ROLES: readonly string[] = ['fact', 'dimension'];
@@ -25,10 +26,6 @@ export const MAX_GRAIN = 200;
 export const MAX_GUIDE = 8000;
 const MAX_KEY = 256; // catalog.ts's MAX_COLUMN_NAME: a longer name cannot be documented
 const MAX_STAMP = 80;
-
-function clip(raw: unknown, max: number): string {
-  return typeof raw === 'string' ? raw.trim().slice(0, max) : '';
-}
 
 function count(n: unknown): n is number {
   return typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;

@@ -4,6 +4,7 @@
 // is what drops a hand-edited or corrupt entry instead of showing it later as a badge. Never throws.
 
 import { isValidId } from './ids';
+import { clip } from './clip';
 import { KEY_RE } from './versions';
 
 export const STATUS_KINDS = ['metric', 'term', 'dataset'] as const;
@@ -26,10 +27,6 @@ const MAX_BY = 80;
 const MAX_AT = 40;
 const MAX_NOTE = 500;
 const PIN_RE = /^[A-Za-z0-9_-]{43}$/;
-
-function clip(raw: unknown, max: number): string {
-  return typeof raw === 'string' ? raw.trim().slice(0, max) : '';
-}
 
 /** `${kind}:${uuid}` for a kind a status covers; anything else is null. */
 export function parseStatusRef(ref: unknown): { kind: StatusKind; id: string } | null {

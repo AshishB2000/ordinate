@@ -283,6 +283,23 @@ async function main(): Promise<void> {
     === '[{"value":" EU ","label":"Europe"}]');
   ok('value labels are capped at 500', vl.sanitizeValueLabels(Array.from({ length: 600 }, (_, i) => ({ value: `v${i}`, label: `l${i}` }))).length === vl.MAX_VALUE_LABELS);
 
+  // ── 8. sanitizing twice is sanitizing once: a clip that ends on a space would lose a character on every re-save ──
+  const sd: typeof import('../src/app/statusDocs') = require('../src/app/statusDocs');
+  const spaced = 'x '.repeat(5000); // every cap below is even, so a plain slice at the cap ends on a space
+  const again = (f: (x: unknown) => unknown, x: unknown): boolean => JSON.stringify(f(f(x))) === JSON.stringify(f(x));
+  const longGrain = 'g'.repeat(199) + ' tail';
+  ok('a table doc sanitized twice is the doc sanitized once, a grain cut on a space loses it',
+    again(td.sanitizeTableDoc, { role: 'fact', grain: longGrain, guide: spaced, updatedBy: spaced, updatedAt: spaced })
+    && td.sanitizeTableDoc({ grain: longGrain }).grain === 'g'.repeat(199) && td.sanitizeTableDoc({ guide: spaced }).guide === spaced.slice(0, td.MAX_GUIDE).trimEnd());
+  const statusIn = { [`metric:${uuid(70)}`]: { status: 'retired', by: spaced, at: spaced, note: spaced }, [`term:${uuid(71)}`]: { status: 'certified', by: spaced, at: spaced, note: spaced } };
+  ok('a status section sanitized twice is the section sanitized once', again(sd.sanitizeStatus, statusIn) && sd.sanitizeStatus(statusIn)[`metric:${uuid(70)}`].note === spaced.slice(0, 500).trimEnd());
+  const catalogIn = {
+    records: { [`dataset:${uuid(72)}`]: { description: spaced, owner: spaced, updatedBy: spaced, updatedAt: spaced } },
+    columns: { [uuid(72)]: { a: { description: spaced, displayName: spaced, example: spaced, updatedBy: spaced, updatedAt: spaced } } },
+  };
+  ok('a catalog sanitized twice is the catalog sanitized once', again(catalog.sanitizeCatalog, catalogIn)
+    && catalog.sanitizeCatalog(catalogIn).records[`dataset:${uuid(72)}`].description === spaced.slice(0, 2000).trimEnd());
+
   if (!failureCount()) console.log('\nAll catalog checks passed.');
 }
 
