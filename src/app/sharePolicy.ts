@@ -33,6 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
+import { closedToCaller } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
 import { readZipAsync, writeZipAsync } from './bundle';
@@ -127,16 +128,23 @@ export async function withheldColumns(projectId: string, datasetId: string): Pro
 
 /**
  * The catalog's column docs as the Assistant's facts read them
- * (ipc/copilot.ts): the stored docs, plus a level-only doc for a column a
- * rename step carried a mark to — so its values are withheld under its new name.
+ * (ipc/copilot.ts, MCP's describe_dataset): the stored docs, plus a level-only doc for a column a
+ * rename step carried a mark to — so its values are withheld under its new name. Value labels name
+ * stored values, so they stay only on a text column that is not marked, for a caller the dataset's
+ * rules leave open (D12).
  */
 export async function assistantColumnDocs(projectId: string, datasetId: string): Promise<Record<string, catalog.ColumnDoc>> {
   const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId, true));
   const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
-  for (const [name, level] of await markedLevels(projectId, datasetId, meta ? meta.steps : [])) {
+  const marked = await markedLevels(projectId, datasetId, meta ? meta.steps : []);
+  for (const [name, level] of marked) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
       docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
     }
+  }
+  const closed = Object.values(docs).some((d) => d.values) && (await closedToCaller(projectId, datasetId).catch(() => true)); // rules unread: none
+  for (const [name, { values: codes, ...doc }] of Object.entries(docs)) {
+    if (codes && (closed || marked.has(name) || meta?.columns.find((c) => c.name === name)?.type !== 'text')) docs[name] = doc;
   }
   return docs;
 }

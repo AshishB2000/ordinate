@@ -244,6 +244,16 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('NEGATIVE CONTROL: the editor\'s catalog:columns holds both labels', colsEd.body?.columns?.customer?.values?.length === 2 && colsEd.text.includes('Customer one') && colsEd.text.includes('West three'), colsEd.text.slice(0, 200));
     const colsPlain = await W.call('east', 'catalog:columns', { projectId: P, datasetId: W.plain });
     ok('control: the gate is the dataset\'s rules, not the viewer — east reads the labels of a dataset with none', colsPlain.body?.columns?.customer?.values?.[0]?.label === 'Customer one', colsPlain.text.slice(0, 200));
+    // The two model-facing readers of the same docs: the Assistant's facts (assistantColumnDocs, the one funnel) and MCP's describe_dataset.
+    const sharePolicy: typeof import('../src/app/sharePolicy') = require('../src/app/sharePolicy');
+    type Described = { columns: { name: string; valueLabels?: unknown }[] };
+    const [aEast, aEd, dEast, dEd] = [await W.as('east', () => sharePolicy.assistantColumnDocs(P, orders)), await W.as('ed', () => sharePolicy.assistantColumnDocs(P, orders)),
+      await describedBy('east') as unknown as Described, await describedBy('ed') as unknown as Described];
+    eastReplies.push(JSON.stringify(aEast), JSON.stringify(dEast));
+    ok('redact: the Assistant\'s column docs — east gets the notes but no value labels', aEast.customer?.sensitivity === 'none' && !('values' in aEast.customer) && !/Customer one|West three/.test(JSON.stringify(aEast)), JSON.stringify(aEast.customer));
+    ok('NEGATIVE CONTROL: the editor\'s Assistant docs hold both labels', JSON.stringify(aEd.customer?.values) === JSON.stringify(labelRows), JSON.stringify(aEd.customer));
+    ok('redact: describe_dataset — east gets no value labels on any column', !dEast.columns.some((c) => 'valueLabels' in c) && !/Customer one|West three/.test(JSON.stringify(dEast)), JSON.stringify(dEast.columns));
+    ok('NEGATIVE CONTROL: the editor\'s describe_dataset carries them', JSON.stringify(dEd.columns.find((c) => c.name === 'customer')?.valueLabels) === JSON.stringify(labelRows), JSON.stringify(dEd.columns));
     // A save's reply and an alias's reply carry the doc too. A writer is never row-restricted, so they are driven where every caller is closed to
     // the dataset (a fan-out scope): the list is withheld there, and the same two calls outside it return it.
     const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');

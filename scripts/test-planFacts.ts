@@ -210,6 +210,17 @@ function checkNotes(): void {
     chatNamed[2] === '- region: called "Territory"; also called "area", "sales region"; Where the order shipped'
     && linesOf(draftNamed).includes(chatNamed[2]), draftNamed);
   ok('notes: a note on a column the dataset no longer has is left out', !text.includes('no longer has'));
+  // Value labels: the chat's codes bit, in the draft's column notes, inside the block's budget.
+  const L = [{ value: 'EU', label: 'Europe' }, { value: 'NA', label: 'North America' }];
+  const coded = planFacts.buildFactsText(CTX, '', { columnDocs: { [SALES]: { region: { values: L } } } });
+  const chatCoded: string[] = [];
+  copilotFacts.columnNoteLines(chatCoded, { region: { values: L } }, SALES_COLS);
+  ok('notes: value labels as codes, as the chat writes them', chatCoded[2] === '- region: codes "EU" = Europe, "NA" = North America' && linesOf(coded).includes(chatCoded[2]), coded);
+  const noteBlock = coded.slice(coded.indexOf('Column notes (written by the user)'));
+  ok('notes: the codes sit inside USER_BLOCK_MAX', noteBlock.length < planFacts.USER_BLOCK_MAX && noteBlock.includes('North America'));
+  const long = Array.from({ length: 20 }, (_, i) => ({ value: `${'v'.repeat(250)}${i}`, label: `${'l'.repeat(119)}${i}` }));
+  const longText = planFacts.buildFactsText(CTX, '', { columnDocs: { [SALES]: { region: { displayName: 'Territory', values: long }, state: { description: 'Ship-to state' } } } });
+  ok('notes: long codes cut pairs, never the row: the column\'s name and the next note still print', /\n- region: called "Territory"; codes "v+…" = l+0, .*\(\+\d+ more\)\n/.test(longText) && longText.includes('\n- state: Ship-to state'), longText.slice(-600));
   const at = (line: string): number => lines.indexOf(line);
   ok('notes: each dataset\'s notes sit under its own name',
     at('For "Sales":') > 0 && at('For "Sales":') < at('- region: called "Territory"; Where the order shipped')
