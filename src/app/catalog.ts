@@ -38,6 +38,7 @@ import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
 import type { NamedColumn } from './columnNames';
 import { alreadyCalled, tooManyNames } from './columnNameMessages';
 import { logger } from './logger';
+import { sanitizeInstructions, type Instruction } from './instructions';
 import { sanitizeStatus, type StatusDoc } from './statusDocs';
 import { sanitizeTables, type TableDoc } from './tableDocs';
 import { sanitizeValueLabels, type ValueLabel } from '../analysis/valueLabels';
@@ -81,6 +82,7 @@ export interface CatalogFile {
   columns: Record<string, Record<string, ColumnDoc>>;
   tables?: Record<string, TableDoc>; // table docs by dataset id (./tableDocs.ts); present only when non-empty
   status?: Record<string, StatusDoc>; // certified/retired by `kind:id` (./statusDocs.ts), kept for a later release; present only when non-empty
+  instructions?: Instruction[]; // the Assistant's standing instructions (./instructions.ts), kept for a later release; present only when non-empty
 }
 
 export const TAG_COLORS = 8;
@@ -225,6 +227,7 @@ export function sanitizeCatalog(raw: any): CatalogFile {
   if (Object.keys(tables).length > 0) out.tables = tables;
   const status = sanitizeStatus(raw.status);
   if (Object.keys(status).length > 0) out.status = status;
+  const instructions = sanitizeInstructions(raw.instructions); if (instructions.length) out.instructions = instructions;
   return out;
 }
 
