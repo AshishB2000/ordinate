@@ -16,6 +16,9 @@
 // 5. A PLANTED UNROUTED READER (reads the Parquet by path) is caught by the
 //    leak check; one that reads through getDataset is refused by the net.
 // 6. `nobody` is refused `none`; the rules themselves are admin-only.
+// 7. COLUMN RULES (semantic layer part 4): `columnAccess`, which a newer release writes, planted on Orders
+//    closes EVERY door and reader of 2 and 3 to east (named by the row rules) and to `nobody`, typed `columns`;
+//    the editor and the admin read each as on an identical dataset without it (NEGATIVE CONTROL).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicySafetyNet.js
 
@@ -27,6 +30,7 @@ import { TREATMENT } from './rowPolicyReaders';
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const contractMod: typeof import('../src/api/contract') = require('../src/api/contract');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
+const rowMessages: typeof import('../src/data/rowAccessMessages') = require('../src/data/rowAccessMessages');
 const { z } = require('zod') as typeof import('zod');
 
 /** Read contracts not in the table — the coverage rule, as a function so its negative control can run it. */
@@ -49,7 +53,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const byMonth = { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }], grain: 'month' };
     // A visual and a metric on each twin: the doors that name a dataset through a record.
     const recs: Record<string, { visualId: string; metricId: string; dash: string }> = {};
-    for (const d of [orders, east]) {
+    const mkRecs = async (d: string): Promise<void> => {
       const v = await W.call('boss', 'visual:save', { projectId: P, datasetId: d, name: 'Sales', chartType: 'bar', encoding: enc });
       const m = await W.call('boss', 'metric:save', { projectId: P, input: { name: `Sales ${d.slice(0, 4)}`, datasetId: d, definition: { column: 'sales', aggregation: 'sum' } } });
       const visualId = String(v.body?.visual?.id ?? v.body?.id ?? '');
@@ -57,7 +61,8 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       const a = await W.call('boss', 'analysis:create', { projectId: P, name: 'Board', sheets: [{ name: 'One', cards: [{ id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId }] }] });
       recs[d] = { visualId, metricId, dash: String(a.body?.id ?? a.body?.analysis?.id ?? '') };
       await W.call('boss', 'analysis:publish', { projectId: P, id: recs[d].dash }); // a viewer reads published dashboards only
-    }
+    };
+    for (const d of [orders, east]) await mkRecs(d);
     ok('setup: a visual, a metric and a dashboard on each twin', [orders, east].every((d) => /^[0-9a-f-]{36}$/.test(recs[d].visualId) && /^[0-9a-f-]{36}$/.test(recs[d].metricId) && /^[0-9a-f-]{36}$/.test(recs[d].dash)), JSON.stringify(recs));
 
     type Payload = (d: string) => unknown;
@@ -293,6 +298,76 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok(`nothing of West's in any of east's ${eastReplies.length} replies (rows, values, the West rule)`, leaked.length === 0, leaked.map((t) => t.slice(0, 120)).join(' | '));
     const edPage = await W.call('ed', 'dataset:page', { projectId: P, datasetId: orders, offset: 0, limit: 200 });
     ok('NEGATIVE CONTROL: the editor\'s grid carries the West canary', H.leaks(edPage.text));
+
+    // ── 7. Column rules: `columnAccess` closes every channel above to a viewer, whatever the row rules give them ──
+    const CA = { columns: [{ column: 'sales', visibleTo: [] }], readersHash: 'h', updatedBy: 'boss@acme.test', updatedAt: '2026-11-04T00:00:00.000Z' };
+    const setColumns = (id: string, on: boolean) => W.as('boss', () => rec.serialized(rec.datasetFilePath(P, id), (r) => { if (on) r.columnAccess = CA; else delete r.columnAccess; return true; }));
+    // The twin: the same rows and steps, no rules at all — what the editor's and the admin's replies must equal.
+    const twin = await W.as('boss', async () => (await datasetsMod.saveDataset(P, { name: 'Orders', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    await mkRecs(twin);
+    const swapTwin = { [twin]: orders, [recs[twin].visualId]: recs[orders].visualId, [recs[twin].metricId]: recs[orders].metricId, [recs[twin].dash]: recs[orders].dash };
+    await setColumns(orders, true);
+    // Each channel refuses in its own wire form. The answer channels carry `code: row_policy` and the sentence in `error`
+    // (their `reason` IS the sentence). `metric:values` and `story:figures` carry no reason for ANY row-policy refusal: a
+    // bare `{id, ok:false}`, an empty chart — so they are asserted as "no figure", and the key is proved to be the cause below.
+    const SENTENCE = rowMessages.rowColumnsMessage();
+    const closedByColumns = (channel: string, r: H.Reply): boolean => {
+      if (channel === 'metric:values') return r.status === 200 && Array.isArray(r.body) && r.body.length > 0 && r.body.every((x: { ok: boolean; value?: unknown }) => x.ok === false && !('value' in x));
+      if (channel === 'story:figures') {
+        const blocks = Object.values((r.body?.blocks ?? {}) as Record<string, { chart?: { data: { labels: unknown[]; series: unknown[] } } }>);
+        return r.status === 200 && blocks.length > 0 && blocks.every((b) => b.chart?.data.labels.length === 0 && b.chart.data.series.length === 0);
+      }
+      if (channel.startsWith('answer:')) return r.status === 200 && r.body?.ok === false && r.body.code === 'row_policy' && r.body.error === SENTENCE;
+      return H.refused(r, 'columns');
+    };
+    const columnReplies: string[] = [];
+    const channels: [string, string, unknown][] = [...DIFFERENTIAL.map(([l, c, p]): [string, string, unknown] => [l, c, p(orders)]), ...REFUSED];
+    for (const [label, channel, payload] of channels) {
+      const mine = await W.call('east', channel, payload);
+      columnReplies.push(mine.text);
+      ok(`columns: ${label} (${channel}) refuses east, whom the row rules name, typed \`columns\``, closedByColumns(channel, mine), `${mine.status} ${mine.text.slice(0, 200)}`);
+      for (const who of ['ed', 'boss']) {
+        const theirs = await W.call(who, channel, payload);
+        ok(`NEGATIVE CONTROL: columns: ${label} — ${who} is not refused`, !H.refused(theirs) && !/row_policy/.test(theirs.text), `${theirs.status} ${theirs.text.slice(0, 160)}`);
+      }
+    }
+    for (const [label, channel, payload] of DIFFERENTIAL.slice(0, 1).concat(DIFFERENTIAL.filter(([l]) => l === 'grid page' || l === 'KPI sum'))) {
+      const r = await W.call('nobody', channel, payload(orders));
+      ok(`columns: a viewer no rule names is refused \`columns\`, not \`none\` (${label})`, H.refused(r, 'columns'), `${r.status} ${r.text.slice(0, 160)}`);
+    }
+    // The figures and rows the editor and the admin read are the twin's, number by number (Object.is) — not just "not refused".
+    await W.call('boss', 'visual:update', { projectId: P, id: recs[twin].visualId, overrides: styled }); // Orders' visual was styled above
+    const tail = (b: { turns?: unknown[] } | null) => (Array.isArray(b?.turns) ? { ...b, turns: b!.turns!.slice(-2) } : b); // a thread grows with every call: compare this call's turns
+    let compared = 0;
+    for (const [label, channel, payload] of DIFFERENTIAL) {
+      for (const who of ['ed', 'boss']) {
+        const got = await W.call(who, channel, payload(orders));
+        const want = await W.call(who, channel, payload(twin));
+        const d = H.diff(tail(got.body), tail(want.body), swapTwin);
+        compared += 1;
+        ok(`NEGATIVE CONTROL: columns: ${label} (${channel}) — ${who} reads it as on the dataset without column rules`, got.status === 200 && want.status === 200 && !H.refused(got) && got.text.length > 20 && d === '', `${d} | ${got.status} ${got.text.slice(0, 120)}`);
+      }
+    }
+    ok(`…${compared} figures and row pages compared, and the comparison can tell data apart`,
+      H.diff((await W.call('ed', 'dataset:page', { projectId: P, datasetId: orders, offset: 0, limit: 200 })).body, (await W.call('ed', 'dataset:page', { projectId: P, datasetId: east, offset: 0, limit: 200 })).body, {}) !== '');
+    // Skipped and flagged through the same check, on a dataset with no row rules (Orders is skipped for east anyway).
+    const seen = async (who: string) => {
+      const found = await W.call(who, 'dataSearch:query', { projectId: P, term: 'c3' });
+      const listed = row(await W.call(who, 'dataset:list', { projectId: P }), W.plain);
+      return { found: found.text.includes(W.plain), scoped: listed?.scoped === true, header: (await W.call(who, 'dataset:columns', { projectId: P, id: W.plain })).body?.scoped === true };
+    };
+    const before = await seen('east');
+    await setColumns(W.plain, true);
+    const [east7, ed7] = [await seen('east'), await seen('ed')];
+    ok('columns: east\'s value search skips a dataset with column rules, and its list entry and grid header say it is limited', before.found && !before.scoped && !before.header && !east7.found && east7.scoped && east7.header, JSON.stringify([before, east7]));
+    ok('NEGATIVE CONTROL: …the editor\'s search finds it and nothing flags it', ed7.found && !ed7.scoped && !ed7.header, JSON.stringify(ed7));
+    await setColumns(W.plain, false);
+    ok(`nothing of West's in any of east's ${columnReplies.length} replies on a dataset with column rules`, columnReplies.filter(H.leaks).length === 0);
+    await setColumns(orders, false);
+    const reopened = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
+    ok('NEGATIVE CONTROL: with the key removed, east is answered through its row lock again (the refusals above were the key\'s)', reopened.body?.ok === true && !H.refused(reopened), reopened.text.slice(0, 160));
+    const [mv, sf] = [await W.call('east', 'metric:values', { projectId: P, ids: [recs[orders].metricId] }), await W.call('east', 'story:figures', { projectId: P, blocks: [{ id: 'b1', kind: 'visual', visualId: recs[orders].visualId }] })];
+    ok('NEGATIVE CONTROL: …so are the two channels whose refusal carries no reason (a figure, a drawn chart)', mv.body?.[0]?.ok === true && typeof mv.body[0].value === 'number' && sf.body?.blocks?.b1?.chart?.data?.labels?.length > 0, `${mv.text.slice(0, 120)} | ${sf.text.slice(0, 120)}`);
   } finally {
     await W.close();
   }

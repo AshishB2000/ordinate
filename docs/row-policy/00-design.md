@@ -224,11 +224,12 @@ entitlement(policy: RowPolicy | null, userId: string | null, teamIds: readonly s
   strings dropped, ≤ 1,000 per rule. On SET a violation is a 400/typed refusal naming the field; on
   LOAD it yields a CLOSED policy (D2b).
 - `rowLockFor(projectId, datasetId)`, for a restricted caller (or inside a fan-out scope), in order:
-  fan-out scope → `fanout` (for a policy or policy-derived dataset); export scope → `export`; as-of →
-  `asOf`; no own policy but a policy dataset upstream → `derived`; no policy → `null`; column
-  missing / not text / dropped by the warehouse → `column`; `storesCrossRow(steps, [column])` or a
-  step referencing a parameter → `pipeline`; entitlement `none` → `none`; else
-  `makeLock({ [column]: values })`.
+  fan-out scope → `fanout` (for a policy or policy-derived dataset); a dataset with column access rules
+  (`columnAccess`, written by a newer release), whatever the row rules give the caller → `columns`;
+  export scope → `export`; as-of → `asOf`; no own policy but a policy dataset upstream → `derived`; no
+  policy → `null`; column missing / not text / dropped by the warehouse → `column`;
+  `storesCrossRow(steps, [column])` or a step referencing a parameter → `pipeline`; entitlement
+  `none` → `none`; else `makeLock({ [column]: values })`.
 
 ## Refusals
 
@@ -242,6 +243,7 @@ entitlement(policy: RowPolicy | null, userId: string | null, teamIds: readonly s
 | `related` | a column or label reached through a relationship | This question reaches a related dataset, and row access rules don't extend across relationships yet. |
 | `asOf` | an as-of read | Looking at past data is off for datasets with row access rules. |
 | `fanout` | publish, embed, subscription, alert | This reads a dataset with row access rules. Published links, embeds, subscriptions and alerts show the same figures to everyone, so they're off for it. |
+| `columns` | the dataset carries column access rules (a newer release writes them) that this release cannot apply: closed to every non-editor, row rules or not | Some columns of this dataset are limited to certain people by rules this version of Ordinate can't apply yet, so it is closed to you. Ask your admin to finish upgrading Ordinate. |
 | `export` | an export by a restricted caller | Exports are off for datasets with row access rules while your access covers only some of its rows. |
 
 The web recognises `row_policy` in the same helper that recognises Live refusals
