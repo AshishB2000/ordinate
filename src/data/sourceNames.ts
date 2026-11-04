@@ -24,8 +24,8 @@ export async function unreadableErrorIds(projectId: string): Promise<Set<string>
   return (await seesSourceNames(projectId)) ? new Set() : connectionDatasetIds(projectId);
 }
 
-/** A connection saved with a blank name is named after its database, host or URL, so a name that is or holds a hidden value of the connection (any case) reads as the connector's label. */
-function viewerName(c: Connection): string {
+/** The name a caller who may not see source names reads for a connection. A blank-named connection is named after its database, host or URL, so a name that is or holds a hidden value of the connection (any case) reads as the connector's label; every reply that names a connection uses this. */
+export function viewerName(c: Connection): string {
   const name = c.name.trim().toLowerCase();
   const hidden = [...Object.values(c.values), c.table, c.query, ...c.queries.map((q) => q.sql)].filter((v): v is string => typeof v === 'string' && v.trim() !== '');
   return hidden.some((v) => name.includes(v.trim().toLowerCase())) ? (getConnector(c.connectorId)?.label ?? c.connectorId) : c.name;

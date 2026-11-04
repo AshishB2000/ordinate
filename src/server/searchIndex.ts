@@ -20,7 +20,7 @@ import { tsqueryOf, wordsOf } from '../app/searchMatch';
 import { logger } from '../app/logger';
 
 /** Bump when what a record describes to changes: every marker is then stale, and each source rebuilds once. */
-export const INDEX_VERSION = 1;
+export const INDEX_VERSION = 2; // 2: a connection's row is per audience (a viewer reads viewerName)
 /** Records read per statement while rebuilding, by count and by bytes: a v2 dataset holds its rows (up to 8 MiB),
  *  so 100 of those would be ~800 MiB in this process, parsed in one loop without yielding. */
 const REBUILD_BATCH = 100;

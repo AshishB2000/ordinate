@@ -10,7 +10,7 @@ import * as alertStore from '../analysis/alertStore';
 import * as connections from '../connectors/connections';
 import * as history from '../app/history';
 import { isValidId } from '../app/ids';
-import { seesSourceNames } from '../data/sourceNames';
+import { seesSourceNames, viewerName } from '../data/sourceNames';
 import { listNotebooks } from '../analysis/notebook/store';
 
 // Lineage IPC — the dependency graph around one record (src/analysis/lineage.ts
@@ -55,7 +55,7 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     metrics: present(await Promise.all(metList.map((m) => metrics.getMetric(projectId, m.id)))),
     reports,
     alerts: alertFile.rules || [],
-    connections: conns.map((c) => ({ id: c.id, name: c.name, kind: c.connectorId })),
+    connections: conns.map((c) => ({ id: c.id, name: sees ? c.name : viewerName(c), kind: c.connectorId })),
     captures: caps.map((c) => ({ id: String(c.id), title: c.title })),
     notebooks: nbs.map((n) => ({ id: n.id, name: n.name })),
   };

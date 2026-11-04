@@ -22,6 +22,8 @@
 //    hub:dataset-refreshed, summary:compute, summary:rewrite.
 // 5. `connections:list`: a viewer gets the connection's id, name, kind of source, status and dataset count: no host, port,
 //    database, user, table, SQL, saved queries, last failure text or dates. NEGATIVE CONTROL: the editor reads them all.
+//    A connection named after its database or host (what a blank name field saves) reads as the connector ("PostgreSQL") for a viewer
+//    in connections:list, dataset:source, lineage:get, pipelines:get and the ⌘K search (the index and the reference path).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -39,6 +41,7 @@ const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary
 const { randomUUID }: typeof import('crypto') = require('crypto');
 const { sourceView }: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
 const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('../src/data/sourceNames');
+const searchMod: typeof import('../src/ipc/search') = require('../src/ipc/search');
 
 const HOST = 'canary-host-9f3.internal';
 const DATABASE = 'canary_db_9f3';
@@ -71,7 +74,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
   if (!W) return finish();
   try {
     const { P } = W;
-    const { connId, byDb, byHost, D, web, U } = await W.as('boss', async () => {
+    const { connId, byDb, byHost, D, dDb, web, U } = await W.as('boss', async () => {
       const conn = await connections.saveConnection(P, {
         name: 'Warehouse',
         connectorId: 'postgres',
@@ -93,6 +96,9 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       const ds = await datasets.saveDataset(P, { name: 'Orders', sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: conn.id, table: TABLE } });
       if (!ds) throw new Error('saveDataset refused');
       await datasets.markRefresh(P, ds.id, 'error', REFRESH_ERROR);
+      // A dataset read from the connection named after its database: dataset:source, lineage and pipelines draw that name.
+      const fromDb = await datasets.saveDataset(P, { name: 'Named orders', sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: byDb, table: TABLE } });
+      if (!fromDb) throw new Error('saveDataset (named) refused');
       const fromWeb = await datasets.saveDataset(P, { name: 'Web orders', sourceKind: 'url', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'url', url: WEB_URL } });
       if (!fromWeb) throw new Error('saveDataset (web) refused');
       // U: a failed import that is not from a connection ("HTTP 500" names nothing), so a viewer keeps its text.
@@ -102,7 +108,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       // The failed runs the pipeline keeps for each (a run's id is a UUID, or the store drops it).
       const failed = (nodeId: string, error: string) => ({ nodeId, id: randomUUID(), runId: randomUUID(), trigger: 'manual' as const, status: 'failed' as const, startedAt: T, finishedAt: T, durationMs: 1, attempts: 1, warnings: [], errors: [error] });
       await pipelineStore.appendRuns(P, [failed('dataset:' + ds.id, REFRESH_ERROR), failed('dataset:' + open.id, 'HTTP 500')]);
-      return { connId: conn.id, byDb, byHost, D: ds.id, web: fromWeb.id, U: open.id };
+      return { connId: conn.id, byDb, byHost, D: ds.id, dDb: fromDb.id, web: fromWeb.id, U: open.id };
     });
     ok('the fixture connection exists', typeof connId === 'string' && connId.length > 0);
 
@@ -136,12 +142,25 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('connections:list: a connection named after its database, or holding its host, reads as the connector for a viewer', entry(connsViewer, byDb).name === 'PostgreSQL' && entry(connsViewer, byHost).name === 'PostgreSQL', connsViewer.text);
     ok('NEGATIVE CONTROL: …a plainly named one keeps its name, and the editor always reads the stored names', cv.name === 'Warehouse' && entry(connsEditor, byDb).name === NAMED_DB && entry(connsEditor, byHost).name === `Replica of ${NAMED_HOST.toUpperCase()}`, connsEditor.text);
 
+    // The same name reaches a viewer wherever a reply names the connection: dataset:source, lineage, pipelines, the ⌘K search.
+    const [srcDbViewer, srcDbEditor] = [await src('nobody', dDb), await src('ed', dDb)];
+    ok('dataset:source: a connection named after its database reads as the connector for a viewer', srcDbViewer.body.label === 'Connection · PostgreSQL' && !CANARY.test(srcDbViewer.text), srcDbViewer.text);
+    ok('NEGATIVE CONTROL: the editor reads the stored name', srcDbEditor.body.label === `Connection · ${NAMED_DB} · ${TABLE}`, srcDbEditor.text);
+    const find = (who: string, query: string) => W.call(who, 'search:query', { projectId: P, query });
+    const hits = (r: H.Reply): { kind: string; name: string }[] => r.body.results ?? [];
+    const [sFind, sFindEditor, sMine] = [await find('nobody', NAMED_DB), await find('ed', NAMED_DB), await find('nobody', 'postgresql')];
+    ok('search:query: a viewer cannot find a connection by its database name, and reads it as the connector', hits(sFind).length === 0 && hits(sMine).filter((h) => h.kind === 'connection' && h.name === 'PostgreSQL').length === 2 && !CANARY.test(sFind.text + sMine.text), sMine.text);
+    ok('NEGATIVE CONTROL: the editor finds it by the stored name', hits(sFindEditor).some((h) => h.kind === 'connection' && h.name === NAMED_DB), sFindEditor.text);
+    // The reference path reads the lists (the index is the other path): searchNames asks the same question.
+    const named = async (who: string) => (await W.as(who, () => searchMod.searchNames(P, NAMED_DB))).map((h) => h.name);
+    ok('searchNames: a viewer finds nothing by the database name; the editor finds the stored name', (await named('nobody')).length === 0 && (await named('ed')).includes(NAMED_DB));
+
     // Lineage and Pipelines draw the source node from the dataset's origin: `loadInput` trims the table and the web address for a viewer.
     const lin = (who: string, id = D) => W.call(who, 'lineage:get', { projectId: P, type: 'dataset', id });
     const pipe = (who: string) => W.call(who, 'pipelines:get', { projectId: P });
     type N = { kind: string; name: string; sub: string; ref?: { type: string } };
     const srcNode = (r: H.Reply) => r.body.nodes.find((n: N) => n.kind === 'source');
-    const connNode = (r: H.Reply) => r.body.nodes.find((n: N) => n.kind === 'source' && n.ref?.type === 'connection');
+    const connNode = (r: H.Reply, id = connId) => r.body.nodes.find((n: N & { id: string }) => n.id === 'source:conn:' + id);
     const webNode = (r: H.Reply) => r.body.nodes.find((n: N) => n.kind === 'source' && n.sub === 'Web address');
     /** The source node drawn into dataset `id` (the pipeline has one per web dataset). */
     const feeds = (r: H.Reply, id: string) => r.body.nodes.find((n: { id: string }) => n.id === r.body.edges.find((e: { from: string; to: string }) => e.to === 'dataset:' + id)?.from);
@@ -152,6 +171,9 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('pipelines:get: a viewer reads the connector kind and "Web address", nothing of a source', connNode(pipeViewer).sub === 'postgres' && feeds(pipeViewer, web).name === 'Web address' && !CANARY.test(pipeViewer.text), pipeViewer.text);
     ok('NEGATIVE CONTROL: the editor reads "Table public.canary_tbl_9f3" in lineage and in pipelines', srcNode(linEditor).sub === `Table ${TABLE}` && connNode(pipeEditor).sub === `Table ${TABLE}`, linEditor.text);
     ok('NEGATIVE CONTROL: the editor reads the web import\'s host in lineage and in pipelines', webNode(linWebEditor).name === WEB_HOST && feeds(pipeEditor, web).name === WEB_HOST, linWebEditor.text);
+    const [linDbViewer, linDbEditor] = [await lin('nobody', dDb), await lin('ed', dDb)];
+    ok('lineage:get and pipelines:get: a connection named after its database reads as the connector for a viewer', srcNode(linDbViewer).name === 'PostgreSQL' && connNode(pipeViewer, byDb).name === 'PostgreSQL' && !CANARY.test(linDbViewer.text), linDbViewer.text);
+    ok('NEGATIVE CONTROL: the editor reads the stored name in lineage and in pipelines', srcNode(linDbEditor).name === NAMED_DB && connNode(pipeEditor, byDb).name === NAMED_DB, linDbEditor.text);
     const pipeBoss = await pipe('boss');
     const drawn = (r: H.Reply) => JSON.stringify(r.body.nodes.map((n: N & { id: string }) => [n.id, n.name, n.sub]));
     ok('an editor and an org admin get the same bytes', linEditor.text === linBoss.text);
