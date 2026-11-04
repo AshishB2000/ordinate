@@ -38,6 +38,20 @@ All notable changes to Ordinate are documented here. Format based on
   once when an untrusted peer sends `X-Forwarded-For`, and the Helm chart when the Ingress is on and
   `TRUSTED_PROXY_CIDRS` is empty: every client would share one rate-limit bucket.
 
+### Security
+
+- **A project viewer no longer reads where your data comes from.** Someone who can read a project but not
+  edit it sees a connection as its card only (name, connector, status, how many datasets use it): no host,
+  database, user, saved queries or last error. A connection named after its host or database reads as the
+  connector's name, in search too. A dataset's source line, and the source nodes in Lineage and Pipelines,
+  no longer name its warehouse table or a web import's host. The error text of a failed refresh of a
+  dataset copied from a connection, which quotes the table it could not find, is gone for a viewer from the
+  dataset list, a pipeline's runs, the alert a failed pipeline raises ("A refresh failed. Ask an editor for
+  the details."), the Summary and the pushes to open tabs. The pushes, and a Summary that leaves the
+  app (a report, a published page, the model behind a Summary rewrite), drop it for editors too. Two
+  things stay: a dataset imported from a table is still named after it by default, so a viewer reads that
+  name until you rename the dataset; and an editor's own in-app view keeps the error text.
+
 ### Audit log
 
 - **Retention, and an `audit` log line.** `AUDIT_RETENTION_DAYS` deletes audit rows older than that many

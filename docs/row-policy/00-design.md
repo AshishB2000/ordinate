@@ -414,9 +414,9 @@ Handler paths are under `src/`.
 | `comment:reopen` | `ipc/comments.ts:101` | as comment:add |
 | `comment:reply` | `ipc/comments.ts:95` | as comment:add |
 | `comment:resolve` | `ipc/comments.ts:99` | as comment:add |
-| `connections:list` | `ipc/connections.ts:251` | connection metadata, secretSet flags; a caller who may not see source names (a viewer) gets id, name, connector, status and dataset count only, so no `lastError` (a refresh failure's text, which can quote a value or a relation — N2, NV-22) and no host, SQL or table |
-| `connectors:catalog` | `ipc/connections.ts:238` | static form shapes |
-| `connectors:logos` | `ipc/connections.ts:471` | static glyphs |
+| `connections:list` | `ipc/connections.ts:254` | connection metadata, secretSet flags; a caller who may not see source names (a viewer) gets id, name, connector, status and dataset count only, so no `lastError` (a refresh failure's text, which can quote a value or a relation — N2, NV-22) and no host, SQL or table |
+| `connectors:catalog` | `ipc/connections.ts:240` | static form shapes |
+| `connectors:logos` | `ipc/connections.ts:473` | static glyphs |
 | `copilot:deleteThread` | `ipc/copilot.ts:434` | own thread |
 | `copilot:history` | `ipc/copilot.ts:382` | the caller's OWN stored turns, written under the access they had then (ceiling) |
 | `copilot:newThread` | `ipc/copilot.ts:413` | own thread |
