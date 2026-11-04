@@ -10,6 +10,7 @@ import { withAnalytics } from './visualsAnalytics';
 import { withEvents } from './events'; // r8:events
 import { withTableCalcs } from '../analysis/tableCalc';
 import { refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { followedEncoding } from '../analysis/metricMeasures';
 import { sanitizeOverlays } from '../analysis/analytics';
 import { stampAsOf } from '../data/figureAsOf';
 import { withGeoSuggest } from '../analysis/geoHits';
@@ -29,8 +30,8 @@ export function register(): void {
   ipcMain.handle('visual:preview', async (_e, { projectId, datasetId, encoding, filters, params, analytics, ...drawnAs }: any = {}) => {
     try {
       // Sanitised exactly as `visual:data` sanitises — this is untrusted input.
-      const enc = sanitizeEncoding(encoding);
       const values = paramValues(params);
+      const enc = await followedEncoding(projectId, datasetId, sanitizeEncoding(encoding), values); // each metric measure as it is defined NOW, as `visual:data` draws it
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>

@@ -31,6 +31,7 @@ import { arrangeSheet, readingOrder, type PlacedTile } from './planLayout';
 import { vizDataFor } from '../ipc/visuals';
 import { withTableCalcs } from './tableCalc';
 import { refuseNonAdditiveCalcs } from './additivity';
+import { followedEncoding } from './metricMeasures';
 import { withChartFigures } from './chartShapes';
 import { figureAsk } from './figureAsk';
 
@@ -248,10 +249,11 @@ async function previewVisual(
   }
 
   // Table calculations exactly as `visual:data` applies them (tableCalc.ts), so
-  // the preview and the built chart cannot disagree.
-  const res = withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(projectId, pv.datasetId, encoding, filters, {
+  // the preview and the built chart cannot disagree: on each metric as it is defined now.
+  const drawn = await followedEncoding(projectId, pv.datasetId, encoding);
+  const res = withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(projectId, pv.datasetId, drawn, filters, {
     maxHydrateRows: PREVIEW_MAX_HYDRATE_ROWS,
-  }), projectId, pv.datasetId, encoding), encoding);
+  }), projectId, pv.datasetId, drawn), drawn);
   if (!res.ok) {
     base.note = 'tooLarge' in res && res.tooLarge
       ? 'Too large to preview without the DuckDB bridge. The chart renders normally once built.'

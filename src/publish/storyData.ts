@@ -13,6 +13,7 @@ import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
 import { refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { followedEncoding } from '../analysis/metricMeasures';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { kpiHidden } from './kpiPolicy';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
@@ -66,7 +67,7 @@ export async function buildStory(
     if (b.kind === 'visual') {
       const v = await visuals.getVisual(projectId, b.visualId);
       if (!v) { blocks.push({ kind: 'broken', reason: 'This visual was deleted.' }); continue; }
-      const enc = sanitizeEncoding(v.encoding);
+      const enc = await followedEncoding(projectId, v.datasetId, sanitizeEncoding(v.encoding)); // each metric measure as it is defined NOW: what the block draws
       if (enc.geo) {
         if (enc.geo.level === 'custom' && enc.geo.boundaryId) boundaryIds.add(enc.geo.boundaryId);
         else geoLevels.add(enc.geo.level);

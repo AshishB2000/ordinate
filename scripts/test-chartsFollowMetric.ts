@@ -27,6 +27,14 @@ const metricsMod: typeof import('../src/analysis/metrics') = require('../src/ana
 const msg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
 const measures: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
 const vmm: typeof import('../src/ipc/vizMetricMeasures') = require('../src/ipc/vizMetricMeasures');
+const visualStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
+const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const planPreview: typeof import('../src/analysis/planPreview') = require('../src/analysis/planPreview');
+const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+const { buildStory }: typeof import('../src/publish/storyData') = require('../src/publish/storyData');
+const { randomUUID }: typeof import('crypto') = require('crypto');
 
 const { ORG_A, fx } = H;
 const show = (v: unknown): string => JSON.stringify(v, (_k, x) => (Object.is(x, -0) ? '-0' : x)).slice(0, 500);
@@ -173,14 +181,63 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   const sumOverlay = await overlay(sales, 'avg');
   ok('NEGATIVE CONTROL: an overlay of a metric that now sums has its caption, though its stored copy says avg', sumOverlay.ok === true && typeof sumOverlay.overlay?.caption === 'string', show(sumOverlay.overlay));
 
-  // ── 11. A snapshot metric is refused until step 07 ─────────────────────────
+  // ── 11. Every other surface judges the calc on the measure it draws ────────
+  // A sum metric with a running total, edited to avg: every surface draws the avg (the door follows), so each refuses.
+  const edits = await save('Qty total', X, { column: 'qty', aggregation: 'sum' });
+  const rtVisual = async (name: string, metricId: string) => (await H.as(ORG_A, () => visualStore.saveVisual(P, { datasetId: X, name, chartType: 'column',
+    encoding: { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId, calc: RT }] } } as never)))!;
+  const editedV = await rtVisual('Edited to avg', edits);
+  const keptV = await rtVisual('Still summed', sales);
+  const toAvg = (await post('metric:update', { projectId: P, id: edits, patch: { definition: { column: 'qty', aggregation: 'avg' } } })).value;
+  ok('the metric is edited to an average', toAvg.ok === true, show(toAvg));
+  const refusal = msg.calcNotAdditive('Qty total', 'a running total');
+  {
+    const dash = (await H.as(ORG_A, () => analysisStore.saveAnalysis(P, { name: 'Follows', sheets: [{ id: randomUUID(), name: 'Main',
+      cards: [editedV, keptV].map((v, i) => ({ id: randomUUID(), type: 'visual', visualId: v.id, layout: { x: 6 * i, y: 0, w: 6, h: 4 } })) }] } as never)))!;
+    const built = await H.as(ORG_A, () => buildDashboard(P, dash.id, 1));
+    const [ec, kc] = built?.sheets[0].cards ?? [];
+    const payload = (c: Reply | undefined) => (c ? c.payloads[c.variants[0]] : undefined) as Reply | undefined;
+    ok('/p/: the edited tile is built as the refusal', show(payload(ec)) === show({ error: refusal }), show(payload(ec)));
+    ok('NEGATIVE CONTROL: /p/ builds the tile over a metric still summed', kc?.kind === 'chart' && payload(kc)?.error === undefined && Array.isArray(payload(kc)?.series), show(payload(kc)));
+  }
+  {
+    const story = (await H.as(ORG_A, () => stories.saveStory(P, { name: 'Follows', blocks: [editedV, keptV].map((v) => ({ id: randomUUID(), kind: 'visual', visualId: v.id, filters: [] })) })))!;
+    const told = await H.as(ORG_A, () => buildStory(P, story.id));
+    ok('a story: the edited block is broken with the refusal', told?.blocks[0].kind === 'broken' && told.blocks[0].reason === refusal, show(told?.blocks[0]));
+    ok('NEGATIVE CONTROL: a story keeps the block over a metric still summed', told?.blocks[1].kind === 'chart', show(told?.blocks[1]));
+  }
+  {
+    const previewOf = (v: { encoding: unknown }) => post('visual:preview', { projectId: P, datasetId: X, encoding: v.encoding }).then((r) => r.value);
+    const ep = await previewOf(editedV);
+    ok('the builder preview refuses the edited chart', ep.ok === false && ep.code === 'calc_not_additive' && ep.error === refusal, show(ep));
+    const kp = await previewOf(keptV);
+    ok('NEGATIVE CONTROL: the builder preview draws the chart over a metric still summed', kp.ok === true && kp.data.series[0].values.length === 5, show(kp));
+  }
+  {
+    const factsOf = (id: string) => H.as(ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'visual', id }));
+    const calcRead = (f: { text: string; ledger: Array<{ label: string }> }) => f.text.includes('before that calculation') || f.ledger.some((e) => e.label.includes('before the calculation'));
+    const ef = await factsOf(editedV.id);
+    ok('the Assistant never reads the refused calculation', !calcRead(ef), ef.text.slice(0, 400));
+    ok('… and is told the measure as drawn, not the stored copy', ef.text.includes('Measures: avg(qty)'), ef.text.slice(0, 400));
+    const kf = await factsOf(keptV.id);
+    ok('NEGATIVE CONTROL: the Assistant reads the calculation over a metric still summed', calcRead(kf), kf.text.slice(0, 400));
+  }
+  {
+    const planOf = (name: string) => H.as(ORG_A, () => planPreview.previewPlan(P, { name: 'Plan', sheets: [{ name: 'S', visuals: [{ visual: name }] }] }));
+    const ev = (await planOf('Edited to avg')).sheets[0]?.visuals[0];
+    ok('the plan preview refuses the edited chart', ev?.kind === 'existing' && ev.data === null && ev.note === refusal, show(ev));
+    const kv = (await planOf('Still summed')).sheets[0]?.visuals[0];
+    ok('NEGATIVE CONTROL: the plan preview draws the chart over a metric still summed', kv?.kind === 'existing' && kv.data !== null && kv.data.series[0].values.length === 5, show(kv));
+  }
+
+  // ── 12. A snapshot metric is refused until step 07 ─────────────────────────
   const stock = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock', datasetId: X, definition: { column: 'qty', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } } })))!;
   const snapEnc = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] };
   ok('a snapshot metric is refused until step 07', (await chart(X, snapEnc)).ok === false);
   const snapPlan = await H.as(ORG_A, () => measures.planMetricMeasures(P, X, snapEnc as never));
   ok('… and the planner refuses it with the sentence (no copy is followed)', !!snapPlan && snapPlan.ok === false && snapPlan.error === msg.measureSnapshotPending('Stock'), show(snapPlan));
 
-  // ── 12. The share policy follows the edit ──────────────────────────────────
+  // ── 13. The share policy follows the edit ──────────────────────────────────
   await H.as(ORG_A, async () => {
     await catalog.setColumn(P, X, 'amt', { sensitivity: 'financial' });
     await privacy.setPolicy(P, { export: 'drop' });
