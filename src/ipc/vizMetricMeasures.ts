@@ -1,11 +1,12 @@
-// A chart's formula measures, answered THROUGH the one chart door — MAIN PROCESS.
+// A chart's metric measures, answered THROUGH the one chart door — MAIN PROCESS.
 //
-// analysis/metricMeasures.ts plans a formula measure into the plain totals it
-// is made of. This asks `vizDataFor` for those totals — so the resident fast
-// path, the JS reference, the sampled preview, a Live warehouse and every typed
-// refusal are whatever the door already does for a plain measure — and then
-// evaluates the formula on each cell's totals. `[Profit] / [Revenue]` by region
-// is each region's profit over each region's revenue.
+// analysis/metricMeasures.ts plans a formula measure (or a simple metric under
+// its own filters) into the plain totals it is made of. This asks `vizDataFor`
+// for those totals — so the resident fast path, the JS reference, the sampled
+// preview, a Live warehouse and every typed refusal are whatever the door
+// already does for a plain measure — and then evaluates the formula on each
+// cell's totals. `[Profit] / [Revenue]` by region is each region's profit over
+// each region's revenue.
 //
 // ── How many questions ──────────────────────────────────────────────────────
 // One, in the ordinary case: the chart's plain measures and every unfiltered
@@ -25,7 +26,7 @@ import type { VizEncoding, VizMeasure } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
 import { keyOf } from '../analysis/vizData';
 import { evaluateOperand } from '../analysis/metricMeasures';
-import type { MeasurePlan } from '../analysis/metricMeasures';
+import type { MeasurePlan, PlanResult } from '../analysis/metricMeasures';
 import { mergeFx } from '../analysis/fx';
 import * as msg from '../analysis/metricCheckMessages';
 import type { VizDataReply } from './visuals';
@@ -59,6 +60,13 @@ function callsFor(plan: MeasurePlan, values: VizMeasure[], split: boolean): Call
 }
 
 const older = (a: Ok['asOf'], b: Ok['asOf']): Ok['asOf'] => (!a ? b : !b ? a : b.at < a.at ? b : a);
+
+/** A chart whose measures name saved metrics, drawn as the metrics define them now (analysis/metricMeasures). */
+export function followMetricMeasures(res: Extract<PlanResult, { ok: true }>, encoding: VizEncoding, filters: FilterStep[], ask: Ask): Promise<VizDataReply> {
+  if (res.plan) return metricMeasureData(res.plan, { ...encoding, values: res.values }, filters, ask);
+  // One question: the shared metric filters ahead of the chart's, and no metricId (the door would plan again).
+  return ask({ ...encoding, values: res.values.map(({ metricId: _m, ...v }) => v) }, res.filters.concat(filters));
+}
 
 export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding, filters: FilterStep[], ask: Ask): Promise<VizDataReply> {
   if (encoding.facet) return { ok: false, error: msg.measureNoFacets() };
@@ -127,10 +135,12 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
     series = values.map((_, i) => {
       const f = plan.formulas.get(i);
       if (f) {
-        return { name: f.name, values: keys.map((k) => evaluateOperand(f.root, (leaf) => {
+        const cells = keys.map((k) => evaluateOperand(f.root, (leaf) => {
           const at = leafAt.get(leaf);
           return at ? cell(at.reply, at.series, k) : null;
-        })) };
+        }));
+        // A simple metric keeps the door's own series (its name, so per-series formatting still applies).
+        return f.simple && 'leaf' in f.root ? { ...(leafAt.get(f.root.leaf)?.series ?? { name: f.name }), values: cells } : { name: f.name, values: cells };
       }
       const s = plainAt.get(i);
       return { ...(s ?? { name: values[i].column }), values: keys.map((k) => cell(0, s, k)) };

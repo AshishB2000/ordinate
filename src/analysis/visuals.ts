@@ -52,15 +52,15 @@ export interface VizMeasure {
    * filled from the metric picker.
    *
    * ADDITIVE: `column`/`aggregation` stay required and stay filled, so every
-   * chart drawn before this key existed — and every chart whose metric is later
-   * deleted — plots exactly as it did. `vizData.buildVizData` never reads it;
-   * it is carried so the chip can show the metric's NAME and format, and so
-   * `metric:usage` can say which visuals a metric appears on.
+   * chart drawn before this key existed plots exactly as it did. They are now
+   * only the FALLBACK for a metric that is deleted (or on another dataset).
+   * `vizData.buildVizData` never reads it; the chip shows the metric's NAME and
+   * format from it, and `metric:usage` says which visuals a metric appears on.
    *
-   * A SIMPLE metric plots those stored fields. A FORMULA metric has no column of
-   * its own: the chart door (`ipc/visuals.vizDataFor`) plans it into the totals
-   * it is made of and calculates it per cell, after totals
-   * (./metricMeasures, ipc/vizMetricMeasures) — `column` then carries its name.
+   * The chart door (`ipc/visuals.vizDataFor`) draws the metric as it is defined
+   * NOW (./metricMeasures, ipc/vizMetricMeasures): a SIMPLE metric's column,
+   * aggregation and own filters; a FORMULA metric planned into the totals it is
+   * made of and calculated per cell, after totals — `column` then carries its name.
    */
   metricId?: string;
   /**

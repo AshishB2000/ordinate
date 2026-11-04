@@ -58,9 +58,9 @@ import { fxScope, fxVizContext, fxVizData } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
-import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
+import { followedEncoding, hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
 import { snapshotMeasureRefusal, timeColumnControlRefusal } from '../analysis/snapshotGuards';
-import { metricMeasureData } from './vizMetricMeasures';
+import { followMetricMeasures } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
@@ -467,9 +467,9 @@ async function vizDataForUnlocked(
   // A snapshot metric, or a metric's own date under a date control, is not computed until a later release.
   const laterRefusal = (await snapshotMeasureRefusal(projectId, encoding)) || (await timeColumnControlRefusal(projectId, encoding, filters));
   if (laterRefusal) return { ok: false, error: laterRefusal };
-  // A measure that IS a formula metric: its totals come back through this door, then the formula runs per cell (./vizMetricMeasures).
+  // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures).
   const planned = hasMetricMeasure(encoding) ? await planMetricMeasures(projectId, datasetId, encoding, opts.params) : null;
-  if (planned) return planned.ok ? metricMeasureData(planned.plan, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : { ok: false, error: planned.error };
+  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : { ok: false, error: planned.error };
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
   const live = await liveMetaOf(projectId, datasetId);
   if (live) return liveChart(projectId, live, encoding, filters);
@@ -634,8 +634,8 @@ export function register() {
       // renderer input, and both paths below consume the sanitized values.
       // Then the dashboard's parameters, through the one resolver: a filter
       // value `[[threshold]]` becomes the typed value it names.
-      const enc = sanitizeEncoding(encoding);
       const values = paramValues(params);
+      const enc = await followedEncoding(projectId, datasetId, sanitizeEncoding(encoding), values); // each metric measure as it is defined NOW: what the calcs, overlay and policy judge
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       const flt = bound.steps;
       // Table calculations run on the aggregated grid, after either path (and
