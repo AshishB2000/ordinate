@@ -460,6 +460,14 @@ const rows = Array.from({ length: 1200 }, (_, i) => [['North', 'South', 'East', 
   const ordOn = (await post('dashboard:metric', { projectId: P, datasetId: D, column: 'amt', aggregation: 'count', filters: [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: scoreTwo.window.from, to: scoreTwo.window.to } }] })).value.value;
   ok('two metrics on one dataset, two dates: each row on its own (the memo is per metric)', Object.is(scoreTwo.rows[1].value, ordOn) && Object.is(scoreTwo.rows[0].value, score.rows[0].value), show(scoreTwo.rows));
 
+  // A statistics tile draws no metric: under a control it is today's figure on the control's column (F-19, every asker).
+  const statsIpc: typeof import('../src/ipc/stats') = require('../src/ipc/stats');
+  const dist = { kind: 'distribution', datasetId: D, columns: ['amt'] };
+  const st1 = await H.as(ORG_A, () => statsIpc.computeStats(P, dist, [CTRL] as never[]));
+  const st0 = await H.as(ORG_A, () => statsIpc.computeStats(P, dist, [ON('order_date')] as never[]));
+  ok('a statistics tile under a control: the control\'s column, byte for byte', st1.ok === true && JSON.stringify(st1) === JSON.stringify(st0), show([st1, st0]));
+  ok('NEGATIVE CONTROL: … on another date it is another figure', JSON.stringify(st0) !== JSON.stringify(await H.as(ORG_A, () => statsIpc.computeStats(P, dist, [ON('ship_date')] as never[]))));
+
   // ── Agents are told which date a metric counts by (Task 8's tail) ───────────
   const handlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
   const listed = (await H.as(ORG_A, () => handlers.metricsList({ projectId: P } as never))) as Reply[];

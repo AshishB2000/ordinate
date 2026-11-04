@@ -60,7 +60,9 @@ async function compute<T extends StatsResult | PairScatter>(
   spec: StatsSpec,
   opts: { filters?: FilterStep[]; pair?: [string, string]; asOf?: unknown } = {},
 ): Promise<Computed<T>> {
-  const filters = (await expandTerms(projectId, spec.datasetId, opts.filters)).steps; // a step it cannot apply THROWS (typed 'term')
+  const expanded = (await expandTerms(projectId, spec.datasetId, opts.filters)).steps; // a step it cannot apply THROWS (typed 'term')
+  // A statistic draws no metric: a date control's period stays on its column, and its mark reaches no engine or cache key (D9).
+  const filters = rewriteControlPeriods(expanded, '');
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
   if (!meta) return { ok: false, error: 'This dataset is no longer in the project.' };
   let needs: VectorNeed[];
@@ -116,8 +118,7 @@ async function compute<T extends StatsResult | PairScatter>(
 
 /** Dashboard filters + parameters → the filter steps both read paths apply. */
 function tileFilters(filters: unknown, params: unknown): FilterStep[] {
-  // A statistics card draws no metric: a date control's period stays on its column, and its mark goes no further (D9).
-  return rewriteControlPeriods(resolveFilterParams(dashboards.sanitizeDashboardFilters(filters), paramValues(params)).steps, '');
+  return resolveFilterParams(dashboards.sanitizeDashboardFilters(filters), paramValues(params)).steps;
 }
 
 /** A spec's result, computed; exported for the Assistant and the published site. */
