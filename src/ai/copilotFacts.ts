@@ -288,15 +288,17 @@ export function visualFacts(
       lines.push(`(Labels from ${[...new Set([...catFrom, ...serFrom])].join(' and ')} are withheld — marked personal or financial data.)`);
     }
     lines.push('Computed chart values (app-computed):');
+    // D3: a label is a cell, and so is a series name a split made; a measure's name is the app's.
+    const said = (name: string): string => (enc.series || enc.pivot?.columns.length || enc.facet?.rows || enc.facet?.cols ? cell(name) : oneLine(name));
     series.forEach((s) => {
       const pairs = labels
-        .map((lab, i) => `${lab}=${fmt(s.values ? s.values[i] : null)}`)
+        .map((lab, i) => `${cell(lab)}=${fmt(s.values ? s.values[i] : null)}`)
         .join(', ');
-      lines.push(`- ${s.name}: ${pairs}`);
+      lines.push(`- ${said(s.name)}: ${pairs}`);
       // One entry per MARK, labelled the way the chart labels it, so a violation
       // report names the bar the model was looking at.
       labels.forEach((lab, i) => num(ledger, `${s.name} @ ${lab}`, s.values ? s.values[i] : null, 'number', 'vizData'));
-      calcFactLines(lines, ledger, s, labels);
+      calcFactLines(lines, ledger, s, labels, said(s.name));
     });
   } else {
     lines.push('');
@@ -309,7 +311,7 @@ export function visualFacts(
     lines.push('');
     lines.push('Analytics overlays on this chart (app-computed):');
     for (const o of overlays) {
-      lines.push(`- ${o.line}`);
+      lines.push(`- ${oneLine(o.line)}`);
       for (const f of o.figures) num(ledger, f.label, f.value, 'number', 'analytics');
     }
   }
@@ -335,14 +337,14 @@ export function visualFacts(
  * in the prose: `sealLedger` would bank those too.
  */
 function calcFactLines(
-  lines: string[], ledger: LedgerEntry[], s: CalcSeries | { name: string; values: (number | null)[] }, labels: (string | number)[],
+  lines: string[], ledger: LedgerEntry[], s: CalcSeries | { name: string; values: (number | null)[] }, labels: (string | number)[], said: string,
 ): void {
   const c = s as CalcSeries;
   if (!c.calc || !Array.isArray(c.raw)) return;
   const raw = c.raw;
   const pct = isPercentKind(c.calc.kind);
-  lines.push(`  (${s.name} above is shown as ${CALC_KIND_NAMES[c.calc.kind]}${pct ? ', as a fraction of one' : ''}. ` +
-    `The figures before that calculation: ${labels.map((lab, i) => `${lab}=${fmt(raw[i])}`).join(', ')})`);
+  lines.push(`  (${said} above is shown as ${CALC_KIND_NAMES[c.calc.kind]}${pct ? ', as a fraction of one' : ''}. ` +
+    `The figures before that calculation: ${labels.map((lab, i) => `${cell(lab)}=${fmt(raw[i])}`).join(', ')})`);
   labels.forEach((lab, i) => {
     num(ledger, `${s.name} before the calculation @ ${lab}`, raw[i], 'number', 'tableCalc');
     const v = s.values ? s.values[i] : null;

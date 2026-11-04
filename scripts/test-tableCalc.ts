@@ -360,7 +360,7 @@ function testDisplay(): void {
   const f = facts.visualFacts(visual, 'Cities', viz);
   const selfAudit = audit.auditNumbers(f.text, f.ledger);
   ok('facts: every figure the calculated block prints is in the ledger', selfAudit.ok, JSON.stringify(selfAudit.violations));
-  ok('facts: the raw figures are handed over too', /Paris=100, Berlin=300/.test(f.text), f.text);
+  ok('facts: the raw figures are handed over too', /"Paris"=100, "Berlin"=300/.test(f.text), f.text); // D3: cells are quoted
   ok('facts: an answer citing the share as a percent is clean', audit.auditNumbers('Berlin is 75% of the total.', f.ledger).ok);
   ok('facts: an answer citing the raw figure is clean', audit.auditNumbers('Berlin has 300.', f.ledger).ok);
 }

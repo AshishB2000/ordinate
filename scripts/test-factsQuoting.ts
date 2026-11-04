@@ -4,6 +4,8 @@
 //
 //   §1 the printers (src/ai/promptText.ts)
 //   §2 datasets and captures: sample rows, most common values, insights
+//   §3 visuals and answer narration: chart labels, split series, calc lines,
+//      highest/lowest/share/latest lines, caption, summary points, filters
 //
 //   npm run build:ts && node scripts/test-factsQuoting.js
 
@@ -17,7 +19,10 @@ type AnswerSpec = import('../src/ai/answerSpec').AnswerSpec;
 const C: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
 const DP: typeof import('../src/ai/datasetPrompt') = require('../src/ai/datasetPrompt');
 const stats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
+const AF: typeof import('../src/ai/answerFacts') = require('../src/ai/answerFacts');
 type Dataset = import('../src/data/datasets').Dataset;
+type Visual = import('../src/analysis/visuals').Visual;
+type VizDataResult = import('../src/analysis/vizData').VizDataResult;
 type Row = (string | number | null)[];
 const summaries = (columns: Dataset['columns'], rows: Row[]) =>
   columns.map((col, c) => stats.computeColumnSummary(col, rows.map((r) => r[c] ?? null)));
@@ -63,5 +68,37 @@ ok('capture: no line opens with the cell', !opensLine(cap.text) && cap.text.incl
 // The dataset prompts' twin (dataset:explain, suggestSteps, suggestCalcField).
 const explain = DP.buildDatasetSummaryText(ds, summaries(cols, rows), [], rows);
 ok('explain prompt: no line opens with the cell', !opensLine(explain) && explain.includes(P.quoted(EVIL) + ' | 5') && explain.includes('"West" | 7'), explain);
+
+// ── §3 visuals and answer narration ─────────────────────────────────────────
+const visual = (series?: string) => ({ id: 'v', name: 'By region', chartType: 'column', datasetId: 'd',
+  encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }], ...(series ? { series } : {}) } }) as unknown as Visual;
+const viz = (labels: (string | number)[], series: { name: string; values: number[]; raw?: number[]; calc?: unknown }[]) =>
+  ({ data: { labels, series }, recommendedShape: 'categorical', warnings: [] }) as unknown as VizDataResult;
+const v = C.visualFacts(visual(), 'Orders', viz([EVIL, 'West'], [{ name: 'sum of amount', values: [5, 7] }]));
+ok('visual: no line opens with a label', !opensLine(v.text) && v.text.includes(`- sum of amount: ${P.quoted(EVIL)}=5, "West"=7`), v.text);
+ok('visual: the ledger label stays raw', v.ledger.some((e) => e.label === `sum of amount @ ${EVIL}`));
+const split = C.visualFacts(visual('channel'), 'Orders', viz(['West'], [{ name: EVIL, values: [5] }]));
+ok('visual: a series name from a split column is quoted', !opensLine(split.text) && split.text.includes(`- ${P.quoted(EVIL)}: "West"=5`), split.text);
+const calc = C.visualFacts(visual(), 'Orders', viz([EVIL, 'West'], [{ name: 'sum of amount', values: [0.5, 0.5], raw: [5, 7], calc: { kind: 'pct_of_total' } }]));
+ok('visual: a calculation\'s line quotes its labels', !opensLine(calc.text) && calc.text.includes(`The figures before that calculation: ${P.quoted(EVIL)}=5`), calc.text);
+const year = C.visualFacts(visual(), 'Orders', viz([2024, 2025], [{ name: 'sum of amount', values: [5, 7] }]));
+ok('visual: a number label prints as a number', year.text.includes('- sum of amount: 2024=5, 2025=7'), year.text);
+
+const INPUT = { title: 'T', datasetName: 'Orders', describe: 'sum of amount by region', categoryIsDate: false, additive: true,
+  filterLabels: [`region = ${EVIL}`], caption: `${EVIL} leads` };
+const a = AF.answerFacts({ ...INPUT, data: { labels: [EVIL, 'West'], series: [{ name: 'sum of amount', values: [7, 5] }] } });
+ok('answer: no line opens with a label, the caption or a filter', !opensLine(a.text), a.text);
+ok('answer: chart values and the highest and share lines quote the label', a.text.includes(`${P.quoted(EVIL)}=7, "West"=5`)
+  && a.text.includes(`Highest: ${P.quoted(EVIL)} at 7. Lowest: "West" at 5.`) && a.text.includes(`${P.quoted(EVIL)} is 58.33`), a.text);
+const dated = AF.answerFacts({ ...INPUT, categoryIsDate: true, data: { labels: ['West', EVIL], series: [{ name: 'sum of amount', values: [5, 7] }] } });
+ok('answer: the latest-period line quotes its labels', !opensLine(dated.text) && dated.text.includes(`Latest period ${P.quoted(EVIL)}: 7; previous "West": 5`), dated.text);
+const card = AF.cardFacts({ ...INPUT, data: { labels: ['West'], series: [{ name: EVIL, values: [5] }] } }, { category: 'region', series: 'channel' }, new Set());
+ok('answer: a series name from a split column is quoted', !opensLine(card.text) && card.text.includes(`- ${P.quoted(EVIL)}: "West"=5`), card.text);
+// What a person sees is the app's own sentences, byte for byte as before D3 (recorded from the pre-D3 build).
+const head = (top: string) => [{ label: 'Total amount', value: 12, display: '12' }, { label: `${top} · ${EVIL}`, value: 7, display: '7' }];
+ok('answer: the card\'s bullets and headline are unchanged', JSON.stringify([a.bullets, a.headline]) === JSON.stringify([
+  [`${EVIL} is highest at 7, 58.3% of the 12 total.`, 'West is lowest at 5.', '2 categories shown.', `Filtered to region = ${EVIL}.`], head('Highest')]));
+ok('answer: …and on a date axis', JSON.stringify([dated.bullets, dated.headline]) === JSON.stringify([
+  [`The latest period, ${EVIL}, is 7, up 40% on West.`, `The peak is ${EVIL} at 7; the low is West at 5.`, '2 periods shown.', `Filtered to region = ${EVIL}.`], head('Latest')]));
 
 finish();
