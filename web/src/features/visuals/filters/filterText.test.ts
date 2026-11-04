@@ -20,4 +20,15 @@ describe('liveFilters', () => {
   it('NEGATIVE CONTROL: a row still being set up (no operator) is still dropped, and a Prepare step is no filter', () => {
     expect(liveFilters(rows({ type: 'filter', column: 'city', op: '' }, TERM, { type: 'filter', op: '=' }, { type: 'dedupe' }))).toEqual([TERM]);
   });
+
+  it('keeps a step\'s via and fromControl on the step it rebuilds', () => {
+    const via = { ...F, via: U };
+    const control = { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_30_days' }, fromControl: true } as FilterStep;
+    expect(JSON.stringify(liveFilters(rows(via, control)))).toBe(JSON.stringify([via, control]));
+  });
+
+  it('NEGATIVE CONTROL: a step without them gets neither key, byte-identical to today', () => {
+    const out = liveFilters(rows(F, { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_30_days' }, context: true }));
+    expect(JSON.stringify(out)).toBe('[{"type":"filter","column":"city","op":"=","value":"Paris"},{"type":"filter","column":"day","op":"period","period":{"preset":"last_30_days"},"context":true}]');
+  });
 });

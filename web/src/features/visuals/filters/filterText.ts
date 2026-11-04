@@ -61,6 +61,9 @@ export function liveFilters(rows: readonly FilterStep[]): FilterStep[] {
       else if (f.op === 'period') s.period = f.period;
       else if (!isValuelessOp(f.op)) s.value = f.value != null ? f.value : '';
       if (f.context === true) s.context = true;
+      // A newer release's keys on a step this screen does edit: dropped, a saved `via` would filter the primary's column.
+      if (typeof f.via === 'string') s.via = f.via;
+      if (f.fromControl === true) s.fromControl = true;
       return s;
     });
 }
