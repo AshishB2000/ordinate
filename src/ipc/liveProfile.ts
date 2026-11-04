@@ -20,6 +20,8 @@
 
 import { ipcMain } from './bus';
 import { closedToCaller, gateRows } from '../data/rowAccess';
+import { redactBaseFilters } from '../data/liveBaseFilters';
+import type { FilterStep } from '../data/transforms';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
@@ -182,6 +184,8 @@ export interface LiveSchemaView {
   note: string | null;
   columns: SchemaColumn[];
   missing: MissingColumn[];
+  /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
+  baseFilters: FilterStep[];
 }
 
 const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
@@ -221,6 +225,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
       };
     }),
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
+    baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
   };
 }
 

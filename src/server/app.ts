@@ -639,6 +639,7 @@ export function registerHandlers(): void {
   (require('../ipc/liveDatasets') as typeof import('../ipc/liveDatasets')).register();
   // …its schema sync and column profile (L2.5).
   (require('../ipc/liveProfile') as typeof import('../ipc/liveProfile')).register();
+  (require('../ipc/liveBaseFilters') as typeof import('../ipc/liveBaseFilters')).register(); // …its always-applied filters (D13)
   // Incremental refresh settings (the desktop panel's web port): what 5/15-minute cadences and fresh on ask need.
   (require('../ipc/incremental') as typeof import('../ipc/incremental')).register();
   // Subscriptions: scheduled sends to Slack / Teams, and the org's channels.

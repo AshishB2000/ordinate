@@ -23,6 +23,14 @@ export function hasBaseFilters(live: { baseFilters?: readonly unknown[]; baseFil
 }
 
 /**
+ * The steps as a caller row access rules restrict may see them (REDACT, as the sample values): the
+ * column and the operator, never a value — a base filter can name the rows it keeps out.
+ */
+export function redactBaseFilters(steps: readonly FilterStep[], closed: boolean): FilterStep[] {
+  return closed ? steps.map(({ type, column, op }) => ({ type, column, op })) : steps.slice();
+}
+
+/**
  * The plain `filter` steps of an untrusted stored list, rebuilt with the keys a base filter may carry:
  * no `lock`, `context` or `via`, no radius, and nothing that is not a filter step (a term, a stray
  * value). Capped at MAX_BASE_FILTERS; a step listing more than MAX_BASE_FILTER_VALUES is dropped, never cut.
