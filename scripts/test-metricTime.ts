@@ -60,7 +60,7 @@ ok('NEGATIVE CONTROL: unset, nothing moves and the via stays', same(rewriteContr
 const APRIL = { ...CTRL, column: 'ship_date', period: { preset: 'custom', from: '2024-04-01', to: '2024-04-30' } } as FilterStep;
 ok('conflict: two controls on different columns', controlPeriodsConflict([CTRL, APRIL], 'ship_date'));
 ok('conflict: two controls on one column with different periods', controlPeriodsConflict([CTRL, { ...APRIL, column: 'order_date' } as FilterStep], 'ship_date'));
-ok('conflict: the same period on two columns still names two dates', controlPeriodsConflict([CTRL, { ...CTRL, column: 'ship_date' } as FilterStep], 'ship_date'));
+ok('NEGATIVE CONTROL: the same period from controls on two columns lands as one step', !controlPeriodsConflict([CTRL, { ...CTRL, column: 'ship_date' } as FilterStep], 'ship_date'));
 ok('NEGATIVE CONTROL: the same period twice merges, no conflict', !controlPeriodsConflict([CTRL, { ...CTRL }], 'ship_date'));
 ok('NEGATIVE CONTROL: one control is no conflict', !controlPeriodsConflict([CTRL, OWN, LOCK], 'ship_date'));
 ok('NEGATIVE CONTROL: unset, nothing lands on a metric date', !controlPeriodsConflict([CTRL, APRIL], ''));

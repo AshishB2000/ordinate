@@ -401,7 +401,7 @@
   "metricCheckMessages.the_measure_is_calculated_from_parts": "メジャー「{name}」は別々に集計される要素から計算されますが、区間に分けたカテゴリや「Other」にまとめたカテゴリの上ではそろえられません。値が 50 個以内のカテゴリを選んでください。",
   "metricCheckMessages.the_measure_uses_a_level_of": "メジャー「{name}」は詳細レベル式を使っていますが、グラフはまだそれをカテゴリ別に分けられません。",
   "metricCheckMessages.this_chart_counts_a_metric_by": null,
-  "metricCheckMessages.this_metric_counts_by_its_own": null,
+  "metricCheckMessages.this_metric_counts_by_its_own": "このメトリックは独自の日付で集計されますが、2 つの日付コントロールがその日付に異なる期間を設定しています。",
   "metricTreeMessages.a_metric_in_this_tree_was": "このツリーの指標が削除されました。",
   "metricTreeMessages.did_not_change": "{metric}は{compare}で変化しませんでした。",
   "metricTreeMessages.explains_of_it": "そのうち{share}は{lead}によるものです。",

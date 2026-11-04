@@ -401,7 +401,7 @@
   "metricCheckMessages.the_measure_is_calculated_from_parts": "La medida «{name}» se calcula a partir de partes que se totalizan por separado, que no se pueden alinear sobre una categoría agrupada en intervalos o plegada en «Other». Elige una categoría con 50 valores como máximo.",
   "metricCheckMessages.the_measure_uses_a_level_of": "La medida «{name}» usa una expresión de nivel de detalle, que un gráfico aún no puede desglosar por su categoría.",
   "metricCheckMessages.this_chart_counts_a_metric_by": null,
-  "metricCheckMessages.this_metric_counts_by_its_own": null,
+  "metricCheckMessages.this_metric_counts_by_its_own": "Esta métrica cuenta por su propia fecha, y dos controles de fecha fijan periodos distintos sobre ella.",
   "metricTreeMessages.a_metric_in_this_tree_was": "Se eliminó una métrica de este árbol.",
   "metricTreeMessages.did_not_change": "{metric} no cambió {compare}.",
   "metricTreeMessages.explains_of_it": "{lead} explica el {share} de ello.",

@@ -23,13 +23,13 @@ export const controlPeriodMoved = (filters: FilterStep[], timeColumn: string): b
   !!timeColumn && filters.some((s) => controlPeriod(s) && s.column !== timeColumn);
 
 /**
- * Whether date controls set different periods on the metric's date: two or more control periods (on
- * different columns, or with different periods) would all land on `timeColumn` and narrow it to their
- * overlap, which nobody asked for. The doors refuse it (D9: conflicts are refused, never guessed). The
- * same period twice merges as today; unset, nothing moves.
+ * Whether date controls set different periods on the metric's date: once moved onto `timeColumn`, the
+ * control periods still differ, so they would narrow it to their overlap, which nobody asked for. The
+ * doors refuse it (D9: conflicts are refused, never guessed). The same period from two controls, on any
+ * columns, moves to one step and merges as today; unset, nothing moves.
  */
 export const controlPeriodsConflict = (filters: FilterStep[], timeColumn: string): boolean =>
-  !!timeColumn && new Set(filters.filter(controlPeriod).map(stepKey)).size > 1;
+  !!timeColumn && rewriteControlPeriods(filters.filter(controlPeriod), timeColumn).length > 1;
 
 /**
  * `filters` with each control period on `timeColumn` (a column of the metric's own dataset, so with
