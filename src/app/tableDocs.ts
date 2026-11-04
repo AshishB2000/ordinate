@@ -1,10 +1,12 @@
 // What a person says about a DATASET as a table: its role, key, grain and a free-text guide, kept
-// in catalog.json under `tables[<datasetId>]` (catalog.ts). Types and sanitizers only; the
-// sanitizers are what keep a stored doc through every catalog read and re-save.
+// in catalog.json under `tables[<datasetId>]` (catalog.ts). The sanitizers are what keep a stored doc
+// through every catalog read and re-save; the store below reads and writes it under the catalog's lock.
 
 import { isValidId } from './ids';
 import { clip } from './clip';
 import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
+import { load, loadStrict, mutateCatalog, osUser } from './catalog';
+import { closedToCaller } from '../data/rowAccess';
 
 export type TableRole = '' | 'fact' | 'dimension';
 const ROLES: readonly string[] = ['fact', 'dimension'];
@@ -67,4 +69,64 @@ export function sanitizeTables(raw: unknown): Record<string, TableDoc> {
     if (isValidId(id) && doc && typeof doc === 'object' && !Array.isArray(doc)) out[id] = sanitizeTableDoc(doc);
   }
   return out;
+}
+
+// ── The store ────────────────────────────────────────────────────────────────
+
+const blank = (): TableDoc => sanitizeTableDoc({});
+
+/** `strict`: an unreadable catalog THROWS instead of reading as "nothing documented" (`loadStrict`). */
+export async function getTableDoc(projectId: string, datasetId: string, strict = false): Promise<TableDoc> {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return blank();
+  const file = await (strict ? loadStrict : load)(projectId);
+  return file.tables?.[datasetId] ?? blank();
+}
+
+/** What a person typed: the fields PRESENT are merged. Clipped by `sanitizeTableDoc`; never `keyCheck`, `updatedBy` or `updatedAt`. */
+export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown }
+
+/** Merge the fields present in `patch`. A changed `key` drops the old key's `keyCheck`. Stamps who and when, here. */
+export async function setTableDoc(projectId: string, datasetId: string, patch: TablePatch): Promise<TableDoc | null> {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return null;
+  const p = patch && typeof patch === 'object' ? patch : {};
+  return mutateCatalog(projectId, (file) => {
+    const cur = file.tables?.[datasetId] ?? blank();
+    const next = sanitizeTableDoc({
+      role: p.role !== undefined ? p.role : cur.role,
+      key: p.key !== undefined ? p.key : cur.key,
+      grain: p.grain !== undefined ? p.grain : cur.grain,
+      guide: p.guide !== undefined ? p.guide : cur.guide,
+      keyCheck: p.key === undefined || p.key === cur.key ? cur.keyCheck : undefined,
+      updatedBy: osUser(),
+      updatedAt: new Date().toISOString(),
+    });
+    const tables = (file.tables ??= Object.create(null) as Record<string, TableDoc>);
+    tables[datasetId] = next;
+    return next;
+  });
+}
+
+/**
+ * Store a key check — or clear it with null — only while the stored key is still `key`, the one that
+ * was checked: a slow check for a key since changed must not stamp the new one. Null when it was not stored.
+ * Derived data: `updatedBy` and `updatedAt` stay a person's.
+ */
+export async function writeKeyCheck(projectId: string, datasetId: string, key: string, check: KeyCheck | null): Promise<TableDoc | null> {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return null;
+  return mutateCatalog(projectId, (file) => {
+    const tables = file.tables;
+    const cur = tables?.[datasetId];
+    if (!tables || !cur || cur.key !== key) return null;
+    const next = sanitizeTableDoc({ ...cur, keyCheck: check ?? undefined });
+    tables[datasetId] = next;
+    return next;
+  });
+}
+
+/** The doc a caller may read: counts over every row are withheld from a caller row access rules restrict (REDACT, as `quality:list`). */
+export async function readableTableDoc(projectId: string, datasetId: string): Promise<TableDoc> {
+  const doc = await getTableDoc(projectId, datasetId);
+  if (!doc.keyCheck || !(await closedToCaller(projectId, datasetId))) return doc;
+  const { keyCheck: _withheld, ...open } = doc;
+  return open;
 }

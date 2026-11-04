@@ -30,6 +30,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'captureDataset:status': 'META',
   'catalog:columns': 'META',
   'catalog:get': 'META',
+  'catalog:getTable': 'REDACT', // keyCheck counts every row: withheld from a caller closed to the dataset
   'catalog:list': 'META',
   'catalog:tags': 'META',
   'channel:list': 'META',

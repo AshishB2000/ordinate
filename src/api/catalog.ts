@@ -19,6 +19,15 @@ const ColumnPatch = z.strictObject({
   sensitivity: z.enum(['none', 'personal', 'financial']).optional(),
 });
 
+// A table's role, key, grain and guide (src/app/tableDocs.ts). Each field is clipped by the store, which stamps who and when itself
+// and never takes a key check from a person: only the fields below can be sent.
+const TablePatch = z.strictObject({
+  role: z.enum(['', 'fact', 'dimension']).optional(),
+  key: z.string().max(256).optional(),
+  grain: z.string().max(200).optional(),
+  guide: z.string().max(8_000).optional(),
+});
+
 export const catalog = {
   // preload: invoke('catalog:list', { projectId }) — every record with its docs, usage and staleness.
   'catalog:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
@@ -41,4 +50,11 @@ export const catalog = {
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid, column: z.string().min(1).max(256), alias: z.string().trim().min(1).max(60) }),
     project: byProjectId,
   }),
+  // preload: invoke('catalog:getTable', { projectId, datasetId }) / ('catalog:setTable', { …, patch }) / ('catalog:checkKey', { … })
+  // The table's key check counts every row, so a caller row access rules restrict gets the doc without it (REDACT).
+  'catalog:getTable': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // A new key on an extract is checked before the reply; on a Live dataset it never is (D2).
+  'catalog:setTable': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, patch: TablePatch }), project: byProjectId }),
+  // "Check now": one count of the declared key. On a Live dataset the one statement that asks the warehouse.
+  'catalog:checkKey': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
 } as const;

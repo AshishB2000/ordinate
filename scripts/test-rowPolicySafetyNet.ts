@@ -196,6 +196,20 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       && (q.body.rules as { kind: string; args: unknown }[]).every((r) => r.kind && JSON.stringify(r.args) === '{}'), q.text.slice(0, 200));
     ok('NEGATIVE CONTROL: the editor reads the run and the rules\' args', qEd.body?.latest !== null && qEd.text.includes(`${H.W_CANARY}_0`) && /"max":100/.test(JSON.stringify(qEd.body)));
 
+    // A declared key's check counts every row of the table (126), so east, who reads only East's, gets the table notes without it.
+    const keyed = await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { role: 'fact', key: 'customer', guide: 'One row per order.' } });
+    const counted = await W.call('boss', 'catalog:checkKey', { projectId: P, datasetId: orders });
+    ok('setup: the key is declared and checked over every row', keyed.body?.ok === true && counted.body?.ok === true && counted.body.table.keyCheck?.rows === 126, `${keyed.text.slice(0, 120)} | ${counted.text.slice(0, 160)}`);
+    const tEast = await W.call('east', 'catalog:getTable', { projectId: P, datasetId: orders });
+    const tEd = await W.call('ed', 'catalog:getTable', { projectId: P, datasetId: orders });
+    eastReplies.push(tEast.text);
+    ok('redact: catalog:getTable — east gets no keyCheck', tEast.body?.ok === true && !('keyCheck' in tEast.body.table), tEast.text.slice(0, 200));
+    ok('…and still gets the key and the guide, which are words, not counts', tEast.body.table.key === 'customer' && tEast.body.table.guide === 'One row per order.');
+    ok('NEGATIVE CONTROL: the editor gets it', tEd.body?.ok === true && tEd.body.table.keyCheck?.rows === 126, tEd.text.slice(0, 200));
+    ok('write: east gets 403 from catalog:setTable and catalog:checkKey',
+      (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
+        && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);
+
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
     await W.as('boss', () => alertStore.recordEvents(P, [{ id: crypto.randomUUID(), ruleId: crypto.randomUUID(), ruleName: 'Sales watch', datasetId: orders, at: new Date().toISOString(),
