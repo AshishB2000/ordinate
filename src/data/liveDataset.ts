@@ -49,6 +49,12 @@ export interface LiveSettings {
    * writer that rebuilds `raw.live` can erase it. A pod that cannot apply them refuses (liveTarget).
    */
   baseFilters?: FilterStep[];
+  /**
+   * The stored list held something `sanitizeBaseFilters` dropped (an unknown operator, a non-object, a step
+   * past the cap). In memory only, set by `applyLive`. Answering with part of a list is as wrong as with
+   * none of it, so the guard refuses on it just as on `baseFilters` (./liveBaseFilters `hasBaseFilters`).
+   */
+  baseFiltersUnreadable?: true;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -192,6 +198,8 @@ export function applyLive(
   if (!live) return;
   const baseFilters = sanitizeBaseFilters(data.baseFilters);
   if (baseFilters.length) live.baseFilters = baseFilters;
+  // A stored list is read in full or the dataset answers nothing: a dropped step must never read as "no step".
+  if (Array.isArray(data.baseFilters) && data.baseFilters.length !== baseFilters.length) live.baseFiltersUnreadable = true;
   target.mode = 'live';
   target.live = live;
   delete target.autoRefresh;

@@ -23,6 +23,7 @@ import type { ConnectorDef, LiveDialectId } from '../../connectors/types';
 import { loadSecrets } from '../../ipc/connectionSecrets';
 import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
+import { hasBaseFilters } from '../../data/liveBaseFilters';
 import type { LiveSettings } from '../../data/liveDataset';
 import * as liveMsg from '../../data/liveMessages';
 import * as msg from '../liveQueryMessages';
@@ -80,7 +81,7 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
   if (!isLive(meta) || !meta.live) return { ok: false, kind: 'unavailable', error: msg.liveNotLive() };
   // 08a: this pod stores the filters but cannot apply them yet. Every question, sync and sample would
   // answer WITHOUT them, so none is asked. Dropped when the pod learns to compile them.
-  if (meta.live.baseFilters?.length) return { ok: false, kind: 'refused', refusal: refuse('baseFilter', meta.live.baseFilters[0].column) };
+  if (hasBaseFilters(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('baseFilter', meta.live.baseFilters?.[0]?.column) };
   const origin = meta.origin;
   if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
   const conn = await connections.getConnection(projectId, origin.connId);

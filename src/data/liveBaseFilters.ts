@@ -13,6 +13,14 @@ import { RADIUS_OP } from '../analysis/geo/radius';
 export const MAX_BASE_FILTERS = 20;
 
 /**
+ * Does this Live block carry base filters this pod must honour: some it read, or a stored list it could
+ * not read in full (`applyLive` marks it)? The ONE test the guards share, so none can drift apart.
+ */
+export function hasBaseFilters(live: { baseFilters?: readonly unknown[]; baseFiltersUnreadable?: true } | undefined): boolean {
+  return !!live && (live.baseFiltersUnreadable === true || (live.baseFilters?.length ?? 0) > 0);
+}
+
+/**
  * The plain `filter` steps of an untrusted stored list, rebuilt with the keys a base filter may carry:
  * no `lock`, `context` or `via`, no radius, and nothing that is not a filter step (a term, a stray
  * value). Capped at MAX_BASE_FILTERS.

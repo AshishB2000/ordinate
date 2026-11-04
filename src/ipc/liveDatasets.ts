@@ -44,6 +44,7 @@ import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { liveBaseFilterRefused } from '../engine/liveRefusals';
+import { hasBaseFilters } from '../data/liveBaseFilters';
 import { safeError } from '../connectors/types';
 import { logger } from '../app/logger';
 
@@ -168,8 +169,8 @@ async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ o
  * cannot apply them). Refused typed, before the source is read, so nothing is fetched or saved.
  */
 function baseFilterRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'baseFilter'; error: string } | null {
-  const column = meta.live?.baseFilters?.[0]?.column;
-  return column === undefined ? null : { ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(column) };
+  if (!hasBaseFilters(meta.live)) return null;
+  return { ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(meta.live?.baseFilters?.[0]?.column ?? '') };
 }
 
 /**

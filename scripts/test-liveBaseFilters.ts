@@ -26,6 +26,7 @@ const base: typeof import('../src/data/liveBaseFilters') = require('../src/data/
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const refusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
+const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 
 const { fake, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -72,9 +73,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
 
   ok('a Live dataset with no key has no base filters in memory', (await meta()).live.baseFilters === undefined);
   await plant([]);
-  ok('an empty list reads as none', (await meta()).live.baseFilters === undefined);
+  ok('an empty list reads as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant('everything');
-  ok('a stored key that is not a list reads as none', (await meta()).live.baseFilters === undefined);
+  ok('a stored key that is not a list reads as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant(BASE);
   ok('meta.live.baseFilters is read from the top-level key', show((await meta()).live.baseFilters) === show(BASE), show((await meta()).live));
 
@@ -97,53 +98,88 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   // ── 3. The guard (08a). A later task replaces this section with the real answers. ──
   const second = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
   const chartOn = async (d: string): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId: d, encoding: ENC })).value;
-  const SPEC = (d: string) => ({ datasetId: d, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], chartType: 'bar', title: 'Sales by region' });
+  const SPEC = (d: string, filters: unknown[] = []) => ({ datasetId: d, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters, chartType: 'bar', title: 'Sales by region' });
+  // A text filter sends the card through the case fix first (liveCaseFix -> liveLookup), before its chart.
+  const NORTH = [{ column: 'region', op: 'in', values: ['north'] }];
   const DOORS: [string, (d: string) => Promise<Reply>][] = [
     ['visual:data', chartOn],
     ['dashboard:metric', async (d) => (await post('dashboard:metric', { projectId: P, datasetId: d, column: 'amt', aggregation: 'sum' })).value],
     ['answer:card', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d) })).value],
+    ['answer:card (a text filter: the case-fix lookup)', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d, NORTH) })).value],
     ['dataset:syncLiveSchema', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value],
   ];
-  H.queryCache.clear();
   const sentence = refusals.liveBaseFilterRefused('region');
   ok('the sentence says why and what to do', /always-applied filters can't be applied by this server/.test(sentence) && /finish upgrading Ordinate/.test(sentence), sentence);
-  const replies: unknown[] = [];
-  for (const [label, call] of DOORS) {
-    const before = fake.calls.length;
-    const r = await call(L);
-    replies.push(r);
-    // A card's failure (ipc/liveAnswers `Failure`) carries the catalog sentence in `reason`; every other reply has the code there.
-    const typed = r.ok === false && r.code === 'live_refused' && (label === 'answer:card' ? r.reason === sentence : r.reason === 'baseFilter' && r.error === sentence);
-    ok(`08a guard: ${label} refuses typed (baseFilter), no warehouse call`, typed && fake.calls.length === before, show(r));
+  const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
+
+  /** Every door, the lookup, Make a copy and Copy the data instead refuse typed on L (whatever is planted), and spend nothing. */
+  async function refusesEverywhere(what: string): Promise<unknown[]> {
+    H.queryCache.clear();
+    const replies: unknown[] = [];
+    const calls0 = fake.calls.length;
+    const n0 = await count();
+    for (const [label, call] of DOORS) {
+      const r = await call(L);
+      replies.push(r);
+      // A card's failure (ipc/liveAnswers `Failure`) carries the catalog sentence in `reason`; every other reply has the code there.
+      const typed = r.ok === false && r.code === 'live_refused' && (label.startsWith('answer:card') ? r.reason === sentence : r.reason === 'baseFilter' && r.error === sentence);
+      ok(`${what}: ${label} refuses typed (baseFilter)`, typed, show(r));
+    }
+    let built = false;
+    const looked = await H.as(ORG_A, () => H.lq.liveLookup(P, L, () => { built = true; return spec.refuse('badQuery'); }));
+    replies.push(looked);
+    ok(`${what}: liveLookup (the case-fix door) refuses typed before it builds a statement`,
+      !built && looked.ok === false && looked.code === 'live_refused' && looked.reason === 'baseFilter' && looked.error === sentence, show(looked));
+    const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
+    replies.push(copy);
+    ok(`${what}: Make a copy refuses typed and saves nothing`,
+      copy.ok === false && copy.code === 'live_refused' && copy.reason === 'baseFilter' && copy.error === sentence && (await count()) === n0, show(copy));
+    const toExtract = (await post('dataset:setMode', { projectId: P, datasetId: L, mode: 'extract' })).value;
+    replies.push(toExtract);
+    ok(`${what}: Copy the data instead refuses typed; the record stays Live`,
+      toExtract.ok === false && toExtract.code === 'live_refused' && toExtract.reason === 'baseFilter' && (await meta()).mode === 'live', show(toExtract));
+    ok(`${what}: none of it spent a warehouse call`, fake.calls.length === calls0, show(fake.calls.length - calls0));
+    return replies;
   }
 
-  const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
-  const n0 = await count();
-  const calls0 = fake.calls.length;
-  const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
-  replies.push(copy);
-  ok('08a guard: Make a copy refuses typed and saves nothing',
-    copy.ok === false && copy.code === 'live_refused' && copy.reason === 'baseFilter' && copy.error === sentence && (await count()) === n0, show(copy));
-  const toExtract = (await post('dataset:setMode', { projectId: P, datasetId: L, mode: 'extract' })).value;
-  replies.push(toExtract);
-  const after = await meta();
-  ok('08a guard: Copy the data instead refuses typed; the record stays Live',
-    toExtract.ok === false && toExtract.code === 'live_refused' && toExtract.reason === 'baseFilter' && after.mode === 'live' && show(after.live.baseFilters) === show(BASE), show(toExtract));
+  const replies = await refusesEverywhere('08a guard');
+  ok('…and the record still holds the filters it was planted with', show((await meta()).live.baseFilters) === show(BASE));
   ok('…and no refusal carries a filter value', !show(replies).includes(CANARY) && !show(replies).includes('North'), show(replies).slice(0, 300));
-  ok('…and neither spent a warehouse call', fake.calls.length === calls0, show(fake.calls.length - calls0));
+
+  // A stored list this pod cannot READ in full is refused too: dropping a step (or all of them) would answer without it.
+  const GOOD = F('region', '!=', 'x');
+  const BOGUS = { type: 'filter', column: 'x', op: 'bogus' };
+  for (const [label, stored] of [
+    ['a list of one step with an unknown operator', [BOGUS]],
+    ['a valid step beside one with an unknown operator (partial)', [GOOD, BOGUS]],
+    ['a valid step beside a non-object', [GOOD, 7]],
+    ['21 valid steps (one past the cap)', Array.from({ length: base.MAX_BASE_FILTERS + 1 }, (_, i) => F('region', '!=', `v${i}`))],
+  ] as [string, unknown][]) {
+    await plant(stored);
+    const m = (await meta()).live;
+    ok(`unreadable: ${label} is marked, not read as none`, m.baseFiltersUnreadable === true, show(m));
+    await refusesEverywhere(`unreadable (${label})`);
+  }
+  await plant(Array.from({ length: base.MAX_BASE_FILTERS }, (_, i) => F('region', '!=', `v${i}`)));
+  ok('NEGATIVE CONTROL: exactly 20 valid steps are read in full, not marked unreadable', (await meta()).live.baseFilters.length === 20 && (await meta()).live.baseFiltersUnreadable === undefined);
+  await plant(BASE);
+  ok('NEGATIVE CONTROL: a readable list is not marked unreadable', (await meta()).live.baseFiltersUnreadable === undefined);
 
   // NEGATIVE CONTROLS: the guard is the base filters, nothing else.
+  const n1 = await count();
   for (const [label, call] of DOORS) {
     const r = await call(second.liveId);
     ok(`NEGATIVE CONTROL: ${label} answers on a Live dataset without base filters`, r.ok === true, show(r).slice(0, 240));
   }
   const copyOther = (await post('dataset:copyLive', { projectId: P, datasetId: second.liveId })).value;
-  ok('NEGATIVE CONTROL: Make a copy answers on a Live dataset without base filters', copyOther.ok === true && (await count()) === n0 + 1, show(copyOther));
-  await plant(undefined);
-  H.queryCache.clear();
-  for (const [label, call] of DOORS) {
-    const r = await call(L);
-    ok(`NEGATIVE CONTROL: with the key removed, ${label} answers on the same dataset`, r.ok === true, show(r).slice(0, 240));
+  ok('NEGATIVE CONTROL: Make a copy answers on a Live dataset without base filters', copyOther.ok === true && (await count()) === n1 + 1, show(copyOther));
+  for (const [label, stored] of [['the key removed', undefined], ['an empty list', []]] as [string, unknown][]) {
+    await plant(stored);
+    H.queryCache.clear();
+    for (const [door, call] of DOORS) {
+      const r = await call(L);
+      ok(`NEGATIVE CONTROL: with ${label}, ${door} answers on the same dataset`, r.ok === true, show(r).slice(0, 240));
+    }
   }
 
   await close();
