@@ -77,4 +77,4 @@ ok('specMetrics lists certified first and keeps the retired one', stableStringif
 - [ ] **Step 4: Run it to see it pass.** `npm run build:ts && node scripts/gen-automation-docs.js && node scripts/test-automationTools.js && node scripts/test-automation.js && node scripts/test-pluginSkills.js` all report `ok`.
 - [ ] **Step 5: Commit.** `git add src/automation docs/automation.md plugins/ordinate scripts` · "Return status from the MCP tools and tell agents to prefer certified items"
 
-Not in this step: hiding metrics that read a hidden column from the Assistant (06), or verified questions citing certified metrics (part 3, which consumes `statusFor`).
+Not in this step: hiding metrics that read a hidden column from the Assistant (06), or verified questions on a retired metric: part 3's 05 and 09 (merged after this step in release B) keep them running and pass on this step's `retiredNotes` sentence through `computeCard`'s `notes` (cross-part check item 8).

@@ -142,4 +142,4 @@ Test: `scripts/test-fanOut.ts` § formula.
 
 **Existing tests that must stay green:** test-joins, test-joinsVia, test-fanOut, test-rowPolicyFanOutJoins, test-metrics, test-metricCheck, test-metricMeasures, test-scenarios, test-analysesServer, test-dashboardFilters, test-visualsServer, test-embedLock, test-rowPolicy, test-rowPolicySidePaths, test-liveRoute, test-i18n, test-file-size; web visuals.test.tsx, calcMeasure.test.tsx, VisualTile.test.tsx; e2e visuals, analyses.
 
-**Not in this step:** the metric editor's column picker. It lists the dataset's own columns, so many-side metrics come from formulas, the API, MCP and the Assistant. Part 5's distinct counts across fan-out: the planner passes any aggregation the door supports, and part 5 adds its own differential case.
+**Not in this step:** the metric editor's column picker. It lists the dataset's own columns, so many-side metrics come from formulas, the API, MCP and the Assistant. Part 5's distinct counts across fan-out: the planner passes any aggregation the door supports; step 06's differential carries the `countd` case (cross-part check item 12).

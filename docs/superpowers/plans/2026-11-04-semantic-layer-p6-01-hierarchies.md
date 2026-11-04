@@ -91,7 +91,7 @@ During p6-01's rollout an older pod 400s a `catalog:setTable` carrying `hierarch
 
 ### Task 3: The ladder rules and `model:navigation`
 
-**Files:** Create `src/analysis/drillLevels.ts`, `src/ipc/modelNavigation.ts`, `scripts/test-modelNavigation.ts` (on `scripts/liveRouteHarness.ts`, as part 1's `test-modelOverview`). Modify `src/api/model.ts` (part 1 step 10: append `model:navigation`), `src/server/app.ts:570` (add `'../ipc/modelNavigation'` to the array), `scripts/rowPolicyReaders.ts` (`'model:navigation': 'META'`).
+**Files:** Create `src/analysis/drillLevels.ts`, `src/ipc/modelNavigation.ts`, `scripts/test-modelNavigation.ts` (on `scripts/liveRouteHarness.ts`, as part 1's `test-modelOverview`). Modify `src/api/model.ts` (part 1 step 10: append `model:navigation`), `src/server/app.ts:570` (add `'../ipc/modelNavigation'` to the array), `scripts/rowPolicyReaders.ts` (`'model:navigation': 'META'`), `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B) (`'model:navigation': 'META'`: level names, never values).
 **Interfaces:** Consumes `sanitizeTables` (part 1 01a) through `catalog.load`, `activeWeekCal` (`src/analysis/retailCalendar.ts:270`), `DateGrain` (`src/analysis/categoryKey.ts:24`). Produces, in `drillLevels.ts` (PURE, type-only imports; the web imports it):
 ```ts
 export interface NavHierarchy extends Hierarchy { missing?: string[] }   // levels that are no longer a text column

@@ -30,7 +30,7 @@
 ---
 
 ### Task 1: What the browser needs, from the server
-**Files:** Modify `src/data/datasets.ts` (`DatasetSummary`/meta header: `semantic?: { layer }`; ≤ 3 lines, the file is at 799 so the projection goes in `src/data/semanticDataset.ts` and is spread in), `src/ipc/liveProfile.ts:168` (`LiveSchemaView.grains?: Array<{ column; grains }>`) · Test `scripts/test-semanticDatasets.ts` (§ replies)
+**Files:** Modify `src/data/datasets.ts` (`DatasetSummary`/meta header: `semantic?: { layer }`; ≤ 1 line: the file is at 799 and `test-file-size` fails above 800, so the projection goes in `src/data/semanticDataset.ts` and is spread in; if the type needs a second line, put the field on the reply at `src/ipc/datasets.ts` instead), `src/ipc/liveProfile.ts:168` (`LiveSchemaView.grains?: Array<{ column; grains }>`) · Test `scripts/test-semanticDatasets.ts` (§ replies)
 - [ ] **Step 1: Write the failing test.** `dataset:list` and `dataset:liveSchema` for the semantic dataset carry `semantic: { layer: 'fake' }` and the grains; `JSON.stringify` of both has no model name (planted) and no connection value; an extract's and a plain Live dataset's replies are byte-identical to before (no `semantic` key).
 - [ ] **Step 2–4:** red → implement → `node scripts/test-semanticDatasets.js && node scripts/test-file-size.js` green.
 - [ ] **Step 5: Commit.** `git add src/data src/ipc/liveProfile.ts scripts/test-semanticDatasets.ts` · "Tell the browser a dataset comes from a semantic layer, and its grains"

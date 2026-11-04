@@ -12,36 +12,41 @@
 
 ## The PR chain
 
-Two releases. **Release 1 ("keep what's coming")** holds only readers and guards: after it, every pod keeps the new fields verbatim and refuses, with a sentence, anything it can't yet apply. **Release 2** holds the features. The owner cuts both releases; release 1 must be deployed on every pod before any release-2 PR reaches a release (`docs/server/upgrade.md` says so after 05a).
+Part 1 ships in two of the three combined releases (see [Combined release order](#combined-release-order)). **Release A ("keep what's coming", formerly release 1)** holds only readers and guards: after it, every pod keeps the new fields verbatim and refuses, with a sentence, anything it can't yet apply. Besides part 1's seven PRs below, release A also carries the other parts' readers and guards, merged after part 1's before the owner cuts it: p2-01, p2-02, p3-01, p3-02, p4-01a, p6-01a, p6-05a, p8-00a, p8-02 and p8-03. **Release B (formerly release 2)** holds part 1's features. The owner cuts both; release A must be deployed on every pod before any release-B PR reaches a release (`docs/server/upgrade.md` says so after 05a).
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p1-09a-via-guard` | [09 Task 0](2026-11-03-semantic-layer-p1-09-labelled-joins.md) | — | 1 |
-| 2 | `feat/semantic-p1-08a-base-filter-guard` | [08 Task 0](2026-11-03-semantic-layer-p1-08-live-base-filters.md) | — | 1 |
-| 3 | `feat/semantic-p1-01a-readers` | [01 Task 1](2026-11-03-semantic-layer-p1-01-tables.md) | — | 1 |
-| 4 | `feat/semantic-p1-04a-time-column-reader` | [04 Task 1](2026-11-03-semantic-layer-p1-04-time-column.md) | 09a | 1 |
-| 5 | `feat/semantic-p1-02a-snapshot-reader` | [02 Task 1](2026-11-03-semantic-layer-p1-02-additivity.md) | — | 1 |
-| 6 | `feat/semantic-p1-05a-unknown-steps-kept` | [05a](2026-11-03-semantic-layer-p1-05a-unknown-steps-kept.md) | 09a, 04a | 1 |
-| | **owner cuts release 1, and it rolls out everywhere** | | | |
-| 7 | `feat/semantic-p1-01-tables` | [01 Tasks 2–7](2026-11-03-semantic-layer-p1-01-tables.md) | 01a | 2 |
-| 8 | `feat/semantic-p1-02-additivity` | [02 Tasks 2–5](2026-11-03-semantic-layer-p1-02-additivity.md) | 01, 02a | 2 |
-| 9 | `feat/semantic-p1-03-charts-follow-metric` | [03](2026-11-03-semantic-layer-p1-03-charts-follow-metric.md) | 02 | 2 |
-| 10 | `feat/semantic-p1-04-time-column` | [04 Tasks 2–8](2026-11-03-semantic-layer-p1-04-time-column.md) | 03, 04a | 2 |
-| 11 | `feat/semantic-p1-05b-terms` | [05b](2026-11-03-semantic-layer-p1-05b-terms.md) | 04, 05a released | 2 |
-| 12 | `feat/semantic-p1-06-value-labels` | [06](2026-11-03-semantic-layer-p1-06-value-labels.md) | 05b, 01a released | 2 |
-| 13 | `feat/semantic-p1-07-snapshot` | [07](2026-11-03-semantic-layer-p1-07-snapshot.md) | 06, 02a released | 2 |
-| 14 | `feat/semantic-p1-08-live-base-filters` | [08 Tasks 1–7](2026-11-03-semantic-layer-p1-08-live-base-filters.md) | 07, 08a released | 2 |
-| 15 | `feat/semantic-p1-09-labelled-joins` | [09 Tasks 1–5](2026-11-03-semantic-layer-p1-09-labelled-joins.md) | 08, 09a released | 2 |
-| 16 | `feat/semantic-p1-10-data-model-section` | [10](2026-11-03-semantic-layer-p1-10-data-model-section.md) | 09 | 2 |
+| 1 | `feat/semantic-p1-09a-via-guard` | [09 Task 0](2026-11-03-semantic-layer-p1-09-labelled-joins.md) | — | A |
+| 2 | `feat/semantic-p1-08a-base-filter-guard` | [08 Task 0](2026-11-03-semantic-layer-p1-08-live-base-filters.md) | — | A |
+| 3 | `feat/semantic-p1-01a-readers` | [01 Task 1](2026-11-03-semantic-layer-p1-01-tables.md) | — | A |
+| 4 | `feat/semantic-p1-04a-time-column-reader` | [04 Task 1](2026-11-03-semantic-layer-p1-04-time-column.md) | 09a | A |
+| 5 | `feat/semantic-p1-02a-snapshot-reader` | [02 Task 1](2026-11-03-semantic-layer-p1-02-additivity.md) | — | A |
+| 6 | `feat/semantic-p1-05a-unknown-steps-kept` | [05a](2026-11-03-semantic-layer-p1-05a-unknown-steps-kept.md) | 09a, 04a | A |
+| 7 | `feat/semantic-p1-r1-review-fixes` | The whole-release review fixes (no plan file) | 05a | A |
+| | **then the other parts' release-A PRs (p2-01, p2-02, p3-01, p3-02, p4-01a, p6-01a, p6-05a, p8-00a, p8-02, p8-03); the owner cuts release A, and it rolls out everywhere** | | | |
+| 8 | `feat/semantic-p1-01-tables` | [01 Tasks 2–7](2026-11-03-semantic-layer-p1-01-tables.md) | 01a | B |
+| 9 | `feat/semantic-p1-02-additivity` | [02 Tasks 2–5](2026-11-03-semantic-layer-p1-02-additivity.md) | 01, 02a | B |
+| 10 | `feat/semantic-p1-03-charts-follow-metric` | [03](2026-11-03-semantic-layer-p1-03-charts-follow-metric.md) | 02 | B |
+| 11 | `feat/semantic-p1-04-time-column` | [04 Tasks 2–8](2026-11-03-semantic-layer-p1-04-time-column.md) | 03, 04a | B |
+| 12 | `feat/semantic-p1-05b-terms` | [05b](2026-11-03-semantic-layer-p1-05b-terms.md) | 04, 05a released | B |
+| 13 | `feat/semantic-p1-06-value-labels` | [06](2026-11-03-semantic-layer-p1-06-value-labels.md) | 05b, 01a released | B |
+| 14 | `feat/semantic-p1-07-snapshot` | [07](2026-11-03-semantic-layer-p1-07-snapshot.md) | 06, 02a released | B |
+| 15 | `feat/semantic-p1-08-live-base-filters` | [08 Tasks 1–7](2026-11-03-semantic-layer-p1-08-live-base-filters.md) | 07, 08a released | B |
+| 16 | `feat/semantic-p1-09-labelled-joins` | [09 Tasks 1–5](2026-11-03-semantic-layer-p1-09-labelled-joins.md) | 08, 09a released | B |
+| 17 | `feat/semantic-p1-10-data-model-section` | [10](2026-11-03-semantic-layer-p1-10-data-model-section.md) | 09 | B |
 
-The order differs from the plans' own "after" lines in three places, all to fit release 1: 04a no longer waits for step 03 (Task 1 touches only the metric sanitizer, the filter-step sanitizer and `recordDiff`); 02's Task 1 ships on its own as 02a; and 05a needs 04a, not all of step 04 (if 05a turns out to need step 04's exported `stepKey`, move that export into 04a).
+The order differs from the plans' own "after" lines in three places, all to fit release A: 04a no longer waits for step 03 (Task 1 touches only the metric sanitizer, the filter-step sanitizer and `recordDiff`); 02's Task 1 ships on its own as 02a; and 05a needs 04a, not all of step 04 (if 05a turns out to need step 04's exported `stepKey`, move that export into 04a).
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 1: its seven release-1 PRs (the six above plus `feat/semantic-p1-r1-review-fixes`) open release A, followed by the other parts' readers and guards; steps 01–10 open release B. Nothing of part 1's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
 - No push, `gh pr create` or release on weekdays 08:00–18:00 local time (the owner's global rule, enforced by a hook).
 - One worktree per PR off `origin/develop` (`feature-branch-workflow` skill); never commit to `develop`; never `git checkout` or `git switch` in the shared clone.
 - No `Co-Authored-By` or any AI co-author trailer on any commit.
-- No release, `v*` tag or image push without the owner. Release 1 is fully rolled out before a release-2 PR ships (05b's merge gate checks it with `git tag`).
+- No release, `v*` tag or image push without the owner. Release A is fully rolled out before a release-B PR ships (05b's merge gate checks it with `git tag`).
 - No new runtime dependency. No migration: everything is records or catalog JSON with additive optional fields.
 - File caps: 500 soft, 800 hard. Near the cap today: `src/data/datasets.ts` 799, `src/data/transforms.ts` 795 (09a and 05a move its sanitizers out), `src/ipc/visuals.ts` 769, `src/ipc/datasets.ts` 748, `src/analysis/alertStore.ts` 633, `src/ai/answerSpec.ts` 632. New logic goes in new files.
 - `src/api/index.ts`, `web/src/app/routes.tsx` and `web/src/app/nav.ts` are append-only.
@@ -53,14 +58,14 @@ The order differs from the plans' own "after" lines in three places, all to fit 
 Cross-cutting failure modes no single plan's happy path covers; each line names the plan whose tests must pin it. A reviewer of that PR checks the test exists.
 
 1. **A dataset refreshed with a changed schema.** A key column, `timeColumn`, snapshot column, value-labelled column, a term's column or a base filter's column is renamed or removed. Expected: a visible flag or a typed refusal, never a silently different figure. Owners: 01 (key check: column gone), 04 (`timeColumn` no longer a date counts as unset and is flagged), 05b (`column_gone`), 06 (labels for a missing column ignored and flagged), 07 (`snapshotProblem`), 08 (a base filter on a missing column refuses every Live statement).
-2. **Mixed versions during a rolling upgrade.** An older pod or an older browser tab reads and re-saves a record holding a new field. Expected: release-1 pods keep it and refuse; nothing is dropped. Owners: 01a, 02a, 04a, 05a, 08a, 09a (each has a "re-save keeps it" test and a negative control).
+2. **Mixed versions during a rolling upgrade.** An older pod or an older browser tab reads and re-saves a record holding a new field. Expected: release-A pods keep it and refuse; nothing is dropped. Owners: 01a, 02a, 04a, 05a, 08a, 09a (each has a "re-save keeps it" test and a negative control).
 3. **Row-restricted viewers.** Term filter values, a column's value list, key-check counts, version diffs of a term. Expected: none of these reach a viewer restricted by row access rules. Owners: 05b, 06, 01.
 4. **Live datasets.** Each new figure path either compiles (with base filters in every statement and values bound) or refuses with a typed sentence; extra statements count against `LIVE_DAILY_QUERY_LIMIT`. Owners: 03 (one statement per metric filter list), 07 (refusal), 08 (every builder, by source-scan count), 01 (`compileKeyCheck` takes base filters once 08 lands).
 5. **Old content stays exactly as it was.** Saved charts, dashboards, published pages and alerts with no new field set. Expected: byte-identical replies. Owners: 03, 04, 06, 09 (each compares against today's reply or the golden fixtures).
 
 ## Calls made while planning (the owner's recommended answers applied; listed so a reviewer knows they are deliberate)
 
-- **Two releases** as above, because the catalog, metric, relationship and dataset sanitizers whitelist their fields today, so a pod of the current release would erase guides, labels, `timeColumn`, snapshots, labels and `via` on its next write.
+- **Two releases** (now A and B of the combined order) as above, because the catalog, metric, relationship and dataset sanitizers whitelist their fields today, so a pod of the current release would erase guides, labels, `timeColumn`, snapshots, labels and `via` on its next write.
 - **Explore's default date axis (D9) is dropped from part 1:** Explore carries no metric measure (`decodeQuestion` drops `metricId`), so there is nothing to attach it to.
 - **No calc picker to grey (D7):** the desktop's `calcMenu.ts` was deleted; the refusal shows where the figure would be. **The metric-tree `sum` guard (02 Task 5) is dropped:** the tree already shows a "Not explained by its parts" row instead of a wrong total, and the guard would block a valid sum of averages over the same rows.
 - **Alerts:** they evaluate a stored `{column, aggregation}` copy, so D8's "through the existing doors" was wrong; 07 Task 6 makes an alert with a `metricId` read its metric's snapshot.

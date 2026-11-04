@@ -64,6 +64,7 @@ export interface Names { dataset: (id: string) => string; term: (id: string) => 
 export function rawSpec(spec: AnswerSpec, names: Names): Record<string, unknown>;
 export function pickExamples(states: VerifiedState[], o: { question: string; datasetId?: string; exclude?: string; withheld: (datasetId: string) => ReadonlySet<string>; names: Names }): { lines: string[]; ids: string[] };
 ```
+The caller's `withheld(datasetId)` is today's withheld columns plus part 4's `hiddenColumnsFor(projectId, datasetId)`, so an example whose spec names a hidden column is never shown to that caller.
 - [ ] **Step 1: Write the failing test** — `scripts/test-verifiedPick.ts`:
   ```ts
   ok('exact, squashed', P.exactHit(S, 'revenue BY region?')?.id === REV);

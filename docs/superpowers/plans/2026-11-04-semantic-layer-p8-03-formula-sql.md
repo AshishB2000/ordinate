@@ -10,7 +10,7 @@
 - A refusal is a `FormulaError` subclass carrying `tokenIndex`, mapped to a source span exactly as `compileTokens` maps parser errors (`sqlGenClean.genConditional` is the precedent for a second back end).
 **Tech Stack:** `src/engine/live/` (dialects, `Binder`, `ParamSink`), `src/formula/` (parser, `FUNCTIONS`), the DuckDB bench in `scripts/liveParityFixture.ts` (`loadWarehouse`, `runDuck`).
 **Spec:** docs/semantic-layer/08-engine.md (D2–D6, D8; Tests "Expression differential", "Safety", "Negative controls") · Index: docs/superpowers/plans/2026-11-04-semantic-layer-p8-00-index.md
-**Branch and PR:** `feat/semantic-p8-03-formula-sql` off `origin/develop` after step 02 merges. One PR.
+**Branch and PR:** `feat/semantic-p8-03-formula-sql` off `origin/develop` after steps 02 and 00a merge (Task 2 consumes 00a's `LiveCalc`). One PR.
 
 ## Global Constraints
 - **One function list for every dialect** (D4). Databricks is compiled and golden-shaped, but step 04 refuses it (owner's answer 1).

@@ -12,21 +12,21 @@
 
 ## The PR chain
 
-There are two releases. **Release P3-A** holds the security fix and the readers. Once every pod runs it, any pod keeps the catalog's `instructions` and a turn's `guidance` verbatim, and its bundles and backups carry `verified/` records. **Release P3-B** holds the features. The owner cuts both. P3-A's PRs need nothing from part 1's release 2, so they may merge before it is cut and ride in it. P3-B needs part 1's release 2 merged (steps 01, 05b, 06, 10) **and** P3-A deployed on every pod.
+Part 3 ships in two of the three combined releases (see [Combined release order](#combined-release-order)); below, **P3-A** means combined release **A** and **P3-B** means combined release **B**. **Release P3-A** holds the security fix and the readers. Once every pod runs it, any pod keeps the catalog's `instructions` and a turn's `guidance` verbatim, and its bundles and backups carry `verified/` records. **Release P3-B** holds the features. The owner cuts both. P3-A's PRs need only part 1's release-A PRs (02 needs 01a), so they ride in release A. P3-B needs part 1's release-B steps merged (01, 05b, 06, 10) **and** release A deployed on every pod.
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p3-01-quote-cells` | [01](2026-11-04-semantic-layer-p3-01-quote-cells.md) | — | P3-A |
-| 2 | `feat/semantic-p3-02-readers` | [02](2026-11-04-semantic-layer-p3-02-readers.md) | — | P3-A |
-| | **owner cuts P3-A (or it rides in part 1's release 2), and it rolls out everywhere** | | | |
-| 3 | `feat/semantic-p3-03-instructions` | [03](2026-11-04-semantic-layer-p3-03-instructions.md) | 02 released, part 1 step 10 (and 01) | P3-B |
-| 4 | `feat/semantic-p3-04-sample-values` | [04](2026-11-04-semantic-layer-p3-04-sample-values.md) | 01, 03, part 1 step 06 | P3-B |
-| 5 | `feat/semantic-p3-05-verified` | [05](2026-11-04-semantic-layer-p3-05-verified.md) | 04, part 1 step 05b | P3-B |
-| 6 | `feat/semantic-p3-06-exact-match` | [06](2026-11-04-semantic-layer-p3-06-exact-match.md) | 05 | P3-B |
-| 7 | `feat/semantic-p3-07-eval` | [07](2026-11-04-semantic-layer-p3-07-eval.md) | 06 | P3-B |
-| 8 | `feat/semantic-p3-08-test-chat` | [08](2026-11-04-semantic-layer-p3-08-test-chat.md) | 07 | P3-B |
-| 9 | `feat/semantic-p3-09-mcp` | [09](2026-11-04-semantic-layer-p3-09-mcp.md) | 08 (the sample set from 07) | P3-B |
-| 10 | `feat/semantic-p3-10-check` | [10](2026-11-04-semantic-layer-p3-10-check.md) | 09 | P3-B |
+| 1 | `feat/semantic-p3-01-quote-cells` | [01](2026-11-04-semantic-layer-p3-01-quote-cells.md) | — | A |
+| 2 | `feat/semantic-p3-02-readers` | [02](2026-11-04-semantic-layer-p3-02-readers.md) | part 1 01a (release 1: its `tables` reader is 02's insertion point) | A |
+| | **owner cuts release A (P3-A rides in it, with part 1's release-A PRs), and it rolls out everywhere** | | | |
+| 3 | `feat/semantic-p3-03-instructions` | [03](2026-11-04-semantic-layer-p3-03-instructions.md) | 02 released, part 1 step 10 (and 01) | B |
+| 4 | `feat/semantic-p3-04-sample-values` | [04](2026-11-04-semantic-layer-p3-04-sample-values.md) | 01, 03, part 1 step 06 | B |
+| 5 | `feat/semantic-p3-05-verified` | [05](2026-11-04-semantic-layer-p3-05-verified.md) | 04, part 1 step 05b | B |
+| 6 | `feat/semantic-p3-06-exact-match` | [06](2026-11-04-semantic-layer-p3-06-exact-match.md) | 05 | B |
+| 7 | `feat/semantic-p3-07-eval` | [07](2026-11-04-semantic-layer-p3-07-eval.md) | 06 | B |
+| 8 | `feat/semantic-p3-08-test-chat` | [08](2026-11-04-semantic-layer-p3-08-test-chat.md) | 07 | B |
+| 9 | `feat/semantic-p3-09-mcp` | [09](2026-11-04-semantic-layer-p3-09-mcp.md) | 08 (the sample set from 07) | B |
+| 10 | `feat/semantic-p3-10-check` | [10](2026-11-04-semantic-layer-p3-10-check.md) | 09 | B |
 
 **Merge gate for #3:** `git tag -l 'v*' --no-contains <02's merge sha>` must print nothing. In other words, no released server that lacks 02 may roll straight into P3-B. `docs/server/upgrade.md` says so (02 Task 4).
 
@@ -43,6 +43,10 @@ There are two releases. **Release P3-A** holds the security fix and the readers.
 | Job kind `assistant-check` | 10 | In-process queue (`src/app/jobs.ts`); it never crosses pods | — |
 
 A P3-A pod given a P3-B browser answers `catalog:setInstructions`, `verified:*` and `catalog:instructions` with 404. The new screens show their error state with Retry, and Retry reaches a new pod.
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 3: 01 and 02 (P3-A) are in release A; 03–10 (P3-B) are in release B, after part 1's release-B chain and part 4's 01–06, so part 4's column ratchet and prompt canaries already bind 03–10. Nothing of part 3's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
@@ -68,10 +72,10 @@ A P3-A pod given a P3-B browser answers `catalog:setInstructions`, `verified:*` 
 
 ## Interfaces other parts consume
 
-- **Part 4 (governance):** `VerifiedQuestion` and `listVerified`/`getVerified` from `src/analysis/verifiedQuestions.ts`. `verifiedProblem(projectId, q, env)` (`src/ipc/verifiedState.ts`) is where a retired metric becomes "no longer runs".
-- **Part 6 (views):** `askGuidance(projectId, context, factsKind, question, opts)` (`src/ipc/guidance.ts`) is the one place guidance is assembled, so a view can scope it there.
-- **Part 7 (portability):**
-  - `Instruction`, `sanitizeInstructions` and `CatalogFile.instructions` (`src/app/instructions.ts`).
+- **Part 4 (governance):** `VerifiedQuestion` and `listVerified`/`getVerified` from `src/analysis/verifiedQuestions.ts`. `verifiedProblem(q, env)` (`src/ipc/verifiedState.ts`, with `env` from `verifiedEnv(projectId)`). No part 4 plan consumes these: a retired metric does not make a verified question "no longer run"; the question keeps running and carries part 4's `retiredNotes` sentence (05 and 09, cross-part check item 8).
+- **Part 6 (views):** `askGuidance(projectId, context, factsKind, question, opts)` (`src/ipc/guidance.ts`) is the one place guidance is assembled. Part 6 08 adds its `'topic'` arm (the topic's datasets' guides; cross-part check item 9).
+- **Part 7 (portability), later:** model files formatVersion 1 carry neither instructions nor verified questions (design 07: they join "later, under a `formatVersion` bump"; a1 lists them as not carried). That later PR will read:
+  - `Instruction` and `sanitizeInstructions` (`src/app/instructions.ts`), and `CatalogFile.instructions` (`src/app/catalog.ts`).
   - `sanitizeVerified` and `RECORD_DIR.verified = 'verified'`.
   - The bundle rule `verified/<uuid>.json`, counted as `verified`.
 - **Part 2:** nothing. A source-table note must never enter `askGuidance`.

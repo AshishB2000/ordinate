@@ -25,22 +25,22 @@
 
 ### Task 1: `pinOf`, per kind
 **Files:** Create `src/analysis/statusPin.ts` · Test `scripts/test-governanceStatus.ts` (part 1, temp `DATA_DIR`)
-**Interfaces:** Consumes `metrics.getMetric`/`metricsByName` (`src/analysis/metrics.ts:321/343`), `compileMetricFormula` (`src/analysis/metricFormula.ts:169`), `getTerm` and `isTermStep` (part 1 05b, `src/data/termStep.ts`), `datasets.getDatasetMeta`, `sanitizeOrigin` (`src/data/datasetOrigin.ts`), `pipelineHash`/`stableStringify` (`src/engine/queryCache.ts:89/104`). Produces:
+**Interfaces:** Consumes `metrics.getMetric`/`metricsByName` (`src/analysis/metrics.ts:321/343`), `compileMetricFormula` (`src/analysis/metricFormula.ts:169`), `getTerm` (part 1 05b, `src/analysis/terms.ts`) and `isTermStep` (part 1 05a, `src/data/termStep.ts`), `datasets.getDatasetMeta`, `sanitizeOrigin` (`src/data/datasetOrigin.ts`), `pipelineHash`/`stableStringify` (`src/engine/queryCache.ts:89/104`). Produces:
 ```ts
-export const METRIC_PIN: Record<keyof Metric, 'pin' | 'out'>;   // pin: name datasetId definition filters format timeColumn (snapshot rides in definition)
+export const METRIC_PIN: Record<keyof Metric, 'pin' | 'out'>;   // pin: name datasetId definition filters format timeColumn (snapshot rides in definition); out: part 5's target and part 7's importedFrom (both merged earlier in release B; neither changes the value)
 export const TERM_PIN: Record<keyof Term, 'pin' | 'out'>;       // pin: name datasetId filters
-export const DATASET_PIN: Record<keyof DatasetMeta, 'pin' | 'out'>; // pin: steps (pipelineHash), origin (whole, sanitized), mode, columns ([name,type]), live (baseFilters only)
+export const DATASET_PIN: Record<keyof DatasetMeta, 'pin' | 'out'>; // pin: steps (pipelineHash), origin (whole, sanitized, minus part 2's readsTables label), mode, columns ([name,type]), live (baseFilters, and part 8's calculated as [name, expression]; part 7 b2 adds semantic backend+model)
 export function unclassified(table: Record<string, string>, keys: readonly string[]): string[];
 export async function pinOf(projectId: string, ref: string): Promise<string | null>; // null: the item is gone; else 43-char base64url sha256
 ```
-The algorithm is not determined by the tests. Hash `stableStringify({ kind, own, deps })`. `own` holds the in-pin fields, with `undefined` kept out. `deps` maps a ref to its pin, or to `'missing'` or `'cycle'`. A metric's deps are every metric its formula names (`compileMetricFormula(text, columns).program.metricRefs` resolved by lowercase name through `metricsByName`) and every `term:` its filters name. A term has no deps. A dataset's deps are none: its upstream is not its definition. Recurse with a visited set and `MAX_DEPTH = 10` (`metricMeasures.ts:35`). A formula that does not compile hashes its text and `'uncompiled'`. Memoise per call tree. Use metadata reads only: a Live dataset never reaches `getDataset`.
+The algorithm is not determined by the tests. Hash `stableStringify({ kind, own, deps })`. `own` holds the in-pin fields, with `undefined` kept out. `deps` maps a ref to its pin, or to `'missing'` or `'cycle'`. A metric's deps are every metric its formula names (`compileMetricFormula(text, columns).program.metricRefs` resolved by lowercase name through `metricsByName`), a part 5 period metric's `definition.base`, and every `term:` its filters name. A term has no deps. A dataset's deps are none: its upstream is not its definition. Recurse with a visited set and `MAX_DEPTH = 10` (`metricMeasures.ts:35`). A formula that does not compile hashes its text and `'uncompiled'`. Memoise per call tree. Use metadata reads only: a Live dataset never reaches `getDataset`.
 - [ ] **Step 1: Write the failing test.** Table-driven over a fixture `Metric` with every field set:
 ```ts
 for (const [field, kind] of Object.entries(METRIC_PIN)) {
   const before = await pinOf(P, `metric:${M}`); await rewriteMetricField(P, M, field, ALT[field]); const after = await pinOf(P, `metric:${M}`);
   ok(`metric.${field} is ${kind}: the pin ${kind === 'pin' ? 'moves' : 'stays'}`, (before !== after) === (kind === 'pin'));
 }
-// the same loops for TERM_PIN over a term, and DATASET_PIN over an extract and a Live record (live.epoch and schemaSyncedAt stay; baseFilters move it)
+// the same loops for TERM_PIN over a term, and DATASET_PIN over an extract and a Live record (live.epoch and schemaSyncedAt stay; baseFilters and a calc's expression move it; linking source tables, origin.readsTables, does not)
 ok('editing the EMEA term moves "EMEA revenue"', await movesAfter(`metric:${EMEA_REV}`, () => terms.updateTerm(P, EMEA, { filters: [NARROWER] })));
 ok('editing [Revenue] moves the formula metric that names it', await movesAfter(`metric:${MARGIN}`, () => metrics.updateMetric(P, REV, { filters: [F0] })));
 ok('a refresh (rows, updatedAt, lastRefreshedAt) does not move a dataset', !(await movesAfter(`dataset:${D}`, () => refreshWithSameSchema(P, D))));

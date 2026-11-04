@@ -33,7 +33,7 @@
 
 ### Task 1: `{ metric }` in the IR, and the refusals
 **Files:** Modify `src/engine/live/liveSpec.ts` (`LiveMeasure` l.65, `LiveRefusalCode` l.121, `MESSAGES` l.149), `src/engine/live/compile.ts` (`Part`, `partsOf` l.75-86, `prepare` l.127), `src/engine/live/shape.ts` (`emptyParts`, `measureValue` l.93, `measureName` l.104) · Create `src/engine/live/semantic/semanticRefusals.ts`, `scripts/test-semanticPlan.ts` · Modify `scripts/i18n-extract.ts:346`
-**Interfaces:** Produces `isMetricMeasure(m: LiveMeasure): m is { metric: string }`; `type LayerRefusalCode = 'bins' | 'weekRollup' | 'autoGrain' | 'nonAdditiveCalc' | 'formulaOverLayer' | 'columnOnLayer' | 'metricOnTable' | 'metricMissing' | 'layerRowPolicy' | 'layerLookup'`; `refuseLayer(code: LayerRefusalCode | 'pivot' | 'cohort' | 'funnel' | 'drivers' | 'facet' | 'map' | 'raw' | 'related', p: { dataset: string; layer: string; metric?: string; column?: string }): LiveRefusal`.
+**Interfaces:** Produces `isMetricMeasure(m: LiveMeasure): m is { metric: string }`; `type LayerRefusalCode = 'bins' | 'weekRollup' | 'autoGrain' | 'nonAdditiveCalc' | 'formulaOverLayer' | 'columnOnLayer' | 'metricOnTable' | 'metricMissing' | 'layerRowPolicy' | 'layerLookup' | 'layerFilter'` (`layerFilter`: a filter the layer's API cannot express, with the column's name; e1 and d1 raise it); `refuseLayer(code: LayerRefusalCode | 'pivot' | 'cohort' | 'funnel' | 'drivers' | 'facet' | 'map' | 'raw' | 'related', p: { dataset: string; layer: string; metric?: string; column?: string }): LiveRefusal`.
 - [ ] **Step 1: Write the failing test.**
 ```ts
 const ir = { kind: 'metric', measures: [{ metric: 'revenue' }], filters: [], order: 'natural', weekCal: null } as LiveIR;

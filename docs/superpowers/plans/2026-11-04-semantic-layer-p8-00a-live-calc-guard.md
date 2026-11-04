@@ -6,7 +6,7 @@
 **Architecture:** Part 1's 08a pattern, verbatim. A top-level record key `calculated` (never inside `live`, which every Live writer rebuilds from `sanitizeLive`), read into `meta.live.calculated` by `applyLive` (in memory only), one guard line in `liveTarget` and two in `src/ipc/liveDatasets.ts`. No contract and no editor: nothing can write the key in this release.
 **Tech Stack:** `src/data/liveDataset.ts`, `src/engine/live/liveSpec.ts`, `liveTarget.ts`, `src/ipc/liveDatasets.ts`, self-checks on `scripts/liveRouteHarness.ts` and the fake warehouse (`scripts/liveFakeConnector.ts`).
 **Spec:** docs/semantic-layer/08-engine.md (D1, D6; Constraints "Live") · precedent: docs/superpowers/plans/2026-11-03-semantic-layer-p1-08-live-base-filters.md Task 0 · Index: docs/superpowers/plans/2026-11-04-semantic-layer-p8-00-index.md
-**Branch and PR:** `feat/semantic-p8-00a-live-calc-guard` off `origin/develop`. It needs nothing from part 1 beyond 08a, which is in develop. One PR. Step 04 must not reach a release before this one is on every pod (release 8A).
+**Branch and PR:** `feat/semantic-p8-00a-live-calc-guard` off `origin/develop`. It needs nothing from part 1 beyond 08a and 05a (release 1; 05a's upgrade section takes Task 2's bullet). One PR. Step 04 must not reach a release before this one is on every pod (release 8A).
 
 ## Global Constraints
 - Every dataset without the key answers byte-identically: `test-liveCompile`, `test-liveRoute`, `test-liveBaseFilters` and `test-liveSafetyNet` stay green untouched (except `all` in test-liveCompile, below).
@@ -73,6 +73,12 @@ export function hasLiveCalcs(live: { calculated?: readonly unknown[]; calculated
   ok('a list with one unreadable entry refuses the same', (await chartOn(L3)).reason === 'calculated');
   ok('base filters and calcs together: refused, never answered', (await withBaseFilters(L, () => chartOn(L))).ok === false);
   ok('NEGATIVE CONTROL: the same doors on Live L2, which has no key, answer', (await chartOn(L2)).ok === true);
+  // cross-part check item 5: the one whole-record rebuild never reaches a Live record
+  const rebuilt = spyOn(datasetRecord, 'writeRecordKeepingPolicy');
+  for (const [, write] of WRITERS) await write();
+  for (const [, call] of DOORS) await call(L);
+  ok('no Live writer or door goes through writeRecordKeepingPolicy (persist), which would drop raw.calculated', rebuilt.calls === 0);
+  ok('NEGATIVE CONTROL: the spy sees a plain extract write', (await datasets.updateSteps(P, X, []), rebuilt.calls > 0));
   ```
   - `WRITERS`: `bumpEpoch`, `setMaxCacheAge(60)`, `stampSyncAttempt`, `writeSchemaSync` (exports of `liveDataset.ts`), and `setBaseFilters` once part 1 step 08 has merged.
   - `DOORS`: `visual:data`, `dashboard:metric`, `answer:card` and `syncLiveSchema` (08a's four).

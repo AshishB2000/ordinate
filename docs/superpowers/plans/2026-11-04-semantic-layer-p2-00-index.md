@@ -12,24 +12,28 @@
 
 ## The PR chain
 
-There are two releases. **Release 1** holds the leak fix and the readers. After it, every pod keeps `origin.readsTables` when it re-saves a dataset, imports a bundle that holds source docs, and deletes them with their connection. **Release 2** holds the store and the features. The owner cuts both releases. Release 1 must be on every pod before PR 03 reaches a release: an older pod's export would leave the docs out of a backup, and an older pod's re-save would drop `readsTables`.
+Part 2 ships in two of the three combined releases (see [Combined release order](#combined-release-order)). **Release A** (formerly release 1) holds the leak fix and the readers. After it, every pod keeps `origin.readsTables` when it re-saves a dataset, imports a bundle that holds source docs, and deletes them with their connection. **Release B** (formerly release 2) holds the store and the features. The owner cuts both releases. Release A must be on every pod before PR 03 reaches a release: an older pod's export would leave the docs out of a backup, and an older pod's re-save would drop `readsTables`.
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p2-01-viewer-source-names` | [01](2026-11-04-semantic-layer-p2-01-viewer-source-names.md) | — | 1 |
-| 2 | `feat/semantic-p2-02-readers` | [02](2026-11-04-semantic-layer-p2-02-readers.md) | — | 1 |
-| | **owner cuts release 1, and it rolls out everywhere** | | | |
-| 3 | `feat/semantic-p2-03-store` | [03](2026-11-04-semantic-layer-p2-03-store.md) | 01, 02 released | 2 |
-| 4 | `feat/semantic-p2-04-facts-door` | [04](2026-11-04-semantic-layer-p2-04-facts-door.md) | 03 | 2 |
-| 5 | `feat/semantic-p2-05-sql-readers` | [05](2026-11-04-semantic-layer-p2-05-sql-readers.md) | 04 | 2 |
-| 6 | `feat/semantic-p2-06-http-readers` | [06](2026-11-04-semantic-layer-p2-06-http-readers.md) | 04 (not 05) | 2 |
-| 7 | `feat/semantic-p2-07-tab` | [07](2026-11-04-semantic-layer-p2-07-tab.md) | 04, **part 1 step 10** | 2 |
-| 8 | `feat/semantic-p2-08-lineage-and-links` | [08](2026-11-04-semantic-layer-p2-08-lineage-and-links.md) | 07 | 2 |
-| 9 | `feat/semantic-p2-09-suggestions` | [09](2026-11-04-semantic-layer-p2-09-suggestions.md) | 08, **part 1 step 01** | 2 |
+| 1 | `feat/semantic-p2-01-viewer-source-names` | [01](2026-11-04-semantic-layer-p2-01-viewer-source-names.md) | — | A |
+| 2 | `feat/semantic-p2-02-readers` | [02](2026-11-04-semantic-layer-p2-02-readers.md) | — | A |
+| | **owner cuts release A (with part 1's release-A PRs and the other parts' readers), and it rolls out everywhere** | | | |
+| 3 | `feat/semantic-p2-03-store` | [03](2026-11-04-semantic-layer-p2-03-store.md) | 01, 02 released | B |
+| 4 | `feat/semantic-p2-04-facts-door` | [04](2026-11-04-semantic-layer-p2-04-facts-door.md) | 03 | B |
+| 5 | `feat/semantic-p2-05-sql-readers` | [05](2026-11-04-semantic-layer-p2-05-sql-readers.md) | 04 | B |
+| 6 | `feat/semantic-p2-06-http-readers` | [06](2026-11-04-semantic-layer-p2-06-http-readers.md) | 04 (not 05) | B |
+| 7 | `feat/semantic-p2-07-tab` | [07](2026-11-04-semantic-layer-p2-07-tab.md) | 04, **part 1 step 10** | B |
+| 8 | `feat/semantic-p2-08-lineage-and-links` | [08](2026-11-04-semantic-layer-p2-08-lineage-and-links.md) | 07 | B |
+| 9 | `feat/semantic-p2-09-suggestions` | [09](2026-11-04-semantic-layer-p2-09-suggestions.md) | 08, **part 1 step 01** | B |
 
-Releases are separate from part 1's. PRs 01 to 06 need nothing from part 1. PR 07 needs part 1's Data model section (step 10, part 1 release 2). PR 09 needs `TableDoc.key` and its check (step 01). The owner may ship part 2's release 1 together with part 1's release 1.
+Releases are separate from part 1's. PRs 01 to 06 need nothing from part 1. PR 07 needs part 1's Data model section (step 10, release B). PR 09 needs `TableDoc.key` and its check (step 01). PRs 01 and 02 ride in release A with part 1's release-A PRs.
 
-The spec's build order has 8 PRs. Its PR 2 is split here: the readers ship ahead, in release 1, as PR 02, and the store becomes PR 03. The fake warehouse's reader moves from the spec's PR 5 into PR 04, because PR 04's door tests need a reader that runs with no network.
+The spec's build order has 8 PRs. Its PR 2 is split here: the readers ship ahead, in release A, as PR 02, and the store becomes PR 03. The fake warehouse's reader moves from the spec's PR 5 into PR 04, because PR 04's door tests need a reader that runs with no network.
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 2: PRs 01 and 02 are in release A; PRs 03–09 are in release B, after part 1's release-B chain and part 4's 01–06. Nothing of part 2's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
@@ -51,7 +55,7 @@ The spec's build order has 8 PRs. Its PR 2 is split here: the readers ship ahead
 2. **A page view costs a warehouse query.** `fake.catalogCalls` must stay flat across list, get, lineage, forDataset and suggestions. The tests are in 04, 07, 08 and 09.
 3. **A hostile table name reaches SQL text.** Each reader binds the name or whitelists and quotes it before a socket opens. The tests are in 04, 05 and 06, one per family suite.
 4. **A field meaning appears without a click.** The catalog stays byte-identical after a read until **Use**. The test is in 09, with a planted auto-apply as the negative control.
-5. **Mixed fleet.** A release-1 pod keeps `readsTables`, imports a release-2 bundle and deletes docs with the connection. The tests are in 02.
+5. **Mixed fleet.** A release-A pod keeps `readsTables`, imports a release-B bundle and deletes docs with the connection. The tests are in 02.
 
 ## Calls made while planning (deliberate; a reviewer should not "fix" them)
 
@@ -68,10 +72,10 @@ The spec's build order has 8 PRs. Its PR 2 is split here: the readers ship ahead
 
 ## Interfaces other parts consume
 
-- `src/app/sourceTables.ts` (PR 03): `SourceTableDoc`, `listSourceIndex`, `readSourceDoc`, `createSourceDoc`, `saveSourceDoc`, `updateSourceDoc`. Part 7 maps dbt `sources:` (descriptions, `freshness`) onto `createSourceDoc`/`saveSourceDoc`, and part 4 may turn `owner` into a person.
-- `src/connectors/tableFacts.ts` (PR 03/04): `TableFacts`, `sanitizeFacts`, `FactsQuery`/`OpenFacts`. `src/connectors/tableFactsRun.ts` (PR 04): `readTableFacts`, the only door. Part 8 builds column lineage on the stored facts.
+- `src/app/sourceTables.ts` (PR 03): `SourceTableDoc`, `listSourceIndex`, `readSourceDoc`, `createSourceDoc`, `saveSourceDoc`, `updateSourceDoc`. No part 7 plan maps dbt `sources:` in v1 (f1 reads `semantic_manifest.json`, which has none; cross-part check item 4); a later part 7 PR may map them onto `createSourceDoc`/`saveSourceDoc` if the owner asks. Part 4 may turn `owner` into a person.
+- `src/connectors/tableFacts.ts` (PR 03/04): `TableFacts`, `sanitizeFacts`, `FactsQuery`/`OpenFacts`. `src/connectors/tableFactsRun.ts` (PR 04): `readTableFacts`, the only door. No current consumer: part 8's column lineage (p8-01) is built from records only (cross-part check item 11).
 - `src/data/sourceTableOf.ts`: `sourceTablesOf(origin, conn)` (D9). `src/data/sourceNames.ts`: `seesSourceNames(projectId)`, the "can open the connection" rule. Part 7's Ossie export reuses it.
-- `src/analysis/sourceLineage.ts`: `perTableGraph` and the node id `source:st:<connId>:<docId|u<n>>`. Part 8's column-level lineage hangs off it.
+- `src/analysis/sourceLineage.ts`: `perTableGraph` and the node id `source:st:<connId>:<docId|u<n>>`. No current consumer: part 8 excludes lineage inside source tables; column nodes under source tables are a later follow-up (part 8 index, cross-part check item 11).
 
 ## Execution
 

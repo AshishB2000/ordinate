@@ -18,22 +18,23 @@ Two tracks on different files (model files in `src/app`; layers in `src/engine/l
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p7-a1-model-export` | [a1](2026-11-04-semantic-layer-p7-a1-model-export.md) | part 1 complete | 1 |
-| 2 | `feat/semantic-p7-a2-import-plan` | [a2](2026-11-04-semantic-layer-p7-a2-import-plan.md) | a1 | 1 |
-| 3 | `feat/semantic-p7-a3-import-apply` | [a3](2026-11-04-semantic-layer-p7-a3-import-apply.md) | a2 | 1 |
-| 4 | `feat/semantic-p7-a4-model-mcp` | [a4](2026-11-04-semantic-layer-p7-a4-model-mcp.md) | a3 | 1 |
-| 5 | `feat/semantic-p7-b0-external-reader` | [b0](2026-11-04-semantic-layer-p7-b0-external-reader.md) | part 1 complete | 1 (the reader) |
-| 6 | `feat/semantic-p7-b1-semantic-engine` | [b1](2026-11-04-semantic-layer-p7-b1-semantic-engine.md) | b0 | 1 |
-| | **owner cuts release 1, and it rolls out on every pod** | | | |
-| 7 | `feat/semantic-p7-b2-semantic-datasets` | [b2](2026-11-04-semantic-layer-p7-b2-semantic-datasets.md) | b1, a3 (it edits a2/a3's files), **b0 released** (merge gate) | 2 |
-| 8 | `feat/semantic-p7-b3-semantic-web` | [b3](2026-11-04-semantic-layer-p7-b3-semantic-web.md) | b2 | 2 |
-| 9 | `feat/semantic-p7-c1-snowflake-semantic` | [c1](2026-11-04-semantic-layer-p7-c1-snowflake-semantic.md) | b3 | 2 |
-| 10 | `feat/semantic-p7-e1-cube` | [e1](2026-11-04-semantic-layer-p7-e1-cube.md) | c1 | 2 |
-| 11 | `feat/semantic-p7-d1-dbt-semantic-layer` | [d1](2026-11-04-semantic-layer-p7-d1-dbt-semantic-layer.md) | e1 | 2 (beta) |
-| 12 | `feat/semantic-p7-f1-dbt-import` | [f1](2026-11-04-semantic-layer-p7-f1-dbt-import.md) | a4, **b0 released** (merge gate) | 2 |
-| 13 | `feat/semantic-p7-g1-ossie-export` | [g1](2026-11-04-semantic-layer-p7-g1-ossie-export.md) | f1 (shared files) | any (stores nothing) |
+| 1 | `feat/semantic-p7-b0-external-reader` | [b0](2026-11-04-semantic-layer-p7-b0-external-reader.md) | part 1 complete | B (the reader) |
+| 2 | `feat/semantic-p7-b1-semantic-engine` | [b1](2026-11-04-semantic-layer-p7-b1-semantic-engine.md) | b0 | B |
+| | **b0 and b1 ride in release B; the owner cuts release B, and it rolls out on every pod** | | | |
+| 3 | `feat/semantic-p7-a1-model-export` | [a1](2026-11-04-semantic-layer-p7-a1-model-export.md) | part 1 complete; part 5 04–10 (C, merged just before) | C (stores nothing) |
+| 4 | `feat/semantic-p7-a2-import-plan` | [a2](2026-11-04-semantic-layer-p7-a2-import-plan.md) | a1 | C (stores nothing) |
+| 5 | `feat/semantic-p7-a3-import-apply` | [a3](2026-11-04-semantic-layer-p7-a3-import-apply.md) | a2 | C |
+| 6 | `feat/semantic-p7-a4-model-mcp` | [a4](2026-11-04-semantic-layer-p7-a4-model-mcp.md) | a3 | C |
+| 7 | `feat/semantic-p7-b2-semantic-datasets` | [b2](2026-11-04-semantic-layer-p7-b2-semantic-datasets.md) | b1, a3 (it edits a2/a3's files), **b0 released** (merge gate) | C |
+| 8 | `feat/semantic-p7-b3-semantic-web` | [b3](2026-11-04-semantic-layer-p7-b3-semantic-web.md) | b2 | C |
+| 9 | `feat/semantic-p7-c1-snowflake-semantic` | [c1](2026-11-04-semantic-layer-p7-c1-snowflake-semantic.md) | b3 | C |
+| 10 | `feat/semantic-p7-e1-cube` | [e1](2026-11-04-semantic-layer-p7-e1-cube.md) | c1 | C |
+| 11 | `feat/semantic-p7-d1-dbt-semantic-layer` | [d1](2026-11-04-semantic-layer-p7-d1-dbt-semantic-layer.md) | e1 | C (beta) |
+| 12 | `feat/semantic-p7-f1-dbt-import` | [f1](2026-11-04-semantic-layer-p7-f1-dbt-import.md) | a4, **b0 released** (merge gate), part 5 04 (for `countd`) | C |
+| 13 | `feat/semantic-p7-g1-ossie-export` | [g1](2026-11-04-semantic-layer-p7-g1-ossie-export.md) | f1 (shared files) | C (stores nothing) |
+| 14 | `feat/semantic-p7-f2-dbt-import-part5` | plan to be written before it starts (cross-part check item 3) | g1, part 5 08 | C |
 
-13 PRs. Release 1 is a1–a4, b0 and b1 (only b0 is required there; the others store nothing and are ready). Release 2 is b2 through g1. The merge gates in b2 and f1 are 05b's: `git tag -l 'v*' --no-contains <b0 merge sha>` prints nothing, or a `v*` tag contains b0.
+14 PRs, in two of the three combined releases (see [Combined release order](#combined-release-order)). Release B holds b0 (the reader; formerly release 1) and b1. Release C holds a1–a4 (they store nothing; they follow part 5's writers so a1 exports part 5's kinds and a2 lifts part 5's checks with the save bodies), b2 through g1 (formerly release 2) and f2. **f2** is a translator-only follow-up to f1: after part 5 step 08 it maps dbt's exact shapes that f1 skips: `window_groupings: [entity]` → `snapshot.per`, cumulative `grain_to_date` → period `to_date` and `window` → `last N`, a time-offset derived metric → period `compare`, and a two-step conversion → funnel; every other shape stays skipped with its reason. **Later, only if the owner asks:** dbt `sources:` → part 2's source-table notes (`owner`, `refresh` from `freshness`, `guide` from the description) through `createSourceDoc`/`saveSourceDoc`, read from a small upload such as `dbt ls --resource-type source --output json`, never from a full `manifest.json` (cross-part check item 4). The merge gates in b2 and f1 are 05b's: `git tag -l 'v*' --no-contains <b0 merge sha>` prints nothing, or a `v*` tag contains b0.
 
 ## Rolling deploys (what an older pod does)
 
@@ -44,6 +45,10 @@ Two tracks on different files (model files in `src/app`; layers in `src/engine/l
 | Dataset top-level `semantic` | b2 | untouched by every Live writer; origin has no table or SQL, so every question refuses `badSource` | refuses `semanticPending` at every door |
 | dbt and Cube connection records | e1, d1 | unknown connector: "Unknown connection kind", nothing written | same |
 | Model files, plans, Ossie | a1–a4, g1 | nothing stored; a missing contract is a 404 | — |
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 7: b0 and b1 are in release B, after part 1's release-B chain; a1–a4, b2–g1 and f2 are in release C, after part 5's 04–10. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 

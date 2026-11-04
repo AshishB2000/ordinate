@@ -108,6 +108,7 @@ checkNoChart() "The Assistant did not answer with a chart."
   - `src/api/verified.ts` (05): append two contracts;
   - `src/ipc/verified.ts` (05): two handlers;
   - `scripts/rowPolicyReaders.ts`: `'verified:checkResult': 'REDACT', // reasons can quote a value`;
+  - `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B): `'verified:checkResult': 'REDACT'` (a result whose question names a hidden column comes without `reason`);
   - `scripts/test-rowPolicySafetyNet.ts`.
 - Test: extend `scripts/test-assistantCheck.ts`.
 

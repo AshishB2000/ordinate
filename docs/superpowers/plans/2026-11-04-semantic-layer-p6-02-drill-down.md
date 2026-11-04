@@ -16,7 +16,7 @@
 - The grain lookup asks `vizDataFor` with the chart's FULL encoding and filters (split included), so it is the tile's own question and hits the answer cache (extract) or the Live executor's cache. On Live it runs too (D4), counted against `LIVE_DAILY_QUERY_LIMIT` when it misses.
 - A failed grain lookup with a `code` (Live refused, timed out, row policy, term) is answered as that failure, typed, never as the "rolled up to a period" sentence.
 - Drill steps are plain `type: 'filter'` steps (`=` or a `custom` period), never `fromControl` (part 1 D9).
-- `src/ipc/visuals.ts` (773) takes at most the 3 lines of Task 0; the handler, its messages and its types live in new files. `'../ipc/drillDown'` joins the array at `src/server/app.ts:602`.
+- `src/ipc/visuals.ts` (773 today, projected about 790 by the time this lands; cross-part check item 13) takes at most the 1 line of Task 0; the handler, its messages and its types live in new files. `'../ipc/drillDown'` joins the array at `src/server/app.ts:602`.
 - No `Co-Authored-By` or AI trailer on any commit.
 
 ## Review Focus
@@ -35,13 +35,13 @@ No stored field. During the rollout a release-A pod 404s `visual:drillDown`: the
 
 ### Task 0 (only if the fix has not merged): the rows panel refuses a joined category
 
-**Files:** Modify `src/ipc/visuals.ts:201-205` (`resolveDrill`, after the category check). Test: extend `scripts/test-visual-rows.ts`.
+**Files:** Modify `src/ipc/drillScope.ts` (a `joinedCategoryRefusal(encoding): string | null` beside `drillScope`; 63 lines) and `src/ipc/visuals.ts:201-205` (`resolveDrill`, after the category check: one line that calls it). Test: extend `scripts/test-visual-rows.ts`.
 **Interfaces:** `resolveDrill` refuses when `encoding.categoryDatasetId` is set, or when the chart splits and `encoding.seriesDatasetId` is set, with the literal "“{column}” comes from a related dataset, so the rows behind this mark cannot be listed here." (`resolveDrill`'s sentences are literals, as its siblings are).
 - [ ] **Step 1: Write the failing test** — Orders and Customers both hold `region`, related many-to-one. `visual:rows` with `{ category: 'region', categoryDatasetId: CUST, values: [sum amount] }` and mark `{ category: 'West' }` → `available === false` with that sentence. NEGATIVE CONTROL: the same mark without `categoryDatasetId` answers rows.
 - [ ] **Step 2: Run it to see it fail** — `npm run build:ts && node scripts/test-visual-rows.js` → the rows of Orders' own `region = 'West'` come back.
-- [ ] **Step 3: Implement** — two lines.
+- [ ] **Step 3: Implement** — the check in `drillScope.ts`, one calling line in `visuals.ts`.
 - [ ] **Step 4: Run it to see it pass** — `node scripts/test-visual-rows.js`, `node scripts/test-drillScope.js`, `node scripts/test-file-size.js`.
-- [ ] **Step 5: Commit** — `git add src/ipc/visuals.ts scripts/test-visual-rows.ts` · "Refuse the rows behind a mark whose category comes from a related dataset"
+- [ ] **Step 5: Commit** — `git add src/ipc/drillScope.ts src/ipc/visuals.ts scripts/test-visual-rows.ts` · "Refuse the rows behind a mark whose category comes from a related dataset"
 
 ### Task 1: Split the drill scope into its inputs and its resolution
 
@@ -62,7 +62,7 @@ export async function drillFilters(projectId, datasetId, meta, req): Promise<Dri
 
 ### Task 2: `visual:drillDown`
 
-**Files:** Create `src/ipc/drillDown.ts`, `src/ipc/drillMessages.ts`, `scripts/test-drillDown.ts` (harness of `scripts/test-drillScope.ts`: temp `ORDINATE_LOCAL_DIR`, the `handlers` map). Modify `src/api/visuals.ts:108-118` and `:192` (the contract after `visual:rows`), `src/server/app.ts:602` (`'../ipc/drillDown'` in the array), `scripts/rowPolicyReaders.ts` (`'visual:drillDown': 'DOOR'`), `scripts/test-liveSafetyNet.ts:144-219` (a row reader, routed), `scripts/i18n-extract.ts` (`MAIN_FILES`), `scripts/termSites.ts` (classify `drillDown.ts`'s `sanitizeFilters(` site as `keeps`).
+**Files:** Create `src/ipc/drillDown.ts`, `src/ipc/drillMessages.ts`, `scripts/test-drillDown.ts` (harness of `scripts/test-drillScope.ts`: temp `ORDINATE_LOCAL_DIR`, the `handlers` map). Modify `src/api/visuals.ts:108-118` and `:192` (the contract after `visual:rows`), `src/server/app.ts:602` (`'../ipc/drillDown'` in the array), `scripts/rowPolicyReaders.ts` (`'visual:drillDown': 'DOOR'`), `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B) (`'visual:drillDown': 'GATE'`: the clicked mark's values and the next level pass `gateColumns` like `visual:rows`), `scripts/test-liveSafetyNet.ts:144-219` (a row reader, routed), `scripts/i18n-extract.ts` (`MAIN_FILES`), `scripts/termSites.ts` (classify `drillDown.ts`'s `sanitizeFilters(` site as `keeps`).
 **Interfaces:** Consumes `drillInputs`, `resolveDrill`, `nextLevel`/`levelOf`/`nextGrain`/`dateLadder`/`navHierarchies` (step 01), `getTableDoc` (part 1), `activeWeekCal`, `rangeLabel` (`src/analysis/driverScope.ts:190`), `labelPairsForValues` (part 1 step 06, `src/ipc/valueLabelReplies.ts`). Produces
 ```ts
 // src/api/visuals.ts — the Drill shape without metricId; the mark is required

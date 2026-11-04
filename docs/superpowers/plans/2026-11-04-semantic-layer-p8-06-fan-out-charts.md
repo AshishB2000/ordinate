@@ -122,7 +122,7 @@ export async function fanOutVizData(projectId: string, datasetId: string, encodi
     - **brute force:** a plain loop over the fixture arrays that groups and aggregates with no engine code.
   - **The cases:**
     - measures on P, on one many side, and on two;
-    - sum, avg, count, min and max;
+    - sum, avg, count, min and max, and part 5's `countd` (step 02 merges earlier in release B; cross-part check item 12): a distinct count of `customer_id` on Orders by Customers' `tier`;
     - a category on P, on J and on a forward table (Regions via Customers);
     - filters on P, J and a forward table, and one only Orders has;
     - an auto-grained date category (`signup`);
@@ -157,6 +157,9 @@ export async function fanOutVizData(projectId: string, datasetId: string, encodi
   ok('chartReads names every table of every question', show((await chartReads(P, CUSTOMERS, FAN.encoding, FAN.filters)).sort()) === show([ORDERS, REGIONS, RETURNS].sort()));
   setRelatedGateForTest(false); ok('NEGATIVE CONTROL: with the related gate off, a caller closed on Returns gets a figure', !H.refused(await asReturnsClosed('visual:data', FAN), 'related')); setRelatedGateForTest(true);
   setNamedDatasetsCheckForTest(false); ok('NEGATIVE CONTROL: without the datasetId check in reachesOther, the locked caller gets a figure', !H.refused(await asLocked('visual:data', FAN), 'related')); setNamedDatasetsCheckForTest(true);
+  // part 4 column rules on a many side (cross-part check item 6): Returns' `amount` hidden from `east` by `columnAccess`
+  ok('a many-side measure on a column hidden from the caller: refused hidden', H.refused(await asEast('visual:data', FAN), 'hidden'));
+  ok('NEGATIVE CONTROL: the named team gets the figure', !H.refused(await asHr('visual:data', FAN)));
   ```
 - [ ] **Step 2: Run it to see it fail.** → `chartReads` returns `[]` for a fan-out chart.
 - [ ] **Step 3: Implement.**

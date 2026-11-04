@@ -17,22 +17,26 @@
 
 ## The PR chain
 
-Two releases. **8A** carries the guard 00a. After 8A, every pod keeps a Live dataset's calculated fields and refuses its figures. **8B** carries the features that need that. The owner cuts both. 00a must be deployed on every pod before 04 reaches a release: 04's merge gate is `git tag --contains <00a's merge commit>` (fetch tags outside work hours) and the owner's word that the rollout is done. 02, 03 and 01 store nothing, so they may land in 8A or 8B. 06 and 07 store nothing either; they wait only for part 1.
+Part 8 ships in two of the three combined releases (see [Combined release order](#combined-release-order)): **8A** below means combined release **A**, and **8B** means combined release **B**. **8A** carries the guard 00a. After 8A, every pod keeps a Live dataset's calculated fields and refuses its figures. **8B** carries the features that need that. The owner cuts both. 00a must be deployed on every pod before 04 reaches a release: 04's merge gate is `git tag --contains <00a's merge commit>` (fetch tags outside work hours) and the owner's word that the rollout is done. 02 and 03 store nothing and ride in A; 01 stores nothing but needs part 1 step 10, so it is in B. 06 and 07 store nothing either; they wait only for part 1.
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p8-00a-live-calc-guard` | [00a](2026-11-04-semantic-layer-p8-00a-live-calc-guard.md) | — (part 1's 08a is in develop) | 8A |
-| 2 | `feat/semantic-p8-02-formula-builder` | [02](2026-11-04-semantic-layer-p8-02-formula-builder.md) | — | 8A or 8B |
-| 3 | `feat/semantic-p8-03-formula-sql` | [03](2026-11-04-semantic-layer-p8-03-formula-sql.md) | 02 | 8A or 8B |
-| 4 | `feat/semantic-p8-01-column-lineage` | [01](2026-11-04-semantic-layer-p8-01-column-lineage.md) | part 1 step 10 | 8A or 8B |
-| | **owner cuts 8A (with 00a), and it rolls out everywhere** | | | |
-| 5 | `feat/semantic-p8-04-live-calcs` | [04](2026-11-04-semantic-layer-p8-04-live-calcs.md) | 03, part 1 step 08, **00a released** | 8B |
-| 6 | `feat/semantic-p8-05-engine-pins` | [05](2026-11-04-semantic-layer-p8-05-engine-pins.md) | 04 (and a green nightly on its branch) | 8B |
-| 7 | `feat/semantic-p8-06-fan-out-charts` | [06](2026-11-04-semantic-layer-p8-06-fan-out-charts.md) | part 1 steps 09 and 05b | 8B |
-| 8 | `feat/semantic-p8-07-fan-out-kpis` | [07](2026-11-04-semantic-layer-p8-07-fan-out-kpis.md) | 06 | 8B |
-| 9 | `feat/semantic-p8-08-lineage-ui` | [08](2026-11-04-semantic-layer-p8-08-lineage-ui.md) | 01, 04, part 1 step 10 | 8B |
+| 1 | `feat/semantic-p8-00a-live-calc-guard` | [00a](2026-11-04-semantic-layer-p8-00a-live-calc-guard.md) | part 1 08a and 05a (release A; 05a's upgrade section takes Task 2's bullet) | A |
+| 2 | `feat/semantic-p8-02-formula-builder` | [02](2026-11-04-semantic-layer-p8-02-formula-builder.md) | — | A (stores nothing) |
+| 3 | `feat/semantic-p8-03-formula-sql` | [03](2026-11-04-semantic-layer-p8-03-formula-sql.md) | 02, 00a (`LiveCalc`) | A (stores nothing) |
+| | **00a, 02 and 03 ride in the combined release A with part 1's release-A PRs; the owner cuts release A, and it rolls out everywhere** | | | |
+| 4 | `feat/semantic-p8-01-column-lineage` | [01](2026-11-04-semantic-layer-p8-01-column-lineage.md) | part 1 step 10 | B (stores nothing) |
+| 5 | `feat/semantic-p8-04-live-calcs` | [04](2026-11-04-semantic-layer-p8-04-live-calcs.md) | 03, part 1 step 08, **00a released** | B |
+| 6 | `feat/semantic-p8-05-engine-pins` | [05](2026-11-04-semantic-layer-p8-05-engine-pins.md) | 04 (and a green nightly on its branch) | B |
+| 7 | `feat/semantic-p8-06-fan-out-charts` | [06](2026-11-04-semantic-layer-p8-06-fan-out-charts.md) | part 1 steps 09 and 05b | B |
+| 8 | `feat/semantic-p8-07-fan-out-kpis` | [07](2026-11-04-semantic-layer-p8-07-fan-out-kpis.md) | 06 | B |
+| 9 | `feat/semantic-p8-08-lineage-ui` | [08](2026-11-04-semantic-layer-p8-08-lineage-ui.md) | 01, 04, part 1 step 10 | B |
 
 Plan numbers follow the spec's build order (1–8) plus the guard (00a). The chain moves the parser refactor (02, 03) ahead of lineage (01), because they need nothing from part 1 and 04 waits on them. 00a and 02 can start today. The rest start once part 1's chain has merged.
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 8: 00a, 02 and 03 are in release A; 01 and 04–08 are in release B, after part 1's release-B chain and part 4's 01–06 (so 01 classifies its readers in part 4's `COLUMN_TREATMENT`, and 06 tests a many side under column rules). Nothing of part 8's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
@@ -96,6 +100,7 @@ Plan numbers follow the spec's build order (1–8) plus the guard (00a). The cha
 - **D14 covers charts but not KPIs.** `reachesOther` (`src/ipc/rowDoors.ts:57-65`) only knows forward names (`relatedColumnNames`). A KPI over a many-side bare column would not be refused for a caller locked on P, and its sub-question would run inside P's lock scope. 07 adds the many-side names to the gate.
 - **D10 says pinned "by part 1 D14's `via`".** But a `via` names one relationship, and `viaPath` prefixes the default path, so one `via` can't pin an arbitrary multi-hop path. Fan-out answers when the phrasing provably resolves to the pin, and refuses otherwise.
 - **D3 versus the non-goal "Prepare typing unchanged".** `retypeColumn` types a text calc by its values: `'12'` becomes a number, ISO text a date. A copy and Live then differ on such a calc, and that is pin 9.
-- **D20 conflicts with part 2's PR 1 test.** Part 2's PR 1 trims the table for viewers only, and its negative control pins that an editor still reads "Table …" in `lineage:get`. D20 removes it for every reader. 01 rewrites that control to "the editor reads the connector kind too" if part 2's PR lands first.
-- **Part 5 defers "Live funnels and snapshots, symmetric aggregates, Approach B" to part 8**, but part 8's approved design has none of them: it rejected B and C, and D15 keeps Live joins out. Part 5's distinct counts need only a differential case on 06's planner.
+- **D20 conflicts with part 2's PR 1 test.** Part 2's PR 1 trims the table for viewers only, and its negative control pins that an editor still reads "Table …" in `lineage:get`. D20 removes it for every reader. Part 2's PR 1 is in release A, so 01 (release B) rewrites that control unconditionally: the lineage half reads the connector kind for the editor too, Task 1's `dataset:source` editor control stays the non-vacuous anchor, and the `pipelines:get` half stays only if the editor's text still carries the canary through the planted run error (cross-part check item 1).
+- **Part 5 defers "Live funnels and snapshots, symmetric aggregates, Approach B" to part 8**, but part 8's approved design has none of them: it rejected B and C, and D15 keeps Live joins out. **Non-goal of parts 1–8:** Live funnel metrics, per-account snapshots on Live, symmetric aggregates and Approach B stay refused (typed); part 5's plans already refuse them. Part 5's distinct counts need only a differential case on 06's planner, and 06 carries it (`countd` in its differential; cross-part check items 2 and 12).
+- **Later (not in this part):** column nodes under part 2's source tables (`perTableGraph`, `source:st:` nodes), as a follow-up after 08 if the owner asks (cross-part check item 11).
 - `src/ipc/visuals.ts` is 773 lines now, not 769, after release 1.

@@ -30,7 +30,7 @@ No tool writes or verifies. The `answer-data-questions` skill checks verified qu
 - **`answer_verified_question { question }`** takes an id, or the question or one of its phrasings, matched on `questionKey` (05).
   - A hidden question or an unknown one refuses: "No verified question “{question}” in this project." Hiding never says "hidden".
   - A broken one refuses with its `problem`.
-  - It returns `{ id, question, dataset, labels, series: [{ name, values }], headline?, asOf?, verifiedBy, verifiedAt, note? }`.
+  - It returns `{ id, question, dataset, labels, series: [{ name, values }], headline?, asOf?, verifiedBy, verifiedAt, note?, notes? }`. `notes` is the card's `notes` when non-empty, so part 4's retired-metric sentence (`retiredNotes`, cross-part check item 8) reaches an agent too; a question on a retired metric still answers.
   - `headline` (`{ label, value, display }[]`, `src/ai/answerFacts.ts:79-83`) is included only when the Share policy left `labels` and series names unchanged. A masked label must not leave inside a headline.
   - A policy refusal is the `aggregate` sentence (`creators.ts:108`).
 - **`get_instructions`** returns `{ framing: GUIDANCE_FRAMING, instructions: [{ text, updatedBy, updatedAt }] }`. A text holding the fence (03) is left out, as in the block. `GUIDANCE_FRAMING` is the block's header, exported from `src/ai/guidanceFacts.ts`.

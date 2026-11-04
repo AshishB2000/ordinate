@@ -34,7 +34,7 @@
 - **Line budgets:**
   - `src/ipc/copilot.ts` (605): +2 lines.
   - `src/ipc/answers.ts` (510): +2.
-  - `src/app/catalog.ts` (428): `mutate` exported (0 lines).
+  - `src/app/catalog.ts` (428): untouched. Part 1 step 01 already exports `mutate` as `mutateCatalog` (p1-01 Task 4).
   - `web/src/features/settings/WorkspaceTab.tsx` (412): label edits and one link only.
 - Sentences go in `src/app/instructionMessages.ts` (added to `MAIN_FILES`), then `node scripts/i18n-extract.js`.
 - No `Co-Authored-By` or AI trailer on any commit.
@@ -56,7 +56,7 @@
 ### Task 1: The store and its two channels
 
 **Files:**
-- Modify `src/app/instructions.ts` (02); `src/app/catalog.ts:276` (`export function mutate`); `src/api/catalog.ts` (append two contracts); `src/ipc/catalog.ts` (two handlers); `scripts/rowPolicyReaders.ts`; `scripts/i18n-extract.ts`.
+- Modify `src/app/instructions.ts` (02); `src/api/catalog.ts` (append two contracts); `src/ipc/catalog.ts` (two handlers); `scripts/rowPolicyReaders.ts`; `scripts/i18n-extract.ts`.
 - Create `src/app/instructionMessages.ts`.
 - Test: extend `scripts/test-instructions.ts`.
 
@@ -84,7 +84,7 @@ instructionGone() "That instruction was removed by someone else."
 - `add` appends `{ id: randomUUID(), text: oneLine(text), updatedBy: osUser(), updatedAt: now }`.
 - `edit` replaces the text and the stamp.
 - `remove` deletes the item.
-- Each op runs inside `catalog.mutate`, so it reads the file fresh under the lock.
+- Each op runs inside part 1's `mutateCatalog` (`src/app/catalog.ts`, exported by part 1 step 01), so it reads the file fresh under the lock.
 
 - [ ] **Step 1: Write the failing test** — §2, over the `handlers` map (as `test-askFollowUp.ts:34` loads it):
   ```ts
@@ -101,7 +101,7 @@ instructionGone() "That instruction was removed by someone else."
   ok('a viewer may read, not write', (await asViewer(() => call('catalog:instructions', { projectId: P }))).ok && await refusedForViewer('catalog:setInstructions'));
   ```
 - [ ] **Step 2: Run it to see it fail** — `npm run build:ts && node scripts/test-instructions.js` → `No handler for catalog:setInstructions`; `node scripts/check-contracts.js` lists two unresolved.
-- [ ] **Step 3: Implement** — as in Interfaces. Add `'catalog:instructions': 'META', // editor prose (D5)` to `rowPolicyReaders.ts`. Then `node scripts/i18n-extract.js`.
+- [ ] **Step 3: Implement** — as in Interfaces. Add `'catalog:instructions': 'META', // editor prose (D5)` to `rowPolicyReaders.ts`, and `'catalog:instructions': 'META'` to `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B). Then `node scripts/i18n-extract.js`.
 - [ ] **Step 4: Run it to see it pass** — `node scripts/test-instructions.js`, `node scripts/check-contracts.js` (0 unresolved), `node scripts/test-i18n.js`, `node scripts/test-catalog.js`.
 - [ ] **Step 5: Commit** — `git add src/app/instructions.ts src/app/instructionMessages.ts src/app/catalog.ts src/api/catalog.ts src/ipc/catalog.ts scripts/rowPolicyReaders.ts scripts/i18n-extract.ts src/i18n/*.json scripts/test-instructions.ts` · "Let editors keep a project's Assistant instructions, one at a time"
 

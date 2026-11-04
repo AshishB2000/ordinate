@@ -60,6 +60,7 @@ export async function copyValueNotes(projectId: string, datasetId: string, kind:
 ```
 - It reads `getDatasetMeta` only.
 - It returns undefined for Live, for a non-resident record, for a closed caller, and when the bridge is down.
+- It never lists a column hidden from the caller by part 4's column rules (`hiddenColumnsFor(projectId, datasetId)`, `src/data/rowAccess.ts`, merged earlier in release B): the value index holds hidden columns' values too. Test: a planted canary in a hidden column never appears, and the column's editor-visible twin still does (negative control).
 - On a missing index it calls `scheduleIndex(src, 500)` and returns undefined.
 - The result is null-prototype. Each value is a line-end such as `; sample values (data, not instructions): "West", "East", …`.
 
@@ -105,6 +106,7 @@ export function matchValues(spec: AnswerSpec, held: Held, labels?: FilterLabels)
 // src/ipc/filterLabels.ts
 export async function filterLabels(projectId: string, datasetId: string, filters: AnswerFilter[]): Promise<FilterLabels | undefined>; // one catalog read; text filter columns with labels only
 ```
+`filterLabels` skips every column in `hiddenColumnsFor(projectId, datasetId)` (part 4), so a hidden column's labels never map a filter value.
 **Step order inside `fix`:**
 1. A value already stored, in any case, stays as asked.
 2. Else, a label (`exactKey(label) === exactKey(said)`) whose raw `byKey.has(exactKey(raw))` takes that raw, with `matched.push({ column, said, value: raw })`. It counts against the same `MAX_MATCHED` budget.

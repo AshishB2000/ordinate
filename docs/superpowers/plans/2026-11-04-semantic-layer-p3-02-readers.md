@@ -6,7 +6,7 @@
 **Architecture:** Readers only. The catalog sanitizer keeps a new optional `instructions` section, read by a new `sanitizeInstructions`. `normalizeTurns` and `appendTurn` keep a new optional `guidance` on assistant turns, read by a new `sanitizeGuidance`. The bundle whitelist admits `verified/<uuid>.json`. Each reader is pinned by a "re-save keeps it" test and a negative control.
 **Tech Stack:** `src/app/catalog.ts`, `src/ai/copilot.ts`, `src/app/bundleRules.ts`, self-checks.
 **Spec:** docs/semantic-layer/03-ai.md D1, D7, D11, and the brief's rolling-deploy rule · Index: docs/superpowers/plans/2026-11-04-semantic-layer-p3-00-index.md
-**Branch and PR:** `feat/semantic-p3-02-readers` off `origin/develop`, one PR to `develop`, release P3-A. It needs nothing merged first.
+**Branch and PR:** `feat/semantic-p3-02-readers` off `origin/develop`, one PR to `develop`, release P3-A. It needs part 1 01a merged (release 1): its `tables` line in `sanitizeCatalog` and `test-tableDocs` are what Task 1 builds on. Nothing from part 1's release 2.
 
 ## Global Constraints
 

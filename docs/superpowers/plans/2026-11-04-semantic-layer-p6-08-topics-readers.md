@@ -56,12 +56,16 @@ Test: extend `scripts/test-exploreSuggest.ts`, `web/src/features/explore/explore
 
 ### Task 2: The Assistant reads a topic
 
-**Files:** Create `src/ai/topicFacts.ts`. Modify `src/api/assistant.ts:22-28` (`'topic'` in `Context.kind`), `src/ipc/copilot.ts:182-190` (one branch before `kind === 'dataset'`), `web/src/features/assistant/ContextPicker.tsx:21` (`CONTEXT_ICON.topic = 'layers'`) and `:28-37` (a "Topics" group first, from `useNavigation`). Test: extend `scripts/test-copilot.ts`, `web/src/features/assistant/dockScreens.test.tsx`.
+**Files:** Create `src/ai/topicFacts.ts`. Modify `src/ipc/guidance.ts` (part 3: the `'topic'` arm), `src/api/assistant.ts:22-28` (`'topic'` in `Context.kind`), `src/ipc/copilot.ts:182-190` (one branch before `kind === 'dataset'`), `web/src/features/assistant/ContextPicker.tsx:21` (`CONTEXT_ICON.topic = 'layers'`) and `:28-37` (a "Topics" group first, from `useNavigation`). Test: extend `scripts/test-copilot.ts`, `web/src/features/assistant/dockScreens.test.tsx`.
 **Interfaces:** Consumes `copilot.projectFacts` (`src/ai/copilotFacts.ts:530`), `catalogColumns` and `liveInventoryNotes` (the inventory path at `src/ipc/copilot.ts:375-386`), `closedToCaller`, `describeDefinitionShort`, part 1's `termLines`. Produces `topicFacts(projectId: string, id: string, emit: ActivityEmit): Promise<CopilotFacts | null>` (null: no such topic, so `buildFacts` falls through to the inventory). Its facts are, in order:
 1. `projectFacts` over the topic's datasets in topic order, each with the topic's fields (all, without `fields`) and that path's docs and notes;
 2. for a dataset with `fields`, one line `- Orders also has, outside this topic: a, b, c`;
 3. the topic's metrics, one line each, `- Metric Revenue: <describeDefinitionShort>`;
 4. its terms, through `termLines`.
+
+Two rules from the parts that land before this one (cross-part check items 6 and 9):
+- **Part 4.** The metric and term lines go through part 4's `vocabularyOrder` (certified first, retired dropped unless the question names it; `src/analysis/statusNotes.ts`), and every column, metric and term hidden from the caller is dropped (`dropHidden`, `metricHidden`, `termHidden`). The same drops apply to MCP `list_topics` and `describe_dataset`'s `inTopic` columns.
+- **Part 3.** `askGuidance` (`src/ipc/guidance.ts`) gains a `'topic'` arm: the guides of the topic's datasets, in topic order, the first 12, with the caps the `'project'` arm uses. Without it a topic chat has no guides at all, because part 3 moved them out of the table notes. Test: `copilot:ask` with a topic context prints the topic's first dataset guide; NEGATIVE CONTROL: a dataset outside the topic's guide is absent.
 
 `emit({ kind: 'read', label: 'Read the topic Sales' })` once.
 - [ ] **Step 1: Write the failing test** — `test-copilot.ts`, through `buildFacts(P, { kind: 'topic', id: T })`:

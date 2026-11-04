@@ -95,7 +95,12 @@ export function keyColumns(primary: string, others: string[], input: LineageInpu
 ```
 - The fields that name columns: `category`, `series`, `values[].column` (no `metricId`), `pivot.rows/columns/values`, `geo.lat/lon/lat2/lon2/from/to/color/property`, `cohort.entity/date/value`, `eventFunnel.entity/event/time`, `drivers` (its metric column and path columns), `facet.rowField/colField`, and every filter's `column`.
 - A bare filter column takes `resolveColumnOwner(primary, column, rels, infos)` (`src/analysis/joinPlan.ts`); `infos` are built from `input.datasets`.
-- **D20 and part 2.** Part 2's PR 1 (`2026-11-04-semantic-layer-p2-01-viewer-source-names.md`, Task 2) trims `origin.table` in `loadInput` for viewers only. Its negative control asserts that an EDITOR still reads "Table public.canary_tbl_9f3" in `lineage:get`. D20 drops the table for every reader, editors and `pipelines:get` included. If that PR has merged, change its control in `scripts/test-sourceNamesHidden.ts` to "the editor reads the connector kind too", and keep its trim: it still guards `pipelines:get`'s other fields. This is the approved D20, not a regression.
+- **D20 and part 2.** Part 2's PR 1 (`2026-11-04-semantic-layer-p2-01-viewer-source-names.md`, Task 2) trims `origin.table` in `loadInput` for viewers only. Its negative control asserts that an EDITOR still reads "Table public.canary_tbl_9f3" in `lineage:get`. D20 drops the table for every reader, editors and `pipelines:get` included. That PR is in release A, so it has merged by now: change its control in `scripts/test-sourceNamesHidden.ts` unconditionally.
+  - The lineage half becomes `srcNode(await lin('ed')).sub === 'postgres'` ("the editor reads the connector kind too"). Keep the viewer assertion as a regression guard: D20 makes it structural.
+  - The non-vacuous anchor for the name rule is Task 1's `dataset:source` control: the editor still reads `Connection · Warehouse · public.canary_tbl_9f3` there.
+  - Keep the `pipelines:get` half (`CANARY.test((await pipe('ed')).text)`) only if the editor's text still carries the canary through Task 3's planted run error; otherwise drop that half from the control.
+  - Keep part 2's `loadInput` trim: it still guards `pipelines:get`'s other fields.
+  This is the approved D20, not a regression.
 - `visualColumns` (:97) stays as it is: `src/analysis/liveDependents.ts` and `src/engine/live/liveMissing.ts` share it for Live datasets, which have no joins.
 - `metricColumns` passes `compileMetricFormula(formula, own + reachable columns)`: `aggregates[].column` are columns, `metricRefs` are metric names, and an LOD aggregate's columns are `compile(column).fn.refs`.
 - [ ] **Step 1: Write the failing test.**
@@ -111,8 +116,8 @@ export function keyColumns(primary: string, others: string[], input: LineageInpu
   ```
 - [ ] **Step 2: Run it to see it fail.** `npm run build:ts && node scripts/test-lineageColumns.js` → `consumerColumns` missing.
 - [ ] **Step 3: Implement.** `buildGraph`'s visual loop: `for (const [ds, cols] of consumerColumns(v, input)) for (const src of inputsFor(ds, cols)) link(src, id);`. The metric loop uses `metricColumns`.
-- [ ] **Step 4: Run it to see it pass.** `node scripts/test-lineageColumns.js && node scripts/test-lineage.js && node scripts/test-figureDatasets.js && node scripts/test-pipelines.js` → all green.
-- [ ] **Step 5: Commit.** `git add src/analysis/lineageColumns.ts src/analysis/lineage.ts scripts/test-lineageColumns.ts` (and `scripts/test-sourceNamesHidden.ts` once part 2's PR 1 has merged) · "Attribute each field a figure reads to its own dataset and read metric formulas by the parser"
+- [ ] **Step 4: Run it to see it pass.** `node scripts/test-lineageColumns.js && node scripts/test-lineage.js && node scripts/test-figureDatasets.js && node scripts/test-pipelines.js && DATABASE_URL=… node scripts/test-sourceNamesHidden.js` → all green.
+- [ ] **Step 5: Commit.** `git add src/analysis/lineageColumns.ts src/analysis/lineage.ts scripts/test-lineageColumns.ts` and `scripts/test-sourceNamesHidden.ts` · "Attribute each field a figure reads to its own dataset and read metric formulas by the parser"
 
 ### Task 3: column and term nodes
 **Files:** Modify `src/analysis/lineageColumns.ts` (append `addColumnNodes`) and `src/analysis/lineage.ts` (`LineageKind` :32 gains `'column' | 'term'`; `KIND_RANK` :61 gains `column: 3, term: 4`). Test: `scripts/test-lineageColumns.ts` § nodes.
@@ -151,6 +156,7 @@ export function keyColumns(primary: string, others: string[], input: LineageInpu
 - `src/api/lineage.ts`: append two contracts.
 - `src/ipc/lineage.ts`: `loadInput` (:29-52) also reads `terms.listTerms` → `getTerm` and `relationships.listRelationships`; two handlers inside `register()` (:84).
 - `scripts/rowPolicyReaders.ts`: two `META` entries.
+- `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B): `'lineage:column': 'META'` and `'lineage:fields': 'META'` (names and counts, never values).
 - `scripts/test-rowPolicySafetyNet.ts`: both in its META walk.
 
 Test: `scripts/test-lineageColumns.ts` § channel (on `scripts/liveRouteHarness.ts`).

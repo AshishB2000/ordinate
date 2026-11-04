@@ -6,7 +6,7 @@
 **Architecture:** One new pure module `src/app/statusDocs.ts`, which `sanitizeCatalog` calls. `writeRecordKeepingPolicy` and the first-write store generalise from `rowPolicy` to a list of kept keys. In `src/data/rowAccess.ts`, a fourth `Effective` kind `columns` refuses with the new reason `columns`.
 **Tech Stack:** `src/app`, `src/data`, `src/ipc/liveDatasets.ts`, `docs/server/upgrade.md`.
 **Spec:** docs/semantic-layer/04-governance.md (D2, D13, D17) · Index: 2026-11-04-semantic-layer-p4-00-index.md
-**Branch:** `feat/semantic-p4-01a-readers` off `origin/develop`. Needs nothing from part 1 release 2. Release A is the first release that contains it.
+**Branch:** `feat/semantic-p4-01a-readers` off `origin/develop`. Needs part 1 01a merged (release 1: `src/app/tableDocs.ts` and the `tables` reader in `sanitizeCatalog`, which Task 1 copies and sits beside). Needs nothing from part 1 release 2. Release A is the first release that contains it.
 
 ## Global Constraints
 - Nothing in this PR writes `status` or `columnAccess`. It only reads, keeps and refuses. A project without them behaves byte-identically. The negative controls prove that.
@@ -66,6 +66,7 @@ ok('NEGATIVE CONTROL: no section in, none out (byte-identical catalog)', !('stat
 **Files:** Modify `src/data/datasetRecord.ts:270-323`, `src/data/rowAccess.ts:331-347` (`rulesForCopyOf`, `savedFrom`), `src/ipc/liveDatasets.ts:223-224` · Test `scripts/test-governanceReaders.ts` (part 2)
 **Interfaces:** Produces
 - `export const KEPT_RECORD_KEYS = ['rowPolicy', 'columnAccess'] as const;` `export type KeptRules = Partial<Record<typeof KEPT_RECORD_KEYS[number], unknown>>;`
+  Beside it, a comment: the Live-only top-level keys `baseFilters` (part 1 08), `calculated` (part 8) and `semantic` (part 7) are deliberately NOT kept. The only `persist` of a Live record is `toExtractRecord`, which folds base filters and calcs into Prepare steps or is refused (semantic datasets; calcs on an 8A pod), so keeping them would leave stale Live keys on an extract. Never widen this list to "every unknown key".
 - `writeRecordKeepingPolicy(file, obj)`: `delete next[k]` for each kept key. Then each key the **stored** record has is copied from it. Otherwise, on a first write, each key the first-write store has is copied from there.
 - `withFirstWritePolicy(rules: KeptRules, fn)` (was `rowPolicy: unknown`). `storedRules(projectId, id): Promise<KeptRules>` replaces `storedRowPolicy`: only the keys the record has. ENOENT gives `{}`, any other failure throws, as today.
 - `rulesForCopyOf(projectId, sourceId): Promise<KeptRules | undefined>`. Undefined when the source is neither `policyClosed` nor carrying `columnAccess`. Otherwise `{ ...storedRules }`, plus the closed row policy `{ column: '', rules: [], stepsHash: '' }` for a source closed only by something upstream (as today). `savedFrom` and `copyLive` pass the result through.
@@ -78,6 +79,9 @@ await plant(D); await datasets.updateSteps(P, D, [{ type: 'filter', column: 'dep
 ok('a data write (persist) keeps columnAccess', await kept(D));
 for (const [name, write] of WRITERS) { await write(D); ok(`${name} keeps columnAccess`, await kept(D)); }
 // WRITERS: markRefresh, setAutoRefresh, writeQuality, writeIncremental, setRowPolicy's serialized save, trash → restore, datasets.saveDataset over an existing id (re-import)
+// LIVE_WRITERS, on a Live record LV with columnAccess planted: bumpEpoch, writeSchemaSync
+for (const [name, write] of LIVE_WRITERS) { await plant(LV); await write(LV); ok(`Live: ${name} keeps columnAccess`, await kept(LV)); }
+await plant(LV); const liveCopy = await copyLive(P, LV); ok('a copyLive copy is born with the source\'s columnAccess', await kept(liveCopy!.id));
 const copy = await savedFrom(P, D, () => datasets.saveDataset(P, { name: 'copy', sourceKind: 'combined', columns: COLS, rows: ROWS }));
 ok('a copy is born with the source\'s columnAccess (first write)', await kept(copy!.id));
 ok('a copy of a source with no rules carries none', !('columnAccess' in (await raw(P, (await savedFrom(P, PLAIN, saveOther))!.id))));

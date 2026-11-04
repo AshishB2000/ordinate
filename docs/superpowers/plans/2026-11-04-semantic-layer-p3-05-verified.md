@@ -143,6 +143,7 @@ The sentences are:
   - `src/api/index.ts` (append);
   - `src/server/app.ts:592` (add `'../ipc/verified'` to the AI modules' array: 0 new lines);
   - `scripts/rowPolicyReaders.ts` (`'verified:list': 'REDACT', // D5: no spec with a value filter on a closed dataset`);
+  - `scripts/columnAccessReaders.ts` (part 4 p4-06's `COLUMN_TREATMENT`, merged earlier in release B): `'verified:list': 'DROP'`: a row whose spec names a column hidden from the caller (`mentionsHidden(spec, await hiddenColumnsFor(projectId, spec.datasetId))`) is left out of the list, so neither its chip nor its example reaches them;
   - `scripts/test-liveSafetyNet.ts` (`ROW_READERS` and `ROUTED`, `:144-220`);
   - `scripts/test-rowPolicySafetyNet.ts`;
   - `src/ai/previousAnswer.ts:27` (export `filterWords`).
@@ -202,6 +203,8 @@ export async function saveVerifiedQuestion(projectId: string, input: z.infer<typ
 - Modify `web/src/features/assistant/AnswerCard.tsx`: `:37-56`, `Card.verified?`; `:118-128`, the badge in `s.meta`.
 
 **Interfaces:** Produces `verifiedMark(projectId: string, spec: AnswerSpec): Promise<{ verified?: { id: string; question: string; by: string; at: string } }>`. It looks at working, not hidden states only. The badge reads `✓ Verified · {by}`, with `title="Verified {date}: {question}"`.
+
+**A retired metric (part 4, merged earlier in release B; cross-part check item 8).** A verified question whose spec names a retired metric keeps running: it names the metric, as part 4's "drop retired unless named" rule allows. `verifiedProblem` is unchanged (no retired check), and the card carries part 4's `retiredNotes` sentence through `computeCard`'s `notes` (p4-04). Test: retire the question's metric, then `verifiedProblem` is null, the card is drawn with the mark, and its `notes` hold `retiredNote(...)`; NEGATIVE CONTROL: with the metric certified, no retired note.
 
 - [ ] **Step 1: Write the failing test** — §4:
   ```ts

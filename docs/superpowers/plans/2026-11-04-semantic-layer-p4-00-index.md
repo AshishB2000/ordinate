@@ -12,8 +12,8 @@
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p4-01a-readers` | [01a](2026-11-04-semantic-layer-p4-01a-readers.md) | none (develop) | **A** |
-| | **the owner cuts release A, and it rolls out on every pod** | | | |
+| 1 | `feat/semantic-p4-01a-readers` | [01a](2026-11-04-semantic-layer-p4-01a-readers.md) | part 1 01a (release 1: `tableDocs.ts`, whose style and `sanitizeCatalog` line Task 1 builds on) | A |
+| | **the owner cuts release A (with part 1's release-A PRs and the other parts' readers), and it rolls out on every pod** | | | |
 | 2 | `feat/semantic-p4-01-status-store` | [01](2026-11-04-semantic-layer-p4-01-status-store.md) | 01a **released**; part 1 05b (terms) | B |
 | 3 | `feat/semantic-p4-02-status-replies` | [02](2026-11-04-semantic-layer-p4-02-status-replies.md) | 01; part 1 10 (Data model section) | B |
 | 4 | `feat/semantic-p4-03-status-web` | [03](2026-11-04-semantic-layer-p4-03-status-web.md) | 02 | B |
@@ -22,7 +22,7 @@
 | 7 | `feat/semantic-p4-06-column-everywhere` | [06](2026-11-04-semantic-layer-p4-06-column-everywhere.md) | 05 | B |
 | 8 | `feat/semantic-p4-07-column-setter` | [07](2026-11-04-semantic-layer-p4-07-column-setter.md) | 06 (the setter merges last) | B |
 
-**Release A** is whichever release first contains 01a. The owner may cut it together with part 1's release 2. **Release B** is cut only after PR 8 merges. 01's merge gate checks that 01a has been released: `git tag --contains <01a merge sha>` must list a `v*` tag (the same check as part 1 05b's Task 8). 02–07 are chained in this order because they share `rowDoors.ts`, `rowAccess.ts`, `ipc/metrics.ts` and the web pickers. The owner merges fast, so push them as an ordered chain, never as parallel PRs.
+**Release A** is the combined release A (see [Combined release order](#combined-release-order)): 01a rides in it with part 1's release-A PRs. **Release B** is the combined release B: 01–06 merge right after part 1's release-B chain and before parts 2, 3, 6 and 8's release-B PRs, and 07 merges last in B. Release B is cut only after PR 8 merges. 01's merge gate checks that 01a has been released: `git tag --contains <01a merge sha>` must list a `v*` tag (the same check as part 1 05b's Task 8). 02–07 are chained in this order because they share `rowDoors.ts`, `rowAccess.ts`, `ipc/metrics.ts` and the web pickers. The owner merges fast, so push them as an ordered chain, never as parallel PRs.
 
 ## Rolling deploys: what an older pod does with each new thing
 
@@ -35,6 +35,10 @@
 | reply fields `status`, `hidden`, `hiddenColumns`, `review` | n/a | n/a | additive. An old browser tab ignores them. A hidden cell arrives as `null` in place, so old tabs never misalign a grid (05) |
 
 The setter for column rules ships in the same release B as enforcement. That is safe because release A pods fail closed on any `columnAccess`. Never `helm rollback` below release A once rules exist (01a Task 4 says so in `docs/server/upgrade.md`).
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 4: 01a is in release A; 01–06 are in release B right after part 1's release-B chain, so `COLUMN_TREATMENT` and the prompt canaries bind every later release-B PR; 07, the setter, is the last PR of release B. Nothing of part 4's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
@@ -71,7 +75,7 @@ The setter for column rules ships in the same release B as enforcement. That is 
 
 ## Interfaces other parts consume
 
-`StatusDoc`, `sanitizeStatus`, `parseStatusRef`, `STATUS_KINDS` (`src/app/statusDocs.ts`). `statusFor(projectId)` → `(ref) => Promise<StatusView | null>` and `StatusView` (`src/analysis/statusStore.ts`). `pinOf(projectId, ref)` (`src/analysis/statusPin.ts`). `hiddenColumnsFor(projectId, datasetId)`, `hiddenAnywhere(projectId)` (`src/data/rowAccess.ts`). `columnView`, `columnReason` (`src/data/columnGate.ts`). `gateColumns` (`src/ipc/columnDoors.ts`). `metricHidden`, `termHidden` (`src/analysis/columnHidden.ts`). `mentionsHidden`, `carriersOf`, `buildColumnAccess`, `columnAccessFromRecord` (`src/data/columnAccess.ts`). The reasons `hidden` and `columns` (`src/data/rowPolicyError.ts`). `COLUMN_TREATMENT` (`scripts/columnAccessReaders.ts`). Part 3 cites certified metrics through `statusFor`. Part 7 exports `StatusDoc`. Part 8's column lineage can reuse `carriersOf`.
+`StatusDoc`, `sanitizeStatus`, `parseStatusRef`, `STATUS_KINDS` (`src/app/statusDocs.ts`). `statusFor(projectId)` → `(ref) => Promise<StatusView | null>` and `StatusView` (`src/analysis/statusStore.ts`). `pinOf(projectId, ref)` (`src/analysis/statusPin.ts`). `hiddenColumnsFor(projectId, datasetId)`, `hiddenAnywhere(projectId)` (`src/data/rowAccess.ts`). `columnView`, `columnReason` (`src/data/columnGate.ts`). `gateColumns` (`src/ipc/columnDoors.ts`). `metricHidden`, `termHidden` (`src/analysis/columnHidden.ts`). `mentionsHidden`, `carriersOf`, `buildColumnAccess`, `columnAccessFromRecord` (`src/data/columnAccess.ts`). The reasons `hidden` and `columns` (`src/data/rowPolicyError.ts`). `COLUMN_TREATMENT` (`scripts/columnAccessReaders.ts`). No part 3 plan consumes `statusFor`: a verified question on a retired metric keeps running and carries `retiredNotes` (p3-05, p3-09; cross-part check item 8). Part 7 does not export `StatusDoc` in model files formatVersion 1 (design 07: "later, under a `formatVersion` bump"; item 10). No part 8 plan uses `carriersOf` (item 11). Parts 3, 6, 7 and 8 classify their new `read` contracts in `COLUMN_TREATMENT` and drop hidden columns from their prompts (item 6).
 
 ## Execution
 

@@ -12,21 +12,21 @@
 
 ## The PR chain
 
-Two releases. **5A ("keep what's coming")** is step 01 alone: every pod then keeps every part-5 shape through every save and computes none of it. **5B** holds the rest. The owner may cut 5A together with part 1's release 2 (it only adds readers). 5A must be rolled out on every pod before any 5B writer reaches a release; step 04, the first writer, checks it at merge.
+Part 5 ships in two of the three combined releases (see [Combined release order](#combined-release-order)): **5A** below means combined release **B**, and **5B**'s writers (04–10) are in combined release **C**. **5A ("keep what's coming")** is step 01 alone: every pod then keeps every part-5 shape through every save and computes none of it. **5B** holds the rest. 5A rides in release B, after part 1's release-B chain (01 needs step 10), with 02 and 03, which write nothing. 5A must be rolled out on every pod before any 5B writer reaches a release; step 04, the first writer, checks it at merge.
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
-| 1 | `feat/semantic-p5-01-readers` | [01](2026-11-04-semantic-layer-p5-01-readers.md) | part 1's `feat/semantic-p1-10-data-model-section` | 5A |
-| | **owner cuts 5A, and it rolls out everywhere** | | | |
-| 2 | `feat/semantic-p5-02-countd-engines` | [02](2026-11-04-semantic-layer-p5-02-countd-engines.md) | 01 | 5B (writes nothing; may ride in 5A) |
-| 3 | `feat/semantic-p5-03-countd-live` | [03](2026-11-04-semantic-layer-p5-03-countd-live.md) | 02 | 5B (writes nothing) |
-| 4 | `feat/semantic-p5-04-countd-editors` | [04](2026-11-04-semantic-layer-p5-04-countd-editors.md) | 03, **5A rolled out** | 5B |
-| 5 | `feat/semantic-p5-05-period-tiles` | [05](2026-11-04-semantic-layer-p5-05-period-tiles.md) | 04 | 5B |
-| 6 | `feat/semantic-p5-06-period-charts` | [06](2026-11-04-semantic-layer-p5-06-period-charts.md) | 05 | 5B |
-| 7 | `feat/semantic-p5-07-snapshot-per-entity` | [07](2026-11-04-semantic-layer-p5-07-snapshot-per-entity.md) | 06 | 5B |
-| 8 | `feat/semantic-p5-08-funnel-metrics` | [08](2026-11-04-semantic-layer-p5-08-funnel-metrics.md) | 07 (uses 06's `bucketSeries`) | 5B |
-| 9 | `feat/semantic-p5-09-targets` | [09](2026-11-04-semantic-layer-p5-09-targets.md) | 08 | 5B |
-| 10 | `feat/semantic-p5-10-target-charts-alerts` | [10](2026-11-04-semantic-layer-p5-10-target-charts-alerts.md) | 09 | 5B |
+| 1 | `feat/semantic-p5-01-readers` | [01](2026-11-04-semantic-layer-p5-01-readers.md) | part 1's `feat/semantic-p1-10-data-model-section` | B |
+| | **01–03 ride in release B; the owner cuts release B, and it rolls out everywhere** | | | |
+| 2 | `feat/semantic-p5-02-countd-engines` | [02](2026-11-04-semantic-layer-p5-02-countd-engines.md) | 01 | B (writes nothing) |
+| 3 | `feat/semantic-p5-03-countd-live` | [03](2026-11-04-semantic-layer-p5-03-countd-live.md) | 02 | B (writes nothing) |
+| 4 | `feat/semantic-p5-04-countd-editors` | [04](2026-11-04-semantic-layer-p5-04-countd-editors.md) | 03, **5A rolled out** | C |
+| 5 | `feat/semantic-p5-05-period-tiles` | [05](2026-11-04-semantic-layer-p5-05-period-tiles.md) | 04 | C |
+| 6 | `feat/semantic-p5-06-period-charts` | [06](2026-11-04-semantic-layer-p5-06-period-charts.md) | 05 | C |
+| 7 | `feat/semantic-p5-07-snapshot-per-entity` | [07](2026-11-04-semantic-layer-p5-07-snapshot-per-entity.md) | 06 | C |
+| 8 | `feat/semantic-p5-08-funnel-metrics` | [08](2026-11-04-semantic-layer-p5-08-funnel-metrics.md) | 07 (uses 06's `bucketSeries`) | C |
+| 9 | `feat/semantic-p5-09-targets` | [09](2026-11-04-semantic-layer-p5-09-targets.md) | 08 | C |
+| 10 | `feat/semantic-p5-10-target-charts-alerts` | [10](2026-11-04-semantic-layer-p5-10-target-charts-alerts.md) | 09 | C |
 
 The spec's build order is kept; its step 9 is split into 09 (model, tiles, scorecards) and 10 (charts, alerts), as the spec's own "then" says.
 
@@ -46,6 +46,10 @@ The spec's build order is kept; its step 9 is split into 09 (model, tiles, score
 | `FunnelEncoding.entry`, `series[].target`, tile `target`/`periodRange`, rule `metricGone` | runtime / reply only, never stored | — | an old tab draws a target series as a plain overlay |
 
 A rollback below 5A once such metrics exist turns them into `sum` or drops them; `docs/server/upgrade.md` says so (step 01, Task 5).
+
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 5: 01–03 are in release B, after part 1's release-B chain (5A's readers ride there); 04–10, the writers, are in release C, ahead of part 7's a1–a4, so a1 exports part 5's kinds and a2's lift of the metric save bodies into `src/ipc/metricSave.ts` carries 05, 08 and 09's checks verbatim. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
 
 ## Global Constraints
 
@@ -67,7 +71,7 @@ A rollback below 5A once such metrics exist turns them into `sum` or drops them;
 ## Interfaces other parts consume
 
 - `src/data/aggregations.ts` (01): `AGGREGATIONS`, `Aggregation`, `PLAIN_AGGREGATIONS`, `NUMBER_AGGREGATIONS`, `isAggregation`, `isCountLike`; `scripts/test-aggregationList.ts` forbids any other list in `src/`.
-- Definition kinds (01): `MetricFunnelDefinition`/`sanitizeFunnelDefinition` (`src/analysis/funnelMetric.ts`), `MetricPeriodDefinition`/`MetricWindow`/`MetricCompare`/`sanitizePeriodDefinition` (`periodMetric.ts`), `MetricTargetSpec`/`sanitizeTarget` (`metricTarget.ts`), `MetricSnapshot.per`, `isSimpleDefinition`/`isFunnelDefinition`/`isPeriodDefinition`, `Metric.target`; `pendingMetric` (`pendingKinds.ts`). Part 7 maps these 1:1 to MetricFlow's `count_distinct`, cumulative, conversion and `window_groupings`; parts 3 and 4 describe and certify them.
+- Definition kinds (01): `MetricFunnelDefinition`/`sanitizeFunnelDefinition` (`src/analysis/funnelMetric.ts`), `MetricPeriodDefinition`/`MetricWindow`/`MetricCompare`/`sanitizePeriodDefinition` (`periodMetric.ts`), `MetricTargetSpec`/`sanitizeTarget` (`metricTarget.ts`), `MetricSnapshot.per`, `isSimpleDefinition`/`isFunnelDefinition`/`isPeriodDefinition`, `Metric.target`; `pendingMetric` (`pendingKinds.ts`). Part 7's dbt import (f1) maps `count_distinct` → `countd` and skips cumulative, conversion, time offset and `window_groupings` in v1 (design 07's non-goal); a later translator-only PR, f2 (after step 08), maps their exact shapes: `window_groupings: [entity]` → `snapshot.per`, cumulative `grain_to_date` → period `to_date` and `window` → `last N`, a time-offset derived metric → period `compare`, a two-step conversion → funnel (cross-part check item 3). Parts 3 and 4 describe and certify them.
 - `countDistinct(cells, type)` / `countDistinctSql(p, type)` (02); `SqlDialect.countDistinct` and refusal `distinctByWeekCalendar` (03).
 - `windowedScope`, `windowRange`, `pctChange` (`src/analysis/periodMath.ts`, 05); `ResolvedMetric.periodRange`, `.notes`.
 - `bucketSeries` (`src/ipc/metricBuckets.ts`), `bucketRange`, `fillBuckets` (06): the per-bucket loop for any metric figure on a date axis; `PlanResult.special` for measures that chart alone.
@@ -89,7 +93,8 @@ A rollback below 5A once such metrics exist turns them into `sum` or drops them;
 - **Per-account snapshots** are a real row-level path (part 1 composed doors around one day, which can't express a day per account), and v1 refuses them with FX conversion, parameter-replayed pipelines or related-table filters (`shortcut:` comment).
 - **Targets:** the covered range ends at today (that is what makes Nov 1–20 pro-rate); row rules compare `rowLockFor` on both datasets; segments use `joinPlan.resolveColumnOwner`; `metric_value` has no scope argument, so it reports "Pick a period" for an additive target.
 - **Target series** are not drawn on `/p/` pages and stories (they draw no overlays today); `/p/` KPI tiles carry the target.
-- **"Exported as `count_distinct`"** is left to part 7's export.
+- **"Exported as `count_distinct`"**: no part 7 export emits MetricFlow. The Ossie export (g1) maps a `countd` metric to the spec's distinct count only if the spec has one, and reports it otherwise.
+- **Not planned in parts 1–8** (design 05 deferred them to part 8, whose design has none): Live funnel metrics, per-account snapshots on Live, symmetric aggregates and Approach B. They stay refused with typed sentences (08, 07, part 1 07). Symmetric aggregates are superseded by part 8's drill-across fan-out, which needs only a `countd` differential case (p8-06; cross-part check items 2 and 12).
 
 ## Where the approved design and the code disagree
 

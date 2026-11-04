@@ -57,7 +57,7 @@ ok('a zip with a data descriptor or an encrypted entry is refused by the reader'
 
 ### Task 2: Match and map ids
 **Files:** Create `src/app/modelMatch.ts`, `scripts/test-modelMatch.ts`
-**Interfaces:** Produces `interface ModelMatch { datasets: Map<string, string | null>; terms: Map<string, string | null>; metrics: Map<string, string | null>; relationships: Map<string, string | null>; how: Map<string, 'id' | 'name'> }` (file id → target id, `null` = no match, keyed `kind:id` in `how`); `matchModel(file: ParsedModel, here: ParsedModel): ModelMatch`; `mapRefs<T>(o: T, m: ModelMatch): { value: T; missing: string[] }`, which rewrites `dataset`, `from.dataset`, `to.dataset`, term steps' `term` and steps' `via`, and lists every reference it could not map.
+**Interfaces:** Produces `interface ModelMatch { datasets: Map<string, string | null>; terms: Map<string, string | null>; metrics: Map<string, string | null>; relationships: Map<string, string | null>; how: Map<string, 'id' | 'name'> }` (file id → target id, `null` = no match, keyed `kind:id` in `how`); `matchModel(file: ParsedModel, here: ParsedModel): ModelMatch`; `mapRefs<T>(o: T, m: ModelMatch): { value: T; missing: string[] }`, which rewrites `dataset`, `from.dataset`, `to.dataset`, term steps' `term`, steps' `via` and a part 5 period metric's `definition.base` (a metric id), and lists every reference it could not map. A metric whose `definition.base` cannot be mapped is skipped `depends_on_skipped`, never written with a dangling id. The dry run also states a1's fixed list of kinds model files never carry, so the person knows an import leaves those as they are here.
 - [ ] **Step 1: Write the failing test.** Same id → `how 'id'`; other id, same name → `how 'name'` and the target id; a name differing only in case is **not** a match; `mapRefs` of a metric whose filter holds `{ type: 'term', term: T_FILE }` gives `T_HERE`; a `via` to an unmatched relationship is listed in `missing`.
 - [ ] **Step 2: Run it to see it fail.** `node scripts/test-modelMatch.js` → missing module.
 - [ ] **Step 3: Implement.**
@@ -103,7 +103,7 @@ ok('NEGATIVE CONTROL: the guide canary is in it', reply.includes(GUIDE_CANARY));
 - [ ] **Step 1: Write the failing test.**
 ```ts
 const NEG: Array<[string, ModelFiles, string]> = [
-  ['a duplicate value label', valueLabels(files, 'region', [{ value: 'EU', label: 'Europe' }, { value: 'EE', label: 'Europe' }]), valueLabelDuplicateMessage('Europe')],
+  ['a duplicate value label', valueLabels(files, 'region', [{ value: 'EU', label: 'Europe' }, { value: 'EE', label: 'Europe' }]), labelShared('Europe', 'EU', 'EE')],
   ['a term inside a term', termFilters(files, EMEA, [{ type: 'term', term: ENTERPRISE }]), termInTerm()],
   ['a metric named like a term', rename(files, 'Revenue', 'EMEA'), termNameTaken('EMEA', 'term')],
   ['two new metrics with one name', twoNew(files, 'Margin'), nameTakenMessage('Margin')],

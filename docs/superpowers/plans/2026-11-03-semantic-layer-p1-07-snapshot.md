@@ -53,14 +53,16 @@ The one new stored field is `Metric.definition.snapshot`.
 **Files:**
 - Modify `src/api/metrics.ts:10-13`: the simple branch of `Definition` gains `snapshot: z.strictObject({ column: z.string().min(1).max(512), take: z.enum(['last', 'first']) }).nullable().optional()`.
 - Modify `src/analysis/snapshot.ts`.
-- Modify `src/analysis/metrics.ts:406`, in `updateMetric`.
+- Read (do not change) `src/analysis/metrics.ts:413`, `updateMetric`: 02a already merges the snapshot there.
 - Modify `src/ipc/metrics.ts:466-497`: the `metric:save` and `metric:update` handlers.
 - Modify `src/analysis/metricFormat.ts:81-85` (`describeDefinitionShort`) and `src/analysis/metricCheckMessages.ts`.
 - Test: create `scripts/test-snapshot.ts`, section "store".
 
 **Interfaces:** Consumes `MetricSnapshot` and `sanitizeSnapshot` (step 02, Task 1). Produces:
 ```ts
-export function mergeSnapshot(next: MetricDefinition, raw: unknown, prev: MetricDefinition): MetricDefinition  // no `snapshot` key in raw → keep prev's; null → none
+// mergeSnapshot is NOT redefined here: 02a already ships `mergeSnapshot(incoming: unknown, stored: unknown): MetricSnapshot | undefined`
+// in this file (no `snapshot` key → keep the stored one; null → none), and `updateMetric` already calls it through
+// `sanitizeDefinition(patch.definition, existing.definition.snapshot)` (src/analysis/metrics.ts:413). Part 5 step 07 extends that one.
 export async function snapshotProblem(projectId: string, datasetId: string, def: MetricDefinition): Promise<string | null>
 export function snapshotNotDate(column: string): string   // metricCheckMessages.ts
 ```
@@ -93,7 +95,7 @@ await update(r.metric.id, { definition: { column: 'units', aggregation: 'sum', s
 ok('null clears it, byte-identical to a plain metric', JSON.stringify((await metrics.getMetric(pid, r.metric.id))!.definition) === '{"column":"units","aggregation":"sum"}');
 ```
 - [ ] **Step 2: Run it to see it fail.** `npm run build:ts && node scripts/test-snapshot.js` fails at "contract: save takes a snapshot".
-- [ ] **Step 3: Implement.** In `updateMetric`: `definition: patch.definition !== undefined ? mergeSnapshot(sanitizeDefinition(patch.definition), patch.definition, existing.definition) : existing.definition`. Call `snapshotProblem` in both handlers after the name check. The sentence: `` `${column} is not a date column, so it can't be a snapshot's date.` `` Then run `node scripts/i18n-extract.js`.
+- [ ] **Step 3: Implement.** `updateMetric` keeps 02a's merge as it is (`sanitizeDefinition(patch.definition, existing.definition.snapshot)` → `mergeSnapshot`); only check that the contract change above reaches it. Call `snapshotProblem` in both handlers after the name check. The sentence: `` `${column} is not a date column, so it can't be a snapshot's date.` `` Then run `node scripts/i18n-extract.js`.
 - [ ] **Step 4: Run it to see it pass.** `npm run build:ts && node scripts/test-snapshot.js scripts/test-snapshotReader.js scripts/test-metrics.js scripts/check-contracts.js scripts/test-i18n.js` reports 0 failures and 0 unresolved contracts.
 - [ ] **Step 5: Commit.** `git add src/api/metrics.ts src/analysis/snapshot.ts src/analysis/metrics.ts src/ipc/metrics.ts src/analysis/metricFormat.ts src/analysis/metricCheckMessages.ts src/i18n scripts/test-snapshot.ts && git commit -m "Let a simple metric be saved as a snapshot of its latest or earliest day"`
 

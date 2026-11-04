@@ -32,6 +32,7 @@
 **Interfaces:** Produces
 ```ts
 export async function metricHidden(projectId: string, id: string): Promise<boolean>; // its own and its dependencies' definition, column, formula text and filters (terms expanded) mention hiddenAnywhere
+// part 5's kinds (step 01, merged earlier in release B) count as definition: a funnel's entity, event and time columns, a period metric's `base` (walked as a dependency), `snapshot.per`, and a target's plan metric (`target.source.metricId`)
 export async function termHidden(projectId: string, id: string): Promise<boolean>;
 export async function hiddenAnywhere(projectId: string): Promise<ReadonlySet<string>>; // rowAccess.ts; memo per request; empty for an unrestricted caller
 ```

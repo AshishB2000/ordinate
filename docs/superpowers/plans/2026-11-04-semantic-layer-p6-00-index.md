@@ -12,13 +12,13 @@
 
 ## The PR chain
 
-Two releases. **Release A** holds what an older pod must already understand before any browser or pod writes it: the hierarchies reader (a pre-part-6 pod's `sanitizeTableDoc` would erase every hierarchy of a project on its next catalog write) and the server half of the cascading picker (so a release-B browser never meets a pod that refuses `dataset:distinct.filters`, or one that ignores it on Live without saying so). Release A needs nothing from part 1 beyond release 1, so if both PRs merge before the owner cuts part 1's release 2, they ride in it. **Release B** holds the features.
+Part 6 ships in two of the three combined releases, A and B (see [Combined release order](#combined-release-order)). **Release A** holds what an older pod must already understand before any browser or pod writes it: the hierarchies reader (a pre-part-6 pod's `sanitizeTableDoc` would erase every hierarchy of a project on its next catalog write) and the server half of the cascading picker (so a release-B browser never meets a pod that refuses `dataset:distinct.filters`, or one that ignores it on Live without saying so). Release A needs nothing from part 1 beyond its release-A PRs, so both PRs ride in the combined release A. **Release B** holds the features.
 
 | # | PR branch | Plan | Needs merged first | Release |
 |---|---|---|---|---|
 | 1 | `feat/semantic-p6-01a-hierarchies-reader` | [01 Task 1](2026-11-04-semantic-layer-p6-01-hierarchies.md) | part 1 01a (in a release) | A |
 | 2 | `feat/semantic-p6-05a-distinct-filters` | [05 Task 1](2026-11-04-semantic-layer-p6-05-cascading-pickers.md) | p6-01a | A |
-| | **owner cuts release A (or it rides in part 1's release 2), and it rolls out everywhere** | | | |
+| | **01a and 05a ride in the combined release A with part 1's release-A PRs; the owner cuts release A, and it rolls out everywhere** | | | |
 | 3 | `feat/semantic-p6-01-hierarchies` | [01 Tasks 2–5](2026-11-04-semantic-layer-p6-01-hierarchies.md) | part 1 step 10 (`src/api/model.ts`, the Data model page); p6-01a released | B |
 | 4 | `feat/semantic-p6-02-drill-down` | [02](2026-11-04-semantic-layer-p6-02-drill-down.md) | 01; the `resolveDrill` joined-category fix (else 02 Task 0 carries it) | B |
 | 5 | `feat/semantic-p6-03-explore-drill` | [03](2026-11-04-semantic-layer-p6-03-explore-drill.md) | 02 | B |
@@ -41,12 +41,16 @@ PRs are chained, never parallel: 04, 05 and 07 touch the same dashboard and Data
 
 New channels (`model:navigation`, `visual:drillDown`, `topic:*`) 404 on a release-A pod during release B's rollout. The web treats a failed `model:navigation` as "no hierarchies, no topics" (today's screens) and a failed drill as a toast plus today's rows drawer.
 
+## Combined release order
+
+All eight parts ship in three releases, **A**, **B** and **C**, in the merge order set by [the cross-part check](2026-11-04-semantic-layer-cross-part-check.md#c-combined-release-order) (section (c)). Part 6: 01a and 05a are in release A (05a carries the `distinctFor` lock-first line, since part 1 step 06 is in B); 01–08 are in release B, after part 1's release-B chain and part 4's 01–06, so 01, 02, 07 and 08 classify their readers in part 4's `COLUMN_TREATMENT` and 08 applies part 4's drops. Nothing of part 6's is in C. A writer never reaches a release before the reader of its field is rolled out on every pod; the owner may cut extra releases inside a gate, never fewer. `src/ipc/visuals.ts` is projected at about 790 of its 800 lines once parts 1, 4, 5, 6 and 8 have touched it: every PR that edits it states the file's line count in its body, and a PR that would take it past 795 splits `vizDataForUnlocked` out first.
+
 ## Global Constraints
 
 - No push, `gh pr create` or release on weekdays 08:00–18:00 local time (the owner's global rule, enforced by a hook). No release, `v*` tag or image push without the owner.
 - One worktree per PR off `origin/develop` (`feature-branch-workflow` skill); never commit to `develop`; never `git checkout`/`git switch` in the shared clone. No `Co-Authored-By` or AI trailer on any commit.
 - Engines do the math: a drill re-asks `visual:data`; crumbs, nesting and the cascade come from structure. The web never sums, derives or rounds a figure.
-- `src/ipc/visuals.ts` (773 lines) and `src/ipc/datasets.ts` (751) take at most 3 lines each; `src/ai/answerSpec.ts` (639) and `src/ipc/copilot.ts` (605) a few lines each; `src/server/app.ts` (652) none (modules join existing arrays at `:570` and `:602`). New logic goes in new files.
+- `src/ipc/visuals.ts` (773 lines, projected about 790 by 02; 02's Task 0 takes 1 line, its check lives in `drillScope.ts`) and `src/ipc/datasets.ts` (751, at most 3 lines); `src/ai/answerSpec.ts` (639) and `src/ipc/copilot.ts` (605) a few lines each; `src/server/app.ts` (652) none (modules join existing arrays at `:570` and `:602`). New logic goes in new files.
 - `src/api/index.ts`, `web/src/app/routes.tsx` and `web/src/app/nav.ts` are append-only (part 6 appends nothing to routes or nav).
 - Every new `read` contract is classified in `scripts/rowPolicyReaders.ts`; every new row-reading channel joins `scripts/test-liveSafetyNet.ts`; `node scripts/check-contracts.js` reports 0 unresolved; `npm run lint` reports 0.
 - Server sentences through `t()` in new message files added to `MAIN_FILES` (`scripts/i18n-extract.ts`), then `node scripts/i18n-extract.js`. The React UI is English-only.
