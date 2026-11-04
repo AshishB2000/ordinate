@@ -9,10 +9,13 @@ import * as path from 'path';
 import * as pqSync from '../src/engine/parquetStoreSync';
 import type * as jr from '../src/engine/joinResident';
 import type { DsInfo } from '../src/analysis/joinPlan';
+import * as jp from '../src/analysis/joinPlan';
+import * as js from '../src/analysis/joinJs';
+import type { VizEncoding } from '../src/analysis/visuals';
 import type { Relationship } from '../src/analysis/relationships';
 import { sanitizeRelationship } from '../src/analysis/relationships';
 import type { ParsedColumn } from '../src/data/parse';
-import type { Cell, TableData } from '../src/data/transforms';
+import type { Cell, FilterStep, TableData } from '../src/data/transforms';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-joinsvia-'));
 let seq = 0;
@@ -81,6 +84,51 @@ export const sourceOf = (id: string): jr.JoinSource => {
   const f = ALL.find((x) => x.id === id) as Fx;
   return { datasetId: id, parquetPath: f.file, columns: f.columns };
 };
+
+const M = (column: string, aggregation: 'sum' | 'count', datasetId?: string) => ({ column, aggregation, ...(datasetId && { datasetId }) });
+const F = (column: string, value: string): FilterStep => ({ type: 'filter', column, op: '=', value } as FilterStep);
+
+/** The no-via questions the golden pins (scripts/fixtures/golden/joinsNoVia.json): each resolves through the FIRST relationship. */
+export const NO_VIA: { label: string; enc: VizEncoding; filters: FilterStep[] }[] = [
+  { label: 'NV1', enc: { category: 'month', categoryDatasetId: DATES.id, values: [M('amount', 'sum')] }, filters: [] },
+  { label: 'NV2', enc: { category: 'region', values: [M('quarter', 'count', DATES.id)] }, filters: [] },
+  { label: 'NV3', enc: { category: 'region', values: [M('amount', 'sum')] }, filters: [F('quarter', 'Q1')] },
+];
+
+/** The KPI sum(amount) where quarter = 'Q2' (NV4), as the server's metric join plans it, over the JS reference. */
+function nv4(): unknown {
+  const filters = [F('quarter', 'Q2')];
+  const owner = jp.resolveColumnOwner(SALES.id, 'quarter', RELS, infos) as string;
+  const planned = jp.planTables(SALES.id, [owner], RELS);
+  if (!planned.ok) return planned;
+  const plan = planned.value;
+  const layout = jp.mergedLayout(plan, infos);
+  const ti = plan.tables.findIndex((t) => t.datasetId === owner);
+  const flt = filters.map((f) => ({ ...f, column: jp.mergedName(layout, plan, ti, f.column, infos) ?? f.column }));
+  return {
+    label: 'NV4',
+    tables: plan.tables.map((t) => [t.datasetId, t.via ? t.via.relId : null]),
+    columns: layout.columns,
+    value: js.joinedMetricJs(plan, layout, tables, infos, { column: 'amount', aggregation: 'sum', table: 0 }, flt),
+  };
+}
+
+/** Today's JS-reference answers for NV1-NV4. Recorded ONCE before the planner learned via; never re-recorded. */
+export async function noViaAnswers(): Promise<unknown> {
+  const out: unknown[] = NO_VIA.map((c) => {
+    const j = jp.resolveVizJoin(SALES.id, c.enc, c.filters, RELS, infos);
+    if (!j || !j.ok) return { label: c.label, plan: j };
+    const r = js.joinedVizDataJs(j.value, tables, infos);
+    return {
+      label: c.label,
+      tables: j.value.plan.tables.map((t) => [t.datasetId, t.via ? t.via.relId : null]),
+      columns: j.value.layout.columns,
+      data: r.data, warnings: r.warnings, category: r.category,
+    };
+  });
+  out.push(nv4());
+  return out;
+}
 
 export function removeFixture(): void {
   fs.rmSync(dir, { recursive: true, force: true });

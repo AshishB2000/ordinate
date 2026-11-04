@@ -8,6 +8,8 @@
 //             predicate, refused by Live; a KPI and a chart reached through `vizJoin` / `metricJoin`
 //             refuse it even in a project with NO relationships. Every guard has a negative control.
 //   § order   a re-saved relationship keeps its place and its id, so "the first relationship" holds
+//   § golden  no-via answers over a table related twice are byte-identical to scripts/fixtures/golden/joinsNoVia.json,
+//             recorded from the planner before it learned via (never re-recorded)
 //
 //   npm run build:ts && node scripts/test-joinsVia.js
 
@@ -38,6 +40,8 @@ const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers
 const { mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
 const cardModel: any = require('../src/analysis/cardModel'); // any: a UMD module with no exported types
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const wire: typeof import('../src/server/wire') = require('../src/server/wire');
+const GOLDEN = path.join(__dirname, 'fixtures', 'golden', 'joinsNoVia.json');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply is narrowed by its check
 
 const { SALES, DATES, R_ORDER, R_SHIP, RELS, infos } = fx;
@@ -50,6 +54,9 @@ async function main(): Promise<void> {
     salesTable.rows.length === 40 && salesTable.rows.some((r) => r[5] === 2025) && salesTable.rows.some((r) => r[5] === 2024));
   ok('fixture: Dates repeats 2024-03-01 and RELS lists Order date first',
     DATES.rows.filter((r) => r[0] === '2024-03-01').length === 2 && RELS.map((r) => r.id).join() === [R_ORDER, R_SHIP, fx.R_RET].join());
+
+  // ── § golden: no via, the first relationship, byte for byte ────────────────
+  ok('no-via answers are byte-identical to the recording made before the planner changed', wire.encode(await fx.noViaAnswers()) === fs.readFileSync(GOLDEN, 'utf8'));
 
   // ── § guard: the sanitizers keep the new fields ────────────────────────────
   const viaStep = { ...F('year', '=', 2024), via: R_SHIP };
