@@ -7,3 +7,13 @@ import { t } from '../app/i18n';
 export function sourceTablesFull(): string {
   return t('sourceTableMessages.this_connection_already_documents_2_000');
 }
+
+/** The connection a call named is not in this project (or was deleted, docs and all). */
+export function connectionGone(): string {
+  return t('sourceTableMessages.that_connection_is_gone');
+}
+
+/** The doc a call named is not there (deleted in another tab, or never made). */
+export function sourceDocGone(): string {
+  return t('sourceTableMessages.those_notes_are_gone');
+}
