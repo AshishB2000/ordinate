@@ -9,6 +9,8 @@
 //    the editor "Connection · Warehouse · <table>" and "Web address · <host>".
 //    `sourceView(hideNames)` keeps "a query". NEGATIVE CONTROL: the editor still reads the names.
 // 2. `seesSourceNames` fails closed on an id that is not a project id.
+// 3. `lineage:get` and `pipelines:get`: a viewer's source node says the connector's kind ("postgres"),
+//    the editor and an org admin read "Table <table>" and get the same bytes. NEGATIVE CONTROL: the editor.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -80,6 +82,18 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('dataset:source: a viewer reads "Web address", not its host', viewerWeb.body.label === 'Web address', viewerWeb.text);
     ok('dataset:source: nothing of the web import reaches a viewer', !CANARY.test(viewerWeb.text), viewerWeb.text);
     ok('NEGATIVE CONTROL: the editor still reads the host', editorWeb.body.label === `Web address · ${WEB_HOST}`, editorWeb.text);
+
+    // Lineage and Pipelines draw the source node from the dataset's origin: `loadInput` trims the table for a viewer.
+    // (A web import's node is still named by its host, which `buildGraph` draws for anyone: so these asserts look at the connection's node and at the table, not at every canary.)
+    const lin = (who: string) => W.call(who, 'lineage:get', { projectId: P, type: 'dataset', id: D });
+    const pipe = (who: string) => W.call(who, 'pipelines:get', { projectId: P });
+    const srcNode = (r: H.Reply) => r.body.nodes.find((n: { kind: string }) => n.kind === 'source');
+    const connNode = (r: H.Reply) => r.body.nodes.find((n: { kind: string; ref?: { type: string } }) => n.kind === 'source' && n.ref?.type === 'connection');
+    const [linViewer, pipeViewer, linEditor, pipeEditor, linBoss] = [await lin('nobody'), await pipe('nobody'), await lin('ed'), await pipe('ed'), await lin('boss')];
+    ok('lineage:get: a viewer reads the connector kind', srcNode(linViewer).sub === 'postgres' && !CANARY.test(linViewer.text), linViewer.text);
+    ok('pipelines:get: a viewer reads the connector kind, no table anywhere', connNode(pipeViewer).sub === 'postgres' && !pipeViewer.text.includes('canary_tbl'), pipeViewer.text);
+    ok('NEGATIVE CONTROL: the editor reads "Table public.canary_tbl_9f3" in lineage and in pipelines', srcNode(linEditor).sub === `Table ${TABLE}` && connNode(pipeEditor).sub === `Table ${TABLE}`, linEditor.text);
+    ok('an editor and an org admin get the same bytes', linEditor.text === linBoss.text);
   } finally {
     await W.close();
   }
