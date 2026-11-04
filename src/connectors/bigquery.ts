@@ -49,6 +49,8 @@ import {
   validLocation, validProject,
 } from './bigqueryShape';
 import type { Job } from './bigqueryShape';
+import { bigqueryFacts } from './bigqueryFacts';
+import type { TableFacts } from './tableFacts';
 import { safeError } from './types';
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, ConnectorSchema, ConnectorTable, ConnectorTables, LiveParam } from './types';
 import { ctx as requestContext } from '../server/context';
@@ -407,7 +409,8 @@ async function listTables(ctx: ConnectorContext): Promise<ConnectorTables | Conn
   return tables.length === 0 && failed ? failed : { ok: true, tables: tables.slice(0, LIST_CAP) };
 }
 
-async function describeTable(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError> {
+/** The one `tables.get` behind both readers of a table's catalog entry. */
+async function tableJson(ctx: ConnectorContext, table: string): Promise<{ ok: true; json: unknown } | ConnectorError> {
   const path = parseTablePath(table);
   if (!path) return err('Name a table as dataset.table or project.dataset.table.');
   const conn = connOf(ctx);
@@ -415,12 +418,22 @@ async function describeTable(ctx: ConnectorContext, table: string): Promise<Conn
   const signal = signalOf(ctx);
   const token = await tokenFor(conn, READ_SCOPES, signal);
   if (!token.ok) return token;
-  const r = await callJson(conn, { url: tableUrl(conn.project, path), method: 'GET', token: token.token, timeoutMs: budgetMs(ctx) }, signal);
+  return callJson(conn, { url: tableUrl(conn.project, path), method: 'GET', token: token.token, timeoutMs: budgetMs(ctx) }, signal);
+}
+
+async function describeTable(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError> {
+  const r = await tableJson(ctx, table);
   if (!r.ok) return r;
   const out: ConnectorSchema = { ok: true, columns: describeColumns(r.json) };
   const n = Number(prop(r.json, 'numRows'));
   if (prop(r.json, 'numRows') !== undefined && Number.isFinite(n) && n >= 0) out.rowEstimate = n;
   return out;
+}
+
+/** Comments, key, partitioning and clustering from the same `tables.get`; the door calls this INSTEAD of describeTable. */
+async function tableFacts(ctx: ConnectorContext, table: string): Promise<({ ok: true } & TableFacts) | ConnectorError> {
+  const r = await tableJson(ctx, table);
+  return r.ok ? { ok: true, ...bigqueryFacts(r.json) } : r;
 }
 
 // ── the capabilities ────────────────────────────────────────────────────────
@@ -474,6 +487,7 @@ export const CONNECTORS: ConnectorDef[] = [
     listTables,
     run,
     describeTable,
+    tableFacts,
     live: { dialect: 'bigquery', runBound, estimate },
   },
 ];

@@ -37,6 +37,8 @@ const bq: typeof import('../src/connectors/bigquery') = require('../src/connecto
 const auth: typeof import('../src/connectors/bigqueryAuth') = require('../src/connectors/bigqueryAuth');
 const shape: typeof import('../src/connectors/bigqueryShape') = require('../src/connectors/bigqueryShape');
 const run: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+const { bigqueryFacts }: typeof import('../src/connectors/bigqueryFacts') = require('../src/connectors/bigqueryFacts');
+const { readTableFacts }: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 
 const KEY = makeKey();
@@ -309,6 +311,51 @@ async function main(): Promise<void> {
     const before = calls.length;
     const refused = await Promise.all(['orders', 'a.b.c.d', 'sales.orders`; drop', 'sales.my table', '../x.y'].map((n) => def.describeTable!(ctx(), n)));
     ok('describe: a malformed or injected name is refused before any request', refused.every((r) => !r.ok) && calls.length === before);
+  }
+
+  // ── Facts: comments, key, partitioning and clustering, off the one tables.get (UNVERIFIED) ──
+  // The reply below is built from BigQuery's documented Table resource (description, tableConstraints,
+  // timePartitioning, rangePartitioning, requirePartitionFilter, clustering, numRows, numBytes,
+  // lastModifiedTime); no real warehouse has answered it. numRows, numBytes and the times are STRINGS there.
+  {
+    const table = {
+      ...(fixture('table-orders.json') as object),
+      description: 'Order lines, one per sku',
+      schema: { fields: [
+        { name: 'line_id', type: 'INTEGER', mode: 'REQUIRED', description: 'Line key' },
+        { name: 'discount', type: 'NUMERIC', mode: 'NULLABLE', description: 'Discount in USD, after tax' },
+        { name: 'order_date', type: 'DATE', mode: 'NULLABLE' },
+        { name: 'region', type: 'STRING', mode: 'NULLABLE' },
+      ] },
+      tableConstraints: { primaryKey: { columns: ['line_id'] } },
+      timePartitioning: { type: 'DAY', field: 'order_date' },
+      requirePartitionFilter: true,
+      clustering: { fields: ['region'] },
+      numRows: '48200000',
+      numBytes: '12400000000',
+      lastModifiedTime: '1728400000000',
+    };
+    const t = serve(happy((c) => (c.url.pathname.endsWith('/tables/orders') ? { json: table } : null)));
+    const before = t.length;
+    const r = await readTableFacts('bigquery', ctx().values, { token: KEY.json }, 'ds.orders');
+    const f = r && r.ok ? r.facts : null;
+    ok('bigquery facts: one GET for the whole read', t.slice(before).filter((c) => c.method === 'GET' && /\/tables\//.test(c.url.pathname)).length === 1 && t.slice(before).every((c) => c.method === 'GET' || isToken(c)));
+    ok('bigquery facts: partition required, clustering, key, comments', JSON.stringify([f?.partition, f?.clusterBy, f?.primaryKey, f?.columns[1].comment]) ===
+      '[{"columns":["order_date"],"method":"DAY","required":true},["region"],{"columns":["line_id"],"enforced":false},"Discount in USD, after tax"]', JSON.stringify(r));
+    ok('bigquery facts: the table comment, the key flag, types and nullability', f?.comment === 'Order lines, one per sku' && f.columns[0].key === true && !f.columns[1].key && f.columns[0].comment === 'Line key' && !('comment' in f.columns[2])
+      && JSON.stringify(f.columns.map((c) => [c.name, c.type, c.nullable])) === '[["line_id","INTEGER",false],["discount","NUMERIC",true],["order_date","DATE",true],["region","STRING",true]]', JSON.stringify(r));
+    ok('bigquery facts: rows, bytes and the modified time (epoch ms → ISO)', f?.rowEstimate === 48_200_000 && f.bytes === 12_400_000_000 && f.lastModified === '2024-10-08T15:06:40.000Z', JSON.stringify(r));
+    const bare = (extra: object) => bigqueryFacts({ schema: { fields: [{ name: 'a', type: 'INTEGER' }] }, ...extra });
+    ok('bigquery facts: ingestion-time partitioning is _PARTITIONTIME; the older filter flag sits under timePartitioning', JSON.stringify(bare({ timePartitioning: { type: 'HOUR', requirePartitionFilter: false } }).partition) === '{"columns":["_PARTITIONTIME"],"method":"HOUR","required":false}');
+    ok('bigquery facts: a range partition', JSON.stringify(bare({ rangePartitioning: { field: 'bucket', range: { start: '0', end: '100', interval: '10' } } }).partition) === '{"columns":["bucket"],"method":"RANGE"}');
+    ok('bigquery facts: a table with nothing but a schema has nothing else', JSON.stringify(bare({})) === '{"columns":[{"name":"a","type":"INTEGER","nullable":true}]}');
+    ok('bigquery facts: junk figures and dates are dropped, never guessed', JSON.stringify(Object.keys(bare({ numRows: '12.5', numBytes: -1, lastModifiedTime: 'yesterday', description: 7, clustering: { fields: [1] } }))) === '["columns"]');
+    const sent = t.length;
+    const bad = await readTableFacts('bigquery', ctx().values, { token: KEY.json }, 'a`b.c');
+    ok('bigquery facts: a malformed name never reaches the network', bad?.ok === false && t.length === sent, JSON.stringify(bad));
+    const d = await def.describeTable!(ctx(), 'ds.orders');
+    ok('NEGATIVE CONTROL: describeTable still answers the workbench, unchanged', JSON.stringify(d) ===
+      '{"ok":true,"columns":[{"name":"line_id","type":"INTEGER","nullable":false},{"name":"discount","type":"NUMERIC","nullable":true},{"name":"order_date","type":"DATE","nullable":true},{"name":"region","type":"STRING","nullable":true}],"rowEstimate":48200000}', JSON.stringify(d));
   }
 
   // ── The dispatch's table SQL and the incremental predicate (L1.4) ─────────
