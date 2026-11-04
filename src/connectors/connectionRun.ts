@@ -146,6 +146,9 @@ export function quotedTable(family: string, table: string): string | null {
   // IDENT_RE refuses. Its own validator holds every part to a charset with no
   // backtick, backslash or newline, so the whole path is one backtick identifier.
   if (family === 'bigquery') return quotedTablePath(name);
+  // A MongoDB collection name may hold dashes and dots, and is never SQL:
+  // mongodb.ts parses this JSON string back out of the statement.
+  if (family === 'mongodb') return name ? JSON.stringify(name) : null;
   const parts = name.split('.');
   if (parts.length === 0 || parts.length > 3 || parts.some((p) => !IDENT_RE.test(p))) return null;
   const dialect = DIALECTS[family] || ANSI;

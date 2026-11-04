@@ -9,6 +9,18 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### MongoDB and Amazon Athena connectors
+
+- **MongoDB.** Collections are tables; a saved query is an aggregation pipeline in JSON
+  (`{"collection": "orders", "pipeline": [...]}`, Extended JSON for dates and ids). `$out` and
+  `$merge` are refused. Atlas `mongodb+srv://` addresses work: the SRV record is resolved and every
+  server checked by the SSRF guard, and the driver connects directly, never to members a server
+  advertises. Adds the `mongodb` driver as a runtime dependency.
+- **Amazon Athena.** The Athena API over HTTPS, signed with an IAM access key (SigV4, no AWS SDK).
+  Queries run inside the row-cap wrapper, so only queries run; a timeout or a closed tab stops the
+  query in Athena. Tables and columns come from the Glue catalog.
+- The catalog is now 42 read-only sources.
+
 ### Sign-in hardening
 
 - **OIDC needs a verified email.** An ID token's `email_verified` must be `true`; an absent claim or a

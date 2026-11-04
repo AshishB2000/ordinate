@@ -33,7 +33,7 @@ const connectionRun: typeof import('../src/connectors/connectionRun') = require(
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
-const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake']);
+const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake', 'mongodb', 'athena']);
 const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 const SECRET_PW = 'sup3r-s3cret-pw';
 
