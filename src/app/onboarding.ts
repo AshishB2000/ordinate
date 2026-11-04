@@ -1,10 +1,11 @@
 // First-run guidance: the Get-started tour and the sample dashboard's coach
 // marks. MAIN PROCESS ONLY.
 //
-// Started ONCE for the org, by the sample seeder, so only an org that began
-// with the sample sees it: an install seeded before this existed (or one that
-// hid or finished the old org-wide checklist) has no `onboarding` block and
-// gets neither the card nor the coach marks.
+// Started ONCE for the org, with its first project: the sample seeder, or
+// `projects:create` for an org that starts with its own (startOnce). An install
+// that had projects before this existed (or one that hid or finished the old
+// org-wide checklist) has no `onboarding` block and gets neither the card nor
+// the coach marks.
 //
 // THE TOUR IS EACH PERSON'S. A stop ticks when that person opens its page
 // (the browser reports the visit, from the card or the sidebar) or, for the
@@ -52,6 +53,11 @@ export interface OnboardingStatus {
 
 export function fresh(now = new Date()): OnboardingState {
   return { startedAt: now.toISOString(), coachSeen: false, by: {} };
+}
+
+/** Starts the tour for an org that has none; a started, hidden or finished one is left alone. */
+export function startOnce(): void {
+  if (!config.get().onboarding) config.save({ onboarding: fresh() });
 }
 
 const blank = (): TourState => ({ seen: {}, collapsed: false, dismissed: false });
