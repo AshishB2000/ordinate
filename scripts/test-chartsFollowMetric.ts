@@ -158,6 +158,24 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok('chartChange: a pivot draws its saved copy', change(mt3, { ...enc3, pivot: { rows: ['region'], columns: [], values: [] } }) === null);
     ok('chartChange: under a split only the first measure is drawn (the second is not changed)', change(mt3, { ...enc3, series: 'cat', values: [plainAmt3, enc3.values[0]] }) === null);
     ok('chartChange: … and the first is', change(mt3, { ...enc3, series: 'cat', values: [enc3.values[0], plainAmt3] }) === 'filters');
+    ok('chartChange: a cohort draws its saved copy', change(mt3, { ...enc3, cohort: { cohortColumn: 'region' } }) === null);
+    // Only the aggregation differs: the metric was edited from sum to avg since the chart stored its copy.
+    const avgU = await save('Avg qty usage', X, { column: 'qty', aggregation: 'avg' });
+    const mAvgU = (await H.as(ORG_A, () => metricsMod.getMetric(P, avgU)))!;
+    const sumCopy = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: avgU }] };
+    ok('chartChange: a copy that differs only by aggregation is "definition"', change(mAvgU, sumCopy) === 'definition');
+    ok('NEGATIVE CONTROL: … and a copy that matches draws the same figure', change(mAvgU, { category: 'region', values: [{ column: 'qty', aggregation: 'avg', metricId: avgU }] }) === null);
+    const vAvg = await saveV('Sum copy of avg', sumCopy);
+    const uAvg = await H.as(ORG_A, () => usage.metricUsage(P, avgU));
+    ok('usage marks a chart whose copy differs only by aggregation', uAvg.refs.find((r) => r.id === vAvg.id)?.change === 'definition', show(uAvg.refs));
+    // A snapshot metric's chart shows the refusal (step 07 draws it), not other numbers: it is never "changed".
+    const snapF = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock filtered', datasetId: X, definition: { column: 'qty', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } }, filters: [eq('tier', 2)] } as never)))!;
+    const snapEncF = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: snapF.id }] };
+    ok('chartChange: a snapshot metric\'s refused chart is not marked changed', change(snapF, snapEncF) === null);
+    ok('NEGATIVE CONTROL: the same filters without a snapshot are "filters"', change({ ...snapF, definition: { column: 'qty', aggregation: 'sum' } }, snapEncF) === 'filters');
+    const vSnap = await saveV('Stock chart', snapEncF);
+    const uSnap = await H.as(ORG_A, () => usage.metricUsage(P, snapF.id));
+    ok('usage: a snapshot metric\'s chart is listed but not marked', uSnap.refs.some((r) => r.id === vSnap.id) && uSnap.refs.every((r) => r.change === undefined), show(uSnap.refs));
     const f = await save('Half qty', X, { formula: 'sum(qty) / 2' });
     const mf = (await H.as(ORG_A, () => metricsMod.getMetric(P, f)))!;
     ok('chartChange: a formula metric is drawn as it always was', change(mf, { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: f }] }) === null);
@@ -349,8 +367,41 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok('facts: a related table\'s personal column is withheld', (await viaOf('Via tier', { ...eq('tier', 3), via: rel.id })) === '"Via tier" = sum(qty) where tier (withheld)');
     ok('NEGATIVE CONTROL: a related table\'s unmarked column shows its value', (await viaOf('Via qty', { ...eq('qty', 5), via: rel.id })) === '"Via qty" = sum(qty) where qty = 5');
     ok('a relationship that cannot be resolved is withheld', (await viaOf('Via gone', { ...eq('qty', 5), via: randomUUID() })) === '"Via gone" = sum(qty) where qty (withheld)');
+    // A relationship whose far dataset is gone resolves to nothing: withheld, like a relationship that does not exist.
+    const relGone = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: randomUUID(), column: 'region' }, cardinality: 'many_to_one' }));
+    if (!relGone) throw new Error('relationship not saved');
+    ok('a via relationship whose far dataset is gone is withheld', (await viaOf('Via far gone', { ...eq('qty', 5), via: relGone.id })) === '"Via far gone" = sum(qty) where qty (withheld)');
     await mark(L, 'tier', 'none');
-    await H.as(ORG_A, () => rels.deleteRelationship(P, rel.id));
+    await H.as(ORG_A, async () => { await rels.deleteRelationship(P, rel.id); await rels.deleteRelationship(P, relGone.id); });
+
+    // A bare filter column the chart's dataset lacks is the NEAREST related dataset's (joinPlan.resolveColumnOwner), and
+    // that dataset's mark decides: the door filters through it, so the literal must not reach the prompt.
+    const contacts = await H.as(ORG_A, () => H.datasets.saveDataset(P, { name: 'Contacts', sourceKind: 'csv',
+      ...fx.importTyped([{ name: 'region', type: 'text' }, { name: 'email', type: 'text' }, { name: 'plan', type: 'text' }], [['West', 'bob@x.com', 'pro'], ['East', 'cy@x.com', 'free']]) }));
+    if (!contacts) throw new Error('contacts not saved');
+    const relC = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: contacts.id, column: 'region' }, cardinality: 'many_to_one' }));
+    if (!relC) throw new Error('relationship not saved');
+    const bareOf = async (name: string, step: unknown): Promise<{ line: string; text: string }> => {
+      const id = await save(name, X, { column: 'qty', aggregation: 'sum' }, [step]);
+      const v = await mk(`Facts ${name}`, [{ column: 'qty', aggregation: 'sum', metricId: id }]);
+      return { line: await measuresOf(v.id), text: await factsText(v.id) };
+    };
+    await mark(contacts.id, 'email', 'personal');
+    const mail = await bareOf('Mail', { type: 'filter', column: 'email', op: '=', value: 'bob@x.com' });
+    ok('facts: a filter on a related table\'s personal column (no via) is withheld', mail.line === '"Mail" = sum(qty) where email (withheld)', mail.line);
+    ok('… and the literal is nowhere in the prompt', !mail.text.includes('bob@x.com'));
+    const plan = await bareOf('Plan', { type: 'filter', column: 'plan', op: '=', value: 'pro' });
+    ok('NEGATIVE CONTROL: a related table\'s unmarked column shows its value', plan.line === '"Plan" = sum(qty) where plan = "pro"', plan.line);
+    const ghost = await bareOf('Ghost', { type: 'filter', column: 'ghost', op: '=', value: 'boo' });
+    ok('facts: a column no dataset has cannot be resolved, so it is withheld', ghost.line === '"Ghost" = sum(qty) where ghost (withheld)' && !ghost.text.includes('boo'), ghost.line);
+    await mark(contacts.id, 'email', 'none');
+    const mailOff = await bareOf('Mail off', { type: 'filter', column: 'email', op: '=', value: 'bob@x.com' });
+    ok('NEGATIVE CONTROL: unmarked, the same related column shows its value', mailOff.line === '"Mail off" = sum(qty) where email = "bob@x.com"', mailOff.line);
+    // Own column wins, as the engine resolves it: X has `region`, so Contacts' mark on `region` does not hide X's.
+    await mark(contacts.id, 'region', 'personal');
+    ok('NEGATIVE CONTROL: the chart\'s own column is its own dataset\'s mark, not a related table\'s', (await bareOf('Own', eq('region', 'West'))).line === '"Own" = sum(qty) where region = "West"');
+    await mark(contacts.id, 'region', 'none');
+    await H.as(ORG_A, () => rels.deleteRelationship(P, relC.id));
   }
 
   // ── 12. A snapshot metric is refused until step 07 ─────────────────────────
@@ -359,6 +410,13 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   ok('a snapshot metric is refused until step 07', (await chart(X, snapEnc)).ok === false);
   const snapPlan = await H.as(ORG_A, () => measures.planMetricMeasures(P, X, snapEnc as never));
   ok('… and the planner refuses it with the sentence (no copy is followed)', !!snapPlan && snapPlan.ok === false && snapPlan.error === msg.measureSnapshotPending('Stock'), show(snapPlan));
+
+  // A snapshot metric with no column has nothing for the planner to follow, so the door's own guard must still refuse it.
+  const stockNone = (await H.as(ORG_A, () => metricsMod.saveMetric(P, { name: 'Stock none', datasetId: X, definition: { column: '', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } } })))!;
+  const noneEnc = { category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stockNone.id }] };
+  const noneChart = await chart(X, noneEnc);
+  ok('a snapshot metric with no column is still refused, with the snapshot sentence', noneChart.ok === false && noneChart.error === msg.measureSnapshotPending('Stock none'), show(noneChart));
+  ok('… although the planner has nothing to follow in it', (await H.as(ORG_A, () => measures.planMetricMeasures(P, X, noneEnc as never))) === null);
 
   // ── 13. The share policy follows the edit ──────────────────────────────────
   await H.as(ORG_A, async () => {

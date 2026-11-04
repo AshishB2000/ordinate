@@ -102,6 +102,13 @@ async function vizJoin(projectId: string, datasetId: string, encoding: VizEncodi
   return join ? { infos, join } : null;
 }
 
+/** The dataset a bare column of `datasetId` means to the engine — its own, else the NEAREST related one (joinPlan.resolveColumnOwner) — or null. */
+export async function columnOwner(projectId: string, datasetId: string, column: string): Promise<string | null> {
+  const list = await rels.listRelationships(projectId);
+  const infos = await modelInfos(projectId, datasetId, list);
+  return resolveColumnOwner(datasetId, column, live(list, infos), infos);
+}
+
 /** The OTHER datasets a chart's question reads — its join plan's tables (row access rules gate exactly these). */
 export async function chartReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
   const j = await vizJoin(projectId, datasetId, encoding, filters);

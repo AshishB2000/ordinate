@@ -10,6 +10,8 @@ import * as metrics from '../analysis/metrics';
 import { describeFilter } from '../analysis/metricFormat';
 import { followedDefinition, needsMetricPlan } from '../analysis/metricMeasures';
 import { listRelationships } from '../analysis/relationships';
+import * as datasets from '../data/datasets';
+import { columnOwner } from './relationships';
 import { assistantColumnDocs } from '../app/sharePolicy';
 import { resolveFilterParams } from '../analysis/params';
 import type { VizEncoding } from '../analysis/visuals';
@@ -25,13 +27,24 @@ const quote = (c: Cell): Cell => (typeof c === 'string' ? quoted(c) : c);
 /** By `encoding.values` index: the measure's line, or undefined when its bare `aggregation(column)` is the truth. */
 export async function followedMeasureTexts(projectId: string, datasetId: string, encoding: VizEncoding, docs: Record<string, FactColumnDoc>): Promise<(string | undefined)[]> {
   const withheld = withheldColumns(docs);
-  // A step with `via` names a column of the RELATED dataset: its mark is that dataset's, and a relationship we cannot resolve withholds.
-  const withholds = async (s: FilterStep): Promise<boolean> => {
-    if (!s.via) return withheld.has(s.column);
+  // The datasets whose marks decide a step's column. A bare column is whoever the engine reads it from: the chart's own
+  // dataset, else the NEAREST related one. A step with `via` names the RELATED end of that relationship. None: unresolvable.
+  const owners = async (s: FilterStep): Promise<string[]> => {
+    if (!s.via) {
+      const owner = await columnOwner(projectId, datasetId, s.column);
+      return owner ? [owner] : [];
+    }
     const rel = (await listRelationships(projectId)).find((r) => r.id === s.via);
-    const ends = rel ? [rel.from.datasetId, rel.to.datasetId].filter((id) => id !== datasetId) : [];
-    if (!ends.length) return true;
-    return (await Promise.all(ends.map(async (id) => withheldColumns(await assistantColumnDocs(projectId, id))))).some((w) => w.has(s.column));
+    return rel ? [rel.from.datasetId, rel.to.datasetId].filter((id) => id !== datasetId) : [];
+  };
+  // Withheld when ANY owner marks it, and when an owner cannot be read (a dataset that is gone, a column nobody has).
+  const withholds = async (s: FilterStep): Promise<boolean> => {
+    const ids = await owners(s);
+    if (!ids.length) return true;
+    return (await Promise.all(ids.map(async (id) => {
+      if (id === datasetId) return withheld.has(s.column);
+      return !(await datasets.getDatasetMeta(projectId, id)) || withheldColumns(await assistantColumnDocs(projectId, id)).has(s.column);
+    }))).some(Boolean);
   };
   // A value of a column the user marked personal or financial is never shown (columnNotes.withheldColumns).
   const say = async (s: FilterStep): Promise<string> => (isKeptStep(s) ? describeFilter(s) // a step this pod cannot read: named by its kind, it holds no value we show

@@ -43,6 +43,7 @@ function ChangedCharts({ usage }: { usage: Usage }) {
   return (
     <span className={s.changed} title={names.join(', ')}>
       <Badge tone="warn">{`${names.length} ${names.length === 1 ? 'chart' : 'charts'} changed`}</Badge>
+      <span className={s.srOnly}>{`Changed charts: ${names.join(', ')}`}</span>
     </span>
   );
 }

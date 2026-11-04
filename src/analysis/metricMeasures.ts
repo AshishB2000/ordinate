@@ -93,12 +93,13 @@ export function followedDefinition(m: Metric | null | undefined, datasetId: stri
 /**
  * Whether a chart's numbers differ from its stored copy now that it follows `m`, and why: `filters` when the metric
  * reads other rows than its column's plain total, `definition` when a drawn copy names another column or aggregation.
+ * A snapshot metric's chart is refused (step 07 draws it), so it shows no other numbers: null.
  */
 export function chartChange(m: Metric, datasetId: string, encoding: VizEncoding): 'filters' | 'definition' | null {
   const copies = drawnMeasures(encoding).filter((v, i) => v.metricId === m.id && followedDefinition(m, datasetId, encoding, i));
-  if (!copies.length) return null;
+  const def = m.definition as MetricSimpleDefinition; // followed (when copies is not empty), so a simple one
+  if (!copies.length || def.snapshot) return null;
   if (needsMetricPlan(m)) return 'filters';
-  const def = m.definition as MetricSimpleDefinition; // followed, so a simple one
   return copies.some((v) => v.column !== def.column || v.aggregation !== def.aggregation) ? 'definition' : null;
 }
 

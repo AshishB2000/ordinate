@@ -90,6 +90,8 @@ describe('a viewer on the metrics', () => {
     const mark = await screen.findByText('2 charts changed', {}, { timeout: LAZY });
     expect(mark.closest('[title]')?.getAttribute('title')).toBe('Tier chart, Old copy');
     expect(screen.getAllByText(/charts? changed/)).toHaveLength(1); // Orders' only chart draws what it drew
+    // Not hover-only: the names are text a screen reader reads, and only for the changed charts.
+    expect(screen.getAllByText(/^Changed charts:/).map((n) => n.textContent)).toEqual(['Changed charts: Tier chart, Old copy']);
     cleanup();
     serveRpc(routes('viewer', { 'metric:table': { body: { ok: true, metrics: [metric(M, 'Revenue')], rows: { [M]: row([ref('One', 'filters')]) } } } }));
     renderApp(`/data/metrics?project=${P}`);
