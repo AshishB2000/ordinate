@@ -34,6 +34,18 @@ describe('stepKey', () => {
     expect(stepKey(TERM)).not.toBe(stepKey({ type: 'filter' })); // a filter with nothing set
     expect(stepKey(TERM)).toBe(stepKey({ term: U, type: 'term' }));
   });
+
+  it('keys a filter by its via: the same filter through a relationship is another step', () => {
+    const via = { ...F, via: V };
+    expect(stepKey(via)).not.toBe(stepKey(F));
+    expect(carrySteps(all, null, [F, via])).toEqual([F, via]);
+    expect(toggled([F], via)).toEqual([via]); // a click on the column still replaces the `=` pick
+  });
+
+  it('NEGATIVE CONTROL: the same filter twice, without via, is one step', () => {
+    expect(stepKey({ ...F })).toBe(stepKey(F));
+    expect(carrySteps(all, null, [F, { ...F }])).toEqual([F]);
+  });
 });
 
 describe('a kept step in the selection', () => {

@@ -35,6 +35,8 @@ const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = requir
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const { generateSql }: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const { mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
+const cardModel: any = require('../src/analysis/cardModel'); // any: a UMD module with no exported types
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply is narrowed by its check
 
@@ -128,6 +130,16 @@ async function main(): Promise<void> {
   ok('a via filter on a chart with no relationships is refused with the typed sentence',
     show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
   ok('negative control: without via the chart needs no join (null)', (await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [F('year', '=', 2024)])) === null);
+
+  // ── § guard: a merge keys a filter by its via, so `year = 2024` never swallows `year = 2024 via R_SHIP` ──
+  const merged = mergeDashboardFilters([F('year', '=', 2024)], [viaStep]);
+  ok('mergeDashboardFilters keeps a dashboard filter and a tile\'s same filter through a relationship, both', show(merged) === show([F('year', '=', 2024), viaStep]), show(merged));
+  ok('…so the merged chart is refused, never drawn on the primary\'s year', show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, merged)) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('negative control: the same filter twice without via still merges to one', mergeDashboardFilters([F('year', '=', 2024)], [F('year', '=', 2024)]).length === 1);
+  const carried = cardModel.carrySteps({ kind: 'navigate', carry: 'all_selection' }, { filters: [F('year', '=', 2024), viaStep], selection: [] });
+  ok('a tile action carries both too', show(carried) === show([F('year', '=', 2024), viaStep]), show(carried));
+  ok('negative control: a tile action still carries a repeated plain filter once',
+    cardModel.carrySteps({ kind: 'navigate', carry: 'all_selection' }, { filters: [F('year', '=', 2024), F('year', '=', 2024)], selection: [] }).length === 1);
 
   // ── § guard: Explain declines a via filter, never narrating the primary's same-named `year` ──
   copilotIpc.register();

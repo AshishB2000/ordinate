@@ -99,6 +99,10 @@ describe('tile actions — differential against cardModel', () => {
     { type: 'future_x', a: 1 },
     { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' },
     { type: 'dedupe' },
+    // The same filter through a relationship is another filter; a kept step's key order is not its identity.
+    { type: 'filter', column: 'region', op: '=', value: 'East', via: '44444444-4444-4444-8444-444444444444' },
+    { type: 'future_y', a: 1, b: 2 },
+    { type: 'future_y', b: 2, a: 1 },
   ];
   const clicks = [null, { column: 'region', value: 'West' }, { column: 'segment', value: 'B2B' }];
   it('carries the same steps for every carry mode and click', () => {
