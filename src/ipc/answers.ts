@@ -29,7 +29,8 @@ import type { ChartData } from '../analysis/vizData';
 import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
 import { isKeptStep } from '../data/filterList';
-import { isTermStep } from '../data/termStep';
+import { isTermStep, type TERM_CODE } from '../data/termStep';
+import { expandAnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
 import { displayNames, load as loadCatalog } from '../app/catalog';
 import { shownNames, taughtNames } from '../app/columnNames';
@@ -102,10 +103,11 @@ export interface Built {
 }
 
 /**
- * `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart.
+ * `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart; `term`, a
+ * filter it cannot apply (thrown by the door, typed by the route).
  * `suggest`: a refused spec named something that does not exist, and this is what it may have meant.
  */
-export type Failure = { ok: false; reason: string; code?: LiveFailureCode; suggest?: AnswerSuggest };
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
@@ -141,8 +143,9 @@ function ranked(data: ChartData, top?: number): ChartData {
  * showed.
  */
 /** THE answer door: row access rules first (./rowDoors — a refusal throws), then the body with the caller's lock. */
-export function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
-  return withLockOf(projectId, asked && asked.datasetId, (lock) => computeCardWith(projectId, asked, loose, lock));
+export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
+  const { spec } = await expandAnswerTerms(projectId, asked); // a term THROWS (typed 'term'), before the lock and the Live split
+  return withLockOf(projectId, spec && spec.datasetId, (lock) => computeCardWith(projectId, spec, loose, lock));
 }
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null): Promise<Built | Failure> {

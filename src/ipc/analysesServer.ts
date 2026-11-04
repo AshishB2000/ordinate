@@ -19,6 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
+import { isTermNotExpandedError, tagTermRefusals, termRaised, termRefusal, TERM_CODE } from '../data/termStep';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 import type { Card } from '../analysis/dashboards';
@@ -53,14 +54,16 @@ async function cardVisual(projectId: string, c: Card, at: string): Promise<visua
 /** How many of the first sheet's visuals a list card previews (anList.ts AN_PREVIEW_MAX). */
 const PREVIEW_MAX = 2;
 
-/** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
+/** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. A term refusal keeps its type, as the route types it. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
   const h = handlers.get(channel);
   if (!h) return { ok: false, error: `${channel} is not available` };
+  const raised = termRaised();
   try {
-    return await h(event, payload);
+    const r = await h(event, payload);
+    return termRaised() === raised ? r : tagTermRefusals(r);
   } catch (err: any) { // any: a handler's throw
-    return { ok: false, error: err?.message || `${channel} failed` };
+    return isTermNotExpandedError(err) ? termRefusal(err) : { ok: false, error: err?.message || `${channel} failed` };
   }
 }
 
@@ -149,6 +152,7 @@ export function register(): void {
       let res: any = null; // any: one of two handlers' replies
       if (it.metricId) {
         const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency });
+        if (r && r.code === TERM_CODE) return r; // a filter it cannot apply: says so — never "deleted", never the stored column's figure
         if (r && r.ok !== false) {
           res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}) };
         }
@@ -227,9 +231,9 @@ export function register(): void {
   ipcMain.handle('metric:values', async (e, { projectId, ids, filters, params }: any = {}) =>
     Promise.all((Array.isArray(ids) ? ids : []).map(async (id: string) => {
       const r = await call(e, 'metric:value', { projectId, id, filters, params });
-      // A Live metric's refusal or failure is kept (typed, D6); any other failure stays a bare `ok:false`.
+      // A Live metric's refusal or failure, and a filter it cannot apply, are kept (typed); any other failure stays a bare `ok:false`.
       return r && r.ok !== false
         ? { id, ok: true, value: r.value, display: r.display, ...(r.asOf ? { asOf: r.asOf } : {}) }
-        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : r && typeof r.code === 'string' && r.code.startsWith('live_') ? { code: r.code, error: r.error } : {}) };
+        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : r && typeof r.code === 'string' && (r.code.startsWith('live_') || r.code === TERM_CODE) ? { code: r.code, error: r.error } : {}) };
     })));
 }

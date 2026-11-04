@@ -48,7 +48,7 @@ import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
-import { isTermNotExpandedError, TERM_CODE } from '../data/termStep';
+import { isTermNotExpandedError, tagTermRefusals, TERM_CODE, termRaised } from '../data/termStep';
 import { seedRank, register as registerCaller } from './authz/caller';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
@@ -451,6 +451,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // the same signal has interrupted the handler's DuckDB queries (T4.3).
       const refusals = liveRefusalsRaised();
       const rowRefusals = rowPolicyRaised();
+      const termRefusals = termRaised();
       let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
@@ -458,6 +459,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // D6: a Live refusal a handler caught keeps its type (src/data/liveDataset.ts).
       if (liveRefusalsRaised() !== refusals) tagLiveRefusals(result);
       if (rowPolicyRaised() !== rowRefusals) tagRowPolicyRefusals(result); // a row access refusal a handler caught keeps its type
+      if (termRaised() !== termRefusals) tagTermRefusals(result); // so does a filter it cannot apply (PR 05a)
       const body = encode(result);
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);

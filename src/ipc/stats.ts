@@ -29,6 +29,7 @@ import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import { pairLine, statsFigures } from '../analysis/stats/figures';
 import { stampAsOf } from '../data/figureAsOf';
 import { ensureFresh } from '../data/freshOnAsk';
+import { expandTerms } from '../analysis/termExpand';
 
 // Statistics workbench IPC — every figure the panel, a dashboard "stats" tile
 // and the Assistant show is computed here, by src/analysis/stats, on vectors
@@ -58,9 +59,9 @@ async function compute<T extends StatsResult | PairScatter>(
   spec: StatsSpec,
   opts: { filters?: FilterStep[]; pair?: [string, string]; asOf?: unknown } = {},
 ): Promise<Computed<T>> {
+  const filters = (await expandTerms(projectId, spec.datasetId, opts.filters)).steps; // a step it cannot apply THROWS (typed 'term')
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
   if (!meta) return { ok: false, error: 'This dataset is no longer in the project.' };
-  const filters = opts.filters || [];
   let needs: VectorNeed[];
   if (opts.pair) {
     const bad = opts.pair.find((c) => meta.columns.find((x) => x.name === c)?.type !== 'number');

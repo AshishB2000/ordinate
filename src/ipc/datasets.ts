@@ -63,6 +63,7 @@ export function headerOf(ds: { id: string; name: string; rowCount: number; colum
 import { forClient } from './stepReply';
 import { MaskKeyUnavailableError } from '../app/privacyStore';
 import { logger } from '../app/logger';
+import { expandTerms } from '../analysis/termExpand';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -197,7 +198,8 @@ export type PageReply =
  * `op` names the call site for `residentTrace`, so a fast path that silently
  * stops firing is visible per feature rather than pooled.
  */
-export function pageFor(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {
+export async function pageFor(projectId: string, datasetId: string, asked: PageRequest, op: string): Promise<PageReply> {
+  const req = { ...asked, filters: (await expandTerms(projectId, datasetId, asked.filters)).steps }; // a step it cannot apply THROWS, before the lock
   // Row access rules (docs/row-policy D7): the caller's lock first in `filters`, which both paths below honour.
   // A quality rule's row filter is computed over the whole table (and another dataset): never under a lock.
   return withLockOf(projectId, datasetId, (lock) => {

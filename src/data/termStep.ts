@@ -29,6 +29,8 @@ export function hasTermType(s: unknown): boolean {
 export const TERM_CODE = 'term';
 export type TermReason = 'not_expanded' | 'unreadable' | 'deleted' | 'unreachable' | 'column_gone';
 
+let raised = 0;
+
 /** A refusal: the route answers it 409 `term` with its sentence. Never caught to become a skipped step or an empty answer. */
 export class TermNotExpandedError extends Error {
   readonly code = TERM_CODE;
@@ -37,6 +39,7 @@ export class TermNotExpandedError extends Error {
     super(message ?? (reason === 'unreadable' ? msg.termUnreadable() : msg.termNotExpanded()));
     this.name = 'TermNotExpandedError';
     this.reason = reason;
+    raised++;
   }
 }
 
@@ -56,4 +59,37 @@ export function isTermNotExpandedError(err: unknown): err is TermNotExpandedErro
 /** The refusal as a reply, for a door whose contract answers `{ok:false, error}`. */
 export function termRefusal(err: TermNotExpandedError): { ok: false; code: typeof TERM_CODE; reason: TermReason; error: string } {
   return { ok: false, code: TERM_CODE, reason: err.reason, error: err.message };
+}
+
+/** How many refusals this process has raised — the route walks a reply for them only when this moved. */
+export function termRaised(): number {
+  return raised;
+}
+
+/**
+ * Type the refusals a handler caught: every `{ok:false}` whose `error` (or `reason`) IS one of the two
+ * sentences gets the code and the reason — per item in a batch, a few levels deep, as
+ * `tagRowPolicyRefusals` does. Mutates and returns.
+ */
+// shortcut: matches the two fixed sentences only; 05b's deleted/unreachable/column_gone messages name their term, so they must be typed where they are thrown
+export function tagTermRefusals<T>(reply: T, depth = 3): T {
+  const bySentence = new Map<string, TermReason>([[msg.termUnreadable(), 'unreadable'], [msg.termNotExpanded(), 'not_expanded']]);
+  const walk = (v: unknown, d: number): void => {
+    if (d < 0 || !v || typeof v !== 'object' || ArrayBuffer.isView(v)) return;
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item, d - 1);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    const said = typeof o.error === 'string' ? o.error : typeof o.reason === 'string' ? o.reason : '';
+    const reason = o.ok === false && o.code === undefined ? bySentence.get(said) : undefined;
+    if (reason) {
+      o.code = TERM_CODE;
+      if (typeof o.reason !== 'string') o.reason = reason; // an answer card's `reason` is its sentence: kept
+      if (typeof o.error !== 'string') o.error = said;
+    }
+    for (const x of Object.values(o)) if (x && typeof x === 'object') walk(x, d - 1);
+  };
+  walk(reply, depth);
+  return reply;
 }
