@@ -642,8 +642,8 @@ export function register() {
       // on the overlay's prior slice alike, so both sides mean the same thing).
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
         withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values }), p, d, e, values), e);
-      const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
-      const computed = await withCompareSeries(drawn, projectId, datasetId, enc, flt, run);
+      const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run, values);
+      const computed = await withCompareSeries(drawn, projectId, datasetId, enc, flt, run, values);
       const shaped = isSharePath(share) && share !== 'bundle'
         ? await applyToChart(projectId, datasetId, enc, computed, share)
         : computed;

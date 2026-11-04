@@ -105,9 +105,10 @@ export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?:
     let alongTime = false; // a pivot plots the stored column, never along time
     if (!pivot) {
       // The split column's declared type matters only to a measure that adds on one side and not the other.
+      const needsSplitType = additivity.categories !== additivity.time && !!enc.series;
       alongTime = calcAlong(calc, enc) === 'across'
         ? reply.category?.kind === 'date'
-        : additivity.categories !== additivity.time && !!enc.series && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
+        : needsSplitType && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
     }
     const error = calcRefusal(name, calc.kind, additivity, alongTime);
     if (error) return { ok: false, error, code: 'calc_not_additive' };

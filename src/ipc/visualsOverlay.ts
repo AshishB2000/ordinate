@@ -17,6 +17,7 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import type { VizEncoding } from '../analysis/visuals';
 import type { DateGrain } from '../analysis/categoryKey';
+import type { ParamValues } from '../analysis/params';
 import { measureAdditivity } from '../analysis/additivity';
 import { shiftBucketLabel } from '../analysis/dateIntel';
 import { compareScope, overlayCaption, overlayFilters } from '../analysis/periodScope';
@@ -43,6 +44,7 @@ export async function withPeriodOverlay(
   enc: VizEncoding,
   filters: FilterStep[],
   base: Base,
+  params?: ParamValues,
 ): Promise<VizDataReply> {
   try {
     if (enc.overlay !== 'previous_year' || !reply.ok) return reply;
@@ -73,7 +75,7 @@ export async function withPeriodOverlay(
 
     const series = reply.data.series.concat([{ name: `${cur.name} · last year`, values, role: 'overlay' as const }]);
     // "Up 12% vs last year" adds the months; an average (or a stock) can't be added across time, so it gets the series and no caption.
-    const cap = (await measureAdditivity(projectId, datasetId, enc.values[0])).time
+    const cap = (await measureAdditivity(projectId, datasetId, enc.values[0], params)).time
       ? overlayCaption(enc.values[0].column, cur.values, values, captionGrain(reply.data.labels, grain))
       : null;
     return {
@@ -113,6 +115,7 @@ export async function withCompareSeries(
   enc: VizEncoding,
   filters: FilterStep[],
   base: Base,
+  params?: ParamValues,
 ): Promise<VizDataReply> {
   try {
     const compare = enc.compare;
@@ -121,7 +124,7 @@ export async function withCompareSeries(
     if (enc.values.length !== 1 || enc.values[0].aggregation === 'none' || reply.data.series.length !== 1) return reply;
     const cat = reply.category;
     if (cat && cat.kind === 'date') {
-      return compare.mode === 'previous_year' ? withPeriodOverlay(reply, projectId, datasetId, { ...enc, overlay: 'previous_year' }, filters, base) : reply;
+      return compare.mode === 'previous_year' ? withPeriodOverlay(reply, projectId, datasetId, { ...enc, overlay: 'previous_year' }, filters, base, params) : reply;
     }
     if (cat && cat.kind !== 'text') return reply; // a binned number axis is cut from each period's own range
 

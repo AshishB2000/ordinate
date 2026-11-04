@@ -35,7 +35,7 @@ export function register(): void {
       // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
         withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), p, d, e, values), e);
-      const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
+      const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run, values);
       // …and offers the map when the labels are places (analysis/geoHits) — what un-greys the builder's map chips.
       // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes).
       const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events

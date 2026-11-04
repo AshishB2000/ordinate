@@ -137,17 +137,18 @@ async function main(): Promise<void> {
   ok('NEGATIVE CONTROL: a reply that is not ok comes back as it is', Object.is(await A.refuseNonAdditiveCalcs(avgRT, pid, ds, { category: 'region', values: [{ column: 'amount', aggregation: 'avg', calc: RT }] }), avgRT));
 
   const plainReply = { ok: true, data: { labels: [], series: [] } };
-  let reads = 0;
+  let reads = 0; // every read the check makes
+  let metaReads = 0; // the dataset-metadata ones among them
   spyOn(metrics, 'getMetric', () => reads++);
-  spyOn(datasets, 'getDatasetMeta', () => reads++);
+  spyOn(datasets, 'getDatasetMeta', () => { reads++; metaReads++; });
   ok('no adding calc: the reply itself, nothing read', Object.is(await A.refuseNonAdditiveCalcs(plainReply, pid, ds, { category: 'region', values: [{ column: 'amount', aggregation: 'avg', calc: { kind: 'rank_dense', along: 'across' } }] }), plainReply) && reads === 0);
   // The spies count: a ratio metric's running total must read its record and the dataset's columns.
   await A.refuseNonAdditiveCalcs(okReply, pid, ds, { category: 'region', values: [{ column: 'Per unit', aggregation: 'sum', metricId: perUnit.id, calc: RT }] });
-  ok('NEGATIVE CONTROL: the spy counts', reads > 0);
+  ok('the spies count: a metric record and the dataset columns', reads - metaReads > 0 && metaReads > 0, `${reads} reads, ${metaReads} of them metadata`);
   // A measure that adds alike on both sides does not need the split column's declared type.
-  const readsBefore = reads;
+  const metaBefore = metaReads;
   const avgDown = await A.refuseNonAdditiveCalcs(okReply, pid, ds, { category: 'region', series: 'day', values: [{ column: 'amount', aggregation: 'avg', calc: { kind: 'running_total', along: 'down' } }] }) as Any;
-  ok('a down split of an avg: refused without reading the split column', avgDown.code === 'calc_not_additive' && reads === readsBefore, `${reads - readsBefore} reads`);
+  ok('a down split of an avg: refused without reading the split column', avgDown.code === 'calc_not_additive' && metaReads === metaBefore, `${metaReads - metaBefore} reads`);
 
   // ── published ───────────────────────────────────────────────────────────────────────────────────────────────────
   const save = (name: string, encoding: object) => visuals.saveVisual(pid, { datasetId: ds, name, chartType: 'column', encoding } as never);
@@ -182,7 +183,25 @@ async function main(): Promise<void> {
   ok('avg: the year-earlier series is drawn', avg.ok && avg.data.series.some((s: Any) => s.role === 'overlay'), show(avg));
   ok('avg: no "up N% vs last year" caption', avg.ok && avg.overlay?.kind === 'previous_year' && avg.overlay.caption === undefined && avg.overlay.pct === undefined, show(avg.overlay));
   const sum = await by('sum');
-  ok('NEGATIVE CONTROL: sum keeps its caption', sum.ok && typeof sum.overlay?.caption === 'string' && typeof sum.overlay?.pct === 'number', show(sum.overlay));
+  const captioned = (r: Any) => r.ok && typeof r.overlay?.caption === 'string' && typeof r.overlay?.pct === 'number';
+  ok('NEGATIVE CONTROL: sum keeps its caption', captioned(sum), show(sum.overlay));
+
+  // The same gate on the other two ways in: a dashboard's Compare "vs last year" on a dated axis, and the builder's preview.
+  const avgCompare = await chart({ category: 'day', grain: 'month', compare: { mode: 'previous_year' }, values: [{ column: 'amount', aggregation: 'avg' }] }, { filters: FEB_2024 });
+  ok('avg compare: drawn, no caption', avgCompare.ok && avgCompare.data.series.some((s: Any) => s.role === 'overlay') && avgCompare.overlay?.kind === 'previous_year' && avgCompare.overlay.caption === undefined, show(avgCompare.overlay));
+  const sumCompare = await chart({ category: 'day', grain: 'month', compare: { mode: 'previous_year' }, values: [{ column: 'amount', aggregation: 'sum' }] }, { filters: FEB_2024 });
+  ok('NEGATIVE CONTROL: sum compare keeps its caption', captioned(sumCompare), show(sumCompare.overlay));
+  const previewOf = (aggregation: string) => preview(null, { projectId: pid, datasetId: ds, encoding: { category: 'day', grain: 'month', overlay: 'previous_year', values: [{ column: 'amount', aggregation }] }, filters: FEB_2024 }) as Promise<Any>;
+  const avgPreview = await previewOf('avg');
+  ok('avg preview: drawn, no caption', avgPreview.ok && avgPreview.data.series.some((s: Any) => s.role === 'overlay') && avgPreview.overlay?.kind === 'previous_year' && avgPreview.overlay.caption === undefined, show(avgPreview.overlay));
+  ok('NEGATIVE CONTROL: sum preview keeps its caption', captioned(await previewOf('sum')));
+
+  // A formula over a dashboard parameter adds, but only when the parameter is known: the check gets the same values the chart does.
+  const withK = { filters: FEB_2024, params: [{ name: 'k', kind: 'number', value: 2 }] };
+  const scaledEnc = { category: 'day', grain: 'month', values: [{ column: 'Scaled', aggregation: 'sum', metricId: scaled.id }] };
+  ok('a parameter formula keeps its caption (overlay)', captioned(await chart({ ...scaledEnc, overlay: 'previous_year' }, withK)));
+  ok('a parameter formula keeps its caption (compare)', captioned(await chart({ ...scaledEnc, compare: { mode: 'previous_year' } }, withK)));
+  ok('a parameter formula keeps its caption (preview)', captioned(await preview(null, { projectId: pid, datasetId: ds, encoding: { ...scaledEnc, overlay: 'previous_year' }, ...withK })));
 }
 
 main()
