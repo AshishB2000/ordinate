@@ -31,7 +31,7 @@ export const connections = {
   'connectors:catalog': rpc({ access: 'read', org: true, input: z.undefined() }),
   // The picker's brand marks — server form of the preload's sync `connector:logos`.
   'connectors:logos': rpc({ access: 'read', org: true, input: z.undefined() }),
-  // preload: invoke('connections:list', { projectId }) — public view + `secretSet` booleans.
+  // preload: invoke('connections:list', { projectId }) — public view + `secretSet` booleans for an editor; a viewer gets the card only (id, name, connectorId, lastStatus, datasetCount).
   'connections:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   // preload: invoke('connection:testAndSave', …) — the registry vocabulary only
   // ({connectorId, values, secrets}); the desktop's legacy {kind, config, secret} stays desktop.

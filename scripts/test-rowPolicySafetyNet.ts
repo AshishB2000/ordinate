@@ -222,7 +222,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const connsEd = await W.call('ed', 'connections:list', { projectId: P });
     eastReplies.push(connsEast.text);
     const lastError = (r: H.Reply, id: string) => (r.body as { id: string; lastError: string | null }[]).find((c) => c.id === id)?.lastError;
-    ok('redact: connections:list gives east no failure text, where a connection feeds a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === undefined, connsEast.text.slice(0, 200));
+    ok('redact: connections:list gives east no failure text, where a connection feeds a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === undefined && (connsEast.body as { id: string }[]).some((c) => c.id === closedFeed.conn), connsEast.text.slice(0, 200));
     ok('…and where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === undefined && (connsEast.body as { id: string }[]).some((c) => c.id === openFeed.conn));
     ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY) && lastError(connsEd, openFeed.conn) === 'OPEN_FEED_ERROR');
     await W.call('boss', 'format:colors:assign', { projectId: P, column: 'customer', values: [`${H.W_CANARY}_1`] });

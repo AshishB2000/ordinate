@@ -48,10 +48,12 @@ const CONN_QUERY = 'select * from canary_tbl_9f3';
 const SAVED_SQL = 'select 1 from canary_tbl_9f3';
 const REFRESH_ERROR = `relation "${TABLE}" does not exist`;
 const WEB_HOST = 'canary-host-web-9f3.internal';
+const NAMED_DB = 'canary_db_named_9f3'; // a connection saved with a blank name is named after its database, its host or its URL
+const NAMED_HOST = 'canary-host-named-9f3.internal';
 const WEB_URL = `https://${WEB_HOST}/export.csv`;
 const T = new Date().toISOString();
 const FAILED_SENTENCE = 'A refresh failed. Ask an editor for the details.';
-const FIXTURES = [HOST, DATABASE, DB_USER, TABLE, CONN_QUERY, SAVED_SQL, REFRESH_ERROR, WEB_HOST, WEB_URL];
+const FIXTURES = [HOST, DATABASE, DB_USER, TABLE, CONN_QUERY, SAVED_SQL, REFRESH_ERROR, WEB_HOST, WEB_URL, NAMED_DB, NAMED_HOST];
 /** Every fixture above matches (the hyphenated hosts too): a leak of any of them is visible to a text assert. */
 const CANARY = /canary[-_](tbl|db|user|host)/;
 
@@ -69,7 +71,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
   if (!W) return finish();
   try {
     const { P } = W;
-    const { connId, D, web, U } = await W.as('boss', async () => {
+    const { connId, byDb, byHost, D, web, U } = await W.as('boss', async () => {
       const conn = await connections.saveConnection(P, {
         name: 'Warehouse',
         connectorId: 'postgres',
@@ -81,6 +83,13 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       });
       if (!conn) throw new Error('saveConnection refused');
       await connections.saveQuery(P, conn.id, { name: 'Q', sql: SAVED_SQL });
+      // What connection:testAndSave stores for a blank name field (its database, else its host), and a name that holds the host in other case.
+      const named = async (name: string, values: Record<string, unknown>) => {
+        const c = await connections.saveConnection(P, { name, connectorId: 'postgres', values });
+        if (!c) throw new Error('saveConnection (named) refused');
+        return c.id;
+      };
+      const [byDb, byHost] = [await named(NAMED_DB, { host: 'h.internal', database: NAMED_DB }), await named(`Replica of ${NAMED_HOST.toUpperCase()}`, { host: NAMED_HOST })];
       const ds = await datasets.saveDataset(P, { name: 'Orders', sourceKind: 'postgres', columns: H.COLUMNS, rows: H.ROWS, origin: { kind: 'connection', connId: conn.id, table: TABLE } });
       if (!ds) throw new Error('saveDataset refused');
       await datasets.markRefresh(P, ds.id, 'error', REFRESH_ERROR);
@@ -93,7 +102,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       // The failed runs the pipeline keeps for each (a run's id is a UUID, or the store drops it).
       const failed = (nodeId: string, error: string) => ({ nodeId, id: randomUUID(), runId: randomUUID(), trigger: 'manual' as const, status: 'failed' as const, startedAt: T, finishedAt: T, durationMs: 1, attempts: 1, warnings: [], errors: [error] });
       await pipelineStore.appendRuns(P, [failed('dataset:' + ds.id, REFRESH_ERROR), failed('dataset:' + open.id, 'HTTP 500')]);
-      return { connId: conn.id, D: ds.id, web: fromWeb.id, U: open.id };
+      return { connId: conn.id, byDb, byHost, D: ds.id, web: fromWeb.id, U: open.id };
     });
     ok('the fixture connection exists', typeof connId === 'string' && connId.length > 0);
 
@@ -114,12 +123,18 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     // connections:list carries the address, the picked table, the SQL and the last failure; a viewer gets the card only.
     const conns = (who: string) => W.call(who, 'connections:list', { projectId: P });
     const [connsViewer, connsEditor] = [await conns('nobody'), await conns('ed')];
-    const [cv, ce] = [connsViewer.body[0], connsEditor.body[0]];
+    // `entry` is {} for an id the reply does not list (or a reply that is not a list), so a regression prints FAIL instead of throwing.
+    const list = (r: H.Reply) => (Array.isArray(r.body) ? r.body : []);
+    const entry = (r: H.Reply, id: string) => list(r).find((c: { id: string }) => c.id === id) ?? {};
+    const [cv, ce] = [entry(connsViewer, connId), entry(connsEditor, connId)];
     const HIDDEN = ['values', 'table', 'query', 'queries', 'lastError', 'secretSet', 'host', 'port', 'database', 'user', 'url', 'ssl', 'kind', 'projectId', 'linkedDatasetId', 'lastRefreshedAt', 'createdAt', 'updatedAt', 'schemaVersion'];
-    ok('connections:list: a viewer gets no address, selection, SQL or failure text', connsViewer.body.length === 1 && HIDDEN.every((k) => !(k in cv)) && !CANARY.test(connsViewer.text), connsViewer.text);
-    ok('connections:list: a viewer gets the card and nothing else', JSON.stringify(Object.keys(cv).sort()) === JSON.stringify(['connectorId', 'datasetCount', 'id', 'lastStatus', 'name']), Object.keys(cv).join());
+    ok('connections:list: a viewer gets no address, selection, SQL or failure text', list(connsViewer).length === 3 && list(connsViewer).every((e: object) => HIDDEN.every((k) => !(k in e))) && !CANARY.test(connsViewer.text), connsViewer.text);
+    ok('connections:list: a viewer gets the card and nothing else', list(connsViewer).every((e: object) => Object.keys(e).sort().join() === 'connectorId,datasetCount,id,lastStatus,name'), connsViewer.text);
     ok('connections:list: …with the connection\'s name, kind of source, status and dataset count', cv.id === connId && cv.name === 'Warehouse' && cv.connectorId === 'postgres' && cv.lastStatus === 'error' && cv.datasetCount === 1, connsViewer.text);
-    ok('NEGATIVE CONTROL: the editor gets host, port, the saved SQL, the table and the failure', ce.values.host === HOST && ce.host === HOST && ce.port === 5432 && ce.queries[0].sql.includes('canary_tbl_9f3') && ce.table === TABLE && ce.lastError === REFRESH_ERROR && ce.secretSet !== undefined, connsEditor.text);
+    ok('NEGATIVE CONTROL: the editor gets host, port, the saved SQL, the table and the failure', ce.values?.host === HOST && ce.host === HOST && ce.port === 5432 && ce.queries?.[0]?.sql.includes('canary_tbl_9f3') && ce.table === TABLE && ce.lastError === REFRESH_ERROR && ce.secretSet !== undefined, connsEditor.text);
+    // A name that is, or holds, one of the connection's hidden values is the address under another word: a viewer reads the connector's label.
+    ok('connections:list: a connection named after its database, or holding its host, reads as the connector for a viewer', entry(connsViewer, byDb).name === 'PostgreSQL' && entry(connsViewer, byHost).name === 'PostgreSQL', connsViewer.text);
+    ok('NEGATIVE CONTROL: …a plainly named one keeps its name, and the editor always reads the stored names', cv.name === 'Warehouse' && entry(connsEditor, byDb).name === NAMED_DB && entry(connsEditor, byHost).name === `Replica of ${NAMED_HOST.toUpperCase()}`, connsEditor.text);
 
     // Lineage and Pipelines draw the source node from the dataset's origin: `loadInput` trims the table and the web address for a viewer.
     const lin = (who: string, id = D) => W.call(who, 'lineage:get', { projectId: P, type: 'dataset', id });

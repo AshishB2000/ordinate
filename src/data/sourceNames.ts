@@ -4,6 +4,7 @@
 // asks here, so the answer is one place. Fails closed: a role lookup that throws, or an id that is not a project id, is a viewer.
 
 import { isValidId } from '../app/ids';
+import { getConnector } from '../connectors';
 import * as datasets from './datasets';
 import type { Connection } from '../connectors/connections';
 import { restrictedOn } from './rowAccess';
@@ -23,5 +24,12 @@ export async function unreadableErrorIds(projectId: string): Promise<Set<string>
   return (await seesSourceNames(projectId)) ? new Set() : connectionDatasetIds(projectId);
 }
 
+/** A connection saved with a blank name is named after its database, host or URL, so a name that is or holds a hidden value of the connection (any case) reads as the connector's label. */
+function viewerName(c: Connection): string {
+  const name = c.name.trim().toLowerCase();
+  const hidden = [...Object.values(c.values), c.table, c.query, ...c.queries.map((q) => q.sql)].filter((v): v is string => typeof v === 'string' && v.trim() !== '');
+  return hidden.some((v) => name.includes(v.trim().toLowerCase())) ? (getConnector(c.connectorId)?.label ?? c.connectorId) : c.name;
+}
+
 /** What `connections:list` gives a caller who may not see source names: the card, never the address, selection, SQL, failure text or dates. A whitelist, so a field added to a connection stays hidden until it is listed here. */
-export const viewerConnection = (c: Connection, datasetCount: number) => ({ id: c.id, name: c.name, connectorId: c.connectorId, lastStatus: c.lastStatus, datasetCount });
+export const viewerConnection = (c: Connection, datasetCount: number) => ({ id: c.id, name: viewerName(c), connectorId: c.connectorId, lastStatus: c.lastStatus, datasetCount });
