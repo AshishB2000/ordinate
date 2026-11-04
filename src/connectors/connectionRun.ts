@@ -497,7 +497,7 @@ export async function estimateSql(
 
 // An unknown id reaches here off a stored record or an IPC payload. Echo it, but
 // bounded and stripped of anything that could be used to smuggle a string out.
-function unknownConnector(id: unknown): string {
+export function unknownConnector(id: unknown): string {
   const shown = typeof id === 'string' ? id.replace(/[^\w.-]/g, '').slice(0, 40) : '';
   return shown ? `Unknown connector: ${shown}` : 'Unknown connector';
 }

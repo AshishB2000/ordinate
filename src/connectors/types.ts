@@ -294,12 +294,15 @@ export function rowBytes(row: readonly (string | number | boolean | null)[]): nu
 /** Redact anything that looks like a credential before it reaches a renderer.
  *  Connector errors are driver strings and drivers DO put DSNs in them. */
 export function safeError(e: unknown, secrets?: Record<string, string>): string {
-  let msg = e instanceof Error ? e.message : String(e ?? 'Unknown error');
+  return redactSecrets(e instanceof Error ? e.message : String(e ?? 'Unknown error'), secrets).slice(0, 500);
+}
+
+/** `safeError`'s two passes, uncut: a literal secret value, then the credentials of a URL. */
+export function redactSecrets(msg: string, secrets?: Record<string, string>): string {
   // Strip any literal secret value first — the cheapest and most reliable pass.
   for (const v of Object.values(secrets || {})) {
     if (v && v.length >= 3) msg = msg.split(v).join('***');
   }
   // Then credentials embedded in a URL, e.g. postgres://user:pw@host.
-  msg = msg.replace(/\/\/[^/@\s]*:[^/@\s]*@/g, '//***:***@');
-  return msg.slice(0, 500);
+  return msg.replace(/\/\/[^/@\s]*:[^/@\s]*@/g, '//***:***@');
 }
