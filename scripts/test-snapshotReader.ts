@@ -147,8 +147,8 @@ void (async () => {
   ok('NEGATIVE CONTROL: the same parts without a snapshot have figures and no note', pp.ok && typeof pp.root.children[0].current === 'number' && pp.root.note === undefined, JSON.stringify(pp).slice(0, 300));
 
   // The Assistant's metric vocabulary, a plan's, a template's role mapping, a story's reuse, an embed's lock.
-  const named = (await answers.specMetrics(pid)).map((x) => x.id);
-  ok('answers: a snapshot metric is not offered to a spec', !named.includes(m.id) && named.includes(plain.id), JSON.stringify(named));
+  const offered = await answers.specMetrics(pid);
+  ok('answers: a snapshot metric is never a bare column measure (step 07: offered, marked like a filtered one)', offered.find((x) => x.id === m.id)?.hasFilters === true && offered.find((x) => x.id === plain.id)?.hasFilters === false, JSON.stringify(offered.slice(0, 3)));
   const planned = (await planExec.loadProjectCtx(pid)).metrics.map((x) => x.id);
   ok('plans: a plan step cannot name a snapshot metric', !planned.includes(m.id) && planned.includes(plain.id), JSON.stringify(planned));
   // A fresh project per case: the plan's inline KPI is tied to a saved metric with the same column and total, if one exists.
@@ -173,7 +173,7 @@ void (async () => {
   ok('scenarios: the picker does not offer a snapshot metric', !listed.includes(m.id) && listed.includes(plain.id), JSON.stringify(listed));
   const run = await scenarioResolve.computeScenario(pid, { id: U(1), name: 't', baseMetricIds: [m.id, plain.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 10 }]) });
   const row = (id: string) => run.metrics.find((x) => x.metricId === id)!;
-  ok('scenarios: a snapshot metric under a driver is never re-summed over every date', row(m.id).value !== rows.reduce((a, r) => a + r[2], 0) && row(m.id).baseline === lastDay, JSON.stringify(row(m.id)));
+  ok('scenarios: a snapshot metric under a driver keeps its baseline, never re-summed over every date (step 07)', row(m.id).value === lastDay && row(m.id).baseline === lastDay, JSON.stringify(row(m.id)));
   ok('NEGATIVE CONTROL: the same column without a snapshot moves with the driver', typeof row(plain.id).value === 'number' && (row(plain.id).value as number) > (row(plain.id).baseline as number), JSON.stringify(row(plain.id)));
 
   // A template's measure role takes the metric's column only when the metric is a plain total.
@@ -216,14 +216,15 @@ void (async () => {
   // ── the alert job: a rule made from a snapshot metric's KPI keeps only its column and total ──
   const rule = (metric: Record<string, unknown>) => ({ name: 'Units above 0', datasetId: ds.id, metric: { column: 'units', aggregation: 'sum', ...metric }, compare: 'threshold', threshold: { op: '>', value: 0 } });
   const alertOn = await alertStore.testRule(pid, rule({ metricId: m.id }));
-  ok('alerts: a rule on a snapshot metric reads no figure and does not fire', alertOn.ok && alertOn.value === null && alertOn.fire === false, JSON.stringify(alertOn));
+  ok('alerts: a rule on a snapshot metric reads its latest day (step 07), never the plain total', alertOn.ok && alertOn.value === lastDay && alertOn.fire === true, JSON.stringify(alertOn));
   const alertPlain = await alertStore.testRule(pid, rule({ metricId: plain.id }));
   ok('NEGATIVE CONTROL: the same rule on a plain metric reads the total and fires', alertPlain.ok && typeof alertPlain.value === 'number' && alertPlain.fire === true, JSON.stringify(alertPlain));
   const alertBare = await alertStore.testRule(pid, rule({}));
   ok('NEGATIVE CONTROL: the same rule with no saved metric reads the total, as before', alertBare.ok && Object.is(alertBare.value, alertPlain.value), JSON.stringify(alertBare));
   const changeRule = { ...rule({ metricId: m.id }), compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } };
   const alertChange = await alertStore.testRule(pid, changeRule);
-  ok('alerts: a previous-period rule on a snapshot metric reads no figure either', alertChange.value === null && alertChange.previous === null && alertChange.fire === false, JSON.stringify(alertChange));
+  // January's last day (2024-01-20) holds one row of 29; February's (2024-02-20) one of 49.
+  ok('alerts: a previous-period rule on a snapshot metric reads each period\'s last day (step 07)', alertChange.value === lastDay && alertChange.previous === rows.filter((r) => r[0] === '2024-01-20').reduce((a, r) => a + r[2], 0), JSON.stringify(alertChange));
 
   // ── the Summary card: a KPI of a snapshot metric never falls back to the card's stored {column, aggregation} ──
   const plainSum = rows.reduce((s, r) => s + r[2], 0);

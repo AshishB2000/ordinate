@@ -81,7 +81,7 @@ export interface SpecMetric {
   datasetId: string;
   column?: string;
   aggregation?: string;
-  /** A metric with its own row filters means something a bare column cannot, so it never becomes a chart measure. */
+  /** A metric with its own row filters or a snapshot means something a bare column cannot, so it never becomes a chart measure. */
   hasFilters?: boolean;
   /** The date it counts by (D9): a period the spec gives no column lands on it. */
   timeColumn?: string;

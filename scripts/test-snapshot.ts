@@ -42,6 +42,12 @@ const { computeMetric }: typeof import('../src/analysis/metricValue') = require(
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 const { buildVizData }: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const { dateBucket, parseDateCell }: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const ipcAnswers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const scenarioResolve: typeof import('../src/analysis/scenarioResolve') = require('../src/analysis/scenarioResolve');
+const scenarioModel: typeof import('../src/analysis/scenarioModel') = require('../src/analysis/scenarioModel');
+const { validateAnswerSpec }: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
+type AlertRule = import('../src/analysis/alerts').AlertRule;
 type Metric = import('../src/analysis/metrics').Metric;
 type FilterStep = import('../src/data/transforms').FilterStep;
 
@@ -225,6 +231,25 @@ void (async () => {
   ok('NEGATIVE CONTROL: the snapshot alone on that axis draws, binned over its own day', (await chart({ category: 'units', values: [M(stock)] })).ok === true);
   const facet = await chart({ category: 'region', values: [M(stock)], facet: { cols: 'sku' } });
   ok('small multiples of a snapshot are refused (one question per facet cannot be lined up)', facet.ok === false && facet.error === msg.measureNoFacets(), show(facet));
+
+  // ── surfaces ───────────────────────────────────────────────────────────────
+  const U = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const rule = (metric: object, extra: object = {}) => ({ id: U(1), name: 'r', datasetId: ds, metric, compare: 'threshold', threshold: { op: '>', value: 0 }, enabled: true, ...extra }) as never as AlertRule;
+  ok('an alert on Stock watches the snapshot', (await alertStore.metricFor(pid, rule({ column: 'units', aggregation: 'sum', metricId: stock.id }))).value === (await kpi(stock, [])));
+  ok('NEGATIVE CONTROL: an alert on the bare column is the plain sum', (await alertStore.metricFor(pid, rule({ column: 'units', aggregation: 'sum' }))).value === (await kpi(units, [])));
+  const change = await alertStore.metricFor(pid, rule({ column: 'units', aggregation: 'sum', metricId: stock.id }, { compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } }));
+  const periods = (await alertStore.recentPeriods(pid, ds, 'day'))!;
+  const inPeriod = (key: string) => [{ type: 'filter', column: 'day', op: periods.op, value: key }] as FilterStep[];
+  ok('a previous-period alert reads each period\'s own last day (reference, Object.is)', typeof change.value === 'number' && Object.is(change.value, ref(stock, inPeriod(periods.keys[1]))) && Object.is(change.previous, ref(stock, inPeriod(periods.keys[0]))), show([change, periods]));
+  const sm = await ipcAnswers.specMetrics(pid);
+  ok('an answer card never treats Stock as a bare column', sm.find((x) => x.id === stock.id)?.hasFilters === true && sm.find((x) => x.id === units.id)?.hasFilters === false, show(sm.filter((x) => [stock.id, units.id].includes(x.id))));
+  const named = (id: string) => validateAnswerSpec({ dataset: ds, category: 'region', measures: [id === stock.id ? 'Stock' : 'Units'] }, [{ id: ds, name: 'Stock data', columns: COLS }], { metrics: sm });
+  ok('…so a spec naming it is refused, never drawn as a sum of units', !named(stock.id).ok, show(named(stock.id)));
+  ok('NEGATIVE CONTROL: a spec naming a plain metric takes it', named(units.id).ok, show(named(units.id)));
+  const sc = await scenarioResolve.computeScenario(pid, { id: U(2), name: 't', baseMetricIds: [stock.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 5 }]) });
+  ok('a scenario says its drivers were not applied, and keeps the baseline', sc.ok && sc.notes.includes('Drivers on "units" were not applied to a snapshot metric.') && sc.metrics[0].value === (await kpi(stock, [])) && sc.metrics[0].baseline === sc.metrics[0].value, show(sc));
+  const scPlain = await scenarioResolve.computeScenario(pid, { id: U(3), name: 't', baseMetricIds: [units.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 5 }]) });
+  ok('NEGATIVE CONTROL: the same driver moves a plain metric, with no such note', scPlain.ok && (scPlain.metrics[0].value as number) > (scPlain.metrics[0].baseline as number) && !scPlain.notes.some((n: string) => n.includes('snapshot')), show(scPlain));
   const gone = (await metrics.saveMetric(pid, { name: 'Gone day', datasetId: ds, definition: { column: 'units', aggregation: 'count', snapshot: { column: 'removed', take: 'last' } } }))!;
   ok('a snapshot day column that is gone gives no figure, never a count of 0', (await ipcMetrics.resolveMetric(pid, gone.id))!.value === null);
   ok('NEGATIVE CONTROL: the same count on the real day column is a figure', (await kpi(lines, [])) !== null && (await kpi(lines, [])) !== 0);
