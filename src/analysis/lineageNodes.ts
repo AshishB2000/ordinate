@@ -11,6 +11,8 @@ import { columnFlow, formulaColumns, stepProduces } from './lineageFlow';
 import type { FlowColumn } from './lineageFlow';
 import { alertReads, cardReads, consumerColumns, keyColumns, metricColumns } from './lineageColumns';
 import type { TransformStep } from '../data/transforms';
+import { isTermStep } from '../data/termStep';
+import { isValidId } from '../app/ids';
 
 // ponytail: loose record shapes — each store's own sanitizer already shaped them (as ./lineage does)
 type Rec = Record<string, any>;
@@ -47,13 +49,19 @@ function nodeId(ds: string, F: DsFlow, fc: FlowColumn): string {
 
 const subOf = (fc: FlowColumn): string => (fc.how === 'masked' ? 'Masked' : fc.how === 'approximate' ? 'Approximate' : fc.was.length ? `Renamed from ${fc.was.join(', ')}` : 'Column');
 
-/** Every `{type:'term', term}` reference anywhere in a record. */
-function termIdsIn(rec: unknown, into = new Set<string>(), depth = 0): Set<string> {
-  if (!rec || typeof rec !== 'object' || depth > 14) return into;
-  const o = rec as Rec;
-  if (o.type === 'term' && typeof o.term === 'string') into.add(o.term);
-  for (const v of Array.isArray(o) ? o : Object.values(o)) termIdsIn(v, into, depth + 1);
-  return into;
+/** Every `{ type: 'term', term: <UUID> }` step anywhere in a record: the one rule ./termUsage counts by (held equal by test-lineageColumns). */
+function termIdsIn(rec: unknown): Set<string> {
+  const out = new Set<string>();
+  const stack: unknown[] = [rec];
+  const seen = new Set<object>();
+  while (stack.length) {
+    const v = stack.pop();
+    if (!v || typeof v !== 'object' || seen.has(v)) continue;
+    seen.add(v);
+    if (isTermStep(v) && isValidId(v.term)) out.add(v.term);
+    for (const child of Array.isArray(v) ? v : Object.values(v)) stack.push(child);
+  }
+  return out;
 }
 
 export function addColumnNodes(g: LineageGraph, input: LineageInput): LineageGraph {

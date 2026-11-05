@@ -172,9 +172,6 @@ ok('a term node, by name only, between its column and the visual', node(g, `term
 ok('a term is not also a direct column edge to the figure that uses it', !g.edges.some((e) => e.from === `column:${CUSTOMERS}:region` && e.to === `visual:${VTERM}`));
 ok('a Live calc reads its inputs', down(g, `column:${LIVE}:amt`).includes(`calc:${LIVE}:Margin`) && down(g, `calc:${LIVE}:Margin`).includes(`visual:${id(10)}`));
 ok('a dataset with a SQL origin has column nodes, fed from the dataset only', g.edges.filter((e) => e.to === `column:${CUSTOMERS}:region`).every((e) => e.from === `dataset:${CUSTOMERS}`));
-// Lineage's term usage, by kind, against the records (part 1's termUsage is not in this branch: step 10's tasks 2-3 add it).
-const wu = focus(g, `term:${WEST}`).usedIn;
-ok('term usage by kind: the chart that holds it, the dashboard that holds the chart', wu.visual === 1 && wu.dashboard === 1 && (wu.metric ?? 0) === 0 && (wu.alert ?? 0) === 0, show(wu));
 ok('lineage:get draws no column or term node', !buildGraph(ni).nodes.some((n) => n.kind === 'column' || n.kind === 'term'));
 ok('NEGATIVE CONTROL: a column nothing reads has no node', !g.nodes.some((n) => n.id === `column:${ORDERS}:unused`));
 ok('addColumnNodes is pure: the graph it was given is unchanged', buildGraph(ni).nodes.length === buildGraph(ni).nodes.length && g.nodes.length > buildGraph(ni).nodes.length);
@@ -215,6 +212,36 @@ const post = (channel: string, payload: unknown): Promise<any> => handlers.get(c
   ok('lineage:column and lineage:fields agree on "Used in"', show(c.usedIn) === show(fl.fields.Month.usedIn));
   ok('a column nobody reads, and an unknown one, answer null, not an error', (await post('lineage:column', { projectId: P, datasetId: sampleDs, column: 'nope' })) === null);
   ok('a bad id answers null / empty', (await post('lineage:column', { projectId: 'x', datasetId: sampleDs, column: 'a' })) === null && Object.keys((await post('lineage:fields', { projectId: 'x', datasetId: sampleDs })).fields).length === 0);
+
+  // Differential: lineage's term edges === part 1's termUsage (term:usage), kind by kind, with Object.is.
+  const termsStore: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+  const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const reportSpec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');
+  const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+  const { termUsage }: typeof import('../src/analysis/termUsage') = require('../src/analysis/termUsage');
+  const { loadInput }: typeof import('../src/ipc/lineage') = require('../src/ipc/lineage');
+  const meta = await datasets.getDatasetMeta(P, sampleDs);
+  const tcol = (meta as { columns: Array<{ name: string }> }).columns[0].name;
+  const term = await termsStore.saveTerm(P, { name: 'Lineage term', datasetId: sampleDs, filters: [{ type: 'filter', column: tcol, op: 'not_empty' }] });
+  const byTerm = [{ type: 'term', term: term!.id }];
+  const lv = await visualStore.saveVisual(P, { name: 'Holds term', datasetId: sampleDs, chartType: 'bar', encoding: { category: tcol, values: [{ column: tcol, aggregation: 'count' }] }, filters: byTerm } as never);
+  await visualStore.saveVisual(P, { name: 'Also holds term', datasetId: sampleDs, chartType: 'bar', encoding: { category: tcol, values: [{ column: tcol, aggregation: 'count' }] }, filters: byTerm } as never);
+  await metricStore.saveMetric(P, { name: 'Term metric', datasetId: sampleDs, definition: { column: tcol, aggregation: 'count' }, filters: byTerm } as never);
+  const dash = await analysisStore.saveAnalysis(P, { name: 'Term board', filters: byTerm, sheets: [{ name: 'Main', cards: [] }] });
+  await reportSpec.saveReport(P, { analysisId: dash!.id, name: 'Term weekly' });
+  await alertStore.saveRule(P, { name: 'Term alert', datasetId: sampleDs, compare: 'threshold', threshold: { op: '<', value: 1 }, metric: { column: tcol, aggregation: 'count', filters: byTerm } } as never);
+  const usage = (await termUsage(P))[term!.id];
+  const inp = await loadInput(P);
+  const lg = addColumnNodes(buildGraph(inp), inp);
+  const kindOf = new Map(lg.nodes.map((n) => [n.id, n.kind]));
+  const direct = lg.edges.filter((e) => e.from === `term:${term!.id}`).map((e) => e.to);
+  const reports = new Set(lg.edges.filter((e) => direct.includes(e.from) && kindOf.get(e.to) === 'report').map((e) => e.to));
+  ok('fixture: the term is used in every kind the differential compares', !!lv && !!usage && usage.refs.length >= 5, show(usage));
+  for (const k of ['visual', 'dashboard', 'metric', 'alert'] as const) {
+    ok(`term usage agrees with termUsage: ${k}`, Object.is(direct.filter((n) => kindOf.get(n) === k).length, usage.refs.filter((r) => r.kind === k).length), `${k}`);
+  }
+  ok('term usage agrees with termUsage: report (through the dashboard that holds it)', Object.is(reports.size, usage.refs.filter((r) => r.kind === 'report').length));
+  ok('NEGATIVE CONTROL: the differential compares non-zero counts', direct.length >= 4 && usage.refs.filter((r) => r.kind === 'visual').length === 2);
 
   // ORIGIN CANARY: a planted path, keyed URL, table and SQL reach neither reply.
   const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
