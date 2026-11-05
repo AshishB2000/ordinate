@@ -686,7 +686,7 @@ export function register() {
         available: true,
         filters: resolved.filters,
         columns: meta.columns,
-        rows: res.rows,
+        rows: res.rows, ...(res.hidden ? { hidden: res.hidden } : {}), // the columns whose cells are null (./columnDoors)
         total: res.total,
         offset: res.offset,
       };

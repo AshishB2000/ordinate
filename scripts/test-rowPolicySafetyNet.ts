@@ -18,8 +18,10 @@
 // 6. `nobody` is refused `none`; the rules themselves are admin-only.
 // 7. COLUMN RULES (semantic layer part 4): `columnAccess`, which a newer release writes, planted on Orders
 //    closes EVERY door and reader of 2 and 3 to east (named by the row rules) and to `nobody`, each in its own
-//    wire form (typed `columns`; the answers carry the sentence; two channels carry no reason and are asserted as
-//    "no figure"); the editor and the admin read each as on an identical dataset without it (NEGATIVE CONTROL).
+//    wire form (typed `columns` — part 4 step 05: rules that no longer hold, here a stale `readersHash`, refuse
+//    at the column gate; a reader of 3 is refused by the row rules first, `reader`; the answers carry the
+//    sentence; two channels carry no reason and are asserted as "no figure"); the editor and the admin read each
+//    as on an identical dataset without it (NEGATIVE CONTROL).
 //    Planted on datasets with NO row rules, every REDACT, SKIP and META channel of 3 is redacted, skipped or
 //    structure-only for east, shown to east before the key, and shown to the editor (NEGATIVE CONTROLS).
 //
@@ -540,10 +542,11 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     };
     const columnReplies: string[] = [];
     const channels: [string, string, unknown][] = [...DIFFERENTIAL.map(([l, c, p]): [string, string, unknown] => [l, c, p(orders)]), ...REFUSED];
+    const readersOf3 = new Set(REFUSED.map(([l]) => l));
     for (const [label, channel, payload] of channels) {
       const mine = await W.call('east', channel, payload);
       columnReplies.push(mine.text);
-      ok(`columns: ${label} (${channel}) refuses east, whom the row rules name, typed \`columns\``, closedByColumns(channel, mine), `${mine.status} ${mine.text.slice(0, 200)}`);
+      ok(`columns: ${label} (${channel}) refuses east, whom the row rules name, typed \`columns\`${readersOf3.has(label) ? ' or `reader`' : ''}`, closedByColumns(channel, mine) || (readersOf3.has(label) && H.refused(mine, 'reader')), `${mine.status} ${mine.text.slice(0, 200)}`);
       for (const who of ['ed', 'boss']) {
         const theirs = await W.call(who, channel, payload);
         ok(`NEGATIVE CONTROL: columns: ${label} — ${who} is not refused`, !H.refused(theirs) && !/row_policy/.test(theirs.text), `${theirs.status} ${theirs.text.slice(0, 160)}`);

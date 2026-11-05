@@ -14,7 +14,7 @@ import { withLockOf } from './rowDoors';
 
 /** Null when the dataset is gone. `op` names the call site for residentTrace. */
 export function distinctFor(projectId: string, datasetId: string, column: string, req: DistinctRequest, op?: string): Promise<DistinctResult | null> {
-  return withLockOf(projectId, datasetId, async (lock) => {
+  return withLockOf(projectId, datasetId, async (lock) => { // the question: the column and the parent picks (a pick on a hidden column would probe its values)
     // The lock FIRST, then the request's own (a picker's parent picks): a pick can only narrow what the lock allows.
     const r: DistinctRequest = lock ? { ...req, filters: [...lock.steps, ...(req.filters ?? [])] } : req;
     const src = await datasets.residentSource(projectId, datasetId);
@@ -30,5 +30,5 @@ export function distinctFor(projectId: string, datasetId: string, column: string
     }
     const ds = await datasets.getDataset(projectId, datasetId);
     return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, r) : null;
-  });
+  }, [column, req.filters]);
 }

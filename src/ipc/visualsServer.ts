@@ -30,6 +30,7 @@ import { pageFor } from './datasets';
 import { csvFileName, writeDrillCsv } from './visuals';
 import { drillFilters } from './drillScope';
 import { visualForCaller } from './rowDoors';
+import { shownColumns } from './columnDoors';
 
 /** The picker's quick picks, short to long (periodPicker.ts PP_GROUPS). */
 const PERIOD_GROUPS: { title: string; items: PeriodSpec[] }[] = [
@@ -79,10 +80,11 @@ export function register(): void {
       const counted = await pageFor(projectId, datasetId, base, 'drillExport');
       if (!counted.ok) return counted;
       if (counted.total === 0) return { ok: false, error: 'There are no rows to export.' };
-      const shaper = await rowShaper(projectId, datasetId, meta.columns, 'export');
+      const shown = shownColumns(meta.columns, counted.hidden); // the hidden columns leave no file, not even as empty cells
+      const shaper = await rowShaper(projectId, datasetId, shown.columns, 'export');
       const file = path.join(appPaths.temp(), `drill-${randomUUID()}.csv`);
       const hash = createHash('sha256'); // as it is written: no second read before an S3 upload
-      const rows = await writeDrillCsv(file, projectId, datasetId, base, shaper.columns, counted.total, shaper.row, hash);
+      const rows = await writeDrillCsv(file, projectId, datasetId, base, shaper.columns, counted.total, (r) => shaper.row(shown.row(r)), hash);
       return { ok: true, rows, ...(await offerDownload(file, csvFileName(name), hash.digest('hex'))) };
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Failed to export the rows' };

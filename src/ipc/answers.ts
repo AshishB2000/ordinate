@@ -18,6 +18,7 @@
 
 import { ipcMain } from './bus';
 import { lockedTable, withLockOf } from './rowDoors';
+import { withoutColumns } from '../data/columnAccess';
 import type { Lock } from '../data/rowLock';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
@@ -158,7 +159,7 @@ function ranked(data: ChartData, top?: number): ChartData {
 export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
   // A glossary term is expanded FIRST (a refusal THROWS, typed 'term'), before the lock and the Live split; the card keeps the reference.
   const x = await expandAnswerTerms(projectId, asked);
-  const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock) => computeCardWith(projectId, x.spec, loose, lock, x));
+  const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock, hidden) => computeCardWith(projectId, x.spec, loose, lock, x, hidden), [x.spec, x.steps]); // the question: the spec and its terms' steps
   const out = x.terms.length && 'card' in built ? withTermRefs(built, x) : built;
   if ('card' in out) out.card.notes.push(...await retiredNotes(projectId, asked.measures.flatMap((m) => m.metricId ? [`metric:${m.metricId}`] : []))); // a retired metric still computes (D6); the card says what replaces it
   return out;
@@ -179,7 +180,7 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
   };
 }
 
-async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }): Promise<Built | Failure> {
+async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }, hidden: ReadonlySet<string> = new Set()): Promise<Built | Failure> {
   const asMeasures = { category: asked.category, values: asked.measures };
   const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures)); // part 5's shapes first; extract and Live alike
   if (snapshot) return { ok: false, reason: snapshot };
@@ -192,7 +193,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const stored = await datasets.getDataset(projectId, asked.datasetId);
   if (!stored) return { ok: false, reason: 'The dataset this answer was built on no longer exists.' };
   // Under a row access lock every helper below (value matching, period anchors, nearest values) sees entitled rows only.
-  const ds = lockedTable(stored, lock);
+  const ds = withoutColumns(lockedTable(stored, lock), hidden); // no hidden column reaches a match, a chip or a suggestion
   const has = (n: string): boolean => ds.columns.some((c) => c.name === n);
   const used = [asked.category, ...asked.measures.map((m) => m.column), ...asked.filters.flatMap((f) => ('column' in f ? [f.column] : []))]
     .concat(asked.series ? [asked.series] : []);
