@@ -231,7 +231,7 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                       {m.definitionText}
                     </td>
                     <td>
-                      <CountsBy m={m} />
+                      <CountsBy m={m} list={q.data.metrics} />
                     </td>
                     <td>
                       <AddsUp a={row?.additivity} />

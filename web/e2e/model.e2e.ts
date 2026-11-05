@@ -10,6 +10,8 @@
 //   3b. Topics (part 6 step 07): Sales made from the header narrows Datasets and Metrics, is still picked after a
 //      reload, Show all clears it, an edit saves, and Delete puts it in the Trash as a "Topic".
 //   3c. Lineage: trace a column, "Used by" on each field, and the ask before removing a step that feeds a metric.
+//   Period metrics (part 5): one built in the editor's Period mode from a dated base, the server's words, days and
+//      figure in its preview; its KPI tile on a dashboard says which days it covers.
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
 //   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
 //      empty state); one written with Enter is stored by the server and still there after a reload, and a
@@ -262,6 +264,58 @@ e2e('data model: count distinct', async ({ page, server }) => {
   await cd.getByRole('button', { name: 'Create metric' }).click();
   const cdRow = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Regions served' }) });
   await cdRow.getByText('count distinct of region').waitFor();
+});
+
+e2e('data model: a period metric', async ({ page, server }) => {
+  // Part 5, D8: "Sales, last 24 months" over a dated base, and a "year to date" tile under a dashboard's October.
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const rpc = async (channel: string, payload: unknown) => (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as Record<string, any>; // any: each channel's reply
+  const ds = ((await rpc('dataset:list', { projectId: pid })) as unknown as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!.id;
+  const base = (await rpc('metric:save', { projectId: pid, input: { name: 'Sales', datasetId: ds, definition: { column: 'revenue', aggregation: 'sum' }, timeColumn: 'order_date', format: { kind: 'currency', decimals: 0, compact: true } } })).metric.id as string;
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  await page.getByRole('button', { name: 'New metric' }).click();
+  const dlg = page.getByRole('dialog', { name: 'New metric' });
+  await dlg.getByLabel('Name').fill('Sales 24 months');
+  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await dlg.getByRole('tab', { name: 'Period' }).click();
+  await dlg.getByRole('combobox', { name: 'Base metric' }).click();
+  assert.deepEqual(await page.getByRole('option').allTextContents(), ['Sales'], 'only a metric that counts by a date is a base');
+  await page.getByRole('option', { name: 'Sales' }).click();
+  await dlg.getByText('Counts by order_date, its base’s date, and follows the base’s edits.').waitFor();
+  await dlg.getByRole('radiogroup', { name: 'Window' }).getByRole('radio', { name: 'Last' }).click();
+  await dlg.getByRole('spinbutton', { name: 'How many' }).fill('24');
+  await dlg.getByRole('combobox', { name: 'Unit' }).click();
+  await page.getByRole('option', { name: 'months' }).click();
+  const preview = dlg.getByRole('complementary', { name: 'Preview' });
+  await preview.getByText('Sales, last 24 months').waitFor(); // the server's words
+  await preview.getByText(/^\$[\d.]+[KM]?$/).waitFor(); // the server's figure, in the base's format
+  await preview.getByText(/ – .*\d{4}$/).waitFor(); // the days it covers, as the server resolved them
+  await screensInPlace(page, 'model-metrics-period-editor');
+  await dlg.getByRole('button', { name: 'Create metric' }).click();
+  const table = page.getByRole('table');
+  const row = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Sales 24 months' }) });
+  await row.getByText('Sales, last 24 months').waitFor();
+  await row.getByText('from Sales').waitFor(); // it counts by its base's date
+
+  // Its KPI on a dashboard filtered to October 2024: the year to the end of October, and the tile says so.
+  const ytd = (await rpc('metric:save', { projectId: pid, input: { name: 'Sales YTD', datasetId: ds, definition: { base, window: { to_date: 'year' } }, format: { kind: 'currency', decimals: 0, compact: true } } })).metric.id as string;
+  const card = { type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: ds, column: '', aggregation: 'sum', metricId: ytd, label: 'Sales, year to date' } };
+  const oct = [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2024-10-01', to: '2024-10-31' } }];
+  const board = (await rpc('analysis:create', { projectId: pid, name: 'Period tiles', filters: oct, sheets: [{ name: 'Sheet 1', cards: [card] }] })).id as string;
+  await page.goto(`/analyses/${pid}/${board}`);
+  await page.getByText('Jan 1 – Oct 31, 2024').waitFor();
+  await screens(page, 'model-period-tile');
+
+  for (const [channel, id] of [['analysis:delete', board], ['metric:delete', ytd]] as const) await rpc(channel, { projectId: pid, id });
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  for (const name of ['Sales 24 months', 'Sales']) {
+    const id = ((await rpc('metric:list', { projectId: pid })).metrics as { id: string; name: string }[]).find((m) => m.name === name)?.id;
+    if (id) await rpc('metric:delete', { projectId: pid, id });
+  }
 });
 
 e2e('data model: glossary', async ({ page, server }) => {

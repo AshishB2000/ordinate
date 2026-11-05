@@ -3,7 +3,7 @@
 // (`metric:table`), absent from an older pod and null when unknown, and both of those read "—".
 
 import { Badge } from '../../../ui/Badge';
-import type { MetricSummary } from '../../analyses/metrics/api';
+import { isPeriod, type MetricSummary } from '../../analyses/metrics/api';
 import s from '../Model.module.css';
 
 export interface Additivity {
@@ -11,9 +11,21 @@ export interface Additivity {
   time: boolean;
 }
 
-export function CountsBy({ m }: { m: MetricSummary }) {
+/** `list`: the table's metrics, where a period metric's base (part 5, D8) is found: it counts by the base's date. */
+export function CountsBy({ m, list = [] }: { m: MetricSummary; list?: MetricSummary[] }) {
   const def = m.definition as MetricSummary['definition'] | undefined; // a summary without one draws no snapshot, never a crash
-  const snap = def && !('formula' in def) ? def.snapshot : null;
+  const snap = def && 'column' in def ? def.snapshot : null;
+  const base = def && isPeriod(def) ? list.find((b) => b.id === def.base) : undefined;
+  if (def && isPeriod(def)) {
+    return base?.timeColumn ? (
+      <span className={s.countsBy}>
+        <code className={s.formula}>{base.timeColumn}</code>
+        <span className={s.muted}>from {base.name}</span>
+      </span>
+    ) : (
+      <span className={s.muted}>—</span>
+    );
+  }
   return (
     <span className={s.countsBy}>
       {m.timeColumn ? <code className={s.formula}>{m.timeColumn}</code> : <span className={s.muted}>Any date</span>}

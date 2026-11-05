@@ -7,7 +7,7 @@
 
 import { rpc } from '../../api/client';
 import type { MetricFormat, MetricSummary } from '../analyses/metrics/api';
-import { isFormula } from '../analyses/metrics/api';
+import { isFormula, isPeriod } from '../analyses/metrics/api';
 import type { FunctionDoc, Tok } from '../prepare/api';
 import type { Measure } from '../visuals/api';
 
@@ -75,7 +75,7 @@ export function templateText(id: TemplateId, a: Operand, b: Operand, measure: bo
  * keeps per-series formatting keyed right.
  */
 export function metricMeasure(m: Pick<MetricSummary, 'id' | 'name' | 'definition'>, prev?: Measure): Measure {
-  const out: Measure = isFormula(m.definition) ? { column: m.name, aggregation: 'count', metricId: m.id } : { column: m.definition.column, aggregation: m.definition.aggregation, metricId: m.id };
+  const out: Measure = isFormula(m.definition) || isPeriod(m.definition) ? { column: m.name, aggregation: 'count', metricId: m.id } : { column: m.definition.column, aggregation: m.definition.aggregation, metricId: m.id };
   if (prev?.calc) out.calc = prev.calc;
   return out;
 }

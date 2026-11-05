@@ -15,7 +15,7 @@ import { Select } from '../../../ui/Select';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import { AGG_LABEL, useTile, type Agg, type Card, type MetricTile } from '../api';
-import { formatBadge, isFormula, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
+import { formatBadge, isFormula, isPeriod, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
 import { pickerOrder } from '../../model/status/status';
 import { RetiredGroup } from '../../model/status/RetiredGroup';
 import { useEditor } from './context';
@@ -172,12 +172,12 @@ export function AddKpiDialog({ onClose }: { onClose: () => void }) {
   const [draft, setDraft] = useState<NonNullable<Card['metric']> | null>(null);
   const pick = (m: MetricSummary) => {
     // column / aggregation are stored ALONGSIDE the id: a card whose metric is
-    // later deleted keeps its number from them. A formula has no column.
+    // later deleted keeps its number from them. A formula has no column, nor a period metric (part 5: `sum`, no copy).
     const def = m.definition;
     add({
       datasetId: m.datasetId,
-      column: isFormula(def) ? '' : def.column,
-      aggregation: isFormula(def) ? 'count' : def.aggregation,
+      column: isFormula(def) || isPeriod(def) ? '' : def.column,
+      aggregation: isFormula(def) ? 'count' : isPeriod(def) ? 'sum' : def.aggregation,
       label: m.name,
       metricId: m.id,
     });

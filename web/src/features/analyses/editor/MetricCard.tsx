@@ -21,6 +21,7 @@ import { metricMeasure } from '../../calc/api';
 import s from './Cards.module.css';
 import { LiveRefusal } from '../../live/LiveOff';
 import { liveRefusalOf } from '../../live/refusal';
+import { periodRangeText } from '../metrics/api';
 
 /** "+18.2%" / "−4.1%" — one decimal under 10%, none above, a real minus sign (kpiPct). */
 export function kpiPct(pct: number): string {
@@ -210,6 +211,7 @@ export function MetricBody({ card }: { card: Card }) {
       )}
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
+      {t.periodRange && <p className={s.periodOn}>{periodRangeText(t.periodRange)}</p> /* a period metric's days, the server's */}
       {t.periodOn && <p className={s.periodOn}>Date range applied to {t.periodOn}</p>}
       {t.notes?.map((n) => <p key={n} role="note" className={s.periodOn}>{n}</p>) /* a dashboard term this KPI leaves out */}
       {why && compare && (

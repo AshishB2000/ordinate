@@ -1,5 +1,5 @@
 // One dialog for a whole metric (legacy metricEditor.ts): name, dataset,
-// definition (Simple or Formula), filters, format, description, direction —
+// definition (Simple, Formula or Period: ./PeriodFields), filters, format, description, direction —
 // with a LIVE figure from the server (`metric:preview` runs the resolver and
 // the formatter the saved record will use). A draft without an id is a
 // prefill: "Save as metric…" on a KPI hands one in. A duplicate name is
@@ -26,10 +26,11 @@ import type { FilterStep } from '../../visuals/api';
 import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
-import { isFormula, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
+import { isFormula, isPeriod, periodRangeText, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
 import { movesPin } from '../../model/status/status';
 import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
 import { KeyHint } from './KeyHint';
+import { PeriodFields, type PeriodDraft } from './PeriodFields';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
@@ -74,12 +75,16 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   const ds = datasetId ?? sets.data?.[0]?.id ?? null;
   const cols = useDatasetColumns(projectId, ds ?? undefined);
   const others = useMetricList(projectId);
-  const [mode, setMode] = useState<'simple' | 'formula'>(def && isFormula(def) ? 'formula' : 'simple');
-  const [column, setColumn] = useState<string | null>(def && !isFormula(def) ? def.column || null : null);
+  const [mode, setMode] = useState<'simple' | 'formula' | 'period'>(def && isFormula(def) ? 'formula' : def && isPeriod(def) ? 'period' : 'simple');
+  const simple = def && 'column' in def ? def : null;
+  const [column, setColumn] = useState<string | null>(simple ? simple.column || null : null);
   const col = column && cols.data?.columns.some((c) => c.name === column) ? column : (cols.data?.columns[0]?.name ?? null);
-  const [agg, setAgg] = useState<Agg>(def && !isFormula(def) ? def.aggregation : 'sum');
+  const [agg, setAgg] = useState<Agg>(simple ? simple.aggregation : 'sum');
   // A snapshot (D8): `take:column`, or '' for every row. Always sent, so a clear (null) is told from an old tab's save.
-  const [snapshot, setSnapshot] = useState(def && !isFormula(def) && def.snapshot ? `${def.snapshot.take}:${def.snapshot.column}` : '');
+  const [snapshot, setSnapshot] = useState(simple?.snapshot ? `${simple.snapshot.take}:${simple.snapshot.column}` : '');
+  // A period metric (part 5, D8): its base, window and comparison; '' until a base is picked.
+  const [period, setPeriod] = useState<PeriodDraft>(def && isPeriod(def) ? def : { base: '' });
+  const [periodError, setPeriodError] = useState('');
   const [snapError, setSnapError] = useState('');
   const [formula, setFormula] = useState(def && isFormula(def) ? def.formula : '');
   // The builder's filter rows and typed dialog (filterDialog.ts): values, conditions, ranges, periods — never a guessed type.
@@ -100,12 +105,13 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   // The date it counts by (D9): `''` is the dashboard's date. Set only by a pick or by "Use <column>", never silently.
   const [timeColumn, setTimeColumn] = useState(existing?.timeColumn ?? '');
   const [dateError, setDateError] = useState('');
-  const [preview, setPreview] = useState<{ display: string; text: string; error?: string } | null>(null);
+  const [preview, setPreview] = useState<{ display: string; text: string; error?: string; range?: string; notes?: string[] } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const definition = mode === 'formula' ? { formula } : col ? { column: col, aggregation: agg, snapshot: snapshotOf(snapshot) } : null;
+  const periodReady = !!period.base && (!!period.window || !!period.compare);
+  const definition = mode === 'formula' ? { formula } : mode === 'period' ? (periodReady ? period : null) : col ? { column: col, aggregation: agg, snapshot: snapshotOf(snapshot) } : null;
   const live = liveFilters(filters);
   const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
@@ -117,9 +123,9 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
       rpc('metric:preview', { projectId, datasetId: d, definition: dfn, filters: flt, format: f })
         .then(
           (r) => {
-            const res = r as { ok: boolean; display?: string; definitionText?: string; error?: string };
-            // A refusal keeps the server's reason (a formula naming an unknown metric) instead of a bare dash.
-            if (on) setPreview(res.ok ? { display: res.display || '—', text: res.definitionText || '' } : { display: '—', text: '', error: res.error || 'This definition cannot be computed.' });
+            const res = r as { ok: boolean; display?: string; definitionText?: string; error?: string; periodRange?: { from?: string; to?: string }; notes?: string[] };
+            // A refusal keeps the server's reason (a formula naming an unknown metric) instead of a bare dash; a period metric's days and why it has no figure are the server's too.
+            if (on) setPreview(res.ok ? { display: res.display || '—', text: res.definitionText || '', range: periodRangeText(res.periodRange), notes: res.notes } : { display: '—', text: '', error: res.error || 'This definition cannot be computed.' });
           },
           (err: unknown) => on && setPreview({ display: '—', text: '', error: failure(err, 'The preview could not be computed.') }),
         )
@@ -168,23 +174,25 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
     setError('');
     setDateError('');
     setSnapError('');
+    setPeriodError('');
     if (!name.trim()) return setError('A metric needs a name.');
+    if (mode === 'period' && !periodReady) return setError(period.base ? 'Pick a window, a comparison, or both.' : 'Choose a base metric.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
     setSaving(true);
-    // The date only when it changed: an edit that leaves it alone lets a formula take its new parts' date (the server's rule).
-    const dated = editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
+    // The date only when it changed: an edit that leaves it alone lets a formula take its new parts' date (the server's rule). A period metric has none of its own.
+    const dated = mode === 'period' ? { timeColumn: '' } : editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
     const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction, ...dated }, guard);
     setSaving(false);
     if ('changed' in r) return; // the banner
     // In the dialog, not a toast: the user's work is still in these boxes — a date's refusal beside the date.
-    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : r.field === 'snapshot' ? setSnapError(r.error) : setError(r.error);
+    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : r.field === 'snapshot' ? setSnapError(r.error) : r.field === 'definition' ? setPeriodError(r.error) : setError(r.error);
     onSaved(r.metric);
     onClose();
   };
   // Save mine as a copy: these boxes as a new metric, which the host then shows (a duplicate name is refused as ever).
   const copy = async () => {
     if (!ds || !definition) throw new Error('Choose a dataset and a column.');
-    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn });
+    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn: mode === 'period' ? '' : timeColumn });
     if ('error' in r) throw new Error(r.error);
     if ('metric' in r) {
       onSaved(r.metric);
@@ -252,12 +260,14 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               setFilters([]);
               setTimeColumn('');
               setSnapshot('');
+              setPeriod({ base: '' });
             }}
           />
-          <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' ? 'formula' : 'simple')}>
+          <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' || v === 'period' ? v : 'simple')}>
             <TabList label="Definition">
               <Tab value="simple">Simple</Tab>
               <Tab value="formula">Formula</Tab>
+              <Tab value="period">Period</Tab>
             </TabList>
           </Tabs>
           {mode === 'simple' ? (
@@ -300,6 +310,18 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
                 />
               )}
             </>
+          ) : mode === 'period' ? (
+            <PeriodFields
+              projectId={projectId}
+              datasetId={ds}
+              value={period}
+              error={periodError || undefined}
+              onChange={(next, f) => {
+                setPeriod(next);
+                setPeriodError('');
+                if (f) setFormat({ kind: f.kind, decimals: f.decimals ?? 0, prefix: f.prefix ?? '', suffix: f.suffix ?? '', compact: f.compact === true });
+              }}
+            />
           ) : (
             <>
               <Textarea
@@ -323,6 +345,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               )}
             </>
           )}
+          {mode !== 'period' && (
           <div className={s.group}>
             <Select
               label="Date it counts by"
@@ -344,6 +367,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               </div>
             )}
           </div>
+          )}
           <div className={s.group}>
             {ds && <FilterRows projectId={projectId} datasetId={ds} cols={columns} filters={filters} onChange={setFilters} />}
             <span className={s.filterHint}>Filters apply before the aggregation: they are part of what the metric means.</span>
@@ -370,6 +394,12 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
             {previewing && !preview ? '…' : preview ? preview.display : '—'}
           </span>
           {preview?.error ? <span className={s.previewError}>{preview.error}</span> : <span className={s.previewText}>{preview?.text}</span>}
+          {preview?.range && <span className={s.previewRange}>{preview.range}</span>}
+          {preview?.notes?.map((n) => (
+            <span key={n} role="note" className={s.previewText}>
+              {n}
+            </span>
+          ))}
           {previewing && preview && <span className={s.previewText}>Updating…</span>}
         </aside>
         {lineage && editingId && <LineageDrawer projectId={projectId} type="metric" id={editingId} name={name || 'Metric'} onClose={() => setLineage(false)} />}

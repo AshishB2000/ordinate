@@ -56,6 +56,17 @@ describe('The Data model: metrics', () => {
     expect(screen.getByText('4 metrics')).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
 
+  it('a period metric counts by its base’s date (part 5), and says whose', async () => {
+    serve({ 'metric:table': { body: { ok: true, metrics: [...METRICS, metric('m5', 'Revenue YTD', { definition: { base: 'm1', window: { to_date: 'year' } } }), metric('m6', 'Gone YTD', { definition: { base: 'zz', window: { to_date: 'year' } } })], rows: ROWS } } });
+    renderApp(`/model/${P}?tab=metrics`);
+    const ytd = await rowOf('Revenue YTD');
+    expect(within(ytd).getByText('ship_date')).toBeTruthy();
+    expect(within(ytd).getByText('from Revenue')).toBeTruthy();
+    expect(within(ytd).queryByText('Any date')).toBeNull();
+    const gone = within(await rowOf('Gone YTD')).getAllByRole('cell');
+    expect(gone[3].textContent).toBe('—'); // NEGATIVE CONTROL: a base that is gone gives no date, never "Any date"
+  });
+
   it('NEGATIVE CONTROL: an older pod sends no additivity, and that reads "—", never "No"', async () => {
     serve();
     renderApp(`/model/${P}?tab=metrics`);
