@@ -51,6 +51,7 @@ import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
 import { isLiveDatasetError } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isExternalMetricError, refuseExternal } from './externalMetric';
 import { logger } from '../app/logger';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -330,6 +331,8 @@ export async function metricFor(
 ): Promise<{ value: number | null; previous: number | null; period?: string }> {
   const stored = (rule.metric.filters || []) as FilterStep[];
   if (rule.compare === 'anomaly') return { value: null, previous: null };
+  const named = typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
+  if (named) refuseExternal(named); // a layer's metric: refused, never its stored column's total (part 7 b0)
   // A rule made from a snapshot metric's KPI stores only its column and total: it reads its metric's snapshot (D8), never the plain sum.
   const snap = (await snapshotMetric(projectId, rule.metric.metricId))?.definition as { snapshot?: MetricSnapshot } | undefined;
   const spec = { column: rule.metric.column, aggregation: rule.metric.aggregation, ...(snap?.snapshot ? { snapshot: snap.snapshot } : {}) };
@@ -496,7 +499,7 @@ export async function evaluateProject(
     } catch (err) {
       // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
       // time — its state untouched, never "the value was null" — and the others still are. Nor is a refused one.
-      if (isLiveFigureError(err) || isRowPolicyError(err)) continue;
+      if (isLiveFigureError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue;
       throw err;
     }
     results.push({ from, rule: res.rule, event: res.event || null });

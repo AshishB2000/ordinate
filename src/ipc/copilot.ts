@@ -162,7 +162,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const out: FactMetric[] = [];
     const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
-      if (datasetId && s.datasetId !== datasetId) continue;
+      if ((datasetId && s.datasetId !== datasetId) || metrics.isExternalDefinition(s.definition)) continue; // a layer's metric has no figure here (part 7 b0)
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
       const r = await resolveMetric(projectId, s.id, scope).catch((err: unknown) => {
         if (isLiveFigureError(err)) return null;

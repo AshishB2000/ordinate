@@ -62,6 +62,8 @@ import { snapshotProblem } from '../analysis/snapshotGuards';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { termHolding } from '../analysis/termNames';
 import { termNameTaken } from '../data/termMessages';
+import { ExternalMetricError } from '../analysis/externalMetric';
+import { externalNoDuplicate } from '../analysis/externalMetricMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 
@@ -146,10 +148,12 @@ async function resolveDefinition(
   definition: MetricDefinition,
   filters: FilterStep[],
   depth: number,
+  name?: string, // the metric's, for the sentence refusing a layer's metric
 ): Promise<number | null> {
   // The metric's OWN filters may reference a dashboard parameter too; the
   // scope arrived already resolved by the handler.
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
+  if (metrics.isExternalDefinition(definition)) throw new ExternalMetricError('pending', name ?? definition.external); // only its layer can answer it (part 7 b0)
 
   if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
   if (!isFormulaDefinition(definition)) {
@@ -223,7 +227,7 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
     if (away && !away.ok) ctx.refused ??= away.error;
     else {
       if (away && m) Object.assign(ctx, { scope: away.filters, marked: { filters: m.filters, on: metric.datasetId } });
-      value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth);
+      value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth, metric.name);
     }
   } finally {
     ctx.stack.delete(key);
@@ -280,7 +284,7 @@ export async function resolveMetric(
   // Seeded so a self-reference inside this metric's own formula is caught by the
   // same guard that catches a loop between two of them.
   ctx.stack.add(metric.name.toLowerCase());
-  const value = s.ok ? await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0) : null;
+  const value = s.ok ? await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0, metric.name) : null;
   ctx.stack.delete(metric.name.toLowerCase());
   const out: ResolvedMetric = {
     ok: true,
@@ -411,7 +415,7 @@ export async function resolveMetricSeries(
       { type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep,
     ]));
     ctx.stack.add(metric.name.toLowerCase());
-    const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
+    const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0, metric.name);
     out.values.push(v);
     out.display.push(displayOf(v, metric.format, ctx.fx, !isFormulaDefinition(metric.definition)));
   }
@@ -568,6 +572,8 @@ export function register() {
   });
 
   ipcMain.handle('metric:duplicate', async (_e, { projectId, id }: any = {}) => {
+    const src = await metrics.getMetric(projectId, id);
+    if (src && metrics.isExternalDefinition(src.definition)) return { ok: false, error: externalNoDuplicate(src.name) }; // a second copy of a layer's definition
     const m = await metrics.duplicateMetric(projectId, id);
     return m ? { ok: true, metric: m } : { ok: false, error: 'Metric not found' };
   });

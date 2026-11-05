@@ -21,6 +21,7 @@ import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 import { isTermNotExpandedError, tagTermRefusals, termRaised, termRefusal, TERM_CODE } from '../data/termStep';
+import { EXTERNAL_CODE, externalRaised, externalRefusal, isExternalMetricError, tagExternalRefusals } from '../analysis/externalMetric';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 import type { Card } from '../analysis/dashboards';
@@ -55,15 +56,17 @@ async function cardVisual(projectId: string, c: Card, at: string): Promise<visua
 /** How many of the first sheet's visuals a list card previews (anList.ts AN_PREVIEW_MAX). */
 const PREVIEW_MAX = 2;
 
-/** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. A term refusal keeps its type, as the route types it. */
+/** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. A term (or layer's metric) refusal keeps its type, as the route types it. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
   const h = handlers.get(channel);
   if (!h) return { ok: false, error: `${channel} is not available` };
-  const raised = termRaised();
+  const [raised, external] = [termRaised(), externalRaised()];
   try {
     const r = await h(event, payload);
+    if (externalRaised() !== external) tagExternalRefusals(r);
     return termRaised() === raised ? r : tagTermRefusals(r);
   } catch (err: any) { // any: a handler's throw
+    if (isExternalMetricError(err)) return externalRefusal(err);
     return isTermNotExpandedError(err) ? termRefusal(err) : { ok: false, error: err?.message || `${channel} failed` };
   }
 }
@@ -154,7 +157,7 @@ export function register(): void {
       let res: any = null; // any: one of two handlers' replies
       if (it.metricId) {
         const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency, share });
-        if (r && r.code === TERM_CODE) return r; // a filter it cannot apply: says so — never "deleted", never the stored column's figure
+        if (r && (r.code === TERM_CODE || r.code === EXTERNAL_CODE)) return r; // a filter it cannot apply, a layer's metric: says so — never "deleted", never the stored column's figure
         if (r && r.hiddenByPolicy) return r; // the Share policy's words — never the stored column's figure, nor a Compare
         if (r && r.refused) return { ok: false, error: r.refused }; // D9: dates that disagree under a date control — nor the stored column's figure
         if (r && r.ok !== false) {
@@ -242,6 +245,6 @@ export function register(): void {
       // A Live metric's refusal or failure, and a filter it cannot apply, are kept (typed); any other failure stays a bare `ok:false`.
       return r && r.ok !== false
         ? { id, ok: true, value: r.value, display: r.display, ...(r.asOf ? { asOf: r.asOf } : {}) }
-        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : r && typeof r.code === 'string' && (r.code.startsWith('live_') || r.code === TERM_CODE) ? { code: r.code, error: r.error } : {}) };
+        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : r && typeof r.code === 'string' && (r.code.startsWith('live_') || r.code === TERM_CODE || r.code === EXTERNAL_CODE) ? { code: r.code, error: r.error } : {}) };
     })));
 }

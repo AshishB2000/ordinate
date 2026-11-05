@@ -292,7 +292,7 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     for (const s of await metrics.listMetrics(projectId)) {
-      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s)) continue; // part 5's shapes: not named by a model on this release
+      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s)) continue; // part 5's shapes, and a layer's metric (no column measure): not named by a model on this release
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,

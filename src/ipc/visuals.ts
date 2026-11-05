@@ -420,8 +420,8 @@ export type VizDataReply =
       periodOn?: string;
       notes?: string[]; // the dashboard's glossary terms this chart left out (analysis/termExpand termNotApplied)
     }
-  // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply.
-  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE; reason?: string };
+  // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply; a layer's metric.
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE | 'external_metric'; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {

@@ -7,6 +7,7 @@ import * as metrics from './metrics';
 import type { Metric } from './metrics';
 import * as msg from './metricCheckMessages';
 import { sanitizeSnapshot } from './snapshot';
+import { ExternalMetricError } from './externalMetric';
 import * as datasets from '../data/datasets';
 import type { VizEncoding } from './visuals';
 
@@ -25,8 +26,10 @@ export async function snapshotMetric(projectId: string, metricId: unknown): Prom
  */
 export async function snapshotMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined): Promise<string | null> {
   for (const v of snapshotDrawn(encoding)) {
-    const m = await snapshotMetric(projectId, v?.metricId);
-    if (m) return msg.snapshotInAnswer(m.name);
+    const m = typeof v?.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
+    if (!m) continue;
+    if (metrics.isExternalDefinition(m.definition)) return new ExternalMetricError('pending', m.name).message; // nor a layer's metric (b0): raised, so the route types it
+    if (metrics.isSimpleDefinition(m.definition) && m.definition.snapshot) return msg.snapshotInAnswer(m.name);
   }
   return null;
 }

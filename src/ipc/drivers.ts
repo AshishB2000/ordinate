@@ -58,6 +58,7 @@ import { isoFromDays } from '../analysis/dateIntel';
 import { changeSentence } from '../analysis/driverPoint';
 import { fewerThanTwoPeriods } from '../analysis/driverPointMessages';
 import { expandTerms } from '../analysis/termExpand';
+import { refuseExternal } from '../analysis/externalMetric';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -295,6 +296,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   const metric = spec.metric.metricId ? await metrics.getMetric(projectId, spec.metric.metricId) : null;
   if (spec.metric.metricId && !metric && !spec.metric.column) return { ok: false, error: 'That metric no longer exists.' };
   if (metric && metric.datasetId !== spec.datasetId) return { ok: false, error: 'That metric lives on another dataset.' };
+  if (metric) refuseExternal(metric); // a layer's metric: only its layer splits it (part 7 b0)
   // D9, for every asker (the Summary, alerts, the waterfall, the copilot): a control's period on the metric's date, as its KPI; no mark goes on.
   const scoped = metric ? await metricScope(projectId, metric, spec.filters) : { ok: true as const, filters: rewriteControlPeriods(spec.filters, '') };
   if (!scoped.ok) return { ok: false, error: scoped.error };
