@@ -65,6 +65,13 @@ function live(list: Relationship[], infos: Infos): Relationship[] {
   return list.filter((r) => has(r.from) && has(r.to));
 }
 
+/** The model a planner over `primary` reads: the live relationships and every dataset they name (analysis/fanOutPlan). */
+export async function projectModel(projectId: string, primary: string): Promise<{ rels: Relationship[]; infos: Infos }> {
+  const list = await rels.listRelationships(projectId);
+  const infos = await modelInfos(projectId, primary, list);
+  return { rels: live(list, infos), infos };
+}
+
 async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinSource[] | null> {
   if (!isResident()) return null;
   const out: JoinSource[] = [];
