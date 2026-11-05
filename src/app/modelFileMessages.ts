@@ -57,3 +57,8 @@ export function modelDuplicateId(): string {
 export function modelDatasetMoved(): string {
   return t('modelFileMessages.this_definition_is_on_another_dataset');
 }
+
+/** An upload token that has expired, was used already, or is not the caller's: files are uploaded again for each run. */
+export function modelUploadExpired(): string {
+  return t('modelFileMessages.that_upload_has_expired_or_was');
+}

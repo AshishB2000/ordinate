@@ -13,14 +13,25 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import { H, close, hydrated, post } from './liveRouteHarness';
+import { H, close, hydrated, post, upload } from './liveRouteHarness';
 import { buildModelFixture, GUIDE_CANARY } from './modelFixture';
 import type { ImportPlan, PlanItem } from '../src/app/modelPlan';
+import type { Identity } from '../src/server/context';
 
 const { exportModel }: typeof import('../src/app/modelExport') = require('../src/app/modelExport');
 const { readModelFiles }: typeof import('../src/app/modelRead') = require('../src/app/modelRead');
 const { planImport }: typeof import('../src/app/modelPlan') = require('../src/app/modelPlan');
 const { modelJson }: typeof import('../src/app/modelFormat') = require('../src/app/modelFormat');
+const { modelZip }: typeof import('../src/ipc/modelFiles') = require('../src/ipc/modelFiles');
+const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
+const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+const api: typeof import('../src/api/index') = require('../src/api/index');
+const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
+const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const VIEWER: Identity = { user: { email: 'vic@acme.test', role: 'viewer' }, org: { id: 'acme' } };
+const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org: { id: 'acme' } };
 
 type Files = Map<string, string>;
 type Json = Record<string, any>; // any: a model file, edited as git would edit it
@@ -250,6 +261,34 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
   const share = itemOf(await plan(F.P, withSkip), `metric:${fid(47)}`);
   ok('a formula naming a metric the import skips is refused as the editor refuses an unknown name', share.reason === 'invalid' && share.error === String((await post('metric:check', { projectId: F.P, datasetId: F.orders, expression: '[Refunds] / [Revenue]', name: 'Refund share' })).value.error), show(share));
   ok('NEGATIVE CONTROL: the same files without a defect plan clean', (await plan(F.P, filesG)).items.every((i) => i.status !== 'skipped'), show(await plan(F.P, filesG)));
+  // ── 8. model:importPlan ───────────────────────────────────────────────────
+  const contract = api.contracts['model:importPlan'];
+  const { bytes } = await H.as(H.ORG_A, () => modelZip(F.P));
+  const tempDir = await H.as(H.ORG_A, async () => appPaths.temp());
+  const staged = (): string[] => (fs.existsSync(tempDir) ? fs.readdirSync(tempDir).filter((n) => n.startsWith('upload-')) : []);
+  const stagedBefore = staged().length;
+  const cleared = (): Promise<boolean> => H.until(() => staged().length === stagedBefore, 2000); // the delete is a callback
+  const up = await upload(bytes, 'Retail model-model.zip');
+  ok('the zip uploads', up.status === 200 && /^[A-Za-z0-9_-]{43}$/.test(up.fileToken), JSON.stringify(up));
+  const viaRoute = await post('model:importPlan', { projectId: F.P, fileToken: up.fileToken });
+  const direct = await plan(F.P, (await H.as(H.ORG_A, () => exportModel(F.P))).files);
+  ok('model:importPlan: ok, and the hash planImport gives over the same files', viaRoute.value.ok === true && viaRoute.value.plan.hash === direct.hash && viaRoute.value.plan.items.length === direct.items.length, viaRoute.body.slice(0, 400));
+  ok('the upload is gone from the staging area once planned', await cleared(), staged().join());
+  const again = await post('model:importPlan', { projectId: F.P, fileToken: up.fileToken });
+  ok('a used token: the upload has expired, with the sentence', again.value.ok === false && again.value.error === (await H.as(H.ORG_A, async () => msg.modelUploadExpired())), again.body);
+  const notZip = await upload(Buffer.from('not a zip'), 'model.zip');
+  const refusedZip = await post('model:importPlan', { projectId: F.P, fileToken: notZip.fileToken });
+  ok('a file that is not a zip is refused with a sentence, and its upload is gone', refusedZip.value.ok === false && typeof refusedZip.value.error === 'string' && (await cleared()), refusedZip.body);
+  const input = { projectId: F.P, fileToken: up.fileToken };
+  ok('contract: write, project-scoped, a strict input', !!contract && contract.access === 'write' && 'project' in contract && contract.project(input) === F.P && contract.input.safeParse(input).success && !contract.input.safeParse({ ...input, path: '/x' }).success && !contract.input.safeParse({ ...input, fileToken: '../x' }).success);
+  const grants = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) }) as unknown as import('pg').Pool;
+  const decide = (who: Identity, rank: number) => H.as(who, () => authz.authorize(contract, input, who, grants(rank)));
+  ok('a viewer is refused (403 before the handler)', !(await decide(VIEWER, 1)).ok);
+  ok('NEGATIVE CONTROL: a project editor may plan an import', (await decide(EDITOR, 2)).ok);
+  const asViewer = (await H.as(VIEWER, async () => rpc.handlers.get('model:importPlan')?.(undefined, input))) as Record<string, unknown> | undefined;
+  ok('a restricted caller reaching the handler is refused, with the sentence', asViewer?.ok === false && asViewer.error === (await H.as(VIEWER, async () => msg.modelRestricted())) && !('plan' in asViewer), JSON.stringify(asViewer));
+  ok('the reply names no file path or token', !viaRoute.body.includes(os.tmpdir()) && !viaRoute.body.includes(up.fileToken) && !/upload-[0-9a-f]{32}/.test(viaRoute.body));
+
   ok('metric:save still refuses a taken name with field "name"', (await post('metric:save', { projectId: F.P, input: { datasetId: F.orders, name: 'Revenue', definition: { column: 'amount', aggregation: 'sum' } } })).value.field === 'name');
 
   await close();

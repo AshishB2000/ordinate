@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { byProjectId, rpc, Uuid } from './contract';
+import { byProjectId, FileToken, rpc, Uuid } from './contract';
 
 export const model = {
   // preload: invoke('model:overview', { projectId }) — the Data model's Datasets tab in one read: every dataset's role, key
@@ -12,4 +12,8 @@ export const model = {
   // invoke('model:export', { projectId }) — the definitions as a zip of model files (src/ipc/modelFiles.ts): a download
   // token, never a row, origin or secret. An editor's: a caller row access rules restrict is refused (part 7 D7).
   'model:export': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // invoke('model:importPlan', { projectId, fileToken }) — the dry run of importing an uploaded model zip (src/ipc/modelFiles.ts): each
+  // object unchanged, updated, renamed, new, in conflict, skipped with why, or only here, and the plan's hash. Writes nothing. An editor's:
+  // the plan shows term values and value labels, so a caller row access rules restrict is refused (part 7 D7).
+  'model:importPlan': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, fileToken: FileToken }), project: byProjectId }),
 } as const;

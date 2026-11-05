@@ -514,6 +514,7 @@
   "modelFileMessages.another_file_in_the_model_has": "Another file in the model has the same id, so this one was not read.",
   "modelFileMessages.has_always_applied_filters_this_version": "“{name}” has always-applied filters this version of Ordinate can't read, so the model can't be exported. Ask your admin to finish upgrading Ordinate.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate can't read this file: a value is missing, has the wrong type or is too long.",
+  "modelFileMessages.that_upload_has_expired_or_was": "That upload has expired or was already used. Choose the file again.",
   "modelFileMessages.the_model_files_hold_a_file": "The model files hold a file Ordinate does not read ({name}). They were refused as a whole.",
   "modelFileMessages.the_model_files_hold_more_values": "The model files hold more values than Ordinate reads (over 1,000,000).",
   "modelFileMessages.these_model_files_use_format_from": "These model files use format {version}, from a newer version of Ordinate. Upgrade Ordinate to import them.",

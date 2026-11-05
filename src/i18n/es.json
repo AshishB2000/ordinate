@@ -517,6 +517,7 @@
   "modelFileMessages.another_file_in_the_model_has": "Otro archivo del modelo tiene el mismo id, así que este no se leyó.",
   "modelFileMessages.has_always_applied_filters_this_version": "“{name}” tiene filtros que se aplican siempre y que esta versión de Ordinate no puede leer, así que el modelo no se puede exportar. Pide a tu administrador que termine de actualizar Ordinate.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate no puede leer este archivo: falta un valor, tiene un tipo incorrecto o es demasiado largo.",
+  "modelFileMessages.that_upload_has_expired_or_was": "Esa subida caducó o ya se usó. Vuelve a elegir el archivo.",
   "modelFileMessages.the_model_files_hold_a_file": "Los archivos del modelo contienen un archivo que Ordinate no lee ({name}): se rechazaron por completo.",
   "modelFileMessages.the_model_files_hold_more_values": "Los archivos del modelo contienen más valores de los que Ordinate lee (más de 1.000.000).",
   "modelFileMessages.these_model_files_use_format_from": "Estos archivos del modelo usan el formato {version}, de una versión más reciente de Ordinate. Actualiza Ordinate para importarlos.",

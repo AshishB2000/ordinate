@@ -2,6 +2,9 @@
 // (src/app/modelExport.ts), handed back as a download token, as `projects:export` hands back a bundle.
 // The zip is byte-identical while nothing changed: entries in path order, each stamped MODEL_ZIP_TIME.
 // It stores nothing: the file sits in the org's temp() until it is sent (src/server/files.ts).
+//
+// `model:importPlan` (a2): the dry run of an uploaded zip (src/app/modelRead.ts, src/app/modelPlan.ts). It writes
+// nothing and keeps nothing: the upload is deleted before the reply, so the apply uploads it again (any pod).
 
 import * as path from 'path';
 import { createHash, randomUUID } from 'crypto';
@@ -12,7 +15,13 @@ import * as recordFs from '../app/recordFs';
 import { writeZipAsync } from '../app/bundle';
 import { exportModel, ModelExportRefused, type ModelCounts, type NotCarried } from '../app/modelExport';
 import { MODEL_ZIP_TIME } from '../app/modelFormat';
-import { offerDownload } from '../server/files';
+import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
+import { readModelZip } from '../app/modelRead';
+import { planImport, type ImportPlan } from '../app/modelPlan';
+import { modelRestricted, modelUploadExpired } from '../app/modelFileMessages';
+import { restrictedOn } from '../data/rowAccess';
+
+export type ModelPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
 
 export type ModelExportReply = { ok: true; downloadToken: string; counts: ModelCounts; notCarried: NotCarried[] } | { ok: false; error: string };
 
@@ -43,6 +52,28 @@ export function register(): void {
     } catch (err) {
       for (const f of [target + '.partial', target]) await recordFs.rm(f, { force: true }).catch(() => undefined);
       throw err;
+    }
+  });
+
+  ipcMain.handle('model:importPlan', async (_e, { projectId, fileToken }: { projectId?: unknown; fileToken?: unknown } = {}): Promise<ModelPlanReply> => {
+    const p = typeof projectId === 'string' ? projectId : '';
+    if (await restrictedOn(p)) return { ok: false, error: modelRestricted() }; // before the upload is read (D7)
+    let upload: Upload;
+    try {
+      upload = await resolveUpload(fileToken);
+    } catch (err) {
+      if (err instanceof FileTokenError) return { ok: false, error: modelUploadExpired() };
+      throw err;
+    }
+    try {
+      const read = await readModelZip(upload.path);
+      if ('refused' in read) return { ok: false, error: read.refused };
+      return { ok: true, plan: await planImport(p, read) };
+    } catch (err) {
+      if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
+      throw err; // the route answers 500 and logs it
+    } finally {
+      upload.done();
     }
   });
 }
