@@ -2,8 +2,6 @@ import { ipcMain } from './bus';
 import { expandedOrRefusal, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
-import * as answerKey from '../data/answerKey';
-import * as queryCache from '../engine/queryCache';
 import * as datasets from '../data/datasets';
 import { buildVizData } from '../analysis/vizData';
 import type { VizDataResult } from '../analysis/vizData';
@@ -49,18 +47,16 @@ import { applyToChart } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
-import { ensureFresh } from '../data/freshOnAsk';
 import type { AsOf } from '../api/asOf';
 import { driversVizData } from './drivers';
 import { facetVizData, isFaceted } from './visualsFacets';
 import { buildFacetData } from '../analysis/facets';
-import { fxScope, fxVizContext, fxVizData } from './fxQuery';
+import { fxScope, fxVizData } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
-import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
-import { followedEncoding, planMetricMeasures } from '../analysis/metricMeasures';
+import { followedEncoding } from '../analysis/metricMeasures';
 import { chartScope } from '../analysis/metricTimeScope';
-import { followMetricMeasures } from './vizMetricMeasures';
+import { vizDataForUnlocked } from './vizDataCached';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
@@ -455,8 +451,8 @@ async function overCeiling(projectId: string, datasetId: string, max?: number): 
  * resident in main's heap. Above the ceiling the honest answer is "no preview
  * for this card", never a slow one and never a guessed one.
  */
-type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
-/** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body below. */
+export type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
+/** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body (./vizDataCached). */
 export async function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
   const expanded = await expandedOrRefusal(projectId, datasetId, filters);
   if (!('steps' in expanded)) return expanded;
@@ -466,36 +462,7 @@ export async function vizDataFor(projectId: string, datasetId: string, encoding:
   return reply.ok && scoped.periodOn ? { ...reply, periodOn: scoped.periodOn } : reply;
 }
 
-async function vizDataForUnlocked(
-  projectId: string,
-  datasetId: string,
-  encoding: VizEncoding,
-  filters: FilterStep[],
-  opts: VizOpts,
-): Promise<VizDataReply> {
-  // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures); a snapshot pivot and part 5's shapes refuse.
-  const planned = await planMetricMeasures(projectId, datasetId, encoding, opts.params);
-  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : planned;
-  // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
-  const live = await liveMetaOf(projectId, datasetId);
-  if (live) return liveChart(projectId, live, encoding, filters);
-  await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
-  // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
-  // the builder or a tab coming back asks the same question over unchanged
-  // data. Only successful answers are kept; an error is recomputed every time.
-  const parts = await answerKey.keyParts(projectId, datasetId);
-  if (!parts) return computeVizData(projectId, datasetId, encoding, filters, opts);
-  const op = encoding && encoding.pivot ? 'pivot' : 'aggregate';
-  const fxc = await fxVizContext(projectId, datasetId, encoding, filters);
-  const key = queryCache.cacheKey(op, parts, {
-    encoding, filters, params: opts.params ?? null, max: opts.maxHydrateRows ?? null, sample: opts.sample === true,
-    ...answerKey.ambient(), fx: fxc ? fxc.key : undefined,
-  });
-  return queryCache.through(op, key, [datasetId, queryCache.projectDep(projectId)],
-    () => computeVizData(projectId, datasetId, encoding, filters, opts), (r) => r.ok);
-}
-
-async function computeVizData(
+export async function computeVizData(
   projectId: string,
   datasetId: string,
   encoding: VizEncoding,
