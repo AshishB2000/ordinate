@@ -47,7 +47,7 @@ export function TopicPicker({ projectId, value, onChange }: { projectId: string;
   };
   return (
     <div className={s.picker} title={current?.description}>
-      <Select label="Topic" size="sm" value={current?.id ?? ALL} options={options} onValueChange={choose} />
+      <Select label="Topic" value={current?.id ?? ALL} options={options} onValueChange={choose} />
       {open && (
         <TopicDrawer
           projectId={projectId}

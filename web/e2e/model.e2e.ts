@@ -7,6 +7,8 @@
 //   2. Metrics (moved from /data/metrics, which redirects): the table from the server with each metric's
 //      date and whether it adds up, a new metric with a live preview and a filter, delete to Trash.
 //   3. Glossary: a term made here, added to a visual's filters, changes its chart, and reads "1 visual".
+//   3b. Topics (part 6 step 07): Sales made from the header narrows Datasets and Metrics, is still picked after a
+//      reload, Show all clears it, an edit saves, and Delete puts it in the Trash as a "Topic".
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
 //   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
 //      empty state); one written with Enter is stored by the server and still there after a reload, and a
@@ -232,6 +234,117 @@ e2e('data model: glossary', async ({ page, server }) => {
   await settled(page);
   await row.getByText('1 visual', { exact: true }).waitFor(); // term:usage, the server's count
   await screens(page, 'model-glossary');
+});
+
+/** One RPC from the page, as the web client sends it (T6.2: the cookie's CSRF token as a header). */
+async function callFromPage(page: Page, channel: string, payload: unknown): Promise<unknown> {
+  return page.evaluate(async ([ch, p]) => {
+    const token = /(?:^|;\s*)(?:__Host-)?ordinate_csrf=([A-Za-z0-9_-]{43})/.exec(document.cookie)?.[1] ?? '';
+    const r = await fetch(`/api/rpc/${encodeURIComponent(ch as string)}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token }, body: JSON.stringify({ args: [p] }) });
+    return r.json();
+  }, [channel, payload] as const);
+}
+
+e2e('data model: topics', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  // A term of the sample's own, for the topic to list.
+  const orders = ((await callFromPage(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[]).find((d) => d.name === 'Retail orders');
+  const term = (await callFromPage(page, 'term:save', { projectId: pid, input: { name: 'East side', datasetId: orders!.id, filters: [{ type: 'filter', column: 'region', op: '=', value: 'East' }] } })) as { ok: boolean };
+  assert.equal(term.ok, true, `the term is saved: ${JSON.stringify(term)}`);
+
+  // No topic yet: the picker reads All, and an editor can start one.
+  const picker = page.getByRole('combobox', { name: 'Topic' });
+  await picker.click();
+  await page.getByRole('option', { name: 'New topic…' }).waitFor();
+  for (const theme of ['light', 'dark'] as const) {
+    // The viewport only: a full-page capture resizes the page, and the open list hides while it moves.
+    await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+    await page.getByRole('listbox').waitFor();
+    await page.waitForTimeout(250); // the list repositions a frame after the theme moves the page
+    await page.screenshot({ path: path.join(SCREENS, `model-topic-none-${theme}.png`) });
+  }
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+  await page.getByRole('option', { name: 'New topic…' }).click();
+  const drawer = page.getByRole('dialog', { name: 'New topic' });
+  await drawer.getByLabel('Name').fill('Sales');
+  await drawer.getByLabel('Description').fill('What the sales team reads first');
+  await drawer.getByRole('checkbox', { name: 'Retail orders' }).check();
+  await drawer.getByRole('button', { name: /^Fields of Retail orders: all \d+$/ }).click();
+  const fields = page.getByRole('dialog', { name: 'Fields of Retail orders' });
+  const boxes = fields.getByRole('checkbox');
+  await boxes.nth(1).waitFor();
+  const total = (await boxes.count()) - 1; // "All fields" first
+  for (let i = total; i > 4; i--) await boxes.nth(i).uncheck(); // keep the first four columns
+  await page.keyboard.press('Escape');
+  await drawer.getByRole('button', { name: `Fields of Retail orders: 4 of ${total}` }).waitFor();
+  await drawer.getByRole('checkbox', { name: 'Revenue', exact: true }).check();
+  await drawer.getByRole('checkbox', { name: 'East side' }).check();
+  await screenshotBoth(page, 'model-topic-drawer');
+  await drawer.getByRole('button', { name: 'Save' }).click();
+  await drawer.waitFor({ state: 'detached' });
+  await page.waitForURL(/[?&]topic=[0-9a-f-]{36}/);
+
+  // Picked: Metrics holds Revenue only, the Datasets list Retail orders only.
+  const line = page.getByTestId('topic-line');
+  await line.getByText(/^1 of \d+ metrics$/).waitFor();
+  const rows = page.getByRole('table').getByRole('row');
+  assert.equal(await rows.count(), 2, 'the header row and Revenue');
+  await rows.filter({ has: page.getByRole('button', { name: 'Revenue', exact: true }) }).waitFor();
+  await page.getByRole('tab', { name: 'Datasets' }).click();
+  const list = page.getByRole('navigation', { name: 'Datasets' });
+  await list.getByRole('link', { name: 'Retail orders' }).waitFor();
+  assert.equal(await list.getByRole('link').count(), 1, 'Shipments is not in Sales');
+  await line.getByText(/^1 of \d+ datasets$/).waitFor();
+
+  // A reload with no topic= keeps it: the pick is remembered in this browser.
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  await line.getByText(/^1 of \d+ metrics$/).waitFor();
+  assert.match((await picker.textContent()) ?? '', /Sales/);
+  await screens(page, 'model-topic');
+
+  // An edit: the term out; the Glossary then says Sales lists none.
+  await picker.click();
+  await page.getByRole('option', { name: 'Edit Sales…' }).click();
+  const edit = page.getByRole('dialog', { name: 'Topic · Sales' });
+  await edit.getByRole('checkbox', { name: 'East side' }).waitFor();
+  // At phone width it is a bottom sheet in one column, and nothing scrolls sideways.
+  const misfits: string[] = [];
+  await phoneFits(page, misfits, 'the topic drawer', { on: [edit] });
+  await screenshotBoth(page, 'model-topic-phone');
+  assert.deepEqual(misfits, []);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await edit.getByRole('checkbox', { name: 'East side' }).uncheck();
+  await edit.getByRole('button', { name: 'Save' }).click();
+  await edit.waitFor({ state: 'detached' });
+  await page.getByRole('tab', { name: 'Glossary' }).click();
+  await page.getByRole('heading', { name: 'Sales lists no terms' }).waitFor();
+  await screens(page, 'model-topic-empty');
+
+  // Show all clears it, for the next load too.
+  await page.getByRole('button', { name: 'Show all' }).click();
+  await line.waitFor({ state: 'detached' });
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  await page.getByText(/^\d+ metrics$/).waitFor(); // the unnarrowed count, in place of the line
+  assert.equal(await line.count(), 0, 'All after Show all and a reload');
+
+  // Delete: confirmed, to the Trash, listed there as a Topic.
+  await picker.click();
+  await page.getByRole('option', { name: 'Sales' }).click();
+  await line.waitFor();
+  await picker.click();
+  await page.getByRole('option', { name: 'Edit Sales…' }).click();
+  await page.getByRole('dialog', { name: 'Topic · Sales' }).getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('dialog', { name: 'Delete “Sales”?' }).getByRole('button', { name: 'Delete' }).click();
+  await page.getByText('Moved “Sales” to Trash').waitFor();
+  await line.waitFor({ state: 'detached' });
+  await page.goto('/trash');
+  await settled(page);
+  const row = page.getByRole('row').filter({ hasText: 'Sales' });
+  await row.getByText('Topic', { exact: true }).waitFor();
 });
 
 e2e('data model: an empty project, and the error and loading states', async (s) => {

@@ -24,7 +24,7 @@
 }
 .pickerBar {
   width: 200px;
-  height: var(--ctl-sm);
+  height: var(--ctl-md);
   border-radius: var(--r-md);
 }
 
