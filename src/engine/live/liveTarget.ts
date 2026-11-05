@@ -91,7 +91,7 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   // b0: a dataset that asks another tool's semantic layer (part 7) has no table or SQL here: refused first, before base filters and calcs.
   if (meta.live.semanticPending) return { ok: false, kind: 'refused', refusal: refuse('semanticPending') };
   // 00a: a stored list of calculated fields this pod cannot read in full answers nothing: a calc it dropped would read as an unknown column.
-  if (meta.live.calculatedUnreadable) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
+  if (meta.live.calculatedUnreadable) return { ok: false, kind: 'refused', refusal: refuse('calculatedUnreadable', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;
   if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
   const conn = await connections.getConnection(projectId, origin.connId);

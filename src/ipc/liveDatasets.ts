@@ -183,9 +183,9 @@ function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseR
 }
 
 /** The same for calculated fields (part 8, 00a): a copy would hold none of them, so a filter on one would be gone. */
-function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'calculated'; error: string } | null {
+function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'calculated' | 'calculatedUnreadable'; error: string } | null {
   if (!hasLiveCalcs(meta.live)) return null;
-  return { ok: false, code: 'live_refused', reason: 'calculated', error: liveCalculatedRefused(meta.live?.calculated?.[0]?.name ?? '') };
+  return { ok: false, code: 'live_refused', reason: meta.live?.calculatedUnreadable ? 'calculatedUnreadable' : 'calculated', error: liveCalculatedRefused(meta.live?.calculated?.[0]?.name ?? '') };
 }
 
 /** A base filter the fetched rows cannot take (its column is gone from the warehouse since the last sync). */

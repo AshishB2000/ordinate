@@ -56,7 +56,7 @@ import { keyOf } from './profileSql';
 import type { Total } from './compileDistinct';
 import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
 import type { LiveCalc } from '../../data/liveCalcs';
-import { namesCalc } from './calcLayers';
+import { calcFrom, namesCalc } from './calcLayers';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -153,7 +153,6 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   if (!d) return refuse('badQuery');
   const columns = Array.isArray(env.columns) ? env.columns : [];
   const names = namesOf(ir);
-  if (namesCalc(names, env.source)) return refuse('calculated', names.find((n) => namesCalc([n], env.source)));
   for (const name of names) {
     if (badName(name)) return refuse('badIdentifier');
     if (!columnOf(columns, name)) return refuse('unknownColumn', name);
@@ -163,9 +162,12 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
-  const from = fromItem(d, env.source);
+  const c: Ctx = { d, b: new ParamSink(), columns };
+  const inner = fromItem(d, env.source);
+  // A calc the statement reads: one derived table per calc it needs (./calcLayers). None: today's FROM, byte for byte.
+  const from = isRefusal(inner) || !namesCalc(names, env.source) ? inner : calcFrom(c, env.source, names, inner);
   if (isRefusal(from)) return from;
-  return { c: { d, b: new ParamSink(), columns }, from, base: env.base ?? [], ms };
+  return { c, from, base: env.base ?? [], ms };
 }
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */

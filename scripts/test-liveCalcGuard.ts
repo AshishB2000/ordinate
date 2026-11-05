@@ -131,14 +131,14 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   ];
   const sentence = refusals.liveCalculatedRefused('Margin');
   ok('the sentence says why and what to do', /calculated fields can't be computed by this server/.test(sentence) && /finish upgrading Ordinate/.test(sentence), sentence);
-  ok('the refusal code renders its catalog key with its column', spec.refuse('calculated', 'Margin').message === sentence && spec.refuse('calculated', 'Margin').params.column === 'Margin');
+  ok('the refusal code renders its catalog key with its column', spec.refuse('calculatedUnreadable', 'Margin').message === sentence && spec.refuse('calculatedUnreadable', 'Margin').params.column === 'Margin');
   const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
 
   /**
    * Every door, the lookup, Make a copy and Copy the data instead refuse typed on L (whatever is planted), and
    * spend nothing. `why` is the code the refusal travels under and `said` its sentence.
    */
-  async function refusesEverywhere(what: string, why = 'calculated', said = sentence): Promise<unknown[]> {
+  async function refusesEverywhere(what: string, why = 'calculatedUnreadable', said = sentence): Promise<unknown[]> {
     H.queryCache.clear();
     const replies: unknown[] = [];
     const calls0 = fake.calls.length;
@@ -184,8 +184,8 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   const calls0 = fake.calls.length;
   const started = await H.as(ORG_A, () => job.startSchemaSync(P, L, { scheduled: true, now: Date.now() + 3_000 }));
   const synced = (started?.status === 'queued' ? await started.done : undefined) as Reply | undefined;
-  ok('the daily sync is queued, then refused typed (calculated), and spent no warehouse call',
-    started?.status === 'queued' && synced?.ok === false && synced.code === 'live_refused' && synced.reason === 'calculated' && synced.error === refusals.liveCalculatedRefused('') && fake.calls.length === calls0, show(synced));
+  ok('the daily sync is queued, then refused typed (calculatedUnreadable), and spent no warehouse call',
+    started?.status === 'queued' && synced?.ok === false && synced.code === 'live_refused' && synced.reason === 'calculatedUnreadable' && synced.error === refusals.liveCalculatedRefused('') && fake.calls.length === calls0, show(synced));
   const rawAfter = await raw();
   const liveOf = (r: Reply) => show({ ...r.live, syncAttemptAt: undefined });
   ok('…it wrote only its attempt stamp: no missingColumns, same columns, same schemaSyncedAt, same calculated fields',
@@ -208,7 +208,7 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     await plant(stored);
     const m = (await meta()).live;
     ok(`unreadable: ${label} is marked, not read as none`, m.calculatedUnreadable === true, show(m));
-    await refusesEverywhere(`unreadable (${label})`, 'calculated', refusals.liveCalculatedRefused(Array.isArray(stored) && stored[0] === GOOD ? GOOD.name : ''));
+    await refusesEverywhere(`unreadable (${label})`, 'calculatedUnreadable', refusals.liveCalculatedRefused(Array.isArray(stored) && stored[0] === GOOD ? GOOD.name : ''));
   }
   await plant(many(calcs.MAX_LIVE_CALCS));
   ok('NEGATIVE CONTROL: exactly 50 valid calcs are read in full, not marked unreadable', (await meta()).live.calculated.length === 50 && (await meta()).live.calculatedUnreadable === undefined);
@@ -220,9 +220,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plantKey('baseFilters', BASE);
   await answersEverywhere('base filters and calcs together');
   await plant([GOOD, 7]);
-  await refusesEverywhere('base filters and an unreadable list: the list refuses', 'calculated', refusals.liveCalculatedRefused(GOOD.name));
+  await refusesEverywhere('base filters and an unreadable list: the list refuses', 'calculatedUnreadable', refusals.liveCalculatedRefused(GOOD.name));
   await plantKey('baseFilters', undefined);
-  await refusesEverywhere('once the base filters are gone, the unreadable list still refuses', 'calculated', refusals.liveCalculatedRefused(GOOD.name));
+  await refusesEverywhere('once the base filters are gone, the unreadable list still refuses', 'calculatedUnreadable', refusals.liveCalculatedRefused(GOOD.name));
   await plant(CALCS);
 
   // The one whole-record rebuild (persist, through writeRecordKeepingPolicy) would drop raw.calculated: no Live writer or door reaches it.

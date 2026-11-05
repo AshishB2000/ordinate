@@ -7,18 +7,25 @@
 //            v1 formulas over earlier calcs only, never Databricks) and stores each with its static
 //            type; `live:checkCalc` answers the editor's check with no rows and no warehouse call;
 //            `formula:functions` marks what Live cannot run, and why.
+// § doors    every door answers a calc from the warehouse through one derived table per calc it needs:
+//            a measure, a category, bins, a split, a filter, a KPI, an answer card and its case fix;
+//            literals bound; an edit moves the cache key with no epoch bump and no stale old answer; a
+//            dropped input refuses only what reads the calc; a warehouse column spelled like a calc
+//            refuses both; a calc is never a row access column; no value list (`notSampled`).
+//            NEGATIVE CONTROL: a statement naming no calc is byte-identical to before.
 //
 //   npm run build:ts && node scripts/test-liveCalcs.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import type { Reply } from './liveRouteHarness';
-import { H, close, post } from './liveRouteHarness';
+import { H, close, hydrated, post } from './liveRouteHarness';
 
 const fs: typeof import('fs') = require('fs');
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const sync: typeof import('../src/engine/live/schemaSync') = require('../src/engine/live/schemaSync');
 const liveCalcs: typeof import('../src/data/liveCalcs') = require('../src/data/liveCalcs');
+const rowPolicy: typeof import('../src/data/rowPolicy') = require('../src/data/rowPolicy');
 const calcCheck: typeof import('../src/engine/live/liveCalcCheck') = require('../src/engine/live/liveCalcCheck');
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
@@ -157,6 +164,103 @@ const CALCS = [
     && !sc.input.safeParse({ projectId: P, datasetId: L, calculated: [{ name: 'n', expression: '1', type: 'number' }] }).success
     && sc.input.safeParse({ projectId: P, datasetId: L, calculated: INPUT }).success);
   ok('NEGATIVE CONTROL: an extract answers not_live', (await set(INPUT, s.extractId)).code === 'not_live' && !('calculated' in (await raw(s.extractId))));
+
+  // ── § doors ──────────────────────────────────────────────────────────────
+  const M = (column: string, aggregation: string) => ({ column, aggregation });
+  const F = (column: string, op: string, value?: unknown, values?: unknown[]) => ({ type: 'filter', column, op, ...(value === undefined ? {} : { value }), ...(values ? { values } : {}) });
+  const chart = async (encoding: unknown, filters: unknown[] = [], d = L): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId: d, encoding, filters })).value;
+  const kpi = async (column: string, aggregation: string, filters: unknown[] = [], d = L): Promise<Reply> =>
+    (await post('dashboard:metric', { projectId: P, datasetId: d, column, aggregation, filters })).value;
+  const last = () => H.fake.calls.at(-1)!;
+  const PLAIN = { category: 'region', values: [M('amt', 'sum')] };
+  const ENC = { category: 'cat', values: [M('amt', 'sum')] };
+  const hydrated0 = hydrated.length;
+
+  await set([]);
+  H.queryCache.clear();
+  await chart(PLAIN);
+  const before = { sql: last().sql, params: show(last().params) };
+  const QUOTED = { name: 'Q', expression: "IF [cat] = 'o\\'k' THEN 1 ELSE 0 END" };
+  const D_CALCS = [...INPUT, QUOTED, { name: 'Margin2', expression: '[Margin] * 2' }];
+  ok('the door calcs save', (await set(D_CALCS)).ok === true);
+  H.queryCache.clear();
+  await chart(PLAIN);
+  ok('NEGATIVE CONTROL: a statement naming no calc is byte-identical to before the calcs were saved',
+    last().sql === before.sql && show(last().params) === before.params && !last().sql.includes('Margin'), last().sql);
+
+  for (const [label, enc] of [
+    ['sum of a calc', { category: 'cat', values: [M('Margin', 'sum')] }],
+    ['a text calc as the category', { category: 'Band', values: [M('amt', 'sum')] }],
+    ['bins over a calc', { category: 'Margin', values: [M('qty', 'count')] }],
+    ['a split by a calc', { category: 'cat', series: 'Band', values: [M('amt', 'sum')] }],
+    ['a calc over a calc', { category: 'cat', values: [M('Margin2', 'max')] }],
+  ] as [string, unknown][]) {
+    const r = await chart(enc);
+    ok(`${label}: answered from the warehouse`, r.ok === true && r.asOf?.mode === 'live' && r.data.labels.length > 0, show(r).slice(0, 300));
+  }
+  const two = last().sql;
+  ok('a calc over a calc: two derived tables, both calcs, in order', (two.match(/\) AS lv_src/g) ?? []).length === 3
+    && two.indexOf('AS "Margin2" FROM (') < two.indexOf('AS "Margin" FROM ('), two);
+  H.queryCache.clear();
+  await chart({ category: 'cat', values: [M('Margin', 'sum')] });
+  const sqlAll = last().sql;
+  const one = sqlAll.slice(sqlAll.indexOf('FROM (SELECT'), sqlAll.lastIndexOf(') AS lv_src') + 1); // the layers alone
+  ok('…and a layer projects only what is still needed (never *, never an unread column)', one.length > 0 && !one.includes('*') && !one.includes('"region"') && !one.includes('"Band"')
+    && !one.includes('"Margin2"') && one.includes('"amt"') && one.includes('"qty"') && one.includes('"cat"'), one);
+  ok('a filter on a calc applies', ((a, b) => a.ok && b.ok && show(a.data) !== show(b.data))(await chart(ENC, [F('Band', '=', 'big')]), await chart(ENC)));
+  ok('a filter on a calc is never skipped as an unknown column', ((r) => r.ok && !show(r.warnings).includes('unknown column'))(await chart(ENC, [F('Band', '=', 'big')])));
+  const q = await chart({ category: 'cat', values: [M('Q', 'sum')] });
+  ok('literals are bound: the quote never reaches SQL text', q.ok === true && !last().sql.includes("o'k") && last().params.some((x) => x.value === "o'k"), show(last().params));
+  const kM = await kpi('Margin', 'sum');
+  ok('a KPI over a calc', kM.ok === true && typeof kM.value === 'number', show(kM));
+  ok('a KPI filtered on a calc', ((r) => r.ok === true && r.value !== kM.value)(await kpi('Margin', 'sum', [F('Band', '=', 'big')])));
+  const card = (await post('answer:card', { projectId: P, spec: {
+    datasetId: L, category: 'Band', measures: [M('Margin', 'sum')], filters: [{ column: 'Band', op: 'in', values: ['BIG'] }], chartType: 'bar', title: 'Margin by band',
+  } })).value;
+  ok('an answer card over calcs, its text filter fixed to the stored spelling', card.ok === true && show(card.steps) === show([{ type: 'filter', column: 'Band', op: 'in', values: ['big'] }]), show(card).slice(0, 400));
+  const distinct = (await post('dataset:distinct', { projectId: P, datasetId: L, column: 'Band' })).value;
+  ok('a calc has no value list: the "not sampled" state', distinct.ok === false && distinct.reason === 'notSampled', show(distinct));
+
+  // An edit moves the cache key with no epoch bump. Written as ANOTHER pod would see it: no cache cleared here.
+  const ASK = { category: 'cat', values: [M('Margin', 'sum')] };
+  const was = await chart(ASK);
+  const k1 = H.fake.calls.length;
+  ok('NEGATIVE CONTROL: asked again unchanged, it is a cache hit', (await chart(ASK)).ok && H.fake.calls.length === k1);
+  await H.as(ORG_A, () => H.liveDataset.setLiveCalcs(P, L, [{ name: 'Margin', expression: '[amt] + [qty]', type: 'number' }, ...saved.calculated.slice(1)]));
+  const now = await chart(ASK);
+  ok('an edit moves the cache key with no epoch bump: a new warehouse call, a new figure', now.ok && H.fake.calls.length > k1 && show(now.data) !== show(was.data)
+    && (await meta()).live.epoch === e0);
+  await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(P, L, 0));
+  H.fake.hook = async () => ({ ok: false, error: 'warehouse suspended' });
+  ok('NEGATIVE CONTROL: unchanged, a failing warehouse serves the stale answer', ((r) => r.ok && r.asOf.stale === true)(await chart(ASK)));
+  await H.as(ORG_A, () => H.liveDataset.setLiveCalcs(P, L, [{ name: 'Margin', expression: '[amt] * [qty]', type: 'number' }, ...saved.calculated.slice(1)]));
+  const failed = await chart(ASK);
+  ok('…but after an edit the stale fallback never serves the old formula\'s answer', failed.ok === false && failed.code === 'live_failed', show(failed).slice(0, 200));
+  H.fake.hook = null;
+  await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(P, L, 300));
+  ok('getDataset is never called (the liveRoute spy)', !hydrated.slice(hydrated0).includes(L), show(hydrated.slice(hydrated0)));
+
+  ok('a row access rule on a calc is refused (its column is checked against raw.columns, which never holds one)',
+    !rowPolicy.textColumn(await raw(), 'Band') && rowPolicy.textColumn(await raw(), 'cat'));
+  // Base filters (part 1 step 08) are on another branch: there, `live:setBaseFilters` adapts against declaredColumns, so a calc is refused at save.
+
+  // A second dataset over its own table, so its warehouse can change under it.
+  await H.warehouseExec(ORG_A, 'CREATE TABLE live_calc2 AS SELECT * FROM live_typed');
+  const L2 = (await H.as(ORG_A, () => H.liveOver(P, { table: 'live_calc2' }, H.fx.COLUMNS))).liveId;
+  ok('the second dataset takes the calcs', (await set(INPUT, L2)).ok === true);
+  await H.warehouseExec(ORG_A, 'ALTER TABLE live_calc2 DROP COLUMN qty');
+  ok('the sync drops qty', ((r) => r.ok && show(r.removed) === '["qty"]')((await post('dataset:syncLiveSchema', { projectId: P, datasetId: L2 })).value));
+  const gone = await chart({ category: 'cat', values: [M('Margin', 'sum')] }, [], L2);
+  ok('a dropped input refuses what reads the calc: columnMissing', gone.ok === false && gone.reason === 'columnMissing' && /qty/.test(gone.error), show(gone));
+  ok('…and only that: the other calc and the columns still answer', (await chart({ category: 'Band', values: [M('amt', 'sum')] }, [], L2)).ok
+    && (await chart(PLAIN, [], L2)).ok);
+  ok('…a filter on the broken calc refuses too, never skips', ((r) => r.ok === false && r.reason === 'columnMissing')(await chart(PLAIN, [F('Margin', '>', 0)], L2)));
+  await H.warehouseExec(ORG_A, 'ALTER TABLE live_calc2 ADD COLUMN band VARCHAR');
+  await post('dataset:syncLiveSchema', { projectId: P, datasetId: L2 });
+  const clash = await chart({ category: 'Band', values: [M('amt', 'sum')] }, [], L2);
+  ok('a warehouse column spelled like a calc (ignoring case): the calc refuses, typed', clash.ok === false && clash.reason === 'calculated' && /Band/.test(clash.error), show(clash));
+  ok('…and so does the warehouse column: nothing silently reads either', ((r) => r.ok === false && r.reason === 'calculated')(await chart({ category: 'band', values: [M('amt', 'sum')] }, [], L2)));
+  ok('…while a statement naming neither answers', (await chart(PLAIN, [], L2)).ok);
 
   await close();
   finish();
