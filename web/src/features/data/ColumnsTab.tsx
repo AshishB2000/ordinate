@@ -100,6 +100,15 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
 function Cell({ value, placeholder, label, multiline, readOnly, onSave }: { value: string; placeholder: string; label: string; multiline?: boolean; readOnly?: boolean; onSave: (v: string, refused: () => void) => void }) {
   const [v, setV] = useState(value);
   const [saved, setSaved] = useState(value);
+  // A value that changed under us (a suggestion's Use) shows at once; our own save leaves value equal to `saved`.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (value !== saved) {
+      setSaved(value);
+      setV(value);
+    }
+  }
   const commit = () => {
     const next = v.trim();
     if (next === saved) return;

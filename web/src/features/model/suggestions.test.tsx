@@ -72,6 +72,16 @@ describe('Suggested meanings in Fields', () => {
     await waitFor(() => expect(count(calls, 'catalog:suggestions')).toBeGreaterThan(n));
   }, 30_000);
 
+  it('after Use the column notes show the meaning the server now holds', async () => {
+    let used = false;
+    serve({ routes: { 'catalog:setColumn': () => { used = true; return body({ ok: true }); }, 'catalog:columns': () => body({ ok: true, columns: used ? { discount: { description: 'Discount in USD, after tax' } } : {} }) } });
+    open();
+    const r = await region();
+    expect((await screen.findByLabelText('Description of discount', {}, LAZY) as HTMLTextAreaElement).value).toBe('');
+    fireEvent.click(within(within(r).getByText('discount').closest('li') as HTMLElement).getByRole('button', { name: 'Use' }));
+    await waitFor(() => expect((screen.getByLabelText('Description of discount') as HTMLTextAreaElement).value).toBe('Discount in USD, after tax'));
+  }, 30_000);
+
   it('Use on the table comment sets the dataset description; on the key sets the key', async () => {
     const calls = serve();
     open();
