@@ -118,7 +118,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'metric:values': 'GATE',
   'metricTree:compute': 'GATE',
   'metricTree:suggest': 'META',
-  'model:navigation': 'META', // hierarchies (their names and column names) and the date ladder: no value, figure or row (part 6)
+  'model:navigation': 'META', // hierarchies (their names and column names), the date ladder and the topics: no value, figure or row (part 6)
   'model:overview': 'REDACT',
   'numbers:follow': 'META',
   'numbers:get': 'GATE',
@@ -206,6 +206,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'tokens:create': 'META',
   'tokens:list': 'META',
   'tokens:revoke': 'META',
+  'topic:get': 'META', // a topic's name, description and member ids and field names (part 6): no value, figure or row
   'trash:list': 'META',
   'verified:checkResult': 'REDACT', // a reason (it can quote the model) dropped on a dataset closed to the caller (test-columnRedact); a question the caller's list leaves out is no row and no count (test-columnAccessSafetyNet)
   'verified:list': 'DROP', // a question whose spec names a hidden column is left out (ipc/verifiedState); test-columnRedact

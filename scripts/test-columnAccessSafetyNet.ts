@@ -213,8 +213,11 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const cols = { projectId: P, datasetId: staff };
     const spec = (category: string) => ({ datasetId: staff, category, measures: [COUNT], filters: [] });
     const step = (type: string) => ({ projectId: P, datasetId: staff, index: -1, step: { type, column: 'ssn' } });
+    // A topic (part 6) listing Staff's ssn and the term on ssn: its reply names them, never a value.
+    const TOPIC = String(must('topic', await W.call('boss', 'topic:save', { projectId: P, topic: { name: 'People', datasets: [{ id: staff, fields: ['dept', 'ssn'] }], metricIds: [PAYROLL], termIds: [SSN_TERM] } })).body?.topic?.id);
     /** One payload for each read contract that needs more than its project (and Staff, and a column) — the rest get those. */
     const EXPLICIT: Record<string, unknown> = {
+      'topic:get': { projectId: P, id: TOPIC },
       'projects:open': { id: P }, 'dataset:page': { ...cols, offset: 0, limit: 200 }, 'dataset:columns': { projectId: P, id: staff }, 'dataset:source': { projectId: P, id: staff },
       'dataSearch:query': { projectId: P, term: 'SSN' }, 'search:query': { projectId: P, query: 'SSN' }, 'comment:mentionable': { projectId: P, q: 'e' },
       'dataset:composePreview': { projectId: P, base: { datasetId: staff }, joins: [], offset: 0, limit: 50 },
