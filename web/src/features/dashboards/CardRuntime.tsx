@@ -334,7 +334,7 @@ export function VisualCard({
           />
         </div>
       </div>
-      {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.drawn?.series ?? tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} onClose={() => setTap(null)} />}
+      {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.drawn?.series ?? tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} pending={tap.drill === undefined} onClose={() => setTap(null)} />}
       <PointMenu key={pointMenu ? `${pointMenu.x}:${pointMenu.y}` : ''} at={pointMenu} items={pointItems} label="Chart point actions" onClose={() => setPointMenu(null)} />
       {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}

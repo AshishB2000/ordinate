@@ -6,6 +6,7 @@
 
 import { Sheet } from '../../../ui/Sheet';
 import { Icon, type IconName } from '../../../ui/icons/Icon';
+import { SkeletonRows } from '../../../ui/Skeleton';
 import s from './Phone.module.css';
 
 export interface PointAction {
@@ -15,10 +16,16 @@ export interface PointAction {
   run: () => void;
 }
 
-export function PointSheet({ title, chart, actions, onClose }: { title: string; chart: string; actions: PointAction[]; onClose: () => void }) {
+/** `pending`: an action first in the list is still being worked out (the drill waits on the model's hierarchies): one skeleton row holds its place. */
+export function PointSheet({ title, chart, actions, pending, onClose }: { title: string; chart: string; actions: PointAction[]; pending?: boolean; onClose: () => void }) {
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()} title={title} description={chart}>
       <ul className={s.actions} aria-label={`What to do with ${title}`}>
+        {pending && (
+          <li>
+            <SkeletonRows rows={1} label="Checking whether this point drills" />
+          </li>
+        )}
         {actions.map((a) => (
           <li key={a.label}>
             <button

@@ -15,6 +15,7 @@ import { DrillCrumbs } from '../visuals/drill/DrillCrumbs';
 import type { Encoding } from '../visuals/encoding';
 import { levelOf } from '../../../../src/analysis/drillLevels.ts';
 import { tileFilters } from './CardRuntime';
+import { isPhoneReader } from './phone/phoneBlocks';
 import { drilledDef } from './tileDrill';
 
 /** A clicked mark: as the server names it, as the axis drew it, and whether (and how finely) the axis is a date. */
@@ -38,7 +39,8 @@ export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def
   const busy = useRef(false);
 
   const offer = async (at: DrillAt): Promise<DrillOffer | null> => {
-    if (!(ed.viewing || ed.view.presenting)) return null;
+    // Drill only where the dashboard is read: the view page, Present, and a phone (which reads the editing route too).
+    if (!(ed.viewing || ed.view.presenting || isPhoneReader(ed))) return null;
     const nav = await loadNavigation(qc, ed.projectId);
     if (!nav) return null;
     const hierarchies = navFor(nav, def.datasetId);

@@ -148,7 +148,7 @@ e2e('explain a change: a chart point → the panel → another baseline → a ti
 
   // ── The rows behind a dated bar: its quarter, as a range of dates ───────
   await rightClickChart(quarters, 0.8);
-  await menu.getByRole('menuitem', { name: /^Show the rows behind/  }).click();
+  await menu.getByRole('menuitem', { name: /^Show the rows behind/ }).click();
   const quarterRows = page.getByRole('dialog', { name: 'Revenue by quarter' });
   await quarterRows.getByText('The rows behind the selected mark').waitFor();
   await quarterRows.getByText(/^[\d,]+ rows?$/).waitFor();
@@ -161,9 +161,9 @@ e2e('explain a change: a chart point → the panel → another baseline → a ti
   const bars = page.getByRole('group', { name: 'Revenue by category (bars) card' });
   await bars.getByRole('img', { name: 'Revenue by category (bars)' }).waitFor();
   await rightClickChart(bars, 0.5);
-  await menu.getByRole('menuitem', { name: /^Show the rows behind/  }).waitFor();
+  await menu.getByRole('menuitem', { name: /^Show the rows behind/ }).waitFor();
   assert.equal(await menu.getByRole('menuitem', { name: 'Explain this change' }).count(), 0, 'NEGATIVE CONTROL: a chart that is not over time offers no change to explain');
-  await menu.getByRole('menuitem', { name: /^Show the rows behind/  }).click();
+  await menu.getByRole('menuitem', { name: /^Show the rows behind/ }).click();
   const barRows = page.getByRole('dialog', { name: 'Revenue by category (bars)' });
   await barRows.getByText('The rows behind the selected mark').waitFor();
   await barRows.getByRole('button', { name: 'Export these rows (CSV)' }).waitFor();

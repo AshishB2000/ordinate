@@ -61,6 +61,10 @@ const LABELS: Record<string, { labels: string[]; category: object }> = {
 
 interface Serve {
   nav?: number;
+  /** No hierarchy saved on the dataset. */
+  plain?: boolean;
+  /** Holds model:navigation's reply until released. */
+  gate?: Promise<void>;
   drill?: { status?: number; body: unknown };
 }
 /** A server that answers the tiles and records every channel called, every tile asked for and every payload. */
@@ -79,7 +83,8 @@ function serve(o: Serve = {}) {
         asked.push(...items);
         return reply(items.map((it) => ({ ok: true, data: { labels: LABELS[it.encoding?.category ?? 'region']?.labels ?? ['x'], series: [{ name: 'revenue', values: [1, 2] }] }, category: LABELS[it.encoding?.category ?? 'region']?.category, warnings: [] })));
       }
-      if (channel === 'model:navigation') return o.nav ? reply({ error: 'gone' }, o.nav) : reply({ ok: true, tables: [{ datasetId: D, hierarchies: [GEO] }], dateLadder: ['year', 'quarter', 'month', 'day'] });
+      if (channel === 'model:navigation') await o.gate;
+      if (channel === 'model:navigation') return o.nav ? reply({ error: 'gone' }, o.nav) : reply({ ok: true, tables: [{ datasetId: D, hierarchies: o.plain ? [] : [GEO] }], dateLadder: ['year', 'quarter', 'month', 'day'] });
       if (channel === 'visual:drillDown') return o.drill ? reply(o.drill.body, o.drill.status) : reply(DRILLED);
       if (channel === 'visual:rows') return reply({ ok: true, available: false, reason: 'stub rows' });
       if (channel === 'projects:roles') return reply({ [P]: 'viewer' });
@@ -243,5 +248,61 @@ describe('where it does not drill', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Drill into East/ }));
     expect(await screen.findByText('region is the last level of Geography.')).toBeTruthy();
     expect(lastFor(s.asked, 'state')).toBeUndefined();
+  });
+});
+
+describe('on a phone', () => {
+  // The sheet column is 375 wide: the dashboard is READ on a phone, and a tap offers its actions in a sheet.
+  const widths = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 375 });
+    // Only the sheet's own observer (the first one asked for) reports a size: a chart's would fire after it is gone.
+    let first = true;
+    vi.stubGlobal('ResizeObserver', class { observe() { if (first) setTimeout(() => this.cb(), 0); first = false; } disconnect() {} constructor(private cb: () => void) {} });
+    vi.stubGlobal('requestAnimationFrame', (f: () => void) => setTimeout(f, 0));
+  });
+  afterEach(() => {
+    if (widths) Object.defineProperty(HTMLElement.prototype, 'clientWidth', widths);
+    else delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  });
+  /** The dashboard is laid out as a phone's before anything is tapped. */
+  const phoneBody = async (name: string) => {
+    await waitFor(() => expect(document.querySelector('[data-phone]')).toBeTruthy());
+    return body(name);
+  };
+  const sheetButtons = async () => within(await screen.findByRole('list', { name: 'What to do with East' })).getAllByRole('button').map((b) => b.textContent ?? '');
+
+  it('a tap on East puts "Drill into East" first in the sheet, and pressing it drills as on a desktop', async () => {
+    const s = open({ clickFilter: true });
+    fireEvent.click(await phoneBody('Revenue by region'));
+        await waitFor(async () => expect((await sheetButtons())[0]).toMatch(/^Drill into East.*By state, on this chart only/));
+    expect((await sheetButtons()).map((t) => t.replace(/By state.*$/, '').trim())).toEqual(['Drill into East', 'Filter to “East”Every other card shows region: East', 'Show the rows behind this pointEvery row that adds up to it', 'Comment on this point']);
+    fireEvent.click(screen.getByRole('button', { name: /^Drill into East/ }));
+    await waitFor(() => expect(lastFor(s.asked, 'state')).toBeTruthy());
+    expect(crumbs()).toEqual(['Geography', 'East', '· by state']);
+  });
+
+  it('a phone reader of the editing route (nobody pinned the size) is reading too', async () => {
+    open({ clickFilter: true, viewing: false });
+    fireEvent.click(await phoneBody('Revenue by region'));
+    await screen.findByRole('button', { name: /^Drill into East/ });
+  });
+
+  it('shows a one-row skeleton until the navigation settles', async () => {
+    let release = () => {};
+    open({ clickFilter: true, gate: new Promise<void>((r) => (release = r)) });
+    fireEvent.click(await phoneBody('Revenue by region'));
+    await screen.findByRole('list', { name: 'What to do with East' });
+    expect(screen.getByLabelText('Checking whether this point drills')).toBeTruthy();
+    release();
+    await screen.findByRole('button', { name: /^Drill into East/ });
+    expect(screen.queryByLabelText('Checking whether this point drills')).toBeNull();
+  });
+
+  it('NEGATIVE CONTROL: with no hierarchy the sheet is today’s list, and the skeleton goes', async () => {
+    open({ clickFilter: true, plain: true });
+    fireEvent.click(await phoneBody('Revenue by region'));
+    await waitFor(() => expect(screen.queryByLabelText('Checking whether this point drills')).toBeNull());
+    expect((await sheetButtons()).map((t) => t.replace(/(Every|The|What).*$/, '').trim())).toEqual(['Filter to “East”Every other card shows region: East'.replace(/Every.*$/, ''), 'Show the rows behind this point', 'Comment on this point']);
   });
 });
