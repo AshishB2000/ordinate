@@ -6,8 +6,11 @@
 // Core invariants:
 //   1. The input `source` is NEVER mutated (deep-copied first). Removing a step
 //      recomputes the output from the untouched source → fully reversible.
-//   2. A broken/unknown step is SKIPPED with a warning, never throws — so one bad
-//      step can't break reversibility; the user can edit or remove it.
+//   2. A broken/unknown step is SKIPPED with a warning — so one bad step can't
+//      break reversibility; the user can edit or remove it. Two refusals THROW
+//      instead, because skipping either would widen the figure: a glossary term
+//      no door expanded (TermNotExpandedError) and a row access lock that cannot
+//      be honoured (RowPolicyError).
 //   3. Number-accuracy: the model never computes values. `calculated_field` runs
 //      our safe evaluator (src/formula.ts); every computed/derived column is typed
 //      via parse.detectColumnType (the STRICT isFiniteNumber gate) and coerced via
@@ -247,7 +250,8 @@ function skip(t: TableData, warning: string): StepResult {
 // ── applyPipeline ────────────────────────────────────────────────────────────
 
 // Fold each step left→right over a deep copy of `source`, accumulating warnings.
-// A step referencing a missing column is skipped with a warning (never throws).
+// A step referencing a missing column is skipped with a warning. It throws only to refuse: a row access lock's
+// step (RowPolicyError) or a glossary term no door expanded (TermNotExpandedError).
 // `ctx.salt` is the project's masking key for a mask_hash step (maskSteps.ts);
 // without it that step is skipped, never hashed unsalted. `ctx.tables` are the
 // datasets a union / lookup step reads (stepRefs.ts); without them it is skipped.
@@ -272,7 +276,7 @@ export function applyPipeline(source: TableData, steps: TransformStep[], ctx: Pi
   return { columns: table.columns, rows: table.rows, rowCount: table.rows.length, warnings, stepCounts };
 }
 
-/** One step of the fold (never throws). `memo`: the regex worker's answers (./regexOffThread.ts). */
+/** One step of the fold: a failing step is skipped, except an unexpanded term or an unhonoured lock, which throw. `memo`: the regex worker's answers (./regexOffThread.ts). */
 export function foldStep(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: RegexMemo): StepResult {
   try {
     return dispatch(t, step, ctx, memo);

@@ -34,6 +34,11 @@ const { filterPredicate }: typeof import('../src/engine/residentFilter') = requi
 const { filterCannotWarn }: typeof import('../src/ipc/visualsResident') = require('../src/ipc/visualsResident');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const { generateSql }: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
+const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const { mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') = require('../src/analysis/dashboardFilters');
+const cardModel: any = require('../src/analysis/cardModel'); // any: a UMD module with no exported types
+const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply is narrowed by its check
 
 const { SALES, DATES, R_ORDER, R_SHIP, RELS, infos } = fx;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -126,6 +131,26 @@ async function main(): Promise<void> {
     show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [viaStep])) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
   ok('negative control: without via the chart needs no join (null)', (await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, [F('year', '=', 2024)])) === null);
 
+  // ── § guard: a merge keys a filter by its via, so `year = 2024` never swallows `year = 2024 via R_SHIP` ──
+  const merged = mergeDashboardFilters([F('year', '=', 2024)], [viaStep]);
+  ok('mergeDashboardFilters keeps a dashboard filter and a tile\'s same filter through a relationship, both', show(merged) === show([F('year', '=', 2024), viaStep]), show(merged));
+  ok('…so the merged chart is refused, never drawn on the primary\'s year', show(await ipcRels.joinedVizDataFor(P, sales.id, salesEnc, merged)) === show({ ok: false, error: jp.VIA_UNSUPPORTED }));
+  ok('negative control: the same filter twice without via still merges to one', mergeDashboardFilters([F('year', '=', 2024)], [F('year', '=', 2024)]).length === 1);
+  const carried = cardModel.carrySteps({ kind: 'navigate', carry: 'all_selection' }, { filters: [F('year', '=', 2024), viaStep], selection: [] });
+  ok('a tile action carries both too', show(carried) === show([F('year', '=', 2024), viaStep]), show(carried));
+  ok('negative control: a tile action still carries a repeated plain filter once',
+    cardModel.carrySteps({ kind: 'navigate', carry: 'all_selection' }, { filters: [F('year', '=', 2024), F('year', '=', 2024)], selection: [] }).length === 1);
+
+  // ── § guard: Explain declines a via filter, never narrating the primary's same-named `year` ──
+  copilotIpc.register();
+  const tileWith = (filters: FilterStep[]) => ({ datasetId: sales.id, encoding: { category: 'year', values: [sum] }, filters, chartType: 'column', name: 'Amount by year' });
+  ok('tileSpec: a chart with a via filter has no spec', answers.tileSpec(tileWith([viaStep])) === null);
+  const explainVia = await handlers.get('answer:explain')!(null, { projectId: P, tile: tileWith([viaStep]) });
+  ok('answer:explain on a via filter declines, and starts no conversation', explainVia.ok === false && !explainVia.threadId, show(explainVia));
+  ok('negative control: tileSpec keeps the same filter without via', show(answers.tileSpec(tileWith([F('year', '=', 2024)]))!.filters) === show([{ column: 'year', op: '=', value: 2024 }]));
+  const explainPlain = await handlers.get('answer:explain')!(null, { projectId: P, tile: tileWith([F('year', '=', 2024)]) });
+  ok('negative control: the same chart without via still explains', explainPlain.ok === true && typeof explainPlain.threadId === 'string', show(explainPlain));
+
   // ── § order: "first" holds across saves ────────────────────────────────────
   await rels.saveRelationship(P, RELS[0]);
   await rels.saveRelationship(P, RELS[1]);
@@ -138,6 +163,29 @@ async function main(): Promise<void> {
   ok('...and does not stack a duplicate or reorder', last.map((x) => x.id).join() === [R_ORDER, R_SHIP].join());
   const added = await rels.saveRelationship(P, RELS[2]);
   ok('a new edge goes to the end (negative control)', (await rels.listRelationships(P)).map((x) => x.id).join() === [R_ORDER, R_SHIP, added!.id].join());
+
+  // ── § keep: a release-1 save (its contract has no label) keeps the same edge's label. The warning is derived and
+  //    recomputed by the release that writes it (absent when the edge no longer warns), so it is never carried. ──
+  const Q = (await projects.createProject('Joins keep')).id;
+  const warned = { kind: 'repeats', repeats: 2 } as const;
+  await rels.saveRelationship(Q, { ...RELS[0], warning: warned });
+  const bare = (extra: object) => ({ from: RELS[0].from, to: RELS[0].to, cardinality: 'one_to_one', ...extra }); // relationship:save's release-1 shape
+  await rels.saveRelationship(Q, bare({ id: R_ORDER }));
+  const byId = (await rels.listRelationships(Q))[0];
+  ok('a same-edge re-save by id without a label keeps it (and takes the new cardinality)', byId.label === 'Order date' && byId.cardinality === 'one_to_one', show(byId));
+  ok('…and a re-save without a warning does NOT inherit the old one (a stale warning would come back)', byId.warning === undefined, show(byId));
+  await rels.saveRelationship(Q, { ...RELS[0], warning: warned });
+  await rels.saveRelationship(Q, bare({}));
+  const byEdge = await rels.listRelationships(Q);
+  ok('…and a same-edge re-save with no id keeps the label too, and not the warning', byEdge.length === 1 && byEdge[0].id === R_ORDER && byEdge[0].label === 'Order date' && byEdge[0].warning === undefined, show(byEdge));
+  await rels.saveRelationship(Q, bare({ id: R_ORDER, warning: warned }));
+  ok('negative control: a warning that IS sent is stored', show((await rels.listRelationships(Q))[0].warning) === show(warned));
+  await rels.saveRelationship(Q, bare({ id: R_ORDER, label: 'Booked' }));
+  ok('negative control: a label that IS sent replaces the stored one', (await rels.listRelationships(Q))[0].label === 'Booked');
+  await rels.saveRelationship(Q, { id: R_ORDER, from: { datasetId: SALES.id, column: 'sale_id' }, to: RELS[0].to, cardinality: 'many_to_one' });
+  const moved = (await rels.listRelationships(Q))[0];
+  ok('negative control: a re-save that changes the edge\'s columns does not inherit its label (nor its warning)',
+    moved.id === R_ORDER && moved.from.column === 'sale_id' && moved.label === undefined && moved.warning === undefined, show(moved));
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });

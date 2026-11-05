@@ -359,6 +359,26 @@ async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise
   return true;
 }
 
+/**
+ * Value labels (a column doc's `values`: a stored value → its display label) can hold the raw
+ * values of a marked column. This release cannot tell which columns matter, so a shaped bundle
+ * leaves every column's behind. The marks and the rest of each doc travel as they were.
+ */
+function dropValueLabels(entries: ZipEntry[]): boolean {
+  const cat = entries.find((x) => x.name === 'catalog.json');
+  if (!cat) return false;
+  let rec: { columns?: Record<string, Record<string, Record<string, unknown>>> };
+  try { rec = JSON.parse(cat.data.toString('utf8')); } catch (_) { return false; }
+  let dropped = false;
+  for (const docs of Object.values((rec && rec.columns) || {})) {
+    for (const doc of Object.values(docs || {})) {
+      if (doc && typeof doc === 'object' && 'values' in doc) { delete doc.values; dropped = true; }
+    }
+  }
+  if (dropped) cat.data = Buffer.from(JSON.stringify(rec, null, 2), 'utf8');
+  return dropped;
+}
+
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
@@ -416,6 +436,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
     await fs.promises.rm(scratch, { recursive: true, force: true });
   }
   if (await dropMarkedColors(projectId, entries)) changed = true;
+  if (dropValueLabels(entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');
   if (manifest) {

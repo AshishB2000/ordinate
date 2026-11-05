@@ -260,6 +260,12 @@ async function main(): Promise<void> {
   ok('a catalog with no tables writes no tables key', !('tables' in JSON.parse(JSON.stringify(catalog.emptyCatalog()))));
   await catalog.setColumn(rpid, rds, 'region', { description: 'changed' });
   ok('setColumn keeps the labels it was not asked to change', (await catalog.getColumns(rpid, rds)).region.values!.length === 1);
+  // A value label names a stored value, so a row-restricted viewer must not read one here: no reader of this release uses them.
+  require('../src/ipc/catalog').register();
+  const handlers: Map<string, (e: unknown, arg: unknown) => Promise<unknown>> = require('../src/server/rpc').handlers;
+  const reply = JSON.stringify(await handlers.get('catalog:columns')!(null, { projectId: rpid, datasetId: rds }));
+  ok('catalog:columns carries no value labels: no values key, and the planted label nowhere in the reply', !reply.includes('"values"') && !reply.includes('Europe'), reply);
+  ok('NEGATIVE CONTROL: catalog:columns still carries the column\'s notes', reply.includes('"description":"changed"'), reply);
   // Negative controls: a catalog and a column doc with nothing new write the bytes they wrote before.
   const plain = catalog.sanitizeCatalog({ columns: { [rds]: { a: { description: 'x', values: [] } } }, tables: { [rds]: 'junk' } });
   ok('no labels and no table docs add no keys', !('tables' in plain) && !('values' in plain.columns[rds].a));

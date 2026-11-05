@@ -58,7 +58,7 @@ import type { FxInfo } from '../analysis/fx';
 import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
-import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { snapshotMeasureRefusal, timeColumnControlRefusal } from '../analysis/snapshotGuards';
 import { metricMeasureData } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
@@ -463,8 +463,9 @@ async function vizDataForUnlocked(
   filters: FilterStep[],
   opts: VizOpts,
 ): Promise<VizDataReply> {
-  const snapshotRefusal = await snapshotMeasureRefusal(projectId, encoding); // a snapshot metric is not computed until a later release
-  if (snapshotRefusal) return { ok: false, error: snapshotRefusal };
+  // A snapshot metric, or a metric's own date under a date control, is not computed until a later release.
+  const laterRefusal = (await snapshotMeasureRefusal(projectId, encoding)) || (await timeColumnControlRefusal(projectId, encoding, filters));
+  if (laterRefusal) return { ok: false, error: laterRefusal };
   // A measure that IS a formula metric: its totals come back through this door, then the formula runs per cell (./vizMetricMeasures).
   const planned = hasMetricMeasure(encoding) ? await planMetricMeasures(projectId, datasetId, encoding, opts.params) : null;
   if (planned) return planned.ok ? metricMeasureData(planned.plan, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : { ok: false, error: planned.error };

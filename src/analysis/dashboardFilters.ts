@@ -37,7 +37,8 @@ function stepKey(s: FilterStep): string {
   if (isKeptStep(s)) return 'kept:' + stableStringify(s);
   // `period` too: two different relative ranges on one column are two filters.
   // `context` too (r7:lod): the same predicate before and after LODs is two filters.
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true]);
+  // `via` too: the same predicate through a relationship reads another table's column (refused until it can be walked).
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:

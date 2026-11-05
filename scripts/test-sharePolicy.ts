@@ -309,6 +309,15 @@ async function main(): Promise<void> {
   await projects.setColorMap(pid, {
     card: { '4111111111111111': 'chart-1' }, email: { 'grace@example.com': 'chart-2' }, region: { North: 'chart-3' },
   });
+  // Value labels (release 1 keeps them but has no screen that writes them): planted on a marked column,
+  // where a label list can hold the raw values themselves, and on an unmarked one.
+  await catalog.setColumn(pid, did, 'region', { description: 'Sales region' });
+  const planted = JSON.parse(fs.readFileSync(catFile, 'utf8'));
+  planted.columns[did].card.values = [{ value: '4111111111111111', label: 'Visa test card' }];
+  planted.columns[did].region.values = [{ value: 'North', label: 'Northern territory' }];
+  fs.writeFileSync(catFile, JSON.stringify(planted));
+  const LABELS = ['4111111111111111', 'Visa test card', 'Northern territory'];
+  const catalogOf = (file: string): string => bundle.readZip(fs.readFileSync(file)).find((e) => e.name === 'catalog.json')!.data.toString('utf8');
   const raw = await bundle.exportProject(pid);
   const rawNames = bundle.readZip(raw!.bytes).map((e) => e.name);
   ok('fixture: a raw export carries the source Parquet and a dataset version', rawNames.includes(`datasets/${did}.source.parquet`) && rawNames.some((n) => n.startsWith(`history/dataset/${did}/`)));
@@ -329,6 +338,9 @@ async function main(): Promise<void> {
   ok('bundle/mask: card is masked in the table that travels', bundled.rows[0][2] === mask.maskToken(salt, '4111111111111111') && rec.columns[2].type === 'text');
   ok('bundle/mask: email travels as its Prepare token', bundled.rows[0][1] === mask.maskToken(salt, 'grace@example.com'));
   ok('bundle/mask: no raw value is anywhere in the bundle', !entries.some((e) => RAW.some((v) => e.data.includes(v))));
+  const maskCat = catalogOf(savePath);
+  ok('bundle/mask: catalog.json carries no value labels, on any column', LABELS.every((s) => !maskCat.includes(s)) && !maskCat.includes('"values"'), maskCat);
+  ok('bundle/mask: …but keeps the rest of every column doc', JSON.parse(maskCat).columns[did].card.sensitivity === 'financial' && JSON.parse(maskCat).columns[did].region.description === 'Sales region');
   const pjColors = JSON.parse(entries.find((e) => e.name === 'project.json')!.data.toString('utf8')).colorMap;
   ok('bundle/mask: the colour map leaves marked columns behind, keeps the rest',
     !!pjColors && pjColors.region && pjColors.region.North === 'chart-3' && !pjColors.card && !pjColors.email, JSON.stringify(pjColors));
@@ -353,11 +365,16 @@ async function main(): Promise<void> {
   const dropRec = JSON.parse(bundle.readZip(fs.readFileSync(savePath)).find((e) => e.name === `datasets/${did}.json`)!.data.toString('utf8'));
   ok('bundle/drop: the column is dropped from the record', !dropRec.columns.some((c: any) => c.name === 'card'));
   ok('bundle/drop: the dropped bundle imports too', (await bundle.importBundle(fs.readFileSync(savePath))).ok === true);
+  const dropCat = catalogOf(savePath);
+  ok('bundle/drop: catalog.json carries no value labels, on any column', LABELS.every((s) => !dropCat.includes(s)) && !dropCat.includes('"values"'), dropCat);
   await store.setPolicy(pid, { bundle: 'include' });
   savePath = path.join(outDir, 'project-include.ordinate');
   keep(await call('projects:export', { id: pid }));
   const inclNames = bundle.readZip(fs.readFileSync(savePath)).map((e) => e.name);
   ok('bundle/include: the source Parquet travels unchanged', inclNames.includes(`datasets/${did}.source.parquet`));
+  // NEGATIVE CONTROL: a full, unshaped bundle keeps the labels, so the checks above can fail.
+  const inclCat = catalogOf(savePath);
+  ok('bundle/include: catalog.json keeps its value labels (control)', LABELS.every((s) => inclCat.includes(s)), inclCat);
   await store.setPolicy(pid, { bundle: 'mask' });
 
   // ── 4. Proposals ──────────────────────────────────────────────────────────

@@ -31,8 +31,13 @@ describe('mergeFilters keeps what the web cannot edit', () => {
     expect(mergeFilters([{ type: 'dedupe' }, F], [{ type: 'filter' }, null as never]).map((s) => s.type)).toEqual(['filter', 'filter']);
   });
 
+  it('keeps a dashboard filter and a tile\'s same filter through a relationship, both', () => {
+    expect(mergeFilters([F], [{ ...F, via: V }])).toEqual([F, { ...F, via: V }]);
+    expect(mergeFilters([F], [{ ...F }])).toEqual([F]); // NEGATIVE CONTROL: without via, one
+  });
+
   it('agrees with the server’s mergeDashboardFilters', () => {
-    const lists: unknown[][] = [[], [TERM], [F, TERM, G], [TERM, TERM, FUTURE], [{ type: 'term', term: V }, F], [{ type: 'dedupe' }, null, F]];
+    const lists: unknown[][] = [[], [TERM], [F, TERM, G], [TERM, TERM, FUTURE], [{ type: 'term', term: V }, F], [{ type: 'dedupe' }, null, F], [{ ...F, via: V }, G]];
     for (const a of lists) for (const b of lists) deepStrictEqual(mergeFilters(a as never, b as never), server.mergeDashboardFilters(a, b), JSON.stringify([a, b]));
   });
 });

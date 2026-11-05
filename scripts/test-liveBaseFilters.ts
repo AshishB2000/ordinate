@@ -75,7 +75,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plant([]);
   ok('an empty list reads as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant('everything');
-  ok('a stored key that is not a list reads as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === undefined);
+  ok('a stored key that is not a list is marked unreadable, never read as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === true);
+  await plant(null);
+  ok('NEGATIVE CONTROL: a stored null reads as none', (await meta()).live.baseFilters === undefined && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant(BASE);
   ok('meta.live.baseFilters is read from the top-level key', show((await meta()).live.baseFilters) === show(BASE), show((await meta()).live));
 
@@ -154,6 +156,10 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['a valid step beside one with an unknown operator (partial)', [GOOD, BOGUS]],
     ['a valid step beside a non-object', [GOOD, 7]],
     ['21 valid steps (one past the cap)', Array.from({ length: base.MAX_BASE_FILTERS + 1 }, (_, i) => F('region', '!=', `v${i}`))],
+    ['a stored key that is not a list', 'everything'],
+    ['an object keyed like a list', { 0: GOOD }],
+    ['a glossary term', [GOOD, { type: 'term', term: ID }]],
+    ['a radius step', [GOOD, { ...F('lat', 'within_km'), radius: { lat: 1, lon: 2, km: 3 } }]],
   ] as [string, unknown][]) {
     await plant(stored);
     const m = (await meta()).live;

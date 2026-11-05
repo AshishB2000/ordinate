@@ -188,6 +188,23 @@ describe('the builder', () => {
     });
   });
 
+  it('saves a filter step\'s via and fromControl as it read them (a newer release wrote them)', async () => {
+    const via = { type: 'filter', column: 'region', op: '=', value: 'East', via: REL };
+    const control = { type: 'filter', column: 'region', op: '!=', value: 'North', fromControl: true };
+    const calls = serve(
+      base({
+        'visual:get': { body: { ...summary(), encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, overrides: {}, filters: [via, control] } },
+        'visual:update': { body: { ok: true, visual: summary(), tag: 'T2' } },
+      }),
+    );
+    renderApp(`/visuals/${PID}/${VID}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save visual' }));
+    await screen.findByRole('dialog', { name: 'Rename this visual' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:update')).toBe(true));
+    expect(JSON.stringify((calls.find((c) => c.channel === 'visual:update')!.payload as { filters: unknown }).filters)).toBe(JSON.stringify([via, control]));
+  });
+
   it('draws a saved pivot through the grid, on its own shelves, and keeps the saved type (T2.11)', async () => {
     const grid = {
       rowHeaders: [['East'], ['North']], colHeaders: [['Sum of amount']], cells: [[3], [4]], rowTotals: null, colTotals: null, grand: null,

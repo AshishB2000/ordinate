@@ -40,3 +40,21 @@ describe('a filter this version cannot edit', () => {
     expect(screen.getByRole('button', { name: 'Edit the filter on city' })).toBeTruthy();
   });
 });
+
+describe('editing a filter a newer release gave a via or fromControl', () => {
+  const VIA = '44444444-4444-4444-8444-444444444444';
+  const edited = (step: FilterStep) => {
+    const onChange = draw([step]);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the filter on city' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    return JSON.stringify(onChange.mock.lastCall?.[0]);
+  };
+
+  it('keeps them on the step the dialog applies', () => {
+    expect(edited({ ...F, via: VIA, fromControl: true })).toBe(JSON.stringify([{ ...F, via: VIA, fromControl: true }]));
+  });
+
+  it('NEGATIVE CONTROL: a step without them gets neither key', () => {
+    expect(edited(F)).toBe(JSON.stringify([F]));
+  });
+});

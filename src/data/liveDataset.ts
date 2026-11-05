@@ -198,8 +198,9 @@ export function applyLive(
   if (!live) return;
   const baseFilters = sanitizeBaseFilters(data.baseFilters);
   if (baseFilters.length) live.baseFilters = baseFilters;
-  // A stored list is read in full or the dataset answers nothing: a dropped step must never read as "no step".
-  if (Array.isArray(data.baseFilters) && data.baseFilters.length !== baseFilters.length) live.baseFiltersUnreadable = true;
+  // A stored list is read in full or the dataset answers nothing: a dropped step, or a stored value that is no list, must never read as "no step".
+  const stored = data.baseFilters;
+  if (stored != null && (!Array.isArray(stored) || stored.length !== baseFilters.length)) live.baseFiltersUnreadable = true;
   target.mode = 'live';
   target.live = live;
   delete target.autoRefresh;

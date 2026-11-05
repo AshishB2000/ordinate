@@ -126,7 +126,9 @@ export function FilterDialog({
     if (isValuelessOp(op)) return [{ ...base, op }];
     return condVal.trim() ? [{ ...base, op, value: condVal }] : [];
   })();
-  const apply = () => steps.length && onApply(lodToggle ? steps.map((x) => (context ? { ...x, context: true } : x)) : steps);
+  // A newer release's keys ride onto the edited step (as liveFilters): a dropped `via` would filter the primary's same-named column.
+  const kept = { ...(typeof ex.via === 'string' ? { via: ex.via } : {}), ...(ex.fromControl === true ? { fromControl: true } : {}) };
+  const apply = () => steps.length && onApply(steps.map((x) => ({ ...x, ...(lodToggle && context ? { context: true } : {}), ...kept })));
 
   const toggle = (v: string, on: boolean) =>
     setSelected((prev) => {

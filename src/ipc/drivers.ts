@@ -48,6 +48,8 @@ import type { DriversSpec, PeriodScopes } from '../analysis/driverScope';
 import * as alertStore from '../analysis/alertStore';
 import type { AlertRule } from '../analysis/alerts';
 import { resolveMetric } from './metrics';
+import { controlOffOwnDate } from '../analysis/snapshotGuards';
+import { measureTimeColumnPending } from '../analysis/metricCheckMessages';
 import { recall, remember } from './driversAsked';
 import { computeCardMetric } from './dashboards';
 import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
@@ -293,6 +295,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   const metric = spec.metric.metricId ? await metrics.getMetric(projectId, spec.metric.metricId) : null;
   if (spec.metric.metricId && !metric && !spec.metric.column) return { ok: false, error: 'That metric no longer exists.' };
   if (metric && metric.datasetId !== spec.datasetId) return { ok: false, error: 'That metric lives on another dataset.' };
+  if (metric && controlOffOwnDate(metric.timeColumn, spec.filters)) return { ok: false, error: measureTimeColumnPending() }; // as its KPI: no figure yet
   const def = metric ? metric.definition : { column: spec.metric.column as string, aggregation: spec.metric.aggregation as MetricAggregation };
   const name = spec.metric.label || (metric ? metric.name : `${spec.metric.aggregation} of ${spec.metric.column}`);
   const shape = metricShape(spec.datasetId, src.columns, def, metric ? metric.filters : [], await metrics.metricsByName(projectId), params, metric?.name);

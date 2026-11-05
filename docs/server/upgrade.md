@@ -187,23 +187,34 @@ write. Each item says what a pod older than this release does, and what this rel
 - **Join names, and `via`.** A join (a relationship) can have a name, and a chart can say which join
   it goes through (`via`). An older pod drops both: every name in the project is lost on its next
   join save or delete, and a chart with `via` is drawn through the first join, which can be the
-  wrong date. This release keeps both, and refuses the chart.
+  wrong date. This release keeps both, and refuses the chart (Explain declines it too). Saving the
+  same join again keeps its name. A join edited onto other columns loses its name, because it
+  described the old columns.
 - **Always-applied filters on a [Live dataset](live-data.md).** An older pod ignores them and
   answers every question without them. This release refuses every question, schema sync, "Make a
   copy" and "Copy the data instead" on that dataset ("Ask your admin to finish upgrading
   Ordinate").
 - **Notes on a table, labels for a column's values, and warnings on a join.** An older pod drops
   them the next time it saves a project's notes (any tag or note edit does) or a join. This
-  release keeps them. A join's warning is worked out again later, so losing it never changes a
-  figure.
+  release keeps the notes and the labels. The column notes a browser reads carry no value labels,
+  so a viewer with row access rules never sees them, and a project bundle shaped by the Share policy
+  (mask or drop) from this release carries none either. A join's warning is dropped when this release
+  saves the join: it is worked out again later, so losing it never changes a figure.
 - **A metric's date column, and the mark on a date filter that came from a dashboard's date
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
   column, and an alert saved from a KPI counts by the control's column instead of the metric's.
-  This release keeps both and changes no figure.
+  This release keeps both. Where a dashboard's date control is on another column than the metric's
+  own date, the later release counts by the metric's date, so this release gives no figure for that
+  metric: it refuses a chart of it, Explain, an alert on it and its drivers ("This chart counts a
+  metric by its own date, which this server cannot do yet"), and the metric's own KPI tile and the
+  Summary card's KPI for it show none. Three places still give a figure: see
+  [What stays open](#what-stays-open).
 - **Snapshot metrics**, which take the last (or first) value by date, as for a balance, instead of
   adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
   duplicate erases the setting. This release keeps it and shows no figure for it: a KPI shows none,
-  and charts, alerts, the metric tree and drivers refuse, until a later release adds snapshots.
+  the Summary card leaves it out, and charts, Explain, alerts, the metric tree and drivers refuse,
+  until a later release adds snapshots. The one exception is under
+  [What stays open](#what-stays-open).
 
 ### What stays open
 
@@ -215,6 +226,23 @@ that is ignored, a chart with `via` drawn through the wrong join, an alert that 
 dashboard's date column instead of the metric's, and a snapshot metric summed over every date. If
 you roll back below this release anyway, remove the always-applied filters from your Live datasets
 first, and check the charts that use a named join afterwards.
+
+These stay open even with every pod on this release, for as long as its pods run beside the
+release that adds these features:
+
+- **The metric editor's preview** on a pod of this release shows a plain total for a snapshot
+  metric. The saved metric keeps its snapshot, and the figures listed above still show none for it.
+- **Restoring an earlier version of a metric** on a pod of this release does not restore its date
+  column: the metric keeps the one it has now.
+- **Explain refuses a saved chart with more than 8 filters** instead of narrating it: it reads at
+  most 8, and narrating fewer would describe a wider chart.
+- **A metric that counts by its own date, under a dashboard date control on another column**, still
+  gets a figure in three places on a pod of this release. It counts by the control's date there,
+  while a pod of the later release counts by the metric's own date, until every pod runs the later
+  release:
+  - a KPI card's comparison period (the figure it compares with);
+  - a what-if (scenario) card;
+  - a formula built on such a metric, in a chart, in its drivers and in the Summary card.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 

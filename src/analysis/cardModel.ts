@@ -90,7 +90,9 @@
   const isKept = (s: any): boolean => require('../data/filterList').isKeptStep(s);
 
   function stepKey(s: any): string {
-    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null]);
+    // `period` and `via`, as web useViewer.stepKey: two periods on one column, or the same predicate through a
+    // relationship, are two filters (dropping one widens the figure).
+    return JSON.stringify([s.column, s.op, s.value === undefined ? null : s.value, Array.isArray(s.values) ? s.values : null, s.period === undefined ? null : s.period, s.via === undefined ? null : s.via]);
   }
 
   /**
@@ -118,7 +120,8 @@
       const kept = isKept(s);
       if (!kept && (!s || s.type !== 'filter' || typeof s.column !== 'string')) continue;
       if (!kept && replaced.has(s.column) && s.op === '=') continue;
-      const k = kept ? 'kept:' + JSON.stringify(s) : stepKey(s);
+      // Its whole body in key order, as the web's keptKey: two copies differing only in key order are one step.
+      const k = kept ? 'kept:' + require('../engine/queryCache').stableStringify(s) : stepKey(s);
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(s);

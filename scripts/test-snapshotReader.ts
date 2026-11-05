@@ -39,6 +39,8 @@ const scenarioModel: typeof import('../src/analysis/scenarioModel') = require('.
 const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const versions: typeof import('../src/ipc/versions') = require('../src/ipc/versions');
+const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
+const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
 const U1 = '11111111-1111-4111-8111-111111111111';
 const U2 = '22222222-2222-4222-8222-222222222222';
@@ -219,6 +221,25 @@ void (async () => {
   const changeRule = { ...rule({ metricId: m.id }), compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } };
   const alertChange = await alertStore.testRule(pid, changeRule);
   ok('alerts: a previous-period rule on a snapshot metric reads no figure either', alertChange.value === null && alertChange.previous === null && alertChange.fire === false, JSON.stringify(alertChange));
+
+  // ── the Summary card: a KPI of a snapshot metric never falls back to the card's stored {column, aggregation} ──
+  const plainSum = rows.reduce((s, r) => s + r[2], 0);
+  const summarised = async (metricId: string) => summary.computeSummary(pid, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds.id, column: 'units', aggregation: 'sum', metricId } }] }], { filters: [], params: new Map() });
+  const sumSnap = await summarised(m.id);
+  ok('summary: a snapshot metric\'s KPI says no figure, never the plain sum over every date',
+    !sumSnap.some((s) => s.kind === 'kpi') && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
+  const sumPlain = await summarised(plain.id);
+  ok('NEGATIVE CONTROL: the same KPI of a plain metric gives its figure', sumPlain.some((s) => s.kind === 'kpi' && s.figures.some((x) => typeof x.value === 'number')), JSON.stringify(sumPlain).slice(0, 400));
+
+  // ── the answer door: Explain and a stored answer card read the measure's metricId, never its stored copy ──
+  copilotIpc.register();
+  const tileOf = (metricId: string) => ({ datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'units', aggregation: 'sum', metricId }] }, filters: [], chartType: 'column', name: 'Stock by region' });
+  const explained = await handlers.get('answer:explain')!(null, { projectId: pid, tile: tileOf(m.id) });
+  ok('answer:explain: a chart whose measure is a snapshot metric is refused with the sentence', explained.ok === false && explained.reason === pending && !explained.threadId, JSON.stringify(explained));
+  const carded = await handlers.get('answer:card')!(null, { projectId: pid, spec: { datasetId: ds.id, category: 'region', measures: tileOf(m.id).encoding.values, filters: [], chartType: 'column', title: 'Stock' } });
+  ok('answer:card: a stored spec over a snapshot metric is refused with the sentence', carded.ok === false && carded.reason === pending, JSON.stringify(carded).slice(0, 300));
+  const explainedPlain = await handlers.get('answer:explain')!(null, { projectId: pid, tile: tileOf(plain.id) });
+  ok('NEGATIVE CONTROL: the same chart over a plain metric still explains', explainedPlain.ok === true && typeof explainedPlain.threadId === 'string', JSON.stringify(explainedPlain));
 
   finish();
 })();

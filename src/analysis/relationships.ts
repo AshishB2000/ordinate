@@ -153,7 +153,10 @@ export async function saveRelationship(projectId: string, raw: unknown): Promise
   if (!parsed) return null;
   const list = await listRelationships(projectId);
   const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
-  const rel = old ? { ...parsed, id: old.id } : parsed;
+  // A save without a label (every release-1 save) keeps the same edge's own; a changed edge does not. Never the
+  // warning: it is derived, and the release that writes it recomputes it (absent once the edge no longer warns).
+  const same = old && sameEdge(old, parsed) ? old : null;
+  const rel = old ? { ...parsed, id: old.id, ...(same && parsed.label === undefined && same.label !== undefined && { label: same.label }) } : parsed;
   const next = (old ? list.map((r) => (r === old ? rel : r)) : [...list, rel]).filter((r) => r === rel || (r.id !== rel.id && !sameEdge(r, rel)));
   if (next.length > MAX_RELATIONSHIPS) return null;
   return (await writeAll(projectId, next)) ? rel : null;

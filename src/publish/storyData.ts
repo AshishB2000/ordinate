@@ -13,6 +13,7 @@ import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
 import { resolveMetric } from '../ipc/metrics';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isTermNotExpandedError } from '../data/termStep';
 import { chartPayload } from './dashboardData';
 import { withEvents } from '../ipc/events'; // r8:events
 import type { BuildProgress, Outgoing } from './dashboardData';
@@ -88,8 +89,9 @@ export async function buildStory(
       try {
         r = await resolveMetric(projectId, id, { filters: b.filters });
       } catch (err) {
-        // A Live metric its warehouse could not give (L2.4): left out, and said if none is left — the story still publishes.
-        if (!isLiveFigureError(err)) throw err;
+        // A Live metric its warehouse could not give (L2.4), or a glossary term this pod cannot apply: left out, and
+        // said if none is left — the story still publishes.
+        if (!isLiveFigureError(err) && !isTermNotExpandedError(err)) throw err;
         liveReason = err.message;
       }
       if (r && r.ok) metrics.push({ name: r.name, display: r.display, value: r.value });

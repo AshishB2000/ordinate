@@ -30,8 +30,11 @@ export function register(): void {
     }
   });
 
-  ipcMain.handle('catalog:columns', async (_e, { projectId, datasetId }: any = {}) =>
-    ({ ok: true, columns: await catalog.getColumns(str(projectId), str(datasetId)) }));
+  // No value labels: they name stored values, which a row-restricted viewer must not read (a later release gates them).
+  ipcMain.handle('catalog:columns', async (_e, { projectId, datasetId }: any = {}) => {
+    const docs = await catalog.getColumns(str(projectId), str(datasetId));
+    return { ok: true, columns: Object.fromEntries(Object.entries(docs).map(([name, { values: _labels, ...doc }]) => [name, doc])) };
+  });
 
   ipcMain.handle('catalog:setColumn', async (_e, { projectId, datasetId, column, patch }: any = {}) => {
     try {
