@@ -18,7 +18,7 @@ export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | 
   return metrics.isFunnelDefinition(d) || metrics.isPeriodDefinition(d);
 }
 
-/** A funnel or period kind, or a per-entity snapshot: no figure on this release. */
+/** A funnel or period kind, or a per-entity snapshot: no chart or card writer on this release (a period metric's KPI and alerts are computed from step 05; its charts are step 06). */
 export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   const d = m.definition;
   return isNewerKind(d) || (metrics.isSimpleDefinition(d) && !!d.snapshot?.per);
@@ -50,5 +50,5 @@ export async function pendingMeasureRefusal(projectId: string, encoding: VizEnco
  */
 export async function alertSkipped(projectId: string, rule: AlertRule): Promise<string | null> {
   const m = canEvaluate(rule) && rule.metric.metricId ? await metrics.getMetric(projectId, rule.metric.metricId) : null;
-  return !canEvaluate(rule) || (m && pendingMetric(m)) ? msg.alertPending() : null;
+  return !canEvaluate(rule) || (m && pendingMetric(m) && !metrics.isPeriodDefinition(m.definition)) ? msg.alertPending() : null; // a period metric's figure is computed (step 05)
 }

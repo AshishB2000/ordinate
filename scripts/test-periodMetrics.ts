@@ -5,6 +5,8 @@
 //   kpi       the figure through the KPI door (src/ipc/periodMetric.ts): the base tile under the window, a compare
 //             like with like, formulas over one (the memo trap), a date control, Live never hydrated, the save's
 //             refusals, a deleted base said; metrics with nothing new reply byte for byte as before (a pinned hash)
+//   surfaces  scorecards and the metric tree are tiles; an alert on a period metric watches the metric itself, by
+//             period too (a range, never a label filter); one whose metric is gone is left untouched
 //
 // Every guard has its NEGATIVE CONTROL beside it.
 //
@@ -180,6 +182,38 @@ void (async () => {
   ok('MCP list_metrics: a period metric in words, counting by its base\'s date', listed.find((m) => m.id === ytd.id)?.definition === 'Revenue, year to date' && listed.find((m) => m.id === ytd.id)?.counts_by === 'day', show(listed.find((m) => m.id === ytd.id)));
   const mv = (await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P } as never, 'Revenue YTD'))) as Reply;
   ok('MCP metric_value: the tile\'s figure', typeof mv.value === 'number' && Object.is(mv.value, await kpi(ytd, [])), show(mv));
+
+  // ── surfaces ──────────────────────────────────────────────────────────────
+  const scorecards: typeof import('../src/ipc/scorecards') = require('../src/ipc/scorecards');
+  const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+  const { randomUUID }: typeof import('crypto') = require('crypto');
+  const sc = (await H.as(H.ORG_A, () => scorecards.computeScorecard(P, { id: randomUUID(), projectId: P, name: 's', period: 'month', rows: [{ metricId: ytd.id }], createdAt: '', updatedAt: '', schemaVersion: 1 } as never))) as Reply;
+  ok('scorecard: the row is the tile under the scorecard\'s window', typeof sc.rows?.[0]?.value === 'number' && Object.is(sc.rows[0].value, await kpi(ytd, [ON(sc.window.from, sc.window.to)])), show(sc.rows?.[0]));
+  const detail = (await H.as(H.ORG_A, () => scorecards.scorecardDetail(P, { id: randomUUID(), projectId: P, name: 's', period: 'month', rows: [{ metricId: ytd.id }], createdAt: '', updatedAt: '', schemaVersion: 1 } as never, ytd.id))) as Reply;
+  ok('scorecard detail: in the period metric\'s words', detail.metric?.definitionText === 'Revenue, year to date', show(detail.metric));
+  const tree = (await post('metricTree:compute', { projectId: P, id: ytd.id, filters: [OCT], compare: { mode: 'previous_year' } })).value;
+  ok('tree: current and previous are tiles', typeof tree.root?.current === 'number' && Object.is(tree.root.current, await kpi(ytd, [OCT])) && Object.is(tree.root.previous, await kpi(ytd, [ON('2023-10-01', '2023-10-31')])), show(tree));
+  const rule = { id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '>', value: 0 }, metric: { column: '', aggregation: 'sum', metricId: ytd.id, filters: [OCT] } };
+  const watched = await H.as(H.ORG_A, () => alertStore.metricFor(P, rule as never));
+  ok('an alert on a period metric watches its figure', typeof watched.value === 'number' && Object.is(watched.value, await kpi(ytd, [OCT])), show(watched));
+  ok('NEGATIVE CONTROL: an alert on a plain metric still uses its copy', Object.is((await H.as(H.ORG_A, () => alertStore.metricFor(P, { ...rule, metric: { column: 'amt', aggregation: 'sum', metricId: REV } } as never))).value, await kpi(REV, [])));
+  // By period: YTD to the end of the latest closed month, against YTD to the end of the one before — never a month alone.
+  const change = { ...rule, id: randomUUID(), datasetId: DI, compare: 'change', threshold: undefined, change: { op: 'pct_up', value: 1, vs: 'previous_period', periodColumn: 'day' }, metric: { column: '', aggregation: 'sum', metricId: ytdI } };
+  const byPeriod = await H.as(H.ORG_A, () => alertStore.metricFor(P, change as never));
+  ok('a change rule by period: the YTD to each month\'s end', byPeriod.period === '2024-10' && Object.is(byPeriod.value, await kpi(ytdI, [ON('2024-10-01', '2024-10-31')])) && Object.is(byPeriod.previous, await kpi(ytdI, [ON('2024-09-01', '2024-09-30')])), show(byPeriod));
+  ok('NEGATIVE CONTROL: … not October alone (a label filter would give it)', typeof byPeriod.value === 'number' && !Object.is(byPeriod.value, await kpi(REVI, [ON('2024-10-01', '2024-10-31')])));
+  const gone = await save('Short-lived YTD', { base: REV, window: { to_date: 'year' } });
+  const ruleGone = { ...rule, id: randomUUID(), metric: { ...rule.metric, metricId: gone.id } };
+  await post('metric:delete', { projectId: P, id: gone.id });
+  for (const r of [rule, ruleGone]) await H.as(H.ORG_A, () => alertStore.restoreRule(P, r));
+  const before = await H.as(H.ORG_A, () => alertStore.load(P));
+  await H.as(H.ORG_A, () => alertStore.evaluateProject(P, D, Date.parse('2024-11-03T12:00:00Z')));
+  const after = await H.as(H.ORG_A, () => alertStore.load(P));
+  const at = (f: typeof before, id: string) => f.rules.find((x) => x.id === id);
+  ok('an alert tick evaluates the period rule: its figure, and it fires', Object.is(at(after, rule.id)?.lastValue, await kpi(ytd, [OCT])) && typeof at(after, rule.id)?.lastFiredAt === 'string', show(at(after, rule.id)));
+  ok('a rule whose metric is gone is left as it was, never evaluated as nothing', JSON.stringify(at(after, ruleGone.id)) === JSON.stringify(at(before, ruleGone.id)) && at(after, ruleGone.id)?.lastEvaluatedAt === undefined, show(at(after, ruleGone.id)));
+  const tested = await H.as(H.ORG_A, () => alertStore.testRule(P, rule));
+  ok('the Test button: the period figure', tested.ok && tested.fire === true && Object.is(tested.value, await kpi(ytd, [OCT])), show(tested));
 
   // The save's refusals, each beside its field.
   const trySave = async (definition: unknown, timeColumn?: string): Promise<Reply> => post1({ name: 'Probe', definition, ...(timeColumn !== undefined ? { timeColumn } : {}) });
