@@ -69,7 +69,8 @@ export async function loadProjectCtx(projectId: string, own: ReadonlySet<string>
   }
   for (const v of visList) ctx.visuals.push({ id: v.id, name: v.name, datasetId: v.datasetId, chartType: v.chartType, fromRun: own.has('visual:' + v.id) });
   for (const m of metList) {
-    const def = m.definition as { column?: string; aggregation?: string };
+    const def = m.definition as { column?: string; aggregation?: string; snapshot?: unknown };
+    if (def.snapshot) continue; // a plan step cannot name a snapshot metric: its card would show a plain total
     ctx.metrics.push({
       id: m.id, name: m.name, datasetId: m.datasetId, fromRun: own.has('metric:' + m.id),
       column: typeof def.column === 'string' ? def.column : '', aggregation: typeof def.aggregation === 'string' ? def.aggregation : '',

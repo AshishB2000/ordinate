@@ -360,6 +360,7 @@
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Une mesure calculée ne peut pas encore être dessinée en petits multiples. Retirez le champ des petits multiples, ou mesurez une colonne.",
   "metricCheckMessages.is_a_column_a_measure_is": "« {column} » est une colonne. Une mesure se calcule après les totaux : indiquez comment la totaliser, par exemple sum([{column}]).",
+  "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "« {name} » est circulaire : {path}. Une métrique ne peut pas faire partie de sa propre formule.",
   "metricCheckMessages.is_measured_on_another_dataset_so": "« {name} » est mesurée sur un autre jeu de données ; ce graphique ne peut donc pas la ventiler par sa catégorie.",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} a besoin d’une colonne numérique, et « {column} » n’en est pas une. count([{column}]) compte ses valeurs renseignées.",

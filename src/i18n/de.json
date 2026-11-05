@@ -360,6 +360,7 @@
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Eine berechnete Kennzahl kann noch nicht als Small Multiples gezeichnet werden. Entfernen Sie das Small-Multiples-Feld oder messen Sie eine Spalte.",
   "metricCheckMessages.is_a_column_a_measure_is": "„{column}“ ist eine Spalte. Eine Kennzahl wird nach den Summen berechnet – geben Sie also an, wie sie zusammengefasst wird, zum Beispiel sum([{column}]).",
+  "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "„{name}“ ist zirkulär: {path}. Eine Metrik kann nicht Teil ihrer eigenen Formel sein.",
   "metricCheckMessages.is_measured_on_another_dataset_so": "„{name}“ wird in einem anderen Datensatz gemessen, daher kann dieses Diagramm sie nicht nach seiner Kategorie aufschlüsseln.",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} braucht eine Zahlenspalte, und „{column}“ ist keine. count([{column}]) zählt die ausgefüllten Werte.",

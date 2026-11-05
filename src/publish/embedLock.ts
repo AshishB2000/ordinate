@@ -63,7 +63,7 @@ export async function visualAllowed(lock: Lock, projectId: string, datasetId: st
 export async function metricAllowed(lock: Lock, projectId: string, m: { datasetId?: string; metricId?: string; column?: string }, filters: FilterStep[] = []): Promise<boolean> {
   if (m.metricId) {
     const def = await metrics.getMetric(projectId, m.metricId);
-    if (def && (metrics.isFormulaDefinition(def.definition) || !(await lock.covers(projectId, def.datasetId))
+    if (def && (metrics.isFormulaDefinition(def.definition) || def.definition.snapshot || !(await lock.covers(projectId, def.datasetId))
       || (await metricReadsOther(projectId, def.datasetId, def.definition.column, filters)))) return false;
   }
   if (await metricReadsOther(projectId, m.datasetId, m.column, filters)) return false;

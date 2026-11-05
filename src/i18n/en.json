@@ -357,6 +357,7 @@
   "mentionMessages.you_get_this_email_because_mentioned": "You get this email because {by} mentioned you in Ordinate. Turn these emails off in Settings → You.",
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "A calculated measure cannot be drawn as small multiples yet. Remove the small-multiples field, or measure a column.",
   "metricCheckMessages.is_a_column_a_measure_is": "“{column}” is a column. A measure is calculated after totals, so say how to total it, for example sum([{column}]).",
+  "metricCheckMessages.is_a_snapshot_metric_which_this": "{name} is a snapshot metric, which this version of Ordinate can't chart yet.",
   "metricCheckMessages.is_circular_a_metric_cannot_be": "“{name}” is circular: {path}. A metric cannot be part of its own formula.",
   "metricCheckMessages.is_measured_on_another_dataset_so": "“{name}” is measured on another dataset, so this chart cannot break it out by its category.",
   "metricCheckMessages.needs_a_number_column_and_is": "{aggregation} needs a number column, and “{column}” is not one. count([{column}]) counts its filled values.",

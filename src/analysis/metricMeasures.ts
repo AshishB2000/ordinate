@@ -97,6 +97,7 @@ export async function planMetricMeasures(
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
     if (!isFormulaDefinition(m.definition)) {
+      if (m.definition.snapshot) throw new PlanError(msg.measureSnapshotPending(m.name)); // a sum over every date would be wrong; step 07 removes this
       return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name) : null;
     }
     if (depth > MAX_DEPTH) return null;

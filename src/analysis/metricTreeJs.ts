@@ -46,7 +46,8 @@ export function metricJs(columns: ParsedColumn[], rows: Cell[][], metrics: Metri
   const table = (filters: FilterStep[]) => applyPipeline({ columns, rows }, filters.concat(scope));
   if (!isFormulaDefinition(m.definition)) {
     const t = table(m.filters);
-    return m.definition.column ? computeMetric(t.columns, t.rows, m.definition) : null;
+    // A snapshot has no figure until a later release, as at the door (ipc/dashboards.computeCardMetric).
+    return m.definition.column && !m.definition.snapshot ? computeMetric(t.columns, t.rows, m.definition) : null;
   }
   if (depth > MAX_DEPTH) return null;
   const compiled = compileMetricFormula(m.definition.formula, columns.map((c) => c.name));

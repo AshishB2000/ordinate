@@ -28,7 +28,7 @@ async function metricFor(projectId: string, m: any): Promise<string | null> {
   if (!m || typeof m.datasetId !== 'string' || typeof m.column !== 'string') return null;
   const all = await metrics.listMetrics(projectId);
   const same = all.find((x) => x.datasetId === m.datasetId && !metrics.isFormulaDefinition(x.definition)
-    && x.definition.column === m.column && x.definition.aggregation === m.aggregation);
+    && x.definition.column === m.column && x.definition.aggregation === m.aggregation && !x.definition.snapshot);
   if (same) return same.id;
   const saved = await metrics.saveMetric(projectId, {
     name: typeof m.label === 'string' && m.label.trim() ? m.label.trim() : `${m.aggregation} of ${m.column}`,

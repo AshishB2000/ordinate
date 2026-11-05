@@ -58,3 +58,8 @@ export function measureNoFacets(): string {
 export function measureNeedsOneAxis(name: string): string {
   return t('metricCheckMessages.the_measure_is_calculated_from_parts', { name });
 }
+
+/** A snapshot metric (the latest rows only) in a chart this version cannot compute it for. */
+export function measureSnapshotPending(name: string): string {
+  return t('metricCheckMessages.is_a_snapshot_metric_which_this', { name });
+}

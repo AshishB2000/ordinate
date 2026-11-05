@@ -35,7 +35,9 @@ export async function writeBack(projectId: string, type: string, id: string, rec
   }
   if (type === 'metric') {
     return metrics.updateMetric(projectId, id, {
-      name: rec.name, definition: rec.definition, filters: rec.filters, format: rec.format,
+      name: rec.name, filters: rec.filters, format: rec.format,
+      // A version without a snapshot restores to none (an update that omits the key keeps the stored one).
+      definition: rec.definition && typeof rec.definition === 'object' && !('snapshot' in rec.definition) ? { ...rec.definition, snapshot: null } : rec.definition,
       // '' clears a description the restored version did not have.
       description: rec.description === undefined ? '' : rec.description,
       direction: rec.direction === undefined ? null : rec.direction,

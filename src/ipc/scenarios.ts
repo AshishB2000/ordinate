@@ -110,7 +110,7 @@ export function register(): void {
   // "Add metric" lists and how a new scenario picks its first ones (a column
   // rollup, a formula, a count). Names and kinds only.
   ipcMain.handle('scenario:metrics', async (_e, { projectId }: any = {}) =>
-    (await metrics.listMetrics(id(projectId))).map((m) => ({
+    (await metrics.listMetrics(id(projectId))).filter((m) => metrics.isFormulaDefinition(m.definition) || !m.definition.snapshot).map((m) => ({
       id: m.id,
       name: m.name,
       kind: metrics.isFormulaDefinition(m.definition) ? 'formula' : m.definition.aggregation === 'count' ? 'count' : 'column',
