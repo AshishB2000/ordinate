@@ -116,6 +116,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   // a term's own filters are plain steps: a term inside a term is refused on save (termProblem), dropped on read
   'src/analysis/terms.ts': { count: 2, how: 'prepare' },
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },
+  'src/data/columnAccess.ts': { count: 1, how: 'prepare' }, // column rules walk the stored Prepare steps one by one; a step it cannot sanitize (a term included) is unknown: closed
   'src/data/stepSanitize.ts': { count: 3, how: 'prepare' },
   'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },
   'src/ipc/modelOverview.ts': { count: 1, how: 'prepare' }, // reads a copy's Prepare filter steps to show them; a Prepare list takes no term
