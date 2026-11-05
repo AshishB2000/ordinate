@@ -68,7 +68,7 @@ function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }
 
-const AGGS: metricValue.MetricAggregation[] = ['sum', 'avg', 'count', 'min', 'max'];
+const AGGS: metricValue.MetricAggregation[] = ['sum', 'avg', 'count', 'min', 'max', 'countd'];
 
 /** computeMetricResident must equal computeMetric, for every aggregation. */
 async function diffMetric(label: string, f: Fixture, column: string, filters?: FilterStep[]): Promise<void> {

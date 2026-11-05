@@ -49,7 +49,6 @@ import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefus
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
 import { isTermNotExpandedError, tagTermRefusals, TERM_CODE, termRaised } from '../data/termStep';
-import { isPendingError, PENDING_CODE } from '../data/pendingError';
 import { seedRank, register as registerCaller } from './authz/caller';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
@@ -490,11 +489,6 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // A glossary term no door expanded, or a filter this pod cannot read (PR 05a): a typed 409 with the catalog's sentence — never a figure.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: TERM_CODE, code: TERM_CODE, reason: err.reason, message: err.message });
-      }
-      if (isPendingError(err)) {
-        // A figure a newer release writes and this one keeps but cannot compute (part 5 step 01): a typed 409, never a figure.
-        await record('error', decision.projectId);
-        return reply.code(409).send({ error: PENDING_CODE, code: PENDING_CODE, message: err.message });
       }
       if ((err as { code?: unknown } | null)?.code === 'ERECORDBUSY') {
         // Another save held the record past the lock wait (src/app/recordFs.ts):

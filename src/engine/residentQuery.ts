@@ -109,8 +109,8 @@ import * as duck from './duckdb';
 // cap; re-exported so every existing importer keeps its import.
 import { colIndex, filterPredicates } from './residentFilter';
 export { filterPredicate, filterPredicates } from './residentFilter';
-import { PLAIN_AGGREGATIONS } from '../data/aggregations';
-import { PendingError } from '../data/pendingError';
+import { AGGREGATIONS } from '../data/aggregations';
+import { countDistinctSql } from './countDistinctSql';
 
 export type { ResidentCatKey } from './residentCategory';
 
@@ -144,7 +144,7 @@ export interface ResidentChartData {
 
 // ── Constants shared with transforms.ts ──────────────────────────────────────
 
-const AGG_FNS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
+const AGG_FNS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -610,8 +610,7 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
 export function aggExpr(cols: ParsedColumn[], ci: number, fn: MetricAggregation): string {
   if (ci < 0) return 'CAST(NULL AS DOUBLE)';
   const p = phys(ci);
-  // countd throws (a caller's throw is null, so the JS reference answers, and refuses); any other unknown fn is count, as transforms.aggregate.
-  if (fn === 'countd') throw new PendingError('countd', `countd of ${cols[ci].name}`); // shortcut: computed from part 5 step 02
+  if (fn === 'countd') return countDistinctSql(p, cols[ci].type); // the twin of analysis/countDistinct
   const f: MetricAggregation = (AGG_FNS.has(fn) ? fn : 'count') as MetricAggregation;
 
   if (f === 'count') {

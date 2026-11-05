@@ -314,7 +314,7 @@ export function foldFacets(
 
 // ── the JS reference ────────────────────────────────────────────────────────
 
-function aggFn(v: VizMeasure): Exclude<VizMeasure['aggregation'], 'none'> { // countd: the group step refuses it (PendingError)
+function aggFn(v: VizMeasure): Exclude<VizMeasure['aggregation'], 'none'> { // countd: the group step counts it (analysis/countDistinct)
   return v.aggregation === 'none' ? 'sum' : v.aggregation;
 }
 

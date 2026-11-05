@@ -48,20 +48,10 @@ const msg: typeof import('../src/analysis/pendingMessages') = require('../src/an
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const { randomUUID }: typeof import('crypto') = require('crypto');
-const { isPendingError }: typeof import('../src/data/pendingError') = require('../src/data/pendingError');
 
 const COLS = [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] as any; // any: the dataset column shape, as the sibling suites build it
 const ROWS: Array<[string, number, string]> = [];
 for (let i = 0; i < 40; i += 1) ROWS.push([`c${i % 7}`, 10 + i, `2026-0${i < 20 ? 1 : 2}-${String((i % 20) + 1).padStart(2, '0')}`]);
-
-function throws(fn: () => unknown, is: (e: unknown) => boolean): boolean {
-  try {
-    fn();
-    return false;
-  } catch (e) {
-    return is(e);
-  }
-}
 
 void (async () => {
   await projects.init();
@@ -91,13 +81,14 @@ void (async () => {
   const G = { type: 'group_aggregate', groupBy: ['day'], aggregations: [{ column: 'customer_id', fn: 'countd', as: 'customers' }] };
   ok('Prepare: a countd group step survives sanitize', JSON.stringify(transforms.sanitizeSteps([G])) === JSON.stringify([G]), JSON.stringify(transforms.sanitizeSteps([G])));
   const T = { columns: COLS, rows: ROWS.map((r) => [...r]) };
-  ok('Prepare: a run that meets it refuses, typed — never an ungrouped table', throws(() => transforms.applyPipeline(T, [G as never]), isPendingError));
+  const grouped = transforms.applyPipeline(T, [G as never]); // one row per day, so one customer per day
+  ok('Prepare: a run that meets it counts distinct per group (step 02) — never an ungrouped table', grouped.columns.map((c) => c.name).join() === 'day,customers' && grouped.rows.length === 40 && grouped.rows.every((r) => r[1] === 1), JSON.stringify(grouped.rows.slice(0, 3)));
   const plainG = { ...G, aggregations: [{ column: 'customer_id', fn: 'count', as: 'rows' }] };
   ok('NEGATIVE CONTROL: the same step with count groups', transforms.applyPipeline(T, [plainG as never]).columns.map((c) => c.name).join() === 'day,rows');
   const SQL_COLS = [{ physical: 'c0', name: 'customer_id', type: 'text' }, { physical: 'c1', name: 'amount', type: 'number' }, { physical: 'c2', name: 'day', type: 'date' }] as any; // any: sqlGen's column shape
-  ok('Prepare on DuckDB: the SQL pipeline hands a countd step to the fold (which refuses), never counts it', sqlGen.generateSql('t', SQL_COLS, [G as never]).sql === null);
+  ok('Prepare on DuckDB: the SQL pipeline hands a countd step to the fold (the reference), never counts it', sqlGen.generateSql('t', SQL_COLS, [G as never]).sql === null);
   ok('NEGATIVE CONTROL: the same step with count compiles to SQL', typeof sqlGen.generateSql('t', SQL_COLS, [plainG as never]).sql === 'string');
-  ok('resident: an aggregate expression for countd refuses, typed — never a count', throws(() => residentQuery.aggExpr(COLS, 0, 'countd'), isPendingError));
+  ok('resident: an aggregate expression for countd counts distinct (step 02) — never a plain count', residentQuery.aggExpr(COLS, 0, 'countd').includes('count(DISTINCT') && residentQuery.aggExpr(COLS, 0, 'countd') !== residentQuery.aggExpr(COLS, 0, 'count'));
   ok('NEGATIVE CONTROL: the same expression for count is SQL', typeof residentQuery.aggExpr(COLS, 0, 'count') === 'string');
   ok('NEGATIVE CONTROL: the Prepare pivot step still refuses countd', typeof stepsSanitize.checkPowerStep({ type: 'pivot', key: 'day', value: 'amount', fn: 'countd' }) === 'string');
   ok('NEGATIVE CONTROL: an unknown aggregation still reads as sum', (metrics.sanitizeDefinition({ column: 'amount', aggregation: 'median' }) as { aggregation: string }).aggregation === 'sum');

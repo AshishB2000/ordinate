@@ -12,7 +12,8 @@
 // / the numeric branch of datasetStats.computeColumnSummary().
 
 import type { ParsedColumn } from '../data/parse';
-import { isPlainAggregation, type Aggregation } from '../data/aggregations';
+import { isAggregation, type Aggregation } from '../data/aggregations';
+import { countDistinct } from './countDistinct';
 
 // A stored cell is the coerced value from Dataset.rows[*][colIndex]: a JS number
 // for numeric columns, the original string for text/date, or null for empties.
@@ -43,10 +44,11 @@ export function computeMetric(
   rows: Cell[][],
   spec: { column: string; aggregation: MetricAggregation },
 ): number | null {
-  if (!spec || typeof spec.column !== 'string' || !isPlainAggregation(spec.aggregation)) return null; // countd: no figure on this release
+  if (!spec || typeof spec.column !== 'string' || !isAggregation(spec.aggregation)) return null;
   const ci = colIndex(columns, spec.column);
   if (ci < 0) return null;
   const body = Array.isArray(rows) ? rows : [];
+  if (spec.aggregation === 'countd') return countDistinct(body.map((r) => (r ? r[ci] : null)), columns[ci].type);
 
   if (spec.aggregation === 'count') {
     let count = 0;
