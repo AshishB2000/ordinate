@@ -15,6 +15,7 @@ import { AddSourceDialog } from './AddSourceDialog';
 import { SourceList, type Picked } from './SourceList';
 import { SourcePanel } from './SourcePanel';
 import m from '../Model.module.css';
+import x from './Sources.module.css';
 
 /** Also what the Data model shows while the roles are still unknown, so an editor's deep link is never bounced. */
 export function SourcesLoading() {
@@ -172,7 +173,7 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
     <>
       <p className={m.calendar}>
         <Icon name="lock" size={16} />
-        <span>Tables in your databases and warehouses that datasets are built from. Only editors of this project see this tab.</span>
+        <span className={x.intro}>Tables in your databases and warehouses that datasets are built from. Only editors of this project see this tab.</span>
       </p>
       {body}
       {adding && (

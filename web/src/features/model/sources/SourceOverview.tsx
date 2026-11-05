@@ -34,7 +34,7 @@ export function SourceOverview({ projectId, conn, doc, datasets, used }: {
   const rows = f?.rowEstimate !== undefined ? `~${formatNumber(f.rowEstimate)} (the warehouse's estimate)` : '';
   const size = [rows, f?.sizeLabel ?? ''].filter(Boolean).join(' · ');
   return (
-    <dl className={m.rows}>
+    <dl className={`${m.rows} ${x.facts}`}>
       <Row label="Connection">{`${conn.name} (${conn.label})`}</Row>
       <Row label="Owner">
         <Written text={doc?.owner ?? ''} />

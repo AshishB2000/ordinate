@@ -118,6 +118,9 @@ All notable changes to Ordinate are documented here. Format based on
   time, or no, from the server's rule). The glossary says where each term is used, and the Relationships tab
   which join a chart takes when two tables are joined more than one way. See `docs/server/upgrade.md`
   ("The Data model section").
+- **Data model has a Source tables tab for editors:** the warehouse tables datasets are built from, their
+  notes, and what the warehouse says about them, read on a click. Connections links to it with
+  "Document in Data model".
 
 ### Snapshot metrics
 

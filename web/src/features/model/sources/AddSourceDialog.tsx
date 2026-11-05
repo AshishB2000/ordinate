@@ -13,6 +13,7 @@ import { EmptyState, ErrorState } from '../../../ui/States';
 import { qualify, useTables } from '../../connections/api';
 import { Alert } from './SourcePanel';
 import { LIST, startNotes } from './api';
+import a from './AddSourceDialog.module.css';
 import x from './Sources.module.css';
 
 /** Drawn at most: a warehouse can hold thousands; the search reaches the rest. */
@@ -64,18 +65,18 @@ export function AddSourceDialog({ projectId, connId, connName, documented, onPic
       </EmptyState>
     ) : (
       <>
-        <ul className={x.pickList}>
+        <ul className={a.pickList}>
           {names.slice(0, SHOWN).map((n) => (
             <li key={n}>
-              <button type="button" className={x.pick} disabled={!!busy} aria-busy={busy === n || undefined} onClick={() => void pick(n)}>
+              <button type="button" className={a.pick} disabled={!!busy} aria-busy={busy === n || undefined} onClick={() => void pick(n)}>
                 <Icon name="table" size={16} />
-                <span className={x.mono}>{n}</span>
+                <span className={`${x.mono} ${a.name}`}>{n}</span>
                 {documented.has(n) && <Badge tone="ok">documented</Badge>}
               </button>
             </li>
           ))}
         </ul>
-        {names.length > SHOWN && <p className={x.pickMore}>{`Showing the first ${SHOWN}. Search to find the others.`}</p>}
+        {names.length > SHOWN && <p className={a.pickMore}>{`Showing the first ${SHOWN}. Search to find the others.`}</p>}
       </>
     );
   }
