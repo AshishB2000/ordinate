@@ -6,7 +6,8 @@
 // tables are `Record<keyof …>`, so a new field fails tsc until someone decides. What part 1 added, by name:
 //   Metric    timeColumn (pin); definition.snapshot (pin, inside definition); additivity (derived from definition and
 //             the column types, both pinned); filters' term steps (pin, and each names a term dep); filters' `via`, the
-//             labelled join a column is read through (pin, and the data model becomes a dep)
+//             labelled join a column is read through (pin, and the data model becomes a dep); its own dataset and every
+//             dataset it reads through a `via` or another table's term (each one's pin is a dep: a Prepare edit moves it)
 //   Term      the record (TERM_PIN); a metric that names one has it as a dep
 //   Dataset   Live baseFilters and calculated fields (LIVE_PIN, pin); origin.readsTables (out: a label, p2-02)
 //   Catalog   TableDoc (role, key, grain, guide, keyCheck, hierarchies) and ColumnDoc (value labels, display names,
@@ -20,6 +21,7 @@ import { getTerm, type Term } from './terms';
 import { compileMetricFormula } from './metricFormula';
 import { bindFormulaText } from './params';
 import { listRelationships, type Relationship } from './relationships';
+import { viaPath } from './joinPlan';
 import { getDatasetMeta, type DatasetMeta } from '../data/datasets';
 import type { LiveSettings } from '../data/liveDataset';
 import type { DatasetOrigin } from '../data/datasetOrigin';
@@ -117,18 +119,28 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
     deps[ref] = stack.includes(ref) || stack.length > MAX_DEPTH ? 'cycle' : ((await pinIn(w, ref, stack)) ?? 'missing');
   };
   const meta = await getDatasetMeta(w.projectId, m.datasetId);
+  await dep(`dataset:${m.datasetId}`); // the figure is computed over its Prepare output (D4 heading, D5)
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const reads: string[] = [];
+  const vias: string[] = [];
   let crosses = false;
   for (const s of m.filters) {
     const step: unknown = s; // a term step is stored in a filter list, typed as a FilterStep
     if (isTermStep(step)) {
       await dep(`term:${step.term}`);
-      crosses ||= (await getTerm(w.projectId, step.term))?.datasetId !== m.datasetId;
+      const termDs = (await getTerm(w.projectId, step.term))?.datasetId;
+      if (termDs !== m.datasetId) crosses = true;
+      if (termDs && termDs !== m.datasetId) await dep(`dataset:${termDs}`);
     } else {
       if (s.via || s.datasetId) crosses = true;
+      if (s.via) vias.push(s.via);
       if (s.type === 'filter') reads.push(s.column);
     }
+  }
+  const model = vias.length > 0 || crosses ? listRelationships(w.projectId) : null;
+  for (const via of [...new Set(vias)].sort()) {
+    const path = viaPath(m.datasetId, via, await model!); // a via that no longer walks: the model's digest below says so
+    if (path.ok) for (const hop of path.value) await dep(`dataset:${hop.to.datasetId}`);
   }
   if (!metrics.isFormulaDefinition(m.definition)) {
     if (m.definition.column) reads.push(m.definition.column);
@@ -145,7 +157,7 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
     }
   }
   // A column read through the data model (its nearest owner, a `via`, a term on another table): the model is a dep.
-  if (crosses || reads.some((c) => !own.has(c))) deps.relationships = digest((await listRelationships(w.projectId)).map((r) => pinned(r, RELATIONSHIP_PIN)));
+  if (crosses || reads.some((c) => !own.has(c))) deps.relationships = digest((await (model ?? listRelationships(w.projectId))).map((r) => pinned(r, RELATIONSHIP_PIN)));
   return deps;
 }
 

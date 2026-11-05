@@ -12,6 +12,9 @@
 //               refuses another kind, itself, a gone or retired replacement and a chain; a replacement is named as it
 //               is called now and left out once gone; clear removes the entry with an event.
 //               NEGATIVE CONTROL: an item never certified reads no status.
+//   § dataset   a metric's pin holds its dataset's (and a via's far dataset's): a Prepare edit turns a certified
+//               metric and its dataset to needs_review; a refresh and a docs, key, value-label or row-rule edit keep
+//               both certified. NEGATIVE CONTROL: a metric on another dataset stays certified.
 //   § channels  over the route: review hands back the pin certify takes and the newest version key; a stale base is
 //               409 record_changed with the current pin; a refusal is { ok:false, error, field }. A restore never
 //               certifies, and one to other content reads needs_review (control: back to what was certified reads
@@ -42,6 +45,8 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+const datasetRecord: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const { stableStringify } = require('../src/engine/queryCache') as typeof import('../src/engine/queryCache');
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const versions: typeof import('../src/app/versions') = require('../src/app/versions');
@@ -197,6 +202,9 @@ async function partPin(): Promise<Fixtures> {
   ok('a relationship edit moves a metric read through it', await movesAfter(`metric:${VIA}`, () => rels.saveRelationship(P, { ...REL, cardinality: 'one_to_one' })));
   ok('a relationship label does not move it', !(await movesAfter(`metric:${VIA}`, () => rels.saveRelationship(P, { ...REL, cardinality: 'one_to_one', label: 'Buyer' }))));
   ok('NEGATIVE CONTROL: an own-table metric is not moved by a relationship edit', !(await movesAfter(`metric:${REV}`, () => rels.saveRelationship(P, { ...REL, cardinality: 'many_to_one' }))));
+  const SEGMENT = { type: 'filter', column: 'segment', op: '=', value: 'ent' } as never;
+  ok('a Prepare edit on a dataset a metric reads through its via moves it', await movesAfter(`metric:${VIA}`, () => datasets.updateSteps(P, CUST, [SEGMENT])));
+  ok('NEGATIVE CONTROL: it does not move a metric on another dataset', !(await movesAfter(`metric:${REV}`, () => datasets.updateSteps(P, CUST, []))));
   ok('a refresh (rows, updatedAt, lastRefreshedAt) does not move a dataset',
     !(await movesAfter(`dataset:${ORD}`, () => datasets.updateDatasetData(P, ORD, { columns: ORDER_COLUMNS, rows: [...ORDER_ROWS, ['AF', 1, 4, '2026-01-04', 'c2']] }))));
   ok('NEGATIVE CONTROL: a Prepare edit moves it', await movesAfter(`dataset:${ORD}`, () => datasets.updateSteps(P, ORD, [])));
@@ -267,6 +275,38 @@ async function partStore(fx: Fixtures): Promise<void> {
   ok('NEGATIVE CONTROL: nothing certified, nothing read', (await as(() => store.statusFor(P)(`metric:${PLAIN}`))) === null);
 }
 
+async function partDatasetDep(): Promise<void> {
+  const P = PROJECT;
+  const rows = [['EU', 10, 1, '2026-01-01', 'c1'], ['US', 5, 3, '2026-01-03', 'c1']];
+  const { LEDGER, OTHER_DS, L, OTHER } = await as(async () => {
+    const ledger = (await datasets.saveDataset(P, { name: 'Ledger', sourceKind: 'csv', columns: ORDER_COLUMNS, rows }))!.id;
+    await datasets.updateSteps(P, ledger, [{ type: 'filter', column: 'qty', op: '>', value: 0 } as never]);
+    const otherDs = (await datasets.saveDataset(P, { name: 'Elsewhere', sourceKind: 'csv', columns: ORDER_COLUMNS, rows }))!.id;
+    const save = async (name: string, datasetId: string) => (await metrics.saveMetric(P, { name, datasetId, definition: { column: 'sales', aggregation: 'sum' } }))!.id;
+    return { LEDGER: ledger, OTHER_DS: otherDs, L: await save('Ledger total', ledger), OTHER: await save('Elsewhere total', otherDs) };
+  });
+  const refs = [`metric:${L}`, `dataset:${LEDGER}`, `metric:${OTHER}`];
+  for (const ref of refs) await as(async () => store.certify(P, ref, (await pinOf(P, ref))!, ''));
+  const states = async (): Promise<string> => (await Promise.all(refs.map((r) => as(() => store.statusFor(P)(r))))).map((v) => v?.state).join(',');
+  ok('fixture: a metric on Ledger, Ledger, and a metric on another dataset are certified', (await states()) === 'certified,certified,certified');
+  await as(() => datasets.updateDatasetData(P, LEDGER, { columns: ORDER_COLUMNS, rows: [...rows, ['ME', 20, 2, '2026-01-02', 'c2']] }));
+  ok('a data refresh (same steps) keeps the metric and its dataset certified', (await states()) === 'certified,certified,certified');
+  await as(async () => {
+    await catalog.setDoc(P, `dataset:${LEDGER}`, { description: 'the ledger', tags: ['finance'] });
+    await catalog.setColumn(P, LEDGER, 'region', { description: 'where', displayName: 'Region', values: [{ value: 'EU', label: 'Europe' }] });
+    await tableDocs.setTableDoc(P, LEDGER, { role: 'fact', key: 'customer', grain: 'one row per order', guide: 'g' });
+    await datasetRecord.serialized(datasetRecord.datasetFilePath(P, LEDGER), (raw) => {
+      raw.rowPolicy = { column: 'region', rules: [{ userId: uuid(12), values: ['EU'] }], stepsHash: 'h' };
+      return true;
+    });
+  });
+  ok('a docs, key, value-label or row-rule edit keeps both certified', (await states()) === 'certified,certified,certified');
+  await as(() => datasets.updateSteps(P, LEDGER, [{ type: 'filter', column: 'qty', op: '>', value: 1 } as never]));
+  ok('a Prepare edit turns the dataset and the metric on it to needs_review', (await states()) === 'needs_review,needs_review,certified');
+  ok('NEGATIVE CONTROL: the metric on another dataset stays certified', (await as(() => store.statusFor(P)(`metric:${OTHER}`)))?.state === 'certified'
+    && (await as(() => store.statusFor(P)(`dataset:${OTHER_DS}`))) === null);
+}
+
 async function partChannels(fx: Fixtures): Promise<void> {
   const P = PROJECT;
   const saved = async (name: string): Promise<string> => (await call('metric:save', { projectId: P, input: { name, datasetId: fx.ORD, definition: { column: 'sales', aggregation: 'sum' } } })).body.metric.id;
@@ -335,6 +375,7 @@ async function partChannels(fx: Fixtures): Promise<void> {
   PROJECT = await as(async () => { await projects.init(); return (await projects.createProject('Governance')).id; });
   const fx = await partPin();
   await partStore(fx);
+  await partDatasetDep();
   await partChannels(fx);
 })().catch((err) => {
   console.error('FAIL harness', err);
