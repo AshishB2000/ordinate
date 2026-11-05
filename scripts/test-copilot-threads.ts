@@ -317,6 +317,45 @@ async function main(): Promise<void> {
     ok('NV-34 control: a member\'s own 51st thread still evicts their own oldest', vicNow.length === 50 && !vicNow.some((t) => t.id === vicFirst));
     ok('NV-34: …and the file keeps both members\' conversations after a reload',
       (await boss(() => copilot.loadThreads(p.id))).length === 51);
+
+    // ── 11. A newer release's `guidance` on an assistant turn survives every thread write ──
+    // copilot.json holds EVERY member's threads, so one member's append rewrites all of them: the re-save
+    // goes through ANOTHER member's thread. Nothing here writes guidance through a channel.
+    const { sanitizeGuidance } = require('../src/ai/turnGuidance') as typeof import('../src/ai/turnGuidance');
+    const appPathsMod: typeof import('../src/app/paths') = require('../src/app/paths');
+    const uuid = (n: number): string => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+    const [V, E1, E2] = [1, 2, 3].map(uuid);
+    const G = { verifiedId: V, instructions: 3, examples: [E1, E2] };
+    const q = await boss(() => projects.createProject('Guidance project'));
+    const file = boss(() => path.join(appPathsMod.userData(), 'projects', q.id, 'copilot.json'));
+    const rawThreads = (): any[] => JSON.parse(fs.readFileSync(file, 'utf8')).threads;
+    const at = '2026-11-01T00:00:00.000Z';
+    const aTurn = (guidance: unknown): any => ({ id: uuid(9), role: 'assistant', text: 'r', createdAt: at, guidance });
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ projectId: q.id, schemaVersion: 2, threads: [{
+      id: uuid(8), title: 'q', createdAt: at, updatedAt: at, owner: 'boss@acme.test',
+      turns: [{ id: uuid(7), role: 'user', text: 'q', createdAt: at, guidance: G }, aTurn({ ...G, examples: [E1, 'bad'], extra: 1 })],
+    }] }));
+    await vic(() => copilot.appendTurn(q.id, { role: 'user', text: 'hello' })); // another member's append rewrites the file
+    const kept = rawThreads().find((t) => t.owner === 'boss@acme.test').turns;
+    ok('another member\'s append keeps guidance', kept[1].guidance?.verifiedId === V && kept[1].guidance.instructions === 3 && kept[1].guidance.examples.join() === E1, JSON.stringify(kept[1].guidance));
+    ok('…and only its three fields', Object.keys(kept[1].guidance).join() === 'verifiedId,instructions,examples');
+    ok('a user turn in the file never carries guidance', !('guidance' in kept[0]));
+    ok('a user turn appended with guidance has none', (await vic(() => copilot.appendTurn(q.id, { role: 'user', text: 'x', guidance: G } as any)))!.at(-1)!.guidance === undefined);
+    ok('appendTurn keeps it on an assistant turn', (await vic(() => copilot.appendTurn(q.id, { role: 'assistant', text: 'y', guidance: G })))!.at(-1)!.guidance!.examples.join() === `${E1},${E2}`);
+    const reload = async (extra: object): Promise<any> => (await vic(() => copilot.appendTurn(q.id, { role: 'assistant', text: 'z', ...extra } as any)))!.at(-1);
+    ok('a turn with no guidance has no guidance key (byte-identical)', !('guidance' in (await reload({}))) && !('guidance' in rawThreads().flatMap((t) => t.turns).at(-1)));
+    ok('NEGATIVE CONTROL: an unknown turn key is still dropped', !('foo' in (await reload({ foo: 1 }))) && !('foo' in rawThreads().flatMap((t) => t.turns).at(-1)));
+
+    ok('a count past 40 drops the guidance whole', sanitizeGuidance({ instructions: 41, examples: [] }) === undefined);
+    ok('…so does a negative, fractional or non-number count', [-1, 1.5, '3', null, undefined].every((n) => sanitizeGuidance({ instructions: n, examples: [E1] }) === undefined));
+    ok('…and a value that is no object', [null, 'x', 7, [], undefined].every((v) => sanitizeGuidance(v) === undefined));
+    ok('0 and 40 are kept', sanitizeGuidance({ instructions: 0, examples: [] })!.instructions === 0 && sanitizeGuidance({ instructions: 40, examples: [] })!.instructions === 40);
+    ok('a bad verifiedId is dropped, the rest kept', (() => { const g = sanitizeGuidance({ verifiedId: 'nope', instructions: 1, examples: [] })!; return !('verifiedId' in g) && g.instructions === 1; })());
+    ok('examples keep UUIDs only, at most 5', sanitizeGuidance({ instructions: 1, examples: [1, 2, 3, 4, 5, 6, 7].map(uuid).concat('x') })!.examples.length === 5
+      && sanitizeGuidance({ instructions: 1, examples: 'nope' })!.examples.length === 0);
+    const once = sanitizeGuidance({ verifiedId: V, instructions: 2, examples: [E1, 'x', E2, 7] });
+    ok('sanitizing twice gives what sanitizing once gives', JSON.stringify(sanitizeGuidance(JSON.parse(JSON.stringify(once)))) === JSON.stringify(once));
     fs.rmSync(serverDir, { recursive: true, force: true });
   }
 }

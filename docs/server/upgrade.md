@@ -356,6 +356,47 @@ here unchanged.
 **Never roll back below this release once source table docs exist** (`helm rollback`, or an older
 `ORDINATE_IMAGE` in Compose). An older pod does the four things above.
 
+## Assistant guidance a newer release writes is kept (`p3-02`)
+
+A later release lets admins give the Assistant standing **instructions** for a project, and lets
+people save **verified questions**: a question with the chart that answers it, which the Assistant
+reuses. It also records, on each answer, how the answer was guided. None of this exists in this
+release. It only keeps what a later release will write, as in
+[Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a). Each item
+says what a pod older than this release does, and what this release does instead.
+
+- **Instructions.** An older pod drops them the next time it saves the project's notes (any tag,
+  note or column description edit), and every instruction in the project is lost. This release
+  keeps them as written. Each is one line of at most 300 characters, a project keeps at most 40,
+  and an entry that is malformed is dropped.
+- **How an answer was guided.** An older pod drops it from every conversation in the project the
+  next time anyone in the project asks the Assistant something, because all members' conversations
+  are saved together. This release keeps it. It holds ids and counts, never text.
+- **Verified questions in a backup or a project bundle.** An older pod leaves them out of every
+  backup and every project export it makes, and refuses to import a bundle that holds one ("does
+  not import"). This release carries them in both, and gives each one its dataset's new id when a
+  bundle is imported into a workspace where the old id is taken.
+
+This release shows none of these and applies none of them.
+
+### The release that adds Assistant instructions and verified questions needs this release first
+
+**The release that adds them needs this release (or a later one) on every pod first.** Nothing
+writes any of this until then, so nothing is lost while this release rolls out.
+
+Nothing in the server can check this, because it keeps no list of the pods that are running. The
+project holds the order itself, as it does for terms: the change that adds them does not merge until
+a release containing this one is tagged. You hold it on your side. From an older release, use the
+same two ways through as for terms: **go through this release** (upgrade to it, wait for the rollout
+to finish, then upgrade to the next one), or **stop every pod, then start the new ones**. The steps,
+for Compose, Helm and ECS, are in
+[The release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first).
+
+**Never roll back below this release once instructions or verified questions exist**
+(`helm rollback`, or an older `ORDINATE_IMAGE` in Compose). An older pod drops the instructions and
+how answers were guided the next time it saves them, and it makes backups without the verified
+questions.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the
