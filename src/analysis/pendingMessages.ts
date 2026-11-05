@@ -7,6 +7,11 @@ export function metricKindPending(name: string): string {
   return t('pendingMessages.is_a_kind_of_metric_from', { name });
 }
 
+/** A kind of metric this release knows (funnel, period) on a path that cannot compute it yet: answer cards, plan cards, scenarios, key drivers. */
+export function metricKindNotHere(name: string): string {
+  return t('pendingMessages.is_a_kind_of_metric_that', { name });
+}
+
 /** A point, hexbin or flow map of a count distinct: it plots rows, or folds counts, sums and averages per cell. `measure` is "countd of <column>". */
 export function mapCountdRefused(measure: string): string {
   return t('pendingMessages.counts_distinct_values_which_a_point', { measure });

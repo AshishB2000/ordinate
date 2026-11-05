@@ -45,6 +45,7 @@ const driverShape: typeof import('../src/analysis/driverShape') = require('../sr
 const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
 const metricFormat: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const msg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
+const pendingKinds: typeof import('../src/analysis/pendingKinds') = require('../src/analysis/pendingKinds');
 const checkMsg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
@@ -172,7 +173,10 @@ void (async () => {
   const carded = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ column: 'customer_id', aggregation: 'countd' }] } });
   ok('an answer card with a countd measure draws', carded.ok === true, JSON.stringify(carded).slice(0, 300));
   const cardedKind = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ ...V, metricId: funnelM.id }] } });
-  ok('an answer card over a funnel metric is refused', cardedKind.ok === false && cardedKind.reason === msg.metricKindPending(funnelM.name), JSON.stringify(cardedKind).slice(0, 300));
+  ok('an answer card over a funnel metric is refused with the typed "not here yet" sentence, not "newer version"', cardedKind.ok === false && cardedKind.reason === msg.metricKindNotHere(funnelM.name) && !/newer version/.test(cardedKind.reason), JSON.stringify(cardedKind).slice(0, 300));
+  ok('a kind this pod truly does not know keeps the newer-version sentence', pendingKinds.pendingSentence({ name: 'Future', definition: { kind: 'hologram' } as never }) === msg.metricKindPending('Future'));
+  ok('…and a known kind never gets it', pendingKinds.pendingSentence(funnelM) === msg.metricKindNotHere(funnelM.name) && pendingKinds.pendingSentence(periodM) === msg.metricKindNotHere(periodM.name));
+  ok('key drivers say "not here yet" for a funnel metric, not "newer version"', (() => { const s = driverShape.metricShape(D, COLS, funnelM.definition, [], new Map()); return s.kind === 'none' && /can't be shown here yet/.test(s.reason) && !/newer version/.test(s.reason); })());
   ok('NEGATIVE CONTROL: the same answer card with sum draws', (await handlers.get('answer:card')!(null, { projectId: P, spec: SPEC })).ok === true);
   const kpi = await dashboards.computeCardMetric(P, D, { column: 'customer_id', aggregation: 'countd' });
   ok('the KPI door: countd is the distinct count', kpi.ok === true && kpi.value === 7, JSON.stringify(kpi));

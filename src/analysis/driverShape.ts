@@ -157,7 +157,7 @@ class Shaper {
 
   definition(def: MetricDefinition, rawFilters: FilterStep[], stack: Set<string>, depth: number): Val {
     const filters = resolveFilterParams(rawFilters, this.params).steps;
-    if (isNewerKind(def)) fail('It is a kind of metric from a newer version of Ordinate.');
+    if (isNewerKind(def)) fail("This kind of metric can't be shown here yet.");
     if (isExternalDefinition(def)) fail(externalNoSplit());
     if (!isFormulaDefinition(def)) {
       if (!def.column) fail('This metric has no column.');

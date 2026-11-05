@@ -514,6 +514,7 @@
   "metricTreeMessages.that_metric_no_longer_exists": "Esa métrica ya no existe.",
   "pendingMessages.counts_distinct_values_which_a_point": "«{measure}» cuenta valores distintos, algo que un mapa de puntos, de hexágonos o de flujos no puede mostrar. Elige un recuento, una suma o un promedio, o haz un mapa por región.",
   "pendingMessages.is_a_kind_of_metric_from": "«{name}» es un tipo de métrica de una versión más reciente de Ordinate. Termina de actualizar Ordinate y vuelve a intentarlo.",
+  "pendingMessages.is_a_kind_of_metric_that": "«{name}» es un tipo de métrica que todavía no se puede mostrar aquí.",
   "pendingMessages.this_alert_uses_a_figure_from": "Esta alerta usa una cifra de una versión más reciente de Ordinate. Se volverá a comprobar cuando termine la actualización de Ordinate.",
   "pivotRender.ascending": ", ascendente",
   "pivotRender.descending": ", descendente",

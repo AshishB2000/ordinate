@@ -28,9 +28,9 @@ export function unofferedMetric(m: Pick<Metric, 'definition'>): boolean {
   return pendingMetric(m) || (metrics.isSimpleDefinition(m.definition) && m.definition.aggregation === 'countd');
 }
 
-/** Why a pending metric has no figure (pendingMetric must hold). */
+/** Why a pending metric has no figure here: a kind this release knows but this path can't compute, or one it doesn't know at all. */
 export function pendingSentence(m: Pick<Metric, 'definition' | 'name'>): string {
-  return msg.metricKindPending(m.name);
+  return isNewerKind(m.definition) ? msg.metricKindNotHere(m.name) : msg.metricKindPending(m.name);
 }
 
 /** The sentence refusing a chart (or an answer card) whose drawn measure (values[0] under a split; every pivot value) names a pending metric, or null. */
