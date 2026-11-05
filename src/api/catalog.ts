@@ -60,4 +60,20 @@ export const catalog = {
   'catalog:setTable': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, patch: TablePatch }), project: byProjectId }),
   // "Check now": one count of the declared key. On a Live dataset the one statement that asks the warehouse.
   'catalog:checkKey': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // The project's Assistant instructions (src/app/instructions.ts): editor prose every reader of the project sees (META).
+  'catalog:instructions': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // ONE change per call, applied under the catalog's lock, so two editors never lose each other's edit. The store
+  // makes the text one line, stamps who and when itself, and refuses the fence marker with a sentence.
+  'catalog:setInstructions': rpc({
+    access: 'write',
+    project: byProjectId,
+    input: z.strictObject({
+      projectId: Uuid,
+      op: z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('add'), text: z.string().max(300) }),
+        z.strictObject({ kind: z.literal('edit'), id: Uuid, text: z.string().max(300) }),
+        z.strictObject({ kind: z.literal('remove'), id: Uuid }),
+      ]),
+    }),
+  }),
 } as const;

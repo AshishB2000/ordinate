@@ -4,11 +4,17 @@
 // hand-edited or corrupt entry instead of showing it to a model later. Pure; never throws.
 //
 // The text is kept as written, bar its line breaks: it is one line, so an instruction can never open a
-// line of its own in a prompt. Fencing the text off from the prompt's own markers is the prompt
-// builder's job, not this reader's.
+// line of its own in a prompt. The reader keeps a stored text that holds the fence marker (never erased);
+// a save refuses one, and the prompt builder (src/ai/guidanceFacts.ts) leaves it out.
+//
+// The store below changes ONE item per call, inside the catalog's locked read-modify-write, so two editors
+// adding at once both land.
 
+import { randomUUID } from 'crypto';
 import { isValidId } from './ids';
 import { clip } from './clip';
+import { loadStrict, mutateCatalog, osUser } from './catalog';
+import { instructionEmpty, instructionFence, instructionGone, instructionTooMany } from './instructionMessages';
 
 export interface Instruction {
   id: string; // UUID
@@ -21,6 +27,11 @@ export const MAX_INSTRUCTIONS = 40;
 export const MAX_INSTRUCTION_LEN = 300;
 const MAX_BY = 80;
 const MAX_AT = 40;
+
+/** What could close the guidance block's fence (`<<<GUIDANCE` … `GUIDANCE`) or speak as it: refused on save, skipped on read. */
+export const FENCE_RE = /<<<|\bGUIDANCE\b/;
+/** A figure-like token — a currency sign before a digit, a decimal, a thousands separator, a percent. A warning, never a refusal: "90 days" is fine. */
+export const FIGURE_RE = /[$€£¥]\s?\d|\d\.\d|\d{1,3}(?:,\d{3})+|\d\s?%/;
 
 /** Idempotent: the cut never leaves a lone high surrogate or a trailing space, so the next pass trims nothing. */
 function oneLine(raw: unknown): string {
@@ -43,4 +54,44 @@ export function sanitizeInstructions(raw: unknown): Instruction[] {
     if (out.length === MAX_INSTRUCTIONS) break;
   }
   return out;
+}
+
+// ── The store ────────────────────────────────────────────────────────────────
+
+export type InstructionOp = { kind: 'add'; text: string } | { kind: 'edit'; id: string; text: string } | { kind: 'remove'; id: string };
+
+/** The project's instructions, in stored order. An unreadable catalog THROWS (a reader shows its error, never "none yet"). */
+export async function listInstructions(projectId: string): Promise<Instruction[]> {
+  if (!isValidId(projectId)) return [];
+  return (await loadStrict(projectId)).instructions ?? [];
+}
+
+/** The text as stored, or THROWS the sentence to show: empty once it is one line, or holding the fence marker. */
+function storable(raw: string): string {
+  const text = oneLine(raw);
+  if (!text) throw new Error(instructionEmpty());
+  if (FENCE_RE.test(text)) throw new Error(instructionFence());
+  return text;
+}
+
+/** One change, read fresh under the catalog's lock; the whole list after it. THROWS the catalog's sentence, storing nothing. */
+export async function changeInstructions(projectId: string, op: InstructionOp): Promise<Instruction[]> {
+  if (!isValidId(projectId)) throw new Error(instructionGone());
+  const text = op.kind === 'remove' ? '' : storable(op.text);
+  return mutateCatalog(projectId, (file) => {
+    const list = file.instructions ?? [];
+    const stamp = { updatedBy: clip(osUser(), MAX_BY), updatedAt: new Date().toISOString() };
+    let next: Instruction[];
+    if (op.kind === 'add') {
+      if (list.length >= MAX_INSTRUCTIONS) throw new Error(instructionTooMany(MAX_INSTRUCTIONS));
+      next = [...list, { id: randomUUID(), text, ...stamp }];
+    } else {
+      const at = list.findIndex((i) => i.id.toLowerCase() === op.id.toLowerCase());
+      if (at < 0) throw new Error(instructionGone());
+      next = op.kind === 'edit' ? list.map((i, k) => (k === at ? { id: i.id, text, ...stamp } : i)) : list.filter((_, k) => k !== at);
+    }
+    if (next.length) file.instructions = next;
+    else delete file.instructions;
+    return next;
+  });
 }

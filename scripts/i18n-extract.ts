@@ -390,6 +390,7 @@ export const MAIN_FILES = [
   'src/engine/semanticMessages.ts',
   'src/analysis/statusMessages.ts',
   'src/app/sourceTableMessages.ts',
+  'src/app/instructionMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
