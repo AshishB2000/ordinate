@@ -66,11 +66,12 @@ const viaIn = (v: unknown): boolean => (Array.isArray(v) ? v.some(viaIn) : !!v &
  * inside this lock's scope would read this dataset as open.
  */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown, measure?: string): Promise<boolean> {
-  if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length || viaIn(rest)) return true;
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  // A semantic dataset's metric measures are its own mirrors, which its door asks with the lock (part 7 b2, D17); any other it refuses.
+  if ((encoding && hasMetricMeasure(encoding) && !meta?.live?.semantic) || namedDatasets(datasetId, encoding).length || viaIn(rest)) return true;
   // A glossary term's step on another table (semantic D11) reads that table: its column name alone would not say so.
   const otherTable = (v: unknown): boolean => (Array.isArray(v) ? v.some(otherTable) : typeof (v as FilterStep | null)?.datasetId === 'string' && (v as FilterStep).datasetId !== datasetId);
   if (otherTable(rest)) return true;
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
   if (!foreign.length) return false;

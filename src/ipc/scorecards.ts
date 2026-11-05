@@ -50,6 +50,7 @@ import { isLiveFigureError, liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE } from '../data/liveDataset';
 import { EXTERNAL_CODE, isExternalMetricError } from '../analysis/externalMetric';
 import { contentTag, recordReply } from '../app/editConflict';
+import { semanticLatestDay } from './semanticValues';
 
 /**
  * Why a Live figure is missing — the fields a handler's `{ok: false, error, code, reason}`
@@ -175,6 +176,7 @@ async function dateColOf(ctx: Ctx, m: Metric): Promise<string | null> {
 
 /** The latest date with data in a date column, through the ordinary chart path (resident first). */
 async function latestDate(projectId: string, datasetId: string, column: string): Promise<string | null> {
+  if ((await datasets.getDatasetMeta(projectId, datasetId))?.live?.semantic) return semanticLatestDay(projectId, datasetId, column); // a layer's: one lookup (part 7 b2)
   const reply = await vizDataFor(projectId, datasetId,
     { category: column, values: [{ column, aggregation: 'count' }], grain: 'day' }, []).catch(() => null);
   if (!reply || !reply.ok) return null;

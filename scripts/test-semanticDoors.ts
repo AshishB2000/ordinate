@@ -7,6 +7,8 @@
 //               (Object.is; sum/avg within the documented 1e-13), series named by the mirror, one question per chart
 //   § refusals  every D16 code at its door with the layer's sentence; NEGATIVE CONTROL a running total of an additive
 //               mirror; always-applied filters and Live calcs refused (cross-part check 14) with negative controls
+//   § values    `dataset:distinct`, the Assistant's spelling lookup and a scorecard's anchor: one dimension-only question
+//               to the layer each, as the extract answers them; a backend without lookups refuses `layerLookup`
 //
 //   npm run build:ts && node scripts/test-semanticDoors.js
 
@@ -26,6 +28,7 @@ const retail: typeof import('../src/analysis/retailCalendar') = require('../src/
 const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
 const cmp: typeof import('./liveParityCompare') = require('./liveParityCompare');
 const fake: typeof import('./semanticFake') = require('./semanticFake');
+const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
 
 const { ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v, (_k, x) => (Object.is(x, -0) ? '-0' : x)).slice(0, 500);
@@ -190,6 +193,53 @@ void (async () => {
   const kept = (r: Reply): string[] => (r.data?.labels ?? []).filter((l: string) => l !== 'Other');
   ok('PINNED: a split answer\'s top 5 over 60 categories is the SQL path\'s, less any "Other" it ranks among them', answered.ok === true && sqlAnswered.ok === true
     && !answered.data.labels.includes('Other') && show(kept(sqlAnswered)) === show(answered.data.labels.slice(0, kept(sqlAnswered).length)), show([answered.data?.labels, sqlAnswered.data?.labels]));
+
+  // ── § values ──
+  await as(() => rec.serialized(rec.datasetFilePath(P, SEM), (r) => {
+    const b = r.semantic as Reply;
+    r.semantic = { ...b, metrics: [...b.metrics, { name: 'max_amount', additive: false }] };
+  }));
+  H.queryCache.clear();
+  const distinct = async (d: string, column: string, more: Record<string, unknown> = {}): Promise<Reply> => (await post('dataset:distinct', { projectId: P, datasetId: d, column, limit: 200, ...more })).value;
+  fake.resetLayerFake();
+  const [dx, ds] = [await distinct(X, 'many'), await distinct(SEM, 'many')];
+  ok('dataset:distinct: the layer\'s values, as the extract lists them', Array.isArray(ds.values) && ds.values.length === 60 && show(ds.values) === show(dx.values) && ds.total === dx.total, show([dx, ds]));
+  ok('…one counted question, a dimension and no metric', fake.layerFake.calls.length === 1 && fake.layerFake.calls[0].body.query.metrics.length === 0
+    && fake.layerFake.calls[0].body.query.dimensions.length === 1, show(fake.layerFake.calls.map((c) => c.body.query)));
+  const [sx, ss] = [await distinct(X, 'many', { search: 'M5' }), await distinct(SEM, 'many', { search: 'M5' })];
+  ok('…searched (case-blind) as the extract searches', show(ss.values) === show(sx.values) && ss.values.length === 10, show([sx, ss]));
+  const [rx, rs] = [await distinct(X, 'region'), await distinct(SEM, 'region')];
+  ok('…a column the layer answers in another order: the same values', show([...rs.values].sort()) === show([...rx.values].sort()), show([rx, rs]));
+  const [px, ps] = [await distinct(X, 'many', { filters: [WEST] }), await distinct(SEM, 'many', { filters: [WEST] })];
+  ok('…under a cascading picker\'s parent: the layer narrows it', show(ps.values) === show(px.values) && ps.narrowed === undefined, show([px, ps]));
+  const def = registry.getConnector(fake.SEMANTIC_FAKE_ID)!;
+  registry.registerTestConnector({ ...def, id: 'semantic-fake-nolookups', semantic: { ...def.semantic!, caps: { lookups: false, binaryCompare: false } } });
+  const C2 = await as(async () => (await H.connections.saveConnection(P, { name: 'Layer, no lookups', connectorId: 'semantic-fake-nolookups', values: {} }))!.id);
+  const NOL = await as(async () => (await liveRecord.saveSemanticRecord(P, { name: 'No lookups', connId: C2, columns: H.fx.COLUMNS, semantic: (await raw(SEM)).semantic }))!.id);
+  fake.resetLayerFake();
+  const nol = await distinct(NOL, 'many');
+  ok('a backend without lookups: dataset:distinct refuses layerLookup, asking nothing', nol.ok === false && nol.reason === 'layerLookup' && /Fake layer/.test(String(nol.error)) && fake.layerFake.calls.length === 0, show(nol));
+  const spelled = async (d: string): Promise<Reply> => card(d, ['revenue'], { category: 'cat', filters: [{ column: 'region', op: 'in', values: ['north', 'SOUTH '] }] });
+  {
+    const [e, l] = [await spelled(X), await spelled(SEM)];
+    const problems = e.ok && l.ok ? cmp.compareCharts(e.data, { labels: l.data.labels, series: l.data.series.map((x: Reply, i: number) => ({ ...x, name: e.data.series[i]?.name })) }, () => true, false) : ['not both answered'];
+    ok('answer:card, a typed value spelled as the layer holds it: the extract\'s chart', problems.length === 0, problems.concat(show([e.reason, l.reason])).join(' | '));
+    ok('…the same case-fixed steps', show(l.steps).includes('"North"') && show(l.steps).includes('"South"'), show(l.steps));
+  }
+  fake.resetLayerFake();
+  const nolCard = await spelled(NOL);
+  ok('…on a backend without lookups the spelling lookup refuses layerLookup, asking nothing', nolCard.ok === false && /look up/.test(String(nolCard.reason)) && /Fake layer/.test(String(nolCard.reason)) && fake.layerFake.calls.length === 0, show(nolCard));
+  const scorecard = async (metricId: string): Promise<Reply> => {
+    const id = (await post('scorecard:create', { projectId: P, name: `C ${metricId.slice(0, 4)}`, period: 'month', rows: [{ metricId }] })).value.scorecard.id as string;
+    return (await post('scorecard:compute', { projectId: P, id, offset: 0 })).value as Reply;
+  };
+  // The extract twin anchors elsewhere (its own day-grain read), so a scorecard is held to the SQL path: a plain Live
+  // dataset over the same table, whose anchor is its latest day too.
+  const PL = (await as(() => metrics.saveMetric(P, { name: 'Revenue L', datasetId: PLAIN_LIVE, definition: { column: 'amt', aggregation: 'sum' } })))!.id;
+  const [scl, scs] = [await scorecard(PL), await scorecard(mirror('revenue'))];
+  ok('scorecard:compute: anchored on the layer\'s latest day, as the SQL path on its own', show(scs.rows?.[0]?.sparkLabels) === show(scl.rows?.[0]?.sparkLabels) && (scs.rows?.[0]?.sparkLabels ?? []).at(-1) === 'Mar 2025', show([scl.rows?.[0]?.sparkLabels, scs.rows?.[0]?.sparkLabels]));
+  kpisAgree('scorecard:compute (revenue)', scl.rows?.[0], scs.rows?.[0], 'revenue');
+  ok('…and its sparkline', (scs.rows?.[0]?.spark ?? []).length === 12 && (scl.rows?.[0]?.spark ?? []).every((v: number | null, i: number) => cmp.sameNumber(v, scs.rows[0].spark[i], true)), show([scl.rows?.[0]?.spark, scs.rows?.[0]?.spark]));
 
   // Cross-part check item 14: always-applied filters and Live calcs never reach a layer.
   const base = (await post('live:setBaseFilters', { projectId: P, datasetId: SEM, filters: [WEST] })).value;

@@ -121,6 +121,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/data/transforms.ts': { count: 1, how: 'throws' },
   // adaptFilter and specFilterSteps callers: a term refuses, never skips
   'src/ipc/liveAnswers.ts': { count: 3, how: 'throws' },
+  'src/ipc/semanticValues.ts': { count: 2, how: 'throws' }, // a layer's value list: the lock first (withLockSteps), then liveSpec's adaptFilters, which throws on a term step
   'src/ipc/visualsResident.ts': { count: 1, how: 'throws' },
   // prepare: a Prepare list (or a dataset setting). Must NOT take a term; unchanged, an unknown step is dropped.
   'src/ai/planCheck.ts': { count: 1, how: 'prepare' },

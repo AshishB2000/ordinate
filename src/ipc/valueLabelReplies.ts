@@ -103,9 +103,9 @@ function optionPairs(list: ValueLabel[], values: readonly string[]): [string, st
  * sample runs no filter, so its list is filtered here and counted from it. Pairs (ruling F11's option text) for the values
  * returned only; none → the reply as it came. A refusal or a gone dataset passes through.
  */
-export async function distinctWithLabels<R extends DistinctResult & { approximate?: true }>(
-  projectId: string, datasetId: string, column: string, req: DistinctRequest, read: (r: DistinctRequest) => Promise<R | LiveValuesRefusal | null>,
-): Promise<R | (R & { valueLabels: [string, string][] }) | LiveValuesRefusal | null> {
+export async function distinctWithLabels<R extends DistinctResult & { approximate?: true }, F extends { ok: false } = LiveValuesRefusal>(
+  projectId: string, datasetId: string, column: string, req: DistinctRequest, read: (r: DistinctRequest) => Promise<R | F | null>,
+): Promise<R | (R & { valueLabels: [string, string][] }) | F | null> {
   const first = await read(req);
   if (!first || !('values' in first)) return first;
   const list = (await labelListsFor(projectId, datasetId, { category: column, values: [] })).category;

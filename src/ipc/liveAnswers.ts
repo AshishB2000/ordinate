@@ -34,6 +34,7 @@ import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import { liveWithheld } from './liveProfile';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import { externalsOf, mirrorsOf, relabelled } from './semanticFigures';
+import { semanticSpellings } from './semanticValues';
 import type { LiveFailure } from '../engine/live/liveQuery';
 import { adaptFilter, isRefusal, refuse } from '../engine/live/liveSpec';
 import type { LiveFilter } from '../engine/live/liveSpec';
@@ -93,8 +94,13 @@ export async function liveCaseFix(
   if (!asked.size) return { ok: true, filters, held: new Map(), said: filters, matched: [] };
   const stored = new Map<string, Map<string, string>>();
   for (const [column, keys] of asked) {
+    let layer = false;
     // Under a row access lock the stored spellings come from the caller's rows only (row-policy D13).
     const r = await liveLookup(projectId, datasetId, (t) => {
+      if (t.semantic) { // a layer's every value, matched below (part 7 b2)
+        layer = true;
+        return semanticSpellings(t, column, lock);
+      }
       const locked: LiveFilter[] = [];
       for (const s of lock) {
         const f = adaptFilter(s, t.columns, {}, []);
@@ -107,7 +113,7 @@ export async function liveCaseFix(
     const byKey = new Map<string, string>();
     for (const row of r.rows) {
       const v = row[0];
-      if (typeof v === 'string' && !byKey.has(caseKey(v))) byKey.set(caseKey(v), v);
+      if (typeof v === 'string' && !byKey.has(caseKey(v)) && (!layer || keys.has(caseKey(v)))) byKey.set(caseKey(v), v);
     }
     stored.set(column, byKey);
   }

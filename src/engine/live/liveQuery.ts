@@ -58,7 +58,7 @@ import type { LiveOutcome, LiveRunner, PeriodRange } from './evaluate';
 import { evaluateLive } from './evaluate';
 import { fly } from './liveFlight';
 import type { AdaptOpts, LiveAdapted, LiveIR, LiveRefusal, LiveRefusalCode } from './liveSpec';
-import { fromAnswerSpec, fromMetric, fromVizEncoding, refuse } from './liveSpec';
+import { fromAnswerSpec, fromMetric, fromVizEncoding, isRefusal, refuse } from './liveSpec';
 import type { LiveRows } from './shape';
 import type { LiveTarget, TargetProblem } from './liveTarget';
 import { liveTarget } from './liveTarget';
@@ -69,6 +69,8 @@ import { adapterFor, semanticRunner } from './semantic/adapters';
 import { liveNotOfferedMessage } from '../../data/liveMessages';
 import { fromSemanticAnswer, fromSemanticMetric, fromSemanticViz } from './semantic/semanticSpec';
 import { refuseLayer } from './semantic/semanticRefusals';
+import type { SemanticQuery } from './semantic/semanticQuery';
+import { alignRows, answerColumns } from './semantic/semanticQuery';
 import { hiddenColumnsFor } from '../../data/rowAccess';
 
 // The one door every Live statement goes through (./liveWarehouse.ts): L2.4's
@@ -264,6 +266,26 @@ async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
   return { ok: true, outcome, asOf: { at, mode: 'live' } };
 }
 
+/** A semantic dataset's question that cannot be asked of its layer at all, or null (part 7 b2). */
+async function layerRefusal(t: LiveTarget): Promise<LiveFailure | null> {
+  if (!t.semantic) return null;
+  // No encoder for its backend on this server (c1, e1, d1 add theirs): nothing to ask.
+  if (!adapterFor(t.semantic.backend)) return unavailable({ ok: false, kind: 'unavailable', error: liveNotOfferedMessage() });
+  // D17: a caller from whom a column rule hides any of a layer's fields is refused, whatever the backend compares.
+  if ((await hiddenColumnsFor(t.projectId, t.datasetId)).size) return refused(t.dialect, refuseLayer('layerRowPolicy', t.semantic.env));
+  return null;
+}
+
+/** A semantic dataset's lookup (part 7 b2): one dimension-only question, read back by its own column. */
+export type SemanticLookup = { ok: true; semantic: SemanticQuery };
+
+async function layerRows(t: LiveTarget, q: SemanticQuery, shared: AbortSignal): Promise<LiveRows> {
+  const a = await semanticRunner(t, shared, () => undefined)(q, 'latest');
+  const rows = isRefusal(a) ? null : alignRows(a.columns, a.rows, answerColumns(q));
+  if (!rows) throw failed(t, 'failed', 'the layer answered a lookup in another shape');
+  return rows;
+}
+
 /** Resolve the target, adapt, ask: the part every door shares. `names`: the columns the question reads. */
 async function run(projectId: string, datasetId: string, names: string[], adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; t: LiveTarget } | LiveFailure> {
   const found = await liveTarget(projectId, datasetId);
@@ -272,12 +294,8 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
   // A column the warehouse dropped (L2.5) is said as exactly that, before the adapter could skip or misname it.
   const gone = missingRefusal(t.live.missingColumns, names);
   if (gone) return refused(t.dialect, gone);
-  if (t.semantic) {
-    // No encoder for its backend on this server (c1, e1, d1 add theirs): nothing to ask.
-    if (!adapterFor(t.semantic.backend)) return unavailable({ ok: false, kind: 'unavailable', error: liveNotOfferedMessage() });
-    // D17: a caller from whom a column rule hides any of a layer's fields is refused, whatever the backend compares.
-    if ((await hiddenColumnsFor(projectId, datasetId)).size) return refused(t.dialect, refuseLayer('layerRowPolicy', t.semantic.env));
-  }
+  const layer = await layerRefusal(t);
+  if (layer) return layer;
   const a = adapt(t);
   if (!a.ok) return refused(t.dialect, a);
   return { asked: await ask(t, a.ir), warnings: a.warnings, t };
@@ -347,14 +365,16 @@ export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: Adap
  * sent through the one door (./liveWarehouse `warehouse`), and a failure is the last rows cached for it,
  * labelled stale, or a typed error — never an empty list that looks like "no match".
  */
-export async function liveLookup(projectId: string, datasetId: string, build: (t: LiveTarget) => Compiled): Promise<LiveLookupReply> {
+export async function liveLookup(projectId: string, datasetId: string, build: (t: LiveTarget) => Compiled | SemanticLookup | LiveRefusal): Promise<LiveLookupReply> {
   const found = await liveTarget(projectId, datasetId);
   if (!found.ok) return unavailable(found);
   const t = found.target;
+  const layer = await layerRefusal(t);
+  if (layer) return layer;
   const c = build(t);
   if (!c.ok) return refused(t.dialect, c);
   const op = opOf(t.dialect);
-  const key = keyOf(t, { lookup: c.query.sql, params: c.query.params });
+  const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params });
   const ages = agesOf(t);
   const at = (ms: number): string => new Date(ms).toISOString();
   const hit = queryCache.get<{ rows: LiveRows; at: number }>('live', key, { maxAgeMs: ages.lookupMs });
@@ -365,7 +385,7 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   const signal = ctx().signal;
   try {
     const { value, owner } = await fly(key, signal, async (shared) => {
-      const v = { rows: await warehouse(t, c.query, shared), at: queryCache.now() };
+      const v = { rows: 'semantic' in c ? await layerRows(t, c.semantic, shared) : await warehouse(t, c.query, shared), at: queryCache.now() };
       queryCache.set(key, v, [t.datasetId], { maxAgeMs: ages.keepMs });
       return v;
     });
