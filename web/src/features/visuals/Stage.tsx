@@ -5,6 +5,8 @@
 // `annotationHooks`) — and the server's notes under it.
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { annotationHooks } from '../../charts/annotations';
 import type { ChartHandle } from '../../charts/Chart';
 import type { Cx } from '../../charts/types';
@@ -29,6 +31,10 @@ import { LIVE_OFF_CHARTS } from '../live/offFeatures';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Builder.module.css';
 import { FIGURE_TYPES, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
+import { MetricEditor, type MetricDraft } from '../analyses/metrics/MetricEditor';
+import { funnelDraft } from '../analyses/metrics/FunnelFields';
+import { engineNeeds } from '../analytics/grids/gridEncoding';
+import type { FunnelDefinition } from '../analyses/metrics/api';
 
 /** "+ More" on a Live dataset: every chart but the grid engines, which are off for Live (L2.6). */
 const LIVE_POOL: readonly string[] = PICKER_POOL.filter((t) => !LIVE_OFF_CHARTS.has(t));
@@ -39,6 +45,10 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
   const [extras, setExtras] = useState<string[]>([]);
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   const [annotating, setAnnotating] = useState<{ label: string; series: number } | null>(null);
+  // Save as metric (part 5, D7): the funnel grid's steps as a metric, opened in the metric editor before anything is saved.
+  const [asMetric, setAsMetric] = useState<MetricDraft | null>(null);
+  const navigate = useNavigate();
+  const client = useQueryClient();
   const { data, fit, reply, current, hasGeo, recommended } = b;
 
   // The chart's authoring gestures, while this builder is open.
@@ -73,6 +83,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
     const pairs = data?.valueLabels;
     setDrill(target({ category: rawOf(m.category, pairs?.category), ...(split && series ? { series: rawOf(series, pairs?.series) } : {}) }, steps));
   };
+  const funnel = current === 'event_funnel' && !b.liveDataset && !engineNeeds('event_funnel', b.eff) ? (b.eff.eventFunnel as FunnelDefinition['funnel'] | undefined) : undefined;
   const drawable = !!fit && !!current && !GRID_TYPES.has(current) && current !== 'table' && !current.startsWith('map_') && chartCanRender(current, fit, hasGeo);
 
   return (
@@ -149,6 +160,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
               if (pivot) b.setEnc({ ...b.enc, pivot: { ...pivot, sort } });
             }}
             exportData={() => sharedData({ projectId, datasetId: b.datasetId, encoding: b.eff, filters: b.live })}
+            onSaveMetric={funnel ? () => setAsMetric(funnelDraft(b.datasetId, funnel)) : undefined}
           />
         )}
       </div>
@@ -162,6 +174,17 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
         </div>
       )}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}
+      {asMetric && (
+        <MetricEditor
+          projectId={projectId}
+          existing={asMetric}
+          onClose={() => setAsMetric(null)}
+          onSaved={(m) => {
+            void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
+            toast(`Saved the metric “${m.name}”.`, { kind: 'success', action: { label: 'Open metrics', onClick: () => void navigate(`/model/${projectId}?tab=metrics`) } });
+          }}
+        />
+      )}
       {annotating && (
         <NameDialog
           name=""

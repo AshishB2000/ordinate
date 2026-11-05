@@ -7,7 +7,7 @@
 
 import { rpc } from '../../api/client';
 import type { MetricFormat, MetricSummary } from '../analyses/metrics/api';
-import { isFormula, isPeriod } from '../analyses/metrics/api';
+import { isFormula, isFunnel, isPeriod } from '../analyses/metrics/api';
 import type { FunctionDoc, Tok } from '../prepare/api';
 import type { Measure } from '../visuals/api';
 
@@ -72,10 +72,11 @@ export function templateText(id: TemplateId, a: Operand, b: Operand, measure: bo
  * SIMPLE metric's copy is its own column and aggregation. A FORMULA metric has
  * neither, so `column` carries its name (the series is named for it) and the
  * aggregation is `count`: the one whose series name is the bare column, which
- * keeps per-series formatting keyed right.
+ * keeps per-series formatting keyed right. A FUNNEL metric's copy counts its entities, distinct (part 5).
  */
 export function metricMeasure(m: Pick<MetricSummary, 'id' | 'name' | 'definition'>, prev?: Measure): Measure {
-  const out: Measure = isFormula(m.definition) || isPeriod(m.definition) ? { column: m.name, aggregation: 'count', metricId: m.id } : { column: m.definition.column, aggregation: m.definition.aggregation, metricId: m.id };
+  const d = m.definition;
+  const out: Measure = isFormula(d) || isPeriod(d) ? { column: m.name, aggregation: 'count', metricId: m.id } : isFunnel(d) ? { column: d.funnel.entity, aggregation: 'countd', metricId: m.id } : { column: d.column, aggregation: d.aggregation, metricId: m.id };
   if (prev?.calc) out.calc = prev.calc;
   return out;
 }

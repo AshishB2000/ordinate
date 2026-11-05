@@ -23,7 +23,7 @@ import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../../data/tags';
 import { useCanEdit } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { failure } from '../../analyses/api';
-import { formatBadge, isPeriod, type Metric, type MetricSummary, type Usage } from '../../analyses/metrics/api';
+import { formatBadge, isFunnel, isPeriod, type Metric, type MetricSummary, type Usage } from '../../analyses/metrics/api';
 import { MetricEditor, type MetricDraft } from '../../analyses/metrics/MetricEditor';
 import { Sparkline } from '../../analyses/metrics/Sparkline';
 import { StatusActions } from '../status/StatusActions';
@@ -234,7 +234,7 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                       <CountsBy m={m} list={q.data.metrics} />
                     </td>
                     <td>
-                      <AddsUp a={row?.additivity} period={!!m.definition && isPeriod(m.definition)} />
+                      <AddsUp a={row?.additivity} period={!!m.definition && isPeriod(m.definition)} funnel={!!m.definition && isFunnel(m.definition)} />
                     </td>
                     <td>
                       <span className={s.badge}>{formatBadge(m.format)}</span>

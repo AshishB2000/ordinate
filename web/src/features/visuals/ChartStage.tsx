@@ -48,6 +48,7 @@ export function ChartStage({
   onMark,
   onPivotSort,
   exportData,
+  onSaveMetric,
 }: {
   projectId: string;
   type: string;
@@ -63,6 +64,8 @@ export function ChartStage({
   onPivotSort?: (sort: PivotSort) => void;
   /** A cohort / funnel's Export CSV: the reply shaped by the project's Share policy. */
   exportData?: () => Promise<EngineData>;
+  /** A funnel's Save as metric (part 5, D7). */
+  onSaveMetric?: () => void;
 }) {
   const held = useRef<ChartHandle | null>(null);
   const data = reply.data as ChartDataShape & { geo?: unknown };
@@ -70,7 +73,7 @@ export function ChartStage({
   if (GRID_TYPES.has(type)) {
     return (
       <div className={s.gridHost}>
-        <GridViz type={type} data={data as GridData} label={label} onSort={onPivotSort} exportData={exportData} fill />
+        <GridViz type={type} data={data as GridData} label={label} onSort={onPivotSort} exportData={exportData} onSaveMetric={onSaveMetric} fill />
       </div>
     );
   }

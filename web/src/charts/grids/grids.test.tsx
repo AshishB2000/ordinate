@@ -305,6 +305,18 @@ describe('behaviour', () => {
     expect(screen.getByRole('button', { name: 'Retention curve' }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('a funnel in the builder offers Save as metric, and asks its host for it (part 5, step 08)', () => {
+    const onSaveMetric = vi.fn();
+    render(<GridViz type="event_funnel" data={DATA['event funnel / sample']!} label="Funnel" onSaveMetric={onSaveMetric} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save as metric' }));
+    expect(onSaveMetric).toHaveBeenCalledTimes(1);
+  });
+
+  it('NEGATIVE CONTROL: without a host for it (a dashboard tile, Explore) there is no Save as metric', () => {
+    render(<GridViz type="event_funnel" data={DATA['event funnel / sample']!} label="Funnel" />);
+    expect(screen.queryByRole('button', { name: 'Save as metric' })).toBeNull();
+  });
+
   it('empty states say what is missing', () => {
     render(<GridViz type="cohort" data={DATA['cohort / needs a column']!} label="Cohort" />);
     expect(screen.getByRole('heading', { name: DATA['cohort / needs a column']!.cohort!.needs })).toBeTruthy();

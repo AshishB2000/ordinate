@@ -16,7 +16,7 @@ const Window = z.union([z.strictObject({ to_date: z.enum(['week', 'month', 'quar
 const Compare = z.strictObject({ vs: z.enum(['previous_period', 'previous_year']), show: z.enum(['change', 'pct_change', 'prior']) });
 // A funnel metric (semantic part 5, D5): the funnel grid's matching, as its conversion rate, converted or entered count.
 const Col = z.string().min(1).max(512);
-const Funnel = z.strictObject({ entity: Col, event: Col, time: Col, steps: z.array(z.string().min(1).max(400)).min(2).max(8), window: z.strictObject({ n: z.number().int().min(1).max(100_000), unit: z.enum(['hours', 'days']) }) });
+const Funnel = z.strictObject({ entity: Col, event: Col, time: Col, steps: z.array(z.string().min(1).max(400)).min(2).max(8), window: z.strictObject({ n: z.number().gt(0).max(100_000), unit: z.enum(['hours', 'days']) }) }); // the window: the grid's own rule (sanitizeEventFunnel), so 1.5 hours saves
 const Definition = z.union([
   z.strictObject({ formula: z.string().max(2_000) }),
   z.strictObject({ column: z.string().max(512), aggregation: z.enum(AGGREGATIONS), snapshot: Snapshot.nullable().optional() }),

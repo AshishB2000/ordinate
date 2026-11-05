@@ -141,6 +141,7 @@ void (async () => {
 
   // The save's refusals.
   ok('a one-step funnel is refused at save', (await post('metric:save', { projectId: P, input: { name: 'One step', datasetId: D, definition: { funnel: { ...F, steps: ['visit'] }, show: 'rate' } } })).status === 400);
+  ok('a grid\'s fractional window (1.5 hours) saves, as the grid draws it', (await post1({ name: 'Quick buyers', definition: { funnel: { ...F, window: { n: 1.5, unit: 'hours' } }, show: 'converted' } })).ok === true);
   ok('… and an empty step', (await post('metric:save', { projectId: P, input: { name: 'Blank step', datasetId: D, definition: { funnel: { ...F, steps: ['visit', ''] }, show: 'rate' } } })).status === 400);
   const gone = await post1({ name: 'Probe', definition: { funnel: { ...F, entity: 'customer' }, show: 'rate' } });
   ok('a funnel on a column the dataset lacks is refused beside its definition', gone.ok === false && gone.field === 'definition' && gone.error === msg.snapshotPerNotColumn('customer'), show(gone));

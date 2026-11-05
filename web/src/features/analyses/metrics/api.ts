@@ -32,7 +32,12 @@ export interface PeriodDefinition {
   window?: PeriodWindow;
   compare?: PeriodCompare;
 }
-export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition;
+/** A funnel metric (semantic part 5, D5): the funnel grid's steps, as its conversion rate, converted or entered count. */
+export interface FunnelDefinition {
+  funnel: { entity: string; event: string; time: string; steps: string[]; window: { n: number; unit: 'hours' | 'days' } };
+  show: 'rate' | 'converted' | 'entered';
+}
+export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition | FunnelDefinition;
 
 /** `metric:list`'s decorated summary. */
 export interface MetricSummary {
@@ -79,6 +84,7 @@ export function formatBadge(format: MetricFormat | undefined): string {
 
 export const isFormula = (d: Definition): d is { formula: string } => typeof (d as { formula?: unknown }).formula === 'string';
 export const isPeriod = (d: Definition): d is PeriodDefinition => typeof (d as { base?: unknown }).base === 'string';
+export const isFunnel = (d: Definition): d is FunnelDefinition => !!(d as { funnel?: unknown }).funnel && typeof (d as { funnel?: unknown }).funnel === 'object';
 
 const RANGE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const utc = (iso: string): number => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
