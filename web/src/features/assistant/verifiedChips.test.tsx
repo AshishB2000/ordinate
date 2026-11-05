@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
+import { useVerifiedChips } from './api';
 import { setDockOpen, takePendingSpec } from './dockState';
 
 afterEach(() => {
@@ -110,5 +113,28 @@ describe('verified chips on Home, with no model', () => {
     fireEvent.click(await screen.findByRole('button', { name: '✓ Revenue by region' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toEqual({ projectId: PID, threadId: THREAD, spec: SPEC, label: 'Revenue by region' }));
     expect(screen.getByRole('complementary', { name: 'Assistant' })).toBeTruthy();
+  });
+});
+
+describe('the chips read the project\'s list once', () => {
+  it('Home and the dock share one verified:list read (the page load\'s RPC budget)', async () => {
+    const calls = serve(base([ROW]));
+    renderApp('/');
+    await screen.findByRole('button', { name: '✓ Revenue by region' });
+    const dock = await openDock();
+    await within(dock).findByRole('button', { name: '✓ Revenue by region' });
+    expect(calls.filter((c) => c.channel === 'verified:list')).toEqual([{ channel: 'verified:list', payload: { projectId: PID } }]);
+  });
+
+  it('a dataset context puts its dataset\'s questions first without asking again; NEGATIVE CONTROL, none keeps the server\'s order', async () => {
+    const onD2 = { ...ROW, id: 'v2', question: 'Units by state', datasetId: 'd2', spec: { ...SPEC, datasetId: 'd2' } };
+    const calls = serve(base([onD2, ROW]));
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const inD1 = renderHook(() => useVerifiedChips(PID, 'd1'), { wrapper });
+    await waitFor(() => expect(inD1.result.current.map((c) => c.question)).toEqual(['Revenue by region', 'Units by state']));
+    const anywhere = renderHook(() => useVerifiedChips(PID), { wrapper });
+    expect(anywhere.result.current.map((c) => c.question)).toEqual(['Units by state', 'Revenue by region']);
+    expect(calls.filter((c) => c.channel === 'verified:list').length).toBe(1);
   });
 });
