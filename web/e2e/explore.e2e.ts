@@ -6,6 +6,8 @@
 //            in its well; the table's figures equal the server's own reply to
 //            the same request; a reload of the URL draws the same answer; Save
 //            as visual → it is in Visuals
+//   drill    a hierarchy on the sample: the field list nests it; a click on a bar drills (one history
+//            entry), the crumbs read the path, the drilled bars equal the server's own reply, Back goes up
 //   viewer   (with Postgres: header sign-in, a project viewer) the same
 //            question by link — answered, shareable (Copy link), and offered
 //            neither Save as visual nor Open in the builder
@@ -25,7 +27,7 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import pg from 'pg';
 import type { Page, Response } from 'playwright';
-import { csrfToken, configureServer, e2e, screens, SCREENS, settled, type Session } from './fixtures.ts';
+import { clickUntil, csrfToken, configureServer, e2e, screens, SCREENS, settled, type Session } from './fixtures.ts';
 import { decodeQuestion, encodeQuestion, type Question } from '../src/features/explore/spec.ts';
 
 const ADMIN = 'admin@acme.test';
@@ -216,6 +218,49 @@ e2e('explore: an editor takes a suggestion, regroups it, checks it against the s
   await page.goto(`/visuals?project=${pid}`);
   await settled(page);
   await page.getByRole('button', { name: /^Total revenue by category/ }).waitFor();
+  report(s);
+});
+
+e2e('explore: a click drills down a hierarchy, the crumbs read the path, and Back goes up', async (s) => {
+  const { page } = s;
+  const { pid, did } = await project(s);
+  await signIn(page, EDITOR);
+  const set = await post(s, 'catalog:setTable', { projectId: pid, datasetId: did, patch: { hierarchies: [{ name: 'Product', levels: ['category', 'sub_category'] }] } });
+  assert.equal(set.ok, true, JSON.stringify(set));
+  const byCategory: Question = { chartType: 'column', encoding: { category: 'category', values: [{ column: 'revenue', aggregation: 'sum' }] }, filters: [] };
+  await page.goto(`/explore?project=${pid}&dataset=${did}&q=${encodeQuestion(byCategory)}`);
+  await settled(page);
+  await page.getByRole('heading', { level: 2, name: 'Total revenue by category' }).waitFor();
+  await inked(page, '[data-chart-type="column"] canvas');
+  await page.getByRole('group', { name: 'Product' }).waitFor(); // the field list nests the hierarchy
+  const crumbs = page.getByRole('navigation', { name: 'Drill path' });
+  assert.equal(await crumbs.count(), 0, 'no path at the top level');
+
+  const canvas = page.locator('[data-chart-type="column"] canvas').first();
+  const entries = await page.evaluate(() => window.history.length);
+  assert.ok(await clickUntil(page, (await canvas.boundingBox())!, async () => (await crumbs.count()) > 0), 'a bar drilled');
+  await page.getByRole('heading', { level: 2, name: 'Total revenue by sub_category' }).waitFor();
+  assert.equal(await page.evaluate(() => window.history.length), entries + 1, 'one history entry');
+  const q = decodeQuestion(new URL(page.url()).searchParams.get('q'))!;
+  assert.equal(q.encoding.category, 'sub_category');
+  assert.equal(q.filters.length, 1);
+  const picked = String(q.filters[0]!.value);
+  assert.equal((await crumbs.innerText()).replace(/\s+/g, ' ').trim(), `Product ${picked} · by sub_category Up`);
+
+  // The drilled bars ARE the server's: its reply to the same encoding and filters.
+  await page.getByRole('table', { name: /, as a table$/ }).waitFor();
+  const server = await post(s, 'visual:data', { projectId: pid, datasetId: did, encoding: q.encoding, filters: q.filters });
+  assert.equal(server.ok, true, JSON.stringify(server).slice(0, 300));
+  const shown = await tableRows(page);
+  assert.deepEqual(shown.map((r) => r[0]), server.data.labels.map(String));
+  shown.forEach((r, i) => assert.ok(Math.abs(Number((r[1] ?? '').replace(/,/g, '')) - server.data.series[0].values[i]) <= 0.005, `${r[0]}: ${r[1]}`));
+  await inked(page, '[data-chart-type="column"] canvas');
+  await tallScreens(page, 'explore-drill');
+  await inked(page, '[data-chart-type="column"] canvas');
+
+  await page.goBack();
+  await page.getByRole('heading', { level: 2, name: 'Total revenue by category' }).waitFor();
+  assert.equal(await crumbs.count(), 0, 'Back is up one level');
   report(s);
 });
 
