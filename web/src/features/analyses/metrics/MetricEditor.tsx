@@ -82,6 +82,8 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   const [agg, setAgg] = useState<Agg>(simple ? simple.aggregation : 'sum');
   // A snapshot (D8): `take:column`, or '' for every row. Always sent, so a clear (null) is told from an old tab's save.
   const [snapshot, setSnapshot] = useState(simple?.snapshot ? `${simple.snapshot.take}:${simple.snapshot.column}` : '');
+  // Its entity (part 5, D11): each one's own latest rows, or '' for the whole scope. Always sent with a snapshot, as null when ''.
+  const [per, setPer] = useState(simple?.snapshot?.per ?? '');
   // A period metric (part 5, D8): its base, window and comparison; '' until a base is picked.
   const [period, setPeriod] = useState<PeriodDraft>(def && isPeriod(def) ? def : { base: '' });
   const [periodError, setPeriodError] = useState('');
@@ -111,7 +113,8 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   const [saving, setSaving] = useState(false);
 
   const periodReady = !!period.base && (!!period.window || !!period.compare);
-  const definition = mode === 'formula' ? { formula } : mode === 'period' ? (periodReady ? period : null) : col ? { column: col, aggregation: agg, snapshot: snapshotOf(snapshot) } : null;
+  const snap = snapshotOf(snapshot);
+  const definition = mode === 'formula' ? { formula } : mode === 'period' ? (periodReady ? period : null) : col ? { column: col, aggregation: agg, snapshot: snap && { ...snap, per: per || null } } : null;
   const live = liveFilters(filters);
   const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
@@ -260,6 +263,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               setFilters([]);
               setTimeColumn('');
               setSnapshot('');
+              setPer('');
               setPeriod({ base: '' });
             }}
           />
@@ -305,6 +309,24 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
                   ]}
                   onValueChange={(v) => {
                     setSnapshot(v);
+                    setSnapError('');
+                  }}
+                />
+              )}
+              {snap && (
+                <Select
+                  label="For each"
+                  value={per}
+                  disabled={!ds || cols.isPending}
+                  hint={!per ? 'Choose an account column to keep each account’s own rows on its own date before they add up.'
+                    : snap.take === 'last' ? `Each ${per}’s own latest row counts, even if it stopped reporting earlier. Pick a period to count only recent ones.`
+                    : `Each ${per}’s own earliest row counts, even if it started reporting later.`}
+                  options={[
+                    { value: '', label: 'The whole scope' },
+                    ...[...new Set([...columns.filter((c) => c.type === 'text' || c.type === 'number').map((c) => c.name), ...(per ? [per] : [])])].map((c) => ({ value: c, label: c })),
+                  ]}
+                  onValueChange={(v) => {
+                    setPer(v);
                     setSnapError('');
                   }}
                 />

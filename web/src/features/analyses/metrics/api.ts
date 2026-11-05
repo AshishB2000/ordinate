@@ -18,6 +18,8 @@ export interface MetricFormat {
 export interface Snapshot {
   column: string;
   take: 'last' | 'first';
+  /** Each entity's own latest (or earliest) day (part 5, D11): the entity column. `null` clears it on save. */
+  per?: string | null;
 }
 /** A period metric (semantic part 5, D8): its base metric over a window, compared with an earlier period, or both. */
 export type PeriodWindow = { to_date: 'week' | 'month' | 'quarter' | 'year' } | { last: number; unit: 'day' | 'week' | 'month' };
