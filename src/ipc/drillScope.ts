@@ -32,6 +32,7 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParsedColumn } from '../data/parse';
 import type { DateGrain } from '../analysis/categoryKey';
 import { isLive } from '../data/liveDataset';
+import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
 import { planMetricMeasures } from '../analysis/metricMeasures';
 import { chartScope, metricScope } from '../analysis/metricTimeScope';
@@ -85,4 +86,10 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
     if (chart.ok && chart.category && chart.category.kind === 'date') grain = chart.category.grain;
   }
   return resolveDrill(columns, enc, followed.concat(filters), mark, grain);
+}
+
+/** A category (or split) from a related dataset is not this table's column, even under the same name: no rows of this table are behind it. */
+export function joinedCategoryRefusal(encoding: VizEncoding): string | null {
+  const column = encoding.categoryDatasetId ? encoding.category : encoding.series && encoding.seriesDatasetId ? encoding.series : null;
+  return column ? `“${column}” comes from a related dataset, so the rows behind this mark cannot be listed here.` : null;
 }

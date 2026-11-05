@@ -309,6 +309,19 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── 4b. A category from a related dataset: its "North" is not this table's "North" ──
+  {
+    const cust = await datasets.saveDataset(projectId, { name: 'customers', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }], rows: [['North'], ['South']] });
+    const agg = [{ column: 'amount', aggregation: 'sum' }];
+    const sentence = '“region” comes from a related dataset, so the rows behind this mark cannot be listed here.';
+    const joined = await drill({ category: 'region', categoryDatasetId: cust!.id, values: agg }, [], { category: 'North' });
+    ok('refuses: a category from a related dataset, with its sentence and no rows', joined.ok === true && joined.available === false && joined.reason === sentence && joined.rows === undefined, JSON.stringify(joined).slice(0, 200));
+    const split = await drill({ category: 'channel', series: 'region', seriesDatasetId: cust!.id, values: agg }, [], { category: 'Web', series: 'North' });
+    ok('refuses: a split from a related dataset', split.ok === true && split.available === false && split.reason === sentence, JSON.stringify(split).slice(0, 200));
+    const own = await drill({ category: 'region', values: agg }, [], { category: 'North' });
+    ok('NEGATIVE CONTROL: the same mark on the table\'s own region lists its rows', own.ok === true && own.available === true && own.total > 0, JSON.stringify(own).slice(0, 200));
+  }
+
   // ── 5. Paging, searching and sorting the drilled set ──────────────────────
   {
     const encoding: VizEncoding = visualsMod.sanitizeEncoding({
