@@ -16,7 +16,7 @@ export type SourceTodoKind = 'used_no_doc' | 'never_read' | 'no_owner' | 'no_gui
 const RANK: readonly SourceTodoKind[] = ['used_no_doc', 'never_read', 'no_owner', 'no_guide', 'stale_read'];
 
 export interface SourceRow { docId?: string; table: string; owner: string; hasGuide: boolean; readAt?: string; datasetIds: string[] }
-export interface SourceConn { connId: string; name: string; connectorId: string; readsFacts: boolean; factsWake?: true; rows: SourceRow[] }
+export interface SourceConn { connId: string; name: string; connectorId: string; label: string; readsFacts: boolean; factsWake?: true; rows: SourceRow[] }
 export interface SourceTodo { connId: string; docId?: string; table: string; kind: SourceTodoKind }
 export interface UsedDataset { id: string; name: string }
 
@@ -27,10 +27,10 @@ export function readsFactsOf(def: ConnectorDef | null): boolean {
   return !!def && (typeof def.tableFacts === 'function' || typeof def.describeTable === 'function');
 }
 
-/** A connection as the tab names it (an editor reads the stored name). */
+/** A connection as the tab names it (an editor reads the stored name), with its connector's label: the tab asks no catalog. */
 export function connectionHead(c: Connection): Omit<SourceConn, 'rows'> {
   const def = getConnector(c.connectorId);
-  return { connId: c.id, name: c.name, connectorId: c.connectorId, readsFacts: readsFactsOf(def), ...(def?.factsWake ? { factsWake: true as const } : {}) };
+  return { connId: c.id, name: c.name, connectorId: c.connectorId, label: def?.label ?? c.connectorId, readsFacts: readsFactsOf(def), ...(def?.factsWake ? { factsWake: true as const } : {}) };
 }
 
 /** A doc as `:get` and `:read` reply, built key by key (`dismissed` never leaves). The server formats the size; the web never divides it. */

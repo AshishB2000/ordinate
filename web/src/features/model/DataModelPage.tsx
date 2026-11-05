@@ -10,16 +10,17 @@ import { Button } from '../../ui/Button';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { useAdoptProject, useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
-import { useCanEdit } from '../projects/api';
+import { useCanEdit, useRoles } from '../projects/api';
 import { MetricEditor } from '../analyses/metrics/MetricEditor';
 import { DatasetsTab } from './datasets/DatasetsTab';
+import { SourcesLoading, SourceTablesTab } from './sources/SourceTablesTab';
 import { MetricsTab } from './metrics/MetricsTab';
 import { GlossaryTab } from './terms/GlossaryTab';
 import { TermDialog } from './terms/TermDialog';
 import { RelationshipsTab } from '../data/RelationshipsTab';
 import { DefaultJoins } from './relationships/DefaultJoins';
 
-const TABS = ['datasets', 'metrics', 'glossary', 'relationships'] as const;
+const TABS = ['datasets', 'metrics', 'glossary', 'relationships', 'sources'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -31,6 +32,7 @@ function Section({ projectId }: { projectId: string }) {
   // The URL names the project: the shell's switcher shows it (T2.2).
   useAdoptProject(projectId);
   const canEdit = useCanEdit(projectId);
+  const roles = useRoles();
   const client = useQueryClient();
   const [newMetric, setNewMetric] = useState(false);
   const [newTerm, setNewTerm] = useState(false);
@@ -48,6 +50,8 @@ function Section({ projectId }: { projectId: string }) {
     void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
     setTab('metrics');
   };
+  // Source tables are an editor's: a viewer's address lands on Datasets, once the roles are known (not before: an editor's link waits).
+  if (tab === 'sources' && !roles.isPending && !canEdit) return <Navigate to="?tab=datasets" replace />;
   return (
     <Page
       title={TITLE}
@@ -71,6 +75,11 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="datasets" icon="database">
             Datasets
           </Tab>
+          {canEdit && (
+            <Tab value="sources" icon="table">
+              Source tables
+            </Tab>
+          )}
           <Tab value="metrics" icon="target">
             Metrics
           </Tab>
@@ -84,6 +93,7 @@ function Section({ projectId }: { projectId: string }) {
         <TabPanel value="datasets">
           <DatasetsTab projectId={projectId} />
         </TabPanel>
+        <TabPanel value="sources">{canEdit ? <SourceTablesTab projectId={projectId} /> : <SourcesLoading />}</TabPanel>
         <TabPanel value="metrics">
           <MetricsTab projectId={projectId} />
         </TabPanel>

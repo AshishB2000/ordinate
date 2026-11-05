@@ -1,0 +1,106 @@
+/* The Source tables tab: what Model.module.css's list and panel do not already draw. Theme tokens only. */
+
+.mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* ── The list ──────────────────────────────────────────────────────── */
+.groupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  min-height: 28px;
+  padding-right: var(--sp-4);
+}
+.groupName {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-8);
+  min-width: 0;
+}
+.groupName > .cap {
+  padding: 0;
+}
+.connKind {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.groupHead .groupName {
+  padding: var(--sp-4) 0 0 var(--sp-12);
+}
+.itemBtn {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.meta {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.metaWarn {
+  color: var(--warn-text);
+}
+
+/* ── The panel's head ──────────────────────────────────────────────── */
+.headMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.ident {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.connName {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.readLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 2px 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.alert {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-12);
+  margin: 0 0 var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.alert > svg {
+  flex-shrink: 0;
+  color: var(--error-text);
+}
+.alertText {
+  flex: 1 1 0;
+  min-width: 12em;
+  overflow-wrap: anywhere;
+}
