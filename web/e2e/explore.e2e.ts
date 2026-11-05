@@ -13,6 +13,8 @@
 //            neither Save as visual nor Open in the builder
 //   phone    375×812, touch: the rail is gone, Fields opens the bottom sheet,
 //            a tap there changes the question
+//   topic    a topic over four fields: ?topic= lists them, the rest sit under "Other fields", a field outside
+//            the topic still answers, and "All datasets" drops the topic
 //   no data  an empty project: what Explore does and, for an editor, the
 //            import and connect doors (with Postgres, a viewer's sentence)
 //
@@ -342,5 +344,30 @@ e2e('explore: a project with no data shows what Explore does, and its doors to a
     assert.equal(await page.getByRole('link', { name: 'Import data' }).count(), 0);
     await screens(page, 'explore-nodata-viewer');
   }
+  report(s);
+});
+
+e2e('explore: a topic narrows the fields, and a field outside it still answers', async (s) => {
+  const { page } = s;
+  const { pid, did } = await project(s);
+  await signIn(page, adminUrl ? ADMIN : EDITOR);
+  const made = await post(s, 'topic:save', { projectId: pid, topic: { name: 'Sales', datasets: [{ id: did, fields: ['region', 'state', 'revenue', 'order_date'] }], metricIds: [], termIds: [] } });
+  assert.equal(made.ok, true, JSON.stringify(made));
+  await page.goto(`/explore?project=${pid}&topic=${made.topic.id}`);
+  await settled(page);
+  const rail = page.getByRole('complementary', { name: 'Fields' });
+  await rail.getByText(/^Other fields \(\d+\)$/).waitFor();
+  for (const f of ['region', 'state', 'revenue', 'order_date']) await rail.getByRole('button', { name: f, exact: true }).waitFor();
+  assert.equal(await rail.getByRole('button', { name: 'customer_segment', exact: true }).isVisible(), false, 'a field outside the topic is collapsed');
+  await rail.getByRole('button', { name: 'revenue', exact: true }).click();
+  await rail.getByText(/^Other fields/).click();
+  await rail.getByRole('button', { name: 'customer_segment', exact: true }).click();
+  await page.getByRole('heading', { level: 2, name: /^Total revenue by customer_segment/ }).waitFor();
+  await inked(page, '[data-chart-type] canvas');
+  assert.equal(new URL(page.url()).searchParams.get('topic'), made.topic.id, 'the question keeps the topic');
+  await screens(page, 'explore-topic');
+  await page.getByRole('button', { name: 'All datasets' }).click();
+  await page.waitForURL((u) => !u.searchParams.has('topic'));
+  await rail.getByText(/^Other fields/).waitFor({ state: 'detached' });
   report(s);
 });

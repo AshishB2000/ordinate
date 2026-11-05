@@ -25,6 +25,7 @@ export function FieldList({
   onPick,
   autoFocus,
   hierarchies = [],
+  topicFields,
 }: {
   fields: readonly Field[];
   /** The groups to offer (a well's picker); all three by default. */
@@ -35,8 +36,13 @@ export function FieldList({
   autoFocus?: boolean;
   /** Drill hierarchies: a usable one whose levels are all dimensions here is nested under Dimensions. */
   hierarchies?: readonly NavHierarchy[];
+  /** A topic's fields of this dataset: the rest sit under a collapsed "Other fields (N)". */
+  topicFields?: readonly string[];
 }) {
   const [find, setFind] = useState('');
+  const inTopic = topicFields && new Set(topicFields);
+  const other = inTopic ? fields.filter((f) => !inTopic.has(f.name)) : [];
+  if (inTopic && other.length) return <TopicFields fields={fields.filter((f) => inTopic.has(f.name))} other={other} {...{ kinds, roleOf, onPick, autoFocus, hierarchies }} />;
   const needle = find.trim().toLowerCase();
   const match = (f: Field) => !needle || f.name.toLowerCase().includes(needle);
   const dims = new Map(fields.filter((f) => f.kind === 'dimension').map((f) => [f.name, f]));
@@ -88,5 +94,18 @@ export function FieldList({
       )}
       {!shown && <p className={s.fieldsNone}>{needle ? `No field matches “${find.trim()}”.` : 'No field of this kind in this dataset.'}</p>}
     </div>
+  );
+}
+
+/** A topic's fields as the list draws them, then the rest one click away, in the same groups. */
+function TopicFields({ fields, other, ...rest }: Omit<Parameters<typeof FieldList>[0], 'topicFields'> & { other: readonly Field[] }) {
+  return (
+    <>
+      <FieldList fields={fields} {...rest} />
+      <details className={s.otherFields}>
+        <summary>{`Other fields (${other.length})`}</summary>
+        <FieldList fields={other} {...rest} autoFocus={false} />
+      </details>
+    </>
   );
 }

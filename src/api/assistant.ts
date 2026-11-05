@@ -20,7 +20,7 @@ const AnswerSpec = z.looseObject({ datasetId: Uuid });
 const Learn = z.strictObject({ said: z.string().max(80), column: z.string().min(1).max(256) });
 /** What the dock is looking at — src/ipc/copilot.ts `buildFacts` resolves it inside the project. */
 const Context = z.strictObject({
-  kind: z.enum(['', 'dataset', 'visual', 'capture', 'analysis', 'stats', 'drivers', 'scorecard', 'scenario']),
+  kind: z.enum(['', 'dataset', 'visual', 'capture', 'analysis', 'stats', 'drivers', 'scorecard', 'scenario', 'topic']),
   id: z.string().max(200).optional(),
   offset: z.number().int().min(-1000).max(1000).optional(),
   // The open Statistics panel's analysis SPEC, never figures (src/ai/statsFacts.ts recomputes it).

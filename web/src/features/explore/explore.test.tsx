@@ -304,3 +304,93 @@ describe('Explore: the field list nests a hierarchy', () => {
     expect(screen.queryByRole('group', { name: 'Geography' })).toBeNull();
   });
 });
+
+describe('Explore: a topic narrows lists, never a figure (step 08)', () => {
+  const DID2 = '33333333-3333-4333-8333-333333333333';
+  const TID = '44444444-4444-4444-8444-444444444444';
+  const NAV = {
+    ok: true,
+    tables: [],
+    dateLadder: ['day', 'week', 'month', 'quarter', 'year'],
+    topics: [{ id: TID, name: 'Sales', datasets: [{ id: DID2 }, { id: DID, fields: ['region', 'revenue'] }], metricIds: [], termIds: [] }],
+  };
+  const DATASETS = [
+    { id: DID, name: 'Retail orders', sourceKind: 'csv', rowCount: 5000, columnCount: 5, updatedAt: '' },
+    { id: DID2, name: 'Regions', sourceKind: 'csv', rowCount: 4, columnCount: 2, updatedAt: '' },
+  ];
+  const withTopic = () => serve('viewer', { 'model:navigation': { body: NAV }, 'dataset:list': { body: DATASETS } });
+  const figures = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === 'visual:data').map((c) => c.payload);
+  afterEach(() => localStorage.clear());
+
+  it('?topic= opens the topic’s first dataset and lists its datasets in its order; All datasets clears it', async () => {
+    withTopic();
+    const router = renderApp(`/explore?project=${PID}&topic=${TID}`);
+    const dataset = await screen.findByRole('combobox', { name: 'Dataset' });
+    await waitFor(() => expect(dataset.textContent).toContain('Regions'));
+    fireEvent.click(dataset);
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Regions', 'Retail orders']);
+    fireEvent.keyDown(dataset, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'All datasets' }));
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('topic')).toBeNull());
+    expect(localStorage.getItem(`ordinate.topic:${PID}`)).toBeNull();
+  });
+
+  it('the field list shows the topic’s fields, then Other fields (3), collapsed, which opens to the rest', async () => {
+    withTopic();
+    renderApp(`/explore?project=${PID}&dataset=${DID}&topic=${TID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Fields' });
+    const other = (await within(rail).findByText('Other fields (3)')).closest('details')!;
+    expect(other.open).toBe(false);
+    const own = Array.from(rail.querySelectorAll('button[data-kind]')).filter((b) => !other.contains(b)).map((b) => b.textContent);
+    expect(own.join()).toContain('region');
+    expect(own.join()).toContain('revenue');
+    expect(own.join()).not.toContain('segment');
+    fireEvent.click(within(other).getByText('Other fields (3)'));
+    expect(other.open).toBe(true);
+    expect(within(other).getByRole('button', { name: /segment/ })).toBeTruthy();
+  });
+
+  // Two renders cannot share a test (the shell registers its commands once), so the first leaves its requests here.
+  let plain: unknown[] = [];
+  it('Explore asks visual:data the same with no topic (the baseline)', async () => {
+    const calls = withTopic();
+    renderApp(url(REGION_Q));
+    await answerTitle();
+    plain = figures(calls);
+    expect(plain.length).toBeGreaterThan(0);
+  });
+
+  it('…and with a topic the request deep-equals it (CONTROL: a changed filter differs)', async () => {
+    const calls = withTopic();
+    renderApp(`${url(REGION_Q)}&topic=${TID}`);
+    await answerTitle();
+    const withIt = figures(calls);
+    expect(withIt).toEqual(plain);
+    expect(withIt).not.toEqual(plain.map((p) => ({ ...(p as object), filters: [{ column: 'region', op: '=', value: 'East' }] })));
+  });
+
+  it('a remembered pick opens with topic= set by replace', async () => {
+    withTopic();
+    localStorage.setItem(`ordinate.topic:${PID}`, TID);
+    const router = renderApp(`/explore?project=${PID}`);
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('topic')).toBe(TID));
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('CONTROL: with a question in the URL the remembered pick is not applied', async () => {
+    withTopic();
+    localStorage.setItem(`ordinate.topic:${PID}`, TID);
+    const router = renderApp(url(REGION_Q));
+    await answerTitle();
+    expect(new URLSearchParams(router.state.location.search).get('topic')).toBeNull();
+  });
+
+  it('a topic id the project does not list draws as All, with no error', async () => {
+    withTopic();
+    renderApp(`/explore?project=${PID}&dataset=${DID}&topic=${DID2}`);
+    const rail = await screen.findByRole('complementary', { name: 'Fields' });
+    expect(await within(rail).findByRole('button', { name: /segment/ })).toBeTruthy();
+    expect(screen.queryByText(/Other fields/)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});

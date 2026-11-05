@@ -10,7 +10,7 @@ import { useAiStatus } from '../assistant/api';
 import { openDockWith, pickDockProject } from '../assistant/dockState';
 import s from './Explore.module.css';
 
-export function AskBox({ projectId }: { projectId: string }) {
+export function AskBox({ projectId, topic }: { projectId: string; topic?: { id: string; name: string } }) {
   const ai = useAiStatus();
   const [q, setQ] = useState('');
   if (!ai.data?.ready) return null;
@@ -24,7 +24,8 @@ export function AskBox({ projectId }: { projectId: string }) {
         if (!text) return;
         setQ('');
         pickDockProject(projectId);
-        openDockWith(text);
+        // With a topic open the Assistant answers inside it (step 08); no figure depends on this.
+        openDockWith(text, topic ? { projectId, context: { kind: 'topic', id: topic.id, label: `topic · ${topic.name}`, name: topic.name } } : undefined);
       }}
     >
       <Icon name="sparkles" size={16} />
