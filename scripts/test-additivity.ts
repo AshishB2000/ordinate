@@ -8,6 +8,7 @@
 //   assistant   the Assistant reads the raw figures of a refused chart
 //   overlay     the "up N% vs last year" caption is not written over a measure that can't be added across time
 //   facts       the Assistant's facts and `list_metrics` say which metrics can be added up
+//   metric:table each row says whether its metric adds up: the rule's own answer, null for a parameter formula
 //
 //   npm run build:ts && node scripts/test-additivity.js
 
@@ -33,6 +34,8 @@ const analysisStore: typeof import('../src/analysis/analysis') = require('../src
 const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcVizSample: typeof import('../src/ipc/vizSample') = require('../src/ipc/vizSample');
+const ipcAnalysesServer: typeof import('../src/ipc/analysesServer') = require('../src/ipc/analysesServer');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const copilotFacts: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
 const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
@@ -93,6 +96,8 @@ const RT = { kind: 'running_total', along: 'across' } as const;
 async function main(): Promise<void> {
   ipcVisuals.register();
   ipcVizSample.register();
+  ipcAnalysesServer.register();
+  ipcMetrics.register();
   const viz = handlers.get('visual:data');
   const preview = handlers.get('visual:preview');
   ok('the shipped handlers are registered', !!viz && !!preview);
@@ -247,6 +252,17 @@ async function main(): Promise<void> {
   ok('a parameter defined but empty is unknown, not "no"', (await empty('number', null)) === null && (await empty('list', ['a', 'b'])) === null && (await A.metricAdditivity(pid, twice.id, byNames, paramValues([{ name: 'k', kind: 'number', value: null }]))) === null);
   ok('a parameter the dashboard does not define stays unknown', (await A.metricAdditivity(pid, scaled.id, byNames, paramValues([{ name: 'other', kind: 'number', value: 2 }]))) === null);
   ok('a metric that is gone is unknown', (await A.metricAdditivity(pid, gone.id, byNames)) === null);
+
+  // ── metric:table ─────────────────────────────────────────────────────────────────────────────────────────────────
+  const t = await handlers.get('metric:table')!(null, { projectId: pid });
+  const revenue = (await metrics.listMetrics(pid)).find((m) => m.name === 'Revenue')!;
+  for (const m of [revenue, profit, perUnit, stock]) {
+    const want = A.additivityOf((await metrics.getMetric(pid, m.id))!, meta.columns, byNames);
+    ok(`metric:table: ${m.name} is the rule's own answer`, same(t.rows[m.id]?.additivity, want.categories, want.time), show(t.rows[m.id]?.additivity));
+  }
+  ok('metric:table: a ratio cannot be added up', t.rows[perUnit.id].additivity.categories === false);
+  ok('metric:table: a formula with a parameter is unknown, not "no"', t.rows[scaled.id].additivity === null);
+  ok('NEGATIVE CONTROL: metric:table: a sum adds up across time', t.rows[revenue.id].additivity.time === true);
 
   // The Assistant's own facts block, from a dataset (no parameters known) and from a dashboard (its saved parameters).
   const onDataset = (await ipcCopilot.buildFacts(pid, { kind: 'dataset', id: ds })).text;
