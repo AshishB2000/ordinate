@@ -5,6 +5,9 @@
 //            the plan's column of the same name, and no series (with a note) where it can't be drawn
 //   quiet    NEGATIVE CONTROLS: a chart with no metric measure is the reply itself and nothing is read; two measures,
 //            a split and a running total draw no target; a metric with no target adds nothing
+//   share    under drop an export-shaped chart carries no target series when the plan's column is marked, as a chart of
+//            the plan itself is hidden; NEGATIVE CONTROLS: in the app, under mask (figures pass on any table), and with
+//            the plan's column unmarked, the export keeps the target series
 //
 //   npm run build:ts && node scripts/test-targetCharts.js
 
@@ -163,8 +166,31 @@ async function alertsSection(): Promise<void> {
   ok('NEGATIVE CONTROL: a rule whose metric is there carries no metricGone', (await post('alerts:list', { projectId: P })).value.rules.every((r: Reply) => r.id === rule.id || !('metricGone' in r)));
 }
 
+async function shareSection(): Promise<void> {
+  const { P, D, PD, rev } = await fixtures();
+  const store: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+  const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const enc = { category: 'day', grain: 'month', values: [{ column: 'amount', aggregation: 'sum', metricId: rev.id }] };
+  const chart = async (share?: string): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId: D, encoding: enc, filters: on('2024-01-01', '2024-12-31'), ...(share ? { share } : {}) })).value;
+  const targetOf = (r: Reply): Reply | undefined => r.data?.series?.find((x: Reply) => x.target);
+  await H.as(H.ORG_A, () => catalog.setColumn(P, PD, 'amount', { sensitivity: 'financial' }));
+  const app = targetOf(await chart());
+  ok('NEGATIVE CONTROL: share: in the app the chart keeps its target series', !!app);
+  const planChart = async (): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId: PD, encoding: { category: 'month', grain: 'month', values: [{ column: 'amount', aggregation: 'sum' }] }, share: 'export' })).value;
+  await H.as(H.ORG_A, () => store.setPolicy(P, { publish: 'drop', export: 'drop' }));
+  ok('share, drop, the twin: a chart of the plan itself is hidden', (await planChart()).hiddenByPolicy === true);
+  const dropped = await chart('export');
+  ok('share, drop: an export-shaped chart carries no target series from a plan over a marked column', dropped.ok === true && !targetOf(dropped) && !JSON.stringify(dropped).includes('1000000'), show(dropped.data?.series));
+  await H.as(H.ORG_A, () => store.setPolicy(P, { publish: 'mask', export: 'mask' }));
+  ok('NEGATIVE CONTROL: share, mask: figures pass on any table, so the export keeps the app\'s target series', JSON.stringify(targetOf(await chart('export'))) === JSON.stringify(app) && (await planChart()).ok === true);
+  await H.as(H.ORG_A, () => store.setPolicy(P, { publish: 'drop', export: 'drop' }));
+  await H.as(H.ORG_A, () => catalog.setColumn(P, PD, 'amount', { sensitivity: 'none' }));
+  ok('NEGATIVE CONTROL: share: with the plan\'s column unmarked the export keeps it', !!targetOf(await chart('export')));
+}
+
 async function main(): Promise<void> {
   await chartsSection();
+  await shareSection();
   await alertsSection();
   await close();
   finish();

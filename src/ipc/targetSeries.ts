@@ -19,6 +19,8 @@ import type { VizEncoding } from '../analysis/visuals';
 import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { metricTarget, targetPlan } from './targetResolve';
+import { applyToChart } from '../app/sharePolicy';
+import type { SharePath } from '../app/privacyStore';
 import { vizDataFor } from './visuals';
 import type { VizDataReply } from './visuals';
 
@@ -65,13 +67,26 @@ async function byColumn(projectId: string, m: Metric, reply: Ok, column: string,
   return { values: reply.data.labels.map((l) => byLabel.get(String(l)) ?? null) };
 }
 
-export async function withTargetSeries(reply: VizDataReply, projectId: string, datasetId: string, enc: VizEncoding, filters: FilterStep[]): Promise<VizDataReply> {
+/** On a share path: would the Share policy hide a chart of the plan itself (its measure judged on ITS dataset)? Then so is its line. */
+async function planWithheld(projectId: string, m: Metric, category: string, share: SharePath): Promise<boolean> {
+  const source = m.target?.source;
+  const plan = source && 'metricId' in source ? await metrics.getMetric(projectId, source.metricId) : null;
+  if (!plan) return false; // a fixed figure is the metric's own, as its tile shows it
+  const d = plan.definition;
+  const measure = isSimpleDefinition(d) ? { column: d.column, aggregation: d.aggregation, metricId: plan.id } : { column: plan.name, aggregation: 'sum' as const, metricId: plan.id };
+  const probe = { ok: true as const, data: { labels: ['·'], series: [{ name: plan.name, values: [0] }] }, warnings: [], recommendedShape: 'categorical' as const };
+  return !(await applyToChart(projectId, plan.datasetId, sanitizeEncoding({ category, values: [measure] }), probe, share)).ok;
+}
+
+/** `share`: the outgoing path the chart is shaped for (a target from a plan the policy would hide is left off). */
+export async function withTargetSeries(reply: VizDataReply, projectId: string, datasetId: string, enc: VizEncoding, filters: FilterStep[], share?: SharePath): Promise<VizDataReply> {
   try {
     if (!reply.ok || enc.series || enc.pivot || enc.geo || enc.cohort || enc.eventFunnel || enc.facet || enc.drivers || enc.categoryDatasetId) return reply;
     const v = enc.values.length === 1 ? enc.values[0] : null;
     if (!v?.metricId || v.calc || v.datasetId || v.aggregation === 'none' || !reply.data.series.length) return reply;
     const m = await metrics.getMetric(projectId, v.metricId);
     if (!m?.target || m.datasetId !== datasetId) return reply;
+    if (share && (await planWithheld(projectId, m, enc.category, share))) return reply;
     const cat = reply.category;
     let drawn: Drawn = null;
     if (cat?.kind === 'date') {
