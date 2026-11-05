@@ -9,7 +9,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, finiteBySubtraction, sqlInt } from '../dialect';
+import { JS_WHITESPACE, extractPart, finiteBySubtraction, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'STRING', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -20,6 +20,12 @@ const UNIT: Record<string, string> = { week: 'WEEK', month: 'MM', quarter: 'QUAR
 /** A backquoted identifier; a backquote is doubled. */
 function ident(name: string): string {
   return '`' + name.replace(/`/g, '``') + '`';
+}
+
+// floor/ceil of a DOUBLE return a BIGINT here. A double at or past 2^52 is already whole (and may not fit
+// one), so it passes through; the rest are cast back to a DOUBLE.
+function whole(x: string, rounded: string): string {
+  return `CASE WHEN abs(${x}) >= 4503599627370496 THEN ${x} ELSE CAST(${rounded} AS DOUBLE) END`;
 }
 
 export const databricksDialect: SqlDialect = {
@@ -41,4 +47,10 @@ export const databricksDialect: SqlDialect = {
   label: (x) => x,
   caseKey: (x, b) => `lower(btrim(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
   tableSample: (plan) => `TABLESAMPLE (${sqlInt(plan.rows)} ROWS)`,
+  lower: (x) => `lower(${x})`,
+  upper: (x) => `upper(${x})`,
+  trimJs: (x, b) => `btrim(${x}, ${b.bind('text', JS_WHITESPACE)})`,
+  floor: (x) => whole(x, `floor(${x})`),
+  ceil: (x) => whole(x, `ceil(${x})`),
+  datePart: extractPart,
 };

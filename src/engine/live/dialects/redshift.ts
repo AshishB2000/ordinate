@@ -12,7 +12,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, doubleQuoted, finiteBySubtraction } from '../dialect';
+import { JS_WHITESPACE, doubleQuoted, extractPart, finiteBySubtraction } from '../dialect';
 
 const TEXT = 'VARCHAR(65535)';
 
@@ -49,4 +49,10 @@ export const redshiftDialect: SqlDialect = {
   // Redshift has no TABLESAMPLE, and this dialect stays the Postgres-portable subset:
   // the profile's LIMIT bounds the rows.
   tableSample: () => null,
+  lower: (x) => `LOWER(${x})`,
+  upper: (x) => `UPPER(${x})`,
+  trimJs: (x, b) => `BTRIM(${x}, ${b.bind('text', JS_WHITESPACE)})`,
+  floor: (x) => `FLOOR(${x})`,
+  ceil: (x) => `CEIL(${x})`,
+  datePart: extractPart,
 };

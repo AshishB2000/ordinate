@@ -11,7 +11,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS, doubleQuoted, sqlInt } from '../dialect';
+import { WS_REGEX_CLASS, doubleQuoted, extractPart, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -50,4 +50,10 @@ export const duckdbDialect: SqlDialect = {
   caseKey: (x) => `lower(regexp_replace(${x}, '^[${WS_REGEX_CLASS}]+|[${WS_REGEX_CLASS}]+$', '', 'g'))`,
   // Reservoir sampling: exactly `rows` rows, or every row of a smaller table.
   tableSample: (plan) => `USING SAMPLE ${sqlInt(plan.rows)} ROWS`,
+  lower: (x) => `lower(${x})`,
+  upper: (x) => `upper(${x})`,
+  trimJs: (x) => `regexp_replace(${x}, '^[${WS_REGEX_CLASS}]+|[${WS_REGEX_CLASS}]+$', '', 'g')`,
+  floor: (x) => `floor(${x})`,
+  ceil: (x) => `ceil(${x})`,
+  datePart: extractPart,
 };
