@@ -30,6 +30,7 @@ import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
 import { describeDefinitionShort } from '../analysis/metricFormat';
 import { metricAdditivity } from '../analysis/additivity';
+import { targetField } from '../ipc/targetResolve';
 import * as analysis from '../analysis/analysis';
 import * as drafts from '../analysis/publishDashboard';
 import { dashboardGone } from '../analysis/savedViewMessages';
@@ -246,13 +247,14 @@ export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promi
   if (!m) throw new AutomationError('not_found', `No metric called "${ref}".`);
   const reads: MetricRead[] = [];
   // Glossary terms as its scope: the door expands each (a deleted or unusable one is refused with its sentence).
-  const r = await resolveMetric(ctx.projectId, m.id, { filters: await termSteps(ctx.projectId, terms), reads });
+  const scope = await termSteps(ctx.projectId, terms);
+  const r = await resolveMetric(ctx.projectId, m.id, { filters: scope, reads });
   if (!r) throw new AutomationError('not_found', `No metric called "${ref}".`);
   // A single app-computed figure, like a dashboard KPI, leaving by the Share policy's EXPORT path as `aggregate` does
   // (./creators): one totalled from a column the policy drops is refused, typed; under mask it passes, as a total does.
   const hidden = await kpiHidden(ctx.projectId, reads, 'export');
   if (hidden) throw new AutomationError('runtime', `${hidden}: a column this metric reads is marked sensitive.`);
-  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText, ...statusFields(await statusFor(ctx.projectId)(`metric:${r.id}`)) };
+  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText, ...statusFields(await statusFor(ctx.projectId)(`metric:${r.id}`)), ...(await targetField(ctx.projectId, m.id, scope, r.value)) }; // part 5, D14: no scope argument, so an additive metric's target is "Pick a period"
 }
 
 /** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */

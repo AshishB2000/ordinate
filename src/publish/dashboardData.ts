@@ -35,6 +35,7 @@ import { refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { followedEncoding } from '../analysis/metricMeasures';
 import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
+import { targetField } from '../ipc/targetResolve';
 import { liveDistinct } from '../ipc/liveProfile';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
@@ -519,7 +520,7 @@ export async function buildDashboard(
               if (r && r.refused) payload = { error: r.refused }; // D9: dates that disagree under a date control — never the stored column's figure
               else if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
-                payload = { value: r.value, display: r.display, ...noteOf(r.notes) };
+                payload = { value: r.value, display: r.display, ...noteOf(r.notes), ...(await targetField(projectId, m.metricId, bound.steps, r.value)) };
                 viaMetric = true;
               }
             }

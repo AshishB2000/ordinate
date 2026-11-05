@@ -42,6 +42,7 @@ import * as answers from './answers';
 import { vizDataFor } from './visuals';
 import { isLiveFigureError } from './liveRoute';
 import { isLiveDatasetError } from '../data/liveDataset';
+import { targetField } from './targetResolve';
 import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } from './copilotCards';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
@@ -188,7 +189,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
       const snapshot = metrics.isSimpleDefinition(s.definition) ? s.definition.snapshot : undefined;
       const st = await status(`metric:${s.id}`);
-      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}) });
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}), ...(await targetField(projectId, s.id, scope?.filters ?? [], r.value)) });
     }
     return vocabularyOrder(out, (m) => namedIn(question, [m.name]));
   } catch (_) {

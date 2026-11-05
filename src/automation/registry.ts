@@ -216,7 +216,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     cli: 'metrics value', tool: 'metric_value', readOnly: true,
-    summary: 'The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it.',
+    summary: 'The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it. A metric with a target also returns it: the target, the attainment and the status, or why there is none (a metric that adds up over time has no period here, so it says so).',
     args: { metric: { type: 'string', description: 'Metric name (case-insensitive) or id.' }, terms: TERMS },
     required: ['metric'], positional: ['metric'],
     run: (a, ctx) => h.metricValue(ctx, String(a.metric), a.terms),

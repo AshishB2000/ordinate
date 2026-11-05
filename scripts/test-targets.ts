@@ -15,6 +15,14 @@ const { isDeepStrictEqual } = require('util') as typeof import('util');
 const tmath: typeof import('../src/analysis/targetMath') = require('../src/analysis/targetMath');
 const model: typeof import('../src/analysis/scorecardModel') = require('../src/analysis/scorecardModel');
 const tm: typeof import('../src/analysis/targetMessages') = require('../src/analysis/targetMessages');
+const scorecards: typeof import('../src/ipc/scorecards') = require('../src/ipc/scorecards');
+const handlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+const copilotFacts: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
+const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+const { createHash }: typeof import('crypto') = require('crypto');
+const { randomUUID }: typeof import('crypto') = require('crypto');
 const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const metricFormat: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
@@ -57,11 +65,18 @@ const PLAN_COLS: ParsedColumn[] = [{ name: 'month', type: 'date' }, { name: 'reg
 const step = (column: string, op: string, value: string): FilterStep => ({ type: 'filter', column, op, value } as FilterStep);
 const on = (from: string, to: string, column = 'day'): FilterStep[] => [step(column, '>=', from), step(column, '<=', to)];
 const eqs = (column: string, value: string): FilterStep => step(column, '=', value);
+const PLAIN_PIN = 'fae06e370abe8f566f2ebc84fa7d83a532b3552f3185a7ea43845fe85e297258';
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 500);
 
-async function resolveSection(): Promise<void> {
-  const s = await H.setupOrg(H.ORG_A);
-  const P = s.projectId;
+const post1 = async (P: string, input: Record<string, unknown>): Promise<Metric> => {
+  const r = (await post('metric:save', { projectId: P, input })).value;
+  if (r.ok !== true) throw new Error(`save ${String(input.name)}: ${show(r)}`);
+  return r.metric as Metric;
+};
+
+/** The project every section reads: Sales (November 1–20, 100 a day), its monthly Plan, Live twin, and the metrics over them. */
+async function fixtures() {
+  const P = (await H.setupOrg(H.ORG_A)).projectId;
   const days: (string | number)[][] = [];
   for (let d = 1; d <= 20; d++) days.push([`2024-11-${String(d).padStart(2, '0')}`, d % 2 ? 'West' : 'East', 'web', 100]);
   const planRows: (string | number)[][] = [['2024-11-01', 'East', 600_000], ['2024-11-01', 'West', 600_000], ['2024-12-01', 'East', 700_000]];
@@ -72,17 +87,18 @@ async function resolveSection(): Promise<void> {
   const L = (await H.as(H.ORG_A, () => H.liveOver(P, { table: 'sales' }, SALES_COLS))).liveId;
   process.env.ORDINATE_TODAY = '2024-11-20';
 
-  const saved = async (input: Record<string, unknown>): Promise<Metric> => {
-    const r = (await post('metric:save', { projectId: P, input })).value;
-    if (r.ok !== true) throw new Error(`save ${String(input.name)}: ${show(r)}`);
-    return r.metric as Metric;
-  };
+  const saved = (input: Record<string, unknown>): Promise<Metric> => post1(P, input);
   const planRev = await saved({ name: 'Plan revenue', datasetId: PD, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'month' });
   const REV_TARGET = { source: { metricId: planRev.id }, per: 'month' };
   const rev = await saved({ name: 'Revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day', target: REV_TARGET });
   const avg = await saved({ name: 'Avg sale', datasetId: D, definition: { column: 'amount', aggregation: 'avg' }, timeColumn: 'day', target: { source: { value: 50 } } });
   const revLive = await saved({ name: 'Live revenue', datasetId: L, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day', target: REV_TARGET });
   const plain = await saved({ name: 'Units', datasetId: D, definition: { column: 'amount', aggregation: 'count' }, timeColumn: 'day' });
+  return { P, D, L, PD, rev, plain, avg, planRev, revLive, REV_TARGET, saved };
+}
+
+async function resolveSection(): Promise<void> {
+  const { P, D, PD, rev, plain, avg, planRev, revLive, REV_TARGET, saved } = await fixtures();
   const metricOf = async (id: string): Promise<Metric> => (await H.as(H.ORG_A, () => metricsMod.getMetric(P, id)))!;
   const t = async (m: Metric, f: FilterStep[], value: number | null = null) => H.as(H.ORG_A, async () => targetResolve.metricTarget(P, await metricOf(m.id), f, value));
   const fmt = (v: number): string => metricFormat.formatMetricValue(v, rev.format);
@@ -130,11 +146,63 @@ async function resolveSection(): Promise<void> {
   ok('…and saving it again sets it', (await trySave({ target: REV_TARGET })).ok === true && isDeepStrictEqual((await metricOf(rev.id)).target, REV_TARGET));
   ok('the contract refuses a target that is both a figure and a plan', (await post('metric:update', { projectId: P, id: rev.id, patch: { target: { source: { value: 1, metricId: planRev.id } } } })).status === 400);
 
+  await surfacesSection({ P, D, rev, avg, plain, planRev });
+
   // A plan whose metric was deleted: a sentence, not a throw.
   const orphan = await saved({ name: 'Orphan', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day' });
   await post('metric:update', { projectId: P, id: orphan.id, patch: { target: { source: { metricId: planRev.id }, per: 'month' } } });
   await post('metric:delete', { projectId: P, id: planRev.id });
   ok('a deleted plan: no target, and why', (await t(orphan, THIS_MONTH))!.none === tm.targetPlanGone());
+}
+
+interface Fx { P: string; D: string; rev: Metric; avg: Metric; plain: Metric; planRev: Metric }
+
+async function surfacesSection({ P, D, rev, avg, plain }: Fx): Promise<void> {
+  const planNov = 1_200_000;
+  const THIS_MONTH = on('2024-11-01', '2024-11-30');
+  const tileOf = async (m: Metric, filters: FilterStep[]): Promise<Reply> => (await post('analysis:tiles', { projectId: P, items: [{ kind: 'metric', metricId: m.id, datasetId: D, column: 'amount', aggregation: 'sum', filters }] })).value[0];
+
+  // Old content first: a metric with no target replies byte for byte as before (hash taken before this step's code).
+  const before = createHash('sha256').update(JSON.stringify([await tileOf(plain, THIS_MONTH), await tileOf(plain, []), (await post('metric:value', { projectId: P, id: plain.id, filters: [] })).value].map(({ asOf: _a, id: _i, ...r }) => r))).digest('hex');
+  ok('NEGATIVE CONTROL: a metric with no target: tile and metric:value replies are byte-identical to before', before === PLAIN_PIN, before);
+
+  const tile = await tileOf(rev, THIS_MONTH);
+  ok('tile: target, attainment, status from the server', tile.target && Object.is(tile.target.value, planNov * (20 / 30)) && Object.is(tile.target.attainment, tile.value / tile.target.value * 100) && typeof tile.target.attainmentDisplay === 'string' && tile.target.status === 'off', show(tile));
+  ok('tile: the target says how', typeof tile.target?.how === 'string' && tile.target.how.includes('pro-rated'), show(tile.target));
+  ok('tile: a fixed figure holds at any scope', Object.is((await tileOf(avg, [])).target?.value, 60), show(await tileOf(avg, [])));
+  ok('tile: no period, additive: only the sentence', (await tileOf(rev, [])).target?.none === tm.targetPickPeriod());
+
+  const board = [{ id: randomUUID(), name: 'Main', cards: [
+    { id: randomUUID(), type: 'control', layout: { x: 0, y: 0, w: 3, h: 2 }, control: { kind: 'date_range', label: 'Day', datasetId: D, column: 'day', default: { from: '2024-11-01', to: '2024-11-30' } } },
+    { id: randomUUID(), type: 'metric', layout: { x: 0, y: 2, w: 3, h: 2 }, metric: { datasetId: D, column: 'amount', aggregation: 'sum', metricId: rev.id } },
+  ] }];
+  const dash = (await H.as(H.ORG_A, () => analysisStore.saveAnalysis(P, { name: 'Targets', sheets: board } as never)))!;
+  const built = await H.as(H.ORG_A, () => buildDashboard(P, dash.id, 4));
+  const card = built?.sheets[0].cards.find((c) => c.kind === 'metric') as Reply | undefined;
+  const pub = card ? card.payloads[card.variants[0]] : undefined;
+  ok('a published KPI carries the same target', Object.is(pub?.target?.value, tile.target.value) && pub.target.status === tile.target.status, show(pub));
+
+  const sc = await H.as(H.ORG_A, () => scorecards.computeScorecard(P, { id: randomUUID(), name: 's', period: 'month', rows: [{ metricId: rev.id }, { metricId: rev.id, target: 5 }] } as never));
+  ok('scorecard: the metric\'s target for the month in progress, pro-rated', Object.is(sc.rows[0].target, planNov * (20 / 30)), show(sc.rows[0]));
+  ok('scorecard: a row\'s own target wins', sc.rows[1].target === 5);
+
+  const mv = await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P, transport: 'mcp', cwd: '', headless: true, progress: () => undefined } as never, 'Revenue')) as Reply;
+  ok('metric_value carries the target: an additive metric has no period there, so its sentence', mv.target?.none === tm.targetPickPeriod(), show(mv));
+  const mvAvg = await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P, transport: 'mcp', cwd: '', headless: true, progress: () => undefined } as never, 'Avg sale')) as Reply;
+  ok('…and an average has its figure', mvAvg.target?.value === 60 && mvAvg.target.status === 'good', show(mvAvg));
+  const mvPlain = await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P, transport: 'mcp', cwd: '', headless: true, progress: () => undefined } as never, 'Units')) as Reply;
+  ok('NEGATIVE CONTROL: a metric with no target: no target key', !('target' in mvPlain), show(mvPlain));
+
+  const lines: string[] = [];
+  const ledger: Parameters<typeof copilotFacts.metricLines>[1] = [];
+  copilotFacts.metricLines(lines, ledger, [{ name: 'Revenue', definitionText: 'sum of amount', value: 700_000, display: '700,000', target: { value: 800_000, display: '800,000', attainment: 87.5, attainmentDisplay: '88%', status: 'warn' } }]);
+  ok('the Assistant is told the target, attainment and status', lines.join('\n').includes('Target 800,000 (88%, at risk).'), lines.join('\n'));
+  ok('…and the ledger holds both figures', ledger.some((l) => l.label === 'Revenue target' && l.value === 800_000) && ledger.some((l) => l.label === 'Revenue attainment' && l.value === 87.5 && l.unit === 'percent'), show(ledger));
+  const lines2: string[] = [];
+  copilotFacts.metricLines(lines2, [], [{ name: 'Units', definitionText: 'count', value: 20, display: '20' }]);
+  ok('NEGATIVE CONTROL: a metric with no target adds no target text', !lines2.join('\n').includes('Target'), lines2.join('\n'));
+  const facts = await H.as(H.ORG_A, () => ipcCopilot.buildFacts(P, { kind: 'dataset', id: D }));
+  ok('the dataset facts carry the average\'s target', /"Avg sale".*Target 60 \(167%, on track\)\./.test(facts.text), facts.text.split('\n').filter((l) => l.includes('Avg sale')).join('|'));
 }
 
 async function main(): Promise<void> {

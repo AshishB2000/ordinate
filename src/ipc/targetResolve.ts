@@ -175,6 +175,18 @@ export async function metricTarget(projectId: string, m: Metric, scope: FilterSt
   };
 }
 
+/** `metricTarget` for a metric by id (null when it is gone or has no target). */
+export async function targetFor(projectId: string, metricId: string, scope: FilterStep[], value: number | null): Promise<TargetResult | null> {
+  const m = await metrics.getMetric(projectId, metricId);
+  return m ? metricTarget(projectId, m, scope, value) : null;
+}
+
+/** `{ target }` to spread into a reply, or nothing: a metric with no target adds no key. */
+export async function targetField(projectId: string, metricId: string, scope: FilterStep[], value: number | null): Promise<{ target?: TargetResult }> {
+  const target = await targetFor(projectId, metricId, scope, value);
+  return target ? { target } : {};
+}
+
 /** Why a target may not be saved on `m`, beside the Target box, or null. */
 export async function checkTarget(projectId: string, m: Pick<Metric, 'id' | 'name' | 'datasetId' | 'definition' | 'timeColumn'>, t: unknown): Promise<{ error: string; field: 'target' } | null> {
   const spec = t && typeof t === 'object' ? (t as MetricTargetSpec) : null;

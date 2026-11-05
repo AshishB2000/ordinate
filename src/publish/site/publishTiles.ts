@@ -206,6 +206,8 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     const box = pcEl('div', 'pub-kpi pub-kpi--card');
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));
     if (payload.subtitle) box.appendChild(pcEl('div', 'pub-kpi-label', payload.subtitle));
+    const tg = payload.target; // the server's target, attainment and how (part 5, D14); printed, never worked out here
+    if (tg) box.appendChild(pcEl('div', 'pub-kpi-label', tg.none || (tg.attainmentDisplay ? `${tg.attainmentDisplay} of target${tg.how ? ` · ${tg.how}` : ''}` : '')));
     el.appendChild(box);
   } else {
     el.appendChild(pcChartBody(card, payload, page, (label, i) => onPick(card.category || '', label, card.title, payload, i)));
