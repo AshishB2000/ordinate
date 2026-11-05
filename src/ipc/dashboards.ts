@@ -173,11 +173,10 @@ async function computeCardMetricUnlocked(
   params: ParamValues | undefined,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf; notes?: string[] }> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
-  if (spec.snapshot?.per) return { ok: true, value: null }; // shortcut: part 5 computes it from step 07
   const live = await liveMetaOf(projectId, datasetId);
   if (live && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
   if (live) return liveCardMetric(projectId, live, spec, filters);
-  // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key.
+  // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key. Per entity: its own path and key.
   if (spec.snapshot) return snapshotCardMetric(projectId, datasetId, { ...spec, snapshot: spec.snapshot }, filters, params, (s, f) => computeCardMetricUnlocked(projectId, datasetId, s, f, params));
   const fanned = await fanOutMetricFor(projectId, datasetId, spec, filters, params, computeCardMetric); // a many-side column: that table's own KPI (./metricFanOut), before this cache
   if (fanned) return fanned;

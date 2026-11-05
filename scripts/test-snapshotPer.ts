@@ -7,6 +7,8 @@
 // DuckDB's parallel sum and a JS fold agree exactly.
 //
 //   twin   the reference's partitions and the twin held to it
+//   doors  the KPI and chart doors: the store, the words, the notes, the cache, the refusals; old snapshots unchanged
+//   (the row lock: scripts/test-snapshotPerRowLock.ts, on Postgres; Live: scripts/test-metricMeasures.ts section 10)
 //
 //   npm run build:ts && node scripts/test-snapshotPer.js
 
@@ -20,7 +22,21 @@ const { isDeepStrictEqual }: typeof import('util') = require('util');
 
 process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-snapshot-per-'));
 
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const dashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const msg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
+const fxStore: typeof import('../src/app/fxStore') = require('../src/app/fxStore');
+const { metrics: api }: typeof import('../src/api/metrics') = require('../src/api/metrics');
+const { describeDefinition }: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
+const { buildVizData }: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
+const { createHash }: typeof import('crypto') = require('crypto');
+const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
+const { metricLines }: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
+const { followedMeasureTexts }: typeof import('../src/ipc/copilotMeasures') = require('../src/ipc/copilotMeasures');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const snap: typeof import('../src/analysis/snapshot') = require('../src/analysis/snapshot');
 const twin: typeof import('../src/engine/snapshotResident') = require('../src/engine/snapshotResident');
@@ -70,6 +86,8 @@ for (const r of ROWS) {
 
 void (async () => {
   await projects.init();
+  ipcVisuals.register();
+  ipcMetrics.register();
   const pid = (await projects.createProject('Snapshot per')).id;
   const ds = (await datasets.saveDataset(pid, { name: 'MRR', sourceKind: 'csv', columns: COLS, rows: ROWS } as Any))!.id;
   // The number-keyed copy: `1` and `1.0` (as stored text) are one account, by value. An empty number cell is null (parse.ts).
@@ -134,6 +152,114 @@ void (async () => {
   ok('…even when the run throws', failing === 'threw' && after[0].n === 0, show([failing, after]));
   ok('a source it cannot read: null, so the JS reference answers', (await twin.withSnapshotRows({ parquetPath: src.parquetPath, columns: COLS.slice(0, 1) }, [], S, null, async () => 1)) === null);
   ok('NEGATIVE CONTROL: per account is not the whole scope\'s last month', jsKpiOn(TABLE, S, 'sum', []) !== jsKpiOn(TABLE, plainS, 'sum', []), show([jsKpiOn(TABLE, S, 'sum', []), jsKpiOn(TABLE, plainS, 'sum', [])]));
+
+  // ── doors ──────────────────────────────────────────────────────────────────
+  type Metric = import('../src/analysis/metrics').Metric;
+  const save = (input: object) => handlers.get('metric:save')!(null, { projectId: pid, input: { datasetId: ds, format: { kind: 'number' }, ...input } });
+  const update = (id: string, patch: object) => handlers.get('metric:update')!(null, { projectId: pid, id, patch });
+  const saved = async (name: string, definition: object, datasetId = ds, filters: object[] = []): Promise<Metric> => {
+    const res = await save({ name, definition, datasetId, filters });
+    if (!res.ok) throw new Error(`"${name}" not saved: ${show(res)}`);
+    return res.metric as Metric;
+  };
+  const resolved = async (m: Metric, scope: FilterStep[]) => (await ipcMetrics.resolveMetric(pid, m.id, { filters: scope }))!;
+  const kpi = async (m: Metric, scope: FilterStep[]) => (await resolved(m, scope)).value;
+  const viz = handlers.get('visual:data')!;
+  const chart = (encoding: object, filters: object[] = [], datasetId = ds): Promise<Any> => viz(null, { projectId: pid, datasetId, encoding, filters });
+  const M = (m: Metric) => ({ column: m.name, aggregation: (m.definition as { aggregation: string }).aggregation, metricId: m.id });
+  const blank = (r: Any) => (r && r.asOf ? { ...r, asOf: { ...r.asOf, at: '' } } : r);
+
+  // Old content first: plain snapshot metrics reply as they did before this step (hash taken on 9d6edf79).
+  const stock = await saved('Stock', { column: 'mrr', aggregation: 'sum', snapshot: { column: 'month', take: 'last' } });
+  const opening = await saved('Opening', { column: 'mrr', aggregation: 'count', snapshot: { column: 'month', take: 'first' } });
+  const eastStock = await saved('East stock', { column: 'mrr', aggregation: 'avg', snapshot: { column: 'month', take: 'last' } }, ds, [EAST]);
+  const oldReplies: unknown[] = [];
+  for (const m of [stock, opening, eastStock]) {
+    for (const scope of [[], [Y2024], [EAST], [Y1999]]) {
+      const { id: _id, ...rest } = await resolved(m, scope);
+      oldReplies.push(rest);
+    }
+    for (const enc of [{ category: 'region', values: [M(m)] }, { category: 'month', grain: 'quarter', values: [M(m)] }, { category: 'month', grain: 'month', series: 'region', values: [M(m)] }, { category: 'month', values: [M(m)] }]) {
+      oldReplies.push(blank(await chart(enc)), blank(await chart(enc, [Y2024])));
+    }
+  }
+  const OLD_PIN = createHash('sha256').update(JSON.stringify(oldReplies)).digest('hex');
+  ok('old content: plain snapshot metrics reply byte for byte as before (KPIs and charts)', OLD_PIN === '5752caa780b4a964ef0c91ef4040f2961d44af365ec02c89a69e4d54f4ea463d', OLD_PIN);
+
+  ok('contract: save takes per', api['metric:save'].input.safeParse({ projectId: pid, input: { name: 'S', datasetId: ds, definition: { column: 'mrr', aggregation: 'sum', snapshot: S } } }).success);
+  ok('contract: update takes per: null', api['metric:update'].input.safeParse({ projectId: pid, id: ds, patch: { definition: { column: 'mrr', aggregation: 'sum', snapshot: { column: 'month', take: 'last', per: null } } } }).success);
+  ok('NEGATIVE CONTROL: contract: per is a name, not an empty one', !api['metric:save'].input.safeParse({ projectId: pid, input: { name: 'S', datasetId: ds, definition: { column: 'mrr', aggregation: 'sum', snapshot: { ...S, per: '' } } } }).success);
+  const mrr = await saved('MRR', { column: 'mrr', aggregation: 'sum', snapshot: S });
+  ok('saved with its per', isDeepStrictEqual((mrr.definition as Any).snapshot, S), show(mrr));
+  ok('words', describeDefinition(mrr) === "sum of mrr, on each account's latest month", describeDefinition(mrr));
+  const said: string[] = [];
+  metricLines(said, [], [{ name: 'MRR', definitionText: 'sum of mrr', value: 5, display: '5', snapshot: S }]);
+  ok('the Assistant is told it is each account\'s own latest value', said.join('\n').includes("Snapshot: each account's own value on its latest month in the period, not a sum over dates."), said.join('\n'));
+  ok('…and a chart\'s facts say so', (await followedMeasureTexts(pid, ds, { category: 'region', values: [M(mrr)] } as Any, {}))[0] === '"MRR" = sum(mrr) on each account\'s latest month', show(await followedMeasureTexts(pid, ds, { category: 'region', values: [M(mrr)] } as Any, {})));
+  const jsKpi = (s: MetricSnapshot, agg: Agg, scope: FilterStep[]) => jsKpiOn(TABLE, s, agg, scope);
+  const t0 = trace.snapshot();
+  ok('KPI = the reference', Object.is(await kpi(mrr, []), jsKpi(S, 'sum', [])), show([await kpi(mrr, []), jsKpi(S, 'sum', [])]));
+  ok('KPI under a scope = the reference', Object.is(await kpi(mrr, [EAST, Y2024]), jsKpi(S, 'sum', [EAST, Y2024])), show([await kpi(mrr, [EAST, Y2024]), jsKpi(S, 'sum', [EAST, Y2024])]));
+  ok('KPI over nothing: no figure', (await kpi(mrr, [Y1999])) === null && jsKpi(S, 'sum', [Y1999]) === null);
+  ok('a KPI with no period says stopped accounts still count', (await resolved(mrr, [])).notes?.includes(msg.snapshotPerStale('account')) === true, show(await resolved(mrr, [])));
+  ok('NEGATIVE CONTROL: with a period, no such note', !(await resolved(mrr, [Y2024])).notes?.includes(msg.snapshotPerStale('account')), show(await resolved(mrr, [Y2024])));
+  ok('NEGATIVE CONTROL: a plain snapshot has no such note', !(await resolved(stock, [])).notes, show(await resolved(stock, [])));
+  ok('the KPI door itself', Object.is((await dashboards.computeCardMetric(pid, ds, { column: 'mrr', aggregation: 'count', snapshot: S })).value, jsKpi(S, 'count', [])));
+  const double = await saved('Double MRR', { formula: '[MRR] * 2' });
+  ok('a formula over it: [MRR] * 2', Object.is(await kpi(double, []), 2 * jsKpi(S, 'sum', [])!));
+  ok('the editor\'s preview of an unsaved per-entity snapshot is its figure', Object.is((await ipcMetrics.previewDefinition(pid, ds, { column: 'mrr', aggregation: 'sum', snapshot: S }, [], { kind: 'number' })).value, jsKpi(S, 'sum', [])));
+
+  const sameItems = (a: unknown[], b: unknown[]): boolean => a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
+  const refChart = (enc: Any, scope: FilterStep[] = []) => {
+    const t = transforms.applyPipeline({ columns: TABLE.columns, rows: TABLE.rows }, scope);
+    return buildVizData(t.columns, snap.snapshotRows(t.columns, t.rows, S, enc.category === 'month' ? bucketOf(enc.grain) : undefined), { ...enc, values: [{ column: 'mrr', aggregation: 'sum' }] }, []);
+  };
+  for (const enc of [{ category: 'region', values: [M(mrr)] }, { category: 'month', grain: 'quarter', values: [M(mrr)] }, { category: 'month', grain: 'month', series: 'region', values: [M(mrr)] }, { category: 'region', series: 'month', values: [M(mrr)] }] as Any[]) {
+    for (const scope of [[], [Y2024]]) {
+      const got = await chart(enc, scope);
+      const want = refChart(enc, scope);
+      ok(`chart = reference, cell by cell: ${JSON.stringify(enc).replace(/"metricId":"[^"]+"/, 'MRR')}${scope.length ? ', 2024' : ''}`, got.ok && sameItems(got.data.labels, want.data.labels)
+        && got.data.series.length === want.data.series.length && want.data.series.every((sr, i) => got.data.series[i].name === sr.name && sameItems(got.data.series[i].values, sr.values)), show([got, want.data]));
+    }
+  }
+  const t1 = trace.snapshot();
+  ok('resident: the KPIs and the charts ran in place', (t1.snapshotPer?.resident ?? 0) > (t0.snapshotPer?.resident ?? 0) && (t1.vizAggregate?.resident ?? 0) > (t0.vizAggregate?.resident ?? 0), show([t0.snapshotPer, t1.snapshotPer, t0.vizAggregate, t1.vizAggregate]));
+  const byRegion = await chart({ category: 'region', values: [M(mrr)] });
+  ok('the region bars add up to the KPI (one partition per account)', byRegion.ok && Object.is(byRegion.data.series[0].values.reduce((a: number, v: number | null) => a + (v ?? 0), 0), await kpi(mrr, [])), show(byRegion));
+  const auto = await chart({ category: 'month', values: [M(mrr)] });
+  const plainAuto = await chart({ category: 'month', values: [{ column: 'mrr', aggregation: 'sum' }] });
+  ok('auto grain is the plain chart\'s, then each account\'s latest per bucket', auto.ok && !!plainAuto.category?.grain && auto.category?.grain === plainAuto.category?.grain
+    && sameItems(auto.data.series[0].values, (await chart({ category: 'month', grain: plainAuto.category.grain, values: [M(mrr)] })).data.series[0].values), show([auto.category, plainAuto.category]));
+  ok('a formula over it per cell: [MRR] * 2', (await chart({ category: 'region', values: [M(double)] })).data.series[0].values.every((v: number, i: number) => Object.is(v, 2 * byRegion.data.series[0].values[i])));
+  ok('NEGATIVE CONTROL: the plain snapshot by region is another chart (West: none on the latest day? no — A9 and the stopped ones)', !sameItems((await chart({ category: 'region', values: [M(stock)] })).data.series[0].values, byRegion.data.series[0].values));
+  const otherDate = await chart({ category: 'month', grain: 'month', values: [M(mrr)] }, [], dsN);
+  ok('a metric of another dataset: the stored copy, as before (not this step\'s)', otherDate.ok === true);
+
+  ok('the cache never serves the plain snapshot for per (same filters)', (await kpi(mrr, [])) !== (await kpi(stock, [])) && (await kpi(mrr, [])) !== (await kpi(stock, [])));
+  ok('…nor the plain snapshot for per, from the KPI door', (await dashboards.computeCardMetric(pid, ds, { column: 'mrr', aggregation: 'sum', snapshot: { column: 'month', take: 'last' } })).value !== (await dashboards.computeCardMetric(pid, ds, { column: 'mrr', aggregation: 'sum', snapshot: S })).value);
+  await update(mrr.id, { definition: { column: 'mrr', aggregation: 'sum', snapshot: { column: 'month', take: 'last' } } });
+  ok('an old editor\'s save keeps per', (await metrics.getMetric(pid, mrr.id))!.definition && (((await metrics.getMetric(pid, mrr.id))!.definition as Any).snapshot.per === 'account'));
+  await update(mrr.id, { definition: { column: 'mrr', aggregation: 'sum', snapshot: { column: 'month', take: 'last', per: null } } });
+  ok('per: null clears it', !('per' in ((await metrics.getMetric(pid, mrr.id))!.definition as Any).snapshot), show((await metrics.getMetric(pid, mrr.id))!.definition));
+  ok('…and the figure is the plain snapshot\'s again', Object.is(await kpi(mrr, []), await kpi(stock, [])));
+  await update(mrr.id, { definition: { column: 'mrr', aggregation: 'sum', snapshot: S } });
+  ok('…and per again', Object.is(await kpi(mrr, []), jsKpi(S, 'sum', [])));
+  const nope = await save({ name: 'Nope', definition: { column: 'mrr', aggregation: 'sum', snapshot: { ...S, per: 'nope' } } });
+  ok('per must be a column', nope.ok === false && nope.field === 'snapshot' && nope.error === msg.snapshotPerNotColumn('nope'), show(nope));
+  const itself = await update(mrr.id, { definition: { column: 'mrr', aggregation: 'sum', snapshot: { ...S, per: 'month' } } });
+  ok('…and not the snapshot\'s own date', itself.ok === false && itself.field === 'snapshot' && itself.error === msg.snapshotPerIsDate('month'), show(itself));
+  ok('NEGATIVE CONTROL: nothing was saved', (((await metrics.getMetric(pid, mrr.id))!.definition as Any).snapshot.per === 'account'));
+
+  const dsFx = (await datasets.saveDataset(pid, { name: 'MRR fx', sourceKind: 'csv', columns: COLS, rows: ROWS } as Any))!.id;
+  await fxStore.setProjectFx(pid, { target: 'USD' });
+  await fxStore.setColumnCurrency(pid, dsFx, 'mrr', { kind: 'fixed', code: 'EUR', date: 'month' });
+  const mrrUsd = await saved('MRR (USD)', { column: 'mrr', aggregation: 'sum', snapshot: S }, dsFx);
+  const fxKpi = await resolved(mrrUsd, []);
+  ok('FX is refused with a sentence, not computed', fxKpi.value === null && fxKpi.notes?.[0] === msg.snapshotPerUnsupported('account'), show(fxKpi));
+  const fxChart = await chart({ category: 'region', values: [M(mrrUsd)] }, [], dsFx);
+  ok('…and on a chart', fxChart.ok === false && fxChart.error === msg.snapshotPerUnsupported('account'), show(fxChart));
+  const linesUsd = await saved('Accounts (USD)', { column: 'mrr', aggregation: 'count', snapshot: S }, dsFx);
+  ok('NEGATIVE CONTROL: a count is never converted, so it is computed', Object.is(await kpi(linesUsd, []), jsKpi(S, 'count', [])));
 
   finish();
 })().catch((err) => {

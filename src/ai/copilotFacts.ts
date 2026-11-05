@@ -135,7 +135,7 @@ export interface FactMetric {
   replacedBy?: string;
 }
 
-const snapshotNote = (s?: MetricSnapshot): string => (s ? ` Snapshot: the value on the ${s.take === 'last' ? 'latest' : 'earliest'} ${s.column} in the period, not a sum over dates.` : '');
+const snapshotNote = (s?: MetricSnapshot): string => (s ? ` Snapshot: ${s.per ? `each ${s.per}'s own value on its` : 'the value on the'} ${s.take === 'last' ? 'latest' : 'earliest'} ${s.column} in the period, not a sum over dates.` : '');
 
 /** The sentence that keeps the model from adding up what does not add (an average, a stock over time), or ''. */
 function addsUpNote(a?: Additivity): string {

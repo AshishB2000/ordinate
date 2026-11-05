@@ -244,7 +244,7 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
       asked.push({ e, f });
       return { ok: false as const, error: 'captured' };
     };
-    if (res && res.ok) await vmm.followMetricMeasures(res, enc3 as never, [], capture);
+    if (res && res.ok) await vmm.followMetricMeasures(res, enc3 as never, [], capture, { projectId: P, datasetId: X, opts: {} });
     ok('the inner question carries the metric\'s filter and the followed measure, without its metricId', show(asked) === show([{ e: { category: 'region', values: [{ column: 'qty', aggregation: 'sum' }] }, f: [eq('tier', 2)] }]), show(asked));
     ok('… so the planner returns null for it', asked.length === 1 && (await H.as(ORG_A, () => measures.planMetricMeasures(P, X, asked[0].e))) === null);
   }

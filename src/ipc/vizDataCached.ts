@@ -23,7 +23,7 @@ export async function vizDataForUnlocked(
 ): Promise<VizDataReply> {
   // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures); a snapshot pivot and part 5's shapes refuse.
   const planned = await planMetricMeasures(projectId, datasetId, encoding, opts.params);
-  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts)) : planned;
+  if (planned) return planned.ok ? followMetricMeasures(planned, encoding, filters, (e, f) => vizDataFor(projectId, datasetId, e, f, opts), { projectId, datasetId, opts }) : planned;
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
   const live = await liveMetaOf(projectId, datasetId);
   if (live) return liveChart(projectId, live, encoding, filters);

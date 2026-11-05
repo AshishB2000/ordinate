@@ -17,14 +17,17 @@ import type { AsOf } from '../api/asOf';
 import { vizDataFor } from './visuals';
 import type { VizDataReply } from './visuals';
 import { isCountLike } from '../data/aggregations';
+import { perEntityCardMetric, perEntityChart } from './snapshotPer';
+import type { PerAt } from './snapshotPer';
 
-type Figure = { ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf };
+type Figure = { ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf; notes?: string[] };
 
 /**
  * A snapshot KPI: the figure `figure` gives over the rows on the latest (or earliest) day of `snapshot.column` under
  * `filters`. No day in scope: `count` is 0 and every other aggregation has no value, as over no rows. A snapshot
  * column that is gone, or no longer a date, gives no figure at all.
  * `figure` is the KPI door's own body (./dashboards), passed in so this file does not import it back.
+ * Per entity (part 5, D11): each entity's own day, its own path (./snapshotPer).
  *
  * shortcut: the day is read as a date axis reads it, the rows by the period filter; a timestamp with an offset can
  * disagree (scorecards.ts:158 has the same seam) — give `period` the axis's parser to close it.
@@ -38,6 +41,7 @@ export async function snapshotCardMetric(
   figure: (spec: { column: string; aggregation: MetricAggregation }, filters: FilterStep[]) => Promise<Figure>,
 ): Promise<Figure> {
   const snap = spec.snapshot;
+  if (snap.per) return perEntityCardMetric(projectId, datasetId, { ...spec, snapshot: { ...snap, per: snap.per } }, filters, params);
   const days = await vizDataFor(projectId, datasetId, { category: snap.column, grain: 'day', values: [{ column: snap.column, aggregation: 'count' }] }, filters, { params });
   if (!days.ok) return { ok: false, value: null };
   if (days.category?.kind !== 'date') return { ok: true, value: null }; // the column is gone or no longer a date: no figure, never a count of 0
@@ -52,9 +56,11 @@ export async function snapshotCardMetric(
  * By the snapshot's own date: the chart at day grain, then each bucket's latest (or earliest) day — a series with no
  * row on that day is null there, never its older value. The grain is the plain chart's (an auto grain is chosen from
  * the same rows first). By anything else: the latest day over the whole scope, then the chart on that day — so a
- * region with no row on it has no bar (D8: never per category).
+ * region with no row on it has no bar (D8: never per category). Per entity (part 5, D11): each entity's own day, per
+ * bucket by the snapshot's own date, asked at `at` (./snapshotPer).
  */
-export async function snapshotAnswer(snap: MetricSnapshot, enc: VizEncoding, filters: FilterStep[], ask: (e: VizEncoding, f: FilterStep[]) => Promise<VizDataReply>): Promise<VizDataReply> {
+export async function snapshotAnswer(snap: MetricSnapshot, enc: VizEncoding, filters: FilterStep[], ask: (e: VizEncoding, f: FilterStep[]) => Promise<VizDataReply>, at: PerAt): Promise<VizDataReply> {
+  const per = (e: VizEncoding) => perEntityChart(at.projectId, at.datasetId, { ...snap, per: snap.per! }, e, filters, at.opts);
   if (enc.category === snap.column) {
     let grain = enc.grain;
     if (!grain) {
@@ -62,11 +68,13 @@ export async function snapshotAnswer(snap: MetricSnapshot, enc: VizEncoding, fil
       if (!axis.ok) return axis;
       grain = axis.category?.grain;
     }
+    if (snap.per) return per(grain ? { ...enc, grain } : enc);
     const day = await ask({ ...enc, grain: 'day' }, filters);
     if (!day.ok) return day;
     if (!grain) return { ...day, data: { ...day.data, labels: [], series: [] } }; // no date axis (the column is no longer a date): no figure
     return { ...day, data: pickPerBucket(day.data, grain, snap.take), category: { kind: 'date', grain } };
   }
+  if (snap.per) return per(enc);
   const days = await ask({ category: snap.column, grain: 'day', values: [{ column: snap.column, aggregation: 'count' }] }, filters);
   if (!days.ok) return days;
   const day = days.category?.kind === 'date' ? latestDay(days.data.labels, snap.take) : null;

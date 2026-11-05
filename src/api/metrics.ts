@@ -9,7 +9,8 @@ import { AGGREGATIONS } from '../data/aggregations';
 
 /** What a metric IS (analysis/metrics.ts sanitizes every field again). */
 // A snapshot (semantic D8): only the rows on the latest (or earliest) day of `column`. null clears it; absent keeps the stored one.
-const Snapshot = z.strictObject({ column: z.string().min(1).max(512), take: z.enum(['last', 'first']) });
+// `per` (part 5, D11): each entity's own latest day; null clears it, absent keeps the stored one.
+const Snapshot = z.strictObject({ column: z.string().min(1).max(512), take: z.enum(['last', 'first']), per: z.string().min(1).max(512).nullable().optional() });
 // A period metric (semantic part 5, D8): a base metric over a window and/or compared with an earlier period; at least one of the two.
 const Window = z.union([z.strictObject({ to_date: z.enum(['week', 'month', 'quarter', 'year']) }), z.strictObject({ last: z.number().int().min(1).max(366), unit: z.enum(['day', 'week', 'month']) })]);
 const Compare = z.strictObject({ vs: z.enum(['previous_period', 'previous_year']), show: z.enum(['change', 'pct_change', 'prior']) });

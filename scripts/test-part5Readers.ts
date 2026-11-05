@@ -2,7 +2,7 @@
 //
 // A LATER release writes `countd`, funnel and period metrics, a snapshot's `per`, a metric's `target` and target
 // alerts. A pod of THIS release that reads such a record must (1) keep it, verbatim, through every load and re-save,
-// and (2) compute none of it: a chart refuses with a sentence, a KPI shows no figure, an alert is skipped untouched.
+// and (2) compute none of it (later steps compute theirs, and their assertions say so): a chart refuses with a sentence, a KPI shows no figure, an alert is skipped untouched.
 // A record with none of the new shapes reads and saves byte-identically.
 //
 //   npm run build:ts && node scripts/test-part5Readers.js
@@ -49,6 +49,8 @@ const checkMsg: typeof import('../src/analysis/metricCheckMessages') = require('
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const { randomUUID }: typeof import('crypto') = require('crypto');
+const snapshot: typeof import('../src/analysis/snapshot') = require('../src/analysis/snapshot');
+const { computeMetric }: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 
 const COLS = [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] as any; // any: the dataset column shape, as the sibling suites build it
 const ROWS: Array<[string, number, string]> = [];
@@ -138,7 +140,13 @@ void (async () => {
   const periodM = (await metrics.getMetric(P, kinds['Revenue YTD']))!;
   const perM = (await metrics.getMetric(P, kinds.MRR))!;
   const chartOf = (values: unknown[], more: object = {}) => viz(null, { projectId: P, datasetId: D, encoding: { category: 'day', grain: 'month', values, ...more } });
-  for (const x of [funnelM, periodM, perM]) {
+  // Step 07 computes a per-entity snapshot: each customer's own latest day (scripts/test-snapshotPer.ts holds the matrix).
+  const PER_FIGURE = computeMetric(COLS, snapshot.snapshotRows(COLS, ROWS, SNAP.snapshot as never), { column: 'amount', aggregation: 'sum' });
+  ok(`${perM.name}: its KPI is each customer's latest, never the whole scope's last day (step 07)`, Object.is((await ipcMetrics.resolveMetric(P, perM.id))!.value, PER_FIGURE)
+    && PER_FIGURE !== computeMetric(COLS, snapshot.snapshotRows(COLS, ROWS, { column: 'day', take: 'last' }), { column: 'amount', aggregation: 'sum' }), JSON.stringify([await ipcMetrics.resolveMetric(P, perM.id), PER_FIGURE]));
+  const perChart = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: perM.id }]);
+  ok(`${perM.name}: its chart draws, the last month its KPI (step 07)`, perChart.ok === true && Object.is(perChart.data.series[0].values.at(-1), PER_FIGURE), JSON.stringify(perChart).slice(0, 300));
+  for (const x of [funnelM, periodM]) {
     ok(`${x.name}: no KPI figure, never a sum`, (await ipcMetrics.resolveMetric(P, x.id))!.value === null, JSON.stringify(await ipcMetrics.resolveMetric(P, x.id)));
     // Step 05 computes a period metric: this one's base (U1) is no metric, so it says so.
     if (x === periodM) ok(`${x.name}: its KPI says its base is gone`, (await ipcMetrics.resolveMetric(P, x.id))!.notes?.[0] === checkMsg.periodBaseMissing());
@@ -168,13 +176,13 @@ void (async () => {
   const kpi = await dashboards.computeCardMetric(P, D, { column: 'customer_id', aggregation: 'countd' });
   ok('the KPI door: countd is the distinct count', kpi.ok === true && kpi.value === 7, JSON.stringify(kpi));
   const kpiPer = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer_id' } });
-  ok('the KPI door: a per-entity snapshot has no figure', kpiPer.ok === true && kpiPer.value === null, JSON.stringify(kpiPer));
+  ok('the KPI door: a per-entity snapshot has its figure (step 07)', kpiPer.ok === true && Object.is(kpiPer.value, PER_FIGURE), JSON.stringify(kpiPer));
   const kpiSnap = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } });
   ok('NEGATIVE CONTROL: the KPI door: a plain snapshot has its figure', typeof kpiSnap.value === 'number', JSON.stringify(kpiSnap));
   ok('key drivers refuse a funnel metric', driverShape.metricShape(D, COLS, funnelM.definition, [], new Map()).kind === 'none');
   ok('key drivers refuse a countd metric', driverShape.metricShape(D, COLS, customers.definition, [], new Map()).kind === 'none');
   ok('the tree reference gives no figure for a funnel metric', treeRef.metricJs(COLS, ROWS, [funnelM], funnelM, []) === null);
-  ok('the tree reference gives no figure for a per-entity snapshot', treeRef.metricJs(COLS, ROWS, [perM], perM, []) === null);
+  ok('the tree reference gives a per-entity snapshot its figure (step 07), as the door', Object.is(treeRef.metricJs(COLS, ROWS, [perM], perM, []), PER_FIGURE));
   const plainSnap = { ...perM, definition: { column: 'amount', aggregation: 'sum' as const, snapshot: { column: 'day', take: 'last' as const } } };
   ok('NEGATIVE CONTROL: the tree reference has a figure for a plain snapshot', typeof treeRef.metricJs(COLS, ROWS, [plainSnap], plainSnap, []) === 'number');
   // A KPI card of a funnel or period metric has no column of its own, and a stored aggregation (the writers store sum).
@@ -225,11 +233,11 @@ void (async () => {
   const rules = [
     R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: periodM.id } }),
     R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }),
-    R({ metric: { column: 'amount', aggregation: 'sum', metricId: perM.id } }),
   ];
+  const perRule = R({ metric: { column: 'amount', aggregation: 'sum', metricId: perM.id } }); // evaluated from step 07
   const plainRule = R({});
   const tag = (r: { metric: object; compare: string }): string => `${(r.metric as { aggregation: string }).aggregation}/${r.compare}/${(r.metric as { metricId?: string }).metricId ? 'a metric' : 'no metric'}`;
-  for (const r of [...rules, plainRule, countdRule]) await alertStore.restoreRule(P, r);
+  for (const r of [...rules, plainRule, countdRule, perRule]) await alertStore.restoreRule(P, r);
   const before = (await alertStore.load(P)).rules;
   for (const r of rules) ok(`kept on load: ${tag(r)}`, before.some((x) => x.id === r.id));
   ok('the target rule keeps its targetPct and its empty column', isDeepStrictEqual((before.find((x) => x.id === rules[0].id) as { targetPct?: unknown } | undefined)?.targetPct, { op: 'below', pct: 90 }) && before.find((x) => x.id === rules[0].id)?.metric.column === '');
@@ -240,6 +248,7 @@ void (async () => {
     ok(`kept, byte-identical after an evaluation tick: ${tag(r)}`, was !== undefined && JSON.stringify(after.find((x) => x.id === r.id)) === was, JSON.stringify(after.find((x) => x.id === r.id)));
   }
   ok('NEGATIVE CONTROL: the plain rule was evaluated', typeof after.find((x) => x.id === plainRule.id)?.lastEvaluatedAt === 'string');
+  ok('a rule on a per-entity snapshot metric is evaluated (step 07)', typeof after.find((x) => x.id === perRule.id)?.lastEvaluatedAt === 'string');
   ok('a countd rule is evaluated, and keeps its aggregation', typeof after.find((x) => x.id === countdRule.id)?.lastEvaluatedAt === 'string' && after.find((x) => x.id === countdRule.id)?.metric.aggregation === 'countd');
   ok('NEGATIVE CONTROL: a target rule with no targetPct is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined })) === null);
   ok('NEGATIVE CONTROL: a target rule over 1000% is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 1001 } })) === null);
@@ -250,6 +259,8 @@ void (async () => {
     ok(`the Test button says why: ${tag(r)}`, tested.ok && !tested.fire && tested.message === msg.alertPending() && tested.value === null, JSON.stringify(tested));
   }
   ok('NEGATIVE CONTROL: the Test button evaluates the plain rule', (await alertStore.testRule(P, plainRule)).fire === true);
+  const testedPer = await alertStore.testRule(P, perRule);
+  ok('the Test button evaluates a per-entity snapshot rule: its KPI', Object.is(testedPer.value, PER_FIGURE), JSON.stringify(testedPer));
   const testedC = await alertStore.testRule(P, countdRule);
   ok('the Test button evaluates a countd rule: 7 customers', testedC.fire === true && testedC.value === 7, JSON.stringify(testedC));
 
