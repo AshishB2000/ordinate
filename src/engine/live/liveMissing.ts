@@ -27,8 +27,8 @@ export function encodingNames(encoding: VizEncoding, filters: FilterStep[]): str
 }
 
 /** The columns a KPI reads: its measure and its filters. */
-export function metricNames(spec: { column: string }, filters: FilterStep[]): string[] {
-  return [spec && spec.column, ...(Array.isArray(filters) ? filters : []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string' && n !== '');
+export function metricNames(spec: { column: string } | { metric: string }, filters: FilterStep[]): string[] {
+  return [spec && 'column' in spec ? spec.column : undefined, ...(Array.isArray(filters) ? filters : []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string' && n !== '');
 }
 
 /** The columns an answer reads: category, measures, split and filters. */

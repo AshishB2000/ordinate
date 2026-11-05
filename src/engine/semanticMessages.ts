@@ -107,3 +107,8 @@ export function noLayer(): string {
 export function layerReadFailed(layer: string): string {
   return t('semanticMessages.didn_t_answer_so_nothing_changed', { layer });
 }
+
+/** `live:setBaseFilters` on a semantic dataset (cross-part check 14). */
+export function layerBaseFilter(layer: string): string {
+  return t('semanticMessages.always_applied_filters_are_not_available', { layer });
+}

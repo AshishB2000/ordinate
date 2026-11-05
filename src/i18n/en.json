@@ -650,6 +650,7 @@
   "semanticMessages.a_formula_can_t_use_computes": "A formula can't use {metric}: {layer} computes it, and its figures can't be combined here.",
   "semanticMessages.a_map_can_t_be_drawn": "A map can't be drawn from {dataset}: {layer} computes its metrics and returns totals, not rows.",
   "semanticMessages.a_pivot_table_can_t_be": "A pivot table can't be drawn from {dataset}: {layer} computes its metrics and returns totals, not rows.",
+  "semanticMessages.always_applied_filters_are_not_available": "Always-applied filters are not available on {layer}'s datasets: set the rule in {layer} instead.",
   "semanticMessages.an_event_funnel_can_t_be": "An event funnel can't be drawn from {dataset}: {layer} computes its metrics and returns totals, not rows.",
   "semanticMessages.another_tool": "another tool",
   "semanticMessages.can_t_apply_this_filter_on": "{layer} can't apply this filter on {column}, so {dataset} can't answer it.",

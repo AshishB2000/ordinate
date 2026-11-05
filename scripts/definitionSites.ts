@@ -17,20 +17,23 @@
 //   refuses   a figure path, a vocabulary or a lock check: an external one throws ExternalMetricError, is left out, or
 //             is never allowed — never drawn as its stored column
 //   words     says the kind in words ("Defined in another tool"), no figure
-//   door      the KPI resolver and the chart planner: they refuse today, and b2 turns them into the layer's answers
+//   answers   the KPI resolver, the chart planner and the semantic doors (b2): a mirror on its own semantic dataset
+//             is asked of its layer by name; anywhere else it refuses as `refuses` does
 //
-// A file with sites of several kinds carries the strictest of them (door > refuses > keeps > words).
+// A file with sites of several kinds carries the strictest of them (answers > refuses > keeps > words).
 
-export type DefinitionSiteHow = 'keeps' | 'refuses' | 'words' | 'door';
+export type DefinitionSiteHow = 'keeps' | 'refuses' | 'words' | 'answers';
 
 export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: DefinitionSiteHow }>> = {
-  // door
-  'src/analysis/metricMeasures.ts': { count: 25, how: 'door' }, // + a period measure charts alone, on its base (p5-06)
-  'src/ipc/metrics.ts': { count: 10, how: 'door' }, // + a period metric resolves its base (p5-05)
+  // answers
+  'src/analysis/metricMeasures.ts': { count: 25, how: 'answers' }, // + a period measure charts alone, on its base (p5-06); a semantic dataset's measures go to its door first (./semanticMeasures)
+  'src/ipc/metrics.ts': { count: 10, how: 'answers' }, // + a period metric resolves its base (p5-05); a mirror resolves through ./semanticFigures layerFigure
+  'src/analysis/semanticMeasures.ts': { count: 2, how: 'answers' }, // a formula measure on a semantic dataset: formulaOverLayer, or columnOnLayer
+  'src/ipc/semanticFigures.ts': { count: 2, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only
   // refuses
   'src/ai/planExec.ts': { count: 1, how: 'refuses' }, // a plan step cannot name it
   'src/ipc/periodMetric.ts': { count: 3, how: 'refuses' }, // a period over an external base: its base's resolution throws ExternalMetricError
-  'src/analysis/additivity.ts': { count: 14, how: 'refuses' }, // adds up nowhere (b2 reads `additive`); a period over an external base adds as it does
+  'src/analysis/additivity.ts': { count: 15, how: 'refuses' }, // adds up where the layer says plain sum or count (b2: `additive`), and a calc over one that does not is refused naming the layer; a period over an external base adds as it does
   'src/analysis/driverShape.ts': { count: 3, how: 'refuses' }, // key drivers: no members to split it into
   'src/analysis/metricTreeJs.ts': { count: 6, how: 'refuses' }, // the JS reference throws
   'src/analysis/scenarioResolve.ts': { count: 10, how: 'refuses' }, // behind resolveMetric's refusal; no column a driver moves
@@ -50,7 +53,8 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   // keeps
   'src/analysis/externalMetric.ts': { count: 2, how: 'keeps' }, // the kind and its whitelist
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
-  'src/analysis/metrics.ts': { count: 2, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13)
+  'src/analysis/metrics.ts': { count: 3, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13), which only the layer sync's external one replaces
+  'src/engine/live/semantic/mirrors.ts': { count: 2, how: 'keeps' }, // the sync's mirrors: found by their external name, written only as external
   'src/analysis/pendingKinds.ts': { count: 7, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
   'src/analysis/statusPin.ts': { count: 3, how: 'keeps' }, // the pin hashes the definition whole; an external one reads no column
   'src/analysis/columnHidden.ts': { count: 2, how: 'keeps' }, // a formula's names, then the definition walked whole for hidden columns

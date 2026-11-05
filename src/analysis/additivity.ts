@@ -24,6 +24,7 @@ import { CALC_KIND_NAMES, calcAlong, sanitizeTableCalc } from './tableCalc';
 import type { TableCalcKind } from './tableCalc';
 import type { VizEncoding, VizMeasure } from './visuals';
 import { calcNotAdditive, calcNotAdditiveOverTime } from './metricCheckMessages';
+import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
 
 export interface Additivity { categories: boolean; time: boolean }
 
@@ -51,7 +52,7 @@ export function additivityOf(
     return { categories: !!b?.categories && !def.compare, time: false };
   }
   if (isFunnelDefinition(def)) return { categories: def.show !== 'rate', time: false }; // D7: one entry per entity adds across categories, never across time; a rate adds across neither
-  if (isExternalDefinition(def)) return { categories: false, time: false }; // the layer's figure, which this pod cannot give (b2 reads `additive`)
+  if (isExternalDefinition(def)) return { categories: def.additive === true, time: def.additive === true }; // D16: only where the layer says plain sum or count
   if (!isFormulaDefinition(def)) {
     const a = aggregationAdditivity(def.aggregation);
     return def.snapshot ? { categories: a.categories, time: false } : a;
@@ -116,7 +117,7 @@ export function calcRefusal(measure: string, kind: TableCalcKind, a: Additivity,
 /** What a measure is called in a sentence, and whether it adds. A metric that is gone (or is on another dataset) is what is plotted: its stored aggregation. */
 async function resolveMeasure(
   projectId: string, datasetId: string, m: VizMeasure, params?: ParamValues, plotsStored = false,
-): Promise<{ name: string; additivity: Additivity }> {
+): Promise<{ name: string; additivity: Additivity; layer?: string }> {
   const dataset = m.datasetId ?? datasetId;
   const found = m.metricId ? await getMetric(projectId, m.metricId) : null;
   const metric = found && found.datasetId === dataset ? found : null;
@@ -128,7 +129,7 @@ async function resolveMeasure(
   const formula = isFormulaDefinition(def) || isPeriodDefinition(def);
   const columns = formula ? (await getDatasetMeta(projectId, dataset))?.columns ?? [] : [];
   const byName = formula ? await metricsByName(projectId) : new Map<string, Metric>();
-  return { name: metric.name, additivity: additivityOf(metric, columns, byName, params) };
+  return { name: metric.name, additivity: additivityOf(metric, columns, byName, params), ...(isExternalDefinition(def) ? { layer: def.layer ?? '' } : {}) };
 }
 
 /** Whether a chart measure's figures add up across categories and across time. Step 03 passes `followedEncoding(...)` as the encoding wherever it asks the chart door. */
@@ -144,7 +145,7 @@ export async function measureAdditivity(projectId: string, datasetId: string, m:
  */
 export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?: { kind?: string } }>(
   reply: R, projectId: string, datasetId: string, enc: VizEncoding, params?: ParamValues,
-): Promise<R | { ok: false; error: string; code: 'calc_not_additive' }> {
+): Promise<R | { ok: false; error: string; code: 'calc_not_additive' } | { ok: false; error: string; code: 'live_refused'; reason: 'nonAdditiveCalc' }> {
   // A map plots no calc (applyChartCalcs), so there is no total to get wrong.
   if (!reply.ok || enc.geo) return reply;
   const pivot = enc.pivot ?? null;
@@ -153,7 +154,7 @@ export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?:
   for (const m of Array.isArray(values) ? values : []) {
     const calc = sanitizeTableCalc(m?.calc);
     if (!calc || !calcNeedsAdditive(calc.kind, false)) continue;
-    const { name, additivity } = await resolveMeasure(projectId, datasetId, m, params, !!pivot);
+    const { name, additivity, layer } = await resolveMeasure(projectId, datasetId, m, params, !!pivot);
     let alongTime = false; // a pivot plots the stored column, never along time
     if (!pivot) {
       // The split column's declared type matters only to a measure that adds on one side and not the other.
@@ -163,6 +164,8 @@ export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?:
         : needsSplitType && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
     }
     const error = calcRefusal(name, calc.kind, additivity, alongTime);
+    // A layer's metric says so naming the layer (part 7 b2, D16): its figures are never added up here.
+    if (error && layer !== undefined) return { ok: false, error: refuseLayer('nonAdditiveCalc', { dataset: '', layer: layerLabel(layer), metric: name }).message, code: 'live_refused', reason: 'nonAdditiveCalc' };
     if (error) return { ok: false, error, code: 'calc_not_additive' };
   }
   return reply;

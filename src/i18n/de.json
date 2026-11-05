@@ -653,6 +653,7 @@
   "semanticMessages.a_formula_can_t_use_computes": "Eine Formel kann {metric} nicht verwenden: {layer} berechnet sie, und ihre Werte lassen sich hier nicht kombinieren.",
   "semanticMessages.a_map_can_t_be_drawn": "Aus {dataset} kann keine Karte erstellt werden: {layer} berechnet seine Kennzahlen und liefert Summen, keine Zeilen.",
   "semanticMessages.a_pivot_table_can_t_be": "Aus {dataset} kann keine Pivot-Tabelle erstellt werden: {layer} berechnet seine Kennzahlen und liefert Summen, keine Zeilen.",
+  "semanticMessages.always_applied_filters_are_not_available": null,
   "semanticMessages.an_event_funnel_can_t_be": "Aus {dataset} kann kein Ereignistrichter erstellt werden: {layer} berechnet seine Kennzahlen und liefert Summen, keine Zeilen.",
   "semanticMessages.another_tool": "ein anderes Tool",
   "semanticMessages.can_t_apply_this_filter_on": "{layer} kann diesen Filter auf {column} nicht anwenden, daher kann {dataset} sie nicht beantworten.",

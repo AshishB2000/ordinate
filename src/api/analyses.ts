@@ -33,7 +33,9 @@ const Compare = z.strictObject({
 /** A card's encoding: re-sanitized by `sanitizeEncoding` in `visual:data`. */
 const Encoding = z.looseObject({
   category: z.string().max(512),
-  values: z.array(z.looseObject({ column: z.string().min(1).max(512), aggregation: z.string().max(16) })).max(64),
+  // No column for a semantic dataset's mirror metric (part 7 b2): its `metricId` names it.
+  values: z.array(z.looseObject({ column: z.string().max(512), aggregation: z.string().max(16) })
+    .refine((m) => m.column !== '' || typeof (m as { metricId?: unknown }).metricId === 'string', { message: 'A measure names a column or a metric.' })).max(64),
 });
 
 /** One tile of a sheet, answered by the server's own channel for its kind. */

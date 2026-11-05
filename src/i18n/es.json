@@ -653,6 +653,7 @@
   "semanticMessages.a_formula_can_t_use_computes": "Una fórmula no puede usar {metric}: {layer} la calcula y sus cifras no se pueden combinar aquí.",
   "semanticMessages.a_map_can_t_be_drawn": "No se puede dibujar un mapa a partir de {dataset}: {layer} calcula sus métricas y devuelve totales, no filas.",
   "semanticMessages.a_pivot_table_can_t_be": "No se puede crear una tabla dinámica a partir de {dataset}: {layer} calcula sus métricas y devuelve totales, no filas.",
+  "semanticMessages.always_applied_filters_are_not_available": null,
   "semanticMessages.an_event_funnel_can_t_be": "No se puede dibujar un embudo de eventos a partir de {dataset}: {layer} calcula sus métricas y devuelve totales, no filas.",
   "semanticMessages.another_tool": "otra herramienta",
   "semanticMessages.can_t_apply_this_filter_on": "{layer} no puede aplicar este filtro en {column}, así que {dataset} no puede responderla.",

@@ -64,6 +64,12 @@ import type { LiveTarget, TargetProblem } from './liveTarget';
 import { liveTarget } from './liveTarget';
 import { answerNames, encodingNames, metricNames, missingRefusal } from './liveMissing';
 import { failed, LiveCallError, opOf, timeoutMs, warehouse } from './liveWarehouse';
+import { evaluateSemantic } from './semantic/evaluateSemantic';
+import { adapterFor, semanticRunner } from './semantic/adapters';
+import { liveNotOfferedMessage } from '../../data/liveMessages';
+import { fromSemanticAnswer, fromSemanticMetric, fromSemanticViz } from './semantic/semanticSpec';
+import { refuseLayer } from './semantic/semanticRefusals';
+import { hiddenColumnsFor } from '../../data/rowAccess';
 
 // The one door every Live statement goes through (./liveWarehouse.ts): L2.4's
 // lookups and L2.5's profile send theirs through it too, never runLiveBound.
@@ -193,7 +199,9 @@ async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared
     // reads the request's signal (the DuckDB pool, a connector's fallback)
     // stops when every asker has gone, not when the first one does.
     const c = ctx();
-    outcome = await runInContext(c, c.requestId, () => evaluateLive(ir, t.env, run), c.client, shared);
+    // A semantic dataset's questions go to its layer (part 7 b2), never the compiler; each through the one door.
+    const sem = t.semantic;
+    outcome = await runInContext(c, c.requestId, () => (sem ? evaluateSemantic(ir, sem.env, semanticRunner(t, shared, seen)) : evaluateLive(ir, t.env, run)), c.client, shared);
   } catch (err: unknown) {
     // A LiveCallError was logged where it happened; anything else is unexpected, and logged once here.
     throw err instanceof LiveCallError ? err : failed(t, 'failed', safeError(err));
@@ -234,7 +242,8 @@ function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal 
 /** Cache → flight → warehouse → shape, for one adapted question. */
 async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
   const op = opOf(t.dialect);
-  const key = keyOf(t, { ir, source: t.source, dialect: t.dialect, base: t.env.base }); // no base: undefined, dropped — today's key
+  const key = keyOf(t, t.semantic ? { ir, semantic: { backend: t.semantic.backend, model: t.semantic.model, base: t.semantic.env.base } } // D18
+    : { ir, source: t.source, dialect: t.dialect, base: t.env.base }); // no base: undefined, dropped — today's key
   const ages = agesOf(t);
   const fresh = queryCache.get<Answered>('live', key, { maxAgeMs: ages.lookupMs });
   if (fresh) {
@@ -263,6 +272,12 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
   // A column the warehouse dropped (L2.5) is said as exactly that, before the adapter could skip or misname it.
   const gone = missingRefusal(t.live.missingColumns, names);
   if (gone) return refused(t.dialect, gone);
+  if (t.semantic) {
+    // No encoder for its backend on this server (c1, e1, d1 add theirs): nothing to ask.
+    if (!adapterFor(t.semantic.backend)) return unavailable({ ok: false, kind: 'unavailable', error: liveNotOfferedMessage() });
+    // D17: a caller from whom a column rule hides any of a layer's fields is refused, whatever the backend compares.
+    if ((await hiddenColumnsFor(projectId, datasetId)).size) return refused(t.dialect, refuseLayer('layerRowPolicy', t.semantic.env));
+  }
   const a = adapt(t);
   if (!a.ok) return refused(t.dialect, a);
   return { asked: await ask(t, a.ir), warnings: a.warnings, t };
@@ -272,7 +287,7 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
 
 /** A chart: `vizDataFor`'s question on a Live dataset. */
 export async function liveVizData(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: AdaptOpts = {}): Promise<LiveVizReply> {
-  const r = await run(projectId, datasetId, encodingNames(encoding, filters), (t) => fromVizEncoding(encoding, filters, t.columns, opts));
+  const r = await run(projectId, datasetId, encodingNames(encoding, filters), (t) => (t.semantic ? fromSemanticViz(encoding, filters, t.columns, t.semantic.env, opts) : fromVizEncoding(encoding, filters, t.columns, opts)));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
@@ -291,11 +306,12 @@ export async function liveVizData(projectId: string, datasetId: string, encoding
 export async function liveMetric(
   projectId: string,
   datasetId: string,
-  spec: { column: string; aggregation: string },
+  spec: { column: string; aggregation: string } | { metric: string },
   filters: FilterStep[],
   opts: AdaptOpts = {},
 ): Promise<LiveMetricReply> {
-  const r = await run(projectId, datasetId, metricNames(spec, filters), (t) => fromMetric(spec, filters, t.columns, opts));
+  const r = await run(projectId, datasetId, metricNames(spec, filters), (t) => (t.semantic ? fromSemanticMetric(spec, filters, t.columns, t.semantic.env, opts)
+    : 'metric' in spec ? refuseLayer('metricOnTable', { dataset: '', layer: '', metric: spec.metric }) : fromMetric(spec, filters, t.columns, opts)));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
@@ -305,7 +321,7 @@ export async function liveMetric(
 
 /** An AI answer's chart: `computeCard`'s question on a Live dataset — ranked and cut in the warehouse. */
 export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: AdaptOpts = {}): Promise<LiveAnswerReply> {
-  const r = await run(projectId, spec && spec.datasetId, answerNames(spec), (t) => fromAnswerSpec(spec, t.columns, opts));
+  const r = await run(projectId, spec && spec.datasetId, answerNames(spec), (t) => (t.semantic ? fromSemanticAnswer(spec, t.columns, t.semantic.env, opts) : fromAnswerSpec(spec, t.columns, opts)));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;

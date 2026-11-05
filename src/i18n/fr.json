@@ -653,6 +653,7 @@
   "semanticMessages.a_formula_can_t_use_computes": "Une formule ne peut pas utiliser {metric} : {layer} la calcule, et ses chiffres ne peuvent pas être combinés ici.",
   "semanticMessages.a_map_can_t_be_drawn": "Une carte ne peut pas être tracée à partir de {dataset} : {layer} calcule ses métriques et renvoie des totaux, pas des lignes.",
   "semanticMessages.a_pivot_table_can_t_be": "Un tableau croisé dynamique ne peut pas être construit à partir de {dataset} : {layer} calcule ses métriques et renvoie des totaux, pas des lignes.",
+  "semanticMessages.always_applied_filters_are_not_available": null,
   "semanticMessages.an_event_funnel_can_t_be": "Un entonnoir d’événements ne peut pas être tracé à partir de {dataset} : {layer} calcule ses métriques et renvoie des totaux, pas des lignes.",
   "semanticMessages.another_tool": "un autre outil",
   "semanticMessages.can_t_apply_this_filter_on": "{layer} ne peut pas appliquer ce filtre sur {column}, donc {dataset} ne peut pas y répondre.",

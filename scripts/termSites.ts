@@ -108,6 +108,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/live/liveBase.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveQuery.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveSpec.ts': { count: 8, how: 'throws' },
+  'src/engine/live/semantic/semanticSpec.ts': { count: 1, how: 'throws' }, // a semantic dataset's KPI filters through liveSpec's adaptFilters, which throws on a term step
   'src/engine/lodResident.ts': { count: 1, how: 'throws' },
   'src/engine/pivotResident.ts': { count: 3, how: 'throws' },
   'src/engine/residentFilter.ts': { count: 4, how: 'throws' },

@@ -41,6 +41,7 @@ import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricF
 import { proposeMetrics } from '../analysis/metricAuto';
 import { metricUsage } from '../analysis/metricUsage';
 import { computeCardMetric } from './dashboards';
+import { layerFigure } from './semanticFigures';
 import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import type { MetricAggregation } from '../analysis/metricValue';
@@ -61,7 +62,6 @@ import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { metricDate, metricScope } from '../analysis/metricTimeScope';
-import { ExternalMetricError } from '../analysis/externalMetric';
 import { externalNoDuplicate } from '../analysis/externalMetricMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
@@ -157,7 +157,11 @@ export async function resolveDefinition(
   // The metric's OWN filters may reference a dashboard parameter too; the
   // scope arrived already resolved by the handler.
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
-  if (metrics.isExternalDefinition(definition)) throw new ExternalMetricError('pending', name ?? definition.external); // only its layer can answer it (part 7 b0)
+  if (metrics.isExternalDefinition(definition)) { // only its layer answers it, on its own semantic dataset (part 7 b2; ./semanticFigures)
+    const res = await layerFigure(ctx.projectId, datasetId, definition, all, ctx.params, depth, name);
+    ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
+    return res.ok ? res.value : null;
+  }
 
   if (metrics.isPeriodDefinition(definition)) return periodMetricValue(ctx, datasetId, definition, all, depth); // its base under a rewritten scope
   if (metrics.isFunnelDefinition(definition)) return funnelMetricValue(ctx, datasetId, definition, filters, depth); // the grid's matching, the scope picking who enters (./funnelMetric)

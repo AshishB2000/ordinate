@@ -54,6 +54,7 @@ import { liveSnapshotRefused } from '../engine/liveRefusals';
 import { relatedColumnGroups, resolveColumnOwner } from './joinPlan';
 import { manySideColumnGroups, manySideOwner } from './fanOutPlan';
 import { projectModel } from '../ipc/relationships';
+import { semanticMeasures } from './semanticMeasures';
 
 /** How deep `[A]` → `[B]` may go — ipc/metrics.ts's MAX_FORMULA_DEPTH, for the same reason. */
 const MAX_DEPTH = 10;
@@ -164,6 +165,8 @@ export async function planMetricMeasures(
   encoding: VizEncoding,
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
+  const layer = await semanticMeasures(projectId, datasetId, encoding); // a semantic dataset: its door asks the layer (part 7 b2)
+  if (layer !== undefined) return layer;
   const alone = await chartsAlone(projectId, datasetId, encoding);
   if (alone) return 'error' in alone ? { ok: false, error: alone.error } : { ok: true, values: encoding.values, filters: [], special: { kind: metrics.isPeriodDefinition(alone.metric.definition) ? 'period' : 'funnel', metric: alone.metric, params } };
   const inPivot = await pivotSnapshot(projectId, encoding);

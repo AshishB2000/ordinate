@@ -43,10 +43,11 @@ const Encoding = z.looseObject({
   category: z.string().max(512),
   values: z
     .array(
+      // No column for a semantic dataset's mirror metric (part 7 b2): its `metricId` names it.
       z.looseObject({
-        column: Column,
+        column: z.string().max(512),
         aggregation: z.enum([...AGGREGATIONS, 'none']),
-      }),
+      }).refine((m) => m.column !== '' || typeof (m as { metricId?: unknown }).metricId === 'string', { message: 'A measure names a column or a metric.' }),
     )
     .max(64),
   geo: Geo.optional(),

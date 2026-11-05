@@ -219,7 +219,12 @@ export interface AdaptOpts {
   today?: string;
   /** The week calendar to roll dates up under; the workspace setting when absent. */
   weekCal?: WeekCal | null;
+  /** A semantic dataset's mirror metrics (part 7 b2): metric id → the layer's metric name. */
+  mirrors?: ReadonlyMap<string, string>;
 }
+
+/** How a chart measure is read: a column aggregated here (`checkMeasure`), or a layer's metric (./semantic/semanticSpec). */
+export type MeasureReader = (v: { column: unknown; aggregation: unknown; metricId?: unknown }) => LiveMeasure | LiveRefusal;
 
 // ── Shared checks ────────────────────────────────────────────────────────────
 
@@ -307,7 +312,7 @@ export function adaptFilter(
   }
 }
 
-function adaptFilters(
+export function adaptFilters(
   steps: FilterStep[] | undefined,
   columns: LiveColumn[],
   opts: AdaptOpts,
@@ -332,7 +337,7 @@ function adaptFilters(
  * cohorts and funnels are refused, as is everything that is not one dataset's
  * own columns.
  */
-function chartCore(encoding: VizEncoding, columns: LiveColumn[], opts: AdaptOpts): { ok: true; ir: LiveIR } | LiveRefusal {
+function chartCore(encoding: VizEncoding, columns: LiveColumn[], opts: AdaptOpts, measureOf: MeasureReader = (v) => checkMeasure(columns, v)): { ok: true; ir: LiveIR } | LiveRefusal {
   if (!encoding || typeof encoding !== 'object') return refuse('noCategory');
   if (encoding.pivot) return refuse('pivot');
   if (encoding.cohort) return refuse('cohort');
@@ -351,10 +356,10 @@ function chartCore(encoding: VizEncoding, columns: LiveColumn[], opts: AdaptOpts
   const hasSplit = typeof encoding.series === 'string' && encoding.series.length > 0;
   if (!hasSplit && values.every((v) => v && v.aggregation === 'none')) return refuse('raw');
 
-  const measures: LiveColumnMeasure[] = [];
+  const measures: LiveMeasure[] = [];
   for (const v of hasSplit ? values.slice(0, 1) : values) {
     // An aggregated build sums a 'none' measure and labels it "sum of x" (vizData.ts).
-    const m = checkMeasure(columns, { column: v && v.column, aggregation: v && v.aggregation === 'none' ? 'sum' : v && v.aggregation });
+    const m = measureOf({ column: v && v.column, aggregation: v && v.aggregation === 'none' ? 'sum' : v && v.aggregation, metricId: v && v.metricId });
     if (isRefusal(m)) return m;
     measures.push(m);
   }
@@ -394,8 +399,9 @@ export function fromVizEncoding(
   filters: FilterStep[],
   columns: LiveColumn[],
   opts: AdaptOpts = {},
+  measureOf?: MeasureReader,
 ): LiveAdapted {
-  const core = chartCore(encoding, columns, opts);
+  const core = chartCore(encoding, columns, opts, measureOf);
   if (!core.ok) return core;
   const f = adaptFilters(filters, columns, opts);
   if (!f.ok) return f;
@@ -413,10 +419,10 @@ export function fromVizEncoding(
  * needs the stored values, and on live it becomes a cached DISTINCT query
  * (L2.4). The IR carries the values as the spec states them.
  */
-export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: AdaptOpts = {}): LiveAdapted {
+export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: AdaptOpts = {}, measureOf?: MeasureReader): LiveAdapted {
   if (!spec || typeof spec !== 'object') return refuse('noCategory');
-  // computeCard's own first check: every column the spec names must still exist.
-  const used = [spec.category, ...(spec.measures || []).map((m) => m.column), ...(spec.filters || []).flatMap((f) => ('column' in f ? [f.column] : []))]
+  // computeCard's own first check: every column the spec names must still exist (a measure's: its reader's check).
+  const used = [spec.category, ...(measureOf ? [] : (spec.measures || []).map((m) => m.column)), ...(spec.filters || []).flatMap((f) => ('column' in f ? [f.column] : []))]
     .concat(spec.series ? [spec.series] : []);
   const missing = used.find((n) => !columnOf(columns, n));
   if (missing !== undefined) return refuse('unknownColumn', String(missing));
@@ -424,7 +430,7 @@ export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: Ad
   const encoding: VizEncoding = { category: spec.category, values: spec.measures || [] };
   if (spec.series) encoding.series = spec.series;
   if (spec.grain) encoding.grain = spec.grain;
-  const core = chartCore(encoding, columns, opts);
+  const core = chartCore(encoding, columns, opts, measureOf);
   if (!core.ok) return core;
   const ir = core.ir;
 

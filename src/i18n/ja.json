@@ -653,6 +653,7 @@
   "semanticMessages.a_formula_can_t_use_computes": "数式では{metric}を使えません。{layer}が計算しており、その数値をここで組み合わせることはできません。",
   "semanticMessages.a_map_can_t_be_drawn": "{dataset}からはマップを描画できません。{layer}は指標を計算して行ではなく合計を返します。",
   "semanticMessages.a_pivot_table_can_t_be": "{dataset}からはピボットテーブルを作成できません。{layer}は指標を計算して行ではなく合計を返します。",
+  "semanticMessages.always_applied_filters_are_not_available": null,
   "semanticMessages.an_event_funnel_can_t_be": "{dataset}からはイベントファネルを描画できません。{layer}は指標を計算して行ではなく合計を返します。",
   "semanticMessages.another_tool": "別のツール",
   "semanticMessages.can_t_apply_this_filter_on": "{layer}は{column}にこのフィルターを適用できないため、{dataset}はこの質問に答えられません。",

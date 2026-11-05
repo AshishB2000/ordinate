@@ -36,6 +36,7 @@ import { liveTarget, typedColumns } from '../engine/live/liveTarget';
 import type { LiveColumn } from '../engine/live/liveSpec';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import * as queryCache from '../engine/queryCache';
+import { refuseLayer } from '../engine/live/semantic/semanticRefusals';
 import type { FormulaCheck, ResultType } from './formula';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -55,6 +56,8 @@ async function targetOf(projectId: string, datasetId: string): Promise<{ ok: tru
       ? { ok: false, code: 'live_refused', reason: found.refusal.code, error: found.refusal.message }
       : { ok: false, code: 'live_unavailable', error: found.error };
   }
+  // A semantic dataset's figures are its layer's: a calc over them would be ours (cross-part check 14).
+  if (found.target.semantic) return { ok: false, code: 'live_refused', reason: 'formulaOverLayer', error: refuseLayer('formulaOverLayer', { ...found.target.semantic.env, metric: meta.name }).message };
   return { ok: true, t: found.target, declared: declaredColumns({ columns: found.target.columns, live: found.target.live }) };
 }
 
@@ -90,7 +93,7 @@ export async function checkLiveCalc(p: Record<string, unknown>): Promise<Formula
   const parsed = compile(src);
   if (!parsed.ok) return failedCheck(tokens, parsed.error, parsed.at);
   const found = await targetOf(str(p.projectId), str(p.datasetId));
-  if (!found.ok) return failedCheck(tokens, found.error);
+  if (!found.ok) return { ...failedCheck(tokens, found.error), ...(found.reason ? { code: found.code, reason: found.reason } : {}) };
   const stored = found.t.live.calculated ?? [];
   // `before`: where this calc sits in the list (the one being edited, or the end for a new one).
   const before = typeof p.before === 'number' ? Math.min(Math.max(0, Math.floor(p.before)), stored.length) : stored.length;

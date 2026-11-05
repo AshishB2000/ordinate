@@ -200,7 +200,7 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
 }
 
 /** `computeCardMetric` under the rules: a refusal THROWS, as a Live KPI's failure does (an ok:false reads as "dataset gone"). */
-export async function lockedMetric<S extends { column: string }, P, R>(
+export async function lockedMetric<S extends { column: string } | { metric: string }, P, R>(
   projectId: string,
   datasetId: string,
   spec: S,
@@ -210,16 +210,17 @@ export async function lockedMetric<S extends { column: string }, P, R>(
 ): Promise<R> {
   const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
   const steps = expanded.steps;
-  const reads = once(() => metricReads(projectId, datasetId, spec.column, steps));
+  const column = 'column' in spec ? spec.column : undefined; // none: a semantic dataset's layer metric (part 7 b2)
+  const reads = once(() => metricReads(projectId, datasetId, column ?? '', steps));
   const snapshot = (spec as { snapshot?: unknown }).snapshot; // its date and entity are read too (part 1 D8, part 5 D11)
-  return gateColumns(projectId, datasetId, reads, [spec.column, snapshot, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
+  return gateColumns(projectId, datasetId, reads, [column, snapshot, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
     const lock = await rowLockFor(projectId, datasetId);
     if (!lock) {
       const why = await relatedClosed(projectId, datasetId, reads);
       if (why) throw new RowPolicyError(why);
       return withNotes(await body(projectId, datasetId, spec, steps, params), expanded.notes);
     }
-    if (await reachesOther(projectId, datasetId, null, [spec.column, steps], spec.column)) throw new RowPolicyError('related');
+    if (await reachesOther(projectId, datasetId, null, [column, steps], column)) throw new RowPolicyError('related');
     return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, steps), params)), expanded.notes);
   });
 }
