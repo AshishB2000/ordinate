@@ -8,13 +8,15 @@
 // 5. Write order: catalog docs, base filters, relationships, terms, metrics.
 // 6. Into a clone: fresh ids that references follow; a period over a new base; `verified` from the clone's rows.
 // 7. model:importApply through the route: the upload, the before file (importing it is the undo), access.
+// 8. Byte for byte: a fresh fixture exported, imported into a clone with the same datasets and exported again gives
+//    the same files, ids and bases aside; the golden still matches (never re-recorded).
 //
 //   npm run build:ts && node scripts/test-modelApply.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { H, close, download, post, upload } from './liveRouteHarness';
-import { buildModelFixture } from './modelFixture';
+import { buildModelFixture, goldenOf, readGolden } from './modelFixture';
 import type { ImportPlan, PlanItem } from '../src/app/modelPlan';
 import type { ApplyChoice, ApplyReply } from '../src/app/modelApply';
 import type { Identity } from '../src/server/context';
@@ -88,6 +90,17 @@ const itemOf = (p: ImportPlan, key: string): PlanItem => p.items.find((i) => i.k
 const done = (r: ApplyReply): { written: string[]; failed: Array<{ key: string; error: string }>; before?: { downloadToken: string } } => (r.ok ? r : { written: [], failed: [] });
 const show = (v: unknown): string => (JSON.stringify(v) ?? String(v)).slice(0, 1500);
 const metric = (P: string, id: string) => as(() => metrics.getMetric(P, id));
+/** The files as text with each id written as its object's path (relationships: their label) and every base blanked: what a clone must reproduce. */
+function stripIds(files: Files): string {
+  const names = new Map<string, string>();
+  for (const [p, text] of files) {
+    if (!p.endsWith('.json') || p === 'model.json') continue;
+    const o = JSON.parse(text) as Json;
+    if (p === 'relationships.json') for (const r of o.relationships as Json[]) names.set(r.id, `relationship:${r.label ?? ''}`);
+    else names.set(o.id, p);
+  }
+  return [...files.keys()].sort().map((p) => `${p}\n${(files.get(p) as string).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, (id) => names.get(id) ?? id).replace(/"base": "[A-Za-z0-9_-]*"/g, '"base": ""')}`).join('\n');
+}
 const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()].sort().map((name) => ({ name, data: Buffer.from(files.get(name) as string, 'utf8') })), MODEL_ZIP_TIME);
 
 (async () => {
@@ -249,6 +262,30 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   ok('NEGATIVE CONTROL: a project editor may apply an import', !!contract && (await decide(EDITOR, 2)).ok);
   const asViewer = (await H.as(VIEWER, async () => rpc.handlers.get('model:importApply')?.(undefined, input))) as Record<string, unknown> | undefined;
   ok('a restricted caller reaching the handler is refused, with the sentence', asViewer?.ok === false && asViewer.error === (await H.as(VIEWER, async () => msg.modelRestricted())), JSON.stringify(asViewer));
+
+  // ── 8. Byte for byte into a clone ─────────────────────────────────────────
+  const G = await buildModelFixture();
+  const a = await exported(G.P);
+  const golden = readGolden();
+  const mine = goldenOf(a);
+  ok('the golden still matches (never re-recorded)', golden.size === mine.size && [...mine].every(([p, t]) => golden.get(p) === t), [...mine.keys()].filter((p) => golden.get(p) !== mine.get(p)).join());
+  const twin = await as(async () => {
+    const C = (await H.projects.createProject('Retail model')).id;
+    await H.liveOver(C, { table: 'live_fake_orders' }, [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }]);
+    const cols = [{ name: 'order_id', type: 'text' as const }, { name: 'customer_id', type: 'text' as const }, { name: 'region', type: 'text' as const }, { name: 'amount', type: 'number' as const }, { name: 'day', type: 'date' as const }, { name: 'units', type: 'number' as const }];
+    const o = await H.datasets.saveDataset(C, { name: 'Orders', sourceKind: 'csv', columns: cols, rows: [['o1', 'c1', 'EU', 10, '2025-03-01', 4]] });
+    const c = await H.datasets.saveDataset(C, { name: 'Customers', sourceKind: 'csv', columns: [{ name: 'id', type: 'text' }, { name: 'name', type: 'text' }], rows: [['c1', 'Ada']] });
+    if (!o || !c) throw new Error('twin datasets not saved');
+    return C;
+  });
+  const into = await applyPlanned(twin, a);
+  const b = await exported(twin);
+  const diff = (x: string, y: string): string => { const xs = x.split('\n'); const ys = y.split('\n'); const i = xs.findIndex((l, k) => l !== ys[k]); return i < 0 ? '' : `${xs.slice(Math.max(0, i - 3), i + 2).join('\n')}\n≠\n${ys.slice(Math.max(0, i - 3), i + 2).join('\n')}`; };
+  ok('into the twin: nothing failed', done(into).failed.length === 0 && done(into).written.length > 0, show(into));
+  ok('export → import into a clone → export: the same files, ids and bases aside', stripIds(a) === stripIds(b), diff(stripIds(a), stripIds(b)));
+  const twinRev = jsonAt(b, 'metrics/revenue.json').id as string;
+  ok('NEGATIVE CONTROL: one differing description shows', stripIds(a) !== stripIds(edit(b, 'metrics', twinRev, (m) => { m.description = 'x'; })));
+  ok('… and the twin\'s own ids are new, so the comparison is not of the same records', twinRev !== G.revenue);
 
   await close();
   finish();
