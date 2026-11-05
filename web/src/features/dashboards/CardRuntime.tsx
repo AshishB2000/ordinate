@@ -306,6 +306,7 @@ export function VisualCard({
             params={ed.params}
             asTable={asTable}
             onMark={mark}
+            staleTime={tile.staleTime}
             filterMark={!!onMark && !clicks.length}
             // A map has no Chart.js marks: a clicked region or point runs the tile's click actions, else joins the
             // sheet's selection (tileActions.ts wireTileActions, cv-mark-click).

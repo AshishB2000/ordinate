@@ -32,11 +32,12 @@ export interface DrillOffer {
   run: () => void;
 }
 
-export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def: VisualDef; drilled: boolean; crumbs: ReactNode; offer: (at: DrillAt) => Promise<DrillOffer | null> } {
+export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def: VisualDef; drilled: boolean; staleTime: number | undefined; crumbs: ReactNode; offer: (at: DrillAt) => Promise<DrillOffer | null> } {
   const qc = useQueryClient();
   const drill = ed.view.drills.get(card.id);
   const def = useMemo(() => drilledDef(saved, drill), [saved, drill]);
   const busy = useRef(false);
+  const used = useRef(false); // this tile has drilled: its cached levels stay fresh for a minute, so Up asks nothing
 
   const offer = async (at: DrillAt): Promise<DrillOffer | null> => {
     // Drill only where the dashboard is read: the view page, Present, and a phone (which reads the editing route too).
@@ -61,6 +62,7 @@ export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def
         if (!r.ok) toast(DRILL_FAILED, { kind: 'error' });
         else if (!r.available) toast(r.reason);
         else {
+          used.current = true;
           const root = levelOf(hierarchies, def.encoding.category)?.hierarchy.name ?? 'All dates';
           ed.view.drillInto(card.id, root, { encoding: r.encoding as VisualDef['encoding'], steps: r.steps as Step[], crumb: { label: r.crumb.label, next: r.crumb.next, word: axis.word } });
         }
@@ -80,5 +82,5 @@ export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def
         onUp={() => ed.view.drillUp(card.id, drill.levels.length - 1)}
       />
     ) : null;
-  return { def, drilled: !!drill, crumbs, offer };
+  return { def, drilled: !!drill, staleTime: used.current ? 60_000 : undefined, crumbs, offer };
 }

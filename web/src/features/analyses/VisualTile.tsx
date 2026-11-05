@@ -160,6 +160,7 @@ export function VisualTileBody({
   onMarkMenu,
   onMarkTap,
   onSwitch,
+  staleTime,
 }: {
   projectId: string;
   def: VisualDef;
@@ -199,6 +200,8 @@ export function VisualTileBody({
    * Wins over `onMark`. The server's date grain of the axis comes last.
    */
   onMarkTap?: (point: ChartPoint, time: boolean, value: string | number, shown: string, drawn?: { category: string; series?: string }, grain?: string) => void;
+  /** How long a read answer stays fresh (ms): a drilled tile's levels (dashboards/useTileDrill). */
+  staleTime?: number;
 }) {
   const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
@@ -214,7 +217,7 @@ export function VisualTileBody({
     }),
     [def, filters],
   );
-  const q = useTile<VisualTile>(projectId, params, req);
+  const q = useTile<VisualTile>(projectId, params, req, staleTime);
   useTileAsOf(!thumb && q.data?.ok ? q.data.asOf : undefined);
   const label = def.name || vizLabel(def.chartType);
   if (q.isPending) return <SkeletonBlock label={`Loading ${label}`} />;
