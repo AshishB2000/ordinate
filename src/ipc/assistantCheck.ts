@@ -20,6 +20,8 @@ import * as analyze from '../ai/analyze';
 import { projectDir, isValidId } from '../app/recordKinds';
 import { osUser } from '../app/catalog';
 import type { VerifiedQuestion } from '../analysis/verifiedRules';
+import { closedToCaller } from '../data/rowAccess';
+import { listVerified } from '../analysis/verifiedQuestions';
 import { buildFacts } from './copilot';
 import { askGuidance } from './guidance';
 import { verifiedStates } from './verifiedState';
@@ -167,3 +169,18 @@ export async function startCheck(projectId: string): Promise<{ ok: true; runId: 
   }
 }
 
+/** The last check as the caller may read it: a reason can quote a value the model wrote, so none on a dataset closed to them. */
+export async function checkFor(projectId: string): Promise<CheckRun | null> {
+  const run = await readCheck(projectId);
+  if (!run || !run.results.some((r) => r.reason !== undefined)) return run;
+  const datasetOf = new Map((await listVerified(projectId)).map((q) => [q.id, q.spec.datasetId] as const));
+  const closed = new Map<string, boolean>();
+  const results: CheckResult[] = [];
+  for (const r of run.results) {
+    const d = datasetOf.get(r.id);
+    if (r.reason !== undefined && d && !closed.has(d)) closed.set(d, await closedToCaller(projectId, d));
+    const keep = r.reason !== undefined && !!d && closed.get(d) === false; // a deleted question's dataset is unknown: no reason
+    results.push(keep ? r : { id: r.id, outcome: r.outcome });
+  }
+  return { ...run, results };
+}

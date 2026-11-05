@@ -26,4 +26,8 @@ export const verified = {
   }),
   // To the project's Trash, restorable.
   'verified:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // Check the Assistant (D13 (3)): queues the run as a job and replies at once, `{ ok: true, runId }` or a refusal sentence.
+  'verified:check': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // The last check from its record, on any pod: no spec, no figure; a result on a dataset closed to the caller has no reason.
+  'verified:checkResult': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
 } as const;

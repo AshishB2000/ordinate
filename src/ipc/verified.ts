@@ -26,6 +26,7 @@ import { contentTag } from '../app/editConflict';
 import { osUser } from '../app/catalog';
 import * as trash from '../app/trash';
 import type { VerifiedInput } from '../api/verified';
+import { checkFor, startCheck } from './assistantCheck';
 
 type Input = z.infer<typeof VerifiedInput>;
 type Field = 'question' | 'phrasings' | 'spec';
@@ -129,4 +130,12 @@ export function register(): void {
     const done = await trash.trashRecord(projectId, 'verified', id); // to the Trash
     return done.ok ? { ok: true } : { ok: false, error: msg.verifiedGone() };
   });
+
+  // Check the Assistant (./assistantCheck): the reply leaves before the first model call; the run goes on as a job.
+  ipcMain.handle('verified:check', async (_e, { projectId }: { projectId: string }) => {
+    const r = await startCheck(projectId);
+    return r.ok ? { ok: true, runId: r.runId } : r;
+  });
+
+  ipcMain.handle('verified:checkResult', async (_e, { projectId }: { projectId: string }) => ({ ok: true, run: await checkFor(projectId) }));
 }

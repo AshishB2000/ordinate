@@ -4,6 +4,9 @@
 //
 //   §1 the run: it answers before any model call, one at a time per project, leave-one-out in every prompt, the cap,
 //      Live without the warehouse, no model no check, and a record that holds no spec, figure or prompt
+//   §2 the two channels: `verified:check` replies with the run id while the model is still asked; `verified:checkResult`
+//      reads it back; a dead pod's run (a stale heartbeat) reads as stopped and does not block the next start. The
+//      viewer's 403 and the restricted reader's missing reasons are scripts/test-rowPolicySafetyNet.ts' (they need roles).
 //
 //   npm run build:ts && node scripts/test-assistantCheck.js
 
@@ -26,6 +29,8 @@ const { projectDir }: typeof import('../src/app/recordKinds') = require('../src/
 const { SAMPLE_VERIFIED }: typeof import('../src/app/sampleGuidance') = require('../src/app/sampleGuidance');
 const C: typeof import('../src/ipc/assistantCheck') = require('../src/ipc/assistantCheck');
 const msg: typeof import('../src/ipc/assistantCheckMessages') = require('../src/ipc/assistantCheckMessages');
+const api: typeof import('../src/api/index') = require('../src/api/index');
+const handlers: Map<string, (e: unknown, payload: unknown) => Promise<unknown>> = require('../src/server/rpc').handlers;
 type Run = import('../src/ipc/assistantCheck').CheckRun;
 type Spec = import('../src/ai/answerSpec').AnswerSpec;
 
@@ -143,6 +148,34 @@ async function main(): Promise<void> {
     const empty = (await (require('../src/app/projects') as typeof import('../src/app/projects')).createProject('No questions')).id;
     const nothing = await C.startCheck(empty);
     ok('no working question, no check', !nothing.ok && nothing.error === msg.checkNothing(), JSON.stringify(nothing));
+
+    // ── §2 The two channels ─────────────────────────────────────────────────
+    ok('contracts: start is write, the result is read, both project-scoped', api.contracts['verified:check'].access === 'write' && api.contracts['verified:checkResult'].access === 'read'
+      && typeof (api.contracts['verified:check'] as { project?: unknown }).project === 'function' && typeof (api.contracts['verified:checkResult'] as { project?: unknown }).project === 'function');
+    verified.register();
+    const call = (ch: string, payload: unknown): Promise<any> => handlers.get(ch)!({}, payload); // any: each handler's own reply
+    let open!: () => void;
+    const held = new Promise<void>((r) => (open = r));
+    (analyze as any).askCopilot = async (_p: unknown, _f: string, q: string) => { await held; return REPLY[q] ?? PROSE; };
+    const finished = new Promise<void>((r) => { const off = jobs.onFinish((j) => { if (j.kind === 'assistant-check') { off(); r(); } }); });
+    const started = await call('verified:check', { projectId: P });
+    ok('verified:check replies with the run id while the model is still asked', started.ok === true && typeof started.runId === 'string' && !('done' in started), JSON.stringify(started));
+    const reading = await call('verified:checkResult', { projectId: P });
+    ok('verified:checkResult reads the same run, running', reading.ok === true && reading.run?.runId === started.runId && reading.run.state === 'running', JSON.stringify(reading));
+    open();
+    await finished;
+    const read = (await call('verified:checkResult', { projectId: P })).run;
+    ok('…and its result once done, reasons and all for an editor', read.state === 'done' && read.asked === 50 && read.results.some((r: { reason?: string }) => r.reason === msg.checkNoChart()), JSON.stringify({ ...read, results: read.results.length }));
+    const old = new Date(Date.now() - 3 * 60_000).toISOString();
+    fs.writeFileSync(path.join(projectDir(P), 'assistant-check.json'), JSON.stringify({ ...read, state: 'running', heartbeatAt: old, finishedAt: undefined }));
+    const dead = (await call('verified:checkResult', { projectId: P })).run;
+    ok('a dead pod\'s run (heartbeat 3 minutes old) reads as stopped', dead.state === 'stopped' && dead.runId === read.runId, JSON.stringify({ ...dead, results: dead.results.length }));
+    fs.writeFileSync(path.join(projectDir(P), 'assistant-check.json'), JSON.stringify({ ...read, state: 'running', heartbeatAt: new Date().toISOString() }));
+    ok('NEGATIVE CONTROL: a fresh heartbeat still blocks a start', (await call('verified:check', { projectId: P })).error === msg.checkRunning());
+    fs.writeFileSync(path.join(projectDir(P), 'assistant-check.json'), JSON.stringify({ ...read, state: 'running', heartbeatAt: old }));
+    const next = await call('verified:check', { projectId: P });
+    ok('…and a stale one does not', next.ok === true && next.runId !== read.runId, JSON.stringify(next));
+    await new Promise<void>((r) => { const off = jobs.onFinish((j) => { if (j.kind === 'assistant-check') { off(); r(); } }); });
   });
   H.cleanup();
   finish();
