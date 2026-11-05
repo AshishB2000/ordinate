@@ -12,6 +12,9 @@
 // figures, and the same count per employee_id answering east Object.is-equal to the editor.
 // FUNNEL (p5-08): Ops → Eng entries by ssn, or timed by a hidden date, give east no figure (KPI, tile, chart) and are
 // listed hidden; NEGATIVE CONTROLS: the editor's figures, and by employee_id on `day` east's Object.is-equal to the editor's.
+// TARGET (p5-09): a headcount whose target is a plan totalling salary shows east its figure and no target, with the
+// sentence, and no plan figure; NEGATIVE CONTROLS: the editor's tile has the plan's target, and a plan counting dept
+// gives east the editor's target, attainment and status.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -127,6 +130,25 @@ void (async () => {
     ok('NEGATIVE CONTROL: …and so does its chart by dept', dF === '', dF);
     const eastFunnels = await listed('east');
     ok('funnel: east\'s metric list marks the ssn and hidden-date ones hidden, not the employee_id one', eastFunnels[F_SSN] && eastFunnels[F_HIRED] && !eastFunnels[F_ID], JSON.stringify(eastFunnels));
+
+    // ── Target (p5-09) ───────────────────────────────────────────────────────
+    const targetSentence: string = require('../src/analysis/targetMessages').targetRowRules();
+    const withTarget = async (name: string, plan: string): Promise<string> => {
+      const id = await save(name, { column: 'employee_id', aggregation: 'count' }, 'day');
+      must(`${name} target`, await W.call('boss', 'metric:update', { projectId: P, id, patch: { target: { source: { metricId: plan }, per: 'month' } } }));
+      return id;
+    };
+    const [ON_PAY, ON_ROWS] = [await withTarget('Heads vs pay plan', PAY), await withTarget('Heads vs row plan', ROWS)];
+    const H1 = [{ type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2024-01-01', to: '2024-06-30' } }];
+    const tTile = (who: string, id: string) => W.call(who, 'analysis:tiles', { projectId: P, items: [{ kind: 'metric', datasetId: log, column: 'employee_id', aggregation: 'count', metricId: id, filters: H1 }] });
+    const [eastT, edT] = [await tTile('east', ON_PAY), await tTile('ed', ON_PAY)];
+    const tOf = (r: H.Reply) => r.body?.[0]?.target;
+    ok('target: east\'s headcount tile has its figure and no target from a salary plan, with the sentence', eastT.body?.[0]?.ok === true && typeof eastT.body[0].value === 'number'
+      && tOf(eastT)?.value === null && tOf(eastT)?.none === targetSentence && !C.leaksHidden(eastT.text), show(eastT));
+    ok('NEGATIVE CONTROL: target: the editor\'s has the plan\'s target', typeof tOf(edT)?.value === 'number' && Object.is(eastT.body?.[0]?.value, edT.body?.[0]?.value), show(edT));
+    const [eastR, edR] = [await tTile('east', ON_ROWS), await tTile('ed', ON_ROWS)];
+    const dT = H.diff(tOf(eastR), tOf(edR), {});
+    ok('NEGATIVE CONTROL: target: a plan counting dept gives east the editor\'s target, attainment and status', typeof tOf(eastR)?.value === 'number' && dT === '', `${dT} | ${show(eastR)}`);
   } finally {
     await W.close();
   }
