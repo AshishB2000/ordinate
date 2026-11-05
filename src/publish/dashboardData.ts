@@ -521,7 +521,7 @@ export async function buildDashboard(
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
         // Shaped as a chart over the same columns is (./kpiPolicy): a column the policy drops leaves no figure, in any combination.
-        const hidden = await kpiHidden(projectId, m.datasetId, reads, outgoing);
+        const hidden = await kpiHidden(projectId, reads, outgoing);
         for (const p of payloads) base.variants.push(intern(store, hidden ? { hidden } : p));
         cards.push({ ...base, kind: 'metric', title });
         continue;
@@ -563,7 +563,7 @@ export async function buildDashboard(
         }
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
-          base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params)));
+          base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params, outgoing)));
           done++;
         }
         cards.push({ ...base, kind: 'chart', title: 'Metric tree', chartType: 'table' });

@@ -132,11 +132,12 @@ export function register(): void {
     return { ok: true, analysis: board, visuals: defs, tag: await tagForCaller(projectId, 'dashboard', board, t.tag), ...about };
   });
 
-  ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>
+  // `share` (server-side callers only — a report, a send): every answer is about to leave the app, shaped by the Share policy.
+  ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items, share }: any = {}) =>
     Promise.all((Array.isArray(items) ? items : []).map(async (it: any) => { // any: contract-checked item
       if (it.kind === 'visual') {
         return call(e, 'visual:data', {
-          projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics, asOf, currency,
+          projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics, asOf, currency, share,
           ...figureAsk(it.chartType, it), // what the tile is drawn as: its figures come with it
           ...(it.visualId ? { visualId: it.visualId } : {}), // a waterfall's stored totals, filled server-side (rowDoors.storedFigureAsk)
         });
@@ -151,8 +152,9 @@ export function register(): void {
       // column and aggregation — dashFiltersUi.ts renderMetricCard's order.
       let res: any = null; // any: one of two handlers' replies
       if (it.metricId) {
-        const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency });
+        const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency, share });
         if (r && r.code === TERM_CODE) return r; // a filter it cannot apply: says so — never "deleted", never the stored column's figure
+        if (r && r.hiddenByPolicy) return r; // the Share policy's words — never the stored column's figure, nor a Compare
         if (r && r.ok !== false) {
           res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}) };
         }
@@ -160,8 +162,9 @@ export function register(): void {
       if (!res) {
         if (!it.column) return { ok: false, error: 'The metric this card showed was deleted.' };
         const r = await call(e, 'dashboard:metric', {
-          projectId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation, filters: it.filters, params, asOf, currency,
+          projectId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation, filters: it.filters, params, asOf, currency, share,
         });
+        if (r && r.hiddenByPolicy) return r;
         // A Live tile's failure keeps its type (L2.4): refused, failed, timed out — never a bare blank.
         if (!r || r.ok === false) return { ok: false, error: (r && r.error) || 'The metric could not be computed.', ...(r && r.code ? { code: r.code, ...(r.reason ? { reason: r.reason } : {}) } : {}) };
         res = { ok: true, value: r.value, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.fx ? { fx: r.fx } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}) };

@@ -39,7 +39,7 @@ import * as alertStore from '../analysis/alertStore';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as comments from '../app/comments';
-import { resolveMetric, resolveMetricSeries } from './metrics';
+import { resolveMetric, resolveMetricSeries, type MetricRead } from './metrics';
 import { vizDataFor } from './visuals';
 import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
@@ -133,6 +133,20 @@ interface Ctx {
   memo: Map<string, number | null>;
   /** Memo key → why that figure is null, for the typed Live failures only. */
   why: Map<string, FigureRefusal>;
+  /** Metric id → every column its figures were totalled from, when a Share policy judges the rows. */
+  reads?: Map<string, MetricRead[]>;
+}
+
+/** What a row leaving the app says when the Share policy drops a column its figures are totalled from (publish/kpiPolicy). */
+export type RowJudge = (reads: MetricRead[]) => Promise<string>;
+
+/** The row with every figure withheld: its name, the house wording, no target, status, change or sparkline. */
+function withheldRow(row: ScoreRow, sentence: string): ScoreRow {
+  const { alert: _alert, unavailable: _why, ...rest } = row;
+  return {
+    ...rest, value: null, display: sentence, target: null, targetDisplay: '', attainment: null, status: 'none', previous: null,
+    delta: null, deltaDisplay: '', pct: null, tone: 'flat', spark: [], sparkLabels: [], attainmentDisplay: '', pctDisplay: '',
+  };
 }
 
 function newCtx(projectId: string): Ctx {
@@ -188,7 +202,8 @@ async function figure(ctx: Ctx, metricId: string, w: PeriodWindow | null): Promi
   const col = await dateColOf(ctx, m.datasetId);
   const key = figureKey(metricId, col, w);
   if (ctx.memo.has(key)) return ctx.memo.get(key) as number | null;
-  const r = await resolveMetric(ctx.projectId, metricId, { filters: col && w ? [periodFilter(col, w)] : [] }).catch((err: unknown) => {
+  if (ctx.reads && !ctx.reads.has(metricId)) ctx.reads.set(metricId, []);
+  const r = await resolveMetric(ctx.projectId, metricId, { filters: col && w ? [periodFilter(col, w)] : [], reads: ctx.reads?.get(metricId) }).catch((err: unknown) => {
     // D6: a Live figure the warehouse did not give is said, not shown as an empty period.
     const why = refusalOf(err);
     if (why) ctx.why.set(key, why);
@@ -270,8 +285,9 @@ async function openCommentCounts(projectId: string, metricIds: string[]): Promis
  * EXPORTED for buildFacts (the Assistant reads the same figures the page shows)
  * and for scripts/test-scorecards.ts.
  */
-export async function computeScorecard(projectId: string, sc: Scorecard, offset = 0): Promise<ScoreResult> {
+export async function computeScorecard(projectId: string, sc: Scorecard, offset = 0, judge?: RowJudge): Promise<ScoreResult> {
   const ctx = newCtx(projectId);
+  if (judge) ctx.reads = new Map();
   const cal = getCalendar();
   const anchor = await anchorFor(ctx, sc.rows);
   const off = Math.max(0, Math.floor(offset) || 0);
@@ -331,7 +347,9 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
     if (alert && !(await closedToCaller(projectId, m.datasetId))) row.alert = alert;
     const threads = talk.get(m.id);
     if (threads) row.comments = threads;
-    rows.push(row);
+    const targetId = def.target && typeof def.target === 'object' ? def.target.metricId : '';
+    const hidden = judge ? await judge([...(ctx.reads?.get(m.id) ?? []), ...(targetId ? ctx.reads?.get(targetId) ?? [] : [])]) : '';
+    rows.push(hidden ? withheldRow(row, hidden) : row);
   }
   return {
     ok: true, id: sc.id, name: sc.name, period: sc.period,
@@ -426,9 +444,9 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
  * scorecard page (the desktop's reportScorecard.ts, through `scorecard:snapshot`).
  * A published site builds its own from computeScorecard (src/publish/scorecardData.ts).
  */
-export async function scorecardSnapshot(projectId: string, id: string, offset = 0): Promise<ScoreResult | null> {
+export async function scorecardSnapshot(projectId: string, id: string, offset = 0, judge?: RowJudge): Promise<ScoreResult | null> {
   const sc = await scorecards.getScorecard(projectId, id);
-  return sc ? computeScorecard(projectId, sc, offset) : null;
+  return sc ? computeScorecard(projectId, sc, offset, judge) : null;
 }
 
 export function register(): void {

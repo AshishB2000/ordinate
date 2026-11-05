@@ -26,7 +26,7 @@ import { compareScope } from '../analysis/periodScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
 import { liveCodeOf } from './liveRoute';
-import { displayOf, resolveMetric } from './metrics';
+import { displayOf, resolveMetric, type MetricRead } from './metrics';
 import { fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 
@@ -61,6 +61,7 @@ export async function compareMetric(
   rawFilters: unknown,
   rawCompare: unknown,
   rawParams?: unknown,
+  reads?: MetricRead[], // every column the figure is totalled from, when the caller asks (ipc/metrics resolveMetric)
 ): Promise<CompareResult> {
   const cmp = sanitizeCompare(rawCompare);
   if (!cmp) return { ok: false, error: 'Nothing to compare with' };
@@ -81,7 +82,7 @@ export async function compareMetric(
   const out: CompareResult = { ok: true, label, prior: moved.prior };
   let metricFx: FxInfo | undefined;
   if (metric) {
-    const a = await resolveMetric(projectId, metric.id, { filters, params });
+    const a = await resolveMetric(projectId, metric.id, { filters, params, reads });
     const b = await resolveMetric(projectId, metric.id, { filters: moved.filters, params });
     if (!a || !b) return { ok: false, error: 'Metric not found' };
     value = finite(a.value);
@@ -92,6 +93,7 @@ export async function compareMetric(
     if (metric.direction) out.direction = metric.direction;
   } else {
     const spec = { column: String(card.column || ''), aggregation: card.aggregation as MetricAggregation };
+    reads?.push({ datasetId, ...spec });
     const a = await computeCardMetric(projectId, datasetId, spec, filters, params);
     const b = await computeCardMetric(projectId, datasetId, spec, moved.filters, params);
     if (!a.ok || !b.ok) return { ok: false, error: 'Dataset not found' };

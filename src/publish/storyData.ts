@@ -3,7 +3,8 @@
 // A story is a column of blocks, each already scoped by its own filters, so it
 // has no filter bar and one answer per block. Same functions as a dashboard
 // tile (./dashboardData.ts): `vizDataFor` for a visual, `resolveMetric` for a
-// metric, the author's caption or the app's (`tileCaption`).
+// metric, the author's caption or the app's (`tileCaption`). A metric totalled
+// from a column the Share policy drops says so in place of its figure (./kpiPolicy).
 
 import * as stories from '../analysis/stories';
 import * as visuals from '../analysis/visuals';
@@ -11,7 +12,8 @@ import { sanitizeEncoding } from '../analysis/visuals';
 import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
-import { resolveMetric } from '../ipc/metrics';
+import { resolveMetric, type MetricRead } from '../ipc/metrics';
+import { kpiHidden } from './kpiPolicy';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
 import { chartPayload } from './dashboardData';
@@ -86,15 +88,17 @@ export async function buildStory(
     let liveReason = '';
     for (const id of ids) {
       let r: Awaited<ReturnType<typeof resolveMetric>> = null;
+      const reads: MetricRead[] = [];
       try {
-        r = await resolveMetric(projectId, id, { filters: b.filters });
+        r = await resolveMetric(projectId, id, { filters: b.filters, reads });
       } catch (err) {
         // A Live metric its warehouse could not give (L2.4), or a glossary term this pod cannot apply: left out, and
         // said if none is left — the story still publishes.
         if (!isLiveFigureError(err) && !isTermNotExpandedError(err)) throw err;
         liveReason = err.message;
       }
-      if (r && r.ok) metrics.push({ name: r.name, display: r.display, value: r.value });
+      const hidden = r && r.ok ? await kpiHidden(projectId, reads, outgoing) : '';
+      if (r && r.ok) metrics.push(hidden ? { name: r.name, display: hidden, value: null } : { name: r.name, display: r.display, value: r.value });
     }
     if (!metrics.length) { blocks.push({ kind: 'broken', reason: liveReason || 'This metric was deleted.' }); continue; }
     blocks.push({

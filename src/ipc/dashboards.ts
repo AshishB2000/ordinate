@@ -23,6 +23,8 @@ import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 import type { AsOf } from '../api/asOf';
 import { liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
+import { isSharePath } from '../app/privacyStore';
+import { kpiHidden } from '../publish/kpiPolicy';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -267,8 +269,11 @@ export function register() {
   // untrusted renderer input to filter-only steps, not a formatter, and BOTH
   // paths consume its output. The response shape is byte-identical either way.
   // `asOf` (view state, data/asOf.ts): the dataset read as of that time.
-  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  // `share` (server-side callers only, as metric:value's): the figure is about to leave the app — judged first.
+  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
+      const hidden = isSharePath(share) && share !== 'bundle' ? await kpiHidden(projectId, [{ datasetId, column, aggregation }], share) : '';
+      if (hidden) return { ok: false, error: hidden, hiddenByPolicy: true };
       // Parameters resolve FIRST — `[[threshold]]` becomes the number it names —
       // so both paths below see ordinary, typed filter steps.
       const values = paramValues(params);

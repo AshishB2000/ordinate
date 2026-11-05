@@ -58,6 +58,8 @@ import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { contentTag, isRecordChanged } from '../app/editConflict';
+import { isSharePath } from '../app/privacyStore';
+import { kpiHidden } from '../publish/kpiPolicy';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -522,12 +524,18 @@ export function register() {
   });
 
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  // `share` (server-side callers only — a report, a send; the contract has no such field): the figure is about to
+  // LEAVE the app, so the Share policy judges the columns it was totalled from (publish/kpiPolicy), as visual:data's does.
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       const values = paramValues(params);
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
-      const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values });
+      const leaving = isSharePath(share) && share !== 'bundle';
+      const reads: MetricRead[] = [];
+      const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values, ...(leaving ? { reads } : {}) });
       if (!res) return { ok: false, error: 'Metric not found' };
+      const hidden = leaving ? await kpiHidden(projectId, reads, share) : '';
+      if (hidden) return { ok: false, error: hidden, hiddenByPolicy: true, name: res.name };
       // Dated by the metric's dataset (L0.2, data/figureAsOf), inside the as-of scope.
       const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
       return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;
