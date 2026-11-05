@@ -73,6 +73,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/explore/Answer.tsx': { count: 1, how: 'keeps' },
   'web/src/features/explore/AnswerActions.tsx': { count: 1, how: 'keeps' },
   'web/src/features/explore/spec.ts': { count: 1, how: 'keeps' },
+  // the drill sends liveFilters(question.filters) (isKeptStep passes a term step through) to visual:drillDown, a door
+  'web/src/features/explore/useExploreDrill.tsx': { count: 1, how: 'keeps' },
   'web/src/features/visuals/builderState.ts': { count: 1, how: 'keeps' },
   'web/src/features/visuals/filters/filterText.ts': { count: 1, how: 'keeps' },
   // door: the figure entry. Expands a term (expandTerms), or refuses it typed; the row lock keeps one.
