@@ -255,6 +255,9 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       if (!keys.length) return undefined; // a channel that takes nothing
       return Object.fromEntries([['projectId', P], ['datasetId', staff], ['column', 'ssn']].filter(([k]) => keys.includes(k as string)));
     };
+    // A verified question over salary (part 3): its answer would carry the salary figures.
+    const payQ = await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Pay by dept', spec: { datasetId: staff, category: 'dept', measures: [SUM_SALARY], filters: [], chartType: 'column', title: 'Pay by dept' } } });
+    ok('setup: a verified question over salary', payQ.body?.ok === true, payQ.text.slice(0, 200));
     const prompts: string[] = [];
     const sweep = async (who: string): Promise<string[]> => {
       C.stubModel(prompts, { dataset: 'Staff', category: 'dept', measures: [COUNT] });
@@ -278,6 +281,8 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
         ['aggregate ssn', () => automation.aggregate(mcpCtx, { dataset: 'Staff', encoding: COUNT_BY('ssn') })],
         ['aggregate dept', () => automation.aggregate(mcpCtx, { dataset: 'Staff', encoding: COUNT_BY('dept') })],
         ['query_sql', () => automation.query(mcpCtx, 'SELECT * FROM "Staff"', 50)], ['insights', () => automation.insights(mcpCtx, 'Staff')],
+        ['list_verified_questions', () => automation.listVerifiedQuestions(mcpCtx)], ['get_instructions', () => automation.getInstructions(mcpCtx)],
+        ['answer_verified_question Pay by dept', () => automation.answerVerifiedQuestion(mcpCtx, 'Pay by dept')],
       ];
       const out: string[] = [];
       for (const [name, run] of tools) out.push(`${name} ${await W.as(who, run).then((v) => JSON.stringify(v), (e: unknown) => `refused ${String((e as Error)?.message ?? e)}`)}`);
@@ -297,6 +302,9 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const edTexts = [...(await sweep('ed')), ...(await mcpTextsAs('ed'))];
     ok('NEGATIVE CONTROL: hr\'s and the editor\'s replies carry them', hrTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => C.SALARY_FIGURES.some((f) => t.includes(f))));
     ok('NEGATIVE CONTROL: …and so do hr\'s prompts', prompts.some((p) => p.includes(C.SSN_CANARY)));
+    const answered = (texts: string[]): string => texts.find((t) => t.startsWith('answer_verified_question ')) ?? '';
+    ok('NEGATIVE CONTROL: hr\'s answer_verified_question over salary carries its figures; east\'s does not', C.SALARY_FIGURES.some((f) => answered(hrTexts).includes(f))
+      && !hasCanary(answered(eastTexts)), `${answered(hrTexts).slice(0, 200)} | ${answered(eastTexts).slice(0, 200)}`);
 
     // ── Every GATE channel ───────────────────────────────────────────────────
     // A metric's versions (its figure, then and now) and its tree need a second version and a date: a pay log hides salary and ssn too.
