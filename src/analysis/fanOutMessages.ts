@@ -38,3 +38,8 @@ export function fanOutNarrows(column: string, names: string): string {
 export function fanOutNarrowsNone(column: string): string {
   return t('fanOutMessages.narrows_none_of_these_measures', { column });
 }
+
+/** A bare column name two many sides have (the nearest two named): no one table to total it on. */
+export function fanOutTwoOwners(column: string, first: string, second: string): string {
+  return t('fanOutMessages.is_on_and_on_chart_one', { column, first, second });
+}

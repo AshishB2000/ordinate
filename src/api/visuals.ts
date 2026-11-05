@@ -184,7 +184,8 @@ export const visuals = {
   'boundary:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'boundary:import': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, fileToken: FileToken }), project: byProjectId }),
   // Columns of the datasets this one reaches without fan-out — the builder's
-  // "from <dataset>" groups. Handler: src/ipc/relationships.ts.
+  // "from <dataset>" groups — and, as `manyGroups` (omitted when none), its many
+  // sides' columns, measures totalled on their own table. Handler: src/ipc/relationships.ts.
   'relationship:related': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
 
   // ── T2.7 part 2: drill, period picker, the project colour map ────────────

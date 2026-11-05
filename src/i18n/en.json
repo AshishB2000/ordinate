@@ -270,6 +270,7 @@
   "externalMetricMessages.it_is_defined_in_another_tool": "It is defined in another tool's semantic layer, so this server can't split it into members.",
   "fanOutMessages.counted_on_their_own_table_s": "Counted on their own table’s rows: {names}.",
   "fanOutMessages.is_not_on_the_path_shares": "“{field}” is not on the path {dataset} shares with {primary}, so the measures from {dataset} have no single answer by it. Choose a field of {primary}, or of a table it leads to.",
+  "fanOutMessages.is_on_and_on_chart_one": "“{column}” is on {first} and on {second}. Chart one of them instead.",
   "fanOutMessages.measures_from_several_tables_can_only": "Measures from several tables can only be drawn as a chart aggregated by one category: not as a pivot, cohort, funnel, small multiples, map, key drivers or raw points.",
   "fanOutMessages.measures_from_several_tables_cannot_be": "Measures from several tables cannot be lined up over a binned category or one folded into “Other”. Choose a category with at most 50 values.",
   "fanOutMessages.narrows_none_of_these_measures": "“{column}” narrows none of these measures.",

@@ -273,6 +273,7 @@
   "externalMetricMessages.it_is_defined_in_another_tool": "Sie ist in der semantischen Schicht eines anderen Tools definiert, daher kann dieser Server sie nicht in Elemente aufteilen.",
   "fanOutMessages.counted_on_their_own_table_s": "Auf den Zeilen der eigenen Tabelle berechnet: {names}.",
   "fanOutMessages.is_not_on_the_path_shares": "„{field}“ liegt nicht auf dem Weg, den {dataset} mit {primary} teilt, daher haben die Kennzahlen aus {dataset} danach keine eindeutige Antwort. Wählen Sie ein Feld von {primary} oder einer Tabelle, zu der es führt.",
+  "fanOutMessages.is_on_and_on_chart_one": "„{column}“ steht in {first} und in {second}. Erstellen Sie das Diagramm stattdessen auf einer davon.",
   "fanOutMessages.measures_from_several_tables_can_only": "Kennzahlen aus mehreren Tabellen lassen sich nur als Diagramm zeichnen, das nach einer Kategorie aggregiert ist: nicht als Pivot, Kohorte, Trichter, Small Multiples, Karte, Haupttreiber oder einzelne Punkte.",
   "fanOutMessages.measures_from_several_tables_cannot_be": "Kennzahlen aus mehreren Tabellen lassen sich über einer in Klassen eingeteilten oder in „Other“ zusammengefassten Kategorie nicht ausrichten. Wählen Sie eine Kategorie mit höchstens 50 Werten.",
   "fanOutMessages.narrows_none_of_these_measures": "„{column}“ filtert keine dieser Kennzahlen.",

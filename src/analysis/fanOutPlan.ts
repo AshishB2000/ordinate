@@ -15,7 +15,8 @@ import type { Relationship } from './relationships';
 import type { VizEncoding, VizMeasure } from './visuals';
 import { pathKey, reachable, resolveColumnOwner, viaPath } from './joinPlan';
 import type { DsInfo, Hop } from './joinPlan';
-import { fanOutManySide, fanOutOffPath, fanOutShape } from './fanOutMessages';
+import type { ParsedColumn } from '../data/parse';
+import { fanOutManySide, fanOutOffPath, fanOutShape, fanOutTwoOwners } from './fanOutMessages';
 
 export interface FanQuestion {
   datasetId: string;
@@ -35,6 +36,13 @@ const sameHops = (a: Hop[], b: Hop[] | undefined): boolean =>
   !!b && a.length === b.length && a.every((h, i) => h.relId === b[i].relId && h.to.datasetId === b[i].to.datasetId);
 const startsWith = (p: Hop[], prefix: Hop[]): boolean => sameHops(p.slice(0, prefix.length), prefix);
 const last = (p: Hop[]): Hop => p[p.length - 1];
+
+/** M's default hops forward to J, the first table of the primary's tree (the primary first) it reaches; undefined when it reaches none. */
+function meet(primary: string, reachP: Map<string, Hop[]>, m: string, rels: Relationship[]): Hop[] | undefined {
+  const reachM = reachable(m, rels);
+  const j = [primary, ...reachP.keys()].find((id) => reachM.has(id));
+  return j === undefined ? undefined : reachM.get(j);
+}
 
 /** A many-side measure as its own table's: no dataset reference left. */
 function own(v: VizMeasure): VizMeasure {
@@ -64,11 +72,7 @@ export function planFanOut(primary: string, encoding: VizEncoding, filters: Filt
       const r = rels.find((x) => x.id === v.via);
       if (!r || r.from.datasetId !== d || !pathP(r.to.datasetId)) return null; // not a hop from M into the tree: today's sentence
       mj = [{ relId: r.id, from: r.from, to: r.to }];
-    } else {
-      const reachM = reachable(d, rels);
-      const j = [primary, ...reachP.keys()].find((id) => reachM.has(id));
-      mj = j === undefined ? undefined : reachM.get(j);
-    }
+    } else mj = meet(primary, reachP, d, rels);
     if (!mj) return null; // unrelated, or reached only through another many side: today's sentence
     const key = d + '|' + pathKey(mj);
     const side = sides.find((s) => s.m + '|' + pathKey(s.mj) === key);
@@ -142,4 +146,27 @@ export function planFanOut(primary: string, encoding: VizEncoding, filters: Filt
   const questions = (mine.length ? [{ datasetId: primary, encoding: { ...encoding, values: mine.map((i) => values[i]) }, filters: ours, measures: mine }] : [])
     .concat(sides.map((s) => s.q));
   return { ok: true, plan: { questions, notes: [{ kind: 'ownRows', measures: sides.flatMap((s) => s.q.measures).sort((a, b) => a - b) }, ...notes] } };
+}
+
+/** The primary's many sides — each dataset off its forward tree that walks forward onto it — with their columns, nearest first. */
+export function manySideColumnGroups(primary: string, rels: Relationship[], infos: Map<string, DsInfo>): { datasetId: string; name: string; columns: ParsedColumn[] }[] {
+  const reachP = reachable(primary, rels);
+  const sides: { hops: number; g: { datasetId: string; name: string; columns: ParsedColumn[] } }[] = [];
+  for (const [id, info] of infos) {
+    if (id === primary || reachP.has(id)) continue;
+    const mj = meet(primary, reachP, id, rels);
+    if (mj) sides.push({ hops: mj.length, g: { datasetId: id, name: info.name, columns: info.columns } });
+  }
+  return sides.sort((a, b) => a.hops - b.hops).map((s) => s.g);
+}
+
+/**
+ * Which many side a BARE column name means from `primary`: null when the primary or its forward tree has it
+ * (today's rule wins) or no many side does; the one many side that has it; refused when two do.
+ */
+export function manySideOwner(primary: string, column: string, rels: Relationship[], infos: Map<string, DsInfo>): { ok: true; datasetId: string } | { ok: false; error: string } | null {
+  if (resolveColumnOwner(primary, column, rels, infos)) return null;
+  const owners = manySideColumnGroups(primary, rels, infos).filter((g) => g.columns.some((c) => c.name === column));
+  if (owners.length > 1) return { ok: false, error: fanOutTwoOwners(column, owners[0].name, owners[1].name) };
+  return owners.length ? { ok: true, datasetId: owners[0].datasetId } : null;
 }

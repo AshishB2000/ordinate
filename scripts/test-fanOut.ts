@@ -6,6 +6,7 @@
 //   § answers  each case three ways — resident-forced, JS-forced and a brute-force loop over the fixture
 //              arrays (no engine code) — all Object.is; each series equals its own table's chart; orphans
 //              fall under the blank label; the door (`visual:data`) answers the same, with its notes
+//   § names    (step 07) the many sides' column lists and a bare name's one many-side owner
 //
 //   npm run build:ts && node scripts/test-fanOut.js
 
@@ -27,6 +28,7 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
@@ -110,10 +112,52 @@ async function main(): Promise<void> {
   ok('the sentences differ, and none is findPath\'s', new Set(REFUSED.map((x) => x[2])).size === 3 && REFUSED.every((x) => !/inflated/.test(x[2])));
 
   await answers();
+  await names();
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
   finish();
+}
+
+/** One local project holding the fixture and its relationships, for the doors; ids swapped in by `swap`. */
+let door: Promise<{ P: string; saved: Map<string, string>; swap: <T>(v: T) => T }> | null = null;
+function doorProject(): Promise<{ P: string; saved: Map<string, string>; swap: <T>(v: T) => T }> {
+  door ??= (async () => {
+    await projects.init();
+    const P = (await projects.createProject('Fan-out')).id;
+    const saved = new Map<string, string>();
+    for (const f of fx.ALL) saved.set(f.id, (await datasets.saveDataset(P, { name: f.name, sourceKind: 'csv', columns: f.columns, rows: f.rows }))!.id);
+    const swap = <T>(v: T): T => JSON.parse([...saved].reduce((s, [a, b]) => s.split(a).join(b), JSON.stringify(v)));
+    for (const r of RELS) await rels.saveRelationship(P, swap(r));
+    return { P, saved, swap };
+  })();
+  return door;
+}
+
+// ── § names (step 07) ───────────────────────────────────────────────────────
+
+async function names(): Promise<void> {
+  ok('Customers: Orders and Returns are its many sides', show(fp.manySideColumnGroups(C, RELS, infos).map((g) => g.name)) === '["Orders","Returns"]', show(fp.manySideColumnGroups(C, RELS, infos)));
+  const amount = fp.manySideOwner(C, 'amount', RELS, infos);
+  const both = fp.manySideOwner(C, 'customer_id', RELS, infos);
+  ok('amount is owned by Orders; customer_id by both, so refused naming both',
+    !!amount && amount.ok && amount.datasetId === O && !!both && !both.ok && /Orders and on Returns/.test(both.error), show([amount, both]));
+  ok('an own column, a forward one and a column no table has have no many-side owner',
+    fp.manySideOwner(C, 'segment', RELS, infos) === null && fp.manySideOwner(C, 'zone', RELS, infos) === null && fp.manySideOwner(C, 'nope', RELS, infos) === null);
+  ok('NEGATIVE CONTROL: from Orders, Customers is forward, never a many side (Returns is one, through Customers)',
+    show(fp.manySideColumnGroups(O, RELS, infos).map((g) => g.name)) === '["Returns"]');
+  const { P, swap } = await doorProject();
+  ok('relatedColumnNames is unchanged: forward only', show(await ipcRels.relatedColumnNames(P, swap(C))) === '["region","zone"]');
+  ok('manySideColumnNames: Orders\' then Returns\' columns', show(await ipcRels.manySideColumnNames(P, swap(C))) === show([...ORDERS.columns, ...RETURNS.columns].map((c) => c.name)));
+  if (!handlers.has('relationship:related')) ipcRels.register();
+  const related = await handlers.get('relationship:related')!(null, { projectId: P, datasetId: swap(C) });
+  ok('relationship:related: the forward groups as before, and manyGroups beside them',
+    related.ok === true && show(related.groups.map((g: { name: string }) => g.name)) === '["Regions"]' && show(related.manyGroups.map((g: { datasetId: string }) => g.datasetId)) === show([swap(O), swap(R)]), show(related));
+  ok('Regions: every table that rolls up to it, nearest first (Customers and Orders by one hop, Returns by two)',
+    show(fp.manySideColumnGroups(G, RELS, infos).map((g) => g.name)) === '["Customers","Orders","Returns"]', show(fp.manySideColumnGroups(G, RELS, infos).map((g) => g.name)));
+  const lonely = (await datasets.saveDataset(P, { name: 'Lonely', sourceKind: 'csv', columns: [{ name: 'x', type: 'text' }], rows: [['a']] }))!.id;
+  const alone = await handlers.get('relationship:related')!(null, { projectId: P, datasetId: lonely });
+  ok('NEGATIVE CONTROL: a dataset with no many side gets today\'s reply, with no manyGroups key', show(alone) === show({ ok: true, groups: [] }), show(alone));
 }
 
 // ── § answers ───────────────────────────────────────────────────────────────
@@ -292,12 +336,7 @@ async function answers(): Promise<void> {
   ok('a text axis folded into "Other" across questions is refused with its sentence', !folded.ok && folded.error === msg.fanOutOneAxis(), show(folded));
 
   // ── the door ──
-  await projects.init();
-  const P = (await projects.createProject('Fan-out')).id;
-  const saved = new Map<string, string>();
-  for (const f of fx.ALL) saved.set(f.id, (await datasets.saveDataset(P, { name: f.name, sourceKind: 'csv', columns: f.columns, rows: f.rows }))!.id);
-  const swap = <T>(v: T): T => JSON.parse([...saved].reduce((s, [a, b]) => s.split(a).join(b), JSON.stringify(v)));
-  for (const r of RELS) await rels.saveRelationship(P, swap(r));
+  const { P, saved, swap } = await doorProject();
   if (!handlers.has('visual:data')) visualsIpc.register();
   const post = (enc: VizEncoding, filters: FilterStep[]): Promise<Reply> => handlers.get('visual:data')!(null, { projectId: P, datasetId: saved.get(C), encoding: swap(enc), filters: swap(filters) });
   const door = await post(CASES[2].enc, CASES[2].filters);
