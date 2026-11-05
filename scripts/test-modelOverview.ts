@@ -16,7 +16,7 @@ import { ok, finish } from './selfcheck';
 import type { Reply } from './liveRouteHarness';
 import { H, close, hydrates, post } from './liveRouteHarness';
 
-const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
 const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = require('../src/ipc/modelOverview');
 
 (async () => {
@@ -45,10 +45,8 @@ const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = requir
   // ── 3. Always applied, and calculated fields ─────────────────────────────
   await post('dataset:addStep', { projectId: P, datasetId: X, step: { type: 'filter', column: 'region', op: '=', value: 'North' } });
   await post('dataset:addStep', { projectId: P, datasetId: X, step: { type: 'calculated_field', name: 'double', expression: '[amt] * 2' } });
-  // PR 08's writer is not on this branch: the base filters are planted where it stores them, beside `rowPolicy`.
-  await H.as(H.ORG_A, () => rec.serialized(rec.datasetFilePath(P, L), (r) => {
-    r.baseFilters = [{ type: 'filter', column: 'region', op: '=', value: 'North' }];
-  }));
+  // PR 08's store writer (live:setBaseFilters' own, without the schema sync that handler queues: no warehouse call here).
+  ok('setup: a base filter on the Live dataset', !!(await H.as(H.ORG_A, () => liveDataset.setBaseFilters(P, L, [{ type: 'filter', column: 'region', op: '=', value: 'North' }]))));
   const calls0 = H.fake.calls.length;
   const hx = await hydrates(X, ov);
   const hl = await hydrates(L, ov);

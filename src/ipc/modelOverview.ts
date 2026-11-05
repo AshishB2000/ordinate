@@ -10,6 +10,7 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { loadStrict } from '../app/catalog';
 import { closedToCaller, restrictedOn } from '../data/rowAccess';
+import { redactBaseFilters } from '../data/liveBaseFilters';
 import type { TableRole } from '../app/tableDocs';
 import type { FilterStep, TransformStep } from '../data/transforms';
 
@@ -77,7 +78,7 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
       key,
       keyState: !key ? '' : !check ? 'unchecked' : check.repeatedKeys > 0 ? 'repeats' : 'unique',
       description,
-      alwaysApplied: { kind: live ? 'live' : 'prepare', steps: closed ? filters.map((s) => ({ type: 'filter', column: s.column, op: s.op })) : filters },
+      alwaysApplied: { kind: live ? 'live' : 'prepare', steps: redactBaseFilters(filters, closed) }, // the one REDACT of a filter list (PR 08)
       calculated: steps.flatMap((s) => (s.type === 'calculated_field' ? [{ name: s.name, formula: closed ? '' : s.expression }] : [])),
       ...(closed && { valuesHidden: true as const }),
     };
