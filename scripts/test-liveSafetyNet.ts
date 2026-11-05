@@ -184,6 +184,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['cohort', 'visual:data', { projectId: P, datasetId: d, encoding: { ...enc, cohort: { entity: 'customer', date: 'day', grain: 'month' } } }],
     ['event funnel', 'visual:data', { projectId: P, datasetId: d, encoding: { ...enc, eventFunnel: { entity: 'customer', event: 'region', time: 'day', steps: ['r1', 'r2'] } } }],
     ['rows behind a mark', 'visual:rows', { projectId: P, datasetId: d, encoding: enc, mark: { category: 'r1' } }],
+    // a drill's grain lookup is the dated chart's own question, through the chart door (part 6 D4)
+    ['drill down', 'visual:drillDown', { projectId: P, datasetId: d, encoding: { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }] }, mark: { category: '2024-01' } }],
     ['visual suggestions', 'visual:suggest', { projectId: P, datasetId: d }],
     // KPI tiles and metric values
     ['KPI tile (dashboard:metric)', 'dashboard:metric', { projectId: P, datasetId: d, column: 'sales', aggregation: 'sum' }],
@@ -229,7 +231,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
     'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual', 'verified save',
-    'alert test: threshold', 'key check (catalog:checkKey)']);
+    'alert test: threshold', 'key check (catalog:checkKey)', 'drill down']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {
     if (Array.isArray(v)) return v.length > 0 && v.every(answered);

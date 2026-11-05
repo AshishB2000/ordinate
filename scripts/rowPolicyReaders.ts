@@ -200,6 +200,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'versions:get': 'EXPLICIT',
   'versions:list': 'META',
   'visual:data': 'DOOR',
+  'visual:drillDown': 'DOOR', // the steps behind a mark; its grain is the chart's own answer, read through vizDataFor
   'visual:dataBatch': 'DOOR',
   'visual:get': 'REDACT',
   'visual:list': 'META',
