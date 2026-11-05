@@ -151,7 +151,11 @@ ok('valueLabelProblemText says each of the six in its own sentence', problems.ev
 
 // ── The leaf stays a leaf (the web imports it) ──────────────────────────────
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysis', 'valueLabels.ts'), 'utf8');
-ok('valueLabels.ts imports nothing', !/^\s*import\b/m.test(src) && !/\brequire\(/.test(src) && !/\bfrom\s+['"]/.test(src));
+// Its one import is release A's shared clip (src/app/clip.ts), itself a leaf: so no server code reaches the web.
+const importsOf = (text: string): string[] => [...text.matchAll(/\bfrom\s+['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1] ?? m[2]);
+const clipSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'clip.ts'), 'utf8');
+ok('valueLabels.ts imports nothing but the shared clip, and the clip imports nothing', JSON.stringify(importsOf(src)) === '["../app/clip"]' && importsOf(clipSrc).length === 0 && !/\bimport\s*\(/.test(src + clipSrc), JSON.stringify(importsOf(src)));
+ok('NEGATIVE CONTROL: a second import, or a require, is seen', importsOf(`${src}\nimport { x } from '../app/catalog';`).length === 2 && importsOf("const a = require('fs');").length === 1);
 
 // ── 7. Saving: the real handlers over a scratch project ─────────────────────
 const os: typeof import('os') = require('os');
