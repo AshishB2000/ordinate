@@ -33,7 +33,7 @@ function Compare({ projectId, kind, id, from, to }: { projectId: string; kind: S
       </EmptyState>
     );
   }
-  return <VersionCompare projectId={projectId} type={type} id={id} versions={versions.data} from={pick.from} to={pick.to} onPick={(f, t) => setPick({ from: f, to: t })} onClose={() => setPick({ from, to })} />;
+  return <VersionCompare projectId={projectId} type={type} id={id} versions={versions.data} from={pick.from} to={pick.to} onPick={(f, t) => setPick({ from: f, to: t })} onClose={() => setPick({ from, to })} noRestore />;
 }
 
 export function ReviewDialog({ projectId, kind, id, name, onClose }: { projectId: string; kind: StatusKind; id: string; name: string; onClose: () => void }) {

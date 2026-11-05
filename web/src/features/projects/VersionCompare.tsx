@@ -170,9 +170,11 @@ export interface CompareProps {
   to: string;
   onPick: (from: string, to: string) => void;
   onClose: () => void;
+  /** Hide the restore action: a review compares and decides nothing about the history. */
+  noRestore?: boolean;
 }
 
-export function VersionCompare({ projectId, type, id, versions, from, to, onPick, onClose }: CompareProps) {
+export function VersionCompare({ projectId, type, id, versions, from, to, onPick, onClose, noRestore }: CompareProps) {
   const diff = useVersionDiff(projectId, type, id, from, to);
   const can = useCan(projectId);
   const [confirm, setConfirm] = useState(false);
@@ -180,7 +182,7 @@ export function VersionCompare({ projectId, type, id, versions, from, to, onPick
   const fromLabel = versionLabel(versions, from);
   const toLabel = versionLabel(versions, to);
   // Restore the older side when the other one is current: that is what "restore v3" means here.
-  const target = to === newest && from !== newest ? from : from === newest && to !== newest ? to : null;
+  const target = noRestore ? null : to === newest && from !== newest ? from : from === newest && to !== newest ? to : null;
   const targetMeta = versions.find((v) => v.key === target);
   const targetLabel = target ? versionLabel(versions, target) : '';
   const restore = useChange<'versions:restore', { ok: boolean; error?: string; unchanged?: boolean }>(

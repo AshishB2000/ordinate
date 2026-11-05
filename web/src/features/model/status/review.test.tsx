@@ -53,6 +53,13 @@ describe('ReviewDialog', () => {
     fireEvent.click(await certifyButton());
     await waitFor(() => expect(calls.find((c) => c.channel === 'model:certify')?.payload).toMatchObject({ ref: REF, base: 'PIN' }));
   });
+  it('shows the comparison only: no Restore beside Certify (the version history keeps it)', async () => {
+    serveRpc(base());
+    mount(<ReviewDialog projectId={P} kind="metric" id={M} name="Revenue" onClose={() => {}} />);
+    await screen.findByRole('heading', { name: 'What changed' });
+    expect(screen.queryByRole('button', { name: /^Restore/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Certify' })).toBeTruthy();
+  });
   it('says so when the definition did not move', async () => {
     serveRpc(base({ 'versions:diff': { body: { ...DIFF, changes: [], counts: {}, summary: '' } } }));
     mount(<ReviewDialog projectId={P} kind="metric" id={M} name="Revenue" onClose={() => {}} />);
