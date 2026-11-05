@@ -23,9 +23,9 @@ export const PREVIOUS_ANSWER = 'PREVIOUS ANSWER';
 /** A name or a text value as the block says it. A quote inside is escaped: left bare it would close the name, and what follows would read as fields the answer does not have. */
 const quoted = (s: string): string => JSON.stringify(s);
 
-const valuesOf = (f: Exclude<AnswerFilter, { period: unknown }>): Cell[] => (f.values ? f.values : f.value !== undefined ? [f.value] : []);
+const valuesOf = (f: Exclude<AnswerFilter, { period: unknown } | { term: string }>): Cell[] => (f.values ? f.values : f.value !== undefined ? [f.value] : []);
 
-function filterWords(f: AnswerFilter, withheld: ReadonlySet<string>): string {
+function filterWords(f: Exclude<AnswerFilter, { term: string }>, withheld: ReadonlySet<string>): string {
   if ('period' in f) return `${quoted(f.column)} in ${f.period}` + (f.yearsBack ? `, yearsBack ${f.yearsBack}` : '');
   const values = valuesOf(f);
   if (!values.length) return `${quoted(f.column)} ${f.op}`;
@@ -64,7 +64,9 @@ export function previousAnswerBlock(
     `measures ${spec.measures.map((m) => `${m.aggregation}(${m.column})`).join(', ')}`,
   ];
   if (spec.series) parts.push(`split by ${quoted(spec.series)}`);
-  if (spec.filters.length) parts.push(`filters: ${spec.filters.map((f) => filterWords(f, withheld)).join(', ')}`);
+  // A glossary term is a reference the model is not shown (the card names it); every other filter is.
+  const said = spec.filters.flatMap((f) => ('term' in f ? [] : [filterWords(f, withheld)]));
+  if (said.length) parts.push(`filters: ${said.join(', ')}`);
   if (spec.top) parts.push(`top ${spec.top}`);
   parts.push(`chart ${spec.chartType}`);
   const text = `${PREVIOUS_ANSWER} (the chart the user is looking at; names only):\n${parts.join('; ')}.`;
@@ -72,6 +74,7 @@ export function previousAnswerBlock(
   const settings: number[] = spec.top ? [spec.top] : [];
   const words: string[] = [datasetName, spec.category, spec.series ?? '', ...spec.measures.map((m) => m.column)];
   for (const f of spec.filters) {
+    if ('term' in f) continue;
     words.push(f.column);
     if ('period' in f) {
       if (f.yearsBack) settings.push(f.yearsBack);

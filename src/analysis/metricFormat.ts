@@ -13,6 +13,7 @@
 // main for metrics — so the two can no longer disagree.
 
 import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
 import { VALUELESS_OPS, LIST_OPS } from '../data/filterOps';
 import type { Metric, MetricFormat, MetricDefinition } from './metrics';
 import { formatMetric } from '../app/format';
@@ -63,6 +64,7 @@ const OP_WORDS: Record<string, string> = {
 const MAX_LISTED = 3;
 
 export function describeFilter(s: FilterStep): string {
+  if (isKeptStep(s)) return String(s.type).replace(/_/g, ' '); // a step this pod cannot read (a glossary term): named by its kind
   if (s.op === 'period') return s.period ? `${s.column} in ${describePeriod(s.period, getCalendar()).toLowerCase()}` : s.column;
   const op = OP_WORDS[s.op] || s.op;
   if (VALUELESS_OPS.has(s.op)) return `${s.column} ${op}`;

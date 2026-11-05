@@ -573,6 +573,8 @@
   "subscriptionText.untitled_subscription": "Abonnement sans titre",
   "subscriptionText.view": "Vue : {name}",
   "subscriptionText.you_receive_this_as_a_member": "Vous recevez ceci en tant que membre de {name} dans Ordinate. Un administrateur de l’organisation gère cette liste.",
+  "termMessages.a_glossary_term_reached_the_engine": null,
+  "termMessages.this_figure_uses_a_filter_from": null,
   "versionDiffMessages.a_deleted_visual": "Un visuel supprimé",
   "versionDiffMessages.a_filter_changed": "un filtre modifié",
   "versionDiffMessages.a_product_of_metrics": "un produit de {count} métriques",

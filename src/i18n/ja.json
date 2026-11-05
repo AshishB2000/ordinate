@@ -573,6 +573,8 @@
   "subscriptionText.untitled_subscription": "無題のサブスクリプション",
   "subscriptionText.view": "ビュー: {name}",
   "subscriptionText.you_receive_this_as_a_member": "Ordinate の {name} のメンバーとしてこれを受け取っています。このリストは組織の管理者が管理しています。",
+  "termMessages.a_glossary_term_reached_the_engine": null,
+  "termMessages.this_figure_uses_a_filter_from": null,
   "versionDiffMessages.a_deleted_visual": "削除されたビジュアル",
   "versionDiffMessages.a_filter_changed": "フィルターを1件変更",
   "versionDiffMessages.a_product_of_metrics": "{count}個の指標の積",

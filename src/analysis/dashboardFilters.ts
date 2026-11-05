@@ -19,6 +19,8 @@
 // so the strict-number rule is untouched.
 
 import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
+import { stableStringify } from '../engine/queryCache';
 import { sanitizePeriod } from './dateIntel';
 import type { CardControl, ControlValue } from './dashboards';
 import { radiusControlSteps } from './geo/radius';
@@ -29,8 +31,10 @@ import { radiusControlSteps } from './geo/radius';
 // `state in (CA, WA)` and `state in (NY)` the same key and silently drop the
 // second. Order-sensitive by design: this is an identity test, not a set
 // comparison, and re-ordering a list produces the same rows but a different
-// step, which is cheap to keep and wrong to guess at.
+// step, which is cheap to keep and wrong to guess at. A step this pod cannot read (a glossary
+// term) is keyed by its WHOLE body under its own prefix, so it never merges with a filter.
 function stepKey(s: FilterStep): string {
+  if (isKeptStep(s)) return 'kept:' + stableStringify(s);
   // `period` too: two different relative ranges on one column are two filters.
   // `context` too (r7:lod): the same predicate before and after LODs is two filters.
   return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true]);
@@ -38,7 +42,7 @@ function stepKey(s: FilterStep): string {
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
 // dashboard filters first, then card filters, dropping exact duplicates. Non-array
-// inputs → treated as empty. Only `type === 'filter'` steps survive (defensive — the
+// inputs → treated as empty. Only `filter` steps and kept steps (a term) survive (defensive — the
 // inputs are already sanitized filter lists, but this keeps the helper self-contained).
 export function mergeDashboardFilters(
   dashFilters: FilterStep[] | null | undefined,
@@ -49,7 +53,7 @@ export function mergeDashboardFilters(
   const out: FilterStep[] = [];
   const seen = new Set<string>();
   for (const s of dash.concat(card)) {
-    if (!s || s.type !== 'filter') continue;
+    if (!s || (s.type !== 'filter' && !isKeptStep(s))) continue;
     const k = stepKey(s);
     if (seen.has(k)) continue;
     seen.add(k);

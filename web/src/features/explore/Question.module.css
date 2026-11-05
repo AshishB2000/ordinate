@@ -137,6 +137,18 @@
   flex: 0 0 auto;
   color: var(--kind);
 }
+/* A kept step's pill: the words, no button — there is nothing to edit. */
+.pillKept {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: 0 var(--sp-8);
+  color: var(--text-dim);
+}
+.pillKept > svg {
+  flex: 0 0 auto;
+}
 .pillText {
   min-width: 0;
   overflow: hidden;

@@ -35,7 +35,7 @@ import { randomUUID } from 'crypto';
 import { sanitizeChartType, sanitizeEncoding, sanitizeOverrides, sanitizeFilters } from './visuals';
 import { sanitizeOverlays } from './analytics';
 import type { Visual } from './visuals';
-import { sanitizeSteps } from '../data/transforms';
+import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod, sanitizeCompare } from './dateIntel';
 import type { CompareMode, PeriodPreset } from './dateIntel';
@@ -634,13 +634,12 @@ export function sanitizeStyle(raw: unknown): DashboardStyle {
   };
 }
 
-// Whitelist untrusted dashboard-wide filters: delegate to the shared
-// transforms.sanitizeSteps (drops unknown types/fields) and keep ONLY `filter`
-// steps — a dashboard filter is a row predicate, never a column-mutating transform.
+// Whitelist untrusted dashboard-wide filters through the shared data/filterList.ts (a filter's
+// fields are whitelisted; a step this pod cannot read, a glossary term, is kept verbatim).
 // A non-array / absent input → [] (backward-compatible v1 → v2 default). Kept
 // separate from visuals.sanitizeFilters because these are the DASHBOARD's own
 // filters, not a visual's — the two happen to share a rule, not a meaning.
 // (This module does import visuals.ts as of v3, for the CardVisual sanitizers.)
 export function sanitizeDashboardFilters(raw: unknown): FilterStep[] {
-  return sanitizeSteps(raw).filter((s): s is FilterStep => s.type === 'filter');
+  return sanitizeFilterList(raw);
 }

@@ -30,6 +30,7 @@
 
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from '../src/connectors/types';
 import type { ParsedColumn } from '../src/data/parse';
+import type { Cell } from '../src/data/transforms';
 
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
@@ -50,6 +51,16 @@ const ORDERS_DDL =
   `CASE i % 4 WHEN 0 THEN 'North' WHEN 1 THEN 'South' WHEN 2 THEN 'East' ELSE 'West' END AS region, ` +
   'CAST((i * 37) % 101 AS DOUBLE) AS amount, CAST(DATE \'2024-01-01\' + CAST(i % 366 AS INTEGER) AS DATE) AS day ' +
   'FROM range(240) t(i)';
+
+const WAREHOUSE_TYPE: Record<string, string> = { text: 'VARCHAR', number: 'DOUBLE', date: 'DATE' };
+
+/** A warehouse table for the fake: `rows` typed as a warehouse holds them, in the current org's DuckDB worker. */
+export async function loadWarehouseTable(table: string, columns: ParsedColumn[], rows: Cell[][]): Promise<void> {
+  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${columns.map((c) => `"${c.name}" ${WAREHOUSE_TYPE[c.type]}`).join(', ')})`);
+  const params: Cell[] = [];
+  const tuples = rows.map((r) => `(${columns.map((c, i) => { params.push(r[i]); return `CAST($${params.length} AS ${WAREHOUSE_TYPE[c.type]})`; }).join(', ')})`);
+  await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params as (string | number | null)[]);
+}
 
 export interface FakeCall {
   sql: string;

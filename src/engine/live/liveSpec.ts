@@ -32,6 +32,7 @@
 
 import type { ParsedColumn } from '../../data/parse';
 import { RowPolicyError } from '../../data/rowPolicyError';
+import { hasTermType, termError } from '../../data/termStep';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -231,6 +232,7 @@ export function adaptFilter(
   opts: AdaptOpts,
   warnings: string[],
 ): LiveFilter | null | LiveRefusal {
+  if (hasTermType(s)) throw termError(s); // a door expands it; never skipped, never dropped
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return refuse('related'); // a related table's column: Live joins stay off
   const col = columnOf(columns, s.column);
@@ -391,7 +393,7 @@ export function fromVizEncoding(
 export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: AdaptOpts = {}): LiveAdapted {
   if (!spec || typeof spec !== 'object') return refuse('noCategory');
   // computeCard's own first check: every column the spec names must still exist.
-  const used = [spec.category, ...(spec.measures || []).map((m) => m.column), ...(spec.filters || []).map((f) => f.column)]
+  const used = [spec.category, ...(spec.measures || []).map((m) => m.column), ...(spec.filters || []).flatMap((f) => ('column' in f ? [f.column] : []))]
     .concat(spec.series ? [spec.series] : []);
   const missing = used.find((n) => !columnOf(columns, n));
   if (missing !== undefined) return refuse('unknownColumn', String(missing));
@@ -405,6 +407,7 @@ export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: Ad
 
   const warnings: string[] = [];
   for (const f of spec.filters || []) {
+    if ('term' in f || hasTermType(f)) throw termError(f); // a door expands it; never skipped, never dropped
     if ('period' in f) {
       const col = columnOf(columns, f.column)!;
       if (col.type !== 'date') return refuse('periodNotDate', col.name);

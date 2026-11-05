@@ -2,8 +2,11 @@
 // MAIN PROCESS.
 //
 // `vizDataFor`, `computeCardMetric` and `computeCard` (and the grid's `pageFor`)
-// wrap their unchanged bodies with these. For a caller nothing restricts on the
-// dataset, the body runs as it always did. For a restricted caller:
+// wrap their unchanged bodies with these. First, for EVERY caller, a filter step
+// this pod cannot apply (a glossary term, a newer release's step) refuses, typed
+// `term` (../analysis/termExpand): the lock below would otherwise drop it. Then,
+// for a caller nothing restricts on the dataset, the body runs as it always did.
+// For a restricted caller:
 //
 //   - the refusals (data/rowAccess.rowLockFor: fan-out, export, as-of, derived,
 //     column, pipeline, no entitlement), and here: a question that reaches a
@@ -32,6 +35,8 @@ import { contentTag } from '../app/editConflict';
 import type { SaveKind } from '../analysis/recordDiff';
 import { isValidId } from '../app/ids';
 import { chartReads, metricReads, relatedColumnNames } from './relationships';
+import { expandTerms } from '../analysis/termExpand';
+import { isTermNotExpandedError, termRefusal } from '../data/termStep';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -105,6 +110,7 @@ const chartReadsOf = (projectId: string, datasetId: string, encoding: VizEncodin
   [...namedDatasets(datasetId, encoding), ...(await chartReads(projectId, datasetId, encoding, filters))];
 
 type Refusal = ReturnType<typeof rowPolicyRefusal>;
+type TermRefusal = ReturnType<typeof termRefusal>;
 
 /** The lock, or the refusal as a reply (a chart door answers `{ok:false}`; it never throws a figure's failure). */
 async function lockOrRefusal(projectId: string, datasetId: string): Promise<Lock | null | Refusal> {
@@ -126,7 +132,15 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   filters: FilterStep[],
   opts: O,
   body: (projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: O) => Promise<R>,
-): Promise<R | Refusal> {
+): Promise<R | Refusal | TermRefusal> {
+  // A step this pod cannot apply (a glossary term, a newer release's) refuses FIRST: before the lock, which
+  // would drop it (withLockSteps), the gates that read the filters, the Live split and the answer cache.
+  try {
+    filters = (await expandTerms(projectId, datasetId, filters)).steps;
+  } catch (err) {
+    if (isTermNotExpandedError(err)) return termRefusal(err);
+    throw err;
+  }
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
   if (!lock) {
@@ -149,6 +163,7 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   params: P,
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
+  filters = (await expandTerms(projectId, datasetId, filters)).steps; // a step it cannot apply THROWS (typed 'term'), before the lock
   const lock = await rowLockFor(projectId, datasetId);
   if (!lock) {
     const why = await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters));

@@ -49,6 +49,15 @@
   outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: 1px;
 }
+.kept {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+}
 .ctx {
   font-size: var(--t-11);
   font-weight: 600;

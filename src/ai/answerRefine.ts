@@ -95,11 +95,11 @@ export function refineSpec(
     // an empty chart that looks like an answer.
     if (name && ([] as unknown[]).concat(o.value ?? [], o.values ?? []).includes(WITHHELD)) {
       const op = String(o.op ?? '=').trim().toLowerCase();
-      if (!previous.filters.some((x) => x.column === name && !('period' in x) && x.op === op)) added.push({ column: o.column, op: o.op });
+      if (!previous.filters.some((x) => !('term' in x) && x.column === name && !('period' in x) && x.op === op)) added.push({ column: o.column, op: o.op });
       continue;
     }
     const excluded = name && withheld.has(name) && EXCLUDE.has(filterOp(o) ?? '')
-      ? previous.filters.flatMap((x) => (x.column === name && !('period' in x) && EXCLUDE.has(x.op) ? (x.values ?? [x.value]) : [])) : [];
+      ? previous.filters.flatMap((x) => (!('term' in x) && x.column === name && !('period' in x) && EXCLUDE.has(x.op) ? (x.values ?? [x.value]) : [])) : [];
     if (name) gone.add(name);
     if (excluded.length) {
       const more = ([] as unknown[]).concat(Array.isArray(o.values) ? o.values : Array.isArray(o.value) ? o.value : [o.value]);
@@ -113,7 +113,7 @@ export function refineSpec(
     dataset: previous.datasetId,
     category: p.category ?? previous.category,
     measures: p.measures ?? (p.measure != null ? [p.measure] : previous.measures.map(carried)),
-    filters: [...previous.filters.filter((f) => !gone.has(f.column)), ...added, ...unknownDrops],
+    filters: [...previous.filters.filter((f) => !('column' in f && gone.has(f.column))), ...added, ...unknownDrops],
   };
   const sameAxis = p.category == null || real(p.category) === previous.category;
   const splitIsAxis = !sameAxis && !!previous.series && real(p.category) === previous.series;
@@ -132,7 +132,7 @@ export function refineSpec(
   return merged;
 }
 
-const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'yearsBack', 'chartType', 'top', 'grain'];
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
 
 /**
  * Two specs that draw the same chart: everything but the title, and a measure's

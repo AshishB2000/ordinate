@@ -63,6 +63,7 @@ export function headerOf(ds: { id: string; name: string; rowCount: number; colum
 import { forClient } from './stepReply';
 import { MaskKeyUnavailableError } from '../app/privacyStore';
 import { logger } from '../app/logger';
+import { expandTerms } from '../analysis/termExpand';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -197,7 +198,8 @@ export type PageReply =
  * `op` names the call site for `residentTrace`, so a fast path that silently
  * stops firing is visible per feature rather than pooled.
  */
-export function pageFor(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {
+export async function pageFor(projectId: string, datasetId: string, asked: PageRequest, op: string): Promise<PageReply> {
+  const req = { ...asked, filters: (await expandTerms(projectId, datasetId, asked.filters)).steps }; // a step it cannot apply THROWS, before the lock
   // Row access rules (docs/row-policy D7): the caller's lock first in `filters`, which both paths below honour.
   // A quality rule's row filter is computed over the whole table (and another dataset): never under a lock.
   return withLockOf(projectId, datasetId, (lock) => {
@@ -452,8 +454,9 @@ export function register() {
   ipcMain.handle('dataset:page', async (_e, { projectId, datasetId, offset, limit, search, sortColumn, sortDir, filters }: any = {}) => {
     try {
       // Filters are untrusted renderer input and go through the SAME whitelist a
-      // saved visual's filters do — `transforms.sanitizeSteps` keeping only
-      // 'filter' steps. An unknown column or operator survives sanitisation and
+      // saved visual's filters do (`sanitizeFilters`). Only `filter` steps reach it:
+      // the contract's `z.literal('filter')` (src/api/datasets.ts) refuses any other
+      // type, a glossary term included, before this runs. An unknown column or operator survives sanitisation and
       // is then SKIPPED by both paging paths (never thrown), because one
       // dashboard-wide filter has to be able to span heterogeneous datasets.
       const req: PageRequest = { offset, limit, search, sortColumn, sortDir, filters: sanitizeFilters(filters) };

@@ -26,6 +26,7 @@ import { paramTable } from '../data/paramReplay';
 import { sanitizeEncoding, sanitizeChartType } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
 import type { Cell, FilterStep } from '../data/transforms';
+import type { TERM_CODE } from '../data/termStep';
 import type { ParsedColumn } from '../data/parse';
 import { coerceValue } from '../data/parse';
 import { CATEGORY_CAP, OTHER_LABEL } from '../analysis/categoryKey';
@@ -414,8 +415,8 @@ export type VizDataReply =
       /** The labels are places and the encoding names no regions: the level a map of it would use (analysis/geoHits). */
       geoSuggest?: { level: 'us_state' | 'country' };
     }
-  // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out.
-  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy'; reason?: string };
+  // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply.
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | typeof TERM_CODE; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {

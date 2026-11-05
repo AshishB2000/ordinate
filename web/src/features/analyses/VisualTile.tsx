@@ -24,6 +24,7 @@ import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Tiles.module.css';
 import { figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
+import { isKeptStep, keptKey } from '../visuals/keptStep';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
 export function vizGlyph(type: string): IconName {
@@ -37,13 +38,14 @@ export function vizGlyph(type: string): IconName {
 
 export const vizLabel = (type: string): string => VIZ_LABELS[type as VizId] ?? type;
 
-/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters). */
+/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters). A step the web cannot edit (a term) is kept once, whole. */
 export function mergeFilters(dash: readonly Step[], own: readonly Step[]): Step[] {
   const out: Step[] = [];
   const seen = new Set<string>();
   for (const st of [...dash, ...own]) {
-    if (!st || st.type !== 'filter') continue;
-    const k = JSON.stringify([st.column, st.op, st.value ?? null, st.values ?? null, st.period ?? null, st.radius ?? null, st.context === true]);
+    const kept = isKeptStep(st);
+    if (!st || (st.type !== 'filter' && !kept)) continue;
+    const k = kept ? keptKey(st) : JSON.stringify([st.column, st.op, st.value ?? null, st.values ?? null, st.period ?? null, st.radius ?? null, st.context === true]);
     if (seen.has(k)) continue;
     seen.add(k);
     out.push(st);

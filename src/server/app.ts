@@ -48,6 +48,7 @@ import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
+import { isTermNotExpandedError, tagTermRefusals, TERM_CODE, termRaised } from '../data/termStep';
 import { seedRank, register as registerCaller } from './authz/caller';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
@@ -450,6 +451,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // the same signal has interrupted the handler's DuckDB queries (T4.3).
       const refusals = liveRefusalsRaised();
       const rowRefusals = rowPolicyRaised();
+      const termRefusals = termRaised();
       let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
@@ -457,6 +459,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // D6: a Live refusal a handler caught keeps its type (src/data/liveDataset.ts).
       if (liveRefusalsRaised() !== refusals) tagLiveRefusals(result);
       if (rowPolicyRaised() !== rowRefusals) tagRowPolicyRefusals(result); // a row access refusal a handler caught keeps its type
+      if (termRaised() !== termRefusals) tagTermRefusals(result); // so does a filter it cannot apply (PR 05a)
       const body = encode(result);
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
@@ -481,6 +484,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // Row access rules (docs/row-policy): a typed 409 with the catalog's sentence — never a figure, never another team's value.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: ROW_POLICY_CODE, code: ROW_POLICY_CODE, reason: err.reason, message: err.message });
+      }
+      if (isTermNotExpandedError(err)) {
+        // A glossary term no door expanded, or a filter this pod cannot read (PR 05a): a typed 409 with the catalog's sentence — never a figure.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: TERM_CODE, code: TERM_CODE, reason: err.reason, message: err.message });
       }
       if ((err as { code?: unknown } | null)?.code === 'ERECORDBUSY') {
         // Another save held the record past the lock wait (src/app/recordFs.ts):

@@ -28,6 +28,9 @@ import { buildVizData } from '../analysis/vizData';
 import type { ChartData } from '../analysis/vizData';
 import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
+import { isTermStep, type TERM_CODE } from '../data/termStep';
+import { expandAnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
 import { displayNames, load as loadCatalog } from '../app/catalog';
 import { shownNames, taughtNames } from '../app/columnNames';
@@ -100,10 +103,11 @@ export interface Built {
 }
 
 /**
- * `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart.
+ * `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart; `term`, a
+ * filter it cannot apply (thrown by the door, typed by the route).
  * `suggest`: a refused spec named something that does not exist, and this is what it may have meant.
  */
-export type Failure = { ok: false; reason: string; code?: LiveFailureCode; suggest?: AnswerSuggest };
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode | typeof TERM_CODE; suggest?: AnswerSuggest };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
@@ -139,8 +143,9 @@ function ranked(data: ChartData, top?: number): ChartData {
  * showed.
  */
 /** THE answer door: row access rules first (./rowDoors — a refusal throws), then the body with the caller's lock. */
-export function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
-  return withLockOf(projectId, asked && asked.datasetId, (lock) => computeCardWith(projectId, asked, loose, lock));
+export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
+  const { spec } = await expandAnswerTerms(projectId, asked); // a term THROWS (typed 'term'), before the lock and the Live split
+  return withLockOf(projectId, spec && spec.datasetId, (lock) => computeCardWith(projectId, spec, loose, lock));
 }
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null): Promise<Built | Failure> {
@@ -155,7 +160,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   // Under a row access lock every helper below (value matching, period anchors, nearest values) sees entitled rows only.
   const ds = lockedTable(stored, lock);
   const has = (n: string): boolean => ds.columns.some((c) => c.name === n);
-  const used = [asked.category, ...asked.measures.map((m) => m.column), ...asked.filters.map((f) => f.column)]
+  const used = [asked.category, ...asked.measures.map((m) => m.column), ...asked.filters.flatMap((f) => ('column' in f ? [f.column] : []))]
     .concat(asked.series ? [asked.series] : []);
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${ds.name}.` };
@@ -187,7 +192,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   // personal or financial is withheld (ai/answerFacts `withheldFilters`, `cardFacts`). The card's own
   // labels and bullets, drawn for the person, are untouched.
   const withheld = await withheldColumns(projectId, ds.id);
-  const saidFilterLabels = spec.filters.some((f) => withheld.has(f.column))
+  const saidFilterLabels = spec.filters.some((f) => 'column' in f && withheld.has(f.column))
     ? specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels : undefined;
   const facts = cardFacts({
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
@@ -362,19 +367,27 @@ export async function answerFromAction(
 
 /** A saved chart (or a dashboard tile's live one) → the spec its card is built from. */
 export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters: FilterStep[]; chartType: string; name: string }): AnswerSpec | null {
+  // A step this pod cannot read (not a filter, not a term) has no place in a spec: none, never a widened chart.
+  if ((t.filters || []).some((f) => isKeptStep(f) && !isTermStep(f))) return null;
   const enc = t.encoding;
   const category = enc.category || (enc.pivot && enc.pivot.rows && enc.pivot.rows[0]) || '';
   const measures = (enc.values || []).map((m) => (m.aggregation === 'none' ? { ...m, aggregation: 'sum' as const } : m));
-  return sanitizeStoredSpec({
+  const spec = sanitizeStoredSpec({
     datasetId: t.datasetId,
     category,
     measures,
     series: enc.series,
     grain: enc.grain,
-    filters: (t.filters || []).map((f) => ({ column: f.column, op: f.op, value: f.value, values: f.values })),
+    // A term step becomes { term } (a door expands it); the rest is a comparison. No step is ignored.
+    filters: (t.filters || []).map((f) => {
+      const s: unknown = f; // a term rides in FilterStep[] (filterList.ts shortcut), so the type cannot say so
+      return isTermStep(s) ? { term: s.term } : { column: f.column, op: f.op, value: f.value, values: f.values };
+    }),
     chartType: ANSWER_CHART_TYPES.has(t.chartType) ? t.chartType : 'column',
     title: t.name,
-  }) || null;
+  });
+  // sanitizeStoredSpec keeps a term only when it is a UUID and stops at the eighth filter: a filter lost there would widen the chart.
+  return spec && spec.filters.length === (t.filters || []).length ? spec : null;
 }
 
 async function appendAnswer(

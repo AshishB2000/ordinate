@@ -10,6 +10,7 @@ import { Button, IconButton } from '../../../ui/Button';
 import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../api';
 import type { Column } from '../model';
+import { isKeptStep, KEPT_STEP_WORDS } from '../keptStep';
 import { FilterDialog } from './FilterDialog';
 import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
@@ -42,29 +43,37 @@ export function FilterRows({
       <span className={s.head} id="enc-filters">
         Filters
       </span>
-      {filters.map((f, i) => (
-        <div key={i} className={s.row}>
-          <div className={s.col}>
-            <Select
-              aria-label="Filter column"
-              size="sm"
-              value={f.column}
-              options={cols.map((c) => ({ value: c.name, label: c.name }))}
-              // Another column makes the old operand meaningless: the row goes inert until set again.
-              onValueChange={(c) => onChange(filters.map((x, j) => (j === i ? { type: 'filter', column: c, op: '' } : x)))}
-            />
+      {filters.map((f, i) =>
+        isKeptStep(f) ? (
+          // A step this version cannot edit (a glossary term, a newer release's): kept through every save, shown, and removable.
+          <div key={i} className={s.row}>
+            <span className={s.kept}>{KEPT_STEP_WORDS}</span>
+            <IconButton icon="x" size="sm" label="Remove filter from a newer version" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
           </div>
-          <button type="button" className={s.cond} aria-label={`Edit the filter on ${f.column || 'this column'}`} onClick={() => setEditing(i)}>
-            <FilterSummary step={f} />
-          </button>
-          {f.context === true && (
-            <span className={s.ctx} title="Applied before LOD expressions">
-              context
-            </span>
-          )}
-          <IconButton icon="x" size="sm" label="Remove filter" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
-        </div>
-      ))}
+        ) : (
+          <div key={i} className={s.row}>
+            <div className={s.col}>
+              <Select
+                aria-label="Filter column"
+                size="sm"
+                value={f.column}
+                options={cols.map((c) => ({ value: c.name, label: c.name }))}
+                // Another column makes the old operand meaningless: the row goes inert until set again.
+                onValueChange={(c) => onChange(filters.map((x, j) => (j === i ? { type: 'filter', column: c, op: '' } : x)))}
+              />
+            </div>
+            <button type="button" className={s.cond} aria-label={`Edit the filter on ${f.column || 'this column'}`} onClick={() => setEditing(i)}>
+              <FilterSummary step={f} />
+            </button>
+            {f.context === true && (
+              <span className={s.ctx} title="Applied before LOD expressions">
+                context
+              </span>
+            )}
+            <IconButton icon="x" size="sm" label="Remove filter" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
+          </div>
+        ),
+      )}
       <Button size="sm" icon="plus" className={s.add} disabled={!cols.length} onClick={() => onChange([...filters, { type: 'filter', column: cols[0]?.name ?? '', op: '' }])}>
         Add filter
       </Button>

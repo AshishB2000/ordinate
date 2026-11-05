@@ -16,6 +16,14 @@ describe('the question in the URL', () => {
     expect(decodeQuestion(raw)).toEqual(q);
   });
 
+  it('keeps a filter step it cannot edit (a glossary term, a newer release’s) through the link; a Prepare step is still no filter', () => {
+    const TERM = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' };
+    const F = { type: 'filter', column: 'region', op: '=', value: 'East' } as const;
+    const q = Q({ category: 'r' }, '', [F, TERM as never, { type: 'future_x', a: 1 } as never]);
+    expect(decodeQuestion(encodeQuestion(q))!.filters).toEqual([F, TERM, { type: 'future_x', a: 1 }]);
+    expect(decodeQuestion(encodeQuestion(Q({ category: 'r' }, '', [{ type: 'drop_column', column: 'x' } as never, TERM as never])))!.filters).toEqual([TERM]);
+  });
+
   it('leaves out what is empty, so a short question is a short link', () => {
     expect(JSON.parse(atob(encodeQuestion(Q({ category: 'r', values: [] })).replace(/-/g, '+').replace(/_/g, '/')))).toEqual({ e: { category: 'r', values: [] } });
   });

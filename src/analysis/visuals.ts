@@ -16,7 +16,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
-import { sanitizeSteps } from '../data/transforms';
+import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import { isDateGrain, sanitizeBins } from './categoryKey';
 import type { DateGrain } from './categoryKey';
@@ -464,11 +464,10 @@ export function sanitizeOverrides(raw: unknown, ctx?: FormatContext): VizOverrid
   return out;
 }
 
-// Whitelist visual-level filters. Delegates to transforms.sanitizeSteps so filter
-// validation stays single-source, then keeps ONLY 'filter' steps (a Visual never
-// carries an aggregate/rename/etc. — its aggregation comes from the encoding).
+// Whitelist visual-level filters: filter validation stays single-source in data/filterList.ts, which
+// also KEEPS a step this pod cannot read (a glossary term) so a save never deletes the reference.
 export function sanitizeFilters(raw: unknown): FilterStep[] {
-  return sanitizeSteps(raw).filter((s): s is FilterStep => s.type === 'filter');
+  return sanitizeFilterList(raw);
 }
 
 // Basic shape validation for a parsed visual.json (skips corrupt files).

@@ -1,6 +1,6 @@
 // Explore's question (docs/explore/00-design.md): the URL form, the edits a
-// click makes, and its title in words. PURE, with type-only imports, so the
-// e2e (Node, type-stripped) builds its links with this same code.
+// click makes, and its title in words. PURE, with type-only imports and one pure
+// sibling (keptStep.ts), so the e2e (Node, type-stripped) builds its links with this same code.
 //
 // `q` = base64url of the UTF-8 JSON {t: chartType, e: encoding, f: filters}.
 // A link is user input: this file only checks its SHAPE, so a bad one cannot
@@ -9,6 +9,7 @@
 // every read. `t` never leaves the browser. Nothing here computes a figure.
 
 import type { Agg, Encoding, FilterStep, Measure } from '../visuals/encoding';
+import { isKeptStep } from '../visuals/keptStep.ts';
 
 export interface Question {
   /** '' = the first chart the answer suits. */
@@ -64,7 +65,9 @@ export function decodeQuestion(raw: string | null | undefined): Question | null 
   if (str(grain) && GRAINS.has(grain)) encoding.grain = grain;
   if (str(series) && series) encoding.series = series;
   if (isObj(geo) && str(geo.level)) encoding.geo = { level: geo.level as NonNullable<Encoding['geo']>['level'] };
-  const filters = (Array.isArray(o.f) ? o.f : []).filter((f): f is FilterStep => isObj(f) && f.type === 'filter' && str(f.column) && str(f.op));
+  // A step this page cannot edit (a glossary term, a newer release's) rides through the link whole, as on every save.
+  // It passes this predicate typed FilterStep but has no `column` or `op`: check isKeptStep before reading either.
+  const filters = (Array.isArray(o.f) ? o.f : []).filter((f): f is FilterStep => isObj(f) && ((f.type === 'filter' && str(f.column) && str(f.op)) || isKeptStep(f)));
   return { chartType: str(o.t) ? o.t : '', encoding, filters };
 }
 

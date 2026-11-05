@@ -34,7 +34,7 @@ export function metricNames(spec: { column: string }, filters: FilterStep[]): st
 /** The columns an answer reads: category, measures, split and filters. */
 export function answerNames(spec: AnswerSpec): string[] {
   if (!spec || typeof spec !== 'object') return [];
-  const names = [spec.category, spec.series, ...(spec.measures || []).map((m) => m && m.column), ...(spec.filters || []).map((f) => f && f.column)];
+  const names = [spec.category, spec.series, ...(spec.measures || []).map((m) => m && m.column), ...(spec.filters || []).map((f) => f && ('column' in f ? f.column : undefined))];
   return names.filter((n): n is string => typeof n === 'string' && n !== '');
 }
 

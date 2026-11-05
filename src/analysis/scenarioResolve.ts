@@ -52,6 +52,7 @@ import {
   foldPieces, isMetricTarget, metricMoves, tornadoBars,
 } from './scenarioModel';
 import type { Driver, DriverKind, DriverTarget, Nudge, Partition, Scenario, TornadoBar } from './scenarioModel';
+import { expandTerms } from './termExpand';
 
 const MAX_FORMULA_DEPTH = 10; // as src/ipc/metrics.ts
 
@@ -144,6 +145,9 @@ async function namesFor(ctx: Ctx): Promise<Map<string, Metric>> {
 // ── pieces ───────────────────────────────────────────────────────────────────
 
 async function loadInputs(ctx: Ctx, datasetId: string, column: string, all: FilterStep[], filters: Array<FilterStep | null>): Promise<Partition[] | null> {
+  // A step it cannot apply THROWS (typed 'term'): in the scope, or as a driver's ONE target step (never widened to the whole column).
+  all = (await expandTerms(ctx.projectId, datasetId, all)).steps;
+  await expandTerms(ctx.projectId, datasetId, filters.filter((f): f is FilterStep => !!f));
   const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
   if (!meta) return null;
   const own = new Set(meta.columns.map((c) => c.name));

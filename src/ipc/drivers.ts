@@ -55,6 +55,7 @@ import { projectEvents } from '../analysis/eventStore';
 import { isoFromDays } from '../analysis/dateIntel';
 import { changeSentence } from '../analysis/driverPoint';
 import { fewerThanTwoPeriods } from '../analysis/driverPointMessages';
+import { expandTerms } from '../analysis/termExpand';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -284,6 +285,7 @@ export { recall };
  * offered as a dimension, at either level — an alert post's (./alertDiagnosis).
  */
 export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown, opts: { remember?: boolean; withhold?: Set<string> } = {}): Promise<DriversReply> {
+  spec = { ...spec, filters: (await expandTerms(projectId, spec.datasetId, spec.filters)).steps }; // a step it cannot apply THROWS (typed 'term')
   // The renderer's payload, or values a caller already resolved (a tile's render).
   const params: ParamValues = rawParams instanceof Map ? (rawParams as ParamValues) : paramValues(rawParams);
   const src = await sourceFor(projectId, spec.datasetId);

@@ -103,7 +103,11 @@ The limits:
   When you upgrade again, it is still there.
 - **A backup file made by a newer release** (Settings → Organization → Backups) may carry a newer
   format version. An older server refuses such a file as "from a newer version".
-- **Skipping releases** (0.2 → 0.5) is fine. Missing migrations apply in order, in one transaction.
+- **Skipping releases** (0.2 → 0.5) is fine for the schema. Missing migrations apply in order, in
+  one transaction. A rolling update can still run old and new pods side by side, so a section below
+  may name a release to pass through first. Read
+  [Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a) before
+  you skip.
 
 ## Sticky sessions are no longer needed (`0021_any_pod`)
 
@@ -111,6 +115,106 @@ Releases before `0021_any_pod` held uploads, downloads, staged imports and Assis
 pod that started them: keep sticky sessions on those. From this release any pod serves any request.
 Remove the stickiness after the rollout, and add the S3 lifecycle rules in
 [eks.md](eks.md#2-s3-and-irsa).
+
+## Filters a newer release writes are kept (`05a`)
+
+Some releases add a new kind of saved data: a new kind of filter, a note on a table, a name on a
+join. Before this release, a pod (one running copy of the server) that did not know the new field
+dropped it the next time it saved that record. In a rolling update, old and new pods run side by
+side for a while, so an old pod could erase what a new pod had just written.
+
+From this release, a pod **keeps a filter step of a kind it does not know**, and the specific saved
+data listed under [Other saved data this release keeps](#other-saved-data-this-release-keeps),
+exactly as it was. It **refuses the figure that needs it**. Where the figure would be, you see a
+sentence such as "This figure uses a filter from a newer version of Ordinate. Finish the upgrade,
+then try again." For these, nothing is dropped and no wrong number is drawn.
+
+That is all it promises. A new field on a kind of data this release already knows is still dropped,
+as before. So is a filter step that is over 2 KB or is not plain JSON, and so is a Prepare step (a
+step that cleans a dataset) of a kind it does not know.
+
+### The release that adds glossary terms needs this release first
+
+A glossary term is a named filter that charts refer to by name. **The release that adds terms needs
+this release (or a later one) on every pod first.** A pod older than this one reads a term as no
+filter, so the chart is drawn unfiltered. It also deletes the term from the chart when anyone saves
+it.
+
+Nothing in the server can check this, because it keeps no list of the pods that are running. The
+project holds the order itself: the maintainers cut every release, and the change that adds terms
+does not merge until a release containing this one is tagged. You hold it on your side. From an
+older release, do one of these:
+
+- **Go through this release.** Upgrade to it and wait for the rollout to finish
+  (`kubectl -n ordinate rollout status deploy/ordinate` on Helm). Only then upgrade to the next one.
+- **Stop every pod, then start the new ones.** There is a short outage, but no old pod ever runs
+  beside a new one.
+  - **Compose** already does this. `docker compose up -d` recreates the container.
+  - **Helm:** scale to 0, wait until the pods are gone, then upgrade. The migration Job still runs
+    first.
+
+    ```bash
+    kubectl -n ordinate scale deploy/ordinate --replicas=0
+    kubectl -n ordinate wait --for=delete pod \
+      -l app.kubernetes.io/instance=ordinate,app.kubernetes.io/component=server --timeout=120s
+    helm upgrade ordinate ordinate-<new version>.tgz -n ordinate -f values.yaml --wait --timeout 10m
+    ```
+
+    `scale` returns at once, so the `wait` is what makes sure no old pod is left. If it says that
+    nothing matches, the pods are already gone. If the migration Job fails while the pods are at 0,
+    the app stays down. Scale it back up to your usual count (`replicaCount`), then read
+    `kubectl -n ordinate logs job/ordinate-migrate`.
+
+    With `hpa.enabled`, the chart does not set a pod count and the autoscaler does not start a
+    deployment that is held at 0. Scale it back up yourself afterwards, to `minReplicas`.
+  - **ECS:** set the service's desired count to 0 and wait for the tasks to stop. Then update the
+    service to the new task definition, with the desired count back at its usual number. If the
+    service uses Application Auto Scaling with a minimum above 0, set that minimum to 0 too (or
+    suspend scaling) before you stop the tasks, or it starts them again. Put it back afterwards.
+
+**Never roll back below this release once terms exist** (`helm rollback`, or an older
+`ORDINATE_IMAGE` in Compose). An older pod reads a term as no filter and deletes it from a chart
+when the chart is saved.
+
+**Open browser tabs:** reload them after the upgrade. A tab still running the old web app does not
+know the new filters, and it saves a filter list without the ones it cannot show.
+
+### Other saved data this release keeps
+
+None of these features exists in this release. It only reads and keeps what a later release will
+write. Each item says what a pod older than this release does, and what this release does instead.
+
+- **Join names, and `via`.** A join (a relationship) can have a name, and a chart can say which join
+  it goes through (`via`). An older pod drops both: every name in the project is lost on its next
+  join save or delete, and a chart with `via` is drawn through the first join, which can be the
+  wrong date. This release keeps both, and refuses the chart.
+- **Always-applied filters on a [Live dataset](live-data.md).** An older pod ignores them and
+  answers every question without them. This release refuses every question, schema sync, "Make a
+  copy" and "Copy the data instead" on that dataset ("Ask your admin to finish upgrading
+  Ordinate").
+- **Notes on a table, labels for a column's values, and warnings on a join.** An older pod drops
+  them the next time it saves a project's notes (any tag or note edit does) or a join. This
+  release keeps them. A join's warning is worked out again later, so losing it never changes a
+  figure.
+- **A metric's date column, and the mark on a date filter that came from a dashboard's date
+  control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
+  column, and an alert saved from a KPI counts by the control's column instead of the metric's.
+  This release keeps both and changes no figure.
+- **Snapshot metrics**, which take the last (or first) value by date, as for a balance, instead of
+  adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
+  duplicate erases the setting. This release keeps it and shows no figure for it: a KPI shows none,
+  and charts, alerts, the metric tree and drivers refuse, until a later release adds snapshots.
+
+### What stays open
+
+For the data listed above, the gap is closed once every pod runs this release or later. It stays
+open in two cases: an upgrade that skips this release without stopping all pods first, and a
+rollback below it. Then an older pod runs next to data it cannot read, and the list above is what it
+does. Some of that is lost data. Some of it is a wrong figure: a term or an always-applied filter
+that is ignored, a chart with `via` drawn through the wrong join, an alert that counts by a
+dashboard's date column instead of the metric's, and a snapshot metric summed over every date. If
+you roll back below this release anyway, remove the always-applied filters from your Live datasets
+first, and check the charts that use a named join afterwards.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 

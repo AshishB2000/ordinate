@@ -570,6 +570,8 @@
   "subscriptionText.untitled_subscription": "Untitled subscription",
   "subscriptionText.view": "View: {name}",
   "subscriptionText.you_receive_this_as_a_member": "You receive this as a member of {name} in Ordinate. An organization admin manages that list.",
+  "termMessages.a_glossary_term_reached_the_engine": "A glossary term reached the engine without being expanded, so the figure was not computed.",
+  "termMessages.this_figure_uses_a_filter_from": "This figure uses a filter from a newer version of Ordinate. Finish the upgrade, then try again.",
   "versionDiffMessages.a_deleted_visual": "A deleted visual",
   "versionDiffMessages.a_filter_changed": "a filter changed",
   "versionDiffMessages.a_product_of_metrics": "a product of {count} metrics",

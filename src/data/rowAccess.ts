@@ -28,6 +28,7 @@ import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
 import { datasetFilePath, storedRowPolicy, withFirstWritePolicy } from './datasetRecord';
 import { asOfIso } from './asOf';
+import { isTermStep } from './termStep';
 import type { FilterStep } from './transforms';
 import { makeLock, type Lock } from './rowLock';
 import { entitlement, policyFromRecord, ruleState, type RowPolicy } from './rowPolicy';
@@ -285,9 +286,9 @@ export async function assertFanOutAllowed(projectId: string, datasetIds: Iterabl
   }
 }
 
-/** `[...lock, ...filters]`, filter steps only — unless `filters` already STARTS WITH exactly the lock (S4). */
+/** `[...lock, ...filters]`, filter and term steps only (a term is expanded later, never dropped here) — unless `filters` already STARTS WITH exactly the lock (S4). */
 export function withLockSteps(lock: Lock, filters: readonly FilterStep[] | undefined): FilterStep[] {
-  const only = (Array.isArray(filters) ? filters : []).filter((f): f is FilterStep => !!f && f.type === 'filter');
+  const only = (Array.isArray(filters) ? filters : []).filter((f): f is FilterStep => !!f && (f.type === 'filter' || isTermStep(f)));
   const same = (a: unknown, b: unknown): boolean => stableStringify(a) === stableStringify(b);
   const starts = lock.steps.length <= only.length && lock.steps.every((s, i) => same(s, only[i]));
   return starts ? only : [...lock.steps, ...only];
