@@ -56,3 +56,13 @@ export function targetOwnPlan(): string {
 export function targetNeedsDate(): string {
   return t('targetMessages.a_target_for_each_period_needs');
 }
+
+/** A chart with more dates than a target line is drawn for. */
+export function targetSeriesTooLong(): string {
+  return t('targetMessages.the_target_is_drawn_for_at');
+}
+
+/** A chart by a column the plan doesn't have: the target can't be split that way. */
+export function targetPlanNoColumn(column: string): string {
+  return t('targetMessages.the_plan_has_no_so_the', { column });
+}

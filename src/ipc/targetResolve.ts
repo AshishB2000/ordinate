@@ -19,6 +19,7 @@ import { formatMetricValue } from '../analysis/metricFormat';
 import { defaultThresholds, rowStatus } from '../analysis/scorecardModel';
 import type { RowStatus } from '../analysis/scorecardModel';
 import { fixedTarget, periodParts, planAsks, widened } from '../analysis/targetMath';
+import type { PeriodPart } from '../analysis/targetMath';
 import * as msg from '../analysis/targetMessages';
 import { scopeRange } from '../analysis/periodScope';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
@@ -96,7 +97,11 @@ async function rulesAgree(projectId: string, a: string, b: string): Promise<bool
   return (await rowLockFor(projectId, a) === null) === (await rowLockFor(projectId, b) === null);
 }
 
-async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec, scope: FilterStep[]): Promise<{ value: number | null; how?: string } | string> {
+/** What a scope makes of a target: the closed range it covers and the `per` periods in it. */
+interface Frame { filters: FilterStep[]; dateCol: string; adds: boolean; range?: { from?: string; to?: string }; parts: PeriodPart[] }
+
+/** The frame, a fixed figure that holds at any scope, or the sentence naming why there is no target. */
+async function frameOf(projectId: string, m: Metric, spec: MetricTargetSpec, scope: FilterStep[]): Promise<{ frame: Frame } | { fixed: number } | string> {
   const s = await metricScope(projectId, m, scope);
   if (!s.ok) return s.error;
   const dateCol = await metricDate(projectId, m);
@@ -104,7 +109,7 @@ async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec
   const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
   const adds = additivityOf(m, columns, byName).time;
   if (adds && !spec.per) return msg.targetNeedsPer();
-  if (!adds && 'value' in spec.source) return { value: spec.source.value }; // a fixed figure holds at any scope
+  if (!adds && 'value' in spec.source) return { fixed: spec.source.value }; // a fixed figure holds at any scope
   const cal = getCalendar();
   const found = dateCol ? scopeRange(s.filters, [{ name: dateCol, type: 'date' }])?.range : undefined;
   const today = todayIso();
@@ -113,15 +118,29 @@ async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec
   if (adds && !closed) return msg.targetPickPeriod();
   const parts = closed && spec.per ? periodParts(closed, spec.per, cal) : [];
   if (adds && !parts.length) return msg.targetPickPeriod();
-  if ('value' in spec.source) return { value: fixedTarget(spec.source.value, parts), ...howOf(m, spec.source.value, parts) };
+  return { frame: { filters: s.filters, dateCol, adds, range, parts } };
+}
 
-  const plan = await metrics.getMetric(projectId, spec.source.metricId);
+/** The plan metric a frame is matched to, its date, and the scope's filters as the plan applies them; or the sentence naming why not. */
+async function planCtx(projectId: string, m: Metric, plan: Metric | null, f: Frame): Promise<{ plan: Metric; planDate: string; filters: FilterStep[] } | string> {
   if (!plan) return msg.targetPlanGone();
   const planDate = await metricDate(projectId, plan);
-  if (!planDate && (adds || range)) return msg.targetPlanNoDate(plan.name);
+  if (!planDate && (f.adds || f.range)) return msg.targetPlanNoDate(plan.name);
   if (!(await rulesAgree(projectId, m.datasetId, plan.datasetId))) return msg.targetRowRules();
-  const filters = await planFilters(projectId, plan.datasetId, s.filters, dateCol);
-  if (typeof filters === 'string') return filters;
+  const filters = await planFilters(projectId, plan.datasetId, f.filters, f.dateCol);
+  return typeof filters === 'string' ? filters : { plan, planDate, filters };
+}
+
+async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec, scope: FilterStep[]): Promise<{ value: number | null; how?: string } | string> {
+  const fr = await frameOf(projectId, m, spec, scope);
+  if (typeof fr === 'string') return fr;
+  if ('fixed' in fr) return { value: fr.fixed };
+  const { adds, range, parts } = fr.frame;
+  if ('value' in spec.source) return { value: fixedTarget(spec.source.value, parts), ...howOf(m, spec.source.value, parts) };
+
+  const pc = await planCtx(projectId, m, await metrics.getMetric(projectId, spec.source.metricId), fr.frame);
+  if (typeof pc === 'string') return pc;
+  const { plan, planDate, filters } = pc;
   const ask = async (r: { from?: string; to?: string }): Promise<number | null> =>
     (await ipcMetrics.resolveMetric(projectId, plan.id, { filters: [...filters, ...bounds(planDate, r)] }))?.value ?? null;
   if (!adds) return { value: await ask(parts.length ? widened(parts) : (range ?? {})) }; // widened to whole periods, never pro-rated
@@ -134,6 +153,31 @@ async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec
     single = v;
   }
   return { value: total, ...(asks.length === 1 && single !== null ? howOf(m, single, parts) : {}) };
+}
+
+/**
+ * The plan behind `m`'s target under `scope`, for a chart that splits it by a column (the plan's own column of that
+ * name): the plan metric, the filters it takes, and the resolutions to make, each with the share that counts. A fixed
+ * figure that doesn't add up is the same for every bar; any other target that can't be split says why (`''`: not worth a note).
+ */
+export async function targetPlan(projectId: string, m: Metric, scope: FilterStep[]): Promise<{ plan: Metric; planDatasetId: string; planDate: string; filters: FilterStep[]; asks: Array<{ from?: string; to?: string; fraction: number }> } | { fixed: number } | { none: string }> {
+  const spec = m.target;
+  if (!spec) return { none: '' };
+  try {
+    const fr = await frameOf(projectId, m, spec, scope);
+    if (typeof fr === 'string') return { none: fr };
+    if ('fixed' in fr) return fr;
+    if ('value' in spec.source) return { none: '' }; // a fixed figure for a metric that adds up is for the whole, not for each bar
+    const { adds, range, parts } = fr.frame;
+    const pc = await planCtx(projectId, m, await metrics.getMetric(projectId, spec.source.metricId), fr.frame);
+    if (typeof pc === 'string') return { none: pc };
+    const asks = adds ? planAsks(parts) : [{ ...(parts.length ? widened(parts) : (range ?? {})), fraction: 1 }];
+    return { plan: pc.plan, planDatasetId: pc.plan.datasetId, planDate: pc.planDate, filters: pc.filters, asks };
+  } catch (err) {
+    if (isRowPolicyError(err)) return { none: msg.targetRowRules() };
+    if (isLiveFigureError(err)) return { none: err.message };
+    throw err;
+  }
 }
 
 /** "1.2M for Nov 2024, pro-rated to Nov 20": one period only (a span has no single full figure). */

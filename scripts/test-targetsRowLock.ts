@@ -50,6 +50,17 @@ void (async () => {
     const east = await target('east');
     const boss = await target('boss');
     ok('both restricted: the plan is East\'s alone (600000 × 20/30), computed inside the lock', Object.is(east?.value, 600_000 * (20 / 30)), JSON.stringify(east));
+    const chartOf = async (who: string) => (await W.call(who, 'visual:data', { projectId: P, datasetId: S, encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum', metricId: rev!.id }] }, filters: NOV })).body;
+    const hasTarget = (r: { data?: { series?: { target?: boolean }[] } }): boolean => !!r?.data?.series?.some((x) => x.target);
+    // A metric chart is refused outright under a row lock (the door), so a restricted viewer never gets a target series beside it.
+    const eastChart = await chartOf('east');
+    ok('east, both restricted: the chart is the door\'s own refusal, with no target and no West', eastChart?.ok === false && eastChart.code === 'row_policy' && !hasTarget(eastChart) && !JSON.stringify(eastChart).includes('West'), JSON.stringify(eastChart).slice(0, 300));
+    const bossChart = await chartOf('boss');
+    ok('NEGATIVE CONTROL: the boss\'s chart carries both regions\' plans', bossChart.data.series.find((x: { target?: boolean }) => x.target)?.values.every((v: number) => Object.is(v, 600_000 * (20 / 30))), JSON.stringify(bossChart).slice(0, 300));
+    await setRules(S, false);
+    const planOnly = await chartOf('east');
+    ok('east, plan restricted only: the chart is drawn without a target, and says the rules treat them differently', planOnly.ok === true && !hasTarget(planOnly) && planOnly.notes?.includes(tm.targetRowRules()), JSON.stringify(planOnly).slice(0, 300));
+    await setRules(S, true);
     ok('NEGATIVE CONTROL: the boss\'s target is the whole plan', Object.is(boss?.value, 1_200_000 * (20 / 30)), JSON.stringify(boss));
   } finally {
     await W.close();

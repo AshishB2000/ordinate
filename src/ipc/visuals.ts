@@ -11,7 +11,7 @@ import { residentPivotData, residentVizData } from './visualsResident';
 import { lodVizFor } from './lodData';
 import { residentEngineData } from './visualsEngines';
 import { authoringVizData } from './vizExtras';
-import { withCompareSeries, withPeriodOverlay } from './visualsOverlay';
+import { withCompareSeries, withPeriodOverlay, withTargetSeries } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
 import { withAnalytics } from './visualsAnalytics';
@@ -619,7 +619,7 @@ export function register() {
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
         withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values }), p, d, e, values), e);
       const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run, values);
-      const computed = await withCompareSeries(drawn, projectId, datasetId, enc, flt, run, values);
+      const computed = await withTargetSeries(await withCompareSeries(drawn, projectId, datasetId, enc, flt, run, values), projectId, datasetId, enc, flt);
       const shaped = isSharePath(share) && share !== 'bundle'
         ? await applyToChart(projectId, datasetId, enc, computed, share)
         : computed;

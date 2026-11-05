@@ -33,6 +33,8 @@ export interface ChartSeriesShape {
   values: Cx[];
   /** 'overlay' = a prior period drawn muted beside its own series (visualsOverlay.ts). */
   role?: string;
+  /** The metric's target, per bar (ipc/targetSeries): an overlay drawn as a stepped line. */
+  target?: boolean;
   /** A table calculation: `values` calculated, `raw` the figures (analysis/tableCalc.ts). */
   raw?: Cx[];
   calc?: TcCalc;
