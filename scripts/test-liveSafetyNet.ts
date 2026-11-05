@@ -28,8 +28,7 @@
 //    (`dataset:profile`) answer from it — flagged as a sample's — and every
 //    other row reader above still refuses, typed. Before it, they refuse (1).
 //
-// 6. A SEMANTIC DATASET (part 7 b2) holds no rows either: every reader refuses it, typed — its doors refuse a column
-//    measure (`columnOnLayer`) or are its layer's — and a picker's list is the layer's own (the extract is § 4's control).
+// 6. A SEMANTIC DATASET (part 7 b2): every reader refuses it, typed; a picker's list is its layer's (control: § 4).
 //
 //   npm run build:ts && node scripts/test-liveSafetyNet.js
 
