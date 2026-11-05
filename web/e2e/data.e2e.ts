@@ -400,9 +400,9 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('listbox').waitFor({ state: 'detached' });
   await dlg2.getByRole('textbox', { name: 'Label' }).fill('Ship state');
   await dlg2.getByRole('button', { name: 'Save relationship' }).click();
-  const labelled = page.getByRole('table').getByRole('row').filter({ hasText: 'Ship state' });
-  await labelled.waitFor();
-  assert.match((await labelled.textContent()) ?? '', /state/, 'the labelled row is the state → region join');
+  const namedJoin = page.getByRole('table').getByRole('row').filter({ hasText: 'Ship state' });
+  await namedJoin.waitFor();
+  assert.match((await namedJoin.textContent()) ?? '', /state/, 'the labelled row is the state → region join');
   await page.getByRole('button', { name: /^Ship state: Retail orders\.state to Regions\.region/ }).waitFor();
   await screens(page, 'data-relationships-labelled');
 
