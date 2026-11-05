@@ -46,6 +46,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/periods.ts': { count: 1, how: 'keeps' }, // formats a delta after resolveMetric (which refuses first)
   'web/src/features/calc/MeasureForm.tsx': { count: 1, how: 'keeps' }, // formulas only
   'web/src/features/calc/api.ts': { count: 2, how: 'keeps' }, // the measure carries its metricId: the chart door refuses it
+  'web/src/features/model/metrics/MetricCells.tsx': { count: 1, how: 'keeps' }, // the snapshot badge: an external one has no snapshot, so no badge
   // words
   'src/analysis/metricFormat.ts': { count: 2, how: 'words' },
   'src/automation/handlers.ts': { count: 3, how: 'words' }, // list_metrics' snapshot flag; metric_value refuses through resolveMetric
