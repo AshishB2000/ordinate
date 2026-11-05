@@ -92,7 +92,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/datasetPage.ts': { count: 2, how: 'throws' },
   'src/engine/driversResident.ts': { count: 1, how: 'throws' },
   'src/engine/facetResident.ts': { count: 1, how: 'throws' },
-  'src/engine/funnelResident.ts': { count: 1, how: 'throws' },
+  // the funnel's filters and its entry filters (part 5 D6): both compiled by filterPredicates, which throws on a term
+  'src/engine/funnelResident.ts': { count: 2, how: 'throws' },
   'src/engine/fxResident.ts': { count: 2, how: 'throws' },
   'src/engine/geoResident.ts': { count: 1, how: 'throws' },
   'src/engine/joinResident.ts': { count: 3, how: 'throws' },

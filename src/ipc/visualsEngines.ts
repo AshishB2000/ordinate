@@ -36,7 +36,7 @@ export async function residentEngineData(
     }
     const names = new Set<string>();
     for (const c of src.columns) if (c && typeof c.name === 'string') names.add(c.name);
-    for (const f of filters) if (!filterCannotWarn(f, names)) return null;
+    for (const f of [...filters, ...(encoding.eventFunnel?.entry ?? [])]) if (!filterCannotWarn(f, names)) return null; // a skipped entry filter would widen who enters
 
     const needs = encoding.cohort ? cohortNeeds(src.columns, encoding.cohort) : funnelNeeds(src.columns, encoding.eventFunnel);
     if (needs) return engineVizData(src.columns, [], encoding, filters);

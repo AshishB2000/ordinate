@@ -4,7 +4,8 @@
 // of `analysis/funnelEvents.buildEventFunnel`'s matching pass.
 //
 // The entry is a WINDOW — `row_number() OVER (PARTITION BY entity ORDER BY t,
-// ordinal)` picks each entity's first step-1 event, and with it the breakdown
+// ordinal)` picks each entity's first step-1 event that passes the entry
+// filters (`x`, part 5 D6; TRUE without any), and with it the breakdown
 // value that entity is counted under. Each later step is the earliest event of
 // that name strictly after the previous match, kept only inside the window;
 // the time gaps' two middle values come from a second window over the gaps.
@@ -61,10 +62,12 @@ export async function funnelGroupsResident(
     const tsText = `CAST(${phys(ti)} AS VARCHAR)`;
     const names = [...new Set(enc.steps)];
 
-    // Params are positional, pushed in STATEMENT-TEXT order: the filters (in
-    // `raw`), the step-name IN list, step 1's name, then per later step the
-    // window bound followed by that step's name.
+    // Params are positional, pushed in STATEMENT-TEXT order: the entry filters
+    // (`x`, in `raw`'s select list), the filters (in `raw`'s WHERE), the
+    // step-name IN list, step 1's name, then per later step the window bound
+    // followed by that step's name.
     const params: duck.DuckValue[] = [];
+    const x = filterPredicates(cols, enc.entry, params).join(' AND ') || 'TRUE'; // part 5 D6: may this event be the entry
     const preds = filterPredicates(cols, filters, params);
     const where = preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
     for (const n of names) params.push(n);
@@ -79,12 +82,12 @@ export async function funnelGroupsResident(
     const withSql = (from: string, ord: string): string =>
       `WITH raw AS (SELECT ${ord} AS o, ${entityKeySql(phys(ei), cols[ei].type === 'number')} AS e, ` +
       `CAST(${phys(ni)} AS VARCHAR) AS n, regexp_extract(${tsText}, '${TS_RE}', ` +
-      `[${TS_PARTS.map((p) => `'${p}'`).join(', ')}]) AS ts, ${dim} AS d FROM ${from}${where}), ` +
-      `base AS (SELECT o, e, n, d, ${msFromParts('ts')} AS t FROM raw), ` +
-      `ev AS (SELECT o, e, n, t, d FROM base WHERE e IS NOT NULL AND t IS NOT NULL ` +
+      `[${TS_PARTS.map((p) => `'${p}'`).join(', ')}]) AS ts, ${dim} AS d, (${x}) AS x FROM ${from}${where}), ` +
+      `base AS (SELECT o, e, n, d, x, ${msFromParts('ts')} AS t FROM raw), ` +
+      `ev AS (SELECT o, e, n, t, d, x FROM base WHERE e IS NOT NULL AND t IS NOT NULL ` +
       `AND n IN (${names.map(() => '?').join(', ')})), ` +
       `s0 AS (SELECT e, t AS m0, d, o AS o0 FROM (SELECT e, t, d, o, ` +
-      `row_number() OVER (PARTITION BY e ORDER BY t, o) AS rn FROM ev WHERE n = ?) WHERE rn = 1)` +
+      `row_number() OVER (PARTITION BY e ORDER BY t, o) AS rn FROM ev WHERE n = ? AND x) WHERE rn = 1)` +
       chain + ' ';
     const lastS = `s${S - 1}`;
 

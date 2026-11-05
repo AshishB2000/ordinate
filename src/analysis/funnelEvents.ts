@@ -35,6 +35,8 @@ export interface FunnelEncoding {
   steps: string[];
   window: { n: number; unit: WindowUnit };
   breakdown?: string;
+  /** Runtime only (a funnel metric's scope, part 5 D6): an entity enters at its first step-1 event that passes these. Never stored, never read from a client. */
+  entry?: FilterStep[];
 }
 
 export const FUNNEL_MIN_STEPS = 2;
@@ -168,7 +170,25 @@ export interface FunnelResult {
   warnings: string[];
 }
 
-interface Ev { n: string; t: number; o: number; d: string }
+/** `x`: the event may be the entry (it passes the entry filters). */
+interface Ev { n: string; t: number; o: number; d: string; x: boolean }
+
+/** The ordinals of the rows that pass the entry filters (each row tagged with its ordinal first), or null when there are none. */
+function entryRows(table: TableData, entry: FilterStep[] | undefined, warnings: string[]): Set<number> | null {
+  if (!entry || entry.length === 0) return null;
+  let tag = '__ordinate_o';
+  for (let n = 1; table.columns.some((c) => c && c.name === tag); n += 1) tag = `__ordinate_o_${n}`;
+  const at = table.columns.length;
+  const tagged = table.rows.map((r, o) => {
+    const t = r.slice(0, at);
+    t.length = at; // a short row keeps the ordinal in its own column
+    t.push(o);
+    return t;
+  });
+  const f = applyPipeline({ columns: [...table.columns, { name: tag, type: 'number' }], rows: tagged }, entry);
+  for (const w of f.warnings) warnings.push(w);
+  return new Set(f.rows.map((r) => r[at] as number));
+}
 
 /** The reference: columns + rows + a funnel encoding → the funnel. Never throws. */
 export function buildEventFunnel(
@@ -194,6 +214,7 @@ export function buildEventFunnel(
   const numEntity = table.columns[ei].type === 'number';
   const numDim = bi >= 0 && table.columns[bi].type === 'number';
   const wanted = new Set(enc.steps);
+  const eligible = entryRows(table, enc.entry, warnings);
 
   const byEntity = new Map<string | number, Ev[]>();
   let excluded = 0;
@@ -205,7 +226,7 @@ export function buildEventFunnel(
     if (n === null || !wanted.has(n)) return;
     let list = byEntity.get(key);
     if (!list) byEntity.set(key, (list = []));
-    list.push({ n, t, o, d: bi >= 0 ? dimLabel(r[bi], numDim) : '' });
+    list.push({ n, t, o, d: bi >= 0 ? dimLabel(r[bi], numDim) : '', x: !eligible || eligible.has(o) });
   });
 
   const S = enc.steps.length;
@@ -215,7 +236,7 @@ export function buildEventFunnel(
   for (const list of byEntity.values()) {
     let entry: Ev | null = null;
     for (const e of list) {
-      if (e.n === enc.steps[0] && (!entry || e.t < entry.t || (e.t === entry.t && e.o < entry.o))) entry = e;
+      if (e.n === enc.steps[0] && e.x && (!entry || e.t < entry.t || (e.t === entry.t && e.o < entry.o))) entry = e;
     }
     if (!entry) continue;
     let g = groups.get(entry.d);
