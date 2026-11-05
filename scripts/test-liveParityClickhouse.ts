@@ -18,7 +18,13 @@
 //   npm run build:ts && CLICKHOUSE_URL=http://default:secret@localhost:8123 node scripts/test-liveParityClickhouse.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, finish } from './selfcheck';
+import { ok, finish, failureCount } from './selfcheck';
+
+/** A line of the nightly's run page ($GITHUB_STEP_SUMMARY), when there is one. */
+function summaryLine(line: string): void {
+  const file = process.env.GITHUB_STEP_SUMMARY;
+  if (file) (require('fs') as typeof import('fs')).appendFileSync(file, `${line}\n`);
+}
 
 const raw = (process.env.CLICKHOUSE_URL ?? '').trim();
 if (!raw) {
@@ -62,10 +68,12 @@ async function main(chUrl: string): Promise<void> {
       ok(`NEGATIVE CONTROL: on ${c.engine.name}, the same statements without the '' → NULL fold disagree with the extract (two blank rows)`,
         unfolded.stripped > 0 && unfolded.problems.length >= 3, `${unfolded.stripped} statements unfolded: ${unfolded.problems.join(' | ')}`);
       await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, c.engine.run).live, env: report.envs.typed, stored: x.stored, engine: c.engine });
+      const calcs = await (require('./liveParityCalcs') as typeof import('./liveParityCalcs')).calcEngineCase(x, c.engine, report.envs.typed, ok, { exprs: 2_000, stride: 1 });
       const s = c.seen;
       // ClickHouse runs the statement unwrapped (the caps are settings), so its order is the statement's own.
       console.log(`  clickhouse: rows came back in rank order in ${s.rankOrdered} of ${s.charts} chart statements; −0 in ${s.negZero} cells; ` +
-        `${s.statements} statements through runBound, whole run ${Date.now() - t0} ms (matrix ${report.ms} ms: ${report.charts} charts, ${report.metrics} metrics, ${report.answers} answers)`);
+        `${s.statements} statements through runBound, whole run ${Date.now() - t0} ms (matrix ${report.ms} ms: ${report.charts} charts, ${report.metrics} metrics, ${report.answers} answers); ${calcs}`);
+      summaryLine(`- clickhouse: ${s.statements} statements, ${failureCount() === 0 ? 'every check passed' : `**${failureCount()} failed**`}; ${calcs}`);
       ok(`clickhouse: every chart statement answered (${s.charts}), each re-sorted by its ranks before shaping`, s.charts > 0);
     } finally {
       await c.close();
