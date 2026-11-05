@@ -80,6 +80,18 @@ async function main(): Promise<void> {
   ok('NEGATIVE CONTROL: with no verified question the prompt is the old one', !sent[1].includes('Verified questions') && Object.is(sent[1].includes('GUIDANCE'), false)
     && Object.is((await guidanceMod.askGuidance(bare, { kind: '' }, 'project', 'profit by region')).text, (await guidanceMod.askGuidance(bare, { kind: '' }, 'project')).text));
 
+  // ── How it was answered stays on the stored turn ──────────────────────────
+  const hist = async (t: string): Promise<any[]> => (await call('copilot:history', { projectId: pid, threadId: t })).turns;
+  (analyze as any).askCopilot = async () => ({ ok: true, text: 'Narrated.', suggestedAction: { kind: 'none', intent: '' } });
+  const kept = await ask('Revenue by region');
+  ok('a verified answer remembers how', (await hist(kept.threadId)).at(-1).guidance?.verifiedId === V);
+  (analyze as any).askCopilot = async (_p: unknown, facts: string) => { sent.push(facts); return { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }; };
+  const modelled = await ask('profit by region', { threadId: kept.threadId });
+  const mg = (await hist(kept.threadId)).at(-1).guidance;
+  ok('a model answer remembers its counts and examples', modelled.ok && mg && mg.instructions === 0 && mg.examples.join() === V && !('verifiedId' in mg), JSON.stringify(mg));
+  const rr = await call('answer:rerun', { projectId: pid, threadId: kept.threadId, spec: SPEC, label: 'Again' });
+  ok('a chip rerun stores none', rr.ok && !('guidance' in rr.turns.at(-1)) && !('guidance' in (await hist(kept.threadId)).at(-1)));
+
   finish();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

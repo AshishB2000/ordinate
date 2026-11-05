@@ -594,6 +594,7 @@ export function register() {
           answer: built ? built.spec : undefined,
           // A refused chart's "Did you mean" (./answers): the app's options, kept so a reload still offers them.
           suggest: answer && !answer.ok ? answer.suggest : undefined,
+          guidance: guided.used,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question
         // wanted (src/ai/suggestedAction.ts) — a whitelisted kind plus an intent
