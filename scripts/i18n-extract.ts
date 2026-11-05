@@ -397,6 +397,7 @@ export const MAIN_FILES = [
   'src/app/hierarchyMessages.ts',
   'src/ipc/drillMessages.ts',
   'src/analysis/topicMessages.ts',
+  'src/analysis/fanOutMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
