@@ -49,6 +49,7 @@ import { statusFor, withStatus } from '../analysis/statusStore';
 import { vocabularyOrder } from '../analysis/statusNotes';
 import { statusFields } from './statusFields';
 import { hiddenColumnsFor } from '../data/rowAccess';
+import { metricHidden } from '../analysis/columnHidden';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
@@ -205,7 +206,9 @@ export async function metricsList(ctx: Ctx): Promise<unknown> {
   const names = new Map((await datasets.listDatasets(ctx.projectId)).map((d) => [d.id, d.name]));
   const byName = await metrics.metricsByName(ctx.projectId);
   const status = statusFor(ctx.projectId);
-  const rows = await Promise.all((await metrics.listMetrics(ctx.projectId)).map(async (m) => ({ row: await metricRow(ctx, m, names, byName), status: (await status(`metric:${m.id}`)) ?? undefined })));
+  const shown = [];
+  for (const m of await metrics.listMetrics(ctx.projectId)) if (!(await metricHidden(ctx.projectId, m.id))) shown.push(m); // one reading a hidden column is left out (part 4, D19)
+  const rows = await Promise.all(shown.map(async (m) => ({ row: await metricRow(ctx, m, names, byName), status: (await status(`metric:${m.id}`)) ?? undefined })));
   return vocabularyOrder(rows, () => true).map(({ row, status: s }) => ({ ...row, ...statusFields(s) })); // certified first; a retired one names its replacement
 }
 
@@ -239,7 +242,8 @@ export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promi
 
 /** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */
 export async function termsList(ctx: Ctx): Promise<unknown> {
-  return vocabularyOrder(await withStatus(ctx.projectId, 'term', await termList(ctx.projectId)), () => true).map((t) => ({
+  const listed = (await termList(ctx.projectId)).filter((t) => !t.hidden); // one on a hidden column is left out (part 4, D19)
+  return vocabularyOrder(await withStatus(ctx.projectId, 'term', listed), () => true).map((t) => ({
     ...statusFields(t.status),
     id: t.id, name: t.name, aliases: t.aliases, description: t.description || '', dataset: t.datasetName, definition: t.definition,
   }));

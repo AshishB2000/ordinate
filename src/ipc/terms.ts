@@ -51,7 +51,8 @@ export async function listForCaller(projectId: string) {
  * written as "…" for a caller row access rules restrict, and for a column marked personal or financial.
  */
 export async function termFactsFor(projectId: string, datasetId: string, question?: string): Promise<FactTerm[]> {
-  const own = (await terms.listFullTerms(projectId)).filter((t) => t.datasetId === datasetId);
+  const own = [];
+  for (const t of await terms.listFullTerms(projectId)) if (t.datasetId === datasetId && !(await termHidden(projectId, t.id))) own.push(t); // part 4, D21
   if (!own.length) return [];
   const hideAll = await restrictedOn(projectId);
   const withheld = withheldColumns(await assistantColumnDocs(projectId, datasetId));

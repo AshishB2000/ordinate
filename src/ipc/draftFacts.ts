@@ -12,6 +12,7 @@
 // Record reads only: no table is hydrated and no engine is asked anything. The table notes
 // (role, grain, key, guide: app/tableDocs `tableFacts`) ride along with the column notes.
 
+import { metricHidden } from '../analysis/columnHidden';
 import type { PlanContext } from '../analysis/analysisPlan';
 import { statusFor } from '../analysis/statusStore';
 import { vocabularyOrder } from '../analysis/statusNotes';
@@ -52,6 +53,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
     const listed = vocabularyOrder(inScope, () => true).slice(0, MAX_DRAFT_METRICS);
     const defined: PlanFactMetric[] = [];
     for (const { s, status } of listed) {
+      if (await metricHidden(projectId, s.id)) continue; // it reads a column hidden from the caller (part 4, D21)
       // The summary has no filters, and they are part of what the metric means.
       const m = await metrics.getMetric(projectId, s.id);
       if (!m) continue;

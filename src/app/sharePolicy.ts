@@ -33,7 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
-import { closedToCaller } from '../data/rowAccess';
+import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
 import { readZipAsync, writeZipAsync } from './bundle';
@@ -147,6 +147,7 @@ export async function assistantColumnDocs(projectId: string, datasetId: string):
   for (const [name, { values: codes, ...doc }] of Object.entries(docs)) {
     if (codes && (closed || marked.has(name) || meta?.columns.find((c) => c.name === name)?.type !== 'text')) docs[name] = doc;
   }
+  for (const name of await hiddenColumnsFor(projectId, datasetId)) delete docs[name]; // a hidden column's notes are not the caller's (part 4, D21)
   return docs;
 }
 
