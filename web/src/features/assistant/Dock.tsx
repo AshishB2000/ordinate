@@ -20,13 +20,14 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { Splitter, useStoredSize } from '../../ui/Splitter';
 import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
-import { ask, mineModel, newThread, UNTITLED, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
+import { ask, mineModel, newThread, UNTITLED, useAiStatus, useHistory, useVerifiedChips, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
 import type { Learn } from './DidYouMean';
 import { DockMenu, modelLabel, ThreadMenu, TOGGLE_ID } from './DockParts';
 import { History } from './History';
-import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion, type DockContext } from './dockState';
+import { pickDockProject, setDockOpen, takePendingQuestion, takePendingSpec, useDockContext, useDockProject, usePendingQuestion, usePendingSpec, type DockContext } from './dockState';
+import { VerifiedChips } from './VerifiedChips';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
 import { ThreadActionDialog, type ThreadAct } from './ThreadActions';
@@ -91,7 +92,8 @@ export default function DockPanel() {
   const turns: Turn[] = history.data?.turns ?? [];
   const ready = status.data?.ready === true;
   const enabled = status.data?.copilotEnabled !== false;
-  const usable = !!pid && ready && enabled && !pending;
+  const chips = useVerifiedChips(pid, context.kind === 'dataset' ? context.id : undefined);
+  const usable = !!pid && enabled && !pending && (ready || chips.length > 0); // a verified question needs no model
 
   // Opening focuses the composer — or the panel, when the composer is disabled and refuses focus.
   useEffect(() => {
@@ -161,6 +163,16 @@ export default function DockPanel() {
     else setText(q);
     (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
   }, [handed, decided, pid]);
+
+  // A verified answer handed over from Home's chips: run on the conversation shown, once the dock knows it.
+  const handedSpec = usePendingSpec();
+  const runner = useRef(followUp);
+  runner.current = followUp;
+  useEffect(() => {
+    if (!handedSpec || !decided) return;
+    const h = takePendingSpec();
+    if (h && pid && enabled) void runner.current(h.spec, h.label);
+  }, [handedSpec, decided, pid, enabled]);
 
   // The dock moved to another project (the route named one, or the picker did): what the last turn left on
   // screen — a proposed plan, the Get-data links, an error — was about the project it was asked in.
@@ -246,8 +258,10 @@ export default function DockPanel() {
     }
     // Failure: the server left the thread unchanged; keep the typed text so nothing is lost.
     setText(q);
-    if (r.notReady) void qc.invalidateQueries({ queryKey: ['ai:status'] });
-    else setHint(r.error || 'Could not answer that. Try again.');
+    if (r.notReady) {
+      void qc.invalidateQueries({ queryKey: ['ai:status'] });
+      setHint('Connect a model to ask anything else.');
+    } else setHint(r.error || 'Could not answer that. Try again.');
   }
 
   async function followUp(spec: Record<string, unknown>, label: string, learn?: Learn): Promise<void> {
@@ -270,11 +284,13 @@ export default function DockPanel() {
     void qc.invalidateQueries({ queryKey: ['copilot:history', pid] });
   }
   const empty = turns.length === 0 && !pending;
-  const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name, context.kind) : [];
+  const prompts = empty && usable && ready ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name, context.kind) : [];
   const placeholder = !pid
     ? 'Open a project to ask a question…'
     : !ready
-      ? 'AI isn’t set up for your organization yet.'
+      ? chips.length > 0 && enabled
+        ? 'Ask a verified question, or connect a model to ask anything else.'
+        : 'AI isn’t set up for your organization yet.'
       : !enabled
         ? 'The Assistant is off.'
         : pinned
@@ -364,6 +380,7 @@ export default function DockPanel() {
                 />
               ))}
         </div>
+        {empty && enabled && !!pid && <VerifiedChips chips={chips} onPick={(c) => void followUp(c.spec, c.question)} />}
         {prompts.length > 0 && (
           <div className={s.suggests}>
             {prompts.map((p) => (

@@ -11,7 +11,8 @@
 import { useRef, useState } from 'react';
 import { Icon } from '../../ui/icons/Icon';
 import { AiNotReady } from '../assistant/AiNotReady';
-import { useAiStatus } from '../assistant/api';
+import { useAiStatus, useVerifiedChips, type VerifiedChip } from '../assistant/api';
+import { VerifiedChips } from '../assistant/VerifiedChips';
 import type { Starter } from './homeText';
 import s from './HomePage.module.css';
 
@@ -30,11 +31,12 @@ function Sentence({ p }: { p: Starter }) {
   );
 }
 
-export function AskBar({ prompts, onAsk }: { prompts: Starter[]; onAsk: (question: string, about?: About) => void }) {
+export function AskBar({ prompts, onAsk, projectId, onRun }: { prompts: Starter[]; onAsk: (question: string, about?: About) => void; projectId?: string; onRun?: (c: VerifiedChip) => void }) {
   const [q, setQ] = useState('');
   const [about, setAbout] = useState<About | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const ai = useAiStatus();
+  const verified = useVerifiedChips(projectId);
   const submit = () => {
     const text = q.trim();
     if (!text) return;
@@ -109,6 +111,7 @@ export function AskBar({ prompts, onAsk }: { prompts: Starter[]; onAsk: (questio
           ))}
         </div>
       )}
+      {onRun && <VerifiedChips className={s.chips} chips={verified} onPick={onRun} />}
       {ai.data && !ai.data.ready && <AiNotReady status={ai.data} className={s.heroNote} />}
     </section>
   );

@@ -5,6 +5,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
+import { useVerified } from '../model/assistant/api';
 
 export type Provider = 'anthropic' | 'openai' | 'gemini' | 'gateway';
 
@@ -192,4 +193,21 @@ export async function ask(projectId: string, context: Ask, question: string, thr
 
 export async function setAssistantEnabled(enabled: boolean): Promise<void> {
   await rpc('copilot:setEnabled', { enabled });
+}
+
+/** A verified question the dock and Home offer as a chip: it runs, and its spec is shown to this caller. */
+export interface VerifiedChip {
+  question: string;
+  spec: { datasetId: string } & Record<string, unknown>;
+}
+const MAX_CHIPS = 4;
+
+/**
+ * The first 4 verified questions that run (the context's dataset first, the server orders them). A chip is an extra:
+ * an old pod's 404 or any error gives none, with no error state.
+ */
+export function useVerifiedChips(projectId: string | null | undefined, datasetId?: string): VerifiedChip[] {
+  const q = useVerified(projectId ?? '', datasetId, { enabled: !!projectId, retry: false });
+  const rows = q.data?.questions ?? [];
+  return rows.flatMap((r) => (r.runs && r.spec ? [{ question: r.question, spec: r.spec }] : [])).slice(0, MAX_CHIPS);
 }

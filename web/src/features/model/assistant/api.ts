@@ -69,9 +69,10 @@ type ListReply = { ok: true; broken: number; questions: VerifiedRow[] } | Fail;
 
 export const verifiedKey = (projectId: string, datasetId?: string) => ['verified:list', projectId, datasetId ?? ''] as const;
 
-export const useVerified = (projectId: string, datasetId?: string) =>
+export const useVerified = (projectId: string, datasetId?: string, opts: { enabled?: boolean; retry?: boolean } = {}) =>
   useQuery({
     queryKey: verifiedKey(projectId, datasetId),
+    ...opts,
     queryFn: async () => {
       const r = okOr((await rpc('verified:list', { projectId, ...(datasetId ? { datasetId } : {}) })) as ListReply, 'The verified questions');
       return { broken: r.broken, questions: r.questions };

@@ -107,6 +107,31 @@ export function takePendingQuestion(): { question: string; about: HandedAbout | 
   return taken;
 }
 
+// A verified answer handed over from outside the dock (Home's chips): the dock opens in its project and runs the
+// spec on the conversation it shows (`answer:rerun`), the same call a chip inside the dock makes.
+export interface HandedSpec { spec: { datasetId: string } & Record<string, unknown>; label: string }
+let handedSpec: HandedSpec | null = null;
+
+export function openDockWithSpec(o: HandedSpec & { projectId: string }): void {
+  handedSpec = { spec: o.spec, label: o.label };
+  picked = o.projectId;
+  write(PROJECT_KEY, o.projectId);
+  open = true;
+  write(OPEN_KEY, '1');
+  emit();
+}
+
+export function usePendingSpec(): HandedSpec | null {
+  return useSyncExternalStore(subscribe, () => handedSpec);
+}
+
+export function takePendingSpec(): HandedSpec | null {
+  const taken = handedSpec;
+  handedSpec = null;
+  if (taken) emit();
+  return taken;
+}
+
 export function pickDockProject(id: string): void {
   picked = id;
   write(PROJECT_KEY, id);

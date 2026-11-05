@@ -14,7 +14,7 @@
 
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
-import { openDockWith } from '../assistant/dockState';
+import { openDockWith, openDockWithSpec } from '../assistant/dockState';
 import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
@@ -90,7 +90,7 @@ export default function HomePage() {
           {canEdit && <NewMenu projectId={projectId} />}
         </div>
       </header>
-      <AskBar prompts={prompts} onAsk={ask} />
+      <AskBar prompts={prompts} onAsk={ask} projectId={projectId} onRun={(c) => projectId && openDockWithSpec({ projectId, spec: c.spec, label: c.question })} />
       <YourNumbers projectId={projectId} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (
