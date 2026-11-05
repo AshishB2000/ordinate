@@ -28,6 +28,7 @@ import { metricHidden } from '../analysis/columnHidden';
 import { ipcMain } from './bus';
 import { distinctFor } from './distinctFor';
 import { isRowPolicyError } from '../data/rowAccess';
+import { rowPolicyRefusal } from '../data/rowPolicyError';
 
 import * as metrics from '../analysis/metrics';
 import { withStatus } from '../analysis/statusStore';
@@ -603,6 +604,7 @@ export function register() {
       const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
       return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;
     } catch (err: any) {
+      if (isRowPolicyError(err)) return rowPolicyRefusal(err.reason); // typed, so a tile never shows its stored column instead
       return { ok: false, error: err?.message || 'Failed to compute the metric', ...liveCodeOf(err) };
     }
   })));
