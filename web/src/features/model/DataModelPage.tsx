@@ -14,8 +14,10 @@ import { useCanEdit } from '../projects/api';
 import { MetricEditor } from '../analyses/metrics/MetricEditor';
 import { DatasetsTab } from './datasets/DatasetsTab';
 import { MetricsTab } from './metrics/MetricsTab';
+import { GlossaryTab } from './terms/GlossaryTab';
+import { TermDialog } from './terms/TermDialog';
 
-const TABS = ['datasets', 'metrics'] as const;
+const TABS = ['datasets', 'metrics', 'glossary'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -29,6 +31,7 @@ function Section({ projectId }: { projectId: string }) {
   const canEdit = useCanEdit(projectId);
   const client = useQueryClient();
   const [newMetric, setNewMetric] = useState(false);
+  const [newTerm, setNewTerm] = useState(false);
   const asked = params.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   const setTab = (v: string) =>
@@ -48,11 +51,16 @@ function Section({ projectId }: { projectId: string }) {
       title={TITLE}
       sub={SUB}
       actions={
-        // On every tab, so an empty Metrics tab does not repeat it (one door, never two).
+        // On every tab, so an empty Metrics or Glossary tab does not repeat them (one door, never two).
         canEdit && (
-          <Button variant="primary" icon="plus" onClick={() => setNewMetric(true)}>
-            New metric
-          </Button>
+          <>
+            <Button icon="plus" onClick={() => setNewTerm(true)}>
+              New term
+            </Button>
+            <Button variant="primary" icon="plus" onClick={() => setNewMetric(true)}>
+              New metric
+            </Button>
+          </>
         )
       }
     >
@@ -64,6 +72,9 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="metrics" icon="target">
             Metrics
           </Tab>
+          <Tab value="glossary" icon="list">
+            Glossary
+          </Tab>
         </TabList>
         <TabPanel value="datasets">
           <DatasetsTab projectId={projectId} />
@@ -71,8 +82,12 @@ function Section({ projectId }: { projectId: string }) {
         <TabPanel value="metrics">
           <MetricsTab projectId={projectId} />
         </TabPanel>
+        <TabPanel value="glossary">
+          <GlossaryTab projectId={projectId} />
+        </TabPanel>
       </Tabs>
       {newMetric && canEdit && <MetricEditor projectId={projectId} existing={{}} onClose={() => setNewMetric(false)} onSaved={metricSaved} />}
+      {newTerm && canEdit && <TermDialog projectId={projectId} onClose={() => setNewTerm(false)} onSaved={() => setTab('glossary')} />}
     </Page>
   );
 }
