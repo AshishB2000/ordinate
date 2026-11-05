@@ -14,7 +14,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import * as rels from '../analysis/relationships';
 import type { Relationship } from '../analysis/relationships';
 import {
-  mergedLayout, mergedName, planTables, relatedColumnGroups, resolveColumnOwner, resolveVizJoin,
+  VIA_UNSUPPORTED, mergedLayout, mergedName, planTables, relatedColumnGroups, resolveColumnOwner, resolveVizJoin,
 } from '../analysis/joinPlan';
 import type { DsInfo, JoinPlan } from '../analysis/joinPlan';
 import { joinRateJs, joinedMetricJs, joinedVizDataJs, keyStatsJs } from '../analysis/joinJs';
@@ -94,7 +94,7 @@ function hasRefs(encoding: VizEncoding): boolean {
 /** The join a chart's question needs (analysis/joinPlan resolveVizJoin), or null when it needs none. */
 async function vizJoin(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
-  if (list.length === 0 && !hasRefs(encoding)) return null;
+  if (list.length === 0 && !hasRefs(encoding) && !(filters || []).some((f) => f && f.via)) return null; // a via filter is refused, not skipped
   const infos = await modelInfos(projectId, datasetId, list);
   const join = resolveVizJoin(datasetId, encoding, filters, live(list, infos), infos);
   return join ? { infos, join } : null;
@@ -134,7 +134,8 @@ export async function joinedVizDataFor(
 /** The join a metric's column and filters need — each resolved to its NEAREST owner — or null when every one is the dataset's own. */
 async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
-  if (list.length === 0) return null;
+  const viaFilter = filters.some((f) => f && f.via);
+  if (list.length === 0 && !viaFilter) return null;
   const infos = await modelInfos(projectId, datasetId, list);
   const model = live(list, infos);
   const needed = new Set<string>();
@@ -142,6 +143,8 @@ async function metricJoin(projectId: string, datasetId: string, column: string, 
   if (owner && owner !== datasetId) needed.add(owner);
   const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos) : null));
   for (const o of filterOwners) if (o && o !== datasetId) needed.add(o);
+  // A via filter is refused (no value), never skipped into an unfiltered total.
+  if (viaFilter) return { infos, owner, filterOwners, planned: { ok: false as const, error: VIA_UNSUPPORTED } };
   if (needed.size === 0) return null;
   return { infos, owner, filterOwners, planned: planTables(datasetId, [...needed], model) };
 }

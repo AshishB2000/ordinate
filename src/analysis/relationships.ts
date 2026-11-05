@@ -35,6 +35,8 @@ export interface Relationship {
   from: RelEnd;
   to: RelEnd;
   cardinality: Cardinality;
+  /** What the user calls this edge ("Order date"), trimmed, 1-60 characters, no control characters. */
+  label?: string;
   /** Counted over the FULL tables when the relationship was saved. */
   verified: { matched: number; unmatchedFrom: number };
 }
@@ -48,6 +50,11 @@ function sanitizeEnd(raw: unknown): RelEnd | null {
   if (!isValidId(o.datasetId)) return null;
   if (typeof o.column !== 'string' || o.column === '' || o.column.length > 500) return null;
   return { datasetId: o.datasetId, column: o.column };
+}
+
+function sanitizeLabel(raw: unknown): string | undefined {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s.length >= 1 && s.length <= 60 && !/\p{Cc}/u.test(s) ? s : undefined;
 }
 
 function count(n: unknown): number {
@@ -65,11 +72,13 @@ export function sanitizeRelationship(raw: unknown): Relationship | null {
     ? (o.cardinality as Cardinality)
     : 'many_to_one';
   const v = (o.verified || {}) as Record<string, unknown>;
+  const label = sanitizeLabel(o.label);
   return {
     id: isValidId(o.id) ? o.id : randomUUID(),
     from,
     to,
     cardinality,
+    ...(label !== undefined && { label }),
     verified: { matched: count(v.matched), unmatchedFrom: count(v.unmatchedFrom) },
   };
 }
@@ -120,17 +129,20 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
 }
 
 /**
- * Create, or replace by id. A second edge between the same two columns replaces
- * the first rather than stacking a duplicate the canvas would draw twice.
+ * Create, or replace IN PLACE: by id, else the same edge (which keeps that entry's id). "The first
+ * relationship" is the default a chart joins through, so a re-save must not move it. A second edge
+ * between the same two columns replaces the first rather than stacking a duplicate.
  */
 export async function saveRelationship(projectId: string, raw: unknown): Promise<Relationship | null> {
   if (!isValidId(projectId)) return null;
-  const rel = sanitizeRelationship(raw);
-  if (!rel) return null;
-  const list = (await listRelationships(projectId)).filter((r) => r.id !== rel.id && !sameEdge(r, rel));
-  if (list.length >= MAX_RELATIONSHIPS) return null;
-  list.push(rel);
-  return (await writeAll(projectId, list)) ? rel : null;
+  const parsed = sanitizeRelationship(raw);
+  if (!parsed) return null;
+  const list = await listRelationships(projectId);
+  const old = list.find((r) => r.id === parsed.id) ?? list.find((r) => sameEdge(r, parsed));
+  const rel = old ? { ...parsed, id: old.id } : parsed;
+  const next = (old ? list.map((r) => (r === old ? rel : r)) : [...list, rel]).filter((r) => r === rel || (r.id !== rel.id && !sameEdge(r, rel)));
+  if (next.length > MAX_RELATIONSHIPS) return null;
+  return (await writeAll(projectId, next)) ? rel : null;
 }
 
 export async function deleteRelationship(projectId: string, id: string): Promise<boolean> {

@@ -22,7 +22,7 @@ import { evaluateTable, lodDimProblem } from '../formula/lod';
 import { isFormulaBudgetError, newFormulaBudget, type FormulaBudget } from '../formula/formulaBudget';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
-import { sanitizePeriod, resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
+import { resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
 import type { PeriodSpec } from '../analysis/dateIntel';
 import { applyMaskStep, sanitizeMaskStep } from './maskSteps';
 import type { MaskStep, PipelineCtx as MaskCtx } from './maskSteps';
@@ -34,7 +34,8 @@ import type { TextStep } from './textStepTypes';
 import { TEXT_STEP_TYPES, sanitizeTextStep } from './textStepTypes';
 import { applyTextStep } from './stepsText';
 import type { RegexMemo } from './regexMemo';
-import { RADIUS_OP, sanitizeRadius, withinKm } from '../analysis/geo/radius';
+import { RADIUS_OP, withinKm } from '../analysis/geo/radius';
+import { sanitizeFilterStep } from './filterStepSanitize';
 import type { RadiusSpec } from '../analysis/geo/radius';
 
 /**
@@ -104,6 +105,12 @@ export interface FilterStep {
   context?: boolean;
   /** A row access / embed lock (data/rowLock.ts): a warehouse compares it byte for byte (row-policy D13). */
   lock?: true;
+  /**
+   * The relationship (id) `column` is read through, when it belongs to a RELATED table (the join
+   * planner, analysis/joinPlan.ts). Kept by every sanitizer so an older pod never drops it, and
+   * REFUSED by every evaluator that cannot walk it: it never filters the primary's own same-named column.
+   */
+  via?: string;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -365,6 +372,7 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep, budget?: Form
 }
 
 function stepFilter(t: TableData, s: FilterStep): StepResult {
+  if (s.via) return skip(t, `Filter skipped: unknown column "${s.column}"`); // a related table's column: never the primary's own
   const ci = colIndex(t.columns, s.column);
   if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (ci < 0) return skip(t, `Filter skipped: unknown column "${s.column}"`);
@@ -691,10 +699,6 @@ function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
-function isCell(v: unknown): v is Cell {
-  return typeof v === 'string' || typeof v === 'number' || v === null;
-}
-
 function sanitizeStep(item: unknown): TransformStep | null {
   if (!item || typeof item !== 'object') return null;
   const o = item as Record<string, unknown>;
@@ -711,33 +715,8 @@ function sanitizeStep(item: unknown): TransformStep | null {
       if (name === undefined || expression === undefined) return null;
       return { type, name, expression };
     }
-    case 'filter': {
-      const column = asString(o.column);
-      const op = asString(o.op);
-      if (column === undefined || op === undefined || !FILTER_OPS.has(op)) return null;
-      const step: FilterStep = { type, column, op: op as FilterOp };
-      if (isCell(o.value)) step.value = o.value;
-      // `values` is whitelisted the same way `value` is, element by element: a
-      // non-array is dropped entirely and a non-Cell entry (object, array,
-      // boolean, undefined) is dropped from the list rather than making the
-      // whole step invalid. Nothing here can produce a nested structure, so a
-      // hostile renderer/AI payload cannot smuggle one past this point into the
-      // SQL builders — which is where an array would otherwise become an
-      // uncontrolled number of bound parameters.
-      if (Array.isArray(o.values)) step.values = o.values.filter(isCell);
-      if (o.context === true) step.context = true;
-      if (op === PERIOD_OP) {
-        const period = sanitizePeriod(o.period);
-        if (!period) return null;
-        step.period = period;
-      }
-      if (op === RADIUS_OP) {
-        const radius = sanitizeRadius(o.radius);
-        if (!radius) return null;
-        step.radius = radius;
-      }
-      return step;
-    }
+    case 'filter':
+      return sanitizeFilterStep(o);
     case 'group_aggregate': {
       const groupByRaw = Array.isArray(o.groupBy) ? o.groupBy : [];
       const groupBy = groupByRaw.filter((v): v is string => typeof v === 'string');

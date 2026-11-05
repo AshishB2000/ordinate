@@ -54,7 +54,7 @@ import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
 // empty value list makes `transforms.stepFilter` skip the step with a warning.
 // Like the other three it is decidable from the step alone, with no rows.
 export function filterCannotWarn(f: FilterStep, names: Set<string>): boolean {
-  if (!f || f.type !== 'filter' || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false;
+  if (!f || f.type !== 'filter' || f.via || !names.has(f.column) || !FILTER_OPS.has(f.op)) return false; // via: the fold warns
   if (LIST_OPS.has(f.op) && (!Array.isArray(f.values) || f.values.length === 0)) return false;
   if (f.op === 'period' && !f.period) return false;
   if (f.op === 'within_km' && !(f.radius && names.has(f.radius.lngColumn))) return false; // r6:geo

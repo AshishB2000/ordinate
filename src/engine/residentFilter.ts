@@ -59,6 +59,7 @@ export function filterPredicates(
  */
 export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
+  if (s.via) return null; // a related table's column: the JS fold skips it with the unknown-column warning (transforms.stepFilter)
   const ci = colIndex(cols, s.column);
   if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (ci < 0) return null; // "Filter skipped: unknown column"
