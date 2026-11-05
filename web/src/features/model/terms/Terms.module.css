@@ -109,3 +109,6 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+.status {
+  margin-top: var(--sp-4);
+}

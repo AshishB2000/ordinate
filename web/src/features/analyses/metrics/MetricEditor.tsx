@@ -27,6 +27,8 @@ import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
 import { isFormula, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
+import { movesPin } from '../../model/status/status';
+import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
@@ -42,7 +44,7 @@ const snapshotOf = (v: string): Snapshot | null => {
   return at > 0 ? { column: v.slice(at + 1), take: v.slice(0, at) === 'first' ? 'first' : 'last' } : null;
 };
 
-type EditorProps = { projectId: string; existing?: MetricDraft; onSaved: (m: Metric) => void; onClose: () => void };
+type EditorProps = { projectId: string; existing?: MetricDraft; /** How many charts, KPIs and formulas use it, as the server counted (for the certified-save warning). */ used?: string; onSaved: (m: Metric) => void; onClose: () => void };
 
 /** The dialog, and its Reload (docs/edit-conflicts): the metric read again, in a new editor. */
 export function MetricEditor(props: EditorProps) {
@@ -54,13 +56,13 @@ export function MetricEditor(props: EditorProps) {
       toast('That metric could not be read.', { kind: 'error' });
       return props.onClose();
     }
-    setCurrent({ ...r.metric, tag: r.tag });
+    setCurrent({ ...r.metric, ...(current?.status && { status: current.status }), tag: r.tag });
     setGen((g) => g + 1);
   };
   return <EditorBody key={gen} {...props} existing={current} onReload={() => void reload()} />;
 }
 
-function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorProps & { onReload: () => void }) {
+function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props }: EditorProps & { onReload: () => void }) {
   const editingId = existing?.id ?? '';
   // The update's base: the tag `existing` was read with (metric:get).
   const guard = useEditGuard({ projectId, type: 'metric', id: editingId || undefined }, existing?.tag);
@@ -141,7 +143,27 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
     });
   };
 
+  // A certified metric: a save that moves its pin (name, dataset, definition, filters, format, date) warns first (D5).
+  const first = useRef<Record<string, string> | undefined>(undefined);
+  const pinNow = (): Record<string, unknown> => ({ name: name.trim(), definition, filters: live, format, timeColumn });
+  const [warn, setWarn] = useState<{ used: string | undefined } | null>(null);
+  const norm = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (x === null ? undefined : x));
+  const changedPin = () => {
+    const now = pinNow();
+    const was = first.current ?? {};
+    return Object.fromEntries(Object.keys(now).filter((k) => norm(now[k]) !== was[k]).map((k) => [k, true]));
+  };
+  // As the boxes first drew: a default the server stores is not a change the person made.
+  // The definition waits for its columns (null until they load).
+  first.current ??= {};
+  for (const [k, v] of Object.entries(pinNow())) if (first.current[k] === undefined && (k !== 'definition' || v)) first.current[k] = norm(v) ?? 'null';
+  const ask = async () => {
+    if (!editingId || !needsWarning(existing?.status, movesPin('metric', changedPin()))) return void save();
+    setWarn({ used: props.used }); // the host's count (the Metrics tab's `Used in`, '' for none); unknown elsewhere, and never blocks a save
+  };
+
   const save = async () => {
+    setWarn(null);
     setError('');
     setDateError('');
     setSnapError('');
@@ -196,12 +218,13 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button variant="primary" loading={saving} disabled={guard.changed} onClick={() => void save()}>
+          <Button variant="primary" loading={saving} disabled={guard.changed} onClick={() => void ask()}>
             {editingId ? 'Save' : 'Create metric'}
           </Button>
         </>
       }
     >
+      {warn && existing?.status && <SaveWarning name={name.trim()} status={existing.status} used={warn.used} onConfirm={() => void save()} onCancel={() => setWarn(null)} />}
       {guard.changed && <ConflictBanner compact noun="metric" onReload={onReload} onCopy={copy} />}
       <div className={s.editor}>
         <div className={s.fields}>

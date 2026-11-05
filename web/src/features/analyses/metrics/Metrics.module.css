@@ -257,3 +257,11 @@ th.num {
   font-size: var(--t-12);
   color: var(--muted);
 }
+.status {
+  margin-top: var(--sp-4);
+}
+.stateFilter {
+  display: inline-flex;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-12);
+}

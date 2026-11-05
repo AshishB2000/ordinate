@@ -11,7 +11,8 @@ import { SkeletonBlock, SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { useMe } from '../../auth/api';
 import { useCanEdit } from '../../projects/api';
-import { todoPanel, useModelOverview, type ModelTable, type TodoItem } from '../api';
+import { todoPanel, useModelOverview, type ModelTable, type ReviewItem, type TodoItem } from '../api';
+import { StatusBadge } from '../status/StatusBadge';
 import { DatasetPanel } from './DatasetPanel';
 import { TodoStrip } from './TodoStrip';
 import m from '../Model.module.css';
@@ -70,6 +71,7 @@ function DatasetList({ list, tables, picked, hrefOf }: { list: DatasetSummary[];
                         <span>{d.name}</span>
                       </span>
                       {tables.get(d.id)?.keyState === 'repeats' && <Badge tone="warn">key repeats</Badge>}
+                      <StatusBadge status={d.status} compact />
                     </Link>
                   </li>
                 );
@@ -95,6 +97,16 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
       q.set('panel', todoPanel(item.kind));
       return q;
     }, { replace: true });
+  // A review chip opens the item where an admin acts on it: a dataset here, a metric or term on its tab.
+  const openReview = (item: ReviewItem) => {
+    const [kind, id = ''] = item.ref.split(':');
+    setParams((p) => {
+      const q = new URLSearchParams(p);
+      if (kind === 'dataset') q.set('dataset', id);
+      else q.set('tab', kind === 'metric' ? 'metrics' : 'glossary');
+      return q;
+    }, { replace: true });
+  };
   const hrefOf = (id: string) => {
     const q = new URLSearchParams(params);
     q.set('dataset', id);
@@ -142,7 +154,7 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
     const names = new Map(all.map((d) => [d.id, d.name]));
     body = (
       <>
-        {canEdit && <TodoStrip todo={ov.data.todo} more={ov.data.more} nameOf={(id) => names.get(id)} onOpen={open} />}
+        {canEdit && <TodoStrip todo={ov.data.todo} review={ov.data.review} more={ov.data.more} nameOf={(id) => names.get(id)} onOpen={open} onReview={openReview} />}
         <div className={m.split}>
           <DatasetList list={all} tables={tables} picked={dataset.id} hrefOf={hrefOf} />
           <DatasetPanel key={dataset.id} projectId={projectId} dataset={dataset} table={tables.get(dataset.id)} />

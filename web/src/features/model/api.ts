@@ -76,3 +76,9 @@ export function todoText(item: TodoItem, name: string): string {
 
 /** The panel tab a strip item opens: the guide for a missing guide, the overview for the rest. */
 export const todoPanel = (kind: TodoKind): 'overview' | 'guide' => (kind === 'no_guide' ? 'guide' : 'overview');
+
+/** One review chip in words: "Revenue changed since certified", "Gross revenue is retired, used by 6". */
+export function reviewText(item: ReviewItem): string {
+  if (item.kind === 'needs_review') return `${item.name} changed since certified`;
+  return item.uses === undefined ? `${item.name} is retired, still used` : `${item.name} is retired, used by ${formatNumber(item.uses)}`;
+}

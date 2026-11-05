@@ -11,6 +11,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { formatNumber } from '../../../../src/app/format.ts';
+import { CertifiedBanner } from '../model/status/CertifiedBanner';
 import { datasetPageSource, useDatasets } from '../../api/datasets';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Button, buttonClass } from '../../ui/Button';
@@ -171,6 +172,7 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
         </nav>
       }
     >
+      <CertifiedBanner status={list.data?.find((d) => d.id === datasetId)?.status} />
       <div className={s.layout}>
         <aside className={s.rail} aria-label="Prepare steps" style={{ width: rail }}>
           {warnings.length > 0 && (

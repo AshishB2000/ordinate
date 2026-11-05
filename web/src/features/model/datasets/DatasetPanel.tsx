@@ -5,6 +5,8 @@
 
 import { Link, useSearchParams } from 'react-router';
 import { useDatasetColumns, type DatasetSummary } from '../../../api/datasets';
+import { StatusActions } from '../status/StatusActions';
+import { StatusBadge } from '../status/StatusBadge';
 import { Badge } from '../../../ui/Badge';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Icon } from '../../../ui/icons/Icon';
@@ -116,10 +118,12 @@ export function DatasetPanel({ projectId, dataset, table }: { projectId: string;
             <h2>{dataset.name}</h2>
             {role ? <Badge tone={role === 'fact' ? 'neutral' : 'ok'}>{ROLE_WORD[role]}</Badge> : <Badge>Role not set</Badge>}
             {dataset.mode === 'live' && <Badge tone="accent">Live</Badge>}
+            <StatusBadge status={dataset.status} />
           </div>
           <p className={description ? m.desc : `${m.desc} ${m.muted}`}>{description || 'No description yet'}</p>
         </div>
         <div className={m.panelActions}>
+          <StatusActions projectId={projectId} kind="dataset" id={dataset.id} name={dataset.name} status={dataset.status} />
           <RecordDetails projectId={projectId} kind="dataset" id={dataset.id} name={dataset.name} trigger={<Button size="sm" icon="info">Details</Button>} />
           <Link className={buttonClass('ghost', 'sm')} to={`/data/${projectId}/${dataset.id}`}>
             <Icon name="external-link" size={16} />
