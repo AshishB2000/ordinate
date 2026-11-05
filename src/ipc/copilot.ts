@@ -56,6 +56,7 @@ import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import { askGuidance } from './guidance';
 import { verifiedAsk } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
+import { topicFacts } from '../ai/topicFacts';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -214,6 +215,7 @@ export async function buildFacts(
   // work, never a fixed script. `emit` defaults to a no-op, so the unit test
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
+  if (kind === 'topic' && id) { const f = await topicFacts(projectId, id, emit); if (f) return f; } // null (no such topic): the inventory below
   // Whole-dataset facts (column summaries, sample rows, insights, a Live sample): refused on a dataset with row access
   // rules (row-policy D9); with a column hidden from the caller, built without it (part 4, D21: ../ai/hiddenFacts).
   const datasetFacts = kind === 'dataset' && id ? await factsOf(projectId, id, async (hidden) => {

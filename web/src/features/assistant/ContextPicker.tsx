@@ -11,14 +11,15 @@ import { Input } from '../../ui/Field';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Popover } from '../../ui/Popover';
 import { SkeletonRows } from '../../ui/Skeleton';
+import { useNavigation } from '../model/navigation';
 import { useAnalysisNames, useVisualNames, type Mentionable } from './api';
 import type { DockContext } from './dockState';
 import s from './DockList.module.css';
 
-type Kind = 'dataset' | 'visual' | 'analysis';
+type Kind = 'topic' | 'dataset' | 'visual' | 'analysis';
 
 /** The glyph a context wears, in the picker and on the composer's chip. */
-export const CONTEXT_ICON: Record<string, IconName> = { dataset: 'table', visual: 'chart-bar', analysis: 'layout-dashboard', scorecard: 'target', scenario: 'sliders', capture: 'camera' };
+export const CONTEXT_ICON: Record<string, IconName> = { topic: 'layers', dataset: 'table', visual: 'chart-bar', analysis: 'layout-dashboard', scorecard: 'target', scenario: 'sliders', capture: 'camera' };
 
 const refTo = (kind: Kind, m: Mentionable): DockContext => ({ kind, id: m.id, label: `${kind} · ${m.name}`, name: m.name });
 
@@ -29,7 +30,11 @@ function Choices({ projectId, onPick }: { projectId: string; onPick: (c: DockCon
   const analyses = useAnalysisNames(projectId);
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
+  // A topic is a context of its own (step 08): the Assistant then sees only its datasets, metrics and terms. Its list is `model:navigation`'s.
+  const nav = useNavigation(projectId);
+  const topics = { data: nav.data?.topics ?? [], isPending: nav.isPending, isError: false };
   const lists = [
+    { kind: 'topic' as const, label: 'Topics', q: topics },
     { kind: 'dataset' as const, label: 'Datasets', q: datasets },
     { kind: 'visual' as const, label: 'Visuals', q: visuals },
     { kind: 'analysis' as const, label: 'Dashboards', q: analyses },

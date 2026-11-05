@@ -178,6 +178,25 @@ describe('the dock beside a real page', () => {
     expect(chip().textContent).toBe(sc.name);
   });
 
+  it('@ lists a Topics group first; picking Sales asks with context { kind: topic }', async () => {
+    const TOPIC = '55555555-5555-4555-8555-555555555555';
+    const sc = SCREENS[0];
+    const calls = serve({ ...SHELL, ...sc.routes, 'model:navigation': { ok: true, tables: [], dateLadder: ['year', 'quarter', 'month', 'day'], topics: [{ id: TOPIC, name: 'Sales', datasets: [{ id: D }], metricIds: [], termIds: [] }] } });
+    act(() => setDockOpen(true));
+    renderApp(sc.path);
+    const box = (await screen.findByRole('textbox', { name: 'Ask the Assistant' })) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: '@' } });
+    const picker = await screen.findByRole('dialog', { name: 'Point the Assistant at' });
+    const topics = await within(picker).findByRole('region', { name: 'Topics' });
+    expect(picker.querySelector('section')).toBe(topics); // first
+    fireEvent.click(within(topics).getByRole('button', { name: 'Sales' }));
+    await waitFor(() => expect(chip().textContent).toBe('Sales'));
+    fireEvent.change(box, { target: { value: 'What sells?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect((calls.find((c) => c.channel === 'copilot:ask')?.payload as { context: unknown } | undefined)?.context).toEqual({ kind: 'topic', id: TOPIC }));
+  });
+
   it('a dataset’s workbench: named from the project’s dataset list the dock itself reads, and asked about as that dataset', async () => {
     const calls = serve(SHELL);
     act(() => setDockOpen(true));
