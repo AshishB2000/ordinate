@@ -10,6 +10,7 @@
 import type { FilterStep } from '../../data/transforms';
 import type { LiveSettings } from '../../data/liveDataset';
 import type { AdaptOpts, LiveColumn, LiveFilter, LiveRefusal } from './liveSpec';
+import { COMPARE_OPS } from '../../data/filterOps';
 import { adaptFilter, isRefusal, refuse } from './liveSpec';
 
 export type LiveBase = { ok: true; base: LiveFilter[] } | LiveRefusal;
@@ -18,6 +19,8 @@ export type LiveBase = { ok: true; base: LiveFilter[] } | LiveRefusal;
 export function liveBaseOf(steps: readonly FilterStep[] | undefined, columns: LiveColumn[], opts: AdaptOpts = {}): LiveBase {
   const base: LiveFilter[] = [];
   for (const s of steps ?? []) {
+    // A step that lost its value (a shaped bundle's marked column) would compare against blank: a wrong figure, so refuse as an empty `in` list does.
+    if ((COMPARE_OPS.has(s.op) || s.op === 'contains') && s.value === undefined) return refuse('baseFilter', s.column);
     const f = adaptFilter(s, columns, opts, []);
     if (isRefusal(f)) return f;
     if (!f) return refuse('baseFilter', s.column);
