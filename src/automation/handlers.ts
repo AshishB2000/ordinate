@@ -32,7 +32,8 @@ import * as drafts from '../analysis/publishDashboard';
 import { dashboardGone } from '../analysis/savedViewMessages';
 import * as reportSpec from '../analysis/reportSpec';
 import * as publishing from '../publish/publish';
-import { resolveMetric } from '../ipc/metrics';
+import { resolveMetric, type MetricRead } from '../ipc/metrics';
+import { kpiHidden } from '../publish/kpiPolicy';
 import { insightsForDataset } from '../ipc/insights';
 import { evaluateAndDeliver } from '../ipc/alerts';
 import { AutomationError } from './errors';
@@ -201,10 +202,13 @@ export async function metricValue(ctx: Ctx, ref: string): Promise<unknown> {
   const byName = await metrics.metricsByName(ctx.projectId);
   const m = byName.get(ref.trim().toLowerCase()) || (await metrics.getMetric(ctx.projectId, ref.trim()));
   if (!m) throw new AutomationError('not_found', `No metric called "${ref}".`);
-  const r =await resolveMetric(ctx.projectId, m.id, {});
+  const reads: MetricRead[] = [];
+  const r = await resolveMetric(ctx.projectId, m.id, { reads });
   if (!r) throw new AutomationError('not_found', `No metric called "${ref}".`);
-  // A single app-computed figure, like a dashboard KPI: the Share policy
-  // passes aggregates through (it shapes labels and rows, not totals).
+  // A single app-computed figure, like a dashboard KPI, leaving by the Share policy's EXPORT path as `aggregate` does
+  // (./creators): one totalled from a column the policy drops is refused, typed; under mask it passes, as a total does.
+  const hidden = await kpiHidden(ctx.projectId, reads, 'export');
+  if (hidden) throw new AutomationError('runtime', `${hidden}: a column this metric reads is marked sensitive.`);
   return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText };
 }
 
