@@ -7,6 +7,9 @@
 //     since the two folds hold different members);
 //   · along another date: refused, as the window would lie on one date and the axis on another.
 //
+// Its sparkline is the date axis at month grain, the last 12 months (periodSeries): a label filter per point, as a plain
+// metric's sparkline has, would give "to today" at every point.
+//
 // Nothing here aggregates: the chart door and the KPI resolver compute; the compare's arithmetic is periodMath's.
 
 import type { Metric } from '../analysis/metrics';
@@ -25,6 +28,7 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { bucketSeries } from './metricBuckets';
 import { olderAsOf, resolveMetric } from './metrics';
+import type { MetricSeries } from './metrics';
 import { baseOf } from './periodMetric';
 import type { VizDataReply } from './visuals';
 
@@ -85,4 +89,18 @@ export async function periodChartData(metric: Metric, encoding: VizEncoding, fil
   const before = new Map(prior.data.labels.map((l, i) => [keyOf(l), prior.data.series[0]?.values[i] ?? null]));
   const show = def.compare.show;
   return drawn(now.data.labels.map((l, i) => (folded && l === OTHER_LABEL ? null : periodValue(show, num(current[i]), num(before.get(keyOf(l)))))), [now, prior]);
+}
+
+/** A period metric's sparkline along its base's date (`byColumn`; another column has none): the last `points` months, at most 12, each its month's tile. */
+export async function periodSeries(metric: Metric, byColumn: string, filters: FilterStep[], points = 12): Promise<MetricSeries | null> {
+  const found = await baseOf(metric.projectId, metric.datasetId, metric.definition as MetricPeriodDefinition);
+  if ('error' in found || found.date.name !== byColumn) return null;
+  const display = new Map<string, string>();
+  const s = await bucketSeries(metric.projectId, metric.datasetId, byColumn, 'month', filters, async (f, label) => {
+    const r = await resolveMetric(metric.projectId, metric.id, { filters: f });
+    display.set(label, r?.display ?? '—');
+    return r?.value ?? null;
+  }, { name: metric.name, last: Math.min(points, 12) });
+  if (!s.ok) throw new Error(s.error); // the door's refusal (Live, row access) is said, never drawn as no sparkline
+  return s.labels.length ? { labels: s.labels, values: s.values, display: s.labels.map((l) => display.get(l) ?? '—') } : null;
 }

@@ -70,6 +70,7 @@ import { externalNoDuplicate } from '../analysis/externalMetricMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 import { baseName, checkPeriodDefinition, periodMetricValue } from './periodMetric';
+import { periodSeries } from './periodChart';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -403,7 +404,8 @@ export async function resolveMetricSeries(
   scope: { filters?: FilterStep[]; /** Fewer than SERIES_MAX_POINTS (the metric tree's 12 months). */ points?: number } = {},
 ): Promise<MetricSeries | null> {
   const metric = await metrics.getMetric(projectId, metricId);
-  if (!metric || !byColumn || metrics.isPeriodDefinition(metric.definition)) return null; // shortcut: a period metric's sparkline needs a resolution per bucket (step 06)
+  if (!metric || !byColumn) return null;
+  if (metrics.isPeriodDefinition(metric.definition)) return periodSeries(metric, byColumn, Array.isArray(scope.filters) ? scope.filters : [], scope.points); // a resolution per month (./periodChart)
   const meta = await datasets.getDatasetMeta(projectId, metric.datasetId);
   const isDate = !!meta && meta.columns.some((c) => c.name === byColumn && c.type === 'date');
   const raw = await distinctValues(projectId, metric.datasetId, byColumn);

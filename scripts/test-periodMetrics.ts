@@ -164,7 +164,8 @@ void (async () => {
   ok('Live: … which is the Live base under the explicit range', Object.is(lv.value, await kpi(REVL, [ON('2024-01-01', '2024-10-31')])));
   const lc = await hydrates(L, () => kpi(yoyL, [OCT]));
   ok('Live: a compare too', typeof lc.value === 'number' && Object.is(lc.value, await kpi(yoyI, [OCT])) && !lc.hydrated, show(lc));
-  ok('no sparkline until step 06', (await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, ytd.id, 'day'))) === null);
+  ok('a sparkline from step 06 (scripts/test-periodCharts.ts): 12 months', (await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, ytd.id, 'day')))?.values.length === 12);
+  ok('… along its base\'s date only', (await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, ytd.id, 'ship'))) === null);
   ok('NEGATIVE CONTROL: the base has its sparkline', ((await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, REV, 'day')))?.values.length ?? 0) > 0);
   const timeScope: typeof import('../src/analysis/metricTimeScope') = require('../src/analysis/metricTimeScope');
   const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');

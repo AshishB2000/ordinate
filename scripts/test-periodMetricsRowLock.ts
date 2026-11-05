@@ -45,6 +45,11 @@ void (async () => {
       const boss = await value('boss', all[k]);
       ok(`NEGATIVE CONTROL: the boss's ${k} over every row of Orders is another figure`, typeof boss === 'number' && !Object.is(boss, mine), JSON.stringify([boss, mine]));
     }
+    // Step 06: the sparkline is a resolution per month, each inside the viewer's lock.
+    const spark = async (who: string, id: string): Promise<unknown> => (await W.call(who, 'metric:table', { projectId: P })).body?.rows?.[id]?.series ?? null; // the Data model's Trend cell
+    const mine = await spark('east', all.qtd);
+    ok('east: the QTD sparkline over Orders is the boss\'s over the East subset', Array.isArray(mine) && mine.length > 0 && JSON.stringify(mine) === JSON.stringify(await spark('boss', sub.qtd)), JSON.stringify([mine, await spark('boss', sub.qtd)]));
+    ok('NEGATIVE CONTROL: the boss\'s over every row of Orders is another', JSON.stringify(await spark('boss', all.qtd)) !== JSON.stringify(mine));
     // Step 06: a chart with a metric measure is refused a restricted viewer (part 1, rowDoors.reachesOther), a period one too.
     const chart = (who: string, category: string) => W.call(who, 'visual:data', { projectId: P, datasetId: orders, encoding: { category, grain: 'month', values: [{ column: 'sales', aggregation: 'sum', metricId: all.qtd }] }, filters: AUG });
     for (const category of ['day', 'region']) {

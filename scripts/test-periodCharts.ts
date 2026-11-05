@@ -249,6 +249,34 @@ void (async () => {
   ok('adds up: … over a ratio, neither', (await addsUp(perYtd.id)) === NEITHER);
   ok('NEGATIVE CONTROL: the base adds up both ways', (await addsUp(REV.id)) === '{"categories":true,"time":true}');
 
+  // ── spark ─────────────────────────────────────────────────────────────────
+  // The Metrics table's sparkline: the last 12 months, each point its month's tile (a label filter would give "to today").
+  const table = (await post('metric:table', { projectId: P })).value;
+  const spark: (number | null)[] | null = table.rows?.[ytd.id]?.series ?? null;
+  const months = Array.from({ length: 12 }, (_, i) => labelOf(dateIntel.isoFromDays(dateIntel.daysFromIso('2023-12-01')! + 31 * i), 'month'));
+  const sparkTiles = await Promise.all(months.map((l) => tileUnder(ytd, l, '2024-11-30')));
+  ok('the sparkline: 12 months, each its month\'s tile', Array.isArray(spark) && spark.length === 12 && spark.every((v, i) => Object.is(v, sparkTiles[i])) && typeof spark[11] === 'number', show([spark, sparkTiles]));
+  ok('… June, with no rows, is still January to June', Array.isArray(spark) && Object.is(spark[6], await kpi(REV.id, [ON('2024-01-01', '2024-06-30')])));
+  const sparkSeries = await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, ytd.id, 'day'));
+  ok('resolveMetricSeries: the labels and the tile\'s own text', sparkSeries?.labels.join() === months.join() && sparkSeries.display.length === 12 && typeof sparkSeries.display[11] === 'string' && sparkSeries.display[11] !== '—', show(sparkSeries));
+  const tree = await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, ytd.id, 'day', { points: 6 }));
+  ok('fewer points when asked (the metric tree)', tree?.labels.join() === months.slice(-6).join(), show(tree));
+  ok('NEGATIVE CONTROL: the base keeps its own sparkline (insightsAgg periods, a label filter each: here its last 24 days)', table.rows?.[REV.id]?.series?.length === 24 && JSON.stringify(table.rows[REV.id].series) === JSON.stringify((await H.as(H.ORG_A, () => ipcMetrics.resolveMetricSeries(P, REV.id, 'day')))?.values), show(table.rows?.[REV.id]?.series));
+
+  // The published page draws the chart the live page draws.
+  const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const analysisMod: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+  const { randomUUID }: typeof import('crypto') = require('crypto');
+  const YTD_ENC = { category: 'day', grain: 'month', values: [asStored] };
+  const built = await H.as(H.ORG_A, async () => {
+    const v = await visualsMod.saveVisual(P, { datasetId: D, name: 'YTD by month', chartType: 'line', encoding: YTD_ENC, filters: [Y2024] } as never);
+    const dash = await analysisMod.saveAnalysis(P, { name: 'Period', sheets: [{ id: randomUUID(), name: 'Main', cards: [{ id: randomUUID(), type: 'visual', visualId: v!.id, layout: { x: 0, y: 0, w: 6, h: 4 } }] }] } as never);
+    return buildDashboard(P, dash!.id, 8);
+  });
+  const liveValues = (await chart(YTD_ENC, [Y2024])).data.series[0].values;
+  ok('a published YTD chart has the live chart\'s points', !!built && JSON.stringify(built).includes(JSON.stringify(liveValues)) && liveValues.length === 11, show([liveValues, JSON.stringify(built).slice(0, 400)]));
+
   await close();
   finish();
 })().catch((err) => {
