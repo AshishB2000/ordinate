@@ -424,9 +424,9 @@ Handler paths are under `src/`.
 | `copilot:renameThread` | `ipc/copilot.ts:426` | own thread |
 | `copilot:threads` | `ipc/copilot.ts:402` | own thread titles |
 | `dashboard:asOfStamps` | `ipc/dashboardsServer.ts:19` | snapshot times and names |
-| `dataset:columns` | `ipc/datasets.ts:371` | header: names, types, `rowCount` (ceiling); gains `scoped: true` for a restricted caller on a policy dataset |
-| `dataset:list` | `ipc/datasets.ts:352` | summaries: `rowCount`, `qualityFailing` count (ceiling); gains `scoped`; a restricted row drops `lastRefreshError` and `autoRefresh.lastAnomalyKeys` (N2, #16) |
-| `dataset:source` | `ipc/datasetViews.ts:88` | `{kind, label, refreshable}` |
+| `dataset:columns` | `ipc/datasets.ts:396` | header: names, types, `rowCount` (ceiling); `mode: 'live'` on a Live dataset; gains `scoped: true` for a restricted caller on a policy dataset; no origin field, so no source name |
+| `dataset:list` | `ipc/datasets.ts:363` | summaries: `rowCount`, `qualityFailing` count (ceiling); gains `scoped`; a restricted row drops `lastRefreshError` and `autoRefresh.lastAnomalyKeys` (N2, #16); a caller who may not see source names (a viewer) also loses `lastRefreshError` on every dataset from a connection, since a driver's text quotes the relation (D13) |
+| `dataset:source` | `ipc/datasetViews.ts:97` | `{kind, label, refreshable}` plus the Live flags (`live`, `maxCacheAgeSec`, `canGoLive`); a caller who may not see source names (a viewer) reads the connection's name (the connector's name when that name holds a value a viewer may not see, such as the host), never the table, and "Web address" for a web import, never its host |
 | `embed:columns` | `ipc/embed.ts:52` | lockable column names and types, no values |
 | `embed:status` | `ipc/embed.ts:47` | settings flags |
 | `events:list` | `ipc/events.ts:58` | authored event annotations |

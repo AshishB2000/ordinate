@@ -306,14 +306,55 @@ connection's host, database, user or saved queries, a dataset's warehouse table 
 the error text of a failed refresh. The changelog lists the places. There is no migration. Two things to
 know when you roll it out:
 
-- **The search index rebuilds once.** The name search (⌘K) now keeps two rows for a connection: a viewer
-  finds it by the connector's name, an editor by its stored name. This release marks every search index
-  as stale, so each project rebuilds it on its first search after the upgrade, for every kind of record
-  the search covers, not only connections. That first search waits for the rebuild.
+- **The search index rebuilds on the first search after the upgrade.** The name search (⌘K) now keeps two
+  rows for a connection: a viewer finds it by the connector's name, an editor by its stored name. This
+  release marks every search index as stale, so each project rebuilds it on its first search after the
+  upgrade, for every kind of record the search covers, not only connections. That first search waits for
+  the rebuild. During a rolling update a pod older than this release marks the index stale again when it
+  rebuilds it, so a project can rebuild more than once until the last old pod is gone. A rebuild costs
+  time, nothing more; the stored-name rows an old pod writes are the next point.
 - **During a rolling update, an old pod still answers a viewer as before.** A connection that a pod older
   than this release saves in that window keeps a row under its stored name, which a viewer's search can
   find. It is replaced when the connection is next saved on a pod of this release, or when the index is
   rebuilt after the last old pod is gone.
+
+## Source table docs a newer release writes are kept (`p2-02`)
+
+A later release adds a doc for each table a connection reads (an owner, a guide, a refresh note) and
+lets a dataset list the source tables it reads. This release has none of that: no screen, no setting,
+and no figure changes. It only keeps and carries what that later release writes. On a pod of this
+release or later:
+
+- a dataset keeps its linked tables (`readsTables`, in its origin) when it is saved again, by a
+  refresh, a rename or a step edit;
+- a project bundle carries a connection's source table docs, in an export and in an import;
+- deleting a connection deletes its docs with it.
+
+That is all it promises. It does not show the docs, check them or use them.
+
+### The release that adds source table docs and linked tables needs this release first
+
+**The release that adds source table docs and linked tables needs this release (or a later one) on
+every pod first.** Once docs exist, a pod older than this one:
+
+- **drops a dataset's linked tables** the next time it saves the dataset, and they are gone from the
+  dataset's record;
+- **refuses a project bundle that carries docs**, the whole bundle, because it holds files that pod
+  does not know;
+- **leaves the docs out of the bundles it exports**, so a backup that pod takes does not hold them;
+- **leaves a connection's docs behind** when the connection is deleted. They are harmless, since
+  nothing lists them once the connection is gone, but a later bundle carries them.
+
+Nothing in the server can check this, because it keeps no list of the pods that are running. You hold
+it on your side, the same way as for glossary terms. From an older release, either upgrade to this
+release and wait for the rollout to finish before you upgrade to the next one, or stop every pod and
+then start the new ones. The steps for Compose, Helm and ECS are under
+[the release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first):
+the `kubectl wait --for=delete`, the note on `hpa.enabled`, and the ECS auto scaling minimum all apply
+here unchanged.
+
+**Never roll back below this release once source table docs exist** (`helm rollback`, or an older
+`ORDINATE_IMAGE` in Compose). An older pod does the four things above.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 

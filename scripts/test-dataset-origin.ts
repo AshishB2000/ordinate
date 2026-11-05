@@ -172,6 +172,34 @@ async function main(): Promise<void> {
   ok('a live origin shows up in the summary as its kind + stamp',
      good !== undefined && good.originKind === 'connection'
        && typeof good.lastRefreshedAt === 'string' && good.lastRefreshStatus === 'ok');
+
+  // ── readsTables: a label an editor sets; a pod must keep it, never run it ──
+  // An older pod runs this sanitizer on every load, so the field has to survive it byte for byte.
+  const connOf = (extra: object) => {
+    const o = san({ kind: 'connection', connId: UUID_A, table: 'public.orders', ...extra });
+    if (o?.kind !== 'connection') throw new Error('expected a connection origin');
+    return o;
+  };
+  const orig: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
+  const conns: typeof import('../src/ipc/connections') = require('../src/ipc/connections');
+  const messy = [' A.ORDERS ', 'a.orders', 'A.ORDERS', '', 7, 'x'.repeat(1001)];
+  ok('readsTables: kept, trimmed, deduped exactly, order kept', JSON.stringify(connOf({ readsTables: messy }).readsTables) === '["A.ORDERS","a.orders"]');
+  const t20 = Array.from({ length: 20 }, (_, i) => `t${i}`);
+  ok('readsTables: at most 16, the first 16 kept in order', orig.MAX_READS_TABLES === 16 && JSON.stringify(connOf({ readsTables: t20 }).readsTables) === JSON.stringify(t20.slice(0, 16)));
+  // 30 repeats of t0..t9 come first: if a repeat used up the cap, 16 would be reached inside them and t10..t15 would be lost.
+  const repeats = Array.from({ length: 30 }, (_, i) => `t${i % 10}`);
+  ok('readsTables: duplicates do not use up the cap', JSON.stringify(connOf({ readsTables: [...repeats, ...t20.slice(10)] }).readsTables) === JSON.stringify(t20.slice(0, 16)));
+  ok('readsTables: a name of exactly 1,000 characters is kept', connOf({ readsTables: ['x'.repeat(1000)] }).readsTables?.length === 1);
+  ok('readsTables: not a list is dropped', !('readsTables' in connOf({ readsTables: 'A.ORDERS' })));
+  ok('readsTables: absent when empty, so the bytes match today', !('readsTables' in connOf({ readsTables: [] })) && !('readsTables' in connOf({})));
+  ok('readsTables: sanitizing twice is sanitizing once', JSON.stringify(orig.sanitizeReadsTables(orig.sanitizeReadsTables(messy))) === JSON.stringify(orig.sanitizeReadsTables(messy)));
+  ok('NEGATIVE CONTROL: another kind never carries it', !('readsTables' in (san({ kind: 'url', url: 'https://a.example/x', readsTables: ['t'] }) as object)));
+  ok('sourceView never prints it', !orig.sourceView('postgres', connOf({ readsTables: ['SECRET_T'] }), () => 'W').label.includes('SECRET_T'));
+  ok('a refresh runs the table, never readsTables', JSON.stringify(conns.selectionForDataset(connOf({ readsTables: ['b'] }))) === '{"table":"public.orders"}');
+  // A stored origin with readsTables survives the refresh path's re-save.
+  const linked = await datasets.saveDataset(proj.id, { name: 'Linked', sourceKind: 'postgres', columns, rows, origin: { kind: 'connection', connId: UUID_A, sql: 'select 1', readsTables: ['A.ORDERS', 'A.LINES'] } });
+  await datasets.updateDatasetData(proj.id, linked!.id, { columns, rows });
+  ok('a refresh keeps readsTables', JSON.stringify((await datasets.getDatasetMeta(proj.id, linked!.id))!.origin) === JSON.stringify({ kind: 'connection', connId: UUID_A, sql: 'select 1', readsTables: ['A.ORDERS', 'A.LINES'] }));
 }
 
 main()

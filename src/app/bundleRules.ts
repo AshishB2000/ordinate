@@ -42,6 +42,10 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^scenarios/${UUID}\\.json$`, 'i'), count: 'scenarios' },
   { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
+  // A connection's source table docs (part 2): written by a newer release, carried here.
+  // No `count`: the manifest's counts stay as they were. The id swap follows both names and bodies.
+  { re: new RegExp(`^connections/${UUID}\\.tables\\.json$`, 'i') }, // the index
+  { re: new RegExp(`^connections/${UUID}/tables/${UUID}\\.json$`, 'i') }, // one doc
   { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
   { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
   { re: new RegExp(`^notebooks/${UUID}\\.json$`, 'i'), count: 'notebooks' }, // r7:notebooks
