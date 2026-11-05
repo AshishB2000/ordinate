@@ -247,8 +247,12 @@ entitlement(policy: RowPolicy | null, userId: string | null, teamIds: readonly s
 | `columns` | the dataset carries column access rules (a newer release writes them) that this release cannot apply: closed to every non-editor, row rules or not (with a ruled dataset upstream it is `derived`) | Some columns of this dataset are limited to certain people by rules this version of Ordinate can't apply yet, so it is closed to you. Ask your admin to finish upgrading Ordinate. |
 | `export` | an export by a restricted caller | Exports are off for datasets with row access rules while your access covers only some of its rows. |
 
-A dataset with `columnAccess` counts as a dataset with rules wherever this document says "policy dataset" (the
-storage net D8, the fan-out scope D10, the `derived` walk D14): all of them treat it as closed.
+A dataset with `columnAccess` counts as a dataset with rules wherever this document says "policy dataset" for the
+storage net (D8) and the `derived` walk (D14): closed to every reader outside a door that gated the question. Fan-out
+(D10) is narrower for columns (semantic layer part 4, `docs/semantic-layer/04-governance.md` D17): a build is gated
+as its least-entitled audience, so it refuses only when it READS a hidden column; `assertFanOutAllowed` and
+`policyClosed` stay rows-only; a `/p/` site or a cached embed page stops once a dataset it read has column rules
+newer than its build (`columnRulesSince`); a push keeps its figures unless it names a hidden column.
 
 The web recognises `row_policy` in the same helper that recognises Live refusals
 (`web/src/features/live/refusal.ts`, generalised to `refusalOf` with `liveRefusalOf` kept as its
