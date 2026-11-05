@@ -58,6 +58,44 @@ const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = requir
   ok('Live: its base filters, and no calculated field', row(L).alwaysApplied.kind === 'live' && row(L).alwaysApplied.steps[0]?.value === 'North' && JSON.stringify(row(L).calculated) === '[]', JSON.stringify(row(L)));
   ok('an editor reads the values', !('valuesHidden' in row(X)) && !('valuesHidden' in row(L)));
 
+  // ── 5. What needs review (part 4) ────────────────────────────────────────
+  ok('NEGATIVE CONTROL: no status, no review key', !('review' in c));
+  const save = async (name: string, definition: Reply, extra: Reply = {}): Promise<string> => (await post('metric:save', { projectId: P, input: { name, datasetId: X, definition, ...extra } })).value.metric.id;
+  const certifyNow = async (ref: string): Promise<void> => {
+    const pin = (await post('model:review', { projectId: P, ref })).value.pin;
+    ok(`setup: ${ref.slice(0, 7)} certified`, (await post('model:certify', { projectId: P, ref, base: pin })).value.ok === true);
+  };
+  const sum = { column: 'amt', aggregation: 'sum' };
+  const REV = await save('Revenue', sum);
+  const GROSS = await save('Gross', sum);
+  const NET = await save('Net', sum);
+  const IDLE = await save('Idle', sum);
+  await save('Uses gross', { formula: '[Gross] + 1' });
+  await save('Uses gross again', { formula: '[Gross] * 2' });
+  const EMEA = (await post('term:save', { projectId: P, input: { name: 'EMEA', aliases: [], description: '', datasetId: X, filters: [{ type: 'filter', column: 'region', op: 'in', values: ['North'] }] } })).value.term.id;
+  await save('Emea sales', sum, { filters: [{ type: 'term', term: EMEA }] });
+  await certifyNow(`metric:${REV}`);
+  await post('metric:update', { projectId: P, id: REV, patch: { filters: [{ type: 'filter', column: 'region', op: '=', value: 'North' }] } });
+  const retire = (ref: string, replacedBy?: string) => post('model:retire', { projectId: P, ref, ...(replacedBy && { replacedBy }) });
+  await retire(`metric:${GROSS}`, `metric:${NET}`); // GROSS is named by two formulas
+  await retire(`metric:${IDLE}`); // nobody uses it
+  await retire(`term:${EMEA}`); // one metric filters by it
+  const r = (await ov()).review;
+  ok('changed since certified leads, then retired and used (most used first)', JSON.stringify(r?.map((i: Reply) => [i.ref, i.kind, i.uses ?? null]))
+    === JSON.stringify([[`metric:${REV}`, 'needs_review', null], [`metric:${GROSS}`, 'retired_used', 2], [`term:${EMEA}`, 'retired_used', 1]]), JSON.stringify(r));
+  ok('each carries the name it has now', r.map((i: Reply) => i.name).join() === 'Revenue,Gross,EMEA');
+  ok('a retired item nobody uses is not listed', !r.some((i: Reply) => i.ref === `metric:${IDLE}`));
+  ok('todo keeps its part-1 kinds only', (await ov()).todo.every((i: Reply) => ['key_repeats', 'no_key', 'no_guide', 'no_description', 'no_role'].includes(i.kind)));
+  const usage = (await post('catalog:list', { projectId: P })).value.rows.find((x: Reply) => x.ref === `dataset:${X}`).usage;
+  await retire(`dataset:${X}`);
+  const dsItem = (await ov()).review.find((i: Reply) => i.ref === `dataset:${X}`);
+  ok('a retired dataset in use carries the catalog\'s own count', dsItem?.kind === 'retired_used' && Object.is(dsItem.uses, usage) && usage > 0, JSON.stringify(dsItem));
+  await post('model:clearStatus', { projectId: P, ref: `metric:${REV}` });
+  ok('clearing an item takes it off the list', !(await ov()).review.some((i: Reply) => i.ref === `metric:${REV}`));
+  const many = await Promise.all(Array.from({ length: 10 }, (_, i) => save(`Bulk ${i}`, sum)));
+  for (const id of many) { await certifyNow(`metric:${id}`); await post('metric:update', { projectId: P, id, patch: { description: 'x' } }); await post('metric:update', { projectId: P, id, patch: { filters: [{ type: 'filter', column: 'region', op: '=', value: 'South' }] } }); }
+  ok('at most 8 are listed', (await ov()).review.length === 8);
+
   // ── 4. Metadata only ─────────────────────────────────────────────────────
   ok('metadata only: nothing hydrated, no warehouse statement', !hx.hydrated && !hl.hydrated && H.fake.calls.length === calls0, `${hx.hydrated} ${hl.hydrated} ${H.fake.calls.length - calls0}`);
   ok('NEGATIVE CONTROL: todoOf with everything filled in', JSON.stringify(todoOf([{ datasetId: X, role: 'fact', key: 'k', repeatedKeys: 0, hasGuide: true, description: 'd' }])) === '{"todo":[],"more":0}');
