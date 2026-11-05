@@ -215,6 +215,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'versions:list': 'META',
   'visual:data': 'GATE',
   'visual:dataBatch': 'GATE',
+  'visual:drillDown': 'GATE', // the steps behind a mark: a drill naming a hidden column is refused (ipc/drillDown); its grain lookup is visual:data's
   'visual:get': 'REDACT', // visualForCaller: one naming a hidden column loses its labels and those filter values; test-columnRedact
   'visual:list': 'META',
   'visual:preview': 'GATE',

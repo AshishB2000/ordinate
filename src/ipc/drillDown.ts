@@ -5,7 +5,8 @@
 // The mark resolves through the rows panel's own `drillInputs` → `resolveDrill` (./drillScope), so "Drill into East"
 // and "the rows behind East" select the same rows, and refuse with the same sentence (D5). It is resolved on the axis
 // alone (`withoutSplit`), so a split chart drills its axis and keeps every series. The grain lookup runs on Live too:
-// it is the tile's own question, the executor's cached answer.
+// it is the tile's own question, the executor's cached answer. A drill that names a column hidden from the caller
+// (part 4) is refused at the column gate first, as `visual:data` refuses its chart.
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
@@ -21,6 +22,7 @@ import { labelPairsForValues } from './valueLabelReplies';
 import { drillInputs } from './drillScope';
 import type { DrillRequest } from './drillScope';
 import { resolveDrill } from './visuals';
+import { gateColumnsReply } from './columnDoors';
 import { drillFinestDate, drillLastLevel, drillNoHierarchy, drillNotThisChart } from './drillMessages';
 
 /** `label`: the mark as people read it (a value label, a period); `next`: the next level's column, or the date grain. */
@@ -68,7 +70,8 @@ export async function drillDown(projectId: string, datasetId: string, req: Drill
 export function register(): void {
   ipcMain.handle('visual:drillDown', async (_e, { projectId, datasetId, encoding, filters, mark, params }: Record<string, unknown> = {}): Promise<DrillDownReply> => {
     try {
-      return await drillDown(String(projectId ?? ''), String(datasetId ?? ''), { encoding, filters, mark, params });
+      const [p, d] = [String(projectId ?? ''), String(datasetId ?? '')];
+      return await gateColumnsReply(p, d, async () => [], [encoding, filters], () => drillDown(p, d, { encoding, filters, mark, params }));
     } catch (err) {
       return { ok: false, error: (err instanceof Error && err.message) || 'The drill could not be worked out.' };
     }
