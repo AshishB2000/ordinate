@@ -14,6 +14,12 @@
 // A post that fails is logged and left: the alert itself is in the inbox either
 // way, and the next firing tries again. Each attempt is on the audit trail.
 //
+// THE SHARE POLICY. A post leaves the org, as a subscription's send does, so its
+// figure is judged on the policy's `report` path as a KPI is (publish/kpiPolicy):
+// a figure totalled from a column the policy drops reads the policy's words, and
+// the sentence and the breakdown that quote it are left out. The title still
+// names the rule that fired; an anomaly's sentence, which carries no figure, stays.
+//
 // AT MOST ONCE PER EVENT (docs/notifications §5.3). Right before an event's own
 // post, its id is claimed in `alert_posts` (0020) — an INSERT every pod shares —
 // and only the first claimant posts, whichever path delivered it. A claim the
@@ -31,14 +37,17 @@ import { dashboardLink } from '../publicUrl';
 import { deliver, type DatasetsMemo } from './deliver';
 import { subscriptionDb } from './run';
 import { inOrg, orgDb } from '../db/inOrg';
+import { kpiHidden } from '../../publish/kpiPolicy';
 
-/** The message one fired event stands for. Pure given the rule and the event. */
-export function alertMessageModel(projectId: string, rule: AlertRule, event: AlertEvent) {
+/** The message one fired event stands for. Pure given the rule, the event and `withheld` (the Share policy's words, or ''). */
+export function alertMessageModel(projectId: string, rule: AlertRule, event: AlertEvent, withheld = '') {
+  const label = rule.metric.label || rule.metric.column || rule.name;
+  const figured = !!withheld && rule.compare !== 'anomaly'; // an anomaly's sentence counts points, it quotes no figure
   return composeMessage({
     title: alertTitle(rule.name),
     subtitle: [],
-    note: event.diagnosis ? `${event.message} ${event.diagnosis}` : event.message,
-    kpis: event.value === null ? [] : [{ label: rule.metric.label || rule.metric.column || rule.name, display: fmtMetric(event.value) }],
+    note: withheld ? (figured ? '' : event.message) : event.diagnosis ? `${event.message} ${event.diagnosis}` : event.message,
+    kpis: figured ? [{ label, display: withheld }] : event.value === null ? [] : [{ label, display: fmtMetric(event.value) }],
     visuals: [],
     link: event.analysisId ? dashboardLink(projectId, event.analysisId) : null,
     footer: '',
@@ -82,6 +91,8 @@ async function post(projectId: string, events: AlertEvent[]): Promise<number> {
       if (!rule || !channelIds || !channelIds.length) continue;
       const who = ctx();
       const trail = (ok: boolean) => audit(subscriptionDb(), { org: who.org.id, actor: who.user.email, action: 'rpc', channel: 'alerts:post', projectId, targets: [rule.id, ...channelIds], outcome: ok ? 'ok' : 'error', requestId: who.requestId }).catch(() => undefined);
+      // Judged before the claim, so a policy that cannot be read leaves the event unclaimed for the next path. The figure is computeCardMetric's over the rule's own column (alertStore.metricFor), so that column is what is judged.
+      const withheld = await kpiHidden(projectId, [{ datasetId: rule.datasetId, column: rule.metric.column, aggregation: rule.metric.aggregation }], 'report');
       let first: boolean;
       try {
         first = await claim(projectId, event.id);
@@ -90,7 +101,7 @@ async function post(projectId: string, events: AlertEvent[]): Promise<number> {
         continue;
       }
       if (!first) continue; // posted already, by another path or pod
-      const model = alertMessageModel(projectId, rule, event);
+      const model = alertMessageModel(projectId, rule, event, withheld);
       let ok = 0;
       for (const id of channelIds) {
         const c = await getChannel(id);
