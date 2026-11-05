@@ -82,6 +82,13 @@ All notable changes to Ordinate are documented here. Format based on
   on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
   Off without a database. See `docs/notifications/00-design.md`.
 
+### Metrics a newer release writes are kept
+
+- This release keeps the metrics a later release writes (count distinct, funnel and period metrics,
+  snapshots per account, targets and target alerts) through every save and computes none of them, so
+  that release can roll out beside it. See `docs/server/upgrade.md` ("Metrics a newer release writes
+  are kept").
+
 ### Data model
 
 - **A new section, Data model** (`/model`, right after Data in the navigation), shows what a project's data

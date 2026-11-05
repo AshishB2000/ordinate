@@ -510,6 +510,44 @@ While pods of the previous release still run beside this one:
 A rollback removes the section and restores the old pages. Nothing is lost: this release stores nothing
 new.
 
+## Metrics a newer release writes are kept (`p5-01`)
+
+A later release adds deeper metrics: **count distinct** (wherever an aggregation is picked, and
+`countd(col)` in a metric formula), **funnel metrics** ("Visit → buy"), **period metrics** (year to
+date, the last N days, the change on the previous period or year), **snapshots per account** (each
+account's own latest day), a **target** on a metric, and **target alerts** ("below 90% of target").
+None of them exists in this release. It keeps each one exactly as written, through every load and
+save, and computes none of them:
+
+- A KPI tile, the Summary card and a metric's value show no figure.
+- A chart, a pivot table, an answer card and Explain refuse with a sentence such as "“Customers”
+  counts distinct values, which needs a newer version of Ordinate. Finish the upgrade, then try
+  again."
+- A Prepare step that counts distinct values refuses its run, so no table is written without that
+  column.
+- An alert on one is not evaluated, and its state is left as it was. Its Test button says why.
+- A target is kept and shown nowhere.
+
+A pod older than this release reads them as something else and saves that back: a count distinct
+on a metric or a chart becomes a sum, a funnel or period metric becomes an empty sum, and a snapshot
+per account becomes the latest day of the whole scope, **a wrong number**. It drops a count-distinct
+KPI card, the count distinct in a Prepare group step (a refresh then writes a table without that
+column) and in a stored answer, and a metric's target. It **deletes** a target alert, and an alert
+that counts distinct values, on its next evaluation.
+
+### The release that adds them needs this release first
+
+**The release that adds these metrics needs this release (or a later one) on every pod first.**
+Nothing in the server can check this. From an older release, use the same two ways through as for
+terms: **go through this release**, or **stop every pod, then start the new ones**
+(`kubectl -n ordinate scale deploy/ordinate --replicas=0`, then `helm upgrade`). The steps, for
+Compose, Helm and ECS, are in
+[The release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first).
+
+**Never roll back below this release once such metrics exist** (`helm rollback`, or an older
+`ORDINATE_IMAGE` in Compose). An older pod shows them as `sum`, or as nothing, and drops them the
+next time it saves them.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the
