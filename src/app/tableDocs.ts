@@ -146,7 +146,7 @@ export async function readableTableDoc(projectId: string, datasetId: string): Pr
  */
 export async function tableFacts(projectId: string, datasetId: string): Promise<FactTableDoc | undefined> {
   const doc = await readableTableDoc(projectId, datasetId);
-  if (!doc.role && !doc.key && !doc.grain && !doc.guide) return undefined;
+  if (!doc.role && !doc.key && !doc.grain) return undefined; // the guide is the Assistant's guidance (ipc/guidance), not a table note
   const key = doc.key && (await getDatasetMeta(projectId, datasetId))?.columns.some((c) => c.name === doc.key) ? doc.key : '';
   const out: FactTableDoc = {};
   if (doc.role) out.role = doc.role;
@@ -156,6 +156,5 @@ export async function tableFacts(projectId: string, datasetId: string): Promise<
   }
   if (doc.grain) out.grain = doc.grain;
   else if (key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[key]?.displayName || key}`;
-  if (doc.guide) out.guide = doc.guide;
   return out;
 }

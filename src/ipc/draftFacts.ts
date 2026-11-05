@@ -10,7 +10,8 @@
 // same function `resolveMetric` words its own `definitionText` with.
 //
 // Record reads only: no table is hydrated and no engine is asked anything. The table notes
-// (role, grain, key, guide: app/tableDocs `tableFacts`) ride along with the column notes.
+// (role, grain, key: app/tableDocs `tableFacts`) ride along with the column notes, and the
+// project's Assistant instructions (app/instructions) with them.
 
 import { metricHidden } from '../analysis/columnHidden';
 import type { PlanContext } from '../analysis/analysisPlan';
@@ -23,6 +24,7 @@ import { describeDefinition, describeDefinitionShort } from '../analysis/metricF
 // carried across a later rename, so a marked column stays marked under its new name.
 import { assistantColumnDocs } from '../app/sharePolicy';
 import { tableFacts } from '../app/tableDocs';
+import { load as loadCatalog } from '../app/catalog';
 
 /** The most metrics a draft is told about, first by name: about what fills the
  *  facts' metric block (planFacts.USER_BLOCK_MAX) at ordinary lengths, and the
@@ -77,7 +79,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
         ...(status ? { status, ...(status.replacedBy ? { replacedBy: status.replacedBy.name } : {}) } : {}),
       });
     }
-    return { columnDocs, tables, metrics: defined };
+    return { columnDocs, tables, metrics: defined, instructions: ((await loadCatalog(projectId)).instructions ?? []).map((i) => i.text) };
   } catch (_) {
     return {}; // the notes must never cost the user their draft
   }

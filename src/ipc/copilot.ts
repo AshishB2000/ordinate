@@ -53,6 +53,7 @@ import { isKeptStep } from '../data/filterList';
 import { termFactsFor } from './terms';
 import { statusFor } from '../analysis/statusStore';
 import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
+import { askGuidance } from './guidance';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -533,6 +534,7 @@ export function register() {
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {}, emit, q);
+      const guided = await askGuidance(projectId, context || {}, facts.provenance.kind); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.
@@ -541,11 +543,11 @@ export function register() {
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const named = !!tid && (await copilot.listThreads(projectId)).some((t) => t.id === tid);
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
-      const ledger = prev ? facts.ledger.concat(prev.ledger) : facts.ledger;
+      const ledger = facts.ledger.concat(guided.ledger, prev ? prev.ledger : []);
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
-      const res = await askCopilot(prior, prev ? `${facts.text}\n\n${prev.block}` : facts.text, q, onDelta);
+      const res = await askCopilot(prior, [facts.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta);
 
       if (res.ok) {
         // Pin the target thread BEFORE the first append. Two reasons: the question
