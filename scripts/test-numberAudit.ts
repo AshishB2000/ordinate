@@ -29,6 +29,7 @@ process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 // ponytail: compiled siblings of the .ts sources under test.
 const audit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const guidance: typeof import('../src/ai/guidanceFacts') = require('../src/ai/guidanceFacts');
 const { auditNumbers, harvestAppNumbers } = audit;
 type LedgerEntry = import('../src/ai/numberAudit').LedgerEntry;
 
@@ -192,6 +193,11 @@ async function main(): Promise<void> {
   roundTrip('projectFacts', copilot.projectFacts('Demo', {
     datasets: ['Cities'], visuals: ['Population by city'], dashboards: ['Overview'],
   }));
+
+  // The editors' guidance block: its frame carries no digit, so on digit-free text its ledger is empty and clean.
+  const guided = guidance.guidanceBlock({ instructions: ['Revenue means net_amount unless they say gross.'], guides: [{ dataset: 'Cities', text: 'Use pop for people.', max: 200 }] });
+  roundTrip('guidanceBlock', guided);
+  ok('guidanceBlock: a digit-free block banks nothing', guided.ledger.length === 0 && guided.text.includes('<<<GUIDANCE'));
 
   // The backstop must still WORK — a name carrying digits is the live case it
   // exists for, and a model repeating the name it was handed is not inventing.

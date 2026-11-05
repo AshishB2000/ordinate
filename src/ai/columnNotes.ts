@@ -89,7 +89,7 @@ export const GUIDE_FACT_MAX = 1200;
 const FIELD_FACT_MAX = 256;
 
 /** One user-written string as ONE line: with its line breaks gone it cannot open a line of its own (a heading, a fence). Cut at `max`, never inside a surrogate pair, "…" when cut. */
-function oneLine(raw: unknown, max: number): string {
+export function oneLine(raw: unknown, max: number): string {
   const s = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
   if (s.length <= max) return s;
   const high = s.charCodeAt(max - 1);
