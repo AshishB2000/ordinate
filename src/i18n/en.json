@@ -581,6 +581,7 @@
   "semanticMessages.small_multiples_can_t_be_drawn": "Small multiples can't be drawn from {dataset}: {layer} computes its metrics and returns totals, not rows.",
   "semanticMessages.this_question_needs_the_latest_date": "This question needs the latest date or the stored values of {dataset}, which {layer} can't look up.",
   "semanticMessages.your_access_to_is_limited_to": "Your access to {dataset} is limited to some rows, and {layer} can't apply that limit exactly, so no figure is shown.",
+  "sourceTableMessages.only_a_dataset_built_from_a": "Only a dataset built from a connection names its source tables.",
   "sourceTableMessages.that_connection_is_gone": "That connection is gone.",
   "sourceTableMessages.this_connection_already_documents_2_000": "This connection already documents 2,000 tables.",
   "sourceTableMessages.this_connection_s_tables_were_read": "This connection's tables were read 60 times in the last hour. Try again in {minutes} min.",

@@ -584,6 +584,7 @@
   "semanticMessages.small_multiples_can_t_be_drawn": "Les petits multiples ne peuvent pas être tracés à partir de {dataset} : {layer} calcule ses métriques et renvoie des totaux, pas des lignes.",
   "semanticMessages.this_question_needs_the_latest_date": "Cette question a besoin de la date la plus récente ou des valeurs enregistrées de {dataset}, que {layer} ne peut pas consulter.",
   "semanticMessages.your_access_to_is_limited_to": "Votre accès à {dataset} est limité à certaines lignes, et {layer} ne peut pas appliquer exactement cette limite, donc aucun chiffre n’est affiché.",
+  "sourceTableMessages.only_a_dataset_built_from_a": "Seul un jeu de données construit à partir d'une connexion nomme ses tables source.",
   "sourceTableMessages.that_connection_is_gone": "Cette connexion n'existe plus.",
   "sourceTableMessages.this_connection_already_documents_2_000": "Cette connexion documente déjà 2 000 tables.",
   "sourceTableMessages.this_connection_s_tables_were_read": "Les tables de cette connexion ont été lues 60 fois au cours de la dernière heure. Réessayez dans {minutes} min.",

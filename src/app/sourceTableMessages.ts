@@ -27,3 +27,8 @@ export function factsReadLimit(minutes: number): string {
 export function factsNotReadable(): string {
   return t('sourceTableMessages.this_source_has_no_catalog_ordinate');
 }
+
+/** `dataset:setSourceTables` on a dataset that is not built from a connection. */
+export function notLinkable(): string {
+  return t('sourceTableMessages.only_a_dataset_built_from_a');
+}
