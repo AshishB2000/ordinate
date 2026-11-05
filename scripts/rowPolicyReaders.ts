@@ -192,6 +192,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'tokens:create': 'META',
   'tokens:list': 'META',
   'tokens:revoke': 'META',
+  'topic:get': 'META', // ids and names of a project's datasets, fields, metrics and terms: never a value, the same reply for every caller
   'trash:list': 'META',
   'verified:list': 'REDACT', // D5: no spec with a value filter on a dataset closed to the caller (ipc/verified rowOf)
   'verified:checkResult': 'REDACT', // reasons can quote a value: none on a dataset closed to the caller (ipc/assistantCheck checkFor)

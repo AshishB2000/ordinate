@@ -15,6 +15,7 @@
 //    value; the editor's replies do (control).
 // 5. A PLANTED UNROUTED READER (reads the Parquet by path) is caught by the
 //    leak check; one that reads through getDataset is refused by the net.
+//    A topic (part 6) hands east no value through the term it lists, and topic:save is an editor's.
 // 6. `nobody` is refused `none`; the rules themselves are admin-only.
 // 7. COLUMN RULES (semantic layer part 4): `columnAccess`, which a newer release writes, planted on Orders
 //    closes EVERY door and reader of 2 and 3 to east (named by the row rules) and to `nobody`, each in its own
@@ -557,6 +558,22 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('setup: boss saves a hierarchy over Orders', hs.body?.ok === true, hs.text.slice(0, 160));
     ok('meta: model:navigation — east reads no value a lock hides', navEast.body?.ok === true && !H.leaks(navEast.text), navEast.text.slice(0, 240));
     ok('NEGATIVE CONTROL: …and it is the editor\'s reply, hierarchy included (nothing was withheld, because nothing was a value)', navEast.text === navEd.text && /"Who"/.test(navEd.text) && navEd.body?.tables?.[0]?.datasetId === orders, navEd.text.slice(0, 240));
+    // topic:get and model:navigation's topics (META, part 6 step 07): ids and names only. A topic listing a term whose filter
+    // quotes a West value hands east no value; a topic is never a way round the lock, nor a narrowing of what east reads.
+    const westTerm = String((await W.call('boss', 'term:save', { projectId: P, input: { name: 'Top west', datasetId: orders, filters: [{ type: 'filter', column: 'customer', op: '=', value: H.W_CANARY }] } })).body?.term?.id ?? '');
+    const topicBody = { name: 'Sales', datasets: [{ id: orders, fields: ['customer', 'region'] }], metricIds: [], termIds: [westTerm] };
+    const tpEd = await W.call('ed', 'topic:save', { projectId: P, topic: topicBody });
+    const tpEast = await W.call('east', 'topic:save', { projectId: P, topic: { ...topicBody, name: 'Mine' } });
+    ok('write: east (a viewer) gets 403 from topic:save', tpEast.status === 403, `${tpEast.status} ${tpEast.text.slice(0, 120)}`);
+    ok('NEGATIVE CONTROL: the editor\'s topic:save is 200', tpEd.status === 200 && tpEd.body?.ok === true, tpEd.text.slice(0, 160));
+    const topicId = String(tpEd.body?.topic?.id ?? '');
+    const [tgEast, tgEd] = [await W.call('east', 'topic:get', { projectId: P, id: topicId }), await W.call('ed', 'topic:get', { projectId: P, id: topicId })];
+    const [tnEast, tnEd] = [await W.call('east', 'model:navigation', { projectId: P }), await W.call('ed', 'model:navigation', { projectId: P })];
+    eastReplies.push(tgEast.text, tnEast.text);
+    ok('meta: topic:get and model:navigation\'s topics — east reads no value a lock hides, through a topic listing a term that quotes one',
+      tgEast.body?.ok === true && !H.leaks(tgEast.text) && !H.leaks(tnEast.text) && tgEast.body.topic.termIds[0] === westTerm && tnEast.body?.topics?.[0]?.name === 'Sales', `${tgEast.text.slice(0, 200)} | ${tnEast.text.slice(0, 200)}`);
+    ok('NEGATIVE CONTROL: …the term itself holds the value (the editor reads it), and east\'s topic replies are the editor\'s',
+      H.leaks((await W.call('ed', 'term:get', { projectId: P, id: westTerm })).text) && tgEast.text === tgEd.text && tnEast.text === tnEd.text, tgEd.text.slice(0, 200));
     // visual:drillDown (DOOR): east drills Orders' customer c3 down to region; the drilled chart is east's own visual:data for it.
     const byCustomer = { category: 'customer', values: [{ column: 'sales', aggregation: 'sum' }] };
     const drilledBy = async (who: string): Promise<{ d: H.Reply; chart: H.Reply | null }> => {
