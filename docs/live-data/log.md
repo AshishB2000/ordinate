@@ -1379,3 +1379,23 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
   failed at the gate on every warehouse before. The differential now packs its statements under the same
   gate (and 200,000 characters, under ClickHouse's default `max_query_size`), so 400 expressions are
   about 8 statements on a billed account.
+- **Pins, re-proved on each engine** (`scripts/liveParityPins.ts`; step 03's two move there from
+  test-formulaSqlDiff, numbered on from step 04's 9):
+  - **10, overflow.** `[n] / 1e-300` at −1e10 is −Infinity in JS. On Live: NULL on DuckDB and ClickHouse
+    (the engine gives −∞, the projection keeps finite values only); a warehouse error on Postgres and
+    BigQuery, which the executor answers as the typed `live_failed`, never a number. Snowflake's side is
+    not recorded yet: the check accepts NULL or an error there and prints which, to be frozen from the
+    first nightly on this branch.
+  - **11, casing.** upper('ß'), lower('İ'), lower('ΑΣ') are "SS", "i̇", "ας" in JS; "ẞ", "i", "ασ" on
+    DuckDB; unchanged ("ß", "İ", "ΑΣ") on the C-collated Postgres. ClickHouse, Snowflake and BigQuery
+    print theirs (not yet asserted). Whatever they answer, `lower` and `upper` stay refused on every
+    dialect (D4: one list), and the check asserts that refusal on each engine's dialect.
+- **Not reached:** ClickHouse `toDayOfMonth` before 1970 (the twin's `Date` column cannot hold such a
+  day, and the corpus has none); Databricks (no workspace: its refusal stays).
+- **Runs.** 2026-11-05, Postgres 17 (redshift dialect, local scratch database): 2,000 expressions in 42
+  statements, every one agrees, the ROUND control caught; 672 calc matrix cases; the whole suite 3,601
+  statements in 35 s. ClickHouse, Snowflake and BigQuery: recorded when the first nightly on
+  `feat/semantic-p8-05-engine-pins` is green (each prints its `calcs:` line into the run's summary).
+- **Older pods.** No function moved to refused. The NULL spelling moves the cache key of a calc holding an
+  always-NULL term; its figures cannot change. A formula over 500 bound values now refuses at save, and a
+  stored one refuses `calculated`; each failed at the connector's gate on every warehouse before.

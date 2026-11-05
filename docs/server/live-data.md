@@ -394,7 +394,9 @@ Then, for each warehouse, it runs the **live-parity matrix**: charts, KPI tiles 
 of a Live dataset and of a copy of the same rows, which must agree figure for figure. The rows are
 held in the query itself (literals cast to the warehouse's types), so nothing is written to the
 account and the read-only role below is enough. The same matrix runs against PostgreSQL on every
-pull request and against a ClickHouse container every night.
+pull request and against a ClickHouse container every night. Each run also checks Live calculated
+fields: 400 formulas against the formula engine, row by row (2,000 on PostgreSQL and ClickHouse), and
+the matrix's calculated-field charts and KPIs.
 
 It runs only when a warehouse's variables are set. Without them it prints that it skipped and
 passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
@@ -435,7 +437,8 @@ prints no credential and no account identifier, because the log of a public repo
 
 **What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
 which waits for Snowflake's own 45-second hand-off before cancelling), plus the parity matrix's
-roughly 500 small statements, plus the warehouse's auto-suspend time. BigQuery: nothing billed in
+roughly 500 small statements and its calculated fields' roughly 400, plus the warehouse's auto-suspend
+time. BigQuery: nothing billed in
 the usual case. Every query it runs reads generated or literal rows rather than a table; the one
 table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
 dry-run, and both are free.
@@ -534,8 +537,9 @@ Prepare step on a copy. Every value a formula writes is a bound parameter, never
 - **Names** are unique ignoring case against the dataset's columns and the other calculated fields
   (BigQuery and Databricks names ignore case), and may not start with `lv_` or `o_` (Ordinate's own
   query aliases). A formula may use the calculated fields above it, not those below. At most 50 per
-  dataset, 200 characters a name, 4,000 a formula; a question whose fields make a query over 256 KB is
-  refused.
+  dataset, 200 characters a name, 4,000 a formula, and 500 values a formula writes (each is a bound
+  parameter, and a query may send 1,000); a question whose fields make a query over 256 KB or over
+  1,000 parameters is refused.
 - **Databricks:** calculated fields are refused there, with a sentence, until a Databricks workspace
   joins Ordinate's real-engine tests. Make a copy to use them.
 - **No value list:** the schema sync never samples a calculated field, so its filter picker shows the
@@ -552,9 +556,19 @@ Prepare step on a copy. Every value a formula writes is a bound parameter, never
   first. A question that reads none is sent exactly as before.
 - **Who sees the formula:** a viewer whom row access rules restrict sees each field's name and type,
   not its formula, which may name a customer.
-- **Known differences from a copy** (each held by a test, `scripts/liveParityPins.ts`): Prepare types a
-  calculated column by its values, so a text formula whose every value reads as a number (`IF [amt] >
-  10 THEN '1' ELSE '2' END`) is a number column on a copy and a text column on Live.
+- **Tested on each engine:** every formula function above is held to the formula engine row by row, and
+  the calculated-field charts and KPIs to a copy's, on PostgreSQL (for Redshift) on every pull request,
+  and on ClickHouse, Snowflake and BigQuery every night. One function list holds for every warehouse, so
+  a dataset that moves to another connection keeps its fields.
+- **Known differences from a copy** (each held by a test on every engine, `scripts/liveParityPins.ts`):
+  - Prepare types a calculated column by its values, so a text formula whose every value reads as a
+    number (`IF [amt] > 10 THEN '1' ELSE '2' END`) is a number column on a copy and a text column on
+    Live.
+  - A number past a double's range (`[x] / 1e-300`) is ±infinity on a copy. On Live it is empty, or
+    the question fails, depending on the warehouse: ClickHouse gives empty, PostgreSQL and BigQuery
+    raise an error, so the question says the warehouse failed. It is never a number.
+  - `lower` and `upper` stay refused because the engines' case maps differ from the formula engine's
+    and from each other; the test records each engine's answer for `ß`, `İ` and a final `Σ`.
 
 ## Refresh URL
 
