@@ -61,7 +61,7 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
       ) : fields.isError ? (
         <ErrorState compact heading={3} title="The fields could not be read" message={fields.error.message} onRetry={() => void fields.refetch()} />
       ) : (
-        <FieldList fields={list} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
+        <FieldList fields={list} hierarchies={navFor(nav.data, dataset.id)} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
       )}
     </>
   );
