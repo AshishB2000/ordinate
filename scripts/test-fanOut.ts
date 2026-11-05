@@ -40,6 +40,7 @@ const { compileMetricFormula }: typeof import('../src/analysis/metricFormula') =
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
+const analysesIpc: typeof import('../src/ipc/analysesServer') = require('../src/ipc/analysesServer');
 const jp: typeof import('../src/analysis/joinPlan') = require('../src/analysis/joinPlan');
 const js: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
 const jr: typeof import('../src/engine/joinResident') = require('../src/engine/joinResident');
@@ -203,6 +204,20 @@ async function kpis(): Promise<void> {
   ok('…while Customers\' segment reaches Returns through Customers', Object.is(smbRefunds.value, refunds((r) => custOf(r[0])?.[COL.segment] === 'SMB')), show(smbRefunds));
   const both = await kpi(C, { column: 'customer_id', aggregation: 'count' }, []);
   ok('a column on two many sides: no figure, and the sentence names both', both.ok && both.value === null && /Orders and on Returns/.test(String(both.notes)), show(both));
+  // A dashboard term the KPI leaves out (an Orders term, part 1 05b): its note after the fan-out's, neither replacing the other.
+  const paid = (await terms.saveTerm(P, { name: 'Paid orders', datasetId: swap(O), filters: [F('amount', '>', 0)] }))!;
+  const scoped = await kpi(C, sum, [{ type: 'term', term: paid.id, fromControl: true } as unknown as FilterStep]);
+  ok('a dashboard term the KPI leaves out: its note after the fan-out\'s, the figure unfiltered', Object.is(scoped.value, all.value)
+    && show(scoped.notes) === show([ownRows, termMsg.termNotApplied('Paid orders', 'Customers')]), show(scoped));
+  // A dashboard's tiles (analysis:tiles, which 05b gave notes): the KPI and its chart each carry the fan-out's note.
+  if (!handlers.has('analysis:tiles')) analysesIpc.register();
+  if (!handlers.has('visual:data')) visualsIpc.register();
+  const tiles = await handlers.get('analysis:tiles')!(null, { projectId: P, items: swap([
+    { kind: 'metric', datasetId: C, ...sum, filters: [F('segment', '=', 'SMB')] },
+    { kind: 'visual', datasetId: C, encoding: { category: 'segment', values: [M('amount', 'sum', O)] }, filters: [] },
+  ]) }) as Kpi[];
+  ok('analysis:tiles: the KPI tile carries its figure and the fan-out\'s note, and so does its chart', Object.is(tiles[0]?.value, v.value)
+    && show(tiles[0]?.notes) === show([ownRows]) && tiles[1]?.ok === true && show(tiles[1]?.notes) === show([ownRows]), show(tiles));
   const reads = await ipcRels.metricReads(P, swap(C), 'amount', swap([F('zone', '=', 'W')]));
   ok('metricReads: Orders and the Regions its pinned filter joins (never Customers itself)', sorted(reads) === sorted([swap(O), swap(G)]), show(reads));
 
