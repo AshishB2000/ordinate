@@ -8,8 +8,12 @@
 //      the `values[].datasetId` check in reachesOther, the locked caller gets a figure.
 //   3. RESTRICTED ON ORDERS, or CLOSED ON REGIONS (read only by the questions' joins): refused `related`.
 //      NEGATIVE CONTROL: with the related gate off, the cached answers reach the caller closed on Regions.
-//   4. LIVE: a Live many side is refused, typed, never a figure.
-//   5. A HIDDEN MANY-SIDE COLUMN (part 4, cross-part item 6): Orders hides `amount` from viewers; east's chart on
+//   4. KPIs (step 07): a KPI on Customers over Orders' amount is Orders' KPI. Locked on Customers: refused
+//      `related` before Orders is asked. NEGATIVE CONTROL: without the many-side measure in reachesOther, the
+//      locked caller gets a figure. Restricted on Orders: refused (metricReads names Orders). A publish
+//      records both tables.
+//   5. LIVE: a Live many side is refused, typed, never a figure — for a chart and for a KPI.
+//   6. A HIDDEN MANY-SIDE COLUMN (part 4, cross-part item 6): Orders hides `amount` from viewers; east's chart on
 //      Customers with a measure over it is refused `hidden` at the column gate, before any sub-question. NEGATIVE
 //      CONTROLS: the editor gets the figure; east's fan-out over Returns' refund answers, Object.is-equal to the editor's.
 //
@@ -25,6 +29,7 @@ const rels: typeof import('../src/analysis/relationships') = require('../src/ana
 const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
 const doors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
+const mf: typeof import('../src/ipc/metricFanOut') = require('../src/ipc/metricFanOut');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
@@ -40,6 +45,7 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     return finish();
   }
   const real = fan.fanOutVizData;
+  const realKpi = mf.fanOutMetricFor;
   try {
     const { P } = W;
     const ids = new Map<string, string>();
@@ -112,7 +118,51 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     ok('NEGATIVE CONTROL: the same visual without that filter keeps them', JSON.stringify(await order(segVis)) === '["SMB","Mid"]');
     ok('setup: Regions\' rules removed', (await policy(G, null)).body?.ok === true);
 
-    // ── 5. A hidden many-side column ────────────────────────────────────
+    // ── 4. KPIs over a many-side column ─────────────────────────────────
+    let kpiAsks = 0;
+    (mf as { fanOutMetricFor: typeof realKpi }).fanOutMetricFor = (p, d, s, f, pa, ask) => realKpi(p, d, s, f, pa, (...a) => { kpiAsks++; return ask(...a); });
+    const kpi = (who: string, column = 'amount', filters: unknown[] = []) => W.call(who, 'dashboard:metric', { projectId: P, datasetId: C, column, aggregation: column === 'id' ? 'count' : 'sum', filters });
+    const total = fx.ORDERS.rows.reduce((a, r) => a + (r[4] as number), 0);
+    const edKpi = await kpi('ed');
+    ok('the editor\'s KPI on Customers over amount is Orders\' total, asked of Orders', edKpi.body?.ok === true && Object.is(edKpi.body.value, total) && kpiAsks === 1, show(edKpi));
+    ok('metricReads names Orders (row access gates it)', sorted(await W.as('boss', () => ipcRels.metricReads(P, C, 'amount', []))) === sorted([O]));
+
+    ok('setup: Customers gets rules', (await policy(C, 'region')).body?.ok === true);
+    kpiAsks = 0;
+    const lockedKpi = await kpi('east');
+    ok('locked on Customers: the KPI is refused related, before Orders is asked', H.refused(lockedKpi, 'related') && kpiAsks === 0, `${kpiAsks} ${show(lockedKpi)}`);
+    ok('…and a Customers KPI under a control on Orders\' order_date still answers (it never reads Orders): no new refusal',
+      (await kpi('east', 'id', [{ type: 'filter', column: 'order_date', op: '>=', value: '2024-01-01' }])).body?.ok === true);
+    doors.setManySideGateForTest(false);
+    try {
+      const leaky = await kpi('east');
+      ok('NEGATIVE CONTROL: with reachesOther on forward names alone, the locked caller gets a figure', leaky.body?.ok === true && typeof leaky.body.value === 'number' && kpiAsks > 0, show(leaky));
+    } finally {
+      doors.setManySideGateForTest(true);
+    }
+    ok('NEGATIVE CONTROL: the editor still gets it', Object.is((await kpi('ed')).body?.value, total));
+    ok('setup: Customers\' rules removed', (await policy(C, null)).body?.ok === true);
+
+    ok('setup: Orders gets rules', (await policy(O, 'region')).body?.ok === true);
+    ok('restricted on Orders: the KPI is refused related', H.refused(await kpi('east'), 'related'));
+    doors.setRelatedGateForTest(false);
+    try {
+      const leaky = await kpi('east');
+      ok('NEGATIVE CONTROL: with the related gate off, east gets a figure', leaky.body?.ok === true, show(leaky));
+    } finally {
+      doors.setRelatedGateForTest(true);
+    }
+    ok('setup: Orders\' rules removed', (await policy(O, null)).body?.ok === true);
+
+    const kpiBoard = await W.call('boss', 'analysis:create', { projectId: P, name: 'KPI board', sheets: [{ name: 'One', cards: [
+      { id: crypto.randomUUID(), type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: C, column: 'amount', aggregation: 'sum', label: 'Revenue' } },
+    ] }] });
+    const kpiSite = await W.call('boss', 'publish:run', { projectId: P, dashboardIds: [String(kpiBoard.body?.id ?? kpiBoard.body?.analysis?.id)], storyIds: [], scorecardIds: [], options: { title: 'KPI' } });
+    ok('a publish of a many-side KPI tile records Customers and Orders', kpiSite.body?.ok === true && sorted(kpiSite.body.site.datasetIds) === sorted([C, O]), show(kpiSite));
+    (mf as { fanOutMetricFor: typeof realKpi }).fanOutMetricFor = realKpi;
+
+
+    // ── 6. A hidden many-side column ────────────────────────────────────
     const hideAmount = (on: boolean) => W.as('boss', () => rec.serialized(rec.datasetFilePath(P, O), (raw) => {
       if (on) raw.columnAccess = access.buildColumnAccess(raw, [{ column: 'amount', visibleTo: [] }], 'boss@acme.test', new Date().toISOString());
       else delete raw.columnAccess;
@@ -128,23 +178,26 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     ok('NEGATIVE CONTROL: east\'s fan-out over Returns\' refund answers, Object.is-equal to the editor\'s', mine.body?.ok === true && H.diff(mine.body.data, theirs.body?.data, {}) === '', show(mine));
     await hideAmount(false);
 
-    // ── 4. Live: a many side on a warehouse refuses, typed ─────────────
+    // ── 5. Live: a many side on a warehouse refuses, typed ─────────────
     fakeMod.registerLiveFake();
     const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
     const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
     const liveOrders = await W.as('boss', async () => {
-      await duck.execAsync('CREATE OR REPLACE TABLE fan_orders (customer_id VARCHAR, amount DOUBLE)');
-      await duck.queryAsync('INSERT INTO fan_orders VALUES ($1, $2), ($3, $4)', ['c1', 2, 'c2', 3]);
+      await duck.execAsync('CREATE OR REPLACE TABLE fan_orders (customer_id VARCHAR, amount DOUBLE, paid DOUBLE)');
+      await duck.queryAsync('INSERT INTO fan_orders VALUES ($1, $2, $3), ($4, $5, $6)', ['c1', 2, 2, 'c2', 3, 3]);
       const conn = await connections.saveConnection(P, { name: 'Fake', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
-      const id = (await liveRecord.saveLiveRecord(P, { name: 'Live orders', columns: [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }], origin: { kind: 'connection', connId: conn!.id, table: 'fan_orders' } }))!.id;
+      const id = (await liveRecord.saveLiveRecord(P, { name: 'Live orders', columns: [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'paid', type: 'number' }], origin: { kind: 'connection', connId: conn!.id, table: 'fan_orders' } }))!.id;
       // relationship:save measures the keys on rows a Live dataset does not keep: the store directly.
       await rels.saveRelationship(P, { from: { datasetId: id, column: 'customer_id' }, to: { datasetId: C, column: 'id' }, cardinality: 'many_to_one' });
       return id;
     });
     const live = await chart('ed', { category: 'segment', values: [M('id', 'count'), M('amount', 'sum', liveOrders)] });
     ok('a Live many side: refused, typed (live_refused), never a figure', live.body?.ok === false && live.body.code === 'live_refused', show(live));
+    const liveKpi = await W.call('ed', 'dashboard:metric', { projectId: P, datasetId: C, column: 'paid', aggregation: 'sum' });
+    ok('a KPI over a Live many side\'s column: refused, typed (live_refused), never a figure', liveKpi.body?.ok === false && liveKpi.body.code === 'live_refused' && liveKpi.body.reason === 'related', show(liveKpi));
   } finally {
     (fan as { fanOutVizData: typeof real }).fanOutVizData = real;
+    (mf as { fanOutMetricFor: typeof realKpi }).fanOutMetricFor = realKpi;
     await W.close();
     fx.removeFixture();
   }

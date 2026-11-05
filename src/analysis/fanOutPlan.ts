@@ -52,6 +52,50 @@ function own(v: VizMeasure): VizMeasure {
   return out;
 }
 
+/** The part of a many side's question Rule 4 fills: its filters, and the measures they reach. */
+type Routed = Pick<Side, 'm' | 'mj' | 'pj'> & { q: Pick<FanQuestion, 'filters' | 'measures'> };
+
+/**
+ * Rule 4 (D11): each filter keeps one meaning — the primary's owner, reached by each many side on the pinned
+ * path; a column only a many side has narrows that side. Fills each side's filters; returns the primary's own
+ * filters and the `narrows` notes, or the refusal's sentence.
+ */
+function routeFilters(primary: string, filters: FilterStep[], mine: number[], sides: Routed[], rels: Relationship[], infos: Map<string, DsInfo>): { ours: FilterStep[]; notes: FanNote[] } | string {
+  const reachP = reachable(primary, rels);
+  const pathP = (ds: string): Hop[] | undefined => (ds === primary ? [] : reachP.get(ds));
+  const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
+  const ours: FilterStep[] = [];
+  const notes: FanNote[] = [];
+  for (const f of filters || []) {
+    const reached = new Set<number>();
+    const give = (s: Routed, step: FilterStep): void => { s.q.filters.push(step); s.q.measures.forEach((i) => reached.add(i)); };
+    const p = !f || typeof f.column !== 'string' ? null
+      : f.via ? viaPath(primary, f.via, rels)
+      : ((o) => (o ? { ok: true as const, value: pathP(o) as Hop[] } : null))(resolveColumnOwner(primary, f.column, rels, infos));
+    if (p && p.ok) {
+      ours.push(f);
+      mine.forEach((i) => reached.add(i));
+      for (const s of sides) {
+        if (!startsWith(p.value, s.pj)) continue; // a branch of the primary's tree M does not pass through
+        const pinned = [...s.mj, ...p.value.slice(s.pj.length)];
+        const back = viaPath(s.m, last(pinned).relId, rels);
+        if (!back.ok || !sameHops(pinned, back.value)) return fanOutOffPath(f.column, nameOf(s.m), nameOf(primary));
+        give(s, { ...f, via: last(pinned).relId });
+      }
+    } else if (!p && f && typeof f.column === 'string' && sides.some((s) => resolveColumnOwner(s.m, f.column, rels, infos))) {
+      for (const s of sides) if (resolveColumnOwner(s.m, f.column, rels, infos)) give(s, f); // a column only a many side has
+    } else {
+      ours.push(f); // no table has it (or its via is refused): every question keeps it, and skips or refuses it as today
+      for (const s of sides) s.q.filters.push(f);
+      continue;
+    }
+    if (reached.size < mine.length + sides.reduce((n, s) => n + s.q.measures.length, 0)) {
+      notes.push({ kind: 'narrows', column: f.column, measures: [...reached].sort((a, b) => a - b) });
+    }
+  }
+  return { ours, notes };
+}
+
 export function planFanOut(primary: string, encoding: VizEncoding, filters: FilterStep[], rels: Relationship[], infos: Map<string, DsInfo>): Planned | null {
   if (!encoding || !infos.has(primary)) return null;
   const split = typeof encoding.series === 'string' && encoding.series !== '';
@@ -111,36 +155,10 @@ export function planFanOut(primary: string, encoding: VizEncoding, filters: Filt
     s.q.encoding = enc;
   }
 
-  // Rule 4 (D11): each filter keeps one meaning: the primary's owner, reached by M on the pinned path.
-  const ours: FilterStep[] = [];
-  const notes: FanNote[] = [];
-  for (const f of filters || []) {
-    const reached = new Set<number>();
-    const give = (s: Side, step: FilterStep): void => { s.q.filters.push(step); s.q.measures.forEach((i) => reached.add(i)); };
-    const p = !f || typeof f.column !== 'string' ? null
-      : f.via ? viaPath(primary, f.via, rels)
-      : ((o) => (o ? { ok: true as const, value: pathP(o) as Hop[] } : null))(resolveColumnOwner(primary, f.column, rels, infos));
-    if (p && p.ok) {
-      ours.push(f);
-      mine.forEach((i) => reached.add(i));
-      for (const s of sides) {
-        if (!startsWith(p.value, s.pj)) continue; // a branch of the primary's tree M does not pass through
-        const pinned = [...s.mj, ...p.value.slice(s.pj.length)];
-        const back = viaPath(s.m, last(pinned).relId, rels);
-        if (!back.ok || !sameHops(pinned, back.value)) return { ok: false, error: fanOutOffPath(f.column, nameOf(s.m), nameOf(primary)) };
-        give(s, { ...f, via: last(pinned).relId });
-      }
-    } else if (!p && f && typeof f.column === 'string' && sides.some((s) => resolveColumnOwner(s.m, f.column, rels, infos))) {
-      for (const s of sides) if (resolveColumnOwner(s.m, f.column, rels, infos)) give(s, f); // a column only a many side has
-    } else {
-      ours.push(f); // no table has it (or its via is refused): every question keeps it, and skips or refuses it as today
-      for (const s of sides) s.q.filters.push(f);
-      continue;
-    }
-    if (reached.size < mine.length + sides.reduce((n, s) => n + s.q.measures.length, 0)) {
-      notes.push({ kind: 'narrows', column: f.column, measures: [...reached].sort((a, b) => a - b) });
-    }
-  }
+  // Rule 4 (D11).
+  const routed = routeFilters(primary, filters, mine, sides, rels, infos);
+  if (typeof routed === 'string') return { ok: false, error: routed };
+  const { ours, notes } = routed;
 
   // Rule 6: the primary's question first, then one per (M, M → J) in measure order.
   const questions = (mine.length ? [{ datasetId: primary, encoding: { ...encoding, values: mine.map((i) => values[i]) }, filters: ours, measures: mine }] : [])
@@ -169,4 +187,25 @@ export function manySideOwner(primary: string, column: string, rels: Relationshi
   const owners = manySideColumnGroups(primary, rels, infos).filter((g) => g.columns.some((c) => c.name === column));
   if (owners.length > 1) return { ok: false, error: fanOutTwoOwners(column, owners[0].name, owners[1].name) };
   return owners.length ? { ok: true, datasetId: owners[0].datasetId } : null;
+}
+
+/** A KPI over a many-side column, as that table's KPI: on which dataset, under which filters, with which notes (one measure, index 0). */
+export interface FanMetricPlan { datasetId: string; filters: FilterStep[]; notes: FanNote[] }
+
+/**
+ * A KPI on `primary` whose BARE column only one many side M has (D12): M's KPI, with the primary's filters
+ * reaching it by Rule 4's pinned paths. Null when the column is the primary's or its forward tree's (today's
+ * path), or no many side's; refused when two many sides have it, or a filter is off M's path.
+ */
+export function planFanOutMetric(primary: string, column: string, filters: FilterStep[], rels: Relationship[], infos: Map<string, DsInfo>): { ok: true; plan: FanMetricPlan } | { ok: false; error: string } | null {
+  if (!infos.has(primary)) return null;
+  const owner = manySideOwner(primary, column, rels, infos);
+  if (!owner || !owner.ok) return owner;
+  const reachP = reachable(primary, rels);
+  const mj = meet(primary, reachP, owner.datasetId, rels) as Hop[]; // a many side reaches the tree by definition
+  const j = last(mj).to.datasetId;
+  const side: Routed = { m: owner.datasetId, mj, pj: j === primary ? [] : (reachP.get(j) as Hop[]), q: { filters: [], measures: [0] } };
+  const routed = routeFilters(primary, filters, [], [side], rels, infos);
+  if (typeof routed === 'string') return { ok: false, error: routed };
+  return { ok: true, plan: { datasetId: side.m, filters: side.q.filters, notes: [{ kind: 'ownRows', measures: [0] }, ...routed.notes] } };
 }

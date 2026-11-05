@@ -7,6 +7,8 @@
 //              arrays (no engine code) — all Object.is; each series equals its own table's chart; orphans
 //              fall under the blank label; the door (`visual:data`) answers the same, with its notes
 //   § names    (step 07) the many sides' column lists and a bare name's one many-side owner
+//   § kpi      (step 07) a KPI on Customers over a many-side column is that table's KPI, filtered by D11,
+//              against a brute-force sum; a KPI over its own or a forward column is today's reply
 //
 //   npm run build:ts && node scripts/test-fanOut.js
 
@@ -29,6 +31,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
+const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
@@ -113,6 +116,7 @@ async function main(): Promise<void> {
 
   await answers();
   await names();
+  await kpis();
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
@@ -159,6 +163,53 @@ async function names(): Promise<void> {
   const alone = await handlers.get('relationship:related')!(null, { projectId: P, datasetId: lonely });
   ok('NEGATIVE CONTROL: a dataset with no many side gets today\'s reply, with no manyGroups key', show(alone) === show({ ok: true, groups: [] }), show(alone));
 }
+
+// ── § kpi (step 07) ─────────────────────────────────────────────────────────
+
+async function kpis(): Promise<void> {
+  const { P, swap } = await doorProject();
+  if (!handlers.has('dashboard:metric')) dashboardsIpc.register();
+  type Kpi = { ok: boolean; value?: number | null; notes?: string[]; error?: string };
+  const kpi = (d: string, spec: { column: string; aggregation: string }, filters: FilterStep[]): Promise<Kpi> =>
+    handlers.get('dashboard:metric')!(null, { projectId: P, datasetId: swap(d), ...spec, filters: swap(filters) });
+  const sum = { column: 'amount', aggregation: 'sum' };
+  const segmentOf = (o: Cell[]): Cell => custOf(o[1])?.[COL.segment] ?? null;
+  const bruteSum = (keepIt: (o: Cell[]) => boolean = () => true): number => ORDERS.rows.filter(keepIt).reduce((a, o) => a + (o[4] as number), 0);
+  const ownRows = msg.fanOutOwnRows('“sum of amount”');
+
+  const v = await kpi(C, sum, [F('segment', '=', 'SMB')]);
+  ok('a KPI on Customers over amount is Orders\' sum for SMB customers', v.ok && Object.is(v.value, bruteSum((o) => segmentOf(o) === 'SMB')), show(v));
+  const onOrders = await kpi(O, sum, [{ ...F('segment', '=', 'SMB'), via: R_OC }]);
+  ok('…and equals the same KPI asked on Orders with the pinned filter', Object.is(v.value, onOrders.value) && onOrders.notes === undefined, show(onOrders));
+  ok('…and says its measure counts Orders\' own rows', show(v.notes) === show([ownRows]), show(v.notes));
+  const all = await kpi(C, sum, []);
+  ok('unfiltered: every order, the orphans too', Object.is(all.value, bruteSum()), show(all));
+  const dated = await kpi(C, sum, [F('order_date', '>=', '2024-01-01')]);
+  ok('an order_date control narrows sum(amount), with no note about it', Object.is(dated.value, bruteSum((o) => String(o[5]) >= '2024-01-01')) && show(dated.notes) === show([ownRows]), show(dated));
+  const refund = await kpi(C, sum, [F('refund', '>', 1)]);
+  ok('a filter no table on Orders\' side has is skipped, as a dashboard filter is today', Object.is(refund.value, bruteSum()) && show(refund.notes) === show([ownRows]), show(refund));
+  // On Orders, Returns is the many side and meets Orders' tree at Customers: Orders' own columns are off its path.
+  const refunds = (keepIt: (r: Cell[]) => boolean = () => true): number => RETURNS.rows.filter(keepIt).reduce((a, r) => a + (r[1] as number), 0);
+  const offPath = await kpi(O, { column: 'refund', aggregation: 'sum' }, [F('order_date', '>=', '2024-01-01')]);
+  ok('a filter off the many side\'s path (Orders\' own order_date, for Returns) leaves the KPI unaffected, and the tile says so',
+    Object.is(offPath.value, refunds()) && show(offPath.notes) === show([msg.fanOutOwnRows('“sum of refund”'), msg.fanOutNarrowsNone('order_date')]), show(offPath));
+  const smbRefunds = await kpi(O, { column: 'refund', aggregation: 'sum' }, [F('segment', '=', 'SMB')]);
+  ok('…while Customers\' segment reaches Returns through Customers', Object.is(smbRefunds.value, refunds((r) => custOf(r[0])?.[COL.segment] === 'SMB')), show(smbRefunds));
+  const both = await kpi(C, { column: 'customer_id', aggregation: 'count' }, []);
+  ok('a column on two many sides: no figure, and the sentence names both', both.ok && both.value === null && /Orders and on Returns/.test(String(both.notes)), show(both));
+  const reads = await ipcRels.metricReads(P, swap(C), 'amount', swap([F('zone', '=', 'W')]));
+  ok('metricReads: Orders and the Regions its pinned filter joins (never Customers itself)', sorted(reads) === sorted([swap(O), swap(G)]), show(reads));
+
+  // Old content: a KPI over Customers' own or forward column is today's reply, byte for byte.
+  const own = await kpi(C, { column: 'id', aggregation: 'count' }, []);
+  ok('NEGATIVE CONTROL: count(id) under the order_date control is today\'s reply (the filter skipped, no notes)',
+    own.ok && own.value === CUSTOMERS.rows.length && show(await kpi(C, { column: 'id', aggregation: 'count' }, [F('order_date', '>=', '2024-01-01')])) === show(own), show(own));
+  const zone = await kpi(C, { column: 'zone', aggregation: 'count' }, []);
+  ok('NEGATIVE CONTROL: a forward column resolves as before (each Regions row reached, once), with no notes', zone.ok && zone.value === new Set(CUSTOMERS.rows.map((r) => r[COL.region]).filter((x) => regionOf(x))).size && zone.notes === undefined, show(zone));
+  ok('NEGATIVE CONTROL: Orders\' own amount on Orders is not fanned out', show(await ipcRels.metricReads(P, swap(O), 'amount', [])) === '[]');
+}
+
+const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
 
 // ── § answers ───────────────────────────────────────────────────────────────
 

@@ -31,6 +31,7 @@ import { isValidId } from '../app/ids';
 import { getTableDoc } from '../app/tableDocs';
 import { closedToCaller } from '../data/rowAccess';
 import { fanOutReads } from './vizFanOut';
+import { fanOutMetricReads } from './metricFanOut';
 import { manySideColumnGroups } from '../analysis/fanOutPlan';
 
 type Infos = Map<string, DsInfo>;
@@ -172,6 +173,8 @@ export async function metricColumnOwner(projectId: string, datasetId: string, co
 
 /** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
 export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
+  const fanned = await fanOutMetricReads(projectId, datasetId, column, filters); // a many-side column: its table's KPI (./metricFanOut)
+  if (fanned) return fanned;
   const mj = await metricJoin(projectId, datasetId, column, filters);
   return mj && mj.planned.ok ? planReads(mj.planned.value.plan) : [];
 }
