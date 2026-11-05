@@ -309,15 +309,13 @@ async function main(): Promise<void> {
   await projects.setColorMap(pid, {
     card: { '4111111111111111': 'chart-1' }, email: { 'grace@example.com': 'chart-2' }, region: { North: 'chart-3' },
   });
-  // Value labels (release 1 keeps them but has no screen that writes them): planted on a marked column,
-  // where a label list can hold the raw values themselves, and on an unmarked one.
+  // Value labels on marked columns, where a label list holds the raw values themselves, and on an unmarked one.
+  // Release 1 had no writer and left EVERY column's list out of a shaped bundle; PR 06 writes them and can tell
+  // which columns are marked, so a shaped bundle leaves only a marked column's list behind.
   await catalog.setColumn(pid, did, 'region', { description: 'Sales region' });
-  const planted = JSON.parse(fs.readFileSync(catFile, 'utf8'));
-  planted.columns[did].card.values = [{ value: '4111111111111111', label: 'Visa test card' }];
-  planted.columns[did].region.values = [{ value: 'North', label: 'Northern territory' }];
-  fs.writeFileSync(catFile, JSON.stringify(planted));
-  const LABELS = ['4111111111111111', 'Visa test card', 'Northern territory'];
+  const LABELS = ['4111111111111111', '"Visa"', 'grace@example.com', '"Grace"']; // a marked column's values and labels
   const catalogOf = (file: string): string => bundle.readZip(fs.readFileSync(file)).find((e) => e.name === 'catalog.json')!.data.toString('utf8');
+  const labelledColumns = (cat: string): string[] => Object.entries(JSON.parse(cat).columns[did] as Record<string, object>).filter(([, d]) => 'values' in d).map(([c]) => c);
   // Value labels name stored values, so they leave a marked column behind as its colours do (email is masked in Prepare, card by the policy).
   await catalog.setColumn(pid, did, 'card', { values: [{ value: '4111111111111111', label: 'Visa' }] });
   await catalog.setColumn(pid, did, 'email', { values: [{ value: 'grace@example.com', label: 'Grace' }] });
@@ -347,7 +345,7 @@ async function main(): Promise<void> {
   ok('bundle/mask: email travels as its Prepare token', bundled.rows[0][1] === mask.maskToken(salt, 'grace@example.com'));
   ok('bundle/mask: no raw value is anywhere in the bundle', !entries.some((e) => RAW.some((v) => e.data.includes(v))));
   const maskCat = catalogOf(savePath);
-  ok('bundle/mask: catalog.json carries no value labels, on any column', LABELS.every((s) => !maskCat.includes(s)) && !maskCat.includes('"values"'), maskCat);
+  ok('bundle/mask: catalog.json carries no value label of a marked column; only the unmarked region keeps a list', LABELS.every((s) => !maskCat.includes(s)) && JSON.stringify(labelledColumns(maskCat)) === '["region"]', maskCat);
   ok('bundle/mask: …but keeps the rest of every column doc', JSON.parse(maskCat).columns[did].card.sensitivity === 'financial' && JSON.parse(maskCat).columns[did].region.description === 'Sales region');
   const pjColors = JSON.parse(entries.find((e) => e.name === 'project.json')!.data.toString('utf8')).colorMap;
   ok('bundle/mask: the colour map leaves marked columns behind, keeps the rest',
@@ -380,7 +378,7 @@ async function main(): Promise<void> {
   ok('bundle/drop: …and its value labels with it', !('values' in dropLabels.card) && !('values' in dropLabels.email) && !!dropLabels.region.values, JSON.stringify(dropLabels));
   ok('bundle/drop: the dropped bundle imports too', (await bundle.importBundle(fs.readFileSync(savePath))).ok === true);
   const dropCat = catalogOf(savePath);
-  ok('bundle/drop: catalog.json carries no value labels, on any column', LABELS.every((s) => !dropCat.includes(s)) && !dropCat.includes('"values"'), dropCat);
+  ok('bundle/drop: catalog.json carries no value label of a marked column; only the unmarked region keeps a list', LABELS.every((s) => !dropCat.includes(s)) && JSON.stringify(labelledColumns(dropCat)) === '["region"]', dropCat);
   await store.setPolicy(pid, { bundle: 'include' });
   savePath = path.join(outDir, 'project-include.ordinate');
   keep(await call('projects:export', { id: pid }));
@@ -388,7 +386,7 @@ async function main(): Promise<void> {
   ok('bundle/include: the source Parquet travels unchanged', inclNames.includes(`datasets/${did}.source.parquet`));
   // NEGATIVE CONTROL: a full, unshaped bundle keeps the labels, so the checks above can fail.
   const inclCat = catalogOf(savePath);
-  ok('bundle/include: catalog.json keeps its value labels (control)', LABELS.every((s) => inclCat.includes(s)), inclCat);
+  ok('bundle/include: catalog.json keeps its value labels (control)', [...LABELS, '"Northern"'].every((s) => inclCat.includes(s)) && labelledColumns(inclCat).sort().join() === 'card,email,region', inclCat);
   const inclLabels = labelsOf(bundle.readZip(fs.readFileSync(savePath)));
   ok('bundle/include: every column keeps its value labels (the policy lets values travel)', !!inclLabels.card.values && !!inclLabels.email.values && !!inclLabels.region.values, JSON.stringify(inclLabels));
   await store.setPolicy(pid, { bundle: 'mask' });
