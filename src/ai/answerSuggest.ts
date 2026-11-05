@@ -37,7 +37,7 @@ const PARTS: ReadonlySet<string> = new Set<SpecMiss['part']>(['dataset', 'catego
 /** A column name, as the catalog files one (app/catalog MAX_COLUMN_NAME). */
 const MAX_COLUMN = 256;
 
-const words = (s: string): string[] => s.split(/[^\p{L}\p{M}\p{N}]+/u).map(squash).filter((w) => w.length >= MIN_NAME);
+export const words = (s: string): string[] => s.split(/[^\p{L}\p{M}\p{N}]+/u).map(squash).filter((w) => w.length >= MIN_NAME);
 
 /**
  * How near a said name is to one a candidate answers to, on squashed names:
