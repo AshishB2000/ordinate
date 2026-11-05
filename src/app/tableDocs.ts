@@ -6,6 +6,7 @@ import { isValidId } from './ids';
 import { clip } from './clip';
 import { sanitizeHierarchies, withIds, type Hierarchy, type HierarchyDraft } from './hierarchies';
 import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
+import { navHierarchies } from '../analysis/drillLevels';
 import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
 import type { FactTableDoc } from '../ai/columnNotes';
@@ -146,8 +147,11 @@ export async function readableTableDoc(projectId: string, datasetId: string): Pr
  */
 export async function tableFacts(projectId: string, datasetId: string): Promise<FactTableDoc | undefined> {
   const doc = await readableTableDoc(projectId, datasetId);
-  if (!doc.role && !doc.key && !doc.grain) return undefined; // the guide is the Assistant's guidance (ipc/guidance), not a table note
-  const key = doc.key && (await getDatasetMeta(projectId, datasetId))?.columns.some((c) => c.name === doc.key) ? doc.key : '';
+  if (!doc.role && !doc.key && !doc.grain && !doc.hierarchies) return undefined; // the guide is the Assistant's guidance (ipc/guidance), not a table note
+  const columns = (doc.key || doc.hierarchies) ? (await getDatasetMeta(projectId, datasetId))?.columns ?? [] : [];
+  const key = doc.key && columns.some((c) => c.name === doc.key) ? doc.key : '';
+  // Only the hierarchies whose every level is still a text column: a half-resolved one names nothing a spec could group by.
+  const hierarchies = navHierarchies(doc.hierarchies ?? [], columns).filter((h) => !h.missing).map(({ name, levels }) => ({ name, levels }));
   const out: FactTableDoc = {};
   if (doc.role) out.role = doc.role;
   if (key) {
@@ -156,5 +160,6 @@ export async function tableFacts(projectId: string, datasetId: string): Promise<
   }
   if (doc.grain) out.grain = doc.grain;
   else if (key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[key]?.displayName || key}`;
+  if (hierarchies.length) out.hierarchies = hierarchies;
   return out;
 }

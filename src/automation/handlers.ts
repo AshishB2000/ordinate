@@ -18,6 +18,7 @@ import * as path from 'path';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { readableTableDoc } from '../app/tableDocs';
+import { navHierarchies } from '../analysis/drillLevels';
 import * as datasets from '../data/datasets';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import { viewColumns } from '../engine/datasetView';
@@ -128,7 +129,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     updatedAt: meta.updatedAt,
     lastRefreshedAt: meta.lastRefreshedAt || null,
     lastRefreshStatus: meta.lastRefreshStatus || null,
-    table: { role: table.role, key: table.key, grain: table.grain, guide: table.guide, ...(table.keyCheck && { keyCheck: table.keyCheck }) },
+    table: { role: table.role, key: table.key, grain: table.grain, guide: table.guide, ...(table.keyCheck && { keyCheck: table.keyCheck }), ...(table.hierarchies && { hierarchies: navHierarchies(table.hierarchies, meta.columns).map(({ name, levels, missing }) => ({ name, levels, ...(missing && { missing }) })) }) },
   };
 }
 
