@@ -40,6 +40,7 @@ const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
   { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
   { re: new RegExp(`^verified/${UUID}\\.json$`, 'i'), count: 'verified' }, // p3-02 — the Assistant's verified questions
   { re: new RegExp(`^terms/${UUID}\\.json$`, 'i'), count: 'terms' }, // glossary terms (semantic D10); a pre-terms server refuses the bundle
+  { re: new RegExp(`^topics/${UUID}\\.json$`, 'i'), count: 'topics' }, // topics (semantic part 6 D14); a pre-topics server refuses the bundle
   { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
   { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
   { re: new RegExp(`^scenarios/${UUID}\\.json$`, 'i'), count: 'scenarios' },
