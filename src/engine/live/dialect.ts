@@ -82,6 +82,8 @@ export interface SqlDialect {
   placeholder(i: number, p: LiveParam): string;
   /** `CAST(x AS DOUBLE)` in this dialect: every aggregate goes through it. */
   toDouble(x: string): string;
+  /** The exact count of distinct non-NULL values of `x` (semantic layer part 5, D2): `count(DISTINCT x)`, or its exact twin. */
+  countDistinct(x: string): string;
   /** An integer-valued double/date difference as an integer column (bucket ids). */
   toInt(x: string): string;
   /** A column read as text. */

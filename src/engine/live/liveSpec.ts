@@ -44,7 +44,8 @@ import { activeWeekCal } from '../../analysis/retailCalendar';
 import { FILTER_OPS, emptyListWarning, periodSkipWarning } from '../../data/filterOps';
 import { getCalendar, resolvePeriod, todayIso } from '../../analysis/dateIntel';
 import * as msg from '../liveRefusals';
-import { NUMBER_AGGREGATIONS, PLAIN_AGGREGATIONS } from '../../data/aggregations';
+import type { Aggregation } from '../../data/aggregations';
+import { AGGREGATIONS, NUMBER_AGGREGATIONS } from '../../data/aggregations';
 
 // ── The IR ───────────────────────────────────────────────────────────────────
 
@@ -59,8 +60,8 @@ export interface LiveColumn extends ParsedColumn {
   sourceType?: string;
 }
 
-export type LiveAgg = 'sum' | 'avg' | 'count' | 'min' | 'max';
-export const LIVE_AGGS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
+export type LiveAgg = Aggregation;
+export const LIVE_AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 /** The aggregations that need a number column — `answerSpec.NUMERIC_AGGS`. */
 export const NUMERIC_AGGS: ReadonlySet<string> = new Set<string>(NUMBER_AGGREGATIONS);
 

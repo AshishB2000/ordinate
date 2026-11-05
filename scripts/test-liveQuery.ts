@@ -214,12 +214,15 @@ async function failures(s: H.OrgSetup): Promise<void> {
   ok('unavailable: an extract dataset is refused, typed', !notLive.ok && notLive.code === 'live_unavailable' && notLive.error === H.msg.liveNotLive());
   const gone = await lq.liveMetric(P, '00000000-0000-4000-8000-000000000000', { column: 'amt', aggregation: 'sum' }, []);
   ok('unavailable: a missing dataset too', !gone.ok && gone.code === 'live_unavailable' && gone.error === H.msg.liveDatasetMissing());
-  // Count distinct is computed on extracts from part 5 step 02, on Live from step 03: until then the KPI door refuses it typed, never "—".
+  // Count distinct on Live (part 5, step 03): the KPI door asks the warehouse once and gives the extract's figure.
   H.fakeMod.resetFake();
   const countd = { column: 'cat', aggregation: 'countd' } as const;
-  const refused = await dashIpc.computeCardMetric(P, s.liveId, countd, []).then(() => null, (e: unknown) => e);
-  ok('refused: a Live countd KPI is typed (unknownAggregation), no call', isLiveFigureError(refused) && refused.failure.code === 'live_refused' && refused.failure.reason === 'unknownAggregation' && fake.calls.length === 0, show(refused));
-  ok('NEGATIVE CONTROL: the extract\'s countd KPI is a figure', typeof (await dashIpc.computeCardMetric(P, s.extractId, countd, [])).value === 'number');
+  const liveCountd = await dashIpc.computeCardMetric(P, s.liveId, countd, []);
+  const copyCountd = await dashIpc.computeCardMetric(P, s.extractId, countd, []);
+  ok('a Live countd KPI is the extract\'s figure, in one warehouse call', typeof liveCountd.value === 'number' && Object.is(liveCountd.value, copyCountd.value) && fake.calls.length === 1, show([liveCountd, copyCountd, fake.calls.length]));
+  ok('NEGATIVE CONTROL: …and not its count of cells', copyCountd.value !== (await dashIpc.computeCardMetric(P, s.extractId, { column: 'cat', aggregation: 'count' }, [])).value);
+  const median = await dashIpc.computeCardMetric(P, s.liveId, { column: 'cat', aggregation: 'median' as never }, []).then(() => null, (e: unknown) => e);
+  ok('refused: an aggregation Live does not know is still typed (unknownAggregation), no call', isLiveFigureError(median) && median.failure.code === 'live_refused' && median.failure.reason === 'unknownAggregation' && fake.calls.length === 1, show(median));
 }
 
 async function twoOrgs(a: H.OrgSetup): Promise<void> {

@@ -27,6 +27,7 @@ export const bigqueryDialect: SqlDialect = {
   ident,
   placeholder: (i, p) => `CAST(@p${i} AS ${TYPE[p.type]})`,
   toDouble: (x) => `CAST(${x} AS FLOAT64)`,
+  countDistinct: (x) => `count(DISTINCT ${x})`,
   toInt: (x) => `CAST(${x} AS INT64)`,
   text: (c) => `CAST(${c} AS STRING)`,
   binary: (x) => `CAST(${x} AS BYTES)`,

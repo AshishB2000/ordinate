@@ -26,6 +26,7 @@ export const snowflakeDialect: SqlDialect = {
   ident: doubleQuoted,
   placeholder: (_i, p) => `CAST(? AS ${TYPE[p.type]})`,
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
+  countDistinct: (x) => `count(DISTINCT ${x})`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS VARCHAR)`,
   binary: (x) => `TO_BINARY(${x}, 'UTF-8')`,

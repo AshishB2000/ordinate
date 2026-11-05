@@ -107,6 +107,13 @@ function goldenShapes(): void {
     const user = comp.compileMetric(adapt(spec.fromMetric({ column: 'amount', aggregation: 'sum' }, [], COLS)), env(id, { kind: 'sql', sql: 'select * from t -- a trailing comment;\n ;  ' }));
     ok(`${id}: a defining query sits on its own lines, trailing ; dropped (rule F3)`,
       user.ok && user.query.sql.includes('(\nselect * from t -- a trailing comment\n) AS lv_src'), user.ok && user.query.sql);
+    // A distinct count (part 5, D2): ClickHouse's count(DISTINCT) follows `count_distinct_implementation`, so it says uniqExact.
+    const distinct = id === 'clickhouse' ? 'uniqExact(' : 'count(DISTINCT ';
+    const countd = { column: 'note', aggregation: 'countd' as const };
+    const kpi = comp.compileMetric(adapt(spec.fromMetric(countd, [], COLS)), env(id));
+    const byMonth = comp.compileChart(adapt(spec.fromVizEncoding({ category: 'order_date', grain: 'month', values: [countd] }, [], COLS, { weekCal: null })), { kind: 'date', grain: 'month' }, env(id));
+    ok(`${id}: a distinct count compiles as ${distinct}…) on a KPI and an unsplit chart`,
+      kpi.ok && kpi.query.sql.includes(distinct) && byMonth.ok && byMonth.query.sql.includes(distinct), show([kpi, byMonth]));
   }
   const sf = dialects.dialectFor('snowflake');
   ok('snowflake: a number stored as text goes through TRY_TO_DOUBLE, a typed one through CAST',
@@ -118,6 +125,49 @@ function goldenShapes(): void {
   const m = pg.bind('text', 'v');
   const twice = pg.finish(`a = ${m} OR b = ${m}`, duckdbDialect, []);
   ok('a fragment used twice binds twice: no placeholder is ever shared', show(twice.params.map((p) => p.name)) === '["p0","p1"]' && twice.sql === 'a = CAST($1 AS VARCHAR) OR b = CAST($2 AS VARCHAR)', twice.sql);
+}
+
+// ── Old statements, byte for byte (semantic layer part 5, step 03) ──────────────
+
+/** Every statement shape a question with no `countd` compiles to, on every dialect, hashed: text, params and columns. */
+function unchangedCorpus(): string {
+  const hash = require('crypto').createHash('sha256');
+  const chart = (enc: import('../src/analysis/visuals').VizEncoding, fs: FilterStep[] = []): LiveIR => adapt(spec.fromVizEncoding(enc, fs, COLS, { weekCal: null }));
+  const answer = (s: Partial<import('../src/ai/answerSpec').AnswerSpec>): LiveIR => adapt(spec.fromAnswerSpec({ datasetId: 'x', filters: [], chartType: 'column', title: 't', ...s } as import('../src/ai/answerSpec').AnswerSpec, COLS, { weekCal: null }));
+  const sum = { column: 'amount', aggregation: 'sum' as const };
+  const all = [sum, { column: 'amount', aggregation: 'avg' as const }, { column: 'note', aggregation: 'count' as const }, { column: 'amount', aggregation: 'min' as const }, { column: 'tier', aggregation: 'max' as const }];
+  const bins: LiveKey = { kind: 'bins', lo: 0, hi: 10, width: 2, bins: 5 };
+  const days: LiveKey = { kind: 'days', grain: 'month', weekCal: { type: '445', yearEnd: 'nearest' } };
+  const charts: [LiveIR, LiveKey][] = [
+    [chart({ category: 'region', values: all }, [F('note', 'contains', 'x'), F('amount', '>', 5), F('order_date', 'period', undefined, { period: { preset: 'custom', from: '2024-01-01', to: '2024-03-31' } })]), { kind: 'text' }],
+    [chart({ category: 'region', series: 'note', values: [sum] }), { kind: 'text' }],
+    [chart({ category: 'region', series: 'tier', values: [{ column: 'note', aggregation: 'count' }] }), { kind: 'text' }],
+    [chart({ category: 'order_date', grain: 'quarter', values: all }), { kind: 'date', grain: 'quarter' }],
+    [chart({ category: 'order_date', series: 'region', values: [sum] }), { kind: 'date', grain: 'week' }],
+    [chart({ category: 'order_date', values: all }), days],
+    [chart({ category: 'amount', values: all }), bins],
+    [chart({ category: 'amount', series: 'note', values: [sum] }), bins],
+    [answer({ category: 'region', measures: [sum], series: 'tier', top: 5 }), { kind: 'text' }],
+    [answer({ category: 'region', measures: all, top: 3 }), { kind: 'text' }],
+    [answer({ category: 'amount', measures: [{ column: 'amount', aggregation: 'avg' }], series: 'region', top: 3 }), bins],
+    [answer({ category: 'amount', measures: all }), bins],
+  ];
+  for (const id of dialects.DIALECT_IDS) {
+    const e = env(id);
+    const out: unknown[] = charts.map(([ir, key]) => comp.compileChart(ir, key, e));
+    for (const m of all) out.push(comp.compileMetric(adapt(spec.fromMetric(m, [F('region', 'in', undefined, { values: ['a', null] })], COLS)), e));
+    out.push(comp.compileGrainProbe(chart({ category: 'order_date', values: [sum] }), e), comp.compileBinRange(chart({ category: 'amount', values: [sum] }), e));
+    out.push(comp.compileLatestDates({ kind: 'chart', category: { column: 'region', kind: 'text' }, measures: [sum], filters: [{ kind: 'latest', column: 'order_date', period: 'last_quarter', yearsBack: 0 }], order: 'value', weekCal: null }, e));
+    hash.update(show(out));
+  }
+  return hash.digest('hex');
+}
+
+function unchanged(): void {
+  // Recorded on p5-02's tip (c9e91892), before a distinct count reached the compiler. Never re-record it to pass.
+  const BEFORE = '28291dc4d194794ecec8a1414323fdfb85b1861ee6a1722ee1c2574587fbd3fb';
+  const now = unchangedCorpus();
+  ok('a question with no distinct count compiles byte for byte as before, on every dialect', now === BEFORE, now);
 }
 
 // ── Adversarial literals ─────────────────────────────────────────────────────
@@ -292,6 +342,8 @@ async function pure(): Promise<void> {
     Object.is(shape.shapeMetric([[-0]], q(['o_m0s']), metricIr('sum')), 0) && Object.is(shape.shapeMetric([[-0]], q(['o_m0n']), metricIr('min')), 0));
   ok('avg is sum ÷ count, divided in our code', shape.shapeMetric([[1, 3]], q(['o_m0s', 'o_m0c']), metricIr('avg')) === 1 / 3);
   ok('avg over no numbers is null, never NaN', shape.shapeMetric([[null, 0]], q(['o_m0s', 'o_m0c']), metricIr('avg')) === null);
+  const countdIr: LiveIR = { kind: 'metric', measures: [{ column: 'note', aggregation: 'countd' }], filters: [], order: 'natural', weekCal: null };
+  ok('a distinct count is its own part, and a NULL one reads 0, as count does', shape.shapeMetric([[7]], q(['o_m0d']), countdIr) === 7 && Object.is(shape.shapeMetric([[null]], q(['o_m0d']), countdIr), 0));
   const wide = shape.shapeMetric([[1, 2]], q(['o_m0s']), metricIr('sum'));
   ok('a reply of the wrong width is refused, not guessed at', !!wide && typeof wide === 'object' && wide.code === 'rowShape');
   ok('numbers arrive as numbers, strings or bigints', shape.toNumber('12') === 12 && shape.toNumber(BigInt(7)) === 7 && shape.toNumber('') === null && shape.toNumber('x') === null);
@@ -346,6 +398,7 @@ async function pure(): Promise<void> {
 
 async function main(): Promise<void> {
   goldenShapes();
+  unchanged();
   await adversarial();
   refusals();
   await pure();

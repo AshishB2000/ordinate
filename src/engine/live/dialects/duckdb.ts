@@ -24,6 +24,7 @@ export const duckdbDialect: SqlDialect = {
   ident: doubleQuoted,
   placeholder: (i, p) => `CAST($${i + 1} AS ${TYPE[p.type]})`,
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
+  countDistinct: (x) => `count(DISTINCT ${x})`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS VARCHAR)`,
   // encode(): the UTF-8 bytes, no escape parsing (a VARCHAR → BLOB cast would read `\\x41` as 'A').

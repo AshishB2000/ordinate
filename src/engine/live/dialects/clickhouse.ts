@@ -36,6 +36,8 @@ export const clickhouseDialect: SqlDialect = {
   ident,
   placeholder: (i, p) => `{p${i}:${TYPE[p.type]}}`,
   toDouble: (x) => `toFloat64(${x})`,
+  // uniqExact, not count(DISTINCT): that follows the server's `count_distinct_implementation`, which may be approximate.
+  countDistinct: (x) => `uniqExact(${x})`,
   toInt: (x) => `toInt64(${x})`,
   text: (c) => `CAST(${c} AS Nullable(String))`,
   // A String compares byte for byte; ClickHouse applies no collation to `=` or `IN`.
