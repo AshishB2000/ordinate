@@ -141,7 +141,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
         }
       >
         A metric names a number once (Revenue, Margin %, Orders), so every KPI card, alert and chart that shows it agrees.
-        {canEdit ? ' Define it from a column or as a formula of other metrics with New metric.' : ' An editor of this project can define one. You have view-only access.'}
+        {canEdit ? ' Use New metric to define one from a column or as a formula of other metrics.' : ' An editor of this project can define one. You have view-only access.'}
       </EmptyState>
     );
   } else {
@@ -250,7 +250,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     <section className={d.section} aria-label="Metrics">
       <div className={d.listBar}>
         {count > 0 && <span className={d.muted}>{count === 1 ? '1 metric' : `${formatNumber(count)} metrics`}</span>}
-        <p className={d.lead}>What this project&apos;s numbers mean, defined once. Every chart, KPI, alert and the Assistant use them.</p>
+        <p className={d.lead}>What this project&apos;s numbers mean, defined once so every chart and KPI agrees.</p>
       </div>
       {body}
       {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}

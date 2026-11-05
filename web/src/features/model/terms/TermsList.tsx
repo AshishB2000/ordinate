@@ -48,7 +48,7 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
       <EmptyState icon="list" heading={3} title="No terms yet">
         A term is a filter with a name — EMEA, Enterprise, Recent order — that every chart and the
         Assistant can use.
-        {canEdit ? ' Define one with New term.' : ' An editor of this project can define one.'}
+        {canEdit ? ' Use New term to define one.' : ' An editor of this project can define one.'}
       </EmptyState>
     );
   } else {

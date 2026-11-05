@@ -82,6 +82,19 @@ All notable changes to Ordinate are documented here. Format based on
   on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
   Off without a database. See `docs/notifications/00-design.md`.
 
+### Data model
+
+- **A new section, Data model** (`/model`, right after Data in the navigation), shows what a project's data
+  means: each dataset's role, key, guide, description, always-applied filters, calculated fields, fields and
+  lineage, with a "To fill in next" strip that ranks what is missing (a key that repeats first, by the
+  server's count). Its other tabs are Metrics, Glossary and Relationships.
+- **Metrics and Relationships moved there.** `/data/metrics` and Data's Relationships tab redirect, keeping
+  the rest of their address (`?tag=`). A metric's tree and its history crumb back to the Data model.
+- **Each metric says the date it counts by and whether it adds up** ("Counts by", "Adds up": yes, not over
+  time, or no, from the server's rule). The glossary says where each term is used, and the Relationships tab
+  which join a chart takes when two tables are joined more than one way. See `docs/server/upgrade.md`
+  ("The Data model section").
+
 ### Snapshot metrics
 
 - **A metric can be a snapshot** (Metrics → the metric → "Snapshot"): a balance, stock count or headcount is
