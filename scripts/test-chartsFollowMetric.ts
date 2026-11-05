@@ -373,13 +373,18 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     ok('NEGATIVE CONTROL: unmarked, the same facts show the value', (await measuresOf(filtered.id)) === '"Tier 3 qty" = sum(qty) where tier = 2');
 
     // A step with `via` names a column of the RELATED dataset: its mark is looked up there, and an unknown relationship is withheld.
-    const rel = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: L, column: 'region' }, cardinality: 'many_to_one' }));
+    // The related table is an extract: since PR 09 a via step is joined (it reads the related rows), and a Live table is never joined.
+    const related = await H.as(ORG_A, () => H.datasets.saveDataset(P, { name: 'Regions', sourceKind: 'csv',
+      ...fx.importTyped([{ name: 'region', type: 'text' }, { name: 'tier', type: 'number' }, { name: 'qty', type: 'number' }], [['West', 3, 5], ['East', 1, 2]]) }));
+    if (!related) throw new Error('related dataset not saved');
+    const R = related.id;
+    const rel = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: R, column: 'region' }, cardinality: 'many_to_one' }));
     if (!rel) throw new Error('relationship not saved');
     const viaOf = async (name: string, step: unknown): Promise<string> => {
       const id = await save(name, X, { column: 'qty', aggregation: 'sum' }, [step]);
       return measuresOf((await mk(`Facts ${name}`, [{ column: 'qty', aggregation: 'sum', metricId: id }])).id);
     };
-    await mark(L, 'tier', 'personal'); // the related table's column is marked; the primary's own `tier` is not
+    await mark(R, 'tier', 'personal'); // the related table's column is marked; the primary's own `tier` is not
     ok('facts: a related table\'s personal column is withheld', (await viaOf('Via tier', { ...eq('tier', 3), via: rel.id })) === '"Via tier" = sum(qty) where tier (withheld)');
     ok('NEGATIVE CONTROL: a related table\'s unmarked column shows its value', (await viaOf('Via qty', { ...eq('qty', 5), via: rel.id })) === '"Via qty" = sum(qty) where qty = 5');
     ok('a relationship that cannot be resolved is withheld', (await viaOf('Via gone', { ...eq('qty', 5), via: randomUUID() })) === '"Via gone" = sum(qty) where qty (withheld)');
@@ -387,7 +392,7 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
     const relGone = await H.as(ORG_A, () => rels.saveRelationship(P, { from: { datasetId: X, column: 'region' }, to: { datasetId: randomUUID(), column: 'region' }, cardinality: 'many_to_one' }));
     if (!relGone) throw new Error('relationship not saved');
     ok('a via relationship whose far dataset is gone is withheld', (await viaOf('Via far gone', { ...eq('qty', 5), via: relGone.id })) === '"Via far gone" = sum(qty) where qty (withheld)');
-    await mark(L, 'tier', 'none');
+    await mark(R, 'tier', 'none');
     await H.as(ORG_A, async () => { await rels.deleteRelationship(P, rel.id); await rels.deleteRelationship(P, relGone.id); });
 
     // A bare filter column the chart's dataset lacks is the NEAREST related dataset's (joinPlan.resolveColumnOwner), and
