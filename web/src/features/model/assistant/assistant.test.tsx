@@ -26,6 +26,7 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
     'projects:overview': body([{ id: P, name: 'Sales', updatedAt: '', lastOpenedAt: null, archived: false, datasets: 0, dashboards: 0, sample: false }]),
     'projects:roles': body({ [P]: role }),
     'catalog:instructions': body({ ok: true, instructions: TWO }),
+    'verified:list': body({ ok: true, broken: 0, questions: [] }),
     ...routes,
   });
 }

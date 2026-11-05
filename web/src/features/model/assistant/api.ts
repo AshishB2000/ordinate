@@ -44,3 +44,36 @@ export function useChangeInstruction(projectId: string) {
     },
   });
 }
+
+// ── Verified questions (`verified:list`, `verified:save`, `verified:delete`; src/ipc/verified.ts) ──────────
+
+/** One question as the server words it for this caller. `spec` is absent when row access rules hide its values. */
+export interface VerifiedRow {
+  id: string;
+  question: string;
+  phrasings: string[];
+  note?: string;
+  datasetId: string;
+  datasetName: string;
+  describe: string;
+  filters: string[];
+  spec?: { datasetId: string } & Record<string, unknown>;
+  verifiedBy: string;
+  verifiedAt: string;
+  runs: boolean;
+  problem?: string;
+  tag: string;
+}
+export type VerifiedField = 'question' | 'phrasings' | 'spec';
+type ListReply = { ok: true; broken: number; questions: VerifiedRow[] } | Fail;
+
+export const verifiedKey = (projectId: string, datasetId?: string) => ['verified:list', projectId, datasetId ?? ''] as const;
+
+export const useVerified = (projectId: string, datasetId?: string) =>
+  useQuery({
+    queryKey: verifiedKey(projectId, datasetId),
+    queryFn: async () => {
+      const r = okOr((await rpc('verified:list', { projectId, ...(datasetId ? { datasetId } : {}) })) as ListReply, 'The verified questions');
+      return { broken: r.broken, questions: r.questions };
+    },
+  });

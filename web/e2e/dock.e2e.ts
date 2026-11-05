@@ -174,6 +174,15 @@ if (!dbUrl) {
       (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [input] } })).json()) as Record<string, unknown>;
     const kept = (await call('visual:get', { projectId: pid, id: href.split('/').pop() })) as { name: string; chartType: string; datasetId: string; encoding: { category: string } };
     assert.deepEqual([kept.name, kept.chartType, kept.encoding.category], ['Revenue by category', 'column', 'category']);
+    // Its spec verified (part 3 D9): drawn again, the card is marked by comparison, and the mark goes with the question.
+    const spec = { datasetId: kept.datasetId, category: 'category', measures: [{ column: 'revenue', aggregation: 'sum' }], filters: [] };
+    const vq = (await call('verified:save', { projectId: pid, input: { question: 'Revenue by category', spec } })) as { ok: boolean; question?: { id: string } };
+    assert.equal(vq.ok, true, JSON.stringify(vq));
+    await page.reload();
+    await settled(page);
+    await card.getByText('✓ Verified · dev@local', { exact: true }).waitFor();
+    await shots('dock-verified');
+    await call('verified:delete', { projectId: pid, id: vq.question?.id }); // the sample as it was, for the rest of the file
     await open.click();
     await page.waitForURL(`**${href}`);
     await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // its own page draws it
