@@ -10,8 +10,8 @@
 
 import { isValidId } from '../app/ids';
 import { callerOn } from '../server/authz/caller';
-import { accessState, columnAccessFromRecord, everyRuled, hiddenFor } from './columnAccess';
-import { memoOf, readRawRecord } from './rawRecord';
+import { accessState, columnAccessFromRecord, everyRuled, hiddenFor, mentionsHidden } from './columnAccess';
+import { memoOf, readRawRecord, readRawRecordNow } from './rawRecord';
 import { RowPolicyError, isRowPolicyError, type RowPolicyReason } from './rowPolicyError';
 import { parentsOfRecord, upstreamIds } from './upstream';
 
@@ -76,6 +76,50 @@ export async function upstreamHides(projectId: string, id: string, audience: Aud
 export async function columnsRuled(projectId: string, id: string): Promise<boolean> {
   const v = await columnView(projectId, id, 'fanout');
   return v.state === 'columns' || v.hidden.size > 0 || (await upstreamHides(projectId, id, 'fanout'));
+}
+
+/**
+ * Would a payload sent alike to every reader (a push), about `id` and naming `question`, carry what a column rule
+ * hides — or can it not be told (rules that do not hold, a dataset upstream that hides a column)?
+ */
+export async function fanOutHides(projectId: string, id: string, question: unknown): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return false;
+  const view = await columnView(projectId, id, 'fanout');
+  return view.state !== 'ok' || (await upstreamHides(projectId, id, 'fanout')) || mentionsHidden(question, view.hidden);
+}
+
+/** When `raw`'s column rules were set, as a time: -Infinity for none; Infinity for rules that do not sanitize or a time that does not parse. */
+function rulesAt(raw: unknown): number {
+  const a = columnAccessFromRecord(raw);
+  if (a === null) return -Infinity;
+  const t = a === 'closed' ? NaN : Date.parse(a.updatedAt);
+  return Number.isNaN(t) ? Infinity : t;
+}
+
+/**
+ * Were column rules set on any of `ids`, or on a dataset one is built from, after `iso` (or do they not sanitize, or
+ * lie past the walk)? A page built at `iso` may hold what they hide: it stops being served (D17). Read as stored now,
+ * never through the request's memo: a build checks this after it ran, in the same request.
+ */
+export async function columnRulesSince(projectId: string, ids: Iterable<string>, iso: string): Promise<boolean> {
+  const since = Date.parse(iso);
+  if (Number.isNaN(since)) return true;
+  for (const id of new Set(ids)) {
+    if (!isValidId(id)) continue;
+    const up = await upstreamIds(id, async (p) => (isValidId(p) ? parentsOfRecord(await readRawRecordNow(projectId, p)) : []));
+    if (!up.complete) return true;
+    for (const d of [id, ...up.ids]) if (isValidId(d) && rulesAt(await readRawRecordNow(projectId, d)) > since) return true;
+  }
+  return false;
+}
+
+/** When the newest column rules of the project were set (-Infinity: none; Infinity: some do not sanitize). Every dataset is read, so upstream needs no walk. */
+export async function newestColumnRules(projectId: string): Promise<number> {
+  if (!isValidId(projectId)) return -Infinity;
+  const datasets = require('./datasets') as typeof import('./datasets'); // lazy: the dataset store calls into the row-access modules
+  let newest = -Infinity;
+  for (const d of await datasets.listDatasets(projectId)) newest = Math.max(newest, rulesAt(await readRawRecord(projectId, d.id)));
+  return newest;
 }
 
 /**

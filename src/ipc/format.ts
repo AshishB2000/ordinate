@@ -63,7 +63,7 @@ export function register(): void {
     // The map lists every value an editor's chart dealt: none to a caller row access rules restrict (REDACT),
     // and no column's that is hidden from them on any dataset (part 4, D18).
     if (!project) return {};
-    if ((await restrictedOn(projectId)) && (await anyPolicyClosed(projectId, true))) return {};
+    if ((await restrictedOn(projectId)) && (await anyPolicyClosed(projectId))) return {};
     const map = colorMap.sanitizeColorMap(project.colorMap);
     for (const c of await hiddenAnywhere(projectId)) delete map[c];
     return map;

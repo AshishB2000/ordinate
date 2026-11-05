@@ -17,7 +17,7 @@
 // when it was published, and only a re-publish changes them.
 
 import * as fs from 'fs';
-import { anyPolicyClosedRecently, assertFanOutAllowed, fanOutScope, governed } from '../data/rowAccess';
+import { RowPolicyError, anyColumnRulesSince, anyPolicyClosedRecently, assertFanOutAllowed, columnRulesSince, fanOutScope, policyClosed } from '../data/rowAccess';
 import { datasetsOfRoot } from '../server/subscriptions/figureDatasets';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -92,16 +92,18 @@ export async function getSite(id: string): Promise<HostedSite | null> {
 
 /**
  * May `site` still be served (docs/row-policy D10)? Not once a dataset its build read has row access
- * rules (or is built from one). A site published before builds were recorded has its datasets worked
- * out ONCE from the dashboards it was published with, and kept (round 2, #10); one that cannot be
- * (a story or scorecard, no stored definitions) is not served while its project has any such dataset.
+ * rules (or is built from one), nor once one has column rules set after it was published (semantic layer
+ * part 4, D17: it was built for an audience the rules have narrowed since; a republish builds it under them).
+ * A site published before builds were recorded has its datasets worked out ONCE from the dashboards it was
+ * published with, and kept (round 2, #10); one that cannot be (a story or scorecard, no stored definitions)
+ * is not served while its project has any such dataset, or column rules newer than it.
  */
 export async function servable(site: HostedSite): Promise<boolean> {
   try {
     const ids = Array.isArray(site.datasetIds) ? site.datasetIds : await backfillDatasets(site);
-    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId));
-    for (const id of ids) if (await governed(site.projectId, id)) return false; // row or column rules (part 4 step 06 narrows columns by date)
-    return true;
+    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId)) && !(await anyColumnRulesSince(site.projectId, site.publishedAt));
+    for (const id of ids) if (await policyClosed(site.projectId, id)) return false;
+    return !(await columnRulesSince(site.projectId, ids, site.publishedAt));
   } catch {
     return false; // rules that cannot be read: not served
   }
@@ -195,6 +197,7 @@ export async function publishHosted(
   const id = prev ? prev.id : randomUUID();
   // ponytail: read just before the pages build; an edit landing in that window can reach the /p/ page but not the embed. One read for both if it matters.
   const defs = await definitions(config.projectId, config.dashboardIds);
+  const started = new Date().toISOString();
   // Built OUTSIDE the lock (every figure is computed here); only the switch below holds the site.
   // A fan-out (docs/row-policy D10): a dataset with row access rules — or built from one — refuses the whole publish.
   const { value: built, datasets: read } = await fanOutScope(() => buildPages(config, opts.progress ?? {}, policyOutgoing(config.projectId, 'publish')));
@@ -206,6 +209,9 @@ export async function publishHosted(
     // who may open it is the owner's latest word, not what the build started with.
     const now = prev ? await getSite(id) : null;
     if (prev && !now) throw new Error('That published link no longer exists.');
+    // Column rules saved while it was built: it may hold what they hide (stamped first, so a later save is newer than it).
+    const publishedAt = new Date().toISOString();
+    if (await columnRulesSince(config.projectId, read, started)) throw new RowPolicyError('fanout');
     for (const f of files) await writeJson(path.join(dir(id), `${f.file}.json`), { html: f.html });
     await writeJson(path.join(dir(id), 'defs.json'), { dashboards: defs });
     const site: HostedSite = {
@@ -214,7 +220,7 @@ export async function publishHosted(
       title: config.options.title || '',
       access: opts.access ?? now?.access ?? 'org',
       publishedBy: by,
-      publishedAt: new Date().toISOString(),
+      publishedAt,
       bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
       combos,
       pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),

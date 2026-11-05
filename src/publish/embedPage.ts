@@ -15,7 +15,7 @@
 //     runAsPublished, so a Live figure is never fresher than the /p/ floor.
 
 import { orgKey } from '../server/context';
-import { assertFanOutAllowed, fanOutScope } from '../data/rowAccess';
+import { RowPolicyError, assertFanOutAllowed, columnRulesSince, fanOutScope } from '../data/rowAccess';
 import * as recordFs from '../app/recordFs';
 import { getFormatPrefs } from '../app/format';
 import { listThemes } from '../app/themeStore';
@@ -38,7 +38,8 @@ const CACHE_MAX = 32;
 
 export type EmbedBuild = { html: string; datasets?: string[] } | { missing: 'gone' | 'republish' };
 
-const cache = new Map<string, { at: number; html: string; datasets: string[] }>();
+/** `started`: when its build began — column rules set after it refuse the page (part 4, D17). */
+const cache = new Map<string, { at: number; started: number; html: string; datasets: string[] }>();
 const inflight = new Map<string, Promise<EmbedBuild>>();
 
 /** Test hook: forget every built page. */
@@ -51,7 +52,12 @@ function keyOf(site: HostedSite, dashboardId: string, c: EmbedClaims): string {
   return orgKey(JSON.stringify(['embed', site.id, site.publishedAt, dashboardId, params, c.theme ?? '', [...c.hide].sort()]));
 }
 
-async function build(site: HostedSite, dashboardId: string, c: EmbedClaims): Promise<EmbedBuild> {
+/** Refuses (`fanout`) a page built from `started` on, once a dataset it read has column rules set since (semantic layer part 4, D17). */
+async function rulesHold(site: HostedSite, datasets: readonly string[], started: number): Promise<void> {
+  if (await columnRulesSince(site.projectId, datasets, new Date(started).toISOString())) throw new RowPolicyError('fanout');
+}
+
+async function build(site: HostedSite, dashboardId: string, c: EmbedClaims, started: number): Promise<EmbedBuild> {
   const defs = await getDefs(site.id);
   const def = defs && Object.prototype.hasOwnProperty.call(defs, dashboardId) ? defs[dashboardId] : null;
   if (!def) return { missing: 'republish' };
@@ -60,6 +66,7 @@ async function build(site: HostedSite, dashboardId: string, c: EmbedClaims): Pro
   // A fan-out (docs/row-policy D10): a dataset with row access rules — or built from one — refuses the embed.
   const { value: d, datasets } = await fanOutScope(() => recordFs.withReadMemo(() => buildDashboard(site.projectId, dashboardId, max, {}, policyOutgoing(site.projectId, 'publish'), { def, lock })));
   await assertFanOutAllowed(site.projectId, datasets);
+  await rulesHold(site, datasets, started); // saved while it was built
   if (!d) return { missing: 'gone' };
   const raw = (d.style || {}) as { themeId?: string };
   // A token's theme wins over the dashboard's (and its workspace theme and brand ramp, which were made for the other one).
@@ -87,17 +94,19 @@ export async function embedHtml(site: HostedSite, dashboardId: string, claims: E
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) {
     await assertFanOutAllowed(site.projectId, hit.datasets); // rules set since it was built: refused on every pod at once
+    await rulesHold(site, hit.datasets, hit.started);
     return { html: hit.html };
   }
+  const started = Date.now();
   let p = inflight.get(key);
   if (!p) {
-    p = build(site, dashboardId, claims).finally(() => inflight.delete(key));
+    p = build(site, dashboardId, claims, started).finally(() => inflight.delete(key));
     inflight.set(key, p);
   }
   const out = await p;
   if ('html' in out) {
     cache.delete(key);
-    cache.set(key, { at: Date.now(), html: out.html, datasets: out.datasets ?? [] });
+    cache.set(key, { at: Date.now(), started, html: out.html, datasets: out.datasets ?? [] });
     while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   }
   return out;

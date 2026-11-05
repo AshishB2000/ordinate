@@ -271,12 +271,12 @@ async function columnAccess(): Promise<void> {
     const raced = await midRestore(RESTORING, () => rec.storedRules(P, RESTORING));
     ok('storedRules: a restore between its live and Trash reads still finds the column rules', raced.fired && stableStringify(raced.value) === stableStringify({ columnAccess: CA }), JSON.stringify(raced));
     await as(() => trash.trashRecord(P, 'dataset', RESTORING));
-    // `governed`: row or column rules (policyClosed is rows only since part 4 step 05), through the same raw read.
-    const gated = await midRestore(RESTORING, () => access.governed(P, RESTORING));
+    // `columnsRuled`: column rules for anyone (policyClosed is rows only since part 4 step 05), through the same raw read.
+    const gated = await midRestore(RESTORING, () => access.columnsRuled(P, RESTORING));
     ok('the row access check: the same restore race still reads it as closed', gated.fired && gated.value === true, JSON.stringify(gated));
     const restoredOpen = await save('No rules, restored mid-read');
     await as(() => trash.trashRecord(P, 'dataset', restoredOpen));
-    const open = await midRestore(restoredOpen, () => access.governed(P, restoredOpen));
+    const open = await midRestore(restoredOpen, () => access.columnsRuled(P, restoredOpen));
     ok('NEGATIVE CONTROL: the same race on a dataset with no rules reads open', open.fired && open.value === false, JSON.stringify(open));
 
     // NEGATIVE CONTROL: the real guard, with 'columnAccess' taken out of KEPT_RECORD_KEYS, drops it on every persist and copy.

@@ -629,7 +629,7 @@
   "subscriptionText.not_sent_none_of_the_chosen": "未送信: 選択したカードがダッシュボードに残っていません。",
   "subscriptionText.not_sent_the_dashboard_was_deleted": "未送信: ダッシュボードが削除されました。",
   "subscriptionText.not_sent_the_figures_could_not": "未送信: 数値を計算できませんでした。",
-  "subscriptionText.not_sent_this_dashboard_reads_a": "送信されませんでした: このダッシュボードは行アクセスルールのあるデータセットを読み取り、配信は全員に同じ数値を表示するため、このダッシュボードでは使えません。",
+  "subscriptionText.not_sent_this_dashboard_reads_a": "送信されませんでした: このダッシュボードは、アクセスルールで一部の人に見える内容が制限されたデータセットを読み取り、配信は全員に同じ数値を表示するため、このダッシュボードでは使えません。",
   "subscriptionText.not_sent_this_server_cannot_read": "未送信: このサーバーは DATABASE_URL と ORDINATE_MASTER_KEY がないと Webhook URL を読み取れません。",
   "subscriptionText.not_sent_to_nobody_on_it": "{channel} に未送信: このリストにはこのプロジェクトを閲覧できる人がいません。",
   "subscriptionText.not_sent_to_this_list_is": "{channel} に未送信: このリストは組織の 1 時間あたりのメール上限を超えています。",

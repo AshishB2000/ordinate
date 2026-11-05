@@ -629,7 +629,7 @@
   "subscriptionText.not_sent_none_of_the_chosen": "No enviado: ninguna de las tarjetas elegidas sigue en el panel.",
   "subscriptionText.not_sent_the_dashboard_was_deleted": "No enviado: el panel fue eliminado.",
   "subscriptionText.not_sent_the_figures_could_not": "No enviado: no se pudieron calcular las cifras.",
-  "subscriptionText.not_sent_this_dashboard_reads_a": "No enviado: este panel lee un conjunto de datos con reglas de acceso a filas, y las suscripciones muestran las mismas cifras a todos, así que están desactivadas para él.",
+  "subscriptionText.not_sent_this_dashboard_reads_a": "No enviado: este panel lee un conjunto de datos cuyas reglas de acceso limitan lo que algunas personas ven, y las suscripciones muestran las mismas cifras a todos, así que están desactivadas para él.",
   "subscriptionText.not_sent_this_server_cannot_read": "No enviado: este servidor no puede leer URL de webhook sin DATABASE_URL y ORDINATE_MASTER_KEY.",
   "subscriptionText.not_sent_to_nobody_on_it": "No enviado a {channel}: nadie de esa lista puede leer este proyecto.",
   "subscriptionText.not_sent_to_this_list_is": "No enviado a {channel}: esta lista supera el límite de correos por hora de la organización.",

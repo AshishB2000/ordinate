@@ -96,7 +96,7 @@ export const NOTE = 'Annual pay';
 const salaries = STAFF_ROWS.map((r) => r[1] as number);
 const TOTAL = salaries.reduce((a, b) => a + b, 0);
 /** A salary figure, as any facts block could print it. */
-export const SALARY_FIGURES = [String(TOTAL), TOTAL.toLocaleString('en-US'), String(TOTAL / salaries.length), String(Math.max(...salaries))];
+export const SALARY_FIGURES = [String(TOTAL), TOTAL.toLocaleString('en-US'), `${(TOTAL / 1000).toFixed(1)}K`, String(TOTAL / salaries.length), String(Math.max(...salaries))];
 /** What no reply or prompt for east may carry: an ssn value, a salary figure, the salary example, an ssn label. (A prompt also drops the note.) */
 export const leaksHidden = (p: string): string | null => [SSN_CANARY, EXAMPLE, LABEL, ...SALARY_FIGURES].find((x) => p.includes(x)) ?? null;
 

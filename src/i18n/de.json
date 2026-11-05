@@ -629,7 +629,7 @@
   "subscriptionText.not_sent_none_of_the_chosen": "Nicht gesendet: Keine der gewählten Karten ist noch im Dashboard.",
   "subscriptionText.not_sent_the_dashboard_was_deleted": "Nicht gesendet: Das Dashboard wurde gelöscht.",
   "subscriptionText.not_sent_the_figures_could_not": "Nicht gesendet: Die Zahlen konnten nicht berechnet werden.",
-  "subscriptionText.not_sent_this_dashboard_reads_a": "Nicht gesendet: Dieses Dashboard liest einen Datensatz mit Zeilenzugriffsregeln, und Abonnements zeigen allen dieselben Zahlen. Daher sind sie dafür ausgeschaltet.",
+  "subscriptionText.not_sent_this_dashboard_reads_a": "Nicht gesendet: Dieses Dashboard liest einen Datensatz, dessen Zugriffsregeln einschränken, was manche Personen sehen, und Abonnements zeigen allen dieselben Zahlen. Daher sind sie dafür ausgeschaltet.",
   "subscriptionText.not_sent_this_server_cannot_read": "Nicht gesendet: Dieser Server kann Webhook-URLs ohne DATABASE_URL und ORDINATE_MASTER_KEY nicht lesen.",
   "subscriptionText.not_sent_to_nobody_on_it": "Nicht an {channel} gesendet: Niemand auf dieser Liste kann dieses Projekt lesen.",
   "subscriptionText.not_sent_to_this_list_is": "Nicht an {channel} gesendet: Diese Liste ist größer als das stündliche E-Mail-Limit der Organisation.",

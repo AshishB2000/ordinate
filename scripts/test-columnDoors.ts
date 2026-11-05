@@ -69,8 +69,8 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('net: inside a door that checked Staff, it is open to east', !(await W.as('east', () => access.withColumnsChecked(new Set([staff]), () => access.closedToCaller(P, staff)))));
     ok('net: …a door that checked another dataset does not open it', await W.as('east', () => access.withColumnsChecked(new Set([W.plain]), () => access.closedToCaller(P, staff))));
     ok('NEGATIVE CONTROL: policyClosed is rows only (Staff has no row rules)', !(await W.as('boss', () => access.policyClosed(P, staff))));
-    ok('governed: Staff has column rules, for the replies sent alike to every reader', await W.as('boss', () => access.governed(P, staff)));
-    ok('NEGATIVE CONTROL: governed: Plain has none', !(await W.as('boss', () => access.governed(P, W.plain))));
+    ok('columnsRuled: Staff has column rules, for the alert save that asks what its test asks', await W.as('boss', () => access.columnsRuled(P, staff)));
+    ok('NEGATIVE CONTROL: columnsRuled: Plain has none', !(await W.as('boss', () => access.columnsRuled(P, W.plain))));
     ok('hiddenColumnsFor: east is hidden salary, ssn and the carrier bonus; hr nothing', [...(await W.as('east', () => access.hiddenColumnsFor(P, staff)))].sort().join() === 'bonus,salary,ssn' && (await W.as('hr', () => access.hiddenColumnsFor(P, staff))).size === 0);
 
     // ── Fixtures: metrics, a term, the requests ──────────────────────────────

@@ -16,7 +16,9 @@
 // REFUSED FIRST. A dashboard whose figures can come from a dataset with row
 // access rules is refused from its definition (`dashboardSendRefusal`) before
 // the owner is looked up or any figure computed: a `skipped` run, code
-// `row_policy`. `deliver` still refuses per channel behind it.
+// `row_policy`. Its figures are built in a fan-out scope, so one that reads a
+// column hidden from anyone refuses the same way. `deliver` still refuses per
+// channel behind it.
 //
 // WHAT A RUN LEAVES. One history entry (time, outcome, a typed code — the
 // sentence is written from the catalog when it is read), the failure count, and
@@ -42,6 +44,7 @@ import type { RunEntry, RunState, Subscription } from '../../analysis/subscripti
 import { asOfText, footerText, pausedNotice, scheduleText, viewText, type RunCode, type RunDetail } from '../../analysis/subscriptionText';
 import { utcLabel } from '../../data/figureAsOf';
 import { resolveFigures } from '../../ipc/subscriptionFigures';
+import { fanOutScope, isRowPolicyError } from '../../data/rowAccess';
 import { audit } from '../authz/audit';
 import { authorize } from '../authz/index';
 import { ctx, runInContext, type Identity } from '../context';
@@ -98,13 +101,21 @@ function underView(a: analysis.Analysis, view: SavedView | null): PageAnalysis {
  * — a preview's caller, or a run's owner. A typed code when there is nothing to
  * compose.
  */
-export async function buildMessage(projectId: string, def: Definition): Promise<Built | { code: 'dashboard_gone' | 'no_content' }> {
+export async function buildMessage(projectId: string, def: Definition): Promise<Built | { code: 'dashboard_gone' | 'no_content' | 'row_policy' }> {
   // A send reaches viewers: the published copy (a draft never published only for its editors' own sends).
   const a = def.analysisId ? await analysis.getAudienceAnalysis(projectId, def.analysisId) : null;
   if (!a) return { code: 'dashboard_gone' };
   // A view that was deleted since falls back to the dashboard as saved, rather than failing the send.
   const view = (def.viewId && (a.views || []).find((v) => v.id === def.viewId)) || null;
-  const figs = await resolveFigures(projectId, a, def.content.mode === 'cards' ? def.content.cardIds : null, view);
+  // A send shows the same figures to everyone on its channels: computed as its least-entitled reader (a fan-out), so a
+  // figure that reads a column hidden from anyone refuses the whole build (semantic layer part 4, D17).
+  let figs: Awaited<ReturnType<typeof resolveFigures>>;
+  try {
+    figs = (await fanOutScope(() => resolveFigures(projectId, a, def.content.mode === 'cards' ? def.content.cardIds : null, view))).value;
+  } catch (err) {
+    if (isRowPolicyError(err)) return { code: 'row_policy' };
+    throw err;
+  }
   if (!figs.found) return { code: 'no_content' };
   const filters = filterLine(underView(a, view));
   const model = composeMessage({
@@ -136,7 +147,7 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     } catch {
       return { outcome: 'failed', code: 'compute_failed' };
     }
-    if ('code' in built) return { outcome: 'failed', code: built.code };
+    if ('code' in built) return { outcome: built.code === 'row_policy' ? 'skipped' : 'failed', code: built.code }; // refused, as from its definition
     // The conditions hold a SCHEDULED run back; "Send now" is someone asking for it.
     if (scheduled && sub.conditions.skipUnchanged && sub.run.lastHash === built.hash) return { outcome: 'skipped', code: 'unchanged' };
     if (scheduled && sub.conditions.onlyWhenRefreshed && sub.run.lastDataAt && built.dataAt && built.dataAt <= sub.run.lastDataAt) return { outcome: 'skipped', code: 'not_refreshed' };

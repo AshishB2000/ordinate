@@ -29,7 +29,8 @@ import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
 import { storedRules, withFirstWritePolicy, type KeptRules } from './datasetRecord';
 import { memoOf, readRawRecord as readRaw, type Raw } from './rawRecord';
-import { columnReason, columnView, columnsRuled, upstreamHides } from './columnGate';
+import { columnReason, columnView, newestColumnRules, upstreamHides } from './columnGate';
+export { columnRulesSince, columnsRuled, fanOutHides } from './columnGate';
 import { asOfIso } from './asOf';
 import { isTermStep } from './termStep';
 import type { FilterStep } from './transforms';
@@ -195,13 +196,6 @@ export async function policyClosed(projectId: string, id: string): Promise<boole
   return (await effective(projectId, id)).kind !== 'none';
 }
 
-/**
- * Row rules (`policyClosed`) or column rules, here or upstream, for anyone: what a reply sent alike to every
- * reader (a push, a legacy published site, the project's colours) treats as closed.
- */
-export async function governed(projectId: string, id: string): Promise<boolean> {
-  return (await policyClosed(projectId, id)) || (isValidId(projectId) && isValidId(id) && (await columnsRuled(projectId, id)));
-}
 
 // ── The doors ───────────────────────────────────────────────────────────────
 
@@ -307,36 +301,46 @@ export function withLockSteps(lock: Lock, filters: readonly FilterStep[] | undef
   return starts ? only : [...lock.steps, ...only];
 }
 
-/** Does any dataset of the project have row rules — or, unless `rowsOnly`, column rules — (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
-export async function anyPolicyClosed(projectId: string, rowsOnly = false): Promise<boolean> {
+/** Does any dataset of the project have row rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
+export async function anyPolicyClosed(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   // Lazy: the dataset store calls into this module, so it is not imported at load time.
   const datasets = require('./datasets') as typeof import('./datasets');
-  for (const d of await datasets.listDatasets(projectId)) if (await (rowsOnly ? policyClosed : governed)(projectId, d.id)) return true;
+  for (const d of await datasets.listDatasets(projectId)) if (await policyClosed(projectId, d.id)) return true;
   return false;
 }
 
-/** `anyPolicyClosed`, remembered per org and project on this pod for a few seconds — the legacy `/p/` check runs per fetch. */
+/** The project's rules as an older published site that recorded no datasets asks of them, remembered per org and project on this pod for a few seconds — it runs per fetch. */
 const ANY_CLOSED_TTL_MS = 15_000;
-const anyClosed = new Map<string, { at: number; value: Promise<boolean> }>();
+const anyClosed = new Map<string, { at: number; value: Promise<{ rows: boolean; columnsAt: number }> }>();
 
-/**
- * `anyPolicyClosed` for a page served per fetch (an older published site, src/publish/hosted.ts). Forgotten at
- * once when this pod saves rules (`rulesChanged`); CEILING: another pod may serve such a page for up to 15 s
- * after rules are first set in its project.
- */
-export function anyPolicyClosedRecently(projectId: string): Promise<boolean> {
+function projectRulesRecently(projectId: string): Promise<{ rows: boolean; columnsAt: number }> {
   const key = ctx().org.id + '\u0000' + projectId;
   const hit = anyClosed.get(key);
   if (hit && Date.now() - hit.at < ANY_CLOSED_TTL_MS) return hit.value;
-  const value = anyPolicyClosed(projectId);
+  const value = (async () => ({ rows: await anyPolicyClosed(projectId), columnsAt: await newestColumnRules(projectId) }))();
   anyClosed.set(key, { at: Date.now(), value });
   value.catch(() => anyClosed.delete(key));
   if (anyClosed.size > 1000) anyClosed.delete(anyClosed.keys().next().value as string);
   return value;
 }
 
-/** Rules were saved or removed in `projectId` (dataset:setRowPolicy): what this pod remembers of it goes. */
+/**
+ * `anyPolicyClosed` for a page served per fetch (an older published site, src/publish/hosted.ts). Forgotten at
+ * once when this pod saves rules (`rulesChanged`); CEILING: another pod may serve such a page for up to 15 s
+ * after rules are first set in its project.
+ */
+export async function anyPolicyClosedRecently(projectId: string): Promise<boolean> {
+  return (await projectRulesRecently(projectId)).rows;
+}
+
+/** Has any dataset of the project column rules set after `iso` (or that do not sanitize)? `anyPolicyClosedRecently`'s twin, with its memory and its ceiling. */
+export async function anyColumnRulesSince(projectId: string, iso: string): Promise<boolean> {
+  const since = Date.parse(iso);
+  return Number.isNaN(since) || (await projectRulesRecently(projectId)).columnsAt > since;
+}
+
+/** Rules were saved or removed in `projectId` (dataset:setRowPolicy; step 07's column setter calls it too): what this pod remembers of it goes. */
 export function rulesChanged(projectId: string): void {
   anyClosed.delete(ctx().org.id + '\u0000' + projectId);
 }
