@@ -174,13 +174,13 @@ export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { pro
             <tr>
               <th scope="col">Column</th>
               <th scope="col">Type</th>
+              {usedBy && <th scope="col">Used by</th>}
               <th scope="col">Display name</th>
               <th scope="col">Also called</th>
               <th scope="col">Value labels</th>
               <th scope="col">Description</th>
               <th scope="col">Example</th>
               <th scope="col">Sensitivity</th>
-              {usedBy && <th scope="col">Used by</th>}
             </tr>
           </thead>
           <tbody>
@@ -193,6 +193,7 @@ export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { pro
                   <td>
                     <span className={s.typeChip}>{c.type}</span>
                   </td>
+                  {usedBy && <td className={s.muted}>{usedBy[c.name] ?? '\u2014'}</td>}
                   <td>
                     <Cell readOnly={!canEdit} value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v, no) => patch(c.name, { displayName: v }, no)} />
                   </td>
@@ -216,7 +217,6 @@ export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { pro
                       onValueChange={(v) => patch(c.name, { sensitivity: v as ColumnDoc['sensitivity'] })}
                     />
                   </td>
-                  {usedBy && <td className={s.muted}>{usedBy[c.name] ?? '\u2014'}</td>}
                 </tr>
               );
             })}
