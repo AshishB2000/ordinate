@@ -45,15 +45,26 @@ export interface VerifiedState { q: VerifiedQuestion; problem: string | null; hi
  */
 export async function verifiedStates(projectId: string): Promise<VerifiedState[]> {
   const [list, env] = await Promise.all([listTagged(projectId), verifiedEnv(projectId)]);
+  const left = await leftOutFor(projectId, list.map((x) => x.rec));
   const closed = new Map<string, boolean>();
-  const hiddenOf = new Map<string, ReadonlySet<string>>();
   const out: VerifiedState[] = [];
   for (const { rec: q, tag } of list) {
     const id = q.spec.datasetId;
-    if (!hiddenOf.has(id)) hiddenOf.set(id, await hiddenColumnsFor(projectId, id));
-    if (mentionsHidden(q.spec, hiddenOf.get(id)!)) continue;
+    if (left.has(q.id)) continue;
     if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id));
     out.push({ q, problem: verifiedProblem(q, env), hidden: !!closed.get(id) && hasValueFilter(q.spec), tag });
   }
   return out;
+}
+
+/** The ids of the questions left out for the caller: each names a column hidden from them (part 4, D18). One check per dataset. */
+export async function leftOutFor(projectId: string, questions: readonly VerifiedQuestion[]): Promise<Set<string>> {
+  const hiddenOf = new Map<string, ReadonlySet<string>>();
+  const left = new Set<string>();
+  for (const q of questions) {
+    const id = q.spec.datasetId;
+    if (!hiddenOf.has(id)) hiddenOf.set(id, await hiddenColumnsFor(projectId, id));
+    if (mentionsHidden(q.spec, hiddenOf.get(id)!)) left.add(q.id);
+  }
+  return left;
 }

@@ -108,6 +108,8 @@ async function main(): Promise<void> {
     await plant(P, 55);
     const capped = await runToEnd(P);
     ok('at most 50 a run', capped.state === 'done' && capped.asked === 50 && capped.total === 50 && capped.skipped === 9 && capped.results.length === 50, JSON.stringify({ ...capped, results: capped.results.length }));
+    ok('the record places every working question: the run\'s 50 first, in the order asked, then the 9 skipped', capped.ids?.length === 59
+      && capped.ids.slice(0, 50).join() === capped.results.map((r) => r.id).join(), JSON.stringify(capped.ids?.length));
 
     // Cancel between questions: the record says stopped.
     let hold!: () => void;

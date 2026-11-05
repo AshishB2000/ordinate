@@ -9,6 +9,7 @@
 // - Leave-one-out: `askCopilot` is called directly, never `copilot:ask`, so an exact hit never short-circuits a
 //   question, and its own entry is no example. The run is the starting editor's request context: their row lock, model.
 // - The record holds outcomes and reasons only: no spec, no figure, no prompt. On Live the judge compares specs only.
+// - A reader whose list leaves a question out (it names a column hidden from them) gets no row and no count of it.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -24,12 +25,12 @@ import { closedToCaller } from '../data/rowAccess';
 import { listVerified } from '../analysis/verifiedQuestions';
 import { buildFacts } from './copilot';
 import { askGuidance } from './guidance';
-import { verifiedStates } from './verifiedState';
+import { leftOutFor, verifiedStates } from './verifiedState';
 import { judgeSpec, type Outcome } from './verifiedJudge';
 import * as msg from './assistantCheckMessages';
 
 export const CHECK_MAX = 50, CHECK_STALE_MS = 120_000;
-const TEXT_MAX = 300;
+const TEXT_MAX = 300, IDS_MAX = 5_000;
 
 export type CheckState = 'running' | 'done' | 'stopped' | 'error';
 export interface CheckResult { id: string; outcome: Outcome; reason?: string }
@@ -46,6 +47,8 @@ export interface CheckRun {
   skipped: number;
   results: CheckResult[];
   error?: string;
+  /** Every working question at the start, newest first: the first `total` are this run's, the rest `skipped`. Never sent. */
+  ids?: string[];
 }
 
 const STATES: ReadonlySet<string> = new Set(['running', 'done', 'stopped', 'error']);
@@ -68,6 +71,7 @@ export function sanitizeCheck(raw: unknown): CheckRun | null {
     ...(typeof o.finishedAt === 'string' ? { finishedAt: text(o.finishedAt, 40) } : {}),
     total: count(o.total), asked: count(o.asked), matched: count(o.matched), skipped: count(o.skipped), results,
     ...(typeof o.error === 'string' ? { error: text(o.error) } : {}),
+    ...(Array.isArray(o.ids) ? { ids: o.ids.filter((x): x is string => isValidId(x)).slice(0, IDS_MAX) } : {}),
   };
 }
 
@@ -151,7 +155,7 @@ export async function startCheck(projectId: string): Promise<{ ok: true; runId: 
   const now = new Date().toISOString();
   const run: CheckRun = {
     runId: randomUUID(), state: 'running', startedBy: osUser(), startedAt: now, heartbeatAt: now,
-    total: questions.length, asked: 0, matched: 0, skipped: working.length - questions.length, results: [],
+    total: questions.length, asked: 0, matched: 0, skipped: working.length - questions.length, results: [], ids: working.map((s) => s.q.id),
   };
   const claimed = await recordFs.locked(fileOf(projectId), async () => {
     if ((await readCheck(projectId))?.state === 'running') return false;
@@ -169,11 +173,31 @@ export async function startCheck(projectId: string): Promise<{ ok: true; runId: 
   }
 }
 
-/** The last check as the caller may read it: a reason can quote a value the model wrote, so none on a dataset closed to them. */
+/** `run` without the questions `left` names: no row, and no count of theirs (`ids` places the ones not asked yet). */
+function withoutLeftOut(run: CheckRun, ids: string[] | undefined, left: ReadonlySet<string>): CheckRun {
+  const gone = run.results.filter((r) => left.has(r.id));
+  const kept = (xs: string[]): number => xs.filter((id) => !left.has(id)).length;
+  return {
+    ...run, results: run.results.filter((r) => !left.has(r.id)),
+    asked: Math.max(0, run.asked - gone.length), matched: Math.max(0, run.matched - gone.filter((r) => r.outcome === 'match').length),
+    total: ids ? kept(ids.slice(0, run.total)) : Math.max(0, run.total - gone.length),
+    skipped: ids ? kept(ids.slice(run.total)) : run.skipped,
+  };
+}
+
+/**
+ * The last check as the caller may read it: a reason can quote a value the model wrote, so none on a dataset closed to
+ * them; a question their list leaves out is no row and no count. An unrestricted caller reads the record as stored.
+ */
 export async function checkFor(projectId: string): Promise<CheckRun | null> {
-  const run = await readCheck(projectId);
-  if (!run || !run.results.some((r) => r.reason !== undefined)) return run;
-  const datasetOf = new Map((await listVerified(projectId)).map((q) => [q.id, q.spec.datasetId] as const));
+  const stored = await readCheck(projectId);
+  if (!stored) return null;
+  const { ids, ...whole } = stored;
+  const list = await listVerified(projectId);
+  const left = await leftOutFor(projectId, list);
+  const run = left.size ? withoutLeftOut(whole, ids, left) : whole;
+  if (!run.results.some((r) => r.reason !== undefined)) return run;
+  const datasetOf = new Map(list.map((q) => [q.id, q.spec.datasetId] as const));
   const closed = new Map<string, boolean>();
   const results: CheckResult[] = [];
   for (const r of run.results) {
