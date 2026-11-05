@@ -731,10 +731,13 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     }
     const kept = ((await W.call('east', 'pipelines:get', { projectId: P })).body?.nodes as { ref?: { id: string }; runs: { status: string }[] }[] | undefined ?? []).filter((n) => n.ref?.id === W.plain).flatMap((n) => n.runs).filter((x) => x.status === 'failed').length;
     ok('columns: pipelines:get keeps east\'s failed runs on the dataset (status, timing and counts stay)', kept === 2, String(kept));
-    // META: structure only. The declared columns, no cell value; the same reply for every caller.
+    // Structure only. The declared columns, no cell value; the editor's reply, plus `hidden` (p4-07's Explore chip), which
+    // names every column while the rules no longer hold.
     const sg = await W.call('east', 'explore:suggest', { projectId: P, datasetId: W.plain });
-    ok('columns: explore:suggest answers east from the declared columns, carries no cell value, and is the editor\'s reply', sg.body?.ok === true && sg.text === (await W.call('ed', 'explore:suggest', { projectId: P, datasetId: W.plain })).text
-      && !H.leaks(sg.text) && !/"(c[0-8]|East|West|North)"/.test(sg.text), sg.text.slice(0, 200));
+    const { hidden: sgHidden, ...sgRest } = (sg.body ?? {}) as { hidden?: string[] };
+    ok('columns: explore:suggest answers east from the declared columns, carries no cell value, and is the editor\'s reply but for hidden', sg.body?.ok === true
+      && JSON.stringify(sgRest) === (await W.call('ed', 'explore:suggest', { projectId: P, datasetId: W.plain })).text
+      && JSON.stringify(sgHidden) === JSON.stringify(H.COLUMNS.map((c) => c.name)) && !H.leaks(sg.text) && !/"(c[0-8]|East|West|North)"/.test(sg.text), sg.text.slice(0, 200));
     for (const d of carriers) await setColumns(d, false);
     ok(`nothing of West's in any of east's ${columnReplies.length} replies on a dataset with column rules`, columnReplies.filter(H.leaks).length === 0);
     await setColumns(orders, false);

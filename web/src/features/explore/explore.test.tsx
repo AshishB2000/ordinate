@@ -166,6 +166,17 @@ describe('Explore: what a figure can come back as', () => {
     expect(await screen.findByText('Rows limited to your access')).toBeTruthy();
   });
 
+  it('a dataset that hides columns from the viewer says their access, not their rows, is limited', async () => {
+    serve('viewer', {
+      'dataset:list': { body: [{ id: DID, name: 'Retail orders', sourceKind: 'csv', rowCount: 5000, columnCount: 5, updatedAt: '', scoped: true }] },
+      'explore:suggest': { body: { ...SUGGEST, hidden: ['revenue'] } },
+    });
+    renderApp(url(REGION_Q));
+    const chip = await screen.findByText('Limited to your access');
+    expect(chip.closest('span')?.getAttribute('title')).toMatch(/some of its columns are hidden from you/);
+    expect(screen.queryByText('Rows limited to your access')).toBeNull();
+  });
+
   it('CONTROL: one they see whole does not', async () => {
     serve('viewer');
     renderApp(url(REGION_Q));

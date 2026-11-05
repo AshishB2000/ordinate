@@ -88,7 +88,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',
-  'explore:suggest': 'META',
+  'explore:suggest': 'MARK', // fields and suggestions from metadata; `hidden` names the columns hidden from the caller (p4-07's Explore chip)
   'format:colors:get': 'REDACT', // no colours of a column hidden on any dataset (rowAccess.hiddenAnywhere); test-columnRedact
   'formula:check': 'NET',
   'formula:functions': 'META',

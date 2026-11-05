@@ -21,6 +21,8 @@ export interface Suggestion {
 export interface Fields {
   fields: Field[];
   suggestions: Suggestion[];
+  /** The columns hidden from you (part 4): their names only. */
+  hidden: string[];
 }
 
 type SuggestReply =
@@ -30,6 +32,7 @@ type SuggestReply =
       dates: { name: string }[];
       measures: { name: string; aggregation: 'sum' | 'avg' }[];
       suggestions: Suggestion[];
+      hidden?: string[];
     }
   | { ok: false; error?: string };
 
@@ -46,6 +49,7 @@ export function useExploreFields(projectId: string, datasetId: string, topicId?:
           ...r.measures.map((m): Field => ({ name: m.name, kind: 'measure', type: 'number', aggregation: m.aggregation })),
         ],
         suggestions: r.suggestions,
+        hidden: r.hidden ?? [],
       };
     },
     staleTime: 60_000,
