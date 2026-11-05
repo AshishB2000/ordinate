@@ -548,6 +548,36 @@ Compose, Helm and ECS, are in
 `ORDINATE_IMAGE` in Compose). An older pod shows them as `sum`, or as nothing, and drops them the
 next time it saves them.
 
+## Definitions from another semantic layer are kept (`p7-b0`)
+
+A later release connects a company's own semantic layer (Snowflake semantic views, Cube, dbt) and
+imports dbt metrics. It writes three things this release only reads and keeps:
+
+- **A metric defined in that layer.** The record holds the layer's metric by name, not its math.
+  This release keeps it through every save (an edit of its name, format, direction or description, a
+  tree save, the Trash, a version restore, a project backup) and refuses to duplicate it. It cannot
+  ask the layer, so every figure that needs it is refused with a sentence such as "“Revenue · dbt”
+  is defined in another tool's semantic layer, which this server can't ask yet. Finish the upgrade,
+  then try again.": its KPI tile, a chart of it or of a formula built on it, an alert, a scorecard,
+  the metric tree, a what-if, a story, a published page, an answer and MCP `metric_value`. The
+  Metrics list shows it as "Defined in another tool".
+- **Where an imported metric came from** (`importedFrom`), so a second import updates it instead of
+  adding a copy. Kept through every save; a duplicate of an imported metric is your own, untagged.
+- **A dataset that asks the layer** (a `semantic` block on a Live dataset). It answers nothing on
+  this release: every chart, KPI, answer and schema sync is refused with "This dataset asks another
+  tool's semantic layer, which this server can't do yet. Ask your admin to finish upgrading
+  Ordinate.", and so are "Make a copy" and "Copy the data instead". No warehouse is asked.
+
+A pod older than this one rewrites a layer's metric as an empty sum the next time anyone saves it
+(the layer's definition is then lost for good) and drops `importedFrom`.
+
+**The release that connects a semantic layer and the dbt import needs this release on every pod
+first.** Use the two ways through in
+[The release that adds glossary terms needs this release first](#the-release-that-adds-glossary-terms-needs-this-release-first):
+go through this release, or stop every pod before you start the new ones (Compose already does;
+Helm and ECS steps are there). **Never roll back below this release once a layer is connected**
+(`helm rollback`, or an older `ORDINATE_IMAGE` in Compose).
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the
