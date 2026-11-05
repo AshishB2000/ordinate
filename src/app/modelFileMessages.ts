@@ -67,3 +67,20 @@ export function modelUploadExpired(): string {
 export function modelExternalMetric(name: string): string {
   return t('modelFileMessages.is_defined_in_another_tool_s', { name });
 }
+
+// ── Applying an import (a3) ──────────────────────────────────────────────────
+
+/** The plan's hash moved since the dry run: nothing is written. */
+export function modelPlanChanged(): string {
+  return t('modelFileMessages.this_project_changed_since_the_dry');
+}
+
+/** One object was edited in this project after the dry run: it is not written, the rest are. */
+export function modelObjectMoved(): string {
+  return t('modelFileMessages.this_was_changed_in_the_project');
+}
+
+/** One object's write failed for a reason that is not its own (the log has it): the rest are written. */
+export function modelWriteFailed(): string {
+  return t('modelFileMessages.this_could_not_be_written_check');
+}

@@ -47,6 +47,12 @@ export async function upload(bytes: Buffer, name: string): Promise<{ status: num
   return { status: r.statusCode, fileToken: r.statusCode === 200 ? String((JSON.parse(r.body) as { fileToken?: unknown }).fileToken) : '' };
 }
 
+/** A download token's bytes through GET /api/files/<token>, as the browser fetches them. */
+export async function download(token: string): Promise<{ status: number; bytes: Buffer }> {
+  const r = await app.inject({ method: 'GET', url: `/api/files/${encodeURIComponent(token)}` });
+  return { status: r.statusCode, bytes: r.rawPayload };
+}
+
 /** Every id `datasets.getDataset` was asked for since the spy went on. */
 export const hydrated: string[] = [];
 const realGet = H.datasets.getDataset;

@@ -121,9 +121,14 @@ const writes = (i: PlanItem): boolean => WRITES.has(i.status);
 /** The editor refused it: kept with its diff, so the person sees what was refused. */
 const refuse = (i: PlanItem, error: string): void => void Object.assign(i, { status: 'skipped', reason: 'invalid', error });
 
-type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
+export type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
 
 export async function planImport(projectId: string, file: ParsedModel): Promise<ImportPlan> {
+  return (await planDetailed(projectId, file)).plan;
+}
+
+/** The plan, and what the apply writes from: each relationship, term and metric item's file form (references mapped) by key, and the match. */
+export async function planDetailed(projectId: string, file: ParsedModel): Promise<{ plan: ImportPlan; forms: ReadonlyMap<string, Mapped>; match: ModelMatch }> {
   const { here, notCarried } = await hereOf(projectId);
   const m: ModelMatch = matchModel(file, here);
   const items: PlanItem[] = [];
@@ -343,5 +348,5 @@ export async function planImport(projectId: string, file: ParsedModel): Promise<
   items.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const counts = Object.fromEntries(PLAN_STATUSES.map((s) => [s, items.filter((i) => i.status === s).length])) as Record<PlanStatus, number>;
   const hash = createHash('sha256').update(stableStringify({ v: 1, items: items.map((i) => [i.key, i.status, i.fileHash, i.hereHash]) })).digest('base64url');
-  return { hash, items, counts, source: { appVersion: file.manifest.appVersion, project: file.manifest.project.name }, notCarried };
+  return { plan: { hash, items, counts, source: { appVersion: file.manifest.appVersion, project: file.manifest.project.name }, notCarried }, forms: fileOf, match: m };
 }

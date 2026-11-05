@@ -68,6 +68,33 @@ export async function termFactsFor(projectId: string, datasetId: string, questio
   return vocabularyOrder(facts, (f) => namedIn(question, [f.name, ...f.aliases]));
 }
 
+/** `term:save`'s body, the reply (a model import writes a new term through it too: src/app/modelApply.ts). */
+export async function saveTermChecked(projectId: string, input: terms.TermInput) { // the reply as it always was
+  const problem = await terms.termProblem(projectId, input);
+  if (problem) return { ok: false, ...problem };
+  const t = await terms.saveTerm(projectId, input);
+  if (!t) return { ok: false, error: 'Could not save the term. Check the dataset still exists.', field: 'datasetId' };
+  await versions.record(projectId, 'term', t);
+  return { ok: true, term: t };
+}
+
+/** `term:update`'s body, the reply. `base`: the content tag — a stale one throws ERECORDCHANGED (the route's 409). */
+export async function updateTermChecked(projectId: string, id: string, patch: Partial<terms.TermInput>, base?: string) { // the reply as it always was
+  try {
+    const before = await terms.getTerm(projectId, id);
+    if (!before) return { ok: false, error: 'Glossary term not found' };
+    const problem = await terms.termProblem(projectId, { ...patch, aliases: patch.aliases ?? (patch.name !== undefined ? before.aliases : undefined), datasetId: before.datasetId }, id);
+    if (problem) return { ok: false, ...problem };
+    const t = await terms.updateTerm(projectId, id, patch, base);
+    if (!t) return { ok: false, error: 'Glossary term not found' };
+    await versions.record(projectId, 'term', t, { before });
+    return { ok: true, term: t, tag: contentTag('term', t) };
+  } catch (err) {
+    if (isRecordChanged(err)) throw err; // the route's 409
+    return { ok: false, error: (err as Error)?.message || 'Failed to update the term' };
+  }
+}
+
 export function register(): void {
   ipcMain.handle('term:list', async (_e, { projectId }: { projectId: string }) => ({ ok: true, terms: await withStatus(projectId, 'term', await listForCaller(projectId)) }));
 
@@ -78,31 +105,10 @@ export function register(): void {
     return { ok: true, term, tag: await tagForCaller(projectId, 'term', term, t.tag) }; // tag: the term dialog's base
   });
 
-  ipcMain.handle('term:save', async (_e, { projectId, input }: { projectId: string; input: terms.TermInput }) => {
-    const problem = await terms.termProblem(projectId, input);
-    if (problem) return { ok: false, ...problem };
-    const t = await terms.saveTerm(projectId, input);
-    if (!t) return { ok: false, error: 'Could not save the term. Check the dataset still exists.', field: 'datasetId' };
-    await versions.record(projectId, 'term', t);
-    return { ok: true, term: t };
-  });
+  ipcMain.handle('term:save', async (_e, { projectId, input }: { projectId: string; input: terms.TermInput }) => saveTermChecked(projectId, input));
 
   // `base`: the dialog's content tag — a stale copy is 409 record_changed (../app/editConflict); `tag` is the next base.
-  ipcMain.handle('term:update', async (_e, { projectId, id, base, patch }: { projectId: string; id: string; base?: string; patch: Partial<terms.TermInput> }) => {
-    try {
-      const before = await terms.getTerm(projectId, id);
-      if (!before) return { ok: false, error: 'Glossary term not found' };
-      const problem = await terms.termProblem(projectId, { ...patch, aliases: patch.aliases ?? (patch.name !== undefined ? before.aliases : undefined), datasetId: before.datasetId }, id);
-      if (problem) return { ok: false, ...problem };
-      const t = await terms.updateTerm(projectId, id, patch, base);
-      if (!t) return { ok: false, error: 'Glossary term not found' };
-      await versions.record(projectId, 'term', t, { before });
-      return { ok: true, term: t, tag: contentTag('term', t) };
-    } catch (err) {
-      if (isRecordChanged(err)) throw err; // the route's 409
-      return { ok: false, error: (err as Error)?.message || 'Failed to update the term' };
-    }
-  });
+  ipcMain.handle('term:update', async (_e, { projectId, id, base, patch }: { projectId: string; id: string; base?: string; patch: Partial<terms.TermInput> }) => updateTermChecked(projectId, id, patch, base));
 
   ipcMain.handle('term:delete', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const done = await trash.trashRecord(projectId, 'term', id); // to the Trash

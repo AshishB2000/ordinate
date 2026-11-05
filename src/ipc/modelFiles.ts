@@ -5,6 +5,9 @@
 //
 // `model:importPlan` (a2): the dry run of an uploaded zip (src/app/modelRead.ts, src/app/modelPlan.ts). It writes
 // nothing and keeps nothing: the upload is deleted before the reply, so the apply uploads it again (any pod).
+//
+// `model:importApply` (a3): the same zip again, planned again and applied if its hash is the dry run's
+// (src/app/modelApply.ts). Before the first write it offers the model as it was, as a download.
 
 import * as path from 'path';
 import { createHash, randomUUID } from 'crypto';
@@ -14,66 +17,101 @@ import * as projects from '../app/projects';
 import * as recordFs from '../app/recordFs';
 import { writeZipAsync } from '../app/bundle';
 import { exportModel, ModelExportRefused, type ModelCounts, type NotCarried } from '../app/modelExport';
-import { MODEL_ZIP_TIME } from '../app/modelFormat';
+import { MODEL_ZIP_TIME, modelJson, type ModelFiles } from '../app/modelFormat';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
-import { readModelZip } from '../app/modelRead';
+import { readModelZip, type ParsedModel } from '../app/modelRead';
+import { applyImport, type ApplyChoice, type ApplyReply } from '../app/modelApply';
 import { planImport, type ImportPlan } from '../app/modelPlan';
 import { modelRestricted, modelUploadExpired } from '../app/modelFileMessages';
 import { restrictedOn } from '../data/rowAccess';
 
 export type ModelPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
+export type ModelApplyReply = ApplyReply | { ok: false; error: string };
 
 export type ModelExportReply = { ok: true; downloadToken: string; counts: ModelCounts; notCarried: NotCarried[] } | { ok: false; error: string };
 
-/** The zip's bytes and its download name. Refuses a restricted caller (ModelExportRefused). */
-export async function modelZip(projectId: string): Promise<{ bytes: Buffer; name: string; counts: ModelCounts; notCarried: NotCarried[] }> {
-  const { files, counts, notCarried } = await exportModel(projectId);
+/** Every object's `base` left out: with none, an import compares nothing three-way and every difference is an update. */
+function withoutBases(files: ModelFiles): ModelFiles {
+  const drop = (o: Record<string, unknown>) => { const { base: _b, ...rest } = o; return rest; };
+  return new Map([...files].map(([p, text]): [string, string] => {
+    if (!p.endsWith('.json') || p === 'model.json') return [p, text];
+    const o = JSON.parse(text) as Record<string, unknown>;
+    return [p, modelJson(p === 'relationships.json' ? { relationships: (o.relationships as Record<string, unknown>[]).map(drop) } : drop(o))];
+  }));
+}
+
+/**
+ * The zip's bytes and its download name. Refuses a restricted caller (ModelExportRefused). `asWas`: the model as it was
+ * before an import, without bases, so importing it overwrites what the import changed (a base would read "newer here").
+ */
+export async function modelZip(projectId: string, asWas = false): Promise<{ bytes: Buffer; name: string; counts: ModelCounts; notCarried: NotCarried[] }> {
+  const exp = await exportModel(projectId);
+  const files = asWas ? withoutBases(exp.files) : exp.files;
   const entries = [...files.keys()].sort().map((name) => ({ name, data: Buffer.from(files.get(name) as string, 'utf8') }));
   const project = await projects.getProject(projectId);
   const safe = (project?.name ?? '').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Project';
-  return { bytes: await writeZipAsync(entries, MODEL_ZIP_TIME), name: `${safe}-model.zip`, counts, notCarried };
+  return { bytes: await writeZipAsync(entries, MODEL_ZIP_TIME), name: `${safe}-model${asWas ? '-before-import' : ''}.zip`, counts: exp.counts, notCarried: exp.notCarried };
+}
+
+/** The zip in the org's temp, offered as a download (`model:export`, and an import's "the model as it was"). Refuses as `modelZip` does. */
+export async function offerModelZip(projectId: string, asWas = false): Promise<{ downloadToken: string; counts: ModelCounts; notCarried: NotCarried[] }> {
+  const zip = await modelZip(projectId, asWas);
+  const target = path.join(appPaths.temp(), `model-${randomUUID()}.zip`);
+  try {
+    await recordFs.writeFile(target + '.partial', zip.bytes);
+    await recordFs.rename(target + '.partial', target);
+    const { downloadToken } = await offerDownload(target, zip.name, createHash('sha256').update(zip.bytes).digest('hex'));
+    return { downloadToken, counts: zip.counts, notCarried: zip.notCarried };
+  } catch (err) {
+    for (const f of [target + '.partial', target]) await recordFs.rm(f, { force: true }).catch(() => undefined);
+    throw err;
+  }
+}
+
+/** An import's "the model as it was", offered before its first write (the catalog and relationships keep no versions). */
+export async function beforeImportZip(projectId: string): Promise<string> {
+  return (await offerModelZip(projectId, true)).downloadToken;
+}
+
+/**
+ * One run over an uploaded model zip: a caller row access rules restrict is refused before the upload is read (D7), a
+ * spent token is said in a sentence, and the upload is deleted before the reply, whatever happens (any pod).
+ */
+async function withModelUpload<T>(projectId: unknown, fileToken: unknown, run: (projectId: string, read: ParsedModel) => Promise<T>): Promise<T | { ok: false; error: string }> {
+  const p = typeof projectId === 'string' ? projectId : '';
+  if (await restrictedOn(p)) return { ok: false, error: modelRestricted() };
+  let upload: Upload;
+  try {
+    upload = await resolveUpload(fileToken);
+  } catch (err) {
+    if (err instanceof FileTokenError) return { ok: false, error: modelUploadExpired() };
+    throw err;
+  }
+  try {
+    const read = await readModelZip(upload.path);
+    if ('refused' in read) return { ok: false, error: read.refused };
+    return await run(p, read);
+  } catch (err) {
+    if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
+    throw err; // the route answers 500 and logs it
+  } finally {
+    upload.done();
+  }
 }
 
 export function register(): void {
   ipcMain.handle('model:export', async (_e, { projectId }: { projectId?: unknown } = {}): Promise<ModelExportReply> => {
-    let zip: Awaited<ReturnType<typeof modelZip>>;
     try {
-      zip = await modelZip(typeof projectId === 'string' ? projectId : '');
+      return { ok: true, ...(await offerModelZip(typeof projectId === 'string' ? projectId : '')) };
     } catch (err) {
       if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
       throw err; // the route answers 500 and logs it: an unknown failure's text is not for a browser
     }
-    const target = path.join(appPaths.temp(), `model-${randomUUID()}.zip`);
-    try {
-      await recordFs.writeFile(target + '.partial', zip.bytes);
-      await recordFs.rename(target + '.partial', target);
-      const { downloadToken } = await offerDownload(target, zip.name, createHash('sha256').update(zip.bytes).digest('hex'));
-      return { ok: true, downloadToken, counts: zip.counts, notCarried: zip.notCarried };
-    } catch (err) {
-      for (const f of [target + '.partial', target]) await recordFs.rm(f, { force: true }).catch(() => undefined);
-      throw err;
-    }
   });
 
-  ipcMain.handle('model:importPlan', async (_e, { projectId, fileToken }: { projectId?: unknown; fileToken?: unknown } = {}): Promise<ModelPlanReply> => {
-    const p = typeof projectId === 'string' ? projectId : '';
-    if (await restrictedOn(p)) return { ok: false, error: modelRestricted() }; // before the upload is read (D7)
-    let upload: Upload;
-    try {
-      upload = await resolveUpload(fileToken);
-    } catch (err) {
-      if (err instanceof FileTokenError) return { ok: false, error: modelUploadExpired() };
-      throw err;
-    }
-    try {
-      const read = await readModelZip(upload.path);
-      if ('refused' in read) return { ok: false, error: read.refused };
-      return { ok: true, plan: await planImport(p, read) };
-    } catch (err) {
-      if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
-      throw err; // the route answers 500 and logs it
-    } finally {
-      upload.done();
-    }
-  });
+  ipcMain.handle('model:importPlan', async (_e, { projectId, fileToken }: { projectId?: unknown; fileToken?: unknown } = {}): Promise<ModelPlanReply> =>
+    withModelUpload(projectId, fileToken, async (p, read) => ({ ok: true as const, plan: await planImport(p, read) })));
+
+  ipcMain.handle('model:importApply', async (_e, { projectId, fileToken, planHash, choices }: { projectId?: unknown; fileToken?: unknown; planHash?: unknown; choices?: unknown } = {}): Promise<ModelApplyReply> =>
+    withModelUpload(projectId, fileToken, (p, read) => applyImport(p, read, typeof planHash === 'string' ? planHash : '', (choices && typeof choices === 'object' ? choices : {}) as Record<string, ApplyChoice>, { before: () => beforeImportZip(p) })));
 }
