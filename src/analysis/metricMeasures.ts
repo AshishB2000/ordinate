@@ -313,6 +313,6 @@ export async function withLeafMeasures(projectId: string, datasetId: string, enc
   const plan = res.plan;
   if (!plan) return { ...encoding, values: res.values };
   const plain = res.values.filter((_, i) => !plan.formulas.has(i));
-  const leaves: VizMeasure[] = plan.leaves.map((l) => ({ column: l.column, aggregation: l.aggregation }));
+  const leaves: VizMeasure[] = plan.leaves.map((l) => ({ column: l.column, aggregation: l.aggregation, ...(l.datasetId ? { datasetId: l.datasetId } : {}) })); // its table: the policy judges it there
   return { ...encoding, values: plain.concat(leaves) };
 }

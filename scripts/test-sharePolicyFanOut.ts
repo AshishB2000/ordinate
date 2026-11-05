@@ -3,7 +3,8 @@
 // the same chart drawn on Employees does — hidden under drop on a /p/ page (publishHosted's own build,
 // `buildPages` with the publish hook), in a dashboard's HTML export and in an export-shaped `visual:data`; its
 // figures pass under mask, as every aggregate's do. The same holds for a forward-joined measure (a one side's
-// marked column totalled on the many side).
+// marked column totalled on the many side), for a formula metric totalling a many-side column (step 07: each
+// leaf on its own table) and for a KPI over one, which publishes exactly what that KPI on its own table does.
 //
 //   npm run build:ts && node scripts/test-sharePolicyFanOut.js
 
@@ -68,12 +69,22 @@ async function main(): Promise<void> {
   const ids = [await visual(D, 'Payroll by department', FAN), await visual(E, 'Payroll on Employees', OWN), await visual(E, 'Budget per employee', FWD)];
   const dash = await analysis.saveAnalysis(P, { name: 'Payroll', sheets: [{ id: randomUUID(), name: 'Main',
     cards: ids.map((visualId, i) => ({ id: randomUUID(), type: 'visual', visualId, layout: { x: 4 * i, y: 0, w: 4, h: 4 } })) }] } as any); // any: as above
-  const cfg = pub.sanitizePublishConfig({ projectId: P, dashboardIds: [dash!.id], storyIds: [], outDir });
-  if ('error' in cfg) throw new Error(cfg.error);
-  const leave = async (action: 'mask' | 'drop'): Promise<{ page: string; exported: string }> => {
+  // Step 07: KPIs over salary on each table, and a formula metric over it charted on each.
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const formula = async (datasetId: string, name: string, f: string) => (await metricsStore.saveMetric(P, { name, datasetId, definition: { formula: f } } as any))!; // any: as above
+  const perDept = await formula(D, 'Payroll per department', 'sum(salary) / count(dept_id)');
+  const perEmp = await formula(E, 'Payroll per head', 'sum(salary) / count(emp_id)');
+  const viaMetric = [await visual(D, 'Formula on Departments', { category: 'name', values: [{ column: perDept.name, aggregation: 'sum', metricId: perDept.id }] }),
+    await visual(E, 'Formula on Employees', { category: 'name', categoryDatasetId: D, values: [{ column: perEmp.name, aggregation: 'sum', metricId: perEmp.id }] })];
+  const kpi = (datasetId: string, label: string, x: number) => ({ id: randomUUID(), type: 'metric', metric: { datasetId, column: 'salary', aggregation: 'sum', label }, layout: { x, y: 0, w: 3, h: 2 } });
+  const kpis = await analysis.saveAnalysis(P, { name: 'Payroll KPIs', sheets: [{ id: randomUUID(), name: 'Main', cards: [kpi(D, 'Payroll on Departments', 0), kpi(E, 'Payroll on Employees', 3),
+    ...viaMetric.map((visualId, i) => ({ id: randomUUID(), type: 'visual', visualId, layout: { x: 6 * i, y: 2, w: 6, h: 4 } }))] }] } as any); // any: as above
+  const leave = async (action: 'mask' | 'drop', board = dash!.id): Promise<{ page: string; exported: string }> => {
     await store.setPolicy(P, { publish: action, export: action });
+    const cfg = pub.sanitizePublishConfig({ projectId: P, dashboardIds: [board], storyIds: [], outDir });
+    if ('error' in cfg) throw new Error(cfg.error);
     const built = await pub.buildPages(cfg, {}, pub.policyOutgoing(P, 'publish')); // what publishHosted stores and /p/ serves
-    return { page: built.pages[0].html, exported: await pub.dashboardPageHtml(P, dash!.id) };
+    return { page: built.pages[0].html, exported: await pub.dashboardPageHtml(P, board) };
   };
   const tile = (html: string, title: string): any => dataBlock(html).dashboard.sheets[0].cards.find((c: any) => c.title === title); // any: as dataBlock
   const hidden = (html: string, title: string): boolean => ((t) => !!t && t.payloads.length > 0 && t.payloads.every((p: any) => p.hidden === 'Hidden by the share policy'))(tile(html, title)); // any: as above
@@ -104,10 +115,30 @@ async function main(): Promise<void> {
   ok('mask: a point map sized by a forward join\'s marked budget is hidden', ((await point('sum')) as { hiddenByPolicy?: boolean }).hiddenByPolicy === true);
   ok('NEGATIVE CONTROL (mask): sized by a count, it is not', (await point('count')).ok === true);
 
+  // ── step 07 ──
+  const figure = (html: string, title: string): string => show(tile(html, title).payloads.map(({ value, display, subtitle }: any) => ({ value, display, subtitle }))); // any: as above
+  for (const action of ['drop', 'mask'] as const) {
+    const out = await leave(action, kpis!.id);
+    for (const [where, html] of [['/p/ page', out.page], ['HTML export', out.exported]] as const) {
+      ok(`${action}, ${where}: the KPI over Employees.salary on Departments publishes what that KPI on Employees does (no subtitle naming the marked column)`,
+        figure(html, 'Payroll on Departments') === figure(html, 'Payroll on Employees') && tile(html, 'Payroll on Employees').payloads[0].value === 310990,
+        show([figure(html, 'Payroll on Departments'), figure(html, 'Payroll on Employees')]));
+      if (action === 'drop') {
+        ok(`drop, ${where}, control: the formula metric charted on Employees is hidden`, hidden(html, 'Formula on Employees'), show(tile(html, 'Formula on Employees')));
+        ok(`drop, ${where}: the formula over Employees.salary charted on Departments is hidden too`, hidden(html, 'Formula on Departments'), show(tile(html, 'Formula on Departments')));
+        ok(`drop, ${where}: …so no department's payroll is on it`, leaks(html, PAYROLL).length === 0, show(leaks(html, PAYROLL)));
+      }
+    }
+  }
+
   // ── a column nobody marked: drop leaves it alone ──
   await catalog.setColumn(P, E, 'salary', { sensitivity: 'none' });
   const open = await leave('drop');
   ok('NEGATIVE CONTROL: with salary unmarked, drop publishes the fan-out tile\'s figures', !hidden(open.page, 'Payroll by department') && leaks(open.page, ['173826']).length === 1, show(tile(open.page, 'Payroll by department')));
+  const openKpis = await leave('drop', kpis!.id);
+  ok('NEGATIVE CONTROL: …and the formula on Departments, with its payroll', !hidden(openKpis.page, 'Formula on Departments') && leaks(openKpis.page, ['173826']).length === 1, show(tile(openKpis.page, 'Formula on Departments')));
+  ok('NEGATIVE CONTROL: …and each KPI says what it measures, so the subtitle check above can see one', JSON.parse(figure(openKpis.page, 'Payroll on Departments'))[0].subtitle === 'Sum of salary'
+    && figure(openKpis.page, 'Payroll on Departments') === figure(openKpis.page, 'Payroll on Employees'), figure(openKpis.page, 'Payroll on Departments'));
 }
 
 main().then(finish, (err) => {
