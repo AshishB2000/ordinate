@@ -21,11 +21,12 @@ import { GET, LIST, startNotes, useReadFacts, useSourceDoc, type SourceConn, typ
 import { SourceColumns } from './SourceColumns';
 import { SourceDocForm } from './SourceDocForm';
 import { SourceGuide } from './SourceGuide';
+import { SourceLineage } from './SourceLineage';
 import { SourceOverview } from './SourceOverview';
 import m from '../Model.module.css';
 import x from './Sources.module.css';
 
-const PANELS = ['overview', 'columns', 'guide'] as const;
+const PANELS = ['overview', 'columns', 'guide', 'lineage'] as const;
 type PanelId = (typeof PANELS)[number];
 /** Restated from the server's STALE_DAYS (src/app/sourceTableList.ts; the web cannot import it): the strip's "read over 30 days ago". */
 const STALE_DAYS = 30;
@@ -162,6 +163,9 @@ function DocPanel({ projectId, conn, row, docId, onDeleted, onReload }: DocProps
             <Tab value="guide" icon="file-text">
               Guide
             </Tab>
+            <Tab value="lineage" icon="lineage">
+              Lineage
+            </Tab>
           </TabList>
           <TabPanel value="overview">
             <SourceOverview projectId={projectId} conn={conn} doc={d} datasets={got.data.datasets} />
@@ -171,6 +175,9 @@ function DocPanel({ projectId, conn, row, docId, onDeleted, onReload }: DocProps
           </TabPanel>
           <TabPanel value="guide">
             <SourceGuide doc={d} onWrite={() => setEditing('guide')} />
+          </TabPanel>
+          <TabPanel value="lineage">
+            <SourceLineage projectId={projectId} connId={conn.connId} docId={docId} />
           </TabPanel>
         </Tabs>
         {editing && (

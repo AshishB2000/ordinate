@@ -63,7 +63,7 @@ function hrefOf(projectId: string, n: LineageNode): string | null {
   return null;
 }
 
-function Graph({ projectId, g }: { projectId: string; g: Lineage }) {
+export function LineageGraph({ projectId, g }: { projectId: string; g: Lineage }) {
   const navigate = useNavigate();
   const [hover, setHover] = useState<string | null>(null);
   const cols = Math.max(1, g.columns || 1);
@@ -193,7 +193,7 @@ export function LineageView({ projectId, id, type = 'dataset' }: { projectId: st
         </span>
         <span className={s.meta}>Hover to follow a path; click to open.</span>
       </div>
-      <Graph projectId={projectId} g={g} />
+      <LineageGraph projectId={projectId} g={g} />
       {g.nodes.length === 1 && <p className={s.note}>Nothing is built from this yet. Visuals, dashboards and reports on it will appear here.</p>}
     </>
   );
