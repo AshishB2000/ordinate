@@ -440,6 +440,8 @@
   "metricTreeMessages.rose": "{metric}は{compare}で{change}（{pct}）増加しました。",
   "metricTreeMessages.rose_2": "{metric}は{compare}で{change}増加しました。",
   "metricTreeMessages.that_metric_no_longer_exists": "その指標はもう存在しません。",
+  "pendingMessages.counts_distinct_values_which_needs_a": "「{measure}」は重複を除いた値の数を数えるため、新しいバージョンの Ordinate が必要です。アップグレードを完了してから、もう一度お試しください。",
+  "pendingMessages.is_a_kind_of_metric_from": "「{name}」は新しいバージョンの Ordinate で作られた種類のメトリックです。アップグレードを完了してから、もう一度お試しください。",
   "pivotRender.ascending": "、昇順",
   "pivotRender.descending": "、降順",
   "pivotRender.pick_a_row_dimension_and_at": "ピボットを作成するには、行ディメンションと1つ以上の値を選択してください。",

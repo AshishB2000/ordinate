@@ -18,6 +18,7 @@ import { validatePlan, type PlanContext, type PlanDataset } from './analysisPlan
 import { CHART_TYPE_IDS } from './analysisPlan';
 import { chartTypeOf, fits, matchField, splitAggregation, tokens, type Confidence, type FieldRole, type MatchAgg } from './rebuildMatch';
 import * as m from './rebuildMessages';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 export type RebuiltKind = 'kpi' | 'chart' | 'filter' | 'text';
 
@@ -63,7 +64,7 @@ export interface TileOverride {
   fields?: Record<string, { column: string | null; aggregation?: MatchAgg }>;
 }
 
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGGS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
 const AGG_WORD: Record<MatchAgg, string> = { sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max' };
 
 /** "Sales by Region" → ["Sales", "Region"]: what a chart's title says when its axes are not readable. */

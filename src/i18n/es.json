@@ -440,6 +440,8 @@
   "metricTreeMessages.rose": "{metric} subió {change} ({pct}) {compare}.",
   "metricTreeMessages.rose_2": "{metric} subió {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "Esa métrica ya no existe.",
+  "pendingMessages.counts_distinct_values_which_needs_a": "«{measure}» cuenta valores distintos, lo que necesita una versión más reciente de Ordinate. Termina de actualizar Ordinate y vuelve a intentarlo.",
+  "pendingMessages.is_a_kind_of_metric_from": "«{name}» es un tipo de métrica de una versión más reciente de Ordinate. Termina de actualizar Ordinate y vuelve a intentarlo.",
   "pivotRender.ascending": ", ascendente",
   "pivotRender.descending": ", descendente",
   "pivotRender.pick_a_row_dimension_and_at": "Elige una dimensión de fila y al menos un valor para crear una tabla dinámica.",

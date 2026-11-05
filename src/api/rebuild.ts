@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { byProjectId, FileToken, rpc, Uuid } from './contract';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 // Rebuild a dashboard from a screenshot (docs/rebuild-from-screenshot/,
 // src/ipc/rebuild.ts). Neither channel creates a record — creating the
@@ -7,7 +8,7 @@ import { byProjectId, FileToken, rpc, Uuid } from './contract';
 // both are `read`, as `analysis:draft` and `analysis:previewPlan` are.
 
 const Text = z.string().max(200);
-const Agg = z.enum(['sum', 'avg', 'count', 'min', 'max']);
+const Agg = z.enum(PLAIN_AGGREGATIONS);
 /** A reading as `rebuild:read` returned it. Sanitized again on the way in (rebuildRead.sanitizeReading). */
 const Reading = z.strictObject({
   title: Text,

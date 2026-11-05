@@ -56,6 +56,7 @@ import { ROWS_PROMPT, flattenRows, validateRows, type PlanRow } from './planRows
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { fillMapRegions, geoHitsFor, type GeoHits } from './geoHits';
+import { NUMBER_AGGREGATIONS, isPlainAggregation } from '../data/aggregations';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
@@ -80,7 +81,7 @@ export const CHART_TYPE_IDS: ReadonlySet<string> = new Set([
 
 /** Aggregations that need a `number` column. `count` is the only one that does
  *  not — it counts non-empty cells of any type (metricValue.computeMetric). */
-export const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max', 'none']);
+export const NUMERIC_AGGS: ReadonlySet<string> = new Set<string>([...NUMBER_AGGREGATIONS, 'none']);
 
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
@@ -485,7 +486,7 @@ function validateMetric(
     return null;
   }
   const aggregation = str(raw.aggregation);
-  if (!dashboards.METRIC_AGGS.has(aggregation)) {
+  if (!isPlainAggregation(aggregation)) { // a model's card never counts distinct here (part 5 step 04 offers it)
     dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
     return null;
   }

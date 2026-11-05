@@ -12,14 +12,13 @@
 // / the numeric branch of datasetStats.computeColumnSummary().
 
 import type { ParsedColumn } from '../data/parse';
+import { isPlainAggregation, type Aggregation } from '../data/aggregations';
 
 // A stored cell is the coerced value from Dataset.rows[*][colIndex]: a JS number
 // for numeric columns, the original string for text/date, or null for empties.
 type Cell = string | number | null;
 
-export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
-
-const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+export type MetricAggregation = Aggregation;
 
 // A cell is empty when it is null or a blank/whitespace-only string. Numbers are
 // never empty (0 is a real value). Mirrors datasetStats.isEmpty.
@@ -44,7 +43,7 @@ export function computeMetric(
   rows: Cell[][],
   spec: { column: string; aggregation: MetricAggregation },
 ): number | null {
-  if (!spec || typeof spec.column !== 'string' || !AGG_FNS.has(spec.aggregation)) return null;
+  if (!spec || typeof spec.column !== 'string' || !isPlainAggregation(spec.aggregation)) return null; // countd: no figure on this release
   const ci = colIndex(columns, spec.column);
   if (ci < 0) return null;
   const body = Array.isArray(rows) ? rows : [];

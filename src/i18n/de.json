@@ -440,6 +440,8 @@
   "metricTreeMessages.rose": "{metric} ist {compare} um {change} ({pct}) gestiegen.",
   "metricTreeMessages.rose_2": "{metric} ist {compare} um {change} gestiegen.",
   "metricTreeMessages.that_metric_no_longer_exists": "Diese Kennzahl gibt es nicht mehr.",
+  "pendingMessages.counts_distinct_values_which_needs_a": "„{measure}“ zählt eindeutige Werte, wofür eine neuere Version von Ordinate nötig ist. Schließen Sie das Upgrade ab und versuchen Sie es dann erneut.",
+  "pendingMessages.is_a_kind_of_metric_from": "„{name}“ ist eine Art von Metrik aus einer neueren Version von Ordinate. Schließen Sie das Upgrade ab und versuchen Sie es dann erneut.",
   "pivotRender.ascending": ", aufsteigend",
   "pivotRender.descending": ", absteigend",
   "pivotRender.pick_a_row_dimension_and_at": "Wählen Sie eine Zeilendimension und mindestens einen Wert, um einen Pivot zu erstellen.",

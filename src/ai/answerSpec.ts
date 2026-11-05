@@ -33,6 +33,7 @@ import { sanitizeMatched } from './answerValues';
 import { matchTerm } from './termFacts';
 import type { SpecTerm } from './termFacts';
 import type { ValueMatch } from './answerValues';
+import { NUMBER_AGGREGATIONS } from '../data/aggregations';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ export const ANSWER_CHART_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Aggregations that need a number column — the rule analysisPlan.NUMERIC_AGGS states. */
-const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max']);
+const NUMERIC_AGGS: ReadonlySet<string> = new Set<string>(NUMBER_AGGREGATIONS);
 
 // ── Name resolution ──────────────────────────────────────────────────────────
 
@@ -422,7 +423,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   if (typeof o.datasetId !== 'string' || !UUID_RE.test(o.datasetId)) return undefined;
   if (typeof o.category !== 'string' || !o.category) return undefined;
   const measures: VizMeasure[] = (Array.isArray(o.measures) ? o.measures : [])
-    .filter((m: any) => m && typeof m.column === 'string' && typeof m.aggregation === 'string' && AGG_ALIASES[m.aggregation] === m.aggregation)
+    .filter((m: any) => m && typeof m.column === 'string' && typeof m.aggregation === 'string' && (AGG_ALIASES[m.aggregation] === m.aggregation || m.aggregation === 'countd'))
     .slice(0, MAX_MEASURES)
     .map((m: any) => (typeof m.metricId === 'string' && UUID_RE.test(m.metricId)
       ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }

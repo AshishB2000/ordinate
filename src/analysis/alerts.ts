@@ -38,6 +38,7 @@ import type { FilterStep } from '../data/transforms';
 import type { Anomaly } from './anomalies';
 import { diffAnomalies } from './anomalyWatch';
 import { t } from '../app/i18n';
+import { AGGREGATIONS } from '../data/aggregations';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export const MAX_RULES = 100;
 /** Channels one rule may post to. */
 export const MAX_RULE_CHANNELS = 10;
 
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 const OPS: ReadonlySet<string> = new Set(['>', '<', '>=', '<=']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

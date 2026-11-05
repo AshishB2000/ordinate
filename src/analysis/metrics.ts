@@ -27,6 +27,7 @@ import * as datasets from '../data/datasets';
 import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
+import { isAggregation } from '../data/aggregations';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
@@ -138,7 +139,6 @@ function metricFilePath(projectId: string, id: string): string {
   return path.join(metricsDir(projectId), id + '.json');
 }
 
-const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
 const FORMAT_KINDS: ReadonlySet<string> = new Set(['number', 'currency', 'percent', 'duration']);
 const MAX_DECIMALS = 6;
 /** An expression longer than this is not a metric, it is a program. */
@@ -175,10 +175,7 @@ export function sanitizeDefinition(raw: unknown, stored?: unknown): MetricDefini
   const formula = trimTo(o.formula, MAX_FORMULA);
   if (formula) return { formula };
   const column = typeof o.column === 'string' ? o.column : '';
-  const aggregation: MetricAggregation =
-    typeof o.aggregation === 'string' && AGG_FNS.has(o.aggregation)
-      ? (o.aggregation as MetricAggregation)
-      : 'sum';
+  const aggregation: MetricAggregation = isAggregation(o.aggregation) ? o.aggregation : 'sum';
   const snapshot = mergeSnapshot(o.snapshot, stored);
   return snapshot ? { column, aggregation, snapshot } : { column, aggregation };
 }

@@ -29,6 +29,7 @@ import { CHART_TYPE_IDS } from '../analysis/analysisPlan';
 import { onlyEditorsPublish } from '../analysis/draftMessages';
 import * as h from './handlers';
 import { AutomationError } from './errors';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 export { AutomationError, EXIT } from './errors';
 export type { ErrorCode } from './errors';
@@ -136,7 +137,7 @@ const ENCODING: ArgSpec = {
         type: 'object',
         properties: {
           column: { type: 'string' },
-          aggregation: { type: 'string', enum: ['sum', 'avg', 'count', 'min', 'max', 'none'] },
+          aggregation: { type: 'string', enum: [...PLAIN_AGGREGATIONS, 'none'] },
         },
         required: ['column', 'aggregation'],
       },

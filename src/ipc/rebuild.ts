@@ -24,8 +24,9 @@ import { rebuild, type RebuiltTile, type TileOverride } from '../analysis/rebuil
 import { computeCardMetric } from './dashboards';
 import { isLiveFigureError, liveCodeOf } from './liveRoute';
 import * as m from '../analysis/rebuildMessages';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
-const AGGS = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGGS = new Set<string>(PLAIN_AGGREGATIONS);
 const FIELD_KEY = /^(?:category|split|filter|value[0-3])$/;
 
 /** The check screen's corrections, re-read field by field — rebuildTile re-checks every value against the dataset. */
