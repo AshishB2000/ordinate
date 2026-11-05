@@ -73,3 +73,8 @@ export function rowBadValuesMessage(): string {
 export function rowUnreadableMessage(): string {
   return t('rowAccessMessages.the_row_access_rules_of_this');
 }
+
+/** Column access rules (a newer release writes them) this release cannot apply: closed to every viewer. */
+export function rowColumnsMessage(): string {
+  return t('rowAccessMessages.some_columns_of_this_dataset_are');
+}

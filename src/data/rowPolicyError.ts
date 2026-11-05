@@ -7,7 +7,7 @@ import * as msg from './rowAccessMessages';
 import { tagRefusals } from './refusalTag';
 
 export const ROW_POLICY_CODE = 'row_policy';
-export type RowPolicyReason = 'none' | 'column' | 'pipeline' | 'reader' | 'related' | 'asOf' | 'fanout' | 'export' | 'derived' | 'unreadable';
+export type RowPolicyReason = 'none' | 'column' | 'pipeline' | 'reader' | 'related' | 'asOf' | 'fanout' | 'export' | 'derived' | 'unreadable' | 'columns';
 
 const SENTENCES: Record<RowPolicyReason, () => string> = {
   none: msg.rowNoneMessage,
@@ -20,6 +20,7 @@ const SENTENCES: Record<RowPolicyReason, () => string> = {
   export: msg.rowExportMessage,
   derived: msg.rowDerivedMessage,
   unreadable: msg.rowUnreadableMessage,
+  columns: msg.rowColumnsMessage,
 };
 
 let raised = 0;
