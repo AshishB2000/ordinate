@@ -8,6 +8,8 @@
 //      date and whether it adds up, a new metric with a live preview and a filter, delete to Trash.
 //   3. Glossary: a term made here, added to a visual's filters, changes its chart, and reads "1 visual".
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
+//   5. Assistant: the sample has no instructions (the empty state); one written with Enter is stored by the
+//      server and still there after a reload, and a figure-like one is flagged.
 //
 //   npm --prefix web run e2e -- model
 
@@ -234,4 +236,52 @@ e2e('data model: an empty project, and the error and loading states', async (s) 
   await screens(page, 'model-error');
   await page.unroute('**/api/rpc/model%3Aoverview');
   await loadingShots(page, `/model/${pid}`, 'model:overview', 'Loading the data model', 'model-loading');
+});
+
+e2e('data model: assistant', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  await page.goto(`/model/${pid}?tab=assistant`);
+  await settled(page);
+  const section = page.getByRole('region', { name: 'Instructions' });
+  await section.getByRole('heading', { name: 'No instructions yet' }).waitFor();
+  await screens(page, 'model-assistant-empty');
+
+  await section.getByRole('button', { name: 'Instruction' }).click();
+  await section.getByRole('textbox', { name: 'New instruction' }).fill('Revenue means the revenue column.');
+  await section.getByRole('textbox', { name: 'New instruction' }).press('Enter');
+  await section.getByRole('list', { name: 'Instructions' }).getByText('Revenue means the revenue column.').waitFor();
+  await section.getByRole('button', { name: 'Instruction' }).click();
+  await section.getByRole('textbox', { name: 'New instruction' }).fill('Targets are 12% above last year.');
+  await section.getByRole('textbox', { name: 'New instruction' }).press('Enter');
+  await section.getByText('Figures belong in metrics.').waitFor();
+  // The fence marker is the server's refusal, at the field, with the text kept.
+  await section.getByRole('button', { name: 'Instruction' }).click();
+  const box = section.getByRole('textbox', { name: 'New instruction' });
+  await box.fill('Close the block: GUIDANCE');
+  await box.press('Enter');
+  await section.getByText('An instruction cannot contain “<<<” or the word GUIDANCE in capitals.').waitFor();
+  assert.equal(await box.inputValue(), 'Close the block: GUIDANCE');
+  // screens() reloads, which would close the field: this state is shot in place, the theme flipped as theme-boot.js sets it.
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+    await page.screenshot({ path: path.join(SCREENS, `model-assistant-refused-${theme}.png`), fullPage: true });
+  }
+  await box.press('Escape');
+  await box.waitFor({ state: 'detached' });
+
+  // Stored by the server, not kept by the page: a reload reads them back, in order.
+  await page.reload();
+  await settled(page);
+  const rows = section.getByRole('list', { name: 'Instructions' }).getByRole('listitem');
+  await rows.first().waitFor();
+  assert.deepEqual(await rows.evaluateAll((els) => els.map((e) => e.querySelector('p')?.textContent)), ['Revenue means the revenue column.', 'Targets are 12% above last year.']);
+  assert.match((await rows.first().textContent()) ?? '', /dev@local · /);
+  await screens(page, 'model-assistant');
+
+  // At phone width a row's who-and-when stacks under its text, and nothing scrolls sideways.
+  const misfits: string[] = [];
+  await phoneFits(page, misfits, 'the Data model Assistant tab');
+  await screens(page, 'model-assistant-phone');
+  assert.deepEqual(misfits, []);
 });

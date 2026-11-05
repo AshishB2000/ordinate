@@ -14,13 +14,14 @@ import { useCanEdit, useRoles } from '../projects/api';
 import { MetricEditor } from '../analyses/metrics/MetricEditor';
 import { DatasetsTab } from './datasets/DatasetsTab';
 import { SourcesLoading, SourceTablesTab } from './sources/SourceTablesTab';
+import { AssistantTab } from './assistant/AssistantTab';
 import { MetricsTab } from './metrics/MetricsTab';
 import { GlossaryTab } from './terms/GlossaryTab';
 import { TermDialog } from './terms/TermDialog';
 import { RelationshipsTab } from '../data/RelationshipsTab';
 import { DefaultJoins } from './relationships/DefaultJoins';
 
-const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships'] as const;
+const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -89,6 +90,9 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="relationships" icon="link">
             Relationships
           </Tab>
+          <Tab value="assistant" icon="sparkles">
+            Assistant
+          </Tab>
         </TabList>
         <TabPanel value="datasets">
           <DatasetsTab projectId={projectId} />
@@ -103,6 +107,9 @@ function Section({ projectId }: { projectId: string }) {
         <TabPanel value="relationships">
           <RelationshipsTab projectId={projectId} />
           <DefaultJoins projectId={projectId} />
+        </TabPanel>
+        <TabPanel value="assistant">
+          <AssistantTab projectId={projectId} />
         </TabPanel>
       </Tabs>
       {newMetric && canEdit && <MetricEditor projectId={projectId} existing={{}} onClose={() => setNewMetric(false)} onSaved={metricSaved} />}
