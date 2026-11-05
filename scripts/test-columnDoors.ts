@@ -15,6 +15,9 @@
 // 4. FAIL CLOSED: a later step reading salary, a corrupt rule, a SQL dataset over Staff, an as-of read
 //    each refuse east `columns` (controls: a later step not reading salary; hr on the SQL dataset).
 // 5. LIVE: a question naming a hidden column is refused before any statement; one not naming it compiles.
+// 6. CACHE ORDER: the editor's cached sum(salary) is refused to east; with the gate turned off (the test
+//    seam, as if it ran after the cache) east gets it (NEGATIVE CONTROL). A planted getDataset reader is
+//    refused by the net; a planted reader of the Parquet by path is caught by the canary check.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnDoors.js
 
@@ -29,6 +32,13 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const doors: typeof import('../src/ipc/columnDoors') = require('../src/ipc/columnDoors');
+const api: typeof import('../src/api/index') = require('../src/api/index');
+const contractMod: typeof import('../src/api/contract') = require('../src/api/contract');
+const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
+const parquet: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const { z } = require('zod') as typeof import('zod');
 
 (async () => {
   const W = await C.columnWorld('column doors');
@@ -206,6 +216,31 @@ const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data
     const hrProf = await prof('hr');
     ok('setup: the Live dataset is profiled from a sample (hr reads salary\'s)', synced.body?.ok === true && hrProf.body?.ok === true && !!hrProf.body.profile?.sample, `${synced.text.slice(0, 120)} | ${hrProf.text.slice(0, 160)}`);
     ok('Live: salary\'s sampled profile is refused east, typed hidden', C.refusedAs(await prof('east'), 'hidden'));
+
+    // ── 6. Cache order, and planted readers ──────────────────────────────────
+    const SUM_SALARY_BY_DEPT = { category: 'dept', values: [{ column: 'salary', aggregation: 'sum' }], grain: undefined };
+    const edSum = await W.call('ed', 'visual:data', viz(SUM_SALARY_BY_DEPT)); // the editor's answer is now cached
+    ok('setup: the editor\'s sum(salary) by dept is answered (and cached)', edSum.body?.ok === true);
+    ok('cache order: east is refused the cached sum(salary)', C.refusedAs(await W.call('east', 'visual:data', viz(SUM_SALARY_BY_DEPT)), 'hidden'));
+    doors.setColumnGateForTest(false);
+    try {
+      const leaked = await W.call('east', 'visual:data', viz(SUM_SALARY_BY_DEPT));
+      ok('NEGATIVE CONTROL: with the gate off, east would get the editor\'s cached answer', sameFigure(leaked, edSum) === '', leaked.text.slice(0, 200));
+    } finally {
+      doors.setColumnGateForTest(true);
+    }
+    ok('…and with it back on, refused again', C.refusedAs(await W.call('east', 'visual:data', viz(SUM_SALARY_BY_DEPT)), 'hidden'));
+    (api.contracts as Record<string, unknown>)['columns:plantedPath'] = contractMod.rpc({ access: 'read', input: z.strictObject({ projectId: z.string(), datasetId: z.string() }), project: (i: { projectId: string }) => i.projectId });
+    (api.contracts as Record<string, unknown>)['columns:plantedNet'] = contractMod.rpc({ access: 'read', input: z.strictObject({ projectId: z.string(), datasetId: z.string() }), project: (i: { projectId: string }) => i.projectId });
+    rpc.registry.handle('columns:plantedPath', async (_e, { projectId, datasetId }: { projectId: string; datasetId: string }) => {
+      const meta = await datasets.getDatasetMeta(projectId, datasetId);
+      const t = await parquet.readTableAsync(rec.tablePath(projectId, datasetId, meta?.storageVersion), meta!.columns);
+      return { rows: t ? t.rows : [] };
+    });
+    rpc.registry.handle('columns:plantedNet', async (_e, { projectId, datasetId }: { projectId: string; datasetId: string }) => ({ rows: (await datasets.getDataset(projectId, datasetId))?.rows ?? [] }));
+    ok('a planted getDataset reader is refused by the net, typed columns', C.refusedAs(await W.call('east', 'columns:plantedNet', { projectId: P, datasetId: staff }), 'columns'));
+    ok('NEGATIVE CONTROL: …hr reads it whole', (await W.call('hr', 'columns:plantedNet', { projectId: P, datasetId: staff })).text.includes(C.SSN_CANARY));
+    ok('NEGATIVE CONTROL: a planted reader of the Parquet by path IS caught by the canary check (the REDACT/SKIP rows of step 06 exist for it)', (await W.call('east', 'columns:plantedPath', { projectId: P, datasetId: staff })).text.includes(C.SSN_CANARY));
   } finally {
     await W.close();
   }
