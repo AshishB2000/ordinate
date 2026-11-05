@@ -249,3 +249,65 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   const stored = await call(page, 'analysis:open', { projectId: pid, id: board.id });
   assert.deepEqual([stored.analysis.views, stored.analysis.defaultViewId], [[], '']);
 });
+
+e2e('cascading pickers: Sub category lists the picked Category’s values, keeps a ruled-out pick as "not in", and Clear drops it', async ({ page, server, rpc }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/analyses?project=${pid}`);
+  await settled(page);
+  const sets: Array<{ id: string; name: string }> = await call(page, 'dataset:list', { projectId: pid });
+  const ds = sets.find((d) => d.name === 'Retail orders');
+  assert.ok(ds, 'the sample dataset');
+  const set = await call(page, 'catalog:setTable', { projectId: pid, datasetId: ds.id, patch: { hierarchies: [{ name: 'Product', levels: ['category', 'sub_category'] }] } });
+  assert.equal(set.ok, true, JSON.stringify(set));
+  // The pair, read off the server's own lists: a sub-category of one category that the other lacks.
+  const cats: string[] = (await call(page, 'dataset:distinct', { projectId: pid, datasetId: ds.id, column: 'category' })).values;
+  const under = async (c: string): Promise<string[]> =>
+    (await call(page, 'dataset:distinct', { projectId: pid, datasetId: ds.id, column: 'sub_category', filters: [{ type: 'filter', column: 'category', op: '=', value: c }] })).values;
+  const lists = new Map<string, string[]>();
+  for (const c of cats) lists.set(c, await under(c));
+  const differs = (x: string, y: string) => (lists.get(x) ?? []).some((v) => !(lists.get(y) ?? []).includes(v));
+  const [a, b] = cats.flatMap((x) => cats.filter((y) => y !== x && differs(x, y)).map((y) => [x, y] as const))[0] ?? [];
+  assert.ok(a && b, 'two categories whose sub-categories differ');
+  const pick = lists.get(a)!.find((v) => !lists.get(b)!.includes(v))!;
+  const card = (type: string, x: number, y: number, extra: object) => ({ id: crypto.randomUUID(), type, layout: { x, y, w: 4, h: type === 'metric' ? 2 : 1 }, ...extra });
+  const board = await call(page, 'analysis:create', {
+    projectId: pid,
+    name: 'Cascade',
+    sheets: [{ name: 'One', cards: [
+      card('control', 0, 0, { control: { kind: 'dropdown', label: 'Category', datasetId: ds.id, column: 'category' } }),
+      card('control', 4, 0, { control: { kind: 'dropdown', label: 'Sub category', datasetId: ds.id, column: 'sub_category' } }),
+      card('metric', 0, 1, { metric: { datasetId: ds.id, column: 'revenue', aggregation: 'sum', label: 'Revenue' } }),
+    ] }],
+  });
+  assert.ok(board.id, JSON.stringify(board));
+  const channels: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/api/rpc/')) channels.push(decodeURIComponent(r.url().split('/api/rpc/')[1] ?? ''));
+  });
+  await page.goto(`/analyses/${pid}/${board.id}`);
+  await page.getByRole('heading', { level: 1, name: 'Cascade' }).waitFor();
+  await page.getByRole('group', { name: 'Revenue card' }).getByText(/^\$?[\d.,]+\s?[KMB]?$/).first().waitFor();
+  await settled(page);
+  const n = rpc.loads.at(-1)?.rpcs ?? 0;
+  console.log(`rpc: cascade dashboard open ${n}`);
+  assert.equal(channels.includes('model:navigation'), false, 'a page load never reads the hierarchies');
+
+  // Pick the sub-category first (no category yet), then a category it is not in.
+  await page.getByRole('button', { name: 'Sub category: All' }).click();
+  await page.getByRole('group', { name: 'Sub category values' }).getByRole('button', { name: pick, exact: true }).click();
+  await page.getByRole('button', { name: `Sub category: ${pick}` }).waitFor();
+  await page.getByRole('button', { name: 'Category: All' }).click();
+  await page.getByRole('group', { name: 'Category values' }).getByRole('button', { name: b, exact: true }).click();
+  await page.getByRole('button', { name: `Category: ${b}` }).waitFor();
+  await page.getByRole('button', { name: `Sub category: ${pick}` }).click();
+  const list = page.getByRole('group', { name: 'Sub category values' });
+  await page.getByText(`Narrowed to Category: ${b}`).waitFor();
+  await page.getByText(`not in ${b}`).waitFor();
+  const direct = await under(b);
+  const shown = (await list.getByRole('button').allTextContents()).filter((t) => t !== 'All' && t !== 'Clear' && t !== pick);
+  assert.deepEqual(shown, direct, 'the list is dataset:distinct asked with the category step');
+  assert.equal(channels.filter((c) => c === 'model:navigation').length, 1, 'the hierarchies are read once, on the first open');
+  await screensInPlace(page, 'picker-cascade');
+  await list.getByRole('button', { name: `Clear ${pick}` }).click();
+  await page.getByRole('button', { name: 'Sub category: All' }).waitFor();
+});
