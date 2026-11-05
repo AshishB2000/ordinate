@@ -77,7 +77,9 @@ export async function followedMeasureTexts(projectId: string, datasetId: string,
     if (!m || !def || !needsMetricPlan(m)) return undefined;
     // The filters the chart draws it under: the door follows a metric with no parameters set (planMetricMeasures).
     const steps = resolveFilterParams(m.filters, new Map()).steps;
-    if (!steps.length) return undefined;
-    return `"${m.name}" = ${def.aggregation}(${def.column}) where ${(await Promise.all(steps.map(say))).join(' and ')}`;
+    // A snapshot (D8) is one day's rows: said, so the model never reads its figures as sums over every date.
+    const snap = def.snapshot ? ` on the ${def.snapshot.take === 'last' ? 'latest' : 'earliest'} ${def.snapshot.column}` : '';
+    if (!steps.length && !snap) return undefined;
+    return `"${m.name}" = ${def.aggregation}(${def.column})${snap}` + (steps.length ? ` where ${(await Promise.all(steps.map(say))).join(' and ')}` : '');
   }));
 }

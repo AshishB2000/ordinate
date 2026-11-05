@@ -48,11 +48,14 @@ const scenarioResolve: typeof import('../src/analysis/scenarioResolve') = requir
 const scenarioModel: typeof import('../src/analysis/scenarioModel') = require('../src/analysis/scenarioModel');
 const { validateAnswerSpec }: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
 type AlertRule = import('../src/analysis/alerts').AlertRule;
+const { metricLines }: typeof import('../src/ai/copilotFacts') = require('../src/ai/copilotFacts');
+const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+const { followedMeasureTexts }: typeof import('../src/ipc/copilotMeasures') = require('../src/ipc/copilotMeasures');
 type Metric = import('../src/analysis/metrics').Metric;
 type FilterStep = import('../src/data/transforms').FilterStep;
 
 type Any = any; // any: each handler's own reply shape, read field by field below
-const show = (v: unknown): string => JSON.stringify(v).slice(0, 600);
+const show = (v: unknown): string => String(JSON.stringify(v)).slice(0, 600);
 const pad = (n: number): string => String(n).padStart(2, '0');
 const isoFromDays = (z: number): string => { const c = civilFromDays(z); return `${c.y}-${pad(c.m)}-${pad(c.d)}`; };
 const usFromDays = (z: number): string => { const c = civilFromDays(z); return `${pad(c.m)}/${pad(c.d)}/${c.y}`; };
@@ -250,6 +253,19 @@ void (async () => {
   ok('a scenario says its drivers were not applied, and keeps the baseline', sc.ok && sc.notes.includes('Drivers on "units" were not applied to a snapshot metric.') && sc.metrics[0].value === (await kpi(stock, [])) && sc.metrics[0].baseline === sc.metrics[0].value, show(sc));
   const scPlain = await scenarioResolve.computeScenario(pid, { id: U(3), name: 't', baseMetricIds: [units.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 5 }]) });
   ok('NEGATIVE CONTROL: the same driver moves a plain metric, with no such note', scPlain.ok && (scPlain.metrics[0].value as number) > (scPlain.metrics[0].baseline as number) && !scPlain.notes.some((n: string) => n.includes('snapshot')), show(scPlain));
+
+  // ── facts ──────────────────────────────────────────────────────────────────
+  const said = (m: object): string => { const lines: string[] = []; metricLines(lines, [], [{ name: 'Balance', definitionText: 'sum of amount', value: 5, display: '5', ...m }]); return lines.join('\n'); };
+  ok('the Assistant is told a snapshot is its latest day\'s value', said({ snapshot: { column: 'as_of', take: 'last' } }).includes('Snapshot: the value on the latest as_of in the period, not a sum over dates.'), said({ snapshot: { column: 'as_of', take: 'last' } }));
+  ok('…or its earliest', said({ snapshot: { column: 'as_of', take: 'first' } }).includes('Snapshot: the value on the earliest as_of in the period, not a sum over dates.'));
+  ok('NEGATIVE CONTROL: a plain metric gets no such sentence', !said({}).includes('Snapshot'));
+  const listed = (await automation.metricsList({ projectId: pid } as never)) as Array<{ id: string; snapshot: unknown; definition: string }>;
+  ok('list_metrics carries the stored snapshot', isDeepStrictEqual(listed.find((x) => x.id === stock.id)?.snapshot, S) && listed.find((x) => x.id === stock.id)?.definition === 'sum of units, on the latest day', show(listed.find((x) => x.id === stock.id)));
+  ok('NEGATIVE CONTROL: …and null for a plain metric', listed.find((x) => x.id === units.id)?.snapshot === null);
+  const lineOf = async (m: Metric) => (await followedMeasureTexts(pid, ds, { category: 'region', values: [M(m)] } as Any, {}))[0];
+  ok('a chart\'s facts name the snapshot, never a bare sum(units)', (await lineOf(stock)) === '"Stock" = sum(units) on the latest day', show(await lineOf(stock)));
+  ok('…with its filters too', (await lineOf(eastStock)) === '"East stock" = sum(units) on the latest day where region = "East"', show(await lineOf(eastStock)));
+  ok('NEGATIVE CONTROL: a plain metric\'s chart line is the bare measure', (await lineOf(units)) === undefined);
   const gone = (await metrics.saveMetric(pid, { name: 'Gone day', datasetId: ds, definition: { column: 'units', aggregation: 'count', snapshot: { column: 'removed', take: 'last' } } }))!;
   ok('a snapshot day column that is gone gives no figure, never a count of 0', (await ipcMetrics.resolveMetric(pid, gone.id))!.value === null);
   ok('NEGATIVE CONTROL: the same count on the real day column is a figure', (await kpi(lines, [])) !== null && (await kpi(lines, [])) !== 0);

@@ -94,7 +94,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `datasets refresh` | — | writes data | Re-fetch a dataset from its source, then run its quality rules and alerts. |
 | `query` | `query_sql` | read | Run one read-only SQL SELECT over the project's datasets, bounded to --limit rows. |
 | — | `aggregate` | read | Compute chart data (labels and series) for an encoding: the numbers a visual would draw. |
-| `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. |
+| `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. snapshot is {column, take} when its figure is only the rows on the latest (take: last) or earliest (first) date of that column in scope, as for a balance or stock; null otherwise. |
 | `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. |
 | `terms list` | `list_terms` | read | List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value. |
 | `insights` | `insights` | read | What the app found in a dataset: trends, movers, concentration and anomalies. |
@@ -187,7 +187,7 @@ Compute chart data (labels and series) for an encoding: the numbers a visual wou
 
 CLI `metrics list` · MCP tool `list_metrics` · read-only
 
-List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date.
+List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. snapshot is {column, take} when its figure is only the rows on the latest (take: last) or earliest (first) date of that column in scope, as for a balance or stock; null otherwise.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
