@@ -77,6 +77,16 @@ describe('Always applied, on a Live dataset’s Schema tab', () => {
     expect(within(box).getByRole('button', { name: 'Save' })).toBeTruthy();
   });
 
+  it('offers no glossary term: the filters are a dataset setting, plain steps only (the server refuses a term)', async () => {
+    const term = { id: '7d2c1f4e-1111-4222-8333-444455556666', name: 'EMEA', aliases: [], datasetId: D, datasetName: 'Orders', definition: 'region in EU', updatedAt: '' };
+    const calls = serve('admin', [A], { 'term:list': { ok: true, terms: [term] } });
+    renderApp(`/data/${P}/${D}?tab=schema`);
+    const box = await panel();
+    expect(within(box).getAllByRole('button', { name: 'Remove filter' })).toHaveLength(1);
+    expect(within(box).queryByRole('button', { name: 'Add term' })).toBeNull();
+    expect(calls.some((c) => c.channel === 'term:list')).toBe(false);
+  });
+
   it('Cancel puts the saved filters back without a call', async () => {
     const calls = serve('admin', [A, B]);
     renderApp(`/data/${P}/${D}?tab=schema`);

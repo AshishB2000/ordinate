@@ -60,7 +60,7 @@ export function BaseFiltersPanel({ projectId, datasetId }: { projectId: string; 
           {EMPTY}
         </EmptyState>
       ) : canEdit ? (
-        <FilterRows projectId={projectId} datasetId={datasetId} cols={cols} filters={list} onChange={setDraft} lod={false} />
+        <FilterRows projectId={projectId} datasetId={datasetId} cols={cols} filters={list} onChange={setDraft} lod={false} terms={false} />
       ) : (
         <ul className={l.baseList}>
           {list.map((f, i) => (
