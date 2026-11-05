@@ -340,11 +340,11 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     // …and the Assistant's facts word a term without its values for east, on a dataset with no rules too (D12).
     await W.call('boss', 'term:save', { projectId: P, input: { name: 'Plain pair', datasetId: W.plain, filters: [{ type: 'filter', column: 'customer', op: 'in', values: [`${H.W_CANARY}_7`] }] } });
     const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
-    const factsOf = (who: string) => W.as(who, () => copilotIpc.buildFacts(P, { kind: 'dataset', id: W.plain }));
-    const factsEast = (await factsOf('east')).text;
+    const datasetFactsOf = (who: string) => W.as(who, () => copilotIpc.buildFacts(P, { kind: 'dataset', id: W.plain }));
+    const factsEast = (await datasetFactsOf('east')).text;
     eastReplies.push(factsEast);
     ok('redact: east\'s dataset facts name the term, without its value', factsEast.includes('"Plain pair"') && factsEast.includes('customer in …') && !factsEast.includes(H.W_CANARY), factsEast.slice(-400));
-    ok('NEGATIVE CONTROL: the editor\'s facts word it with its value', (await factsOf('ed')).text.includes(`${H.W_CANARY}_7`));
+    ok('NEGATIVE CONTROL: the editor\'s facts word it with its value', (await datasetFactsOf('ed')).text.includes(`${H.W_CANARY}_7`));
 
     // A term reaches the table it filters (semantic D11): a chart on a dataset without rules, filtered by a term on
     // Orders (rules), reads Orders through the join — east is refused `related`; by a term on an open table, answered.
