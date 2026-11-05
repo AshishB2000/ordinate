@@ -569,8 +569,8 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis', '../ipc/connections', '../ipc/trash', '../ipc/versions']) {
     (require(mod) as { register: () => void }).register();
   }
-  // The Data section (T2.3): catalog, lineage, relationships, search inside the data, the browser's dataset views, table docs, glossary terms, the data model, source table docs.
-  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs', '../ipc/terms', '../ipc/modelOverview', '../ipc/sourceTables']) {
+  // The Data section (T2.3): catalog, lineage, relationships, search inside the data, the browser's dataset views, table docs, glossary terms, the data model, source table docs, the model's navigation.
+  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs', '../ipc/terms', '../ipc/modelOverview', '../ipc/sourceTables', '../ipc/modelNavigation']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('../ipc/governance') as typeof import('../ipc/governance')).register(); // …and status: review, certify, retire (part 4)
