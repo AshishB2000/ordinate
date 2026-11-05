@@ -3,13 +3,14 @@
 //
 // 1. perTableGraph: the pure rewrite of one node per connection into one node per (connection, table).
 // 2. linking: what `setReadsTables` writes (a label, no refresh or Live change) and how `choiceOrder` sorts.
-// 3. the channels (added with them).
+// 3. the channels: sourceTable:lineage, :forDataset, dataset:setSourceTables, :sourceTableChoices (records only; the
+//    choices read the warehouse once, on the call). The viewer's 403 on each is in test-sourceNamesHidden.
 //
 //   npm run build:ts && node scripts/test-sourceLinks.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import { H, close, post } from './liveRouteHarness';
+import { H, close, post, hydrates, type Reply } from './liveRouteHarness';
 
 const { buildGraph, focus }: typeof import('../src/analysis/lineage') = require('../src/analysis/lineage');
 const { perTableGraph, tableNodeId }: typeof import('../src/analysis/sourceLineage') = require('../src/analysis/sourceLineage');
@@ -20,6 +21,10 @@ const { selectionForDataset }: typeof import('../src/ipc/connections') = require
 const { liveSourceOf }: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
 const { getConnector }: typeof import('../src/connectors/index') = require('../src/connectors/index');
 const { setReadsTables, choiceOrder }: typeof import('../src/data/datasetSourceTables') = require('../src/data/datasetSourceTables');
+
+const visualsStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 
 const DOC_A = 'a1b2c3d4-0000-4000-8000-0000000000a1';
 
@@ -82,9 +87,85 @@ async function linking(): Promise<void> {
   ok('choiceOrder: NEGATIVE CONTROL: with no query it is the plain name order', JSON.stringify(choiceOrder(['b', 'a'], '')) === '["a","b"]');
 }
 
+async function channels(): Promise<void> {
+  const { fakeMod, fake, ORG_A } = H;
+  const store: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+  const api: typeof import('../src/api/index') = require('../src/api/index');
+  const rows = [['a', 1, '2024-01-01']];
+  const s = await H.as(ORG_A, async () => {
+    await H.projects.init();
+    const P = (await H.projects.createProject('Source link channels')).id;
+    const cols = [{ name: 'k', type: 'text' as const }, { name: 'amt', type: 'number' as const }, { name: 'day', type: 'date' as const }];
+    await fakeMod.loadWarehouseTable('wh_a', cols, rows as never);
+    await fakeMod.loadWarehouseTable('wh_b', cols, rows as never);
+    const conn = await H.connections.saveConnection(P, { name: 'Warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
+    if (!conn) throw new Error('connection not saved');
+    const live = async (name: string, origin: object) => { const r = await H.liveRecord.saveLiveRecord(P, { name, columns: [{ name: 'amt', type: 'number' }], origin: { kind: 'connection', connId: conn.id, ...origin } }); if (!r) throw new Error('not saved'); return r.id; };
+    const A = await live('Live A', { table: 'wh_a' }), B = await live('Live B', { table: 'wh_b' });
+    const Q = await live('Query', { sql: 'select * from wh_a join wh_b using (k)' }), Q0 = await live('Query two', { sql: 'select 1 as amt' });
+    const enc = { category: 'k', values: [{ column: 'amt', aggregation: 'sum' }] };
+    const visA = (await visualsStore.saveVisual(P, { name: 'By k A', datasetId: A, chartType: 'bar', encoding: enc, filters: [] } as never))!.id;
+    await metricsStore.saveMetric(P, { name: 'Sum A', datasetId: A, definition: { column: 'amt', aggregation: 'sum' } });
+    await metricsStore.saveMetric(P, { name: 'Sum B', datasetId: B, definition: { column: 'amt', aggregation: 'sum' } });
+    const dash = (await analysisStore.saveAnalysis(P, { name: 'Board A', sheets: [{ name: 'One', cards: [{ type: 'visual', visualId: visA, layout: { x: 0, y: 0, w: 6, h: 6 } }] }] }))!.id;
+    const csv = (await H.datasets.saveDataset(P, { name: 'A file', sourceKind: 'csv', columns: [{ name: 'a', type: 'text' }], rows: [['x']] }))!.id;
+    const doc = await store.createSourceDoc(P, conn.id, 'wh_a', { owner: 'Data platform', refresh: 'Hourly', requiredFilters: 'day', guide: '# Filter on day' });
+    if (!doc.ok) throw new Error(doc.error);
+    return { P, C: conn.id, A, B, Q, Q0, csv, visA, dash, DA: doc.docId };
+  });
+  const { P, C, A, B, Q, Q0, csv, visA, dash, DA } = s;
+  const copy = await post('dataset:copyLive', { projectId: P, datasetId: A });
+  const copyOfA = String(copy.value?.dataset?.id ?? '');
+  ok('setup: a copy of the Live view', copyOfA !== '', copy.body.slice(0, 200));
+
+  const before = (await post('lineage:get', { projectId: P, type: 'dataset', id: A })).body;
+  const n0 = fake.catalogCalls;
+  const lin = async () => (await post('sourceTable:lineage', { projectId: P, connId: C, docId: DA })).value;
+  const g = await lin();
+  const ids: string[] = g.nodes.map((n: Reply) => n.id);
+  ok('lineage: rooted at the table, its datasets and what is built on them', g.focus === `source:st:${C}:${DA}` && ids.includes(`dataset:${A}`) && ids.includes(`visual:${visA}`) && ids.includes(`dashboard:${dash}`), JSON.stringify(ids));
+  ok('lineage: the other table\'s dataset is not shown', !ids.includes(`dataset:${B}`));
+  ok('lineage: no node id holds a table name', ids.every((id) => !/wh_[ab]/.test(id)));
+  ok('lineage: the table node names the table on its connection', g.nodes.find((n: Reply) => n.id === g.focus)?.name === 'wh_a' && g.nodes.find((n: Reply) => n.id === g.focus)?.sub === 'Warehouse' && typeof g.upstream === 'number');
+  ok('lineage: a query with no link is not a child', !ids.includes(`dataset:${Q}`));
+  const set = await post('dataset:setSourceTables', { projectId: P, datasetId: Q, tables: ['wh_a', 'wh_b'] });
+  ok('setSourceTables: ok, the tables back', set.value.ok === true && set.value.tables.join() === 'wh_a,wh_b', set.body);
+  ok('lineage: a linked query is a child of each table it names', (await lin()).nodes.some((n: Reply) => n.id === `dataset:${Q}`));
+  ok('lineage:get is byte-identical after docs and links', (await post('lineage:get', { projectId: P, type: 'dataset', id: A })).body === before);
+  ok('setSourceTables: a CSV dataset gets the sentence', (await post('dataset:setSourceTables', { projectId: P, datasetId: csv, tables: ['t'] })).value.error === 'Only a dataset built from a connection names its source tables.');
+  ok('setSourceTables: 17 names refused at the door', (await post('dataset:setSourceTables', { projectId: P, datasetId: Q0, tables: Array(17).fill('t') })).status === 400);
+
+  const fd = async (id: string) => (await post('sourceTable:forDataset', { projectId: P, datasetId: id })).value;
+  const fa = await fd(A);
+  ok('guide block: the doc\'s fields, with the connection', fa.ok === true && fa.linkable === true && fa.byQuery === false && ((b: Reply) => b.docId === DA && b.table === 'wh_a' && b.connName === 'Warehouse' && b.owner === 'Data platform' && b.refresh === 'Hourly' && b.requiredFilters === 'day' && b.guide === '# Filter on day')(fa.tables[0]), JSON.stringify(fa));
+  ok('guide block: a Live view and its copy show one doc', (await fd(copyOfA)).tables[0].docId === DA);
+  ok('guide block: a table with no doc has empty strings and no docId', ((b: Reply) => b.table === 'wh_b' && b.docId === undefined && b.guide === '' && b.owner === '')((await fd(B)).tables[0]));
+  ok('guide block: a linked query shows its tables, byQuery', ((r: Reply) => r.byQuery === true && r.tables.map((t: Reply) => t.table).join() === 'wh_a,wh_b')(await fd(Q)));
+  ok('guide block: a query with no link says so', ((r: Reply) => r.byQuery === true && r.linkable === true && r.tables.length === 0)(await fd(Q0)));
+  ok('guide block: a file dataset is not linkable', (await fd(csv)).linkable === false);
+  await H.as(ORG_A, () => store.updateSourceDoc(P, C, DA, (d) => ({ ...d, facts: { columns: [{ name: 'secretcol', type: 'int' }], primaryKey: { columns: ['k'], enforced: false }, partition: { columns: ['day'], method: 'RANGE' }, readAt: 'x', readBy: 'y' }, dismissed: { [A]: { table: 'AbCdEf012345' } } })));
+  const withFacts = await post('sourceTable:forDataset', { projectId: P, datasetId: A });
+  ok('guide block: the key and partition come with it; no columns, no dismissals, no SQL', withFacts.value.tables[0].primaryKey.columns[0] === 'k' && withFacts.value.tables[0].partition.columns[0] === 'day'
+    && !/secretcol|dismissed|AbCdEf012345|select \*/.test(withFacts.body), withFacts.body);
+
+  const c = (await post('dataset:sourceTableChoices', { projectId: P, datasetId: Q0 })).value;
+  const n1 = fake.catalogCalls;
+  ok('choices: one warehouse call, tables sorted', c.ok === true && n1 === n0 + 1 && Array.isArray(c.tables) && c.tables.includes('wh_a') && c.linked.length === 0, JSON.stringify(c));
+  const cq = (await post('dataset:sourceTableChoices', { projectId: P, datasetId: Q })).value;
+  ok('choices: the words of the query first, the linked ones come back', cq.tables.slice(0, 2).join() === 'wh_a,wh_b' && cq.linked.join() === 'wh_a,wh_b');
+  ok('choices: a CSV dataset gets the sentence', (await post('dataset:sourceTableChoices', { projectId: P, datasetId: csv })).value.ok === false);
+
+  const probe = await hydrates(A, async () => { await lin(); await fd(A); });
+  ok('lineage and the guide block read no warehouse and hydrate nothing', !probe.hydrated && fake.catalogCalls === n1 + 1, String(fake.catalogCalls - n1));
+  const contracts = api.contracts as unknown as Record<string, { access: string; project(i: unknown): unknown }>;
+  const names = ['sourceTable:lineage', 'sourceTable:forDataset', 'dataset:setSourceTables', 'dataset:sourceTableChoices'];
+  ok('contracts: all write, scoped by projectId', names.every((n) => contracts[n]?.access === 'write' && contracts[n].project({ projectId: P }) === P));
+}
+
 (async () => {
   pure();
   await linking();
+  await channels();
   await close();
   finish();
 })().catch((err: unknown) => { console.error(err); process.exit(1); });

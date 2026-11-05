@@ -10,6 +10,7 @@ import { connectionGone, sourceDocGone } from '../app/sourceTableMessages';
 import { connectionHead, docView, sourceList, usedTables } from '../app/sourceTableList';
 import * as store from '../app/sourceTables';
 import { register as registerRead } from './sourceTableRead';
+import { register as registerLinks } from './sourceTableLinks';
 
 interface Ids { projectId: string; connId: string; docId: string }
 interface SavePayload { projectId: string; connId: string; docId?: string; table?: string; patch: store.SourcePatch; base?: string }
@@ -51,4 +52,5 @@ export function register(): void {
   });
 
   registerRead();
+  registerLinks();
 }

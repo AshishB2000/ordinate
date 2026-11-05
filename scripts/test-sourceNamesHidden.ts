@@ -270,6 +270,10 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       'sourceTable:save': { projectId: P, connId, table: TABLE, patch: { guide: 'x' } },
       'sourceTable:delete': { projectId: P, connId, docId },
       'sourceTable:read': { projectId: P, connId, docId },
+      'sourceTable:lineage': { projectId: P, connId, docId },
+      'sourceTable:forDataset': { projectId: P, datasetId: D },
+      'dataset:setSourceTables': { projectId: P, datasetId: D, tables: [TABLE] },
+      'dataset:sourceTableChoices': { projectId: P, datasetId: D },
     };
     const channels = Object.keys(require('../src/api/sourceTables').sourceTables);
     ok('every source table channel has a viewer case here', channels.every((ch) => ch in PAYLOAD), channels.filter((ch) => !(ch in PAYLOAD)).join());

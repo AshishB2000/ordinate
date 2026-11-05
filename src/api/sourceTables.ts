@@ -29,4 +29,12 @@ export const sourceTables = {
   'sourceTable:delete': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
   // Read the table's facts from the warehouse, on an editor's click only (60 an hour per connection, any pod).
   'sourceTable:read': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
+  // A source table's lineage, from its doc: records only. `lineage:get` is unchanged.
+  'sourceTable:lineage': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
+  // The source tables' notes under a dataset's Guide (read-only), and how its tables are named.
+  'sourceTable:forDataset': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // The names a query dataset says it reads: a label, at most 16 (spec D11).
+  'dataset:setSourceTables': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, tables: z.array(Table).max(16) }), project: byProjectId }),
+  // The link picker: the connection's tables, read from the warehouse on this call.
+  'dataset:sourceTableChoices': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
 } as const;
