@@ -10,7 +10,6 @@ import { randomUUID } from 'crypto';
 import { isValidId, projectDir, RECORD_DIR } from '../app/recordKinds';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
-import { logger } from '../app/logger';
 import { sanitizeVerified, type VerifiedQuestion } from './verifiedRules';
 
 const dirOf = (projectId: string): string => path.join(projectDir(projectId), RECORD_DIR.verified);
@@ -25,8 +24,8 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 // any: parsed stored JSON
 const normalize = (projectId: string) => (data: any): VerifiedQuestion | null => sanitizeVerified(data && typeof data === 'object' ? { ...data, projectId } : null);
 
-/** Every question of the project, newest `updatedAt` first. A corrupt file is skipped. */
-export async function listVerified(projectId: string): Promise<VerifiedQuestion[]> {
+/** Every question of the project with the tag of what is stored, newest `updatedAt` first. A corrupt file is skipped. */
+export async function listTagged(projectId: string): Promise<Tagged<VerifiedQuestion>[]> {
   if (!isValidId(projectId)) return [];
   let names: string[];
   try {
@@ -34,18 +33,18 @@ export async function listVerified(projectId: string): Promise<VerifiedQuestion[
   } catch (_) {
     return []; // none yet
   }
-  const out: VerifiedQuestion[] = [];
+  const out: Tagged<VerifiedQuestion>[] = [];
   for (const n of names) {
     const id = n.endsWith('.json') ? n.slice(0, -5) : '';
-    if (!isValidId(id)) continue; // a stray or temp file
-    try {
-      const q = normalize(projectId)(JSON.parse(await recordFs.readFile(fileOf(projectId, id), 'utf8')));
-      if (q && q.id === id) out.push(q);
-    } catch (err) {
-      if ((err as { code?: string }).code !== 'ENOENT') logger.error('[verified] Skipping corrupt or unreadable question:', id, (err as Error).message);
-    }
+    const t = isValidId(id) ? await readVerified(projectId, id) : null; // a stray or temp file, or a corrupt one: null
+    if (t && t.rec.id === id) out.push(t);
   }
-  return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+  return out.sort((a, b) => (a.rec.updatedAt < b.rec.updatedAt ? 1 : a.rec.updatedAt > b.rec.updatedAt ? -1 : 0));
+}
+
+/** Every question of the project, newest `updatedAt` first. A corrupt file is skipped. */
+export async function listVerified(projectId: string): Promise<VerifiedQuestion[]> {
+  return (await listTagged(projectId)).map((t) => t.rec);
 }
 
 /** The record and the tag of what is stored, from ONE read (../app/editConflict). */

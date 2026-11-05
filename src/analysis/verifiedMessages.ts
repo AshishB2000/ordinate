@@ -15,3 +15,34 @@ export function verifiedColumnGone(column: string, dataset: string): string {
 export function verifiedTermGone(): string {
   return t('verifiedMessages.a_glossary_term_this_question_uses');
 }
+
+// ── Saving one (../ipc/verified) ─────────────────────────────────────────────
+
+/** A question or phrasing whose key another question or phrasing of the project holds (./verifiedRules `keyClash`). */
+export function verifiedTaken(text: string): string {
+  return t('verifiedMessages.is_already_a_verified_question_or', { text });
+}
+
+/** A question that is only punctuation: it has no key, so nobody could ask it. */
+export function verifiedNoWords(): string {
+  return t('verifiedMessages.write_the_question_in_words');
+}
+
+export function verifiedNotRead(): string {
+  return t('verifiedMessages.this_answer_could_not_be_read');
+}
+
+/** The spec named everything that exists, but its card could not be drawn (a Live failure, a snapshot measure…). */
+export function verifiedDoesNotDraw(reason: string): string {
+  return t('verifiedMessages.this_answer_cannot_be_verified', { reason });
+}
+
+/** An edit or a delete of a question the project no longer holds. */
+export function verifiedGone(): string {
+  return t('verifiedMessages.this_verified_question_was_deleted');
+}
+
+/** A value filter of a question whose spec a restricted caller is not sent (D5). */
+export function verifiedValuesHidden(column: string): string {
+  return t('verifiedMessages.values_hidden_by_row_access_rules', { column });
+}

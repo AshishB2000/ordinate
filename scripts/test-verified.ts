@@ -57,7 +57,6 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
     try { body = r.statusCode === 200 ? wire.decode(r.body) : JSON.parse(r.body); } catch { body = null; }
     return { status: r.statusCode, text: r.body, body };
   };
-  void call;
   const as = <T>(fn: () => Promise<T>): Promise<T> => context.runInContext(ADMIN, 'verified', fn);
   const projects: typeof import('../src/app/projects') = require('../src/app/projects');
   const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -144,7 +143,54 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
     let states: Awaited<ReturnType<typeof VS.verifiedStates>> = [];
     ok('metadata only: nothing hydrated', !(await hydrates(async () => { states = await VS.verifiedStates(P); })));
     ok('states: each question, whether it runs, and nothing hidden from an admin', states.length === 1 && states[0].problem === null && states[0].hidden === false, JSON.stringify(states));
+    await trash.trashRecord(P, 'verified', V); // § channels starts from none
   });
+
+  // ── § channels: verified:list, verified:save, verified:delete ─────────────
+  const rawRecord = (id: string) => as(async () => recordFs.readFile(path.join(recordKinds.projectDir(P), 'verified', id + '.json'), 'utf8'));
+  const cardFigure = async (id: string): Promise<string> => {
+    const rec = JSON.parse(await rawRecord(id));
+    return JSON.stringify((await call('answer:card', { projectId: P, spec: rec.spec })).body?.data?.series);
+  };
+  const s = await call('verified:save', { projectId: P, input: { question: 'Revenue by region', phrasings: ['Sales per region'], note: 'Net of refunds', spec: { ...SPEC, matched: [{ column: 'region', said: 'west', value: 'West' }] } } });
+  const id: string = s.body?.question?.id ?? '';
+  ok('saved: the card\'s spec, no figure', s.body?.ok === true && !/\b(data|headline|bullets|series)\b/.test(await rawRecord(id)) && !(await rawRecord(id)).includes('"matched"'), s.text.slice(0, 300));
+  const f1 = await cardFigure(id);
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: [...ROWS, ['West', 'SMB', 100, '2026-05-05']] }));
+  const f2 = await cardFigure(id);
+  ok('no stored figure: new rows, new figure', f1.length > 2 && !Object.is(f1, f2), `${f1} | ${f2}`);
+  const noDraw = await call('verified:save', { projectId: P, input: { question: 'x', spec: { ...SPEC, category: 'nope' } } });
+  ok('a spec that no longer runs cannot be verified', noDraw.body?.ok === false && noDraw.body.field === 'spec' && noDraw.body.error === msg.verifiedColumnGone('nope', 'Orders'), noDraw.text);
+  const unread = await call('verified:save', { projectId: P, input: { question: 'x', spec: { datasetId: D } } });
+  ok('a spec that does not read cannot be verified', unread.body?.ok === false && unread.body.field === 'spec' && unread.body.error === msg.verifiedNotRead(), unread.text);
+  const taken = await call('verified:save', { projectId: P, input: { question: 'revenue by REGION?', spec: SPEC } });
+  ok('a taken question is refused', taken.body?.ok === false && taken.body.field === 'question' && taken.body.error === msg.verifiedTaken('revenue by REGION?'), taken.text);
+  const takenP = await call('verified:save', { projectId: P, input: { question: 'Revenue by segment', phrasings: ['sales PER region'], spec: { ...SPEC, category: 'segment' } } });
+  ok('a taken phrasing is refused beside the phrasings', takenP.body?.ok === false && takenP.body.field === 'phrasings' && takenP.body.error === msg.verifiedTaken('sales PER region'), takenP.text);
+  const noWords = await call('verified:save', { projectId: P, input: { question: '???', spec: SPEC } });
+  ok('a question with no words is refused', noWords.body?.ok === false && noWords.body.field === 'question' && noWords.body.error === msg.verifiedNoWords(), noWords.text);
+  ok('edit with a stale tag is 409', (await call('verified:save', { projectId: P, id, base: 'stale', input: { question: 'Revenue by region', spec: SPEC } })).status === 409);
+  const list = await call('verified:list', { projectId: P });
+  const row = list.body?.questions?.[0];
+  ok('list: describe, filters, runs, who, the spec and a tag', list.body?.ok === true && list.body.broken === 0 && row?.runs === true && row.describe === 'sum of amount by region'
+    && row.verifiedBy === TEST_USER && row.datasetName === 'Orders' && row.note === 'Net of refunds' && row.phrasings[0] === 'Sales per region'
+    && row.spec?.category === 'region' && typeof row.tag === 'string' && !('problem' in row), list.text.slice(0, 400));
+  const edited = await call('verified:save', { projectId: P, id, base: row?.tag, input: { question: 'Revenue by region', note: '', spec: { ...SPEC, filters: [{ column: 'region', op: 'in', values: ['West', 'East'] }] } } });
+  ok('edit with the open tag lands in place: same id, the new spec, the note cleared, a new tag', edited.body?.ok === true && edited.body.question.id === id
+    && edited.body.question.filters.join() === 'region in West, East' && !('note' in edited.body.question) && edited.body.question.tag !== row?.tag, edited.text.slice(0, 300));
+  ok('NEGATIVE CONTROL: the old tag is now stale', (await call('verified:save', { projectId: P, id, base: row?.tag, input: { question: 'Revenue by region', spec: SPEC } })).status === 409);
+  ok('an edit of a question that is gone says so', (await call('verified:save', { projectId: P, id: '00000000-0000-4000-8000-000000000003', input: { question: 'Other', spec: SPEC } })).body?.error === msg.verifiedGone());
+  const segQ = await call('verified:save', { projectId: P, input: { question: 'Revenue by segment', spec: { ...SPEC, category: 'segment' } } });
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS.filter((c) => c.name !== 'segment'), rows: ROWS.map((r) => [r[0], r[2], r[3]]) }));
+  const broken = await call('verified:list', { projectId: P });
+  const bRow = (broken.body?.questions ?? []).find((x: { id: string }) => x.id === segQ.body?.question?.id);
+  ok('list: a question that no longer runs is counted, with its reason', broken.body?.broken === 1 && bRow?.runs === false && bRow.problem === msg.verifiedColumnGone('segment', 'Orders'), broken.text.slice(0, 400));
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
+  const del = await call('verified:delete', { projectId: P, id });
+  const inTrash = (await call('trash:list', { projectId: P })).body;
+  ok('delete goes to Trash, under its question', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string; name: string }) => e.type === 'verified' && e.id === id && e.name === 'Revenue by region'), JSON.stringify(inTrash).slice(0, 300));
+  ok('…and leaves the list', !(await call('verified:list', { projectId: P })).body.questions.some((x: { id: string }) => x.id === id));
+  ok('a bad id is refused at the contract', (await call('verified:delete', { projectId: P, id: 'nope' })).status === 400);
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });

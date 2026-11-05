@@ -192,6 +192,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'tokens:list': 'META',
   'tokens:revoke': 'META',
   'trash:list': 'META',
+  'verified:list': 'REDACT', // D5: no spec with a value filter on a dataset closed to the caller (ipc/verified rowOf)
   'versions:diff': 'EXPLICIT',
   'versions:figures': 'DOOR',
   'versions:get': 'EXPLICIT',

@@ -246,6 +246,19 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('meta: the Assistant\'s guidance — east gets the editor\'s block, the guide and the instruction, and no value',
       gEast.text === gEd.text && gEast.text.includes('Guide for "Orders" (written by an editor): One row per order.') && gEast.text.includes('- Revenue means sales.') && !H.leaks(gEast.text), gEast.text);
     await W.call('boss', 'catalog:setInstructions', { projectId: P, op: { kind: 'remove', id: added.body.instructions[0].id } }); // the sections below ask with none
+    // A verified question whose spec compares with a West value (part 3 D5): east reads its words, never its spec or the value.
+    const westQ = await W.call('boss', 'verified:save', { projectId: P, input: { question: 'West customers', spec: spec(orders, { filters: [{ column: 'customer', op: '=', value: `${H.W_CANARY}_1` }] }) } });
+    const vEastList = await W.call('east', 'verified:list', { projectId: P });
+    eastReplies.push(vEastList.text);
+    const vRow = vEastList.body?.questions?.[0];
+    ok('redact: verified:list — east reads the question, no spec, no value', westQ.body?.ok === true && vRow?.question === 'West customers' && !('spec' in vRow)
+      && vRow.filters[0] === 'customer · values hidden by row access rules' && !H.leaks(vEastList.text), `${westQ.text.slice(0, 160)} | ${vEastList.text.slice(0, 300)}`);
+    const vEdList = await W.call('ed', 'verified:list', { projectId: P });
+    ok('NEGATIVE CONTROL: the editor\'s row has the spec and the value', vEdList.body?.questions?.[0]?.spec?.filters?.[0]?.value === `${H.W_CANARY}_1` && H.leaks(vEdList.text), vEdList.text.slice(0, 300));
+    ok('write: east gets 403 from verified:save and verified:delete',
+      (await W.call('east', 'verified:save', { projectId: P, input: { question: 'Mine', spec: spec(orders) } })).status === 403
+        && (await W.call('east', 'verified:delete', { projectId: P, id: westQ.body?.question?.id })).status === 403);
+    await W.call('boss', 'verified:delete', { projectId: P, id: westQ.body?.question?.id }); // the sections below run with none
 
     // Value labels name STORED values, so a caller closed to a dataset reads no list from any reply that carries a column doc. boss labels
     // Orders' customer — a West value among them — and Plain's, which has no rules.
