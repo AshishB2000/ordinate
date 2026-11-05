@@ -118,6 +118,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'metric:values': 'GATE',
   'metricTree:compute': 'GATE',
   'metricTree:suggest': 'META',
+  'model:navigation': 'META', // hierarchies (their names and column names) and the date ladder: no value, figure or row (part 6)
   'model:overview': 'REDACT',
   'numbers:follow': 'META',
   'numbers:get': 'GATE',
