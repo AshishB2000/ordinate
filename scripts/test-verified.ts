@@ -4,6 +4,9 @@
 //   § record   one line, the spec without `matched`, its title the question; the key squashes; a clash is
 //              found across phrasings; a term or a period is no value filter; sanitizing is idempotent;
 //              Trash round-trips under the question; a stale base refuses; a corrupt file is skipped
+//   § retired  (part 4, cross-part check item 8) a question on a retired metric still runs (verifiedProblem
+//              null), its card is marked and its notes say what replaces the metric. NEGATIVE CONTROL: certified,
+//              no retired note.
 // What a row-restricted viewer reads of a verified question is pinned in scripts/test-rowPolicySafetyNet.ts.
 //
 //   npm run build:ts && node scripts/test-verified.js
@@ -209,6 +212,32 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   ok('broken (its measure no longer fits): the card draws, unmarked', drawn?.ok === true && drawn.verified === undefined, JSON.stringify(drawn).slice(0, 200));
   await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
   ok('NEGATIVE CONTROL: restored, the mark is back', (await card(SEG))?.verified?.id === VQ);
+
+  // ── § retired (part 4; cross-part check item 8): a verified question on a retired metric keeps running ──
+  const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const statusStore: typeof import('../src/analysis/statusStore') = require('../src/analysis/statusStore');
+  const { pinOf }: typeof import('../src/analysis/statusPin') = require('../src/analysis/statusPin');
+  const statusMsg: typeof import('../src/analysis/statusMessages') = require('../src/analysis/statusMessages');
+  const state: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
+  const { GROSS, NET } = await as(async () => {
+    const save = async (name: string) => (await metricsMod.saveMetric(P, { name, datasetId: D, definition: { column: 'amount', aggregation: 'max' } }))!.id;
+    return { GROSS: await save('Gross revenue'), NET: await save('Net revenue') };
+  });
+  const GSPEC = { ...SPEC, measures: [{ column: 'amount', aggregation: 'max', metricId: GROSS }], title: 'Largest gross revenue by region' };
+  const gq = await call('verified:save', { projectId: P, input: { question: 'Largest gross revenue by region', spec: GSPEC } });
+  const GQ: string = gq.body?.question?.id ?? '';
+  const certifyNow = (ref: string) => as(async () => statusStore.certify(P, ref, (await pinOf(P, ref))!, ''));
+  await certifyNow(`metric:${NET}`);
+  await as(() => statusStore.retire(P, `metric:${GROSS}`, `metric:${NET}`, ''));
+  const problem = await as(async () => state.verifiedProblem((await S.getVerified(P, GQ))!, await state.verifiedEnv(P)));
+  ok('retired: verifiedProblem is null (the question names its metric, so it still runs)', !!GQ && problem === null, `${gq.text?.slice(0, 200)} ${problem}`);
+  const retiredCard = await card(GSPEC);
+  ok("…its card draws, marked verified, and its notes say what replaces the metric", retiredCard?.ok === true && retiredCard.verified?.id === GQ
+    && retiredCard.notes.includes(statusMsg.retiredUse('Gross revenue', 'Net revenue')), JSON.stringify(retiredCard?.notes));
+  await as(async () => { await statusStore.clearStatus(P, `metric:${GROSS}`); });
+  await certifyNow(`metric:${GROSS}`);
+  const certifiedCard = await card(GSPEC);
+  ok('NEGATIVE CONTROL: certified, the card is marked and carries no retired note', certifiedCard?.verified?.id === GQ && !certifiedCard.notes.some((n: string) => /retired/.test(n)), JSON.stringify(certifiedCard?.notes));
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });
