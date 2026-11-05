@@ -4,13 +4,35 @@
 //   §1 judgeSpec over the seeded sample (and a Live dataset: specs only, no warehouse query)
 //   §2 CI replay: each recorded reply in ./verified-eval-cases.ts through the real path — `splitAction`, the
 //      validator, the judge — against the sample's verified questions; and leave-one-out holds
+//   §3 LIVE MODE (ORDINATE_LIVE_MODEL=1 and a configured model; never in CI): asks every sample question and
+//      phrasing three ways — no guidance, the instructions, the instructions and verified examples (leave-one-out)
+//      — judges each spec, prints the match rates and every reply as a ready-to-paste recorded case. It asserts a
+//      model and a parsed action line per reply, never a match rate.
+//
+// A model is reached only through this machine's desktop config, in a local (not server-mode) process
+// (./liveModel.ts), so live mode runs §1 and §2 there too, without the Live-dataset checks: those need the
+// server-mode harness (a Live dataset over the fake warehouse), which is fixture mode's.
 //
 //   npm run build:ts && node scripts/test-verifiedEval.js
+//   ORDINATE_LIVE_MODEL=1 [ORDINATE_LIVE_CLI=claude] node scripts/test-verifiedEval.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import * as H from './liveQueryHarness';
-import { EVAL_CASES } from './verified-eval-cases';
+import { EVAL_CASES, type EvalCase } from './verified-eval-cases';
+import { useLiveModel } from './liveModel';
+
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+
+const LIVE = process.env.ORDINATE_LIVE_MODEL === '1';
+const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-verifiedeval-'));
+if (LIVE) {
+  useLiveModel(tmpUserData);
+  process.env.ORDINATE_LOCAL_DIR = tmpUserData;
+}
+// Server mode (and the fake warehouse) for fixture mode; loaded BEFORE anything that reads app paths.
+const H: typeof import('./liveQueryHarness') | null = LIVE ? null : require('./liveQueryHarness');
 
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
 const verified: typeof import('../src/ipc/verified') = require('../src/ipc/verified');
@@ -22,7 +44,10 @@ const { exactHit }: typeof import('../src/ai/verifiedPick') = require('../src/ai
 const { verifiedStates }: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
 const { SAMPLE_VERIFIED }: typeof import('../src/app/sampleGuidance') = require('../src/app/sampleGuidance');
 const trash: typeof import('../src/app/trash') = require('../src/app/trash');
+const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 type VerifiedQuestion = import('../src/analysis/verifiedRules').VerifiedQuestion;
+type Outcome = import('../src/ipc/verifiedJudge').Outcome;
 type Spec = import('../src/ai/answerSpec').AnswerSpec;
 
 const REV = [{ column: 'revenue', aggregation: 'sum' as const }];
@@ -36,17 +61,65 @@ async function save(projectId: string, question: string, spec: Spec): Promise<Ve
 }
 
 /** Whether `fn` sent the warehouse no statement. */
-async function noStatements(fn: () => Promise<unknown>): Promise<boolean> {
-  const before = H.fake.calls.length;
+async function noStatements(h: NonNullable<typeof H>, fn: () => Promise<unknown>): Promise<boolean> {
+  const before = h.fake.calls.length;
   await fn();
-  return H.fake.calls.length === before;
+  return h.fake.calls.length === before;
+}
+
+// ── §3 Live mode ─────────────────────────────────────────────────────────────
+
+type Way = 'none' | 'instructions' | 'full';
+const WAYS: Way[] = ['none', 'instructions', 'full'];
+
+async function runLive(P: string): Promise<void> {
+  const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
+  const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+  const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+  ok('LIVE: a model is configured', await execConfig.executionReady(), 'set one up, or run without ORDINATE_LIVE_MODEL=1');
+  if (!(await execConfig.executionReady())) return;
+
+  const facts = await ipcCopilot.buildFacts(P, {}); // the project inventory, as the in-app check builds it
+  const instructions = await askGuidance(P, { kind: '' }, 'project'); // 03's block: no question, so no examples
+  const matched: Record<Way, number> = { none: 0, instructions: 0, full: 0 };
+  const recorded: EvalCase[] = [];
+  let asked = 0;
+  let parsed = 0;
+  for (const s of await verifiedStates(P)) {
+    for (const question of [s.q.question, ...s.q.phrasings]) {
+      for (const way of WAYS) {
+        const block = way === 'none' ? '' : way === 'instructions' ? instructions.text
+          : (await askGuidance(P, { kind: '' }, 'project', question, { exclude: s.q.id })).text; // leave-one-out
+        const res = await analyze.askCopilot([], [facts.text, block].filter(Boolean).join('\n\n'), question);
+        asked++;
+        if (!res.ok) {
+          console.log(`[${way}] ${question}: model error ${res.errorType}`);
+          continue;
+        }
+        const action = res.suggestedAction;
+        if (action.kind !== 'none') parsed++;
+        const judged: Outcome = action.kind === 'answer' ? (await J.judgeSpec(P, s.q, action.spec)).outcome : 'refused';
+        if (judged === 'match') matched[way]++;
+        // The reply as the app read it: its prose, then its action line re-serialised.
+        const line = action.kind === 'none' ? res.text : `${res.text}\n@@ACTION ${JSON.stringify(action)}`;
+        recorded.push({ name: `${s.q.question} (${way}): "${question}"`, recorded: true, question, verified: s.q.question, line, expect: judged });
+      }
+    }
+  }
+  const per = asked / WAYS.length;
+  console.log(`\nLIVE match rates: ${WAYS.map((w) => `${w} ${matched[w]}/${per}`).join(' · ')}\n`);
+  console.log('Every reply, as recorded cases:');
+  for (const c of recorded) console.log(`  ${JSON.stringify(c)},`);
+  ok('LIVE: every reply carries an action line', parsed === asked, `${parsed} of ${asked}`);
 }
 
 async function main(): Promise<void> {
-  const live = await H.setupOrg(H.ORG_A);
-  await H.as(H.ORG_A, async () => {
+  const live = H ? await H.setupOrg(H.ORG_A) : null;
+  if (!H) await projects.init();
+  const inOrg = (fn: () => Promise<void>): Promise<void> => (H ? H.as(H.ORG_A, fn) : fn());
+  await inOrg(async () => {
     const P = String((await sample.seedSampleProject({ again: true })).projectId);
-    const dsId = (await H.datasets.listDatasets(P))[0].id;
+    const dsId = (await datasets.listDatasets(P))[0].id;
     const base: Spec = { datasetId: dsId, category: 'region', measures: REV, filters: [], chartType: 'column', title: 'Revenue by region' };
     const verifiedNamed = async (q: string): Promise<VerifiedQuestion> => (await store.listVerified(P)).find((v) => v.question === q)!;
 
@@ -86,16 +159,23 @@ async function main(): Promise<void> {
     ok('NEGATIVE CONTROL: without exclude it is the exact hit', exactHit(states, 'Revenue by region')?.id === own);
 
     // ── Live: compared on specs only, and the warehouse is never asked ─────
-    const P2 = live.projectId;
-    const liveQ = await save(P2, 'Amount by region', { datasetId: live.liveId, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Amount by region' });
-    const LIVE_SAME = { dataset: 'Live', category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }] };
-    const LIVE_OTHER = { ...LIVE_SAME, filters: [{ column: 'region', op: 'in', values: ['West'] }] };
-    let other: import('../src/ipc/verifiedJudge').Judged | undefined;
-    ok('Live: spec only, no warehouse query', (await noStatements(async () => { other = await J.judgeSpec(P2, liveQ, LIVE_OTHER); })) && other?.outcome === 'differs', JSON.stringify(other));
-    let hit: import('../src/ipc/verifiedJudge').Judged | undefined;
-    ok('Live: the same spec matches, no warehouse query', (await noStatements(async () => { hit = await J.judgeSpec(P2, liveQ, LIVE_SAME); })) && hit?.outcome === 'match', JSON.stringify(hit));
+    if (H && live) {
+      const P2 = live.projectId;
+      const liveQ = await save(P2, 'Amount by region', { datasetId: live.liveId, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Amount by region' });
+      const LIVE_SAME = { dataset: 'Live', category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }] };
+      const LIVE_OTHER = { ...LIVE_SAME, filters: [{ column: 'region', op: 'in', values: ['West'] }] };
+      let other: import('../src/ipc/verifiedJudge').Judged | undefined;
+      ok('Live: spec only, no warehouse query', (await noStatements(H, async () => { other = await J.judgeSpec(P2, liveQ, LIVE_OTHER); })) && other?.outcome === 'differs', JSON.stringify(other));
+      let hit: import('../src/ipc/verifiedJudge').Judged | undefined;
+      ok('Live: the same spec matches, no warehouse query', (await noStatements(H, async () => { hit = await J.judgeSpec(P2, liveQ, LIVE_SAME); })) && hit?.outcome === 'match', JSON.stringify(hit));
+    }
+
+    // ── §3 ──────────────────────────────────────────────────────────────────
+    if (LIVE) await runLive(P);
+    else console.log('\n(live mode off — set ORDINATE_LIVE_MODEL=1 with a configured model to run it)');
   });
-  H.cleanup();
+  H?.cleanup();
+  try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* temp dir */ }
   finish();
 }
 
