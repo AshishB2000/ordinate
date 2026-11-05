@@ -54,6 +54,7 @@ import { termFactsFor } from './terms';
 import { statusFor } from '../analysis/statusStore';
 import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import { askGuidance } from './guidance';
+import { copyValueNotes } from './copyValues';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -243,7 +244,8 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, tableWithout(await tableFacts(projectId, id), hidden), await termFactsFor(projectId, id, question)); // its glossary terms beside its metrics
+      const valueNotes = await copyValueNotes(projectId, id, 'facts'); // its common text values, off the value index (no hydration)
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, tableWithout(await tableFacts(projectId, id), hidden), await termFactsFor(projectId, id, question), valueNotes); // its glossary terms beside its metrics
     }
     return null;
   }) : null;
@@ -410,8 +412,8 @@ export async function buildFacts(
     dashboards: dashList.map((x) => x.name),
   }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
     name: m!.name, columns: dropHidden(m!.columns, await hiddenColumnsFor(projectId, m!.id)), docs: await catalogColumns(projectId, m!.id), table: tableWithout(await tableFacts(projectId, m!.id), await hiddenColumnsFor(projectId, m!.id)),
-    // A Live dataset's profile and sample values (L2.5) — none from a dataset with row access rules the caller may not read whole.
-    notes: (await closedToCaller(projectId, m!.id)) ? undefined : await liveInventoryNotes(projectId, m!),
+    // A Live dataset's profile and sample values (L2.5), or a copy's from its value index — none from a dataset with row access rules the caller may not read whole.
+    notes: (await closedToCaller(projectId, m!.id)) ? undefined : (await liveInventoryNotes(projectId, m!)) ?? (await copyValueNotes(projectId, m!.id, 'inventory')),
   }))));
 }
 
