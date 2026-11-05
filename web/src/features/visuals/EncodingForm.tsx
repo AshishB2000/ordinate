@@ -28,6 +28,8 @@ import { CalcDialog, type CalcCreated } from '../calc/CalcDialog';
 import type { Agg, Encoding, Measure, Preview, RelatedCol } from './api';
 import { MapRegions } from './MapRegions';
 import { AGG_LABELS, AGGS, categoryType, fieldKey, GRAINS, measureColumns, measureFrom, parseKey, type Column } from './model';
+import { pickerOrder } from '../model/status/status';
+import { RetiredGroup } from '../model/status/RetiredGroup';
 import s from './Builder.module.css';
 
 const heading = (label: string, key: string): SelectOption => ({ value: `__h:${key}`, label, disabled: true });
@@ -99,10 +101,11 @@ export function EncodingForm({
   const isDate = categoryType(encoding, cols, related) === 'date';
   const own = (metrics.data ?? []).filter((m) => m.datasetId === datasetId);
   const byId = new Map(own.map((m) => [m.id, m]));
+  const ordered = pickerOrder(own); // certified first; retired are folded under the measures, not offered
   const measureOpts: SelectOption[] = [
     ...measureColumns(cols).map((c) => ({ value: c.name, label: c.name })),
     ...relatedOptions(related, (c) => c.type === 'number'),
-    ...(own.length ? [heading('Metrics', 'metrics'), ...own.map((m) => ({ value: METRIC + m.id, label: m.name }))] : []),
+    ...(ordered.main.length ? [heading('Metrics', 'metrics'), ...ordered.main.map((m) => ({ value: METRIC + m.id, label: m.name }))] : []),
   ];
   const seriesOpts: SelectOption[] = [
     { value: '', label: 'None' },
@@ -212,6 +215,7 @@ export function EncodingForm({
           const gone = !!m.metricId && !metric && metrics.isSuccess;
           const options = [
             ...measureOpts,
+            ...(metric?.status?.state === 'retired' ? [{ value: METRIC + metric.id, label: metric.name }] : []), // the one this measure already uses
             ...(asMetric && !metric ? [{ value: METRIC + m.metricId, label: m.column }] : []),
             ...(canEdit ? [{ value: NEW, label: '+ New calculated measure…' }] : []),
           ];
@@ -256,6 +260,7 @@ export function EncodingForm({
             </div>
           );
         })}
+        <RetiredGroup items={ordered.retired} />
         <div className={s.addRow}>
           <Button size="sm" icon="plus" className={s.addSlot} onClick={() => set({ values: [...encoding.values, { column: firstMeasure, aggregation: 'sum' }] })}>
             Add measure

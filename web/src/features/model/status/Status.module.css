@@ -1,0 +1,27 @@
+.retired {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+}
+.retiredToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.retiredToggle:hover {
+  color: var(--text);
+}
+.retiredList {
+  margin: 0;
+  padding: 0 0 0 var(--sp-16);
+  list-style: none;
+  color: var(--muted);
+}

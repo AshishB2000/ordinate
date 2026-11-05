@@ -13,6 +13,8 @@ import { Input } from '../../../ui/Field';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import { formatBadge, useMetricList, useMetricValues, type MetricSummary } from '../../analyses/metrics/api';
+import { pickerOrder } from '../../model/status/status';
+import { RetiredGroup } from '../../model/status/RetiredGroup';
 import d from '../../analyses/editor/Dialogs.module.css';
 
 /** Rows past this and the picker is a list to scroll — which is what search is for (MPK_MAX_ROWS). */
@@ -23,10 +25,11 @@ export type MetricPick = { kind: 'metric'; metric: MetricSummary } | { kind: 'cu
 export function MetricPicker({ projectId, onPick, onClose }: { projectId: string; onPick: (p: MetricPick) => void; onClose: () => void }) {
   const list = useMetricList(projectId);
   const [q, setQ] = useState('');
-  const shown = useMemo(() => {
-    const all = list.data ?? [];
+  const { shown, retired } = useMemo(() => {
     const k = q.trim().toLowerCase();
-    return (k ? all.filter((m) => m.name.toLowerCase().includes(k) || m.definitionText.toLowerCase().includes(k)) : all).slice(0, MAX_ROWS);
+    const all = k ? (list.data ?? []).filter((m) => m.name.toLowerCase().includes(k) || m.definitionText.toLowerCase().includes(k)) : (list.data ?? []);
+    const o = pickerOrder(all);
+    return { shown: o.main.slice(0, MAX_ROWS), retired: o.retired };
   }, [list.data, q]);
   // The pivot builder opened its picker with no filters: each figure is the metric over all its rows.
   const values = useMetricValues(projectId, shown.map((m) => m.id), [], []);
@@ -54,6 +57,7 @@ export function MetricPicker({ projectId, onPick, onClose }: { projectId: string
               </div>
             ))
           )}
+          <RetiredGroup items={retired} />
         </div>
         <div className={d.pickerFoot}>
           <Button variant="ghost" onClick={() => onPick({ kind: 'custom' })}>

@@ -17,6 +17,7 @@ import { Icon } from '../../../ui/icons/Icon';
 import { vizLabel } from '../../analyses/VisualTile';
 import { useMetricList } from '../../analyses/metrics/api';
 import type { Step } from '../api';
+import { pickerOrder } from '../../model/status/status';
 import pk from './Pickers.module.css';
 
 export type ChooserKind = 'visual' | 'metric' | 'metrics_row';
@@ -96,7 +97,10 @@ export function ChooseVisual({ projectId, onDone }: { projectId: string; onDone:
 
 export function ChooseMetrics({ projectId, max, onDone }: { projectId: string; max: number; onDone: (ids: string[]) => void }) {
   const q = useMetricList(projectId);
-  const rows = useMemo(() => (q.data ?? []).map((m) => ({ id: m.id, label: m.name, sub: m.description || m.definitionText })), [q.data]);
+  const rows = useMemo(() => {
+    const o = pickerOrder(q.data ?? []); // certified first, retired last
+    return [...o.main, ...o.retired].map((m) => ({ id: m.id, label: m.name, sub: (m.status?.state === 'retired' ? 'Retired · ' : m.status?.state === 'certified' ? 'Certified · ' : '') + (m.description || m.definitionText) }));
+  }, [q.data]);
   return <Chooser title={max > 1 ? `Add up to ${max} metrics` : 'Add a metric'} rows={rows} max={max} loading={q.isPending} error={q.isError ? q.error.message : undefined} onDone={onDone} />;
 }
 
