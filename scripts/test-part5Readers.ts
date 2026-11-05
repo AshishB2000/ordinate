@@ -30,6 +30,20 @@ const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sql
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const versions: typeof import('../src/ipc/versions') = require('../src/ipc/versions');
 const editConflict: typeof import('../src/app/editConflict') = require('../src/app/editConflict');
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each handler's reply is narrowed where it is read
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const ipcScenarios: typeof import('../src/ipc/scenarios') = require('../src/ipc/scenarios');
+const ipcTemplates: typeof import('../src/ipc/templates') = require('../src/ipc/templates');
+const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const dashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const stories: typeof import('../src/ipc/stories') = require('../src/ipc/stories');
+const embedLock: typeof import('../src/publish/embedLock') = require('../src/publish/embedLock');
+const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
+const driverShape: typeof import('../src/analysis/driverShape') = require('../src/analysis/driverShape');
+const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
+const metricFormat: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
+const msg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
 const { isPendingError }: typeof import('../src/data/pendingError') = require('../src/data/pendingError');
 
 const COLS = [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] as any; // any: the dataset column shape, as the sibling suites build it
@@ -47,6 +61,7 @@ function throws(fn: () => unknown, is: (e: unknown) => boolean): boolean {
 
 void (async () => {
   await projects.init();
+  ipcVisuals.register();
   const P = (await projects.createProject('Part 5 readers')).id;
   const D = (await datasets.saveDataset(P, { name: 'orders', sourceKind: 'csv', columns: COLS, rows: ROWS } as any))!.id; // any: the sibling suites' save shape
 
@@ -118,6 +133,76 @@ void (async () => {
   const restored = (await metrics.getMetric(P, restoredT.id))!;
   ok('a version restore keeps the definition and the target', isDeepStrictEqual(restored.definition, PER) && isDeepStrictEqual((restored as { target?: unknown }).target, TARGET), JSON.stringify(restored));
   ok('the edit-conflict tag covers target', editConflict.contentTag('metric', restored) !== editConflict.contentTag('metric', { ...restored, target: undefined }));
+
+  // ── refused: every reader that cannot compute a part-5 shape shows no figure, or says why ──
+  const viz = handlers.get('visual:data')!;
+  const plain = (await metrics.saveMetric(P, { name: 'Revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' } }))!;
+  const customers = (await metrics.saveMetric(P, { name: 'Customers', datasetId: D, definition: { column: 'customer_id', aggregation: 'countd' } }))!;
+  const funnelM = (await metrics.getMetric(P, kinds['Visit → buy']))!;
+  const periodM = (await metrics.getMetric(P, kinds['Revenue YTD']))!;
+  const perM = (await metrics.getMetric(P, kinds.MRR))!;
+  const chartOf = (values: unknown[], more: object = {}) => viz(null, { projectId: P, datasetId: D, encoding: { category: 'day', grain: 'month', values, ...more } });
+  for (const x of [customers, funnelM, periodM, perM]) {
+    ok(`${x.name}: no KPI figure, never a sum`, (await ipcMetrics.resolveMetric(P, x.id))!.value === null, JSON.stringify(await ipcMetrics.resolveMetric(P, x.id)));
+    const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
+    ok(`${x.name}: a chart says why`, c.ok === false && [msg.countdPending(x.name), msg.metricKindPending(x.name)].includes(c.error), JSON.stringify(c).slice(0, 300));
+    const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
+    ok(`${x.name}: a formula over it has no KPI figure`, (await ipcMetrics.resolveMetric(P, f.id))!.value === null);
+    const cf = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: f.id }]);
+    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && [msg.countdPending(x.name), msg.metricKindPending(x.name)].includes(cf.error), JSON.stringify(cf).slice(0, 300));
+  }
+  ok('a raw countd measure is refused', (await chartOf([{ column: 'customer_id', aggregation: 'countd' }])).error === msg.countdPending('countd of customer_id'));
+  const V = { column: 'amount', aggregation: 'sum' };
+  ok('a countd pivot value is refused', (await chartOf([V], { pivot: { rows: [{ column: 'day' }], columns: [], values: [{ column: 'customer_id', aggregation: 'countd' }] } })).ok === false);
+  copilotIpc.register();
+  const SPEC = { datasetId: D, category: 'day', measures: [V], filters: [], chartType: 'column', title: 'Orders' };
+  const carded = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ column: 'customer_id', aggregation: 'countd' }] } });
+  ok('an answer card with a countd measure is refused', carded.ok === false && carded.reason === msg.countdPending('countd of customer_id'), JSON.stringify(carded).slice(0, 300));
+  const cardedKind = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ ...V, metricId: funnelM.id }] } });
+  ok('an answer card over a funnel metric is refused', cardedKind.ok === false && cardedKind.reason === msg.metricKindPending(funnelM.name), JSON.stringify(cardedKind).slice(0, 300));
+  ok('NEGATIVE CONTROL: the same answer card with sum draws', (await handlers.get('answer:card')!(null, { projectId: P, spec: SPEC })).ok === true);
+  const kpi = await dashboards.computeCardMetric(P, D, { column: 'customer_id', aggregation: 'countd' });
+  ok('the KPI door: countd has no figure', kpi.ok === true && kpi.value === null, JSON.stringify(kpi));
+  const kpiPer = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer_id' } });
+  ok('the KPI door: a per-entity snapshot has no figure', kpiPer.ok === true && kpiPer.value === null, JSON.stringify(kpiPer));
+  const kpiSnap = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } });
+  ok('NEGATIVE CONTROL: the KPI door: a plain snapshot has its figure', typeof kpiSnap.value === 'number', JSON.stringify(kpiSnap));
+  ok('key drivers refuse a funnel metric', driverShape.metricShape(D, COLS, funnelM.definition, [], new Map()).kind === 'none');
+  ok('key drivers refuse a countd metric', driverShape.metricShape(D, COLS, customers.definition, [], new Map()).kind === 'none');
+  ok('the tree reference gives no figure for a funnel metric', treeRef.metricJs(COLS, ROWS, [funnelM], funnelM, []) === null);
+  ok('the tree reference gives no figure for a per-entity snapshot', treeRef.metricJs(COLS, ROWS, [perM], perM, []) === null);
+  const plainSnap = { ...perM, definition: { column: 'amount', aggregation: 'sum' as const, snapshot: { column: 'day', take: 'last' as const } } };
+  ok('NEGATIVE CONTROL: the tree reference has a figure for a plain snapshot', typeof treeRef.metricJs(COLS, ROWS, [plainSnap], plainSnap, []) === 'number');
+  ok('the words say it is newer', metricFormat.describeDefinition(periodM) === 'a newer kind of metric' && metricFormat.describeDefinition(funnelM) === 'a newer kind of metric');
+  const plainKpi = (await ipcMetrics.resolveMetric(P, plain.id))!.value;
+  ok('NEGATIVE CONTROL: the plain metric has its figure and its chart', plainKpi === ROWS.reduce((a, r) => a + r[1], 0) && (await chartOf([{ ...V, metricId: plain.id }])).ok === true);
+
+  // Stories, scenarios, templates, plans and embeds: a part-5 metric is never read as its stored column's plain total.
+  ipcScenarios.register();
+  ipcTemplates.register();
+  const listed = ((await handlers.get('scenario:metrics')!(null, { projectId: P })) as Array<{ id: string }>).map((x) => x.id);
+  ok('scenarios: the picker offers no part-5 metric', [customers, funnelM, periodM, perM].every((x) => !listed.includes(x.id)) && listed.includes(plain.id), JSON.stringify(listed));
+  const planned = (await planExec.loadProjectCtx(P)).metrics.map((x) => x.id);
+  ok('plans: a plan step cannot name a part-5 metric', [customers, funnelM, periodM, perM].every((x) => !planned.includes(x.id)) && planned.includes(plain.id), JSON.stringify(planned));
+  const open = { covers: async () => true } as never; // any lock that covers the dataset
+  ok('embed: a KPI of a funnel metric is not allowed under a lock', (await embedLock.metricAllowed(open, P, { metricId: funnelM.id, datasetId: D, column: 'amount' })) === false);
+  ok('NEGATIVE CONTROL: embed: the KPI of the plain metric is allowed', (await embedLock.metricAllowed(open, P, { metricId: plain.id, datasetId: D, column: 'amount' })) === true);
+  const D2 = (await datasets.saveDataset(P, { name: 'orders 2', sourceKind: 'csv', columns: COLS, rows: ROWS } as any))!.id; // any: as above
+  const D3 = (await datasets.saveDataset(P, { name: 'orders 3', sourceKind: 'csv', columns: COLS, rows: ROWS } as any))!.id; // any: as above
+  const countdRev = (await metrics.saveMetric(P, { name: 'Sales', datasetId: D2, definition: { column: 'amount', aggregation: 'countd' } }))!;
+  const plainRev = (await metrics.saveMetric(P, { name: 'Sales', datasetId: D3, definition: { column: 'amount', aggregation: 'sum' } }))!;
+  const roleMetrics = async (datasetId: string): Promise<string[]> => {
+    const r = await handlers.get('template:list')!(null, { projectId: P, datasetId });
+    return r.templates.flatMap((t: { matches: Array<{ metricId?: string }> }) => t.matches.map((x) => x.metricId)).filter(Boolean);
+  };
+  ok("templates: a role does not take a countd metric's column", !(await roleMetrics(D2)).includes(countdRev.id));
+  ok('NEGATIVE CONTROL: templates: the same name on a plain metric is taken by a role', (await roleMetrics(D3)).includes(plainRev.id));
+  const p2 = (await projects.createProject('Story KPI')).id;
+  const d2 = (await datasets.saveDataset(p2, { name: 'orders', sourceKind: 'csv', columns: COLS, rows: ROWS } as any))!.id; // any: as above
+  const kept2 = (await metrics.saveMetric(p2, { name: 'Buyers', datasetId: d2, definition: { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer_id' } } }))!;
+  const out = await stories.blocksFromRecords(p2, { name: 'S', sheets: [{ name: 'A', cards: [{ type: 'metric', metric: { datasetId: d2, column: 'amount', aggregation: 'sum' } }] }] }, '');
+  const tied = (out.find((b) => b.kind === 'metric') as { metricId?: string } | undefined)?.metricId;
+  ok('stories: an inline KPI is not tied to a per-entity snapshot metric of the same column', !!tied && tied !== kept2.id);
 
   finish();
 })();

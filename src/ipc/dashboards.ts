@@ -171,6 +171,7 @@ async function computeCardMetricUnlocked(
   params: ParamValues | undefined,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
+  if (spec.aggregation === 'countd' || spec.snapshot?.per) return { ok: true, value: null }; // shortcut: part 5 computes them from step 02 / step 07
   const live = await liveMetaOf(projectId, datasetId);
   if (live && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
   if (live) return liveCardMetric(projectId, live, spec, filters);

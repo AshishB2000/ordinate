@@ -50,7 +50,7 @@ export function metricJs(columns: ParsedColumn[], rows: Cell[][], metrics: Metri
   if (!isFormulaDefinition(m.definition)) {
     const t = table(m.filters);
     const snap = m.definition.snapshot;
-    if (!m.definition.column || (snap && !columns.some((c) => c.name === snap.column && c.type === 'date'))) return null;
+    if (!m.definition.column || snap?.per || (snap && !columns.some((c) => c.name === snap.column && c.type === 'date'))) return null;
     // A snapshot reads only the rows on its latest (or earliest) day in scope (./snapshot), as the door does.
     return computeMetric(t.columns, snap ? snapshotRows(t.columns, t.rows, snap) : t.rows, m.definition);
   }

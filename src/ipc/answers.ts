@@ -69,7 +69,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
-import { pendingMetric } from '../analysis/pendingKinds';
+import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 
@@ -177,7 +177,7 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }): Promise<Built | Failure> {
   const asMeasures = { category: asked.category, values: asked.measures };
-  const snapshot = await snapshotMeasureRefusal(projectId, asMeasures); // extract and Live alike
+  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures)); // part 5's shapes first; extract and Live alike
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels);

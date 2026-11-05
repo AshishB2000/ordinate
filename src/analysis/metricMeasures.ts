@@ -28,7 +28,7 @@
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isFormulaDefinition } from './metrics';
-import { pendingSentence } from './pendingKinds';
+import { pendingMeasureRefusal, pendingMetric, pendingSentence } from './pendingKinds';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
 import type { MetricAggregation } from './metricValue';
@@ -136,6 +136,8 @@ export async function planMetricMeasures(
   encoding: VizEncoding,
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
+  const pending = await pendingMeasureRefusal(projectId, encoding); // part 5's shapes: no figure on this release
+  if (pending) return { ok: false, error: pending };
   const inPivot = await pivotSnapshot(projectId, encoding);
   if (inPivot) return { ok: false, error: msg.snapshotInPivot(inPivot.name) };
   if (!hasMetricMeasure(encoding)) return null;
@@ -172,6 +174,7 @@ export async function planMetricMeasures(
 
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
+    if (pendingMetric(m)) throw new PlanError(pendingSentence(m)); // part 5's shapes: no figure on this release
     if (metrics.isSimpleDefinition(m.definition)) {
       const snap = m.definition.snapshot;
       if (snap) await checkSnapshot(m, snap);
@@ -223,7 +226,7 @@ export async function planMetricMeasures(
         if (root) plan.formulas.set(i, { name: m.name, root });
         continue;
       }
-      if (!metrics.isSimpleDefinition(m.definition)) throw new PlanError(pendingSentence(m)); // part 5's kinds
+      if (!metrics.isSimpleDefinition(m.definition) || pendingMetric(m)) throw new PlanError(pendingSentence(m)); // part 5's shapes
       // A snapshot with no column of its own has no figure (as its KPI), never its stored copy summed over every date.
       const def = followedDefinition(m, datasetId, encoding, i) ?? (m.datasetId === datasetId && m.definition.snapshot ? m.definition : null);
       if (!def) continue; // another dataset's, or no column of its own: the stored copy, as before
