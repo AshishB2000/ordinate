@@ -172,7 +172,7 @@ export function parityKit(x: Extract, run: (q: CompiledQuery, step: LiveStep) =>
       problems.push(`category ${show(reply.category)} vs ${show(out.chart.category)}`);
     }
     const split = !!enc.series;
-    const aggs = a.ir.measures.map((m) => m.aggregation);
+    const aggs = a.ir.measures.map((m) => ('metric' in m ? 'v' : m.aggregation));
     problems.push(...cmp.compareCharts(reply.data, out.chart.data, (k) => TOLERANT.has(split ? aggs[0] : aggs[k]), split));
     problems.push(...extractFirstSeen(reply.data.labels, enc, filters, reply.category));
     problems.push(...(await liveOrder(a.ir, out.chart, env)));
@@ -200,7 +200,7 @@ export function parityKit(x: Extract, run: (q: CompiledQuery, step: LiveStep) =>
     const notes = a.warnings.concat(out.warnings);
     if (out.chart.category.note) notes.push(out.chart.category.note);
     if (show(card.notes) !== show(notes)) problems.push(`notes ${show(card.notes)} vs ${show(notes)}`);
-    const aggs = a.ir.measures.map((m) => m.aggregation);
+    const aggs = a.ir.measures.map((m) => ('metric' in m ? 'v' : m.aggregation));
     const tol = (k: number): boolean => TOLERANT.has(s.series ? aggs[0] : aggs[k]);
     const date = a.ir.category!.kind === 'date';
     if (date) problems.push(...extractFirstSeen(card.data.labels, { category: s.category, values: s.measures, grain: s.grain }, card.steps, out.chart.category));

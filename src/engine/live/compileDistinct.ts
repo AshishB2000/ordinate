@@ -5,7 +5,7 @@
 // distinct count survives none of that, so wherever a statement ranks or folds, a `countd` is COUNTED AGAIN from
 // `lv_base`, grouped by that level's key, and joined back. Held to the extract by scripts/test-liveParity.ts.
 
-import type { LiveColumn, LiveMeasure } from './liveSpec';
+import type { LiveColumn, LiveColumnMeasure } from './liveSpec';
 import type { Ctx } from './compileFilter';
 import { dateOf, emptyOf, nullsLast, numberOf, textOf } from './compileFilter';
 
@@ -62,7 +62,7 @@ export function withTotals(rel: string, totals: [Total, string][]): string {
  * folded key (`lv_fold` carries `lv_g` beside it) and the series, then joined onto `lv_out` as its `lv_b<i>d` parts.
  * Ends in `lv_outd`; `lv_bk` (the rows with their folded key, `lv_kk`) is there for the category total.
  */
-export function foldedDistinct(c: Ctx, ms: LiveMeasure[], split: boolean, seriesText: boolean): string[] {
+export function foldedDistinct(c: Ctx, ms: LiveColumnMeasure[], split: boolean, seriesText: boolean): string[] {
   const ds = ms.flatMap((m, i) => (m.aggregation === 'countd' ? [i] : []));
   const by = split ? ['lv_kk', 'lv_s'] : ['lv_kk'];
   const on = nullSafeOn('lv_out.lv_k', 'lv_dk.lv_dk0', true) + (split ? ` AND ${nullSafeOn('lv_out.lv_s', 'lv_dk.lv_dk1', seriesText)}` : '');

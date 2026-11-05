@@ -322,7 +322,7 @@ function refusals(): void {
     const x = r as import('../src/engine/live/liveSpec').LiveRefusal;
     ok(`refused, typed (${code}): ${label}`, !!x && x.ok === false && x.code === code && t(x), show(x));
   }
-  const all: import('../src/engine/live/liveSpec').LiveRefusalCode[] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
+  const all: Parameters<typeof spec.refuse>[0][] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
     'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate', 'unresolvedPeriod',
     'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable', 'distinctByWeekCalendar'];
   ok(`every refusal code (${all.length}) renders its catalog key with its parameters`, all.every((c) => t(spec.refuse(c, 'col'))));

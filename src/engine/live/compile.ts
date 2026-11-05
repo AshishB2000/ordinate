@@ -43,8 +43,9 @@
 import type { DateGrain } from '../../analysis/categoryKey';
 import { CATEGORY_CAP, DATE_GRAINS, OTHER_LABEL } from '../../analysis/categoryKey';
 import type { WeekCal } from '../../analysis/retailCalendar';
-import type { LiveColumn, LiveFilter, LiveIR, LiveMeasure, LiveRefusal } from './liveSpec';
-import { LIVE_AGGS, NUMERIC_AGGS, columnOf, isRefusal, refuse } from './liveSpec';
+import type { LiveColumn, LiveColumnMeasure, LiveFilter, LiveIR, LiveMeasure, LiveRefusal } from './liveSpec';
+import { LIVE_AGGS, NUMERIC_AGGS, columnOf, isMetricMeasure, isRefusal, refuse } from './liveSpec';
+import { refuseLayer } from './semantic/semanticRefusals';
 import type { CompileDialectId, SqlDialect } from './dialect';
 import { dialectFor } from './dialects';
 import type { CompiledQuery } from './sqlParams';
@@ -79,10 +80,14 @@ export type LiveKey =
 
 export type Compiled = { ok: true; query: CompiledQuery } | LiveRefusal;
 
-/** A measure's parts: s = sum, c = count, n = min, x = max, d = a distinct count (never re-aggregated). `avg` is s + c. */
-export type Part = 's' | 'c' | 'n' | 'x' | 'd';
+/** A measure's parts: s = sum, c = count, n = min, x = max, d = a distinct count (never re-aggregated); `avg` is s + c. v = a semantic layer's own value. */
+export type Part = 's' | 'c' | 'n' | 'x' | 'd' | 'v';
+type ColumnPart = Exclude<Part, 'v'>;
 
+export function partsOf(m: LiveColumnMeasure): ColumnPart[];
+export function partsOf(m: LiveMeasure): Part[];
 export function partsOf(m: LiveMeasure): Part[] {
+  if (isMetricMeasure(m)) return ['v'];
   switch (m.aggregation) {
     case 'sum': return ['s'];
     case 'avg': return ['s', 'c'];
@@ -99,6 +104,8 @@ interface Prepared {
   c: Ctx;
   from: string;
   base: LiveFilter[];
+  /** The IR's measures, every one a column's (a layer metric was refused). */
+  ms: LiveColumnMeasure[];
 }
 
 function badName(name: unknown): boolean {
@@ -129,13 +136,17 @@ function namesOf(ir: LiveIR): string[] {
   const names: string[] = [];
   if (ir.category) names.push(ir.category.column);
   if (ir.series) names.push(ir.series);
-  for (const m of ir.measures || []) names.push(m.column);
+  for (const m of ir.measures || []) if (!isMetricMeasure(m)) names.push(m.column);
   for (const f of ir.filters || []) names.push(f.column);
   return names;
 }
 
 function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   if (!ir || typeof ir !== 'object' || !Array.isArray(ir.measures) || !Array.isArray(ir.filters)) return refuse('badQuery');
+  // A layer's metric has no SQL here: aggregating a table ourselves would go around the layer (part 7, D12).
+  const metric = ir.measures.find(isMetricMeasure);
+  if (metric) return refuseLayer('metricOnTable', { dataset: '', layer: '', metric: metric.metric });
+  const ms = ir.measures as LiveColumnMeasure[];
   const d = dialectFor(env.dialect);
   if (!d) return refuse('badQuery');
   const columns = Array.isArray(env.columns) ? env.columns : [];
@@ -143,14 +154,14 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
     if (badName(name)) return refuse('badIdentifier');
     if (!columnOf(columns, name)) return refuse('unknownColumn', name);
   }
-  for (const m of ir.measures) {
+  for (const m of ms) {
     if (!LIVE_AGGS.has(m.aggregation)) return refuse('unknownAggregation', String(m.aggregation));
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
   const from = fromItem(d, env.source);
   if (isRefusal(from)) return from;
-  return { c: { d, b: new ParamSink(), columns }, from, base: env.base ?? [] };
+  return { c: { d, b: new ParamSink(), columns }, from, base: env.base ?? [], ms };
 }
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */
@@ -161,7 +172,7 @@ function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
 }
 
 /** The column a measure aggregates: a finite number, for `count` a non-empty flag, for `countd` what it counts. */
-function measureInput(c: Ctx, m: LiveMeasure): string {
+function measureInput(c: Ctx, m: LiveColumnMeasure): string {
   const col = columnOf(c.columns, m.column)!;
   if (m.aggregation === 'countd') return distinctKey(c, col);
   if (m.aggregation !== 'count') return numberOf(c, col);
@@ -169,12 +180,12 @@ function measureInput(c: Ctx, m: LiveMeasure): string {
   return col.type === 'number' ? numberOf(c, col) : `CASE WHEN NOT ${emptyOf(c, col)} THEN 1 END`;
 }
 
-const AGG_OF: Record<Exclude<Part, 'd'>, string> = { s: 'sum', c: 'count', n: 'min', x: 'max' };
+const AGG_OF: Record<Exclude<ColumnPart, 'd'>, string> = { s: 'sum', c: 'count', n: 'min', x: 'max' };
 /** Re-aggregating a part: counts and sums add, minima and maxima stay minima and maxima. A distinct count never does. */
-const REAGG_OF: Record<Exclude<Part, 'd'>, string> = { s: 'sum', c: 'sum', n: 'min', x: 'max' };
+const REAGG_OF: Record<Exclude<ColumnPart, 'd'>, string> = { s: 'sum', c: 'sum', n: 'min', x: 'max' };
 
 /** A part's aggregate over a measure's input `v`. */
-const aggOf = (d: SqlDialect, pt: Part, v: string): string => (pt === 'd' ? d.countDistinct(v) : `${AGG_OF[pt]}(${v})`);
+const aggOf = (d: SqlDialect, pt: ColumnPart, v: string): string => (pt === 'd' ? d.countDistinct(v) : `${AGG_OF[pt]}(${v})`);
 
 // ── One number ───────────────────────────────────────────────────────────────
 
@@ -186,8 +197,8 @@ const aggOf = (d: SqlDialect, pt: Part, v: string): string => (pt === 'd' ? d.co
 export function compileMetric(ir: LiveIR, env: CompileEnv): Compiled {
   const p = prepare(ir, env);
   if (isRefusal(p)) return p;
-  if (ir.measures.length !== 1) return refuse('badQuery');
-  const m = ir.measures[0];
+  if (p.ms.length !== 1) return refuse('badQuery');
+  const m = p.ms[0];
   const v = measureInput(p.c, m);
   const sel: string[] = [];
   const cols: string[] = [];
@@ -291,7 +302,7 @@ function keyExpr(c: Ctx, col: LiveColumn, key: LiveKey): string | LiveRefusal {
 }
 
 /** The first measure's value over a window — the rank a category or a series is ordered by. */
-function totalOver(c: Ctx, m: LiveMeasure, name: (p: Part) => string, partition: string): string {
+function totalOver(c: Ctx, m: LiveColumnMeasure, name: (p: ColumnPart) => string, partition: string): string {
   const w = `OVER (PARTITION BY ${partition})`;
   const d = c.d;
   switch (m.aggregation) {
@@ -332,7 +343,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   if (dated && (ir.order === 'value' || ir.top !== undefined)) return refuse('rankOnDate');
   if (ir.top !== undefined && (!Number.isInteger(ir.top) || ir.top < 1 || ir.order !== 'value')) return refuse('badQuery');
   // Days roll up into a week calendar's periods in ./shape.ts, which no distinct count survives (part 5, D2).
-  if (key.kind === 'days' && ir.measures.some((m) => m.aggregation === 'countd')) return refuse('distinctByWeekCalendar');
+  if (key.kind === 'days' && p.ms.some((m) => m.aggregation === 'countd')) return refuse('distinctByWeekCalendar');
 
   const g = keyExpr(c, catCol, key);
   if (isRefusal(g)) return g;
@@ -354,7 +365,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const where = whereOf(p, ir);
   if (isRefusal(where)) return where;
 
-  const ms = ir.measures;
+  const ms = p.ms;
   const m0 = ms[0];
   const gs = s ? 'lv_g, lv_s' : 'lv_g';
   const base = [`${g} AS lv_g`];
@@ -370,7 +381,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   // of the first measure exactly as `vizData.capText` ranks it.
   let last = 'lv_grp';
   let k = 'lv_g';
-  let part = (i: number, pt: Part): string => `lv_a${i}${pt}`;
+  let part = (i: number, pt: ColumnPart): string => `lv_a${i}${pt}`;
   const text = key.kind === 'text';
   // A distinct count is counted again from rows wherever this statement folds or ranks (./compileDistinct.ts).
   const distinct = ms.some((m) => m.aggregation === 'countd');
