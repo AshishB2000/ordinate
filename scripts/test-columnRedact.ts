@@ -7,7 +7,8 @@
 // - visual:get: a visual on dept keeps its custom order for east; one filtered on ssn values loses the values and its labels.
 // - dataset:columns, sql:schema, describe_dataset: a hidden column is marked `hidden: true` for east, never for hr.
 // - metric:list and term:list: Payroll, Payroll per head and High earners read a hidden column, so `hidden: true` for
-//   east; Headcount is not (CONTROL); nothing is for hr (CONTROL).
+//   east; Headcount is not (CONTROL); nothing is for hr (CONTROL). Part 5's kinds likewise: a distinct count of salary,
+//   a period metric over Payroll (through its base) and a funnel by ssn; a period over Headcount is not (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnRedact.js
@@ -21,6 +22,7 @@ const automation: typeof import('../src/automation/handlers') = require('../src/
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 
 const EXAMPLE = 'EXAMPLE_PAY_52000';
 
@@ -125,6 +127,21 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     const tEast = await flags('east', 'term:list');
     ok('term:list: High earners is hidden: true for east; Ops people is not', tEast['High earners'] === true && 'Ops people' in tEast && tEast['Ops people'] === undefined, JSON.stringify(tEast));
     ok('NEGATIVE CONTROL: no term is hidden for hr', Object.values(await flags('hr', 'term:list')).every((v) => v === undefined));
+    // Part 5's kinds (stored as the release that offers them stores them; metric:save takes none before p5-04): a
+    // distinct count and a funnel name their columns, a period metric reads through its base (by id).
+    const store = async (name: string, definition: object): Promise<string> =>
+      (await W.as('boss', () => metricsMod.saveMetric(P, { name, datasetId: staff, definition } as never)))!.id;
+    const PAYROLL_ID = await W.as('boss', async () => (await metricsMod.metricsByName(P)).get('payroll')!.id);
+    const HEADCOUNT_ID = await W.as('boss', async () => (await metricsMod.metricsByName(P)).get('headcount')!.id);
+    await store('Distinct salaries', { column: 'salary', aggregation: 'countd' });
+    await store('Payroll YTD', { base: PAYROLL_ID, window: { to_date: 'year' } });
+    await store('Headcount YTD', { base: HEADCOUNT_ID, window: { to_date: 'year' } });
+    await store('By ssn funnel', { funnel: { entity: 'ssn', event: 'dept', time: 'employee_id', steps: ['Ops', 'Eng'], window: { n: 7, unit: 'days' } }, show: 'rate' });
+    const kEast = await flags('east', 'metric:list');
+    ok("part 5's kinds: a distinct count of salary, a period over Payroll and a funnel by ssn are hidden: true for east",
+      kEast['Distinct salaries'] === true && kEast['Payroll YTD'] === true && kEast['By ssn funnel'] === true, JSON.stringify(kEast));
+    ok('NEGATIVE CONTROL: a period over Headcount is not hidden for east', 'Headcount YTD' in kEast && kEast['Headcount YTD'] === undefined, JSON.stringify(kEast));
+    ok("NEGATIVE CONTROL: none of part 5's kinds is hidden for hr", Object.values(await flags('hr', 'metric:list')).every((v) => v === undefined));
 
     // ── quality:list and dataset:liveSchema: the whole dataset (closedToCaller) ──
     must('quality', await W.call('boss', 'quality:save', { projectId: P, datasetId: staff, rule: { kind: 'in_set', column: 'ssn', args: { values: [`${C.SSN_CANARY}_0`] }, severity: 'warn' } }));
