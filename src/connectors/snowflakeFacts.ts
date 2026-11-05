@@ -14,20 +14,12 @@
 // of each answer is the column names, lower-cased; a reader finds a field by name. SHOW COLUMNS and SHOW
 // PRIMARY KEYS take no LIMIT (UNVERIFIED): the connector's own row cap bounds what is kept. SHOW TABLES does.
 
-import { attempt, figure, flag, nameParts, splitTop, str } from './factsRead';
+import { attempt, figure, flag, nameParts, records, splitTop, str } from './factsRead';
 import type { FactColumn, FactsQuery, FactsReply, OpenFacts, TableFacts } from './tableFacts';
 
 /** A part of a name that may be quoted without escaping: letters, digits, `_` and `$`, not starting with a digit. */
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
 const SHOW_TABLES_ROWS = 50;
-
-type Named = Record<string, unknown>;
-/** The rows of an answer whose first row is its column names → one object per row. */
-function records(rows: unknown[][] | undefined): Named[] {
-  if (!rows?.length) return [];
-  const head = rows[0].map((h) => str(h).toLowerCase());
-  return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
-}
 
 /** `data_type` is JSON text: {"type":"FIXED","precision":38,"scale":0,...}. NUMBER(p,s) and the rest as describeTable spells them. */
 function typeOf(raw: unknown): string {

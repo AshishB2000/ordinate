@@ -63,6 +63,7 @@ import {
   prop, requestJson, rowCap, secret, shapeClickhouse, shapeDatabricks, str, timeoutError, toCell, type Cell, type HttpResult,
 } from './httpShared';
 import { CLICKHOUSE_LIVE, DATABRICKS_LIVE } from './liveHttp';
+import { chQuery, clickhouseTableFacts } from './httpFacts';
 export { MAX_BYTES, httpRequest, shapeDatabricks } from './httpShared';
 export type { HttpRequestOptions, HttpResult } from './httpShared';
 
@@ -631,6 +632,7 @@ export const CONNECTORS: ConnectorDef[] = [
     ],
     listTables: clickhouseListTables,
     run: clickhouseRun,
+    tableFacts: (ctx, t) => clickhouseTableFacts(t, (read) => read(chQuery(ctx)), { database: str(ctx, 'database', 'default') || 'default' }),
     live: CLICKHOUSE_LIVE, // docs/live-data/00-plan.md D2: ./liveHttp.ts
   },
   {
