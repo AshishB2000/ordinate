@@ -16,6 +16,11 @@
 //               metric and its dataset to needs_review; a refresh and a docs, key, value-label or row-rule edit keep
 //               both certified; so does one on a dataset the figure reaches by the nearest owner (no via).
 //               NEGATIVE CONTROLS: a metric on another dataset, and one after an unrelated dataset's Prepare edit, stay certified.
+//   § kinds     part 5's funnel and period definitions, a snapshot's `per` and a target, and part 7's external
+//               definition and importedFrom, each written as the later release writes it: an edit of each turns a
+//               certified metric to needs_review; a period metric's base is a dep; a Live dataset that gains a
+//               `semantic` block (b0) reads needs_review.
+//               NEGATIVE CONTROLS: a description edit keeps each certified; editing the period metric does not move its base.
 //   § channels  over the route: review hands back the pin certify takes and the newest version key; a stale base is
 //               409 record_changed with the current pin; a refusal is { ok:false, error, field }. A restore never
 //               certifies, and one to other content reads needs_review (control: back to what was certified reads
@@ -153,6 +158,7 @@ async function partPin(): Promise<Fixtures> {
       definition: set('definition', { column: 'qty', aggregation: 'sum' }), filters: set('filters', [EMEA_F]),
       format: set('format', { kind: 'number', decimals: 2, compact: true }), description: set('description', 'other'),
       direction: set('direction', 'down_good'), tree: set('tree', { metricId: FULL, split: 'qty' }), timeColumn: set('timeColumn', 'shipped'),
+      target: set('target', { source: { value: 900 } }), importedFrom: set('importedFrom', { kind: 'dbt', name: 'emea_revenue' }),
       createdAt: set('createdAt', day), updatedAt: set('updatedAt', day), schemaVersion: set('schemaVersion', 2),
     }, () => metrics.getMetric(P, FULL) as Promise<Raw | null>, ['projectId', 'schemaVersion']);
     await tableLoop('term', TERM_PIN, file(P, 'terms', EMEA), `term:${EMEA}`, {
@@ -181,6 +187,7 @@ async function partPin(): Promise<Fixtures> {
       calculatedUnreadable: (r) => { r.calculated = [...r.calculated, 'junk']; },
       maxCacheAgeSec: inLive('maxCacheAgeSec', 60), epoch: inLive('epoch', 5), schemaSyncedAt: inLive('schemaSyncedAt', '2026-02-01T00:00:00.000Z'),
       profile: inLive('profile', {}), missingColumns: inLive('missingColumns', ['gone']), syncAttemptAt: inLive('syncAttemptAt', '2026-02-01T00:00:00.000Z'),
+      semanticPending: set('semantic', { backend: 'dbt' }), // b0: a top-level `semantic` key, read as this flag
     }, liveMeta, ['profile']);
     const linked = await rewritten(file(P, 'datasets', LIVE), (r) => { r.origin.readsTables = ['public.orders']; }, () => pinOf(P, `dataset:${LIVE}`), meta(LIVE));
     ok('linking source tables (origin.readsTables) does not move a Live dataset', linked.took && !linked.moved);
@@ -214,6 +221,52 @@ async function partPin(): Promise<Fixtures> {
   ok('a deleted metric has no pin', (await pin(`metric:${GONE}`)) === null);
   ok('a ref of no status kind has no pin', (await pin(`visual:${ORD}`)) === null);
   return { ORD, CUST, EMEA, LIVE };
+}
+
+async function partKinds(fx: Fixtures): Promise<void> {
+  const P = PROJECT;
+  const FUNNEL = { funnel: { entity: 'customer', event: 'region', time: 'day', steps: ['EU', 'US'], window: { n: 7, unit: 'days' } }, show: 'rate' };
+  const BASE = await as(async () => (await metrics.saveMetric(P, { name: 'Base sales', datasetId: fx.ORD, definition: { column: 'sales', aggregation: 'sum' } }))!.id);
+  const cases: [string, Raw, (r: Raw) => void][] = [
+    ['a funnel definition', FUNNEL, (r) => { r.definition = { ...r.definition, show: 'converted' }; }],
+    ['a period definition', { base: BASE, window: { to_date: 'year' } }, (r) => { r.definition = { ...r.definition, window: { last: 7, unit: 'day' } }; }],
+    ["a snapshot's per", { column: 'sales', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer' } }, (r) => { r.definition.snapshot.per = 'region'; }],
+    ['a target', { column: 'sales', aggregation: 'sum' }, (r) => { r.target = { source: { value: 120 }, per: 'month' }; }],
+    ['an external definition', { external: 'revenue', layer: 'dbt' }, (r) => { r.definition = { external: 'net_revenue', layer: 'dbt' }; }],
+    ['importedFrom', { column: 'sales', aggregation: 'sum' }, (r) => { r.importedFrom = { kind: 'dbt', name: 'net_sales' }; }],
+  ];
+  for (const [label, definition, edit] of cases) {
+    const id = uuid(200 + cases.findIndex((c) => c[0] === label));
+    const f = await as(async () => file(P, 'metrics', id));
+    const now = '2026-01-01T00:00:00.000Z';
+    writeRaw(f, { id, projectId: P, name: `Kind ${label}`, datasetId: fx.ORD, definition, filters: [], createdAt: now, updatedAt: now, schemaVersion: 1,
+      ...(label === 'a target' ? { target: { source: { value: 100 } } } : label === 'importedFrom' ? { importedFrom: { kind: 'dbt', name: 'sales' } } : {}) });
+    const ref = `metric:${id}`;
+    const stored = await as(() => metrics.getMetric(P, id));
+    ok(`${label}: the stored record reads back as written`, stableStringify(stored?.definition) === stableStringify(definition), JSON.stringify(stored?.definition));
+    await as(async () => store.certify(P, ref, (await pinOf(P, ref))!, ''));
+    const state = async (): Promise<string | undefined> => (await as(() => store.statusFor(P)(ref)))?.state;
+    const kept = await rewritten(f, (r) => { r.description = 'reworded'; }, async () => (await state()) ?? null, () => as(() => metrics.getMetric(P, id)));
+    ok(`NEGATIVE CONTROL: ${label}: a description edit keeps it certified`, !kept.moved && kept.took && (await state()) === 'certified');
+    const r = JSON.parse(fs.readFileSync(f, 'utf8')) as Raw;
+    edit(r);
+    writeRaw(f, r);
+    ok(`${label}: an edit turns the certified metric to needs_review`, (await state()) === 'needs_review');
+  }
+  const ytd = uuid(201); // the period case: certified again on its current pin, then its base is edited
+  await as(async () => store.certify(P, `metric:${ytd}`, (await pinOf(P, `metric:${ytd}`))!, ''));
+  const basePin = await as(() => pinOf(P, `metric:${BASE}`));
+  await as(() => metrics.updateMetric(P, ytd, { format: { kind: 'number', decimals: 1, compact: false } }));
+  ok('NEGATIVE CONTROL: editing the period metric does not move its base', basePin !== null && basePin === (await as(() => pinOf(P, `metric:${BASE}`))));
+  await as(async () => store.certify(P, `metric:${ytd}`, (await pinOf(P, `metric:${ytd}`))!, ''));
+  await as(() => metrics.updateMetric(P, BASE, { filters: [F0] }));
+  ok("editing a period metric's base turns it to needs_review", (await as(() => store.statusFor(P)(`metric:${ytd}`)))?.state === 'needs_review');
+  const LIVE = `dataset:${fx.LIVE}`;
+  await as(async () => store.certify(P, LIVE, (await pinOf(P, LIVE))!, ''));
+  const layered = await rewritten(await as(async () => file(P, 'datasets', fx.LIVE)), (r) => { r.semantic = { backend: 'dbt' }; },
+    async () => (await as(() => store.statusFor(P)(LIVE)))?.state ?? null, async () => (await as(() => datasets.getDatasetMeta(P, fx.LIVE)))?.live);
+  ok('a Live dataset that starts asking another tool\'s layer (b0) turns from certified to needs_review', layered.moved && layered.took, JSON.stringify(layered));
+  await as(() => store.clearStatus(P, LIVE));
 }
 
 async function partStore(fx: Fixtures): Promise<void> {
@@ -393,6 +446,7 @@ async function partChannels(fx: Fixtures): Promise<void> {
   };
   PROJECT = await as(async () => { await projects.init(); return (await projects.createProject('Governance')).id; });
   const fx = await partPin();
+  await partKinds(fx);
   await partStore(fx);
   await partDatasetDep();
   await partChannels(fx);

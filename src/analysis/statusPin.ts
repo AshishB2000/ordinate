@@ -13,6 +13,10 @@
 //   Catalog   TableDoc (role, key, grain, guide, keyCheck, hierarchies) and ColumnDoc (value labels, display names,
 //             aliases): all out, docs and labels that change no figure
 //   Model     a relationship's ends and cardinality (pin), its label (out)
+// Part 5 and part 7 (kept, not computed, on this release): a funnel, period or external definition and a snapshot's
+// `per` (pin, inside definition; a funnel reads only its own dataset); a period metric's base (a metric dep); a
+// metric's target and importedFrom (pin: a reviewer certified them too); a Live dataset that asks another tool's
+// layer (`semanticPending`, pin: its figures stop being ours).
 
 import { createHash } from 'crypto';
 import * as metrics from './metrics';
@@ -42,6 +46,7 @@ export const METRIC_PIN: Record<keyof Metric, Pin> = {
   filters: 'pin',
   format: 'pin',
   timeColumn: 'pin',
+  target: 'pin', importedFrom: 'pin',
   description: 'out', direction: 'out', tree: 'out',
   createdAt: 'out', updatedAt: 'out', schemaVersion: 'out',
 };
@@ -65,7 +70,7 @@ export const DATASET_PIN: Record<keyof DatasetMeta, Pin> = {
 };
 
 export const LIVE_PIN: Record<keyof LiveSettings, Pin> = {
-  baseFilters: 'pin', baseFiltersUnreadable: 'pin', calculated: 'pin', calculatedUnreadable: 'pin',
+  baseFilters: 'pin', baseFiltersUnreadable: 'pin', calculated: 'pin', calculatedUnreadable: 'pin', semanticPending: 'pin',
   maxCacheAgeSec: 'out', epoch: 'out', schemaSyncedAt: 'out', profile: 'out', missingColumns: 'out', syncAttemptAt: 'out',
 };
 
@@ -148,10 +153,12 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
       if (s.type === 'filter') reads.push(s.column);
     }
   }
-  if (!metrics.isFormulaDefinition(m.definition)) {
-    if (m.definition.column) measures.push(m.definition.column);
-  } else {
-    const compiled = compileMetricFormula(bindFormulaText(m.definition.formula, new Map()).text, own);
+  const def = m.definition;
+  if (metrics.isPeriodDefinition(def)) await dep(`metric:${def.base}`); // its figure is its base metric's, over a window
+  if (metrics.isSimpleDefinition(def)) {
+    if (def.column) measures.push(def.column);
+  } else if (metrics.isFormulaDefinition(def)) {
+    const compiled = compileMetricFormula(bindFormulaText(def.formula, new Map()).text, own);
     if (!compiled.ok) deps.formula = 'uncompiled';
     else {
       measures.push(...compiled.program.aggregates.map((a) => a.column).filter((c) => c[0] !== '{')); // an LOD reads its own dataset
