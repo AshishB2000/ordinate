@@ -13,7 +13,7 @@
 // 3. The guard: every door a question can come through (a chart, a KPI, an answer card with and without
 //    the case-fix lookup, a schema sync, the scheduler's daily sync), "Make a copy" and "Copy the data
 //    instead" refuse typed (`calculated`) and spend no warehouse call, and a copy saves nothing. A stored
-//    list this pod cannot read in full refuses the same. With base filters too, base filters answer first.
+//    list this pod cannot read in full refuses the same. With base filters too (applied since PR 08), the calcs still refuse.
 //    NEGATIVE CONTROL: the same doors answer on a Live dataset with no key, an empty one, a null one, and
 //    on this one once the key is gone.
 //
@@ -128,7 +128,6 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['dataset:syncLiveSchema', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value],
   ];
   const sentence = refusals.liveCalculatedRefused('Margin');
-  const baseSentence = refusals.liveBaseFilterRefused('region');
   ok('the sentence says why and what to do', /calculated fields can't be computed by this server/.test(sentence) && /finish upgrading Ordinate/.test(sentence), sentence);
   ok('the refusal code renders its catalog key with its column', spec.refuse('calculated', 'Margin').message === sentence && spec.refuse('calculated', 'Margin').params.column === 'Margin');
   const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
@@ -205,9 +204,10 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plant(CALCS);
   ok('NEGATIVE CONTROL: a readable list is not marked unreadable', (await meta()).live.calculatedUnreadable === undefined);
 
-  // With base filters too, the order is base filters first (liveTarget, baseFilterRefusal), then calcs.
+  // With base filters too: release A refused both, base filters first. PR 08 applies base filters, so with both stored
+  // the calcs still refuse every door, with their own sentence: a dataset with calcs never answers on this pod.
   await plantKey('baseFilters', BASE);
-  await refusesEverywhere('base filters and calcs together: the base filters answer', 'baseFilter', baseSentence);
+  await refusesEverywhere('base filters and calcs together: the calcs refuse (base filters apply now)');
   await plantKey('baseFilters', undefined);
   await refusesEverywhere('once the base filters are gone, the calcs answer');
 
