@@ -50,3 +50,10 @@ export function modelGuideTooLong(): string {
 export function modelDuplicateId(): string {
   return t('modelFileMessages.another_file_in_the_model_has');
 }
+
+// ── Planning an import (a2) ──────────────────────────────────────────────────
+
+/** A metric or term whose dataset differs in the files: a definition never moves between datasets. */
+export function modelDatasetMoved(): string {
+  return t('modelFileMessages.this_definition_is_on_another_dataset');
+}

@@ -520,6 +520,7 @@
   "modelFileMessages.the_model_files_hold_a_file": "モデルファイルに Ordinate が読み込まないファイル（{name}）が含まれているため、全体を拒否しました。",
   "modelFileMessages.the_model_files_hold_more_values": "モデルファイルに含まれる値が、Ordinate が読み込める数（1,000,000 個）を超えています。",
   "modelFileMessages.these_model_files_use_format_from": "これらのモデルファイルは、より新しいバージョンの Ordinate の形式 {version} を使用しています。インポートするには Ordinate をアップグレードしてください。",
+  "modelFileMessages.this_definition_is_on_another_dataset": "ファイルではこの定義は別のデータセットにあります。インポートでデータセット間を移動することはできません。そちらで新しく作成してください。",
   "modelFileMessages.this_guide_is_longer_than_8": "このガイドは 8,000 文字を超えています。インポートするには短くしてください。",
   "modelFileMessages.this_is_not_a_model_export": "これは Ordinate のモデルエクスポートではありません。model.json がないか、読み込めません。",
   "modelFileMessages.your_access_to_this_project_is": "このプロジェクトへのアクセスは行アクセスルールで制限されているため、定義をエクスポートもインポートもできません。",

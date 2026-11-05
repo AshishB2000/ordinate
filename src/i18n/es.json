@@ -520,6 +520,7 @@
   "modelFileMessages.the_model_files_hold_a_file": "Los archivos del modelo contienen un archivo que Ordinate no lee ({name}): se rechazaron por completo.",
   "modelFileMessages.the_model_files_hold_more_values": "Los archivos del modelo contienen más valores de los que Ordinate lee (más de 1.000.000).",
   "modelFileMessages.these_model_files_use_format_from": "Estos archivos del modelo usan el formato {version}, de una versión más reciente de Ordinate. Actualiza Ordinate para importarlos.",
+  "modelFileMessages.this_definition_is_on_another_dataset": "Esta definición está en otro conjunto de datos en los archivos. Una importación no puede moverla entre conjuntos de datos: crea una nueva allí.",
   "modelFileMessages.this_guide_is_longer_than_8": "Esta guía tiene más de 8.000 caracteres. Acórtala para importarla.",
   "modelFileMessages.this_is_not_a_model_export": "Esto no es una exportación de modelo de Ordinate: falta su model.json o no se puede leer.",
   "modelFileMessages.your_access_to_this_project_is": "Tu acceso a este proyecto está limitado por reglas de acceso a filas, así que sus definiciones no se pueden exportar ni importar.",

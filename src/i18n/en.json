@@ -517,6 +517,7 @@
   "modelFileMessages.the_model_files_hold_a_file": "The model files hold a file Ordinate does not read ({name}). They were refused as a whole.",
   "modelFileMessages.the_model_files_hold_more_values": "The model files hold more values than Ordinate reads (over 1,000,000).",
   "modelFileMessages.these_model_files_use_format_from": "These model files use format {version}, from a newer version of Ordinate. Upgrade Ordinate to import them.",
+  "modelFileMessages.this_definition_is_on_another_dataset": "This definition is on another dataset in the files. An import can't move it between datasets: make a new one there instead.",
   "modelFileMessages.this_guide_is_longer_than_8": "This guide is longer than 8,000 characters. Shorten it to import it.",
   "modelFileMessages.this_is_not_a_model_export": "This is not a model export from Ordinate: its model.json is missing or can't be read.",
   "modelFileMessages.your_access_to_this_project_is": "Your access to this project is limited by row access rules, so its definitions can't be exported or imported.",

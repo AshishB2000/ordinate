@@ -84,16 +84,19 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
- * `o` with every reference in project ids, and the `kind:id` of each that resolves to nothing. A reference to a file
+ * `o` with every reference in project ids, the `kind:id` of each that resolves to nothing (`missing`) and of every one
+ * read, as the files name it (`refs`: what a skip of that object takes down with it). A reference to a file
  * object with no match keeps its file id (it is new; the apply gives it its id), except a dataset, which is missing.
  * Read: `dataset`, `from`/`to.dataset`, filter and base-filter steps' `term`, `via` and `datasetId`, a period
  * definition's `base` and a target's `source.metricId`. A copy: `o` is never touched.
  */
-export function mapRefs<T>(o: T, m: ModelMatch): { value: T; missing: string[] } {
+export function mapRefs<T>(o: T, m: ModelMatch): { value: T; missing: string[]; refs: string[] } {
   const value = JSON.parse(JSON.stringify(o)) as T;
   const missing: string[] = [];
+  const refs: string[] = [];
   const to = (kind: RefKind, id: unknown): unknown => {
     if (typeof id !== 'string') return id;
+    refs.push(`${kind}:${id}`);
     const map = mapOf(m, kind);
     const hit = map.has(id) ? map.get(id) ?? (kind === 'dataset' ? undefined : id) : m.here.has(`${kind}:${id}`) ? id : undefined;
     if (hit === undefined) missing.push(`${kind}:${id}`);
@@ -113,5 +116,5 @@ export function mapRefs<T>(o: T, m: ModelMatch): { value: T; missing: string[] }
   if (isObj(v.definition) && v.definition.base !== undefined) v.definition.base = to('metric', v.definition.base);
   const source = isObj(v.target) ? v.target.source : undefined;
   if (isObj(source) && source.metricId !== undefined) source.metricId = to('metric', source.metricId);
-  return { value, missing };
+  return { value, missing, refs };
 }
