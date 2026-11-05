@@ -13,6 +13,7 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
+const { isDeepStrictEqual }: typeof import('util') = require('util');
 
 process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-part5-readers-'));
 
@@ -27,6 +28,8 @@ const transforms: typeof import('../src/data/transforms') = require('../src/data
 const stepsSanitize: typeof import('../src/data/stepsSanitize') = require('../src/data/stepsSanitize');
 const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
+const versions: typeof import('../src/ipc/versions') = require('../src/ipc/versions');
+const editConflict: typeof import('../src/app/editConflict') = require('../src/app/editConflict');
 const { isPendingError }: typeof import('../src/data/pendingError') = require('../src/data/pendingError');
 
 const COLS = [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] as any; // any: the dataset column shape, as the sibling suites build it
@@ -80,6 +83,41 @@ void (async () => {
   ok('NEGATIVE CONTROL: the Prepare pivot step still refuses countd', typeof stepsSanitize.checkPowerStep({ type: 'pivot', key: 'day', value: 'amount', fn: 'countd' }) === 'string');
   ok('NEGATIVE CONTROL: an unknown aggregation still reads as sum', (metrics.sanitizeDefinition({ column: 'amount', aggregation: 'median' }) as { aggregation: string }).aggregation === 'sum');
   ok('a countd(col) metric formula has no figure on this release', metricFormula.compileMetricFormula('countd(customer_id)', ['customer_id', 'amount', 'day']).ok === false);
+
+  // ── kinds kept: funnel and period definitions, a snapshot's per, a metric's target ──
+  const U1 = '11111111-1111-4111-8111-111111111111';
+  const U2 = '22222222-2222-4222-8222-222222222222';
+  const FUN = { funnel: { entity: 'customer_id', event: 'customer_id', time: 'day', steps: ['visit', 'buy'], window: { n: 7, unit: 'days' } }, show: 'rate' };
+  const PER = { base: U1, window: { to_date: 'year' }, compare: { vs: 'previous_year', show: 'pct_change' } };
+  const SNAP = { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer_id' } };
+  const TARGET = { source: { metricId: U2 }, per: 'month', thresholds: { good: 100, warn: 90 } };
+  const TREE = { relation: 'sum', children: [{ metricId: U1 }, { metricId: U2 }] };
+  const kinds: Record<string, string> = {};
+  for (const [name, definition] of [['Visit → buy', FUN], ['Revenue YTD', PER], ['MRR', SNAP]] as const) {
+    const x = (await metrics.saveMetric(P, { name, datasetId: D, definition, target: TARGET } as never))!;
+    kinds[name] = x.id;
+    await metrics.updateMetric(P, x.id, { name: name + ' (2)' });
+    await metrics.updateMetric(P, x.id, { tree: TREE }, undefined, 'metricTree');
+    const back = (await metrics.getMetric(P, x.id))!, dup = (await metrics.duplicateMetric(P, x.id))!;
+    ok(`${name}: definition survives rename, tree save and duplicate`, isDeepStrictEqual(back.definition, definition) && isDeepStrictEqual(dup.definition, definition), JSON.stringify(back.definition));
+    ok(`${name}: target survives`, isDeepStrictEqual((back as { target?: unknown }).target, TARGET) && isDeepStrictEqual((dup as { target?: unknown }).target, TARGET), JSON.stringify(back));
+    ok(`${name}: sanitizing twice is sanitizing once`, JSON.stringify(metrics.sanitizeDefinition(metrics.sanitizeDefinition(definition))) === JSON.stringify(metrics.sanitizeDefinition(definition)));
+  }
+  // The release-5A editor sends a snapshot without `per` on every save (MetricEditor.tsx): the stored per stays.
+  await metrics.updateMetric(P, kinds.MRR, { definition: { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } } });
+  ok('MRR: an editor that knows no per keeps the stored one', isDeepStrictEqual((await metrics.getMetric(P, kinds.MRR))!.definition, SNAP));
+  ok('a plain metric is byte-identical', JSON.stringify(metrics.sanitizeDefinition({ column: 'amount', aggregation: 'sum' })) === '{"column":"amount","aggregation":"sum"}');
+  ok('a plain snapshot is byte-identical', JSON.stringify(metrics.sanitizeDefinition({ ...SNAP, snapshot: { column: 'day', take: 'last' } })) === '{"column":"amount","aggregation":"sum","snapshot":{"column":"day","take":"last"}}');
+  ok('a metric with no target writes no target key', !('target' in (await metrics.getMetric(P, m.id))!));
+  ok('NEGATIVE CONTROL: a one-step funnel is not a funnel', !('funnel' in metrics.sanitizeDefinition({ ...FUN, funnel: { ...FUN.funnel, steps: ['visit'] } })));
+  ok('NEGATIVE CONTROL: a period metric with neither window nor compare is not one', !('base' in metrics.sanitizeDefinition({ base: U1 })));
+  ok('NEGATIVE CONTROL: last: 0 is refused', !('base' in metrics.sanitizeDefinition({ base: U1, window: { last: 0, unit: 'day' } })));
+  ok('NEGATIVE CONTROL: a target with no source is not a target', !('target' in (await metrics.saveMetric(P, { name: 'No target', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, target: { per: 'month' } } as never))!));
+  const restoredT = (await metrics.getMetric(P, kinds['Revenue YTD']))!;
+  await versions.writeBack(P, 'metric', restoredT.id, { name: 'Revenue YTD', definition: PER, filters: [], format: { kind: 'number', decimals: 0 } });
+  const restored = (await metrics.getMetric(P, restoredT.id))!;
+  ok('a version restore keeps the definition and the target', isDeepStrictEqual(restored.definition, PER) && isDeepStrictEqual((restored as { target?: unknown }).target, TARGET), JSON.stringify(restored));
+  ok('the edit-conflict tag covers target', editConflict.contentTag('metric', restored) !== editConflict.contentTag('metric', { ...restored, target: undefined }));
 
   finish();
 })();

@@ -2,6 +2,7 @@ import { ipcMain } from './bus';
 import { loadPlanContext } from '../analysis/analysisPlan';
 import { mapRoles, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
 import * as metrics from '../analysis/metrics';
+import { pendingMetric } from '../analysis/pendingKinds';
 import { TEMPLATES, templateById } from '../analysis/templates';
 
 // TEMPLATES IPC — the gallery's two channels. NOT an AI path: both work with no
@@ -50,7 +51,7 @@ export function register() {
       // scored highest — the user already said which one is Revenue. Formula
       // metrics are skipped: a role resolves to a COLUMN and a ratio is not one.
       const defined: DefinedMeasure[] = (await metrics.listMetrics(projectId))
-        .filter((m) => m.datasetId === ds.id && !(m.definition as { snapshot?: unknown }).snapshot) // a snapshot's column is not its figure
+        .filter((m) => m.datasetId === ds.id && !(m.definition as { snapshot?: unknown }).snapshot && !pendingMetric(m)) // a snapshot's (or part 5's) column is not its figure
         .map((m) => {
           const def = m.definition as { column?: string };
           return { id: m.id, name: m.name, column: def && def.column ? def.column : '' };

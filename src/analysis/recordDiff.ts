@@ -29,7 +29,7 @@ export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' 
 const CONTENT_KEYS: Record<DiffType, string[]> = {
   dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'],
   visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'],
-  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'tree', 'timeColumn'],
+  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'tree', 'timeColumn', 'target'],
   report: ['name', 'analysisId', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'schedule', 'discussion', 'viewId'],
   // A dataset's version is its PREPARE PIPELINE. The table is data, not a
   // definition — restoring a version never touches the source Parquet. The one
@@ -51,7 +51,7 @@ export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'repor
 export const SAVE_KEYS: Record<SaveKind, readonly string[]> = {
   dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'], // analysis:update
   visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'], // visual:update, not `favorite`
-  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'timeColumn'], // metric:update: no `tree`
+  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'timeColumn', 'target'], // metric:update: no `tree`
   metricTree: ['tree'], // metricTree:save
   report: ['name', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'discussion', 'viewId'], // reports:update: no `schedule`, no `analysisId`
   story: ['name', 'blocks'],
@@ -221,6 +221,7 @@ function diffMetric(a: Rec, b: Rec, parts: string[]): void {
   if ((a.direction || '') !== (b.direction || '')) parts.push('changed which way is good');
   if (!same(a.tree ?? null, b.tree ?? null)) parts.push('changed its tree');
   if ((a.timeColumn || '') !== (b.timeColumn || '')) parts.push('changed the date it counts by');
+  if (!same(a.target ?? null, b.target ?? null)) parts.push('changed its target');
 }
 
 function diffTerm(a: Rec, b: Rec, parts: string[]): void {

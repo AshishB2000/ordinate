@@ -13,7 +13,7 @@ import type { VizEncoding } from './visuals';
 /** The saved metric `metricId` names when it is a SIMPLE snapshot one (its stored column and total are not its figure), else null. */
 export async function snapshotMetric(projectId: string, metricId: unknown): Promise<Metric | null> {
   const m = typeof metricId === 'string' ? await metrics.getMetric(projectId, metricId) : null;
-  return m && !metrics.isFormulaDefinition(m.definition) && m.definition.snapshot ? m : null;
+  return m && metrics.isSimpleDefinition(m.definition) && m.definition.snapshot ? m : null;
 }
 
 /**
@@ -32,7 +32,7 @@ export async function snapshotMeasureRefusal(projectId: string, encoding: VizEnc
 }
 
 /** The measures a chart draws, for the guards here (not metricMeasures.drawnMeasures, which leaves a pivot to its copy): a pivot's values, else its values (only the first under a split, as vizData.buildPivot); none for the grids beside it. */
-function snapshotDrawn(encoding: VizEncoding | null | undefined): VizEncoding['values'] {
+export function snapshotDrawn(encoding: VizEncoding | null | undefined): VizEncoding['values'] {
   if (!encoding || encoding.cohort || encoding.eventFunnel || encoding.drivers) return [];
   const all = encoding.pivot ? encoding.pivot.values : encoding.values;
   return Array.isArray(all) ? (encoding.series && !encoding.pivot ? all.slice(0, 1) : all) : [];

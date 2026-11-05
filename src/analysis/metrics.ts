@@ -33,6 +33,9 @@ import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
 import { mergeSnapshot } from './snapshot';
 import type { MetricSnapshot } from './snapshot';
+import { sanitizeFunnelDefinition, type MetricFunnelDefinition } from './funnelMetric';
+import { sanitizePeriodDefinition, type MetricPeriodDefinition } from './periodMetric';
+import { sanitizeTarget, type MetricTargetSpec } from './metricTarget';
 import type { TreeNode } from './metricTree';
 import { logger } from '../app/logger';
 
@@ -71,11 +74,15 @@ export interface MetricFormulaDefinition {
   formula: string;
 }
 
-export type MetricDefinition = MetricSimpleDefinition | MetricFormulaDefinition;
+/** Funnel and period kinds (part 5) are written by a later release; this one keeps them and computes neither (./pendingKinds). */
+export type MetricDefinition = MetricSimpleDefinition | MetricFormulaDefinition | MetricFunnelDefinition | MetricPeriodDefinition;
 
 export function isFormulaDefinition(d: MetricDefinition): d is MetricFormulaDefinition {
   return typeof (d as MetricFormulaDefinition).formula === 'string';
 }
+export const isSimpleDefinition = (d: MetricDefinition): d is MetricSimpleDefinition => 'column' in d;
+export const isFunnelDefinition = (d: MetricDefinition): d is MetricFunnelDefinition => 'funnel' in d;
+export const isPeriodDefinition = (d: MetricDefinition): d is MetricPeriodDefinition => 'base' in d;
 
 export interface Metric {
   id: string;
@@ -98,6 +105,8 @@ export interface Metric {
   tree?: TreeNode;
   /** The date column this metric counts by (semantic D9). Absent = no opinion. */
   timeColumn?: string;
+  /** What it is measured against (part 5, D12). Written by a later release; kept by this one, shown nowhere. */
+  target?: MetricTargetSpec;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
@@ -174,6 +183,8 @@ export function sanitizeDefinition(raw: unknown, stored?: unknown): MetricDefini
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const formula = trimTo(o.formula, MAX_FORMULA);
   if (formula) return { formula };
+  const kind = sanitizeFunnelDefinition(o) ?? sanitizePeriodDefinition(o);
+  if (kind) return kind;
   const column = typeof o.column === 'string' ? o.column : '';
   const aggregation: MetricAggregation = isAggregation(o.aggregation) ? o.aggregation : 'sum';
   const snapshot = mergeSnapshot(o.snapshot, stored);
@@ -244,6 +255,8 @@ function normalize(data: any, projectId: string): Metric {
   if (tree) m.tree = tree;
   const timeColumn = trimTo(data.timeColumn, MAX_TIME_COLUMN);
   if (timeColumn) m.timeColumn = timeColumn;
+  const target = sanitizeTarget(data.target);
+  if (target) m.target = target;
   return m;
 }
 

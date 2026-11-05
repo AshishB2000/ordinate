@@ -9,7 +9,6 @@
 // table the KPI totals it from — a forward join's, not only the card's.
 
 import * as metrics from '../analysis/metrics';
-import { isFormulaDefinition } from '../analysis/metrics';
 import { withheldColumns } from '../app/sharePolicy';
 import { metricColumnOwner } from '../ipc/relationships';
 import { kpiMeasure } from './publishMessages';
@@ -28,7 +27,7 @@ export async function kpiSubtitle(
   let { datasetId, column, aggregation } = card;
   if (viaMetric && card.metricId) {
     const metric = await metrics.getMetric(projectId, card.metricId);
-    if (!metric || isFormulaDefinition(metric.definition)) return '';
+    if (!metric || !metrics.isSimpleDefinition(metric.definition)) return '';
     datasetId = metric.datasetId;
     ({ column, aggregation } = metric.definition);
   }

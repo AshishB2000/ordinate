@@ -28,6 +28,7 @@
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isFormulaDefinition } from './metrics';
+import { pendingSentence } from './pendingKinds';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
 import type { MetricAggregation } from './metricValue';
@@ -71,7 +72,7 @@ export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]
 
 /** Whether a simple metric reads other rows than its column's plain total: its own filters, or a snapshot's day. */
 export function needsMetricPlan(m: Metric): boolean {
-  return m.filters.length > 0 || (!isFormulaDefinition(m.definition) && !!m.definition.snapshot);
+  return m.filters.length > 0 || (metrics.isSimpleDefinition(m.definition) && !!m.definition.snapshot);
 }
 
 /** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}` (typed when `live`). */
@@ -85,7 +86,7 @@ class PlanError extends Error {
 async function pivotSnapshot(projectId: string, encoding: VizEncoding | null | undefined): Promise<Metric | null> {
   for (const v of encoding?.pivot && Array.isArray(encoding.pivot.values) ? encoding.pivot.values : []) {
     const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m && !isFormulaDefinition(m.definition) && m.definition.snapshot) return m;
+    if (m && metrics.isSimpleDefinition(m.definition) && m.definition.snapshot) return m;
   }
   return null;
 }
@@ -108,7 +109,7 @@ export function drawnMeasures(encoding: VizEncoding | null | undefined): VizMeas
  * (no metric, another dataset's, a formula, no column of its own, or not a drawn measure).
  */
 export function followedDefinition(m: Metric | null | undefined, datasetId: string, encoding: VizEncoding, i: number): MetricSimpleDefinition | null {
-  if (!m || m.datasetId !== datasetId || isFormulaDefinition(m.definition) || !m.definition.column) return null;
+  if (!m || m.datasetId !== datasetId || !metrics.isSimpleDefinition(m.definition) || !m.definition.column) return null;
   return i < drawnMeasures(encoding).length ? m.definition : null;
 }
 
@@ -171,12 +172,12 @@ export async function planMetricMeasures(
 
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
-    if (!isFormulaDefinition(m.definition)) {
+    if (metrics.isSimpleDefinition(m.definition)) {
       const snap = m.definition.snapshot;
       if (snap) await checkSnapshot(m, snap);
       return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name, snap) : null;
     }
-    if (depth > MAX_DEPTH) return null;
+    if (depth > MAX_DEPTH || !isFormulaDefinition(m.definition)) return null;
     if (!columns) columns = ((await datasets.getDatasetMeta(projectId, datasetId))?.columns ?? []).map((c) => c.name);
     const compiled = compileMetricFormula(bindFormulaText(m.definition.formula, params).text, columns);
     if (!compiled.ok) {
@@ -222,6 +223,7 @@ export async function planMetricMeasures(
         if (root) plan.formulas.set(i, { name: m.name, root });
         continue;
       }
+      if (!metrics.isSimpleDefinition(m.definition)) throw new PlanError(pendingSentence(m)); // part 5's kinds
       // A snapshot with no column of its own has no figure (as its KPI), never its stored copy summed over every date.
       const def = followedDefinition(m, datasetId, encoding, i) ?? (m.datasetId === datasetId && m.definition.snapshot ? m.definition : null);
       if (!def) continue; // another dataset's, or no column of its own: the stored copy, as before
@@ -243,7 +245,7 @@ export async function planMetricMeasures(
     }
     // A filtered simple metric is one leaf under its own filters; values[i] holds its metric's column and aggregation.
     for (const [i, m] of filtered) {
-      const snap = isFormulaDefinition(m.definition) ? undefined : m.definition.snapshot;
+      const snap = metrics.isSimpleDefinition(m.definition) ? m.definition.snapshot : undefined;
       plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name, snap), simple: true });
     }
   } catch (err) {
