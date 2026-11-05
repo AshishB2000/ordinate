@@ -134,6 +134,7 @@ describe('The Data model: the test chat', () => {
     await within(s).findByText('Fine.');
     expect(within(s).queryByText(/no model call|The model, with/)).toBeNull();
     expect(s.textContent).toContain('Spec: Orders · sum of net_amount by region');
+    expect(await within(s).findByRole('button', { name: 'Save as verified' })).toBeTruthy(); // the card's, with the question before it
   }, 30_000);
 
   it('NEGATIVE CONTROL: a viewer sees no test chat and makes no copilot: call', async () => {

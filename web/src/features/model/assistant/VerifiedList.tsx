@@ -91,7 +91,7 @@ export function VerifiedList({ projectId, canEdit }: { projectId: string; canEdi
   else if (!list.length) {
     body = (
       <EmptyState icon="circle-check" heading={3} title="No verified questions yet">
-        A verified question is answered the team’s way every time, by the app, without a model.
+        A verified question is answered the team’s way every time, by the app, without a model. Try a question below and save a good answer as verified.
       </EmptyState>
     );
   } else {
