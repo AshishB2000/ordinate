@@ -1,4 +1,5 @@
 import { t } from '../app/i18n';
+import { CALC_KIND_NAMES } from './tableCalc';
 // What the measure editor and a chart say when a calculated measure cannot be
 // computed — MAIN, through the catalog. Its own file so the i18n extractor scans
 // only sentences (as engine/liveQueryMessages.ts). Each is a whole sentence the
@@ -155,4 +156,10 @@ export function periodOwnDate(): string {
 /** A compare with no window and no period in scope: nothing to compare with. */
 export function pickPeriodToCompare(): string {
   return t('metricCheckMessages.pick_a_period_to_compare');
+}
+
+/** A period metric on a date axis is one resolution per bucket, at most 24 (part 5, D10). `calc`: the Moving sum calculation's name. */
+export function periodTooManyBuckets(name: string, grain: string, n: number): string {
+  const calc = CALC_KIND_NAMES.moving_sum;
+  return t('metricCheckMessages.by_needs_points_and_a_period', { name, grain, n, calc });
 }

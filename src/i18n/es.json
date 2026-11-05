@@ -448,6 +448,7 @@
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Una medida calculada aún no se puede dibujar como múltiplos pequeños. Quita el campo de múltiplos pequeños o mide una columna.",
   "metricCheckMessages.a_period_metric_can_t_be": "Una métrica de periodo no se puede crear a partir de otra métrica de periodo.",
   "metricCheckMessages.a_period_metric_counts_by_its": "Una métrica de periodo cuenta por la fecha de su métrica base.",
+  "metricCheckMessages.by_needs_points_and_a_period": "{name} por {grain} necesita {n} puntos, y una métrica de periodo se representa con 24 como máximo. Usa una fecha menos detallada o representa su métrica base con {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} no se puede mostrar como {calc} a lo largo de fechas: es una instantánea, y una instantánea no se puede sumar a lo largo del tiempo.",
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} no se puede mostrar como {calc}: no se puede sumar, así que un total sería incorrecto.",
   "metricCheckMessages.counts_by_and_by_so_one": "«{a}» cuenta por {aDate} y «{b}» por {bDate}, así que un mismo intervalo de fechas no puede aplicarse a ambas. Dales la misma fecha o ponlas en dos gráficos.",

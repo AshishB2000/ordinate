@@ -448,6 +448,7 @@
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "計算メジャーは、まだスモールマルチプルとして描画できません。スモールマルチプルのフィールドを外すか、列を集計してください。",
   "metricCheckMessages.a_period_metric_can_t_be": "期間メトリックを別の期間メトリックの上に作ることはできません。",
   "metricCheckMessages.a_period_metric_counts_by_its": "期間メトリックは、ベースのメトリックの日付で集計します。",
+  "metricCheckMessages.by_needs_points_and_a_period": "{grain}ごとの{name}には{n}個のポイントが必要ですが、期間メトリックのグラフは最大24個までです。より粗い日付を使うか、ベースのメトリックを{calc}でグラフにしてください。",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure}は日付に沿って{calc}として表示できません。スナップショットであり、スナップショットは時間をまたいで合計できません。",
   "metricCheckMessages.can_t_be_shown_as_it": "{measure}は{calc}として表示できません。合計できないため、その合計は誤りになります。",
   "metricCheckMessages.counts_by_and_by_so_one": "「{a}」は{aDate}で、「{b}」は{bDate}で集計されるため、1 つの日付範囲を両方に適用することはできません。同じ日付に揃えるか、2 つのグラフに分けてください。",

@@ -448,6 +448,7 @@
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Eine berechnete Kennzahl kann noch nicht als Small Multiples gezeichnet werden. Entfernen Sie das Small-Multiples-Feld oder messen Sie eine Spalte.",
   "metricCheckMessages.a_period_metric_can_t_be": "Eine Zeitraum-Metrik kann nicht auf einer anderen Zeitraum-Metrik aufbauen.",
   "metricCheckMessages.a_period_metric_counts_by_its": "Eine Zeitraum-Metrik zählt nach dem Datum ihrer Basismetrik.",
+  "metricCheckMessages.by_needs_points_and_a_period": "{name} nach {grain} braucht {n} Punkte, und eine Zeitraum-Metrik wird mit höchstens 24 dargestellt. Verwenden Sie ein gröberes Datum oder stellen Sie ihre Basismetrik mit {calc} dar.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} kann nicht als {calc} über Datumswerte angezeigt werden: Es ist ein Stichtagswert, und ein Stichtagswert lässt sich nicht über die Zeit aufsummieren.",
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} kann nicht als {calc} angezeigt werden: Es lässt sich nicht aufsummieren, daher wäre eine Summe davon falsch.",
   "metricCheckMessages.counts_by_and_by_so_one": "„{a}“ zählt nach {aDate} und „{b}“ nach {bDate}, daher kann nicht ein Datumsbereich für beide gelten. Geben Sie beiden dasselbe Datum oder zeigen Sie sie in zwei Diagrammen.",

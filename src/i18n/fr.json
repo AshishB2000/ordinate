@@ -448,6 +448,7 @@
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Une mesure calculée ne peut pas encore être dessinée en petits multiples. Retirez le champ des petits multiples, ou mesurez une colonne.",
   "metricCheckMessages.a_period_metric_can_t_be": "Une métrique de période ne peut pas reposer sur une autre métrique de période.",
   "metricCheckMessages.a_period_metric_counts_by_its": "Une métrique de période compte selon la date de sa métrique de base.",
+  "metricCheckMessages.by_needs_points_and_a_period": "{name} par {grain} demande {n} points, et une métrique de période se trace sur 24 au plus. Utilisez une date moins fine, ou tracez sa métrique de base avec {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} ne peut pas être affiché comme {calc} au fil des dates : c’est un instantané, et un instantané ne s’additionne pas dans le temps.",
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} ne peut pas être affiché comme {calc} : il ne s’additionne pas, donc son total serait faux.",
   "metricCheckMessages.counts_by_and_by_so_one": "« {a} » compte selon {aDate} et « {b} » selon {bDate} ; une même plage de dates ne peut donc pas s’appliquer aux deux. Donnez-leur la même date, ou placez-les dans deux graphiques.",

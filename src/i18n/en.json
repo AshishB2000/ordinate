@@ -445,6 +445,7 @@
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "A calculated measure cannot be drawn as small multiples yet. Remove the small-multiples field, or measure a column.",
   "metricCheckMessages.a_period_metric_can_t_be": "A period metric can’t be built on another period metric.",
   "metricCheckMessages.a_period_metric_counts_by_its": "A period metric counts by its base metric’s date.",
+  "metricCheckMessages.by_needs_points_and_a_period": "{name} by {grain} needs {n} points, and a period metric charts at most 24. Use a coarser date, or chart its base with {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} can't be shown as {calc} along dates: it is a snapshot, and a snapshot can't be added up across time.",
   "metricCheckMessages.can_t_be_shown_as_it": "{measure} can't be shown as {calc}: it can't be added up, so a total of it would be wrong.",
   "metricCheckMessages.counts_by_and_by_so_one": "“{a}” counts by {aDate} and “{b}” by {bDate}, so one date range cannot apply to both. Give them the same date, or put them on two charts.",
