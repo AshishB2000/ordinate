@@ -7,31 +7,16 @@ import { PHONE_QUERY } from '../../ui/Dialog';
 import { toast } from '../../ui/Toast';
 import { PointSheet } from '../dashboards/phone/PointSheet';
 import { serverLabel } from '../analyses/VisualTile';
-import type { Encoding, Preview } from '../visuals/api';
-import { DRILL_FAILED, drillDown } from '../visuals/drill/drillApi';
+import type { Preview } from '../visuals/api';
+import { DRILL_FAILED, drillableAxis, drillDown } from '../visuals/drill/drillApi';
 import { markAt } from '../visuals/drill/mark';
 import type { PanelMark } from '../visuals/facets/FacetGrid';
 import { liveFilters } from '../visuals/filters/filterText';
-import { DRILL_CHART_TYPES, grainWord, nextGrain, nextLevel, type NavHierarchy } from '../../../../src/analysis/drillLevels.ts';
+import type { NavHierarchy } from '../../../../src/analysis/drillLevels.ts';
 import type { DateGrain } from '../../../../src/analysis/categoryKey.ts';
 import { questionTitle, type Question } from './spec';
 
-/** What a drill would go to, in the words the sheet uses ("by state", "by month"), or null: the click stays inert. */
-export function drillableAxis(a: {
-  chartType: string;
-  encoding: Encoding;
-  category: Preview['category'];
-  hierarchies: readonly NavHierarchy[];
-  ladder: readonly DateGrain[];
-}): { next: string; word: string } | null {
-  if (!DRILL_CHART_TYPES.has(a.chartType)) return null;
-  if (a.category?.kind === 'date') {
-    const next = nextGrain(a.ladder, a.category.grain as DateGrain);
-    return next ? { next, word: grainWord(next, a.ladder) } : null;
-  }
-  const down = nextLevel(a.hierarchies, a.encoding.category);
-  return down ? { next: down.next, word: down.next } : null;
-}
+export { drillableAxis };
 
 export interface DrillProps {
   projectId: string;

@@ -12,7 +12,7 @@ import { Icon } from '../../ui/icons/Icon';
 import type { Card, Layout, VisualDef } from '../analyses/api';
 import type { EditorApi } from '../analyses/editor/context';
 import { clickFilterOn, type ClickMark } from '../analyses/editor/filters';
-import { mergeFilters, VisualTileBody } from '../analyses/VisualTile';
+import { mergeFilters, VisualTileBody, type MarkInfo } from '../analyses/VisualTile';
 import { kpiDrillTarget } from '../analyses/editor/MetricCard';
 import { AlertDialog, subjectOf, type AlertSubject } from './AlertDialog';
 import { DrillPanel, type DrillTarget } from '../visuals/drill/DrillPanel';
@@ -27,7 +27,8 @@ import { pinsOn } from './CommentsPanel';
 import { presentRow } from './DashboardChrome';
 import { pivotToCsv, pivotToTsv, saveText } from './pivotExport';
 import { actionMenu, actionsOf, TooltipVisual, useRunAction } from './tileActions';
-import { drillSteps } from './tileDrill';
+import { drilledDef, drillSteps } from './tileDrill';
+import { useTileDrill, type DrillOffer } from './useTileDrill';
 import { isPhoneReader } from './phone/phoneBlocks';
 import { IS_MAC } from '../palette/registry';
 import { PointSheet, type PointAction } from './phone/PointSheet';
@@ -114,8 +115,10 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
     return () => window.removeEventListener('resize', fit);
   }, [presenting, rows, gridRef]);
 
-  const menu = (card: Card, def: VisualDef | undefined): MenuEntry[] => {
+  const menu = (card: Card, saved: VisualDef | undefined): MenuEntry[] => {
     const out: MenuEntry[] = [];
+    // A drilled tile's actions act on what it shows.
+    const def = saved && drilledDef(saved, ed.view.drills.get(card.id));
     // An alert is saved to the project (`alerts:save` is a write): not a viewer's.
     if (card.type === 'metric' && ed.writer) {
       out.push({
@@ -188,9 +191,9 @@ export function clickColumns(ed: EditorApi, def: VisualDef): { column: string; s
 export function VisualCard({
   ed,
   card,
-  def,
+  def: saved,
   asTable,
-  onMark,
+  onMark: clickFilter,
 }: {
   ed: EditorApi;
   card: Card;
@@ -199,6 +202,10 @@ export function VisualCard({
   onMark?: (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }, drawn?: ClickMark['drawn']) => void;
 }) {
   const run = useRunAction(ed);
+  // A drilled tile: its own definition and crumbs. It filters nothing and pins nothing (the pins name the saved level's points).
+  const tile = useTileDrill(ed, card, saved);
+  const def = tile.def;
+  const onMark = tile.drilled ? undefined : clickFilter;
   const actions = actionsOf(card);
   const clicks = actions.filter((a) => a.trigger === 'click' && a.kind !== 'tooltip_visual');
   const tip = actions.find((a) => a.kind === 'tooltip_visual' && a.tooltipVisualId);
@@ -206,7 +213,7 @@ export function VisualCard({
   const filters = tileFilters(ed, card.id);
   // The card's comment pins, drawn by the chart engine's annotations (commentStore.ts cmtWithPins).
   const comments = useComments(ed.projectId);
-  const pins = pinsOn(comments.data?.comments, 'card', card.id);
+  const pins = tile.drilled ? [] : pinsOn(comments.data?.comments, 'card', card.id);
   const drawn = useMemo(
     () => (pins.length ? { ...def, overrides: { ...def.overrides, commentPins: pins, commentPinTarget: { kind: 'card', id: card.id } } } : def),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pins compared by value
@@ -240,16 +247,17 @@ export function VisualCard({
     () => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : hint ? { ...compared, overrides: { ...compared.overrides, tooltipHint: hint } } : compared),
     [compared, phone, hint],
   );
-  const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string; drawn?: ClickMark['drawn'] } | null>(null);
+  const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string; drawn?: ClickMark['drawn']; drill?: DrillOffer | null } | null>(null);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   // A right-click on a bar or a point: its context menu, then a panel. Apart from the left click above.
-  const [pointMenu, setPointMenu] = useState<{ x: number; y: number; point: ChartPoint; time: boolean } | null>(null);
+  const [pointMenu, setPointMenu] = useState<{ x: number; y: number; point: ChartPoint; time: boolean; shown: string; drill: DrillOffer | null } | null>(null);
   const [explain, setExplain] = useState<ExplainTarget | null>(null);
   const rowsAt = (p: ChartPoint) => setDrill(drillTarget(ed, card.id, def, { category: p.bucket, ...(def.encoding.series && p.series ? { series: p.series } : {}) }));
   const pointItems: MenuEntry[] = pointMenu
     ? [
-        { label: 'Show the rows behind this point', icon: 'table', onSelect: () => rowsAt(pointMenu.point) },
+        ...(pointMenu.drill ? [{ label: `Drill into ${pointMenu.shown} · by ${pointMenu.drill.word}`, icon: 'arrow-down', onSelect: pointMenu.drill.run } as MenuEntry] : []),
+        { label: `Show the rows behind ${pointMenu.shown}`, icon: 'table', onSelect: () => rowsAt(pointMenu.point) },
         // Only a point on a time axis has a period before it to compare with (the server says which axes are).
         ...(pointMenu.time && explainable(def) ? [{ label: 'Explain this change', icon: 'activity', onSelect: () => setExplain(explainTarget(ed, card.id, def, pointMenu.point)) } as MenuEntry] : []),
       ]
@@ -259,6 +267,7 @@ export function VisualCard({
     const out: PointAction[] = [];
     const col = def.encoding.category;
     const series = def.encoding.series && at.point.series ? at.point.series : undefined;
+    if (at.drill) out.push({ label: `Drill into ${at.shown}`, hint: `By ${at.drill.word}, on this chart only`, icon: 'arrow-down', run: at.drill.run });
     if (onMark && col) {
       const now = picked(col) ?? [];
       const on = now.some((v) => String(v) === String(at.value));
@@ -276,33 +285,55 @@ export function VisualCard({
   };
   const mark = clicks.length
     ? (v: string | number) => clicks.forEach((a) => run(a, card, def, v))
-    : (onMark ?? ((v: string | number, series?: string) => setDrill(drillTarget(ed, card.id, def, { category: v, ...(def.encoding.series && series ? { series } : {}) }))));
+    : (onMark ??
+      // D7: the tile's own actions, click-to-filter, then a drillable mark's point menu, else the rows behind it.
+      ((v: string | number, series?: string, e?: { clientX: number; clientY: number }, _drawn?: unknown, info?: MarkInfo) => {
+        const rows = () => setDrill(drillTarget(ed, card.id, def, { category: v, ...(def.encoding.series && series ? { series } : {}) }));
+        if (!e || !info) return rows();
+        const { clientX: x, clientY: y } = e;
+        void tile.offer({ category: v, series, ...info }).then((drill) => (drill ? setPointMenu({ x, y, point: { bucket: String(v), ...(series ? { series } : {}) }, time: info.time, shown: info.shown, drill }) : rows()));
+      }));
   return (
     <>
-      <VisualTileBody
-        projectId={ed.projectId}
-        def={drawnHere}
-        onSwitch={ed.writer && !ed.readOnly ? (e) => void switchEncoding(e) : undefined}
-        filters={filters}
-        params={ed.params}
-        asTable={asTable}
-        onMark={mark}
-        filterMark={!!onMark && !clicks.length}
-        // A map has no Chart.js marks: a clicked region or point runs the tile's click actions, else joins the
-        // sheet's selection (tileActions.ts wireTileActions, cv-mark-click).
-        onMapMark={(column, category) => {
-          if (clicks.length) return clicks.forEach((a) => run(a, card, def, category));
-          const col = column || def.encoding.category;
-          if (col) ed.view.toggleSelection({ type: 'filter', column: col, op: '=', value: category });
-        }}
-        onPinAt={(category, series) => ed.view.openComments({ kind: 'card', id: card.id, point: { label: String(category), ...(series ? { series } : {}) } })}
-        onHover={tip ? (category, e, drawn) => setHover(category === null ? null : { category, drawn, x: e.clientX, y: e.clientY }) : undefined}
-        // The drill names a mark as the SERVER labelled it ("2025-03", not the axis's "Mar 2025"): a dated bar resolves to its dates.
-        serverMark={!onMark && !clicks.length}
-        onMarkMenu={(point, e, time) => setPointMenu({ x: e.clientX, y: e.clientY, point, time })}
-        // The author's own click actions still run on a tap: they chose what a click does.
-        onMarkTap={phone && !clicks.length ? (point, time, value, shown, drawn) => setTap({ point, time, value, shown, drawn }) : undefined}
-      />
+      <div className={tile.drilled ? s.drilled : s.plain}>
+        {tile.crumbs}
+        <div className={tile.drilled ? s.drilledBody : s.plain}>
+          <VisualTileBody
+            projectId={ed.projectId}
+            def={drawnHere}
+            onSwitch={ed.writer && !ed.readOnly ? (e) => void switchEncoding(e) : undefined}
+            filters={filters}
+            params={ed.params}
+            asTable={asTable}
+            onMark={mark}
+            filterMark={!!onMark && !clicks.length}
+            // A map has no Chart.js marks: a clicked region or point runs the tile's click actions, else joins the
+            // sheet's selection (tileActions.ts wireTileActions, cv-mark-click).
+            onMapMark={(column, category) => {
+              if (clicks.length) return clicks.forEach((a) => run(a, card, def, category));
+              const col = column || def.encoding.category;
+              if (col) ed.view.toggleSelection({ type: 'filter', column: col, op: '=', value: category });
+            }}
+            onPinAt={tile.drilled ? undefined : (category, series) => ed.view.openComments({ kind: 'card', id: card.id, point: { label: String(category), ...(series ? { series } : {}) } })}
+            onHover={tip ? (category, e, drawn) => setHover(category === null ? null : { category, drawn, x: e.clientX, y: e.clientY }) : undefined}
+            // The drill names a mark as the SERVER labelled it ("2025-03", not the axis's "Mar 2025"): a dated bar resolves to its dates.
+            serverMark={!onMark && !clicks.length}
+            onMarkMenu={(point, e, time, info) => {
+              const { clientX: x, clientY: y } = e;
+              void tile.offer({ category: point.bucket, series: point.series, ...info }).then((drill) => setPointMenu({ x, y, point, time, shown: info.shown, drill }));
+            }}
+            // The author's own click actions still run on a tap: they chose what a click does.
+            onMarkTap={
+              phone && !clicks.length
+                ? (point, time, value, shown, drawn, grain) => {
+                    setTap({ point, time, value, shown, drawn });
+                    void tile.offer({ category: point.bucket, series: point.series, shown, time, grain }).then((drill) => setTap((t) => (t && t.point === point ? { ...t, drill } : t)));
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </div>
       {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.drawn?.series ?? tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} onClose={() => setTap(null)} />}
       <PointMenu key={pointMenu ? `${pointMenu.x}:${pointMenu.y}` : ''} at={pointMenu} items={pointItems} label="Chart point actions" onClose={() => setPointMenu(null)} />
       {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
