@@ -77,13 +77,31 @@ describe('a glossary term in the filter rows', () => {
     expect(onChange).toHaveBeenLastCalledWith([F]);
   });
 
-  it('Add term → EMEA appends the reference', async () => {
-    serveRpc({ 'term:list': LIST });
+  it('asks term:list only when the picker opens, then appends the reference', async () => {
+    const calls = serveRpc({ 'term:list': LIST });
     const onChange = draw([F]);
     const add = await screen.findByRole('button', { name: 'Add term' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls.some((c) => c.channel === 'term:list')).toBe(false);
     fireEvent.pointerDown(add, { button: 0, ctrlKey: false });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'EMEA' }));
+    expect(calls.filter((c) => c.channel === 'term:list')).toHaveLength(1);
     expect(onChange).toHaveBeenLastCalledWith([F, { type: 'term', term: EMEA }]);
+  });
+
+  it('an empty glossary opens to a designed empty state that points to the Glossary tab', async () => {
+    serveRpc({ 'term:list': { body: { ok: true, terms: [] } }, 'projects:roles': { body: { p: 'editor' } } });
+    draw([F]);
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Add term' }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText('No glossary terms yet')).toBeTruthy();
+    expect(screen.queryByRole('menuitem')).toBeNull();
+  });
+
+  it('a term step with no picker open still names itself (one term:list from its chip)', async () => {
+    const calls = serveRpc({ 'term:list': LIST });
+    draw([F, TERM]);
+    expect(await screen.findByText('EMEA')).toBeTruthy();
+    expect(calls.filter((c) => c.channel === 'term:list')).toHaveLength(1);
   });
 
   it('NEGATIVE CONTROL: a term’s own filters offer no term', async () => {

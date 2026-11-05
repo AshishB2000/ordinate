@@ -11,9 +11,9 @@ import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../api';
 import type { Column } from '../model';
 import { isKeptStep, KEPT_STEP_WORDS } from '../keptStep';
-import { Menu } from '../../../ui/Menu';
 import { TermChip } from '../../model/terms/TermChip';
-import { termIdOf, useTerms } from '../../model/terms/api';
+import { termIdOf } from '../../model/terms/api';
+import { TermPicker } from './TermPicker';
 import { FilterDialog } from './FilterDialog';
 import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
@@ -43,9 +43,6 @@ export function FilterRows({
   terms?: boolean;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
-  const glossary = useTerms(terms ? projectId : undefined);
-  // This dataset's terms first; another dataset's applies through a relationship (or is refused, with a sentence).
-  const offered = [...(glossary.data ?? [])].sort((a, b) => Number(b.datasetId === datasetId) - Number(a.datasetId === datasetId));
   const cur = editing === null ? null : filters[editing];
   return (
     <div className={s.rows} role="group" aria-labelledby="enc-filters">
@@ -92,20 +89,7 @@ export function FilterRows({
       <Button size="sm" icon="plus" className={s.add} disabled={!cols.length} onClick={() => onChange([...filters, { type: 'filter', column: cols[0]?.name ?? '', op: '' }])}>
         Add filter
       </Button>
-      {terms && offered.length > 0 && (
-        <Menu
-          label="Add a glossary term"
-          trigger={
-            <Button size="sm" icon="list" className={s.add}>
-              Add term
-            </Button>
-          }
-          items={offered.map((t) => ({
-            label: t.datasetId === datasetId ? t.name : `${t.name} (${t.datasetName ?? 'another dataset'})`,
-            onSelect: () => onChange([...filters, { type: 'term', term: t.id } as unknown as FilterStep]),
-          }))}
-        />
-      )}
+      {terms && <TermPicker projectId={projectId} datasetId={datasetId} onPick={(step) => onChange([...filters, step])} />}
       {cur && editing !== null && (
         <FilterDialog
           projectId={projectId}
