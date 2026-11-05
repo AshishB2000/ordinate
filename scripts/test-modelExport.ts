@@ -7,13 +7,31 @@
 //    .md; fields sorted by name; references by id; part 5's kinds verbatim; a bare dataset is { base, id, name }.
 // 3. What the files do not carry is listed, by kind.
 // 4. Metadata only: getDataset never ran.
+// 5. A Live base filter list this release cannot read refuses the export. NEGATIVE CONTROL: the readable one exports.
+// 6. The zip: byte-identical when unchanged, read back through MODEL_POLICY; the golden (scripts/fixtures/golden/
+//    modelFiles, ids and bases normalized: ./modelFixture.ts goldenOf); one edited description changes one file.
+// 7. model:export: a viewer gets 403; a restricted caller reaching the handler gets modelRestricted().
+//    NEGATIVE CONTROL: an editor gets a token, the counts and what is not carried, and no path.
 //
 //   npm run build:ts && node scripts/test-modelExport.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import { H, close, hydrated } from './liveRouteHarness';
-import { buildModelFixture, BASE, GUIDE, GUIDE_CANARY, TARGET } from './modelFixture';
+import type { Identity } from '../src/server/context';
+import { H, close, hydrated, post, type Reply } from './liveRouteHarness';
+import { buildModelFixture, goldenOf, readGolden, BASE, GUIDE, GUIDE_CANARY, TARGET } from './modelFixture';
+
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+const { modelZip }: typeof import('../src/ipc/modelFiles') = require('../src/ipc/modelFiles');
+const { MODEL_POLICY }: typeof import('../src/app/modelFormat') = require('../src/app/modelFormat');
+const { openZip }: typeof import('../src/app/zipReader') = require('../src/app/zipReader');
+const api: typeof import('../src/api/index') = require('../src/api/index');
+const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
+const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
+const VIEWER: Identity = { user: { email: 'vic@acme.test', role: 'viewer' }, org: { id: 'acme' } };
+const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org: { id: 'acme' } };
 
 const { exportModel }: typeof import('../src/app/modelExport') = require('../src/app/modelExport');
 const { stableStringify }: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
@@ -80,6 +98,42 @@ const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/m
   ok('a base filter this release cannot read refuses the export, with the sentence', refused === (await H.as(H.ORG_A, async () => msg.modelFiltersUnreadable('Live'))), refused);
   await setStored(BASE);
   ok('NEGATIVE CONTROL: the readable list exports again', (await H.as(H.ORG_A, () => exportModel(F.P))).files.has('datasets/live.json'));
+
+  // ── 6. The zip: byte-stable, readable by the model whitelist, the golden ──
+  const a = await H.as(H.ORG_A, () => modelZip(F.P));
+  const b = await H.as(H.ORG_A, () => modelZip(F.P));
+  ok('unchanged project: the zip is byte-identical', a.bytes.equals(b.bytes) && a.bytes.length > 0);
+  const zipFile = path.join(os.tmpdir(), `model-${process.pid}.zip`);
+  fs.writeFileSync(zipFile, a.bytes);
+  const z = await openZip({ file: zipFile }, MODEL_POLICY);
+  const back = new Map<string, string>();
+  for (const e of z.entries) back.set(e.name, (await z.read(e)).toString('utf8'));
+  await z.close();
+  fs.rmSync(zipFile, { force: true });
+  const now = (await H.as(H.ORG_A, () => exportModel(F.P))).files;
+  ok('the zip holds the files, in path order, and the whitelist reads every one', JSON.stringify([...back.keys()]) === JSON.stringify([...now.keys()].sort()) && [...now].every(([p, t]) => back.get(p) === t), [...back.keys()].join());
+  const golden = readGolden();
+  const mine = goldenOf(files);
+  ok('the fixture export equals the golden, byte for byte', golden.size === mine.size && [...mine].every(([p, t]) => golden.get(p) === t), [...mine.keys()].filter((p) => golden.get(p) !== mine.get(p)).join());
+  await post('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'region', patch: { description: 'Sales region' } });
+  const edited = (await H.as(H.ORG_A, () => exportModel(F.P))).files;
+  const changed = [...new Set([...now.keys(), ...edited.keys()])].filter((p) => now.get(p) !== edited.get(p));
+  ok('one edit changes exactly one file', changed.join() === 'datasets/orders.json', changed.join());
+
+  // ── 7. model:export: who, and what the reply holds ───────────────────────
+  const contract = api.contracts['model:export'];
+  const input = { projectId: F.P };
+  ok('contract: write, project-scoped, a strict input', contract.access === 'write' && 'project' in contract && contract.project(input) === F.P && !contract.input.safeParse({ ...input, path: '/x' }).success && contract.input.safeParse(input).success);
+  const grants = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) }) as unknown as import('pg').Pool;
+  const decide = (who: Identity, rank: number) => H.as(who, () => authz.authorize(contract, input, who, grants(rank)));
+  ok('a viewer is refused (403 before the handler)', !(await decide(VIEWER, 1)).ok);
+  ok('NEGATIVE CONTROL: a project editor may export', (await decide(EDITOR, 2)).ok);
+  const handler = rpc.handlers.get('model:export');
+  const asViewer = (await H.as(VIEWER, async () => handler?.(undefined, input))) as Reply;
+  ok('a restricted caller reaching the handler is refused, with the sentence', asViewer?.ok === false && asViewer.error === (await H.as(VIEWER, async () => msg.modelRestricted())) && !('downloadToken' in asViewer), JSON.stringify(asViewer));
+  const r = (await post('model:export', input)).value;
+  ok('NEGATIVE CONTROL: an unrestricted editor gets a token, the counts and what is not carried', r.ok === true && typeof r.downloadToken === 'string' && r.counts?.metrics === 5 && JSON.stringify(r.notCarried) === '["metricTrees","instructions"]', JSON.stringify(r));
+  ok('the reply names no file path', !JSON.stringify(r).includes(os.tmpdir()) && !/\.zip|temp/.test(JSON.stringify(r)), JSON.stringify(r));
 
   await close();
   finish();

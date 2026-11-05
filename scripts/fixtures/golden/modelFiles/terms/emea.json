@@ -1,0 +1,21 @@
+{
+  "aliases": [
+    "Europe and ME"
+  ],
+  "base": "<base>",
+  "dataset": "00000000-0000-4000-8000-000000000003",
+  "description": "Europe and the Middle East",
+  "filters": [
+    {
+      "column": "region",
+      "op": "in",
+      "type": "filter",
+      "values": [
+        "EU",
+        "ME"
+      ]
+    }
+  ],
+  "id": "00000000-0000-4000-8000-000000000008",
+  "name": "EMEA"
+}

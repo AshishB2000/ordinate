@@ -1,0 +1,14 @@
+{
+  "appVersion": "<appVersion>",
+  "calendar": {
+    "calendarType": "gregorian",
+    "fiscalYearStart": 1,
+    "weekStart": 1,
+    "yearEnd": "nearest"
+  },
+  "format": "ordinate-model",
+  "formatVersion": 1,
+  "project": {
+    "name": "Retail model"
+  }
+}

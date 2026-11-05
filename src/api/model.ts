@@ -9,4 +9,7 @@ export const model = {
   // preload: invoke('model:navigation', { projectId }) — every dataset's drill hierarchies (levels that are no longer a text column
   // marked `missing`) and the calendar's date ladder. Metadata only; level names, never values (src/ipc/modelNavigation.ts).
   'model:navigation': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // invoke('model:export', { projectId }) — the definitions as a zip of model files (src/ipc/modelFiles.ts): a download
+  // token, never a row, origin or secret. An editor's: a caller row access rules restrict is refused (part 7 D7).
+  'model:export': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
 } as const;

@@ -1,0 +1,17 @@
+{
+  "base": "<base>",
+  "dataset": "00000000-0000-4000-8000-000000000003",
+  "definition": {
+    "base": "00000000-0000-4000-8000-000000000006",
+    "window": {
+      "to_date": "month"
+    }
+  },
+  "format": {
+    "compact": false,
+    "decimals": 0,
+    "kind": "number"
+  },
+  "id": "00000000-0000-4000-8000-000000000007",
+  "name": "Revenue MTD"
+}

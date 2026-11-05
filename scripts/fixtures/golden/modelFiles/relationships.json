@@ -1,0 +1,18 @@
+{
+  "relationships": [
+    {
+      "base": "<base>",
+      "cardinality": "many_to_one",
+      "from": {
+        "column": "customer_id",
+        "dataset": "00000000-0000-4000-8000-000000000003"
+      },
+      "id": "00000000-0000-4000-8000-000000000010",
+      "label": "Customer",
+      "to": {
+        "column": "id",
+        "dataset": "00000000-0000-4000-8000-000000000001"
+      }
+    }
+  ]
+}

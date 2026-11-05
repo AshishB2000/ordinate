@@ -1,0 +1,34 @@
+{
+  "base": "<base>",
+  "description": "Every order line",
+  "fields": [
+    {
+      "aliases": [
+        "net"
+      ],
+      "description": "Net amount",
+      "displayName": "Amount",
+      "name": "amount",
+      "sensitivity": "financial"
+    },
+    {
+      "example": "EU",
+      "name": "region",
+      "values": [
+        {
+          "label": "Europe",
+          "value": "EU"
+        },
+        {
+          "label": "Middle East",
+          "value": "ME"
+        }
+      ]
+    }
+  ],
+  "grain": "One row per order line",
+  "id": "00000000-0000-4000-8000-000000000003",
+  "key": "order_id",
+  "name": "Orders",
+  "role": "fact"
+}

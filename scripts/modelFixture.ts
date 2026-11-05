@@ -97,3 +97,41 @@ export async function buildModelFixture(): Promise<ModelFixture> {
       ['row-policy value', POLICY_CANARY], ['privacy salt', salt], ['connection id', connId]],
   };
 }
+
+export const GOLDEN_DIR = path.join(__dirname, 'fixtures', 'golden', 'modelFiles');
+
+/**
+ * The files as the golden holds them. Record ids are random per run, so each UUID becomes a fixed one in order
+ * of first appearance (paths in order); a `base` hashes those ids, so it reads `<base>` (scripts/test-modelFormat
+ * pins the hash, the byte-identity check its stability); `appVersion` moves each release. Everything else is byte for byte.
+ */
+export function goldenOf(files: Map<string, string>): Map<string, string> {
+  const ids = new Map<string, string>();
+  const fixed = (id: string): string => {
+    if (!ids.has(id)) ids.set(id, `00000000-0000-4000-8000-${String(ids.size + 1).padStart(12, '0')}`);
+    return ids.get(id) as string;
+  };
+  const out = new Map<string, string>();
+  for (const p of [...files.keys()].sort()) {
+    out.set(p, (files.get(p) as string)
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, fixed)
+      .replace(/"base": "[A-Za-z0-9_-]{43}"/g, '"base": "<base>"')
+      .replace(/"appVersion": "[^"]*"/, '"appVersion": "<appVersion>"'));
+  }
+  return out;
+}
+
+/** The golden as recorded: every file under GOLDEN_DIR, by its path there. */
+export function readGolden(): Map<string, string> {
+  const fs: typeof import('fs') = require('fs');
+  const out = new Map<string, string>();
+  const walk = (rel: string): void => {
+    for (const e of fs.readdirSync(path.join(GOLDEN_DIR, rel), { withFileTypes: true })) {
+      const p = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(p);
+      else out.set(p, fs.readFileSync(path.join(GOLDEN_DIR, p), 'utf8'));
+    }
+  };
+  walk('');
+  return out;
+}
