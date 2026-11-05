@@ -53,7 +53,7 @@ ok('at most 5, newest first on a tie', big.ids.length === 5 && big.ids[0].starts
 const huge = st(LONG, 'Long', spec(ORDERS, { filters: [{ column: 'region', op: 'in', values: Array.from({ length: 80 }, (_, n) => `value number ${n}`) }] }));
 const capped = P.pickExamples([huge, ...many], { question: 'q', withheld: () => new Set(), names: NAMES });
 ok('a line over 600 characters is skipped', !capped.ids.includes(LONG) && capped.lines.every((l) => l.length <= P.EXAMPLE_MAX));
-const wide = Array.from({ length: 5 }, (_, n) => st(id(n), `Wide ${n}`, spec(ORDERS, { filters: [{ column: 'region', op: 'in', values: Array.from({ length: 40 }, (_, k) => `value ${k}`) }] })));
+const wide = Array.from({ length: 5 }, (_, n) => st(id(n), `Wide ${n}`, spec(ORDERS, { filters: [{ column: 'region', op: 'in', values: Array.from({ length: 34 }, (_, k) => `value ${k}`) }] })));
 const w = P.pickExamples(wide, { question: 'q', withheld: () => new Set(), names: NAMES });
 ok('3,000 in all (5 lines of up to 600 fit it)', w.ids.length >= 1 && w.lines.join('\n').length <= P.EXAMPLES_BLOCK_MAX, `${w.ids.length} ${w.lines.join('\n').length}`);
 
