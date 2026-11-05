@@ -1,0 +1,105 @@
+// A semantic dataset (semantic layer part 7, b2; docs/semantic-layer/07-portability.md D11, D13, D14): a Live dataset
+// whose top-level `semantic` block names a layer's model, over the real RPC route (scripts/liveRouteHarness.ts) and the
+// fake layer as a connector (scripts/semanticFake.ts).
+//
+//   § record    the block is stored at the record's top level, read into `live.semantic`, kept by every Live writer;
+//               an unreadable one refuses every door; the target carries the layer's env, or is unavailable
+//
+//   npm run build:ts && node scripts/test-semanticDatasets.js
+
+export {}; // module scope — sibling test scripts share top-level names
+import { ok, finish } from './selfcheck';
+import type { Reply } from './liveRouteHarness';
+import { H, close, post } from './liveRouteHarness';
+
+const fs: typeof import('fs') = require('fs');
+const { isDeepStrictEqual }: typeof import('util') = require('util');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const sd: typeof import('../src/data/semanticDataset') = require('../src/data/semanticDataset');
+const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const lt: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
+const ck: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
+const fake: typeof import('./semanticFake') = require('./semanticFake');
+
+const { ORG_A } = H;
+const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
+fake.registerSemanticFake();
+
+const SYNCED = '2026-11-01T00:00:00.000Z';
+const BLOCK = {
+  backend: 'fake',
+  model: 'live_typed',
+  metrics: Object.keys(fake.FAKE_METRICS).map((name) => ({ name, additive: fake.FAKE_ADDITIVE.has(name) })),
+  grains: [{ column: 'd', grains: [...ck.DATE_GRAINS] }],
+  syncedAt: SYNCED,
+};
+
+void (async () => {
+  const s = await H.setupOrg(ORG_A);
+  const P = s.projectId;
+  const as = <T>(fn: () => Promise<T>): Promise<T> => H.as(ORG_A, fn);
+  const raw = (d: string): Promise<Reply> => as(async () => JSON.parse(await fs.promises.readFile(rec.datasetFilePath(P, d), 'utf8')));
+  const meta = (d: string): Promise<Reply> => as(() => H.datasets.getDatasetMeta(P, d)) as Promise<Reply>;
+  const conn = async (connectorId: string, name = 'Layer prod'): Promise<string> => as(async () => (await H.connections.saveConnection(P, { name, connectorId, values: {} }))!.id);
+  const CONN = await conn(fake.SEMANTIC_FAKE_ID);
+  const add = (connId: string, semantic: unknown = BLOCK): Promise<Reply | null> =>
+    as(() => liveRecord.saveSemanticRecord(P, { name: 'Orders layer', connId, semantic: semantic as never, columns: H.fx.COLUMNS })) as Promise<Reply | null>;
+
+  // ── § record ──
+  ok('sanitize twice == once', isDeepStrictEqual(sd.sanitizeSemantic(sd.sanitizeSemantic(BLOCK)), sd.sanitizeSemantic(BLOCK)) && isDeepStrictEqual(sd.sanitizeSemantic(BLOCK), BLOCK));
+  const bad: Array<[string, unknown]> = [
+    ['no model', { ...BLOCK, model: '' }], ['a bad backend id', { ...BLOCK, backend: 'Cube!' }], ['a metric past 512 characters', { ...BLOCK, metrics: [{ name: 'x'.repeat(513), additive: true }] }],
+    ['2,001 metrics', { ...BLOCK, metrics: Array.from({ length: 2001 }, (_x, i) => ({ name: `m${i}`, additive: false })) }], ['an unknown grain', { ...BLOCK, grains: [{ column: 'd', grains: ['decade'] }] }],
+    ['no syncedAt', { ...BLOCK, syncedAt: 'yesterday' }], ['a metric that is no object', { ...BLOCK, metrics: [7] }], ['null', null], ['b0\'s test value', { backend: 'cube', model: 'orders' }],
+  ];
+  for (const [what, v] of bad) ok(`unreadable: ${what}`, sd.sanitizeSemantic(v) === null);
+  ok('NEGATIVE CONTROL: 2,000 metrics and a 512-character name read', sd.sanitizeSemantic({ ...BLOCK, metrics: Array.from({ length: 2000 }, (_x, i) => ({ name: i ? `m${i}` : 'y'.repeat(512), additive: false })) }) !== null);
+
+  const ds = await add(CONN);
+  const SEM = ds?.id as string;
+  ok('a semantic record is saved', !!ds && ds.mode === 'live', show(ds));
+  const r0 = await raw(SEM);
+  ok('stored at the top level, its origin a connection with no table or SQL', isDeepStrictEqual(r0.semantic, BLOCK) && isDeepStrictEqual(r0.origin, { kind: 'connection', connId: CONN }) && !('semantic' in r0.live), show(r0));
+  ok('read back into live.semantic as saved', isDeepStrictEqual((await meta(SEM)).live.semantic, BLOCK) && !(await meta(SEM)).live.semanticUnreadable);
+  ok('its columns are the dimensions, as declared', isDeepStrictEqual((await meta(SEM)).columns, H.fx.COLUMNS.map((c) => ({ name: c.name, type: c.type }))));
+  await as(() => H.liveDataset.bumpEpoch(P, SEM));
+  await as(() => H.liveDataset.setMaxCacheAge(P, SEM, 60));
+  ok('bumpEpoch and setMaxCacheAge keep the block', isDeepStrictEqual((await raw(SEM)).semantic, BLOCK) && (await meta(SEM)).live.epoch === 1 && (await meta(SEM)).live.maxCacheAgeSec === 60);
+  await post('dataset:refresh', { projectId: P, id: SEM });
+  ok('a Refresh keeps it', isDeepStrictEqual((await raw(SEM)).semantic, BLOCK));
+
+  const t = await as(() => lt.liveTarget(P, SEM));
+  const env = t.ok ? t.target.semantic?.env : undefined;
+  ok('the target is semantic: backend, model and the layer\'s env', t.ok && t.target.semantic?.backend === 'fake' && t.target.semantic.model === 'live_typed' && !!env, show(t));
+  ok('…the env holds the synced metrics, additive as the layer said', !!env && env.metrics.size === 4 && env.metrics.get('revenue')?.additive === true && env.metrics.get('avg_amount')?.additive === false);
+  ok('…the grains, the dimensions, the names for the sentences and the connection\'s caps', !!env && isDeepStrictEqual(env.grains.get('d'), ck.DATE_GRAINS) && env.columns.length === H.fx.COLUMNS.length
+    && env.dataset === 'Orders layer' && env.layer === 'Fake layer' && isDeepStrictEqual(env.caps, { lookups: true, binaryCompare: false }));
+  ok('…and its source is inert: no table, never compiled', t.ok && isDeepStrictEqual(t.target.source, { kind: 'table', parts: [] }));
+
+  const onWarehouse = await add(s.connId); // the live fake: a warehouse, no semantic capability
+  const other = await add(CONN, { ...BLOCK, backend: 'cube' }); // a block for another backend than its connector's
+  for (const [what, d] of [['a connection with no semantic capability', onWarehouse], ['a block naming another backend', other]] as const) {
+    const u = await as(() => lt.liveTarget(P, d!.id as string));
+    ok(`${what}: unavailable`, !u.ok && u.kind === 'unavailable', show(u));
+  }
+
+  const SPEC = (d: string) => ({ datasetId: d, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], chartType: 'bar', title: 'Sales by region' });
+  const DOORS: Array<[string, (d: string) => Promise<Reply>]> = [
+    ['visual:data', async (d) => (await post('visual:data', { projectId: P, datasetId: d, encoding: { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }] } })).value],
+    ['dashboard:metric', async (d) => (await post('dashboard:metric', { projectId: P, datasetId: d, column: 'amt', aggregation: 'sum' })).value],
+    ['answer:card', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d) })).value],
+  ];
+  const broken = await add(CONN);
+  await as(() => rec.serialized(rec.datasetFilePath(P, broken!.id as string), (r) => { r.semantic = { ...BLOCK, metrics: [...BLOCK.metrics, 'junk'] }; }));
+  ok('an unreadable block reads as semanticUnreadable, in memory only', (await meta(broken!.id as string)).live.semanticUnreadable === true && !('semantic' in (await meta(broken!.id as string)).live)
+    && !('semanticUnreadable' in (await raw(broken!.id as string)).live));
+  fake.resetLayerFake();
+  for (const [ch, call] of DOORS) {
+    const r = await call(broken!.id as string);
+    ok(`${ch}: an unreadable block refuses, typed, with no layer call`, r.ok === false && r.code === 'live_refused' && fake.layerFake.calls.length === 0, show(r));
+  }
+  ok('…and its block is kept as stored', (await raw(broken!.id as string)).semantic.metrics.length === 5);
+
+  await close();
+  finish();
+})();

@@ -28,6 +28,8 @@ import { sanitizeBaseFilters } from './liveBaseFilters';
 import type { LiveCalc } from './liveCalcs';
 import { calcColumns, sanitizeLiveCalcs } from './liveCalcs';
 import type { FilterStep } from './transforms';
+import type { SemanticSettings } from './semanticDataset';
+import { sanitizeSemantic } from './semanticDataset';
 
 export type DatasetMode = 'extract' | 'live';
 
@@ -64,8 +66,10 @@ export interface LiveSettings {
   calculated?: LiveCalc[];
   /** The stored list held something `sanitizeLiveCalcs` dropped, or was no list. In memory only; refused like `calculated` (`hasLiveCalcs`). */
   calculatedUnreadable?: true;
-  /** The record has a top-level `semantic` key (part 7 b2 writes it): it asks another tool's semantic layer, which this pod cannot. In memory only; every question refuses (liveTarget). */
-  semanticPending?: true;
+  /** The layer block of a semantic dataset (./semanticDataset, part 7 b2): stored at the record's top level like `baseFilters`, filled by `applyLive`, in memory only. */
+  semantic?: SemanticSettings;
+  /** The record's top-level `semantic` key holds something `sanitizeSemantic` cannot read (a newer release's, or damage). In memory only; every question refuses (liveTarget). */
+  semanticUnreadable?: true;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -207,7 +211,11 @@ export function applyLive(
 ): void {
   const live = sanitizeLive(data);
   if (!live) return;
-  if ('semantic' in data) live.semanticPending = true; // of any value: b2 replaces this presence check with the real reader
+  if ('semantic' in data) { // a block read in full, or one that answers nothing: never "not a semantic dataset"
+    const semantic = sanitizeSemantic(data.semantic);
+    if (semantic) live.semantic = semantic;
+    else live.semanticUnreadable = true;
+  }
   const baseFilters = sanitizeBaseFilters(data.baseFilters);
   if (baseFilters.length) live.baseFilters = baseFilters;
   // A stored list is read in full or the dataset answers nothing: a dropped step, or a stored value that is no list, must never read as "no step".

@@ -16,7 +16,8 @@
 // Part 5 and part 7 (kept, not computed, on this release): a funnel, period or external definition and a snapshot's
 // `per` (pin, inside definition; a funnel reads only its own dataset); a period metric's base (a metric dep); a
 // metric's target and importedFrom (out: neither changes the metric's value, cross-part check item 7); a Live
-// dataset that asks another tool's layer (`semanticPending`, pin: its figures stop being ours).
+// dataset that asks another tool's layer (`semantic`: its backend and model pin, not what a sync refreshes;
+// `semanticUnreadable`, pin).
 
 import { createHash } from 'crypto';
 import * as metrics from './metrics';
@@ -70,7 +71,7 @@ export const DATASET_PIN: Record<keyof DatasetMeta, Pin> = {
 };
 
 export const LIVE_PIN: Record<keyof LiveSettings, Pin> = {
-  baseFilters: 'pin', baseFiltersUnreadable: 'pin', calculated: 'pin', calculatedUnreadable: 'pin', semanticPending: 'pin',
+  baseFilters: 'pin', baseFiltersUnreadable: 'pin', calculated: 'pin', calculatedUnreadable: 'pin', semantic: 'pin', semanticUnreadable: 'pin', // semantic: its backend and model only (datasetOwn)
   maxCacheAgeSec: 'out', epoch: 'out', schemaSyncedAt: 'out', profile: 'out', missingColumns: 'out', syncAttemptAt: 'out',
 };
 
@@ -113,6 +114,8 @@ function datasetOwn(meta: DatasetMeta): Record<string, unknown> {
     own.origin = origin;
   }
   if (meta.live) own.live = pinned(meta.live, LIVE_PIN);
+  // A semantic dataset pointed at another model is another dataset; a sync that only refreshes its metrics, grains or time is not (cross-part check 7).
+  if (meta.live?.semantic) (own.live as Record<string, unknown>).semantic = { backend: meta.live.semantic.backend, model: meta.live.semantic.model };
   return own;
 }
 

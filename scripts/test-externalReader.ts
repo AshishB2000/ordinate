@@ -194,7 +194,7 @@ void (async () => {
   const said = refusals.liveSemanticPending();
   ok('the sentence says why and what to do', /semantic layer/.test(said) && /finish upgrading Ordinate/.test(said), said);
   const meta = (d: string): Promise<Reply> => as(() => H.datasets.getDatasetMeta(P, d)) as Promise<Reply>;
-  ok('the key is read into the Live block, in memory only', (await meta(L)).live.semanticPending === true && !('semanticPending' in (await rawRecord(L)).live));
+  ok('the key is read into the Live block, in memory only (b2: a block it cannot read)', (await meta(L)).live.semanticUnreadable === true && !('semanticUnreadable' in (await rawRecord(L)).live));
   H.queryCache.clear();
   const n0 = await count();
   for (const [ch, call] of DOORS) {
@@ -209,7 +209,7 @@ void (async () => {
   ok('a Refresh keeps the key', isDeepStrictEqual((await rawRecord(L)).semantic, { backend: 'cube', model: 'orders' }), show(await rawRecord(L)));
   for (const v of [null, 'x', {}]) {
     await as(() => rec.serialized(rec.datasetFilePath(P, L), (r) => { r.semantic = v; }));
-    ok(`a \`semantic\` key of any value (${JSON.stringify(v)}) is pending`, (await meta(L)).live.semanticPending === true);
+    ok(`a \`semantic\` key of any value b2 cannot read (${JSON.stringify(v)}) is refused`, (await meta(L)).live.semanticUnreadable === true);
   }
   const fresh = await as(async () => {
     const p2 = (await H.projects.createProject('Only a layer')).id;

@@ -111,6 +111,8 @@ let PROJECT = '';
 type Reply = { status: number; text: string; body: any }; // any: each channel's own reply
 let call: (channel: string, payload: unknown) => Promise<Reply> = async () => { throw new Error('no app'); };
 
+const SEMANTIC = { backend: 'fake', model: 'orders_view', metrics: [{ name: 'revenue', additive: true }], grains: [{ column: 'day', grains: ['day', 'month'] }], syncedAt: '2026-11-01T00:00:00.000Z' };
+
 interface Fixtures { ORD: string; CUST: string; EMEA: string; LIVE: string }
 
 async function partPin(): Promise<Fixtures> {
@@ -190,9 +192,19 @@ async function partPin(): Promise<Fixtures> {
       calculatedUnreadable: (r) => { r.calculated = [...r.calculated, 'junk']; },
       maxCacheAgeSec: inLive('maxCacheAgeSec', 60), epoch: inLive('epoch', 5), schemaSyncedAt: inLive('schemaSyncedAt', '2026-02-01T00:00:00.000Z'),
       profile: inLive('profile', {}), missingColumns: inLive('missingColumns', ['gone']), syncAttemptAt: inLive('syncAttemptAt', '2026-02-01T00:00:00.000Z'),
-      semanticPending: set('semantic', { backend: 'dbt' }), // b0: a top-level `semantic` key, read as this flag
+      semanticUnreadable: set('semantic', { backend: 'dbt' }), // a top-level `semantic` key b2 cannot read, read as this flag
+      semantic: set('semantic', SEMANTIC), // part 7 b2: a layer's block (its backend and model; the sync's refresh is below)
     }, liveMeta, ['profile']);
     const linked = await rewritten(file(P, 'datasets', LIVE), (r) => { r.origin.readsTables = ['public.orders']; }, () => pinOf(P, `dataset:${LIVE}`), meta(LIVE));
+    const before = fs.readFileSync(file(P, 'datasets', LIVE), 'utf8');
+    writeRaw(file(P, 'datasets', LIVE), { ...JSON.parse(before), semantic: SEMANTIC });
+    const synced = await rewritten(file(P, 'datasets', LIVE), (r) => { r.semantic = { ...SEMANTIC, metrics: [], grains: [{ column: 'day', grains: ['month'] }], syncedAt: '2026-11-03T00:00:00.000Z' }; }, () => pinOf(P, `dataset:${LIVE}`), meta(LIVE));
+    ok('a semantic sync that only refreshes metrics, grains and syncedAt does not move it', synced.took && !synced.moved, JSON.stringify(synced));
+    const remodelled = await rewritten(file(P, 'datasets', LIVE), (r) => { r.semantic = { ...SEMANTIC, model: 'other_view' }; }, () => pinOf(P, `dataset:${LIVE}`), meta(LIVE));
+    ok('NEGATIVE CONTROL: pointing it at another model moves it (needs_review)', remodelled.took && remodelled.moved, JSON.stringify(remodelled));
+    const rebacked = await rewritten(file(P, 'datasets', LIVE), (r) => { r.semantic = { ...SEMANTIC, backend: 'cube' }; }, () => pinOf(P, `dataset:${LIVE}`), meta(LIVE));
+    ok('…and so does another backend', rebacked.took && rebacked.moved, JSON.stringify(rebacked));
+    fs.writeFileSync(file(P, 'datasets', LIVE), before);
     ok('linking source tables (origin.readsTables) does not move a Live dataset', linked.took && !linked.moved);
 
     const full = (await metrics.getMetric(P, FULL))!;

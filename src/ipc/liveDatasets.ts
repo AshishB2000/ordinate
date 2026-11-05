@@ -176,7 +176,7 @@ type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; e
  * another tool's semantic layer (part 7 b0) has no rows to copy: refused first.
  */
 function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
-  if (meta.live?.semanticPending) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
+  if (meta.live?.semanticUnreadable || meta.live?.semantic) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
   const b = meta.live ? baseOfLive(meta.live, declaredColumns(meta)) : null;
   if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
   return { ok: true, steps: meta.live?.baseFilters ?? [] };
