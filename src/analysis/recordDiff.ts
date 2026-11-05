@@ -40,7 +40,7 @@ const CONTENT_KEYS: Record<DiffType, string[]> = {
 };
 
 /** A whole-document editor's save channel (src/app/editConflict.ts). A metric has two: its fields, and its tree. */
-export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'term' | 'sourceTable';
+export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'term' | 'sourceTable' | 'verified';
 
 /**
  * What each editor's save can write — replace-or-keep — and so all its
@@ -59,6 +59,7 @@ export const SAVE_KEYS: Record<SaveKind, readonly string[]> = {
   scenario: ['name', 'baseMetricIds', 'drivers'],
   term: ['name', 'aliases', 'description', 'filters'], // term:update: no `datasetId`
   sourceTable: ['owner', 'refresh', 'requiredFilters', 'guide'], // sourceTable:save: not `facts`, not `dismissed`
+  verified: ['question', 'phrasings', 'note', 'spec'], // verified:save with `id`: who and when are restamped, never content
 };
 
 /** What an absent key means — its store's own default — so a version saved

@@ -25,6 +25,7 @@ const TYPE: Record<RecordType, { word: string; icon: IconName }> = {
   report: { word: 'Report', icon: 'file-text' },
   alert: { word: 'Alert', icon: 'bell' },
   term: { word: 'Glossary term', icon: 'list' }, // no `tag` icon in ui/icons/paths.ts
+  verified: { word: 'Verified question', icon: 'circle-check' },
 };
 
 type Ask = { kind: 'purge'; item: TrashItem } | { kind: 'empty' } | null;

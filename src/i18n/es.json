@@ -235,6 +235,7 @@
   "editConflictMessages.this_scenario_was_changed_in_another": "Este escenario se cambió en otra pestaña o lo cambió otra persona. Vuelve a cargarlo o guarda tu versión como copia.",
   "editConflictMessages.this_scorecard_was_changed_in_another": "Este cuadro de mando se cambió en otra pestaña o lo cambió otra persona. Vuelve a cargarlo o guarda tu versión como copia.",
   "editConflictMessages.this_story_was_changed_in_another": "Esta historia se cambió en otra pestaña o la cambió otra persona. Vuelve a cargarla o guarda tu versión como copia.",
+  "editConflictMessages.this_verified_question_was_changed_in": "Esta pregunta verificada se cambió en otra pestaña o la cambió otra persona. Vuelve a cargarla y haz tu cambio de nuevo.",
   "editConflictMessages.this_visual_was_changed_in_another": "Este visual se cambió en otra pestaña o lo cambió otra persona. Vuelve a cargarlo o guarda tu versión como copia.",
   "editConflictMessages.this_was_changed_in_another_tab": "Esto se cambió en otra pestaña o lo cambió otra persona. Vuelve a cargarlo o guarda tu versión como copia.",
   "embedMessages.a_preview_link_opens_only_inside": "Un enlace de vista previa solo se abre dentro de Ordinate.",

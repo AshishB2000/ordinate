@@ -94,6 +94,11 @@ export async function readEntry(projectId: string, type: RecordType, id: string)
   }
 }
 
+/** What a stored record is called: its name, or a verified question's question (it has no name). */
+export function recordName(rec: { name?: unknown; question?: unknown }): string {
+  return typeof rec.name === 'string' ? rec.name : typeof rec.question === 'string' ? rec.question : '';
+}
+
 /** Remove an entry for good — its JSON and, for a dataset, its Parquet files. */
 export async function removeEntry(projectId: string, type: RecordType, id: string): Promise<void> {
   const file = entryPath(projectId, type, id);
@@ -131,7 +136,7 @@ export async function listEntries(projectId: string): Promise<TrashEntry[]> {
       if (!rec || typeof rec.deletedAt !== 'string') continue;
       const entry: TrashEntry = {
         type, id,
-        name: typeof rec.name === 'string' && rec.name.trim() ? rec.name : 'Untitled',
+        name: recordName(rec).trim() ? recordName(rec) : 'Untitled',
         deletedAt: rec.deletedAt,
       };
       if (typeof rec.deletedWith === 'string') entry.deletedWith = rec.deletedWith;

@@ -235,6 +235,7 @@
   "editConflictMessages.this_scenario_was_changed_in_another": "このシナリオは、別のタブまたは別のユーザーによって変更されました。再読み込みするか、ご自分の版をコピーとして保存してください。",
   "editConflictMessages.this_scorecard_was_changed_in_another": "このスコアカードは、別のタブまたは別のユーザーによって変更されました。再読み込みするか、ご自分の版をコピーとして保存してください。",
   "editConflictMessages.this_story_was_changed_in_another": "このストーリーは、別のタブまたは別のユーザーによって変更されました。再読み込みするか、ご自分の版をコピーとして保存してください。",
+  "editConflictMessages.this_verified_question_was_changed_in": "この検証済みの質問は、別のタブまたは別のユーザーによって変更されました。再読み込みしてから、もう一度編集してください。",
   "editConflictMessages.this_visual_was_changed_in_another": "このビジュアルは、別のタブまたは別のユーザーによって変更されました。再読み込みするか、ご自分の版をコピーとして保存してください。",
   "editConflictMessages.this_was_changed_in_another_tab": "これは、別のタブまたは別のユーザーによって変更されました。再読み込みするか、ご自分の版をコピーとして保存してください。",
   "embedMessages.a_preview_link_opens_only_inside": "プレビューリンクは Ordinate の中でのみ開けます。",

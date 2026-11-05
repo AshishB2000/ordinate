@@ -235,6 +235,7 @@
   "editConflictMessages.this_scenario_was_changed_in_another": "Ce scénario a été modifié dans un autre onglet ou par quelqu’un d’autre. Rechargez-le ou enregistrez votre version comme copie.",
   "editConflictMessages.this_scorecard_was_changed_in_another": "Ce tableau de score a été modifié dans un autre onglet ou par quelqu’un d’autre. Rechargez-le ou enregistrez votre version comme copie.",
   "editConflictMessages.this_story_was_changed_in_another": "Ce récit a été modifié dans un autre onglet ou par quelqu’un d’autre. Rechargez-le ou enregistrez votre version comme copie.",
+  "editConflictMessages.this_verified_question_was_changed_in": "Cette question vérifiée a été modifiée dans un autre onglet ou par quelqu’un d’autre. Rechargez-la, puis refaites votre modification.",
   "editConflictMessages.this_visual_was_changed_in_another": "Ce visuel a été modifié dans un autre onglet ou par quelqu’un d’autre. Rechargez-le ou enregistrez votre version comme copie.",
   "editConflictMessages.this_was_changed_in_another_tab": "Ceci a été modifié dans un autre onglet ou par quelqu’un d’autre. Rechargez-le ou enregistrez votre version comme copie.",
   "embedMessages.a_preview_link_opens_only_inside": "Un lien d’aperçu ne s’ouvre que dans Ordinate.",

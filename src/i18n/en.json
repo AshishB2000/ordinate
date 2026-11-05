@@ -232,6 +232,7 @@
   "editConflictMessages.this_scenario_was_changed_in_another": "This scenario was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_scorecard_was_changed_in_another": "This scorecard was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_story_was_changed_in_another": "This story was changed in another tab or by someone else. Reload it, or save yours as a copy.",
+  "editConflictMessages.this_verified_question_was_changed_in": "This verified question was changed in another tab or by someone else. Reload it, then make your edit again.",
   "editConflictMessages.this_visual_was_changed_in_another": "This visual was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_was_changed_in_another_tab": "This was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "embedMessages.a_preview_link_opens_only_inside": "A preview link opens only inside Ordinate.",
