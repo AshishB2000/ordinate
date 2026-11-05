@@ -27,6 +27,7 @@ import { utcLabel } from '../data/figureAsOf';
 import type { ChartData } from '../analysis/vizData';
 import { tileCaption } from '../analysis/captions';
 import { displayNames } from '../app/catalog';
+import { navContext } from './modelNavigation';
 import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, specFilterSteps } from '../ai/answerSpec';
 import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
 import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
@@ -222,7 +223,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
-      chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category) }),
+      chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category), ...(await navContext(projectId, spec.datasetId)) }),
       filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), asOf: r.asOf,
       notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n))),
     },

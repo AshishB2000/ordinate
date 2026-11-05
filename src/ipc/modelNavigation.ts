@@ -24,6 +24,18 @@ export async function modelNavigation(projectId: string): Promise<{ tables: { da
   return { tables: found.filter((t) => t !== null), dateLadder: dateLadder(activeWeekCal() !== null) };
 }
 
+/** What `answerChips` needs to offer the next level: metadata only (one catalog read, one dataset meta), `[]` on any failure. */
+export async function navContext(projectId: string, datasetId: string): Promise<{ hierarchies: NavHierarchy[]; ladder: DateGrain[] }> {
+  const ladder = dateLadder(activeWeekCal() !== null);
+  try {
+    const [file, meta] = await Promise.all([loadStrict(projectId), datasets.getDatasetMeta(projectId, datasetId)]);
+    const stored = file.tables?.[datasetId]?.hierarchies;
+    return { hierarchies: meta && stored?.length ? navHierarchies(stored, meta.columns) : [], ladder };
+  } catch {
+    return { hierarchies: [], ladder };
+  }
+}
+
 export function register(): void {
   ipcMain.handle('model:navigation', async (_e, { projectId }: { projectId?: unknown } = {}): Promise<NavigationReply> => {
     try {

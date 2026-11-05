@@ -298,6 +298,23 @@ const split = A.answerChips({ ...base, series: 'category' }, { columns: COLS, sp
 ok('chips: an already-split answer offers no second split', !labels(split).includes('Split by'));
 const table = A.answerChips({ ...base, chartType: 'table' }, { columns: COLS, splitCandidates: [] });
 ok('chips: a table answer offers no "Show as table"', labels(table) === 'Same for last year', labels(table));
+
+// Next-level chip (part 6, step 06): from the spec and metadata only.
+const G = ['year', 'quarter', 'month', 'day'] as const;
+const W = ['year', 'quarter', 'month', 'week', 'day'] as const;
+const GEO = { id: 'h1', name: 'Geography', levels: ['region', 'state'] };
+const CTX = { columns: COLS, splitCandidates: [] as string[] };
+const lvl = A.answerChips({ ...base, category: 'region' }, { ...CTX, hierarchies: [GEO], ladder: G });
+const byState = lvl.find((c) => c.label === 'By state');
+ok('next level: By state regroups the whole answer, adding no filter', !!byState && byState.spec.category === 'state' && JSON.stringify(byState.spec.filters) === JSON.stringify(base.filters) && byState.spec.title.endsWith('by state'));
+ok('next level: no chip at the last level', !A.answerChips({ ...base, category: 'state' }, { ...CTX, hierarchies: [GEO], ladder: G }).some((c) => c.label.startsWith('By ')));
+ok('next level: a month answer offers days', A.answerChips({ ...base, category: 'order_date', grain: 'month' }, { ...CTX, ladder: G }).find((c) => c.label === 'By day')?.spec.grain === 'day');
+ok('next level: a week calendar month offers weeks', A.answerChips({ ...base, category: 'order_date', grain: 'month' }, { ...CTX, ladder: W }).some((c) => c.label === 'By week'));
+ok('next level: a week calendar quarter reads By period', A.answerChips({ ...base, category: 'order_date', grain: 'quarter' }, { ...CTX, ladder: W }).some((c) => c.label === 'By period'));
+ok('next level: an auto grain offers nothing', !A.answerChips({ ...base, category: 'order_date' }, { ...CTX, ladder: G }).some((c) => c.label.startsWith('By ')));
+ok('next level: NEGATIVE CONTROL, a missing level and no hierarchies give today\'s chips',
+  JSON.stringify(A.answerChips(base, { ...CTX, hierarchies: [{ ...GEO, missing: ['state'] }], ladder: G })) === JSON.stringify(A.answerChips(base, CTX))
+  && JSON.stringify(A.answerChips({ ...base, category: 'region' }, { ...CTX, hierarchies: [{ ...GEO, missing: ['state'] }], ladder: G })) === JSON.stringify(A.answerChips({ ...base, category: 'region' }, CTX)));
 const trend = byDate.ok ? A.answerChips(byDate.spec, { columns: COLS, splitCandidates: ['region'] }) : [];
 ok('chips: a date-axis answer splits into lines and has no "last year" (it IS the timeline)',
   labels(trend) === 'Split by region | Show as table' && trend[0].spec.chartType === 'line', labels(trend));
