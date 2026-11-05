@@ -160,6 +160,8 @@ async function leaks(s: H.OrgSetup): Promise<void> {
 const keepAlive = setInterval(() => undefined, 1000);
 
 async function main(): Promise<void> {
+  ok('the fake layer resolves by id, and no catalog lists it', registry.getConnector(fake.SEMANTIC_FAKE_ID)?.semantic?.backend === 'fake'
+    && !registry.listConnectors().some((d) => d.family === 'semantic-fake') && !registry.connectorCatalog().some((e) => e.id === fake.SEMANTIC_FAKE_ID));
   const s = await H.setupOrg(ORG_A);
   await counted(s);
   await hangUp(s);

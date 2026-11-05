@@ -184,6 +184,10 @@ export async function evaluateSemantic(ir: LiveIR, env: SemanticEnv, run: Semant
   let warnings: string[] = [];
   let periodLabels: string[] = [];
   let periodRanges: PeriodRange[] = [];
+  // Refused before anything is asked: a refusal never costs a counted question (the periods resolve to ranges).
+  const asIfResolved = { ...ir, filters: ir.filters.filter((f) => f.kind !== 'latest') };
+  const pre = ir.kind === 'metric' ? planMetric(asIfResolved, env) : planChart(asIfResolved, env);
+  if (isRefusal(pre)) return pre;
   const lp = planLatest(ir, env);
   if (isRefusal(lp)) return lp;
   if (lp.queries.length) {
