@@ -37,6 +37,7 @@ const ipcScenarios: typeof import('../src/ipc/scenarios') = require('../src/ipc/
 const ipcTemplates: typeof import('../src/ipc/templates') = require('../src/ipc/templates');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const dashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const dashboardModel: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const stories: typeof import('../src/ipc/stories') = require('../src/ipc/stories');
 const embedLock: typeof import('../src/publish/embedLock') = require('../src/publish/embedLock');
 const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
@@ -176,6 +177,12 @@ void (async () => {
   ok('the tree reference gives no figure for a per-entity snapshot', treeRef.metricJs(COLS, ROWS, [perM], perM, []) === null);
   const plainSnap = { ...perM, definition: { column: 'amount', aggregation: 'sum' as const, snapshot: { column: 'day', take: 'last' as const } } };
   ok('NEGATIVE CONTROL: the tree reference has a figure for a plain snapshot', typeof treeRef.metricJs(COLS, ROWS, [plainSnap], plainSnap, []) === 'number');
+  // A KPI card of a funnel or period metric has no column of its own, and a stored aggregation (the writers store sum).
+  const kindCard = { type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: D, column: '', aggregation: 'sum', metricId: funnelM.id } };
+  const board = (await analysis.saveAnalysis(P, { name: 'Kinds', sheets: [{ name: 'A', cards: [kindCard, { ...kindCard, metric: { ...kindCard.metric, aggregation: 'median' } }] }] }))!;
+  const kindCards = (await analysis.getAnalysis(P, board.id))!.sheets[0].cards.filter((c) => c.type === 'metric');
+  ok('dashboard: a KPI card of a funnel metric (no column, a metricId, sum) survives', kindCards.length === 1 && kindCards[0].metric!.metricId === funnelM.id && kindCards[0].metric!.column === '', JSON.stringify(kindCards));
+  ok('NEGATIVE CONTROL: the same card with an aggregation no store knows is dropped, as today', dashboardModel.sanitizeCards([{ ...kindCard, metric: { ...kindCard.metric, aggregation: 'median' } }]).length === 0 && dashboardModel.sanitizeCards([kindCard]).length === 1);
   ok('the words say it is newer', metricFormat.describeDefinition(periodM) === 'a newer kind of metric' && metricFormat.describeDefinition(funnelM) === 'a newer kind of metric');
   const plainKpi = (await ipcMetrics.resolveMetric(P, plain.id))!.value;
   ok('NEGATIVE CONTROL: the plain metric has its figure and its chart', plainKpi === ROWS.reduce((a, r) => a + r[1], 0) && (await chartOf([{ ...V, metricId: plain.id }])).ok === true);
