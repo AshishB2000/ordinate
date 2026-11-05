@@ -371,3 +371,133 @@
     padding-top: 0;
   }
 }
+
+/* ── Hierarchies: drill levels on the Fields tab, and the dialog that edits one ─────────────── */
+.hier {
+  margin-bottom: var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.hierHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-8);
+}
+.hierHead .calcHead {
+  margin: 0;
+}
+.hList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hChip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-12);
+  min-height: 40px;
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  font-size: var(--t-13);
+}
+.hChipWarn {
+  border-color: var(--warn);
+}
+.hName {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.hPath {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.hMoves {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.hLadder {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.hForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.hLevels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.hCap {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.hOrder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hOrder li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.hStep {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.hLevel {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.hNone {
+  margin: 0;
+  padding: var(--sp-12);
+  border: 1px dashed var(--border-hairline);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.hAlert {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  color: var(--error-text);
+  font-size: var(--t-13);
+}
