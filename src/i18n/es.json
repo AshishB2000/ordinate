@@ -514,6 +514,7 @@
   "metricTreeMessages.rose": "{metric} subió {change} ({pct}) {compare}.",
   "metricTreeMessages.rose_2": "{metric} subió {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "Esa métrica ya no existe.",
+  "modelFileMessages.has_always_applied_filters_this_version": "“{name}” tiene filtros que se aplican siempre y que esta versión de Ordinate no puede leer, así que el modelo no se puede exportar. Pide a tu administrador que termine de actualizar Ordinate.",
   "modelFileMessages.the_model_files_hold_a_file": "Los archivos del modelo contienen un archivo que Ordinate no lee ({name}): se rechazaron por completo.",
   "modelFileMessages.your_access_to_this_project_is": "Tu acceso a este proyecto está limitado por reglas de acceso a filas, así que sus definiciones no se pueden exportar ni importar.",
   "pendingMessages.counts_distinct_values_which_a_point": "«{measure}» cuenta valores distintos, algo que un mapa de puntos, de hexágonos o de flujos no puede mostrar. Elige un recuento, una suma o un promedio, o haz un mapa por región.",

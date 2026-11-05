@@ -13,3 +13,8 @@ export function modelRestricted(): string {
 export function modelEntryRefused(name: string): string {
   return t('modelFileMessages.the_model_files_hold_a_file', { name });
 }
+
+/** A Live dataset's base filters hold a step this release cannot read: part of a list must never travel as all of it. */
+export function modelFiltersUnreadable(name: string): string {
+  return t('modelFileMessages.has_always_applied_filters_this_version', { name });
+}
