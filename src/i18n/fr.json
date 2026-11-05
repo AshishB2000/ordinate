@@ -389,6 +389,7 @@
   "liveRefusals.the_always_applied_filter_on_can": "Le filtre toujours appliqué sur « {column} » ne peut plus être appliqué : ce jeu de données ne répond rien tant qu’un éditeur ne l’a pas modifié.",
   "liveRefusals.the_category_no_longer_has_the": "La catégorie « {column} » n’a plus le type pour lequel ce graphique a été construit.",
   "liveRefusals.the_warehouse_answered_in_a_shape": "L’entrepôt de données a répondu sous une forme que la requête en direct n’a pas demandée.",
+  "liveRefusals.this_dataset_asks_another_tool_s": "Ce jeu de données interroge la couche sémantique d’un autre outil, ce que ce serveur ne sait pas encore faire. Demandez à votre admin de terminer la mise à niveau d’Ordinate.",
   "liveRefusals.this_dataset_s_always_applied_filters": "Les filtres toujours appliqués de ce jeu de données ne peuvent pas être appliqués par ce serveur : il ne répond rien. Demandez à votre administrateur de terminer la mise à jour d’Ordinate.",
   "liveRefusals.this_dataset_s_calculated_fields_can": "Ce serveur ne sait pas calculer les champs calculés de ce jeu de données ; il ne répond donc à rien. Demandez à votre admin de terminer la mise à niveau d’Ordinate.",
   "liveRefusals.this_live_dataset_has_no_table": "Ce jeu de données en direct n’a ni table ni requête à lire.",

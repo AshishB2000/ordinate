@@ -386,6 +386,7 @@
   "liveRefusals.the_always_applied_filter_on_can": "The always-applied filter on “{column}” can't be applied any more, so this dataset answers nothing until an editor changes it.",
   "liveRefusals.the_category_no_longer_has_the": "The category \"{column}\" no longer has the type this chart was built for.",
   "liveRefusals.the_warehouse_answered_in_a_shape": "The warehouse answered in a shape the live query did not ask for.",
+  "liveRefusals.this_dataset_asks_another_tool_s": "This dataset asks another tool's semantic layer, which this server can't do yet. Ask your admin to finish upgrading Ordinate.",
   "liveRefusals.this_dataset_s_always_applied_filters": "This dataset's always-applied filters can't be applied by this server, so it answers nothing. Ask your admin to finish upgrading Ordinate.",
   "liveRefusals.this_dataset_s_calculated_fields_can": "This dataset's calculated fields can't be computed by this server, so it answers nothing. Ask your admin to finish upgrading Ordinate.",
   "liveRefusals.this_live_dataset_has_no_table": "This live dataset has no table or query to read from.",

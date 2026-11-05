@@ -43,7 +43,7 @@ import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
 import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
-import { liveBaseFilterRefused, liveCalculatedRefused } from '../engine/liveRefusals';
+import { liveBaseFilterRefused, liveCalculatedRefused, liveSemanticPending } from '../engine/liveRefusals';
 import { hasLiveCalcs } from '../data/liveCalcs';
 import { baseOfLive } from '../engine/live/liveBase';
 import type { LiveRefusalCode } from '../engine/live/liveSpec';
@@ -172,9 +172,11 @@ type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; e
 /**
  * The base filters a copy keeps as its Prepare steps (D13), or why it cannot be made: a list this pod
  * cannot read, or a step its declared columns cannot take. Asked before the source is read, so a
- * refused copy fetches and saves nothing. A copy is never wider than the dataset.
+ * refused copy fetches and saves nothing. A copy is never wider than the dataset. A dataset that asks
+ * another tool's semantic layer (part 7 b0) has no rows to copy: refused first.
  */
 function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
+  if (meta.live?.semanticPending) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
   const b = meta.live ? baseOfLive(meta.live, meta.columns) : null;
   if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
   return { ok: true, steps: meta.live?.baseFilters ?? [] };

@@ -453,7 +453,7 @@ async function ensureDefaults(projectId: string, datasetId?: string): Promise<me
   const target = datasetId ? list.find((d) => d.id === datasetId) : list[0];
   if (!target) return existing;
   const meta = await datasets.getDatasetMeta(projectId, target.id);
-  if (!meta) return existing;
+  if (!meta || meta.live?.semanticPending) return existing; // a layer's dataset: sums over its dimensions would not be its metrics
 
   for (const input of proposeMetrics(target.id, meta.columns)) {
     await metrics.saveMetric(projectId, input);

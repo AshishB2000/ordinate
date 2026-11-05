@@ -389,6 +389,7 @@
   "liveRefusals.the_always_applied_filter_on_can": "「{column}」の常時適用フィルターを適用できなくなったため、編集者が変更するまでこのデータセットは何も返しません。",
   "liveRefusals.the_category_no_longer_has_the": "カテゴリ「{column}」は、このチャートを作成したときの型ではなくなりました。",
   "liveRefusals.the_warehouse_answered_in_a_shape": "データウェアハウスが、ライブクエリの要求と異なる形式で応答しました。",
+  "liveRefusals.this_dataset_asks_another_tool_s": "このデータセットは別のツールのセマンティックレイヤーに問い合わせますが、このサーバーはまだそれに対応していません。Ordinate のアップグレードを完了するよう管理者に依頼してください。",
   "liveRefusals.this_dataset_s_always_applied_filters": "このデータセットの常時適用フィルターはこのサーバーでは適用できないため、何も返しません。管理者に Ordinate の更新を完了するよう依頼してください。",
   "liveRefusals.this_dataset_s_calculated_fields_can": "このサーバーはこのデータセットの計算フィールドを計算できないため、何も回答しません。Ordinate のアップグレードを完了するよう管理者に依頼してください。",
   "liveRefusals.this_live_dataset_has_no_table": "このライブデータセットには、読み取るテーブルまたはクエリがありません。",

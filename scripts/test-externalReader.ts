@@ -8,6 +8,8 @@
 //
 //   § keep      every re-save keeps the definition and importedFrom; NEGATIVE CONTROL: a plain metric sanitizes as today
 //   § refuse    every figure entry refuses with the sentence; NEGATIVE CONTROL: the same entries over a plain metric answer
+//   § dataset   a Live record with a top-level `semantic` key refuses every door, the schema sync, Make a copy and Copy the
+//               data instead, without a warehouse call; NEGATIVE CONTROL: the same doors answer without the key
 //
 //   npm run build:ts && node scripts/test-externalReader.js
 
@@ -32,8 +34,10 @@ const bundleImport: typeof import('../src/app/bundleImport') = require('../src/a
 const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const refusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
 
-const { ORG_A } = H;
+const { ORG_A, fake } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
 const NAME = 'Revenue · dbt';
 const EXT = { external: 'Revenue', additive: true, layer: 'dbt' };
@@ -167,6 +171,59 @@ void (async () => {
   }
   const fplain = ((await post('metric:values', { projectId: P, ids: [overPlain] })).value as unknown as Reply[])[0];
   ok('NEGATIVE CONTROL: a formula over a plain metric has its figure', fplain.ok === true && typeof fplain.value === 'number', show(fplain));
+
+  // ── § dataset: a Live record with a top-level `semantic` key (b2 writes it; its origin has no table or SQL) ──
+  const layered = await as(() => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  const plainLive = await as(() => H.liveOver(P, { table: 'live_typed' }, H.fx.COLUMNS));
+  const L = layered.liveId;
+  const rawRecord = (d: string): Promise<Reply> => as(async () => JSON.parse(await fs.promises.readFile(rec.datasetFilePath(P, d), 'utf8')));
+  await as(() => rec.serialized(rec.datasetFilePath(P, L), (r) => {
+    r.semantic = { backend: 'cube', model: 'orders' };
+    delete (r.origin as Record<string, unknown>).table;
+  }));
+  const count = async (): Promise<number> => (await as(() => H.datasets.listDatasets(P))).length;
+  const SPEC = (d: string) => ({ datasetId: d, category: 'region', measures: [{ column: 'amt', aggregation: 'sum' }], filters: [], chartType: 'bar', title: 'Sales by region' });
+  const DOORS: Array<[string, (d: string) => Promise<Reply>]> = [
+    ['visual:data', async (d) => (await post('visual:data', { projectId: P, datasetId: d, encoding: { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }] } })).value],
+    ['dashboard:metric', async (d) => (await post('dashboard:metric', { projectId: P, datasetId: d, column: 'amt', aggregation: 'sum' })).value],
+    ['answer:card', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d) })).value],
+    ['dataset:syncLiveSchema', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value],
+    ['dataset:copyLive', async (d) => (await post('dataset:copyLive', { projectId: P, datasetId: d })).value],
+    ['dataset:setMode', async (d) => (await post('dataset:setMode', { projectId: P, datasetId: d, mode: 'extract' })).value],
+  ];
+  const said = refusals.liveSemanticPending();
+  ok('the sentence says why and what to do', /semantic layer/.test(said) && /finish upgrading Ordinate/.test(said), said);
+  const meta = (d: string): Promise<Reply> => as(() => H.datasets.getDatasetMeta(P, d)) as Promise<Reply>;
+  ok('the key is read into the Live block, in memory only', (await meta(L)).live.semanticPending === true && !('semanticPending' in (await rawRecord(L)).live));
+  H.queryCache.clear();
+  const n0 = await count();
+  for (const [ch, call] of DOORS) {
+    const before = fake.calls.length;
+    const r = await call(L);
+    // An answer card's failure carries the catalog sentence in `reason`; every other reply has the code there.
+    const typed = r.ok === false && r.code === 'live_refused' && (ch === 'answer:card' ? r.reason === said : r.reason === 'semanticPending' && r.error === said);
+    ok(`${ch}: refused semanticPending, no warehouse call`, typed && fake.calls.length === before, show(r));
+  }
+  ok('…Make a copy saved nothing and the record is still Live, its key kept', (await count()) === n0 && (await meta(L)).mode === 'live' && 'semantic' in (await rawRecord(L)));
+  await post('dataset:refresh', { projectId: P, id: L });
+  ok('a Refresh keeps the key', isDeepStrictEqual((await rawRecord(L)).semantic, { backend: 'cube', model: 'orders' }), show(await rawRecord(L)));
+  for (const v of [null, 'x', {}]) {
+    await as(() => rec.serialized(rec.datasetFilePath(P, L), (r) => { r.semantic = v; }));
+    ok(`a \`semantic\` key of any value (${JSON.stringify(v)}) is pending`, (await meta(L)).live.semanticPending === true);
+  }
+  const fresh = await as(async () => {
+    const p2 = (await H.projects.createProject('Only a layer')).id;
+    const l2 = await H.liveOver(p2, { table: 'live_typed' }, H.fx.COLUMNS);
+    await rec.serialized(rec.datasetFilePath(p2, l2.liveId), (r) => { r.semantic = { backend: 'cube', model: 'orders' }; });
+    return { p2, l2: l2.liveId };
+  });
+  const proposed = (await post('metric:ensureDefaults', { projectId: fresh.p2, datasetId: fresh.l2 })).value;
+  ok('metric:ensureDefaults proposes nothing for it', proposed.ok === true && (proposed.metrics as Reply[]).every((m) => m.datasetId !== fresh.l2), show(proposed));
+  H.queryCache.clear();
+  for (const [ch, call] of DOORS.slice(0, 4)) {
+    const r = await call(plainLive.liveId);
+    ok(`NEGATIVE CONTROL: ${ch} answers on a Live dataset without the key`, r.ok === true, show(r).slice(0, 240));
+  }
 
   await close();
   finish();

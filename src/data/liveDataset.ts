@@ -64,6 +64,8 @@ export interface LiveSettings {
   calculated?: LiveCalc[];
   /** The stored list held something `sanitizeLiveCalcs` dropped, or was no list. In memory only; refused like `calculated` (`hasLiveCalcs`). */
   calculatedUnreadable?: true;
+  /** The record has a top-level `semantic` key (part 7 b2 writes it): it asks another tool's semantic layer, which this pod cannot. In memory only; every question refuses (liveTarget). */
+  semanticPending?: true;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -201,10 +203,11 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
  */
 export function applyLive(
   target: { mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
-  data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown; calculated?: unknown },
+  data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown; calculated?: unknown; semantic?: unknown },
 ): void {
   const live = sanitizeLive(data);
   if (!live) return;
+  if ('semantic' in data) live.semanticPending = true; // of any value: b2 replaces this presence check with the real reader
   const baseFilters = sanitizeBaseFilters(data.baseFilters);
   if (baseFilters.length) live.baseFilters = baseFilters;
   // A stored list is read in full or the dataset answers nothing: a dropped step, or a stored value that is no list, must never read as "no step".
