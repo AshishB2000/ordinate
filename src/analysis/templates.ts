@@ -37,9 +37,10 @@
 //   - NO TOP-N. `VizEncoding` has no `topN`, so "top customers" is a bar chart
 //     over the customer column and vizData's own category cap decides how many
 //     bars. Adding one is a storage-format decision, not a template's.
-//   - NO COUNT-DISTINCT. `METRIC_AGGS` is sum/avg/count/min/max, so a "how many
-//     customers" KPI is not expressible and the Customer template counts ORDERS
-//     instead, labelled as such. Never a distinct count wearing a count's label.
+//   - NO COUNT-DISTINCT. A role is mapped to a column and its picker is plain
+//     (sum/avg/count/min/max), so a "how many customers" KPI is not named here and
+//     the Customer template counts ORDERS instead, labelled as such. Never a
+//     distinct count wearing a count's label. (A metric or chart may count distinct.)
 //   - NO MEDIAN. Operations shows an average and a maximum duration.
 //   - NO COHORT. A first-order-month cohort needs a per-customer `min(date)`
 //     joined back onto every row. The only shape close to that in Prepare is

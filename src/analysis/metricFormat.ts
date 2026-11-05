@@ -39,6 +39,7 @@ const AGG_WORDS: Record<string, string> = {
   sum: 'sum',
   avg: 'average',
   count: 'count',
+  countd: 'count distinct',
   min: 'minimum',
   max: 'maximum',
 };

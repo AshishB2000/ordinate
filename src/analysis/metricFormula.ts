@@ -32,7 +32,7 @@ import { FormulaError, tokenize, type Tok } from '../formula/formulaTokens';
 import { compile, compileTokens, type Compiled, type SourceSpan } from '../formula/formula';
 import { isLodExpression, lodDimProblem } from '../formula/lod';
 import type { MetricAggregation } from './metricValue';
-import { PLAIN_AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS } from '../data/aggregations';
 
 /**
  * The sentinel that marks a rewritten aggregation.
@@ -44,7 +44,7 @@ import { PLAIN_AGGREGATIONS } from '../data/aggregations';
  */
 const AGG_PREFIX = '@agg:';
 
-const AGG_FNS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
+const AGG_FNS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 
 /** One `sum(revenue)` the rewrite turned into a reference. */
 export interface AggOperand {
