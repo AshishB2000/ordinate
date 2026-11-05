@@ -167,6 +167,91 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
   if (tableBoth.value.ok !== true) throw new Error(`table edit failed: ${tableBoth.body}`);
   ok('a table doc edited here only: newer here', itemOf(await plan(F.P, files0), `table:${F.orders}`).newerHere === true);
 
+  // ── 7. The editor's gates ─────────────────────────────────────────────────
+  // metric:save and metric:update, byte for byte: their replies hashed (ids, stamps and tags normalized) before their
+  // bodies moved to src/ipc/metricSave.ts, and pinned.
+  const pinOf = async (): Promise<string> => {
+    const save = async (input: Record<string, unknown>) => (await post('metric:save', { projectId: F.P, input: { datasetId: F.orders, format: { kind: 'number', decimals: 0, compact: false }, ...input } })).value;
+    const update = async (id: string, patch: Record<string, unknown>) => (await post('metric:update', { projectId: F.P, id, patch })).value;
+    const sum = { column: 'amount', aggregation: 'sum' };
+    const replies: unknown[] = [
+      await save({ name: 'Revenue', definition: sum }),
+      await save({ name: ' emea ', definition: sum }),
+      await save({ name: 'Pin period', definition: { base: fid(90), window: { to_date: 'month' } } }),
+      await save({ name: 'Pin period', definition: { base: F.revenue, window: { to_date: 'month' } }, timeColumn: 'day' }),
+      await save({ name: 'Pin funnel', definition: { funnel: { entity: 'nope', event: 'region', time: 'day', steps: ['EU', 'ME'], window: { n: 7, unit: 'days' } }, show: 'rate' } }),
+      await save({ name: 'Pin snapshot', definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'region', take: 'last' } } }),
+      await save({ name: 'Pin per', definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'day' } } }),
+      await save({ name: 'Pin per', definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'nope' } } }),
+      await save({ name: 'Pin time', definition: sum, timeColumn: 'region' }),
+      await save({ name: 'Pin target', definition: sum, timeColumn: 'day', target: { source: { value: 5 } } }),
+      await save({ name: 'Pin gone', definition: sum, datasetId: fid(91) }),
+      await update(F.stock, { name: 'revenue' }),
+      await update(F.mtd, { definition: { base: fid(92), window: { to_date: 'month' } } }),
+      await update(F.stock, { definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'region', take: 'last' } } }),
+      await update(F.stock, { timeColumn: 'region' }),
+      await update(F.revenue, { target: { source: { value: 5 } } }),
+      await update(fid(93), { description: 'x' }),
+    ];
+    const made = await save({ name: 'Pin metric', definition: sum, description: 'pinned', timeColumn: 'day' });
+    const distinct = await save({ name: 'Pin distinct', definition: { column: 'order_id', aggregation: 'countd' } });
+    replies.push(made, await update(made.metric.id, { description: 'pinned again', timeColumn: 'day' }), distinct);
+    for (const m of [made, distinct]) await post('metric:delete', { projectId: F.P, id: m.metric.id });
+    const text = JSON.stringify(replies)
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'ID')
+      .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'TS')
+      .replace(/"tag":"[^"]*"/g, '"tag":"TAG"');
+    return require('crypto').createHash('sha256').update(text).digest('hex') as string;
+  };
+  const PIN = 'fb294aaf7473ae590e4294ea900089c81ccb2ad486fa22a249663b9b11140839';
+  const pin = await pinOf();
+  ok('metric:save and metric:update replies are byte-identical to before the lift', pin === PIN, pin);
+
+  // Each defect is refused with the sentence the editor itself gives for it (asked of the editor, which refuses too).
+  const filesG = (await H.as(H.ORG_A, () => exportModel(F.P))).files;
+  const editor = async (channel: string, payload: Record<string, unknown>): Promise<string> => {
+    const r = await post(channel, { projectId: F.P, ...payload });
+    if (r.value.ok !== false) throw new Error(`the editor took ${channel}: ${r.status} ${r.body.slice(0, 300)}`);
+    return String(r.value.error);
+  };
+  const dupLabels = [{ value: 'EU', label: 'Europe' }, { value: 'EE', label: 'Europe' }];
+  const badBase = [{ type: 'filter', column: 'nope', op: '=', value: 'x' }];
+  const rel0 = jsonAt(filesG, 'relationships.json').relationships[0];
+  const NEG: Array<[string, Files, string, string]> = [
+    ['a duplicate value label', fieldOf(filesG, 'region', (f) => { f.values = dupLabels; }), `field:${F.orders}:region`, await editor('catalog:setColumn', { datasetId: F.orders, column: 'region', patch: { values: dupLabels } })],
+    ['value labels on a column that is not text', fieldOf(filesG, 'amount', (f) => { f.values = [{ value: '1', label: 'One' }]; }), `field:${F.orders}:amount`, await editor('catalog:setColumn', { datasetId: F.orders, column: 'amount', patch: { values: [{ value: '1', label: 'One' }] } })],
+    ['an "Also called" name another column answers to', fieldOf(filesG, 'amount', (f) => { f.aliases = ['region']; }), `field:${F.orders}:amount`, await editor('catalog:setColumn', { datasetId: F.orders, column: 'amount', patch: { aliases: ['region'] } })],
+    ['a key that is not a column', edit(filesG, 'datasets', F.orders, (d) => { d.key = 'nope'; }), `table:${F.orders}`, await editor('catalog:setTable', { datasetId: F.orders, patch: { key: 'nope' } })],
+    ['a base filter on a column the Live dataset lacks', edit(filesG, 'datasets', F.live, (d) => { d.baseFilters = badBase; }), `baseFilters:${F.live}`, await editor('live:setBaseFilters', { datasetId: F.live, filters: badBase })],
+    ['a term inside a term', edit(filesG, 'terms', F.emea, (t) => { t.filters = [{ type: 'term', term: F.emea }]; }), `term:${F.emea}`, await editor('term:update', { id: F.emea, patch: { filters: [{ type: 'term', term: F.emea }] } })],
+    ['a term named like a metric', edit(filesG, 'terms', F.emea, (t) => { t.name = 'Revenue'; }), `term:${F.emea}`, await editor('term:update', { id: F.emea, patch: { name: 'Revenue' } })],
+    ['a metric named like a term', edit(filesG, 'metrics', F.revenue, (m) => { m.name = 'EMEA'; }), `metric:${F.revenue}`, await editor('metric:update', { id: F.revenue, patch: { name: 'EMEA' } })],
+    ['a snapshot on a column that is not a date', edit(filesG, 'metrics', F.stock, (m) => { m.definition.snapshot.column = 'region'; }), `metric:${F.stock}`, await editor('metric:update', { id: F.stock, patch: { definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'region', take: 'last', per: 'region' } } } })],
+    ['a period metric with a date of its own', edit(filesG, 'metrics', F.mtd, (m) => { m.timeColumn = 'day'; }), `metric:${F.mtd}`, await editor('metric:update', { id: F.mtd, patch: { timeColumn: 'day' } })],
+    ['a formula that does not compile', edit(filesG, 'metrics', avg, (m) => { m.definition = { formula: '[Revenue] +' }; }), `metric:${avg}`, String((await post('metric:check', { projectId: F.P, datasetId: F.orders, expression: '[Revenue] +', name: 'Avg basket', id: avg })).value.error)],
+    ['a relationship label another one between the two datasets has', put(filesG, 'relationships.json', { relationships: [rel0, { ...rel0, id: fid(40), base: BASE, from: { dataset: F.orders, column: 'region' }, to: { dataset: F.customers, column: 'name' } }] }), `relationship:${fid(40)}`,
+      await editor('relationship:save', { relationship: { from: { datasetId: F.orders, column: 'region' }, to: { datasetId: F.customers, column: 'name' }, cardinality: 'many_to_one', label: 'Customer' } })],
+  ];
+  for (const [what, f, key, sentence] of NEG) {
+    const i = itemOf(await plan(F.P, f), key);
+    ok(`${what}: skipped with the editor's sentence`, sentence.length > 0 && i.status === 'skipped' && i.reason === 'invalid' && i.error === sentence, `${show(i)} / ${sentence}`);
+  }
+  const ordersMetric = jsonAt(filesG, 'metrics/orders.json');
+  const twoNew = await plan(F.P, put(put(filesG, 'metrics/margin-a.json', { ...ordersMetric, id: fid(41), name: 'Margin' }), 'metrics/margin-b.json', { ...ordersMetric, id: fid(42), name: 'Margin' }));
+  const taken = await H.as(H.ORG_A, async () => require('../src/ipc/metrics').nameTakenMessage('Margin') as string);
+  ok('two new metrics with one name: both skipped with the editor\'s sentence', [41, 42].every((n) => itemOf(twoNew, `metric:${fid(n)}`).error === taken), show(twoNew));
+  const swapped = await plan(F.P, edit(edit(filesG, 'metrics', F.stock, (m) => { m.name = 'Orders'; }), 'metrics', jsonAt(filesG, 'metrics/orders.json').id, (m) => { m.name = 'Stock on hand'; }));
+  ok('two metrics swapping names: both plan, against the names after the import', itemOf(swapped, `metric:${F.stock}`).status === 'renamed' && itemOf(swapped, `metric:${ordersMetric.id}`).status === 'renamed', show(swapped));
+  const pending = await plan(F.P, put(put(filesG, 'metrics/units.json', { ...ordersMetric, id: fid(43), name: 'Units', definition: { column: 'units', aggregation: 'sum' }, timeColumn: 'day' }), 'metrics/units-mtd.json', { ...jsonAt(filesG, 'metrics/revenue-mtd.json'), id: fid(44), name: 'Units MTD', definition: { base: fid(43), window: { to_date: 'month' } } }));
+  ok('a period metric over a new base metric is new: its base is checked when it is written', itemOf(pending, `metric:${fid(44)}`).status === 'new' && itemOf(pending, `metric:${fid(43)}`).status === 'new', show(pending));
+  let withSkip = put(filesG, 'datasets/returns.json', { id: fid(45), name: 'Returns', base: BASE });
+  withSkip = put(withSkip, 'metrics/refunds.json', { ...ordersMetric, id: fid(46), name: 'Refunds', dataset: fid(45) });
+  withSkip = put(withSkip, 'metrics/refund-share.json', { ...ordersMetric, id: fid(47), name: 'Refund share', definition: { formula: '[Refunds] / [Revenue]' } });
+  const share = itemOf(await plan(F.P, withSkip), `metric:${fid(47)}`);
+  ok('a formula naming a metric the import skips is refused as the editor refuses an unknown name', share.reason === 'invalid' && share.error === String((await post('metric:check', { projectId: F.P, datasetId: F.orders, expression: '[Refunds] / [Revenue]', name: 'Refund share' })).value.error), show(share));
+  ok('NEGATIVE CONTROL: the same files without a defect plan clean', (await plan(F.P, filesG)).items.every((i) => i.status !== 'skipped'), show(await plan(F.P, filesG)));
+  ok('metric:save still refuses a taken name with field "name"', (await post('metric:save', { projectId: F.P, input: { datasetId: F.orders, name: 'Revenue', definition: { column: 'amount', aggregation: 'sum' } } })).value.field === 'name');
+
   await close();
   finish();
 })().catch((err: unknown) => {

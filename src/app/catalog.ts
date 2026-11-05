@@ -392,11 +392,8 @@ export async function setColumn(
       const others: NamedColumn[] = (datasetColumns || Object.keys(cols)).filter((name) => name !== column)
         .map((name) => ({ name, ...(own(cols, name) ? { displayName: cols[name].displayName, aliases: cols[name].aliases } : {}) }));
       // Thrown inside the write, before the file is touched: nothing of this patch is saved.
-      const refuse = (said: string, by: NamedColumn): never => { throw new Error(alreadyCalled(said, by.displayName || by.name)); };
-      const hit = asked !== undefined ? aliasCollision(aliases, others) : null;
-      if (hit) refuse(hit.alias, hit.column);
-      const called = renamed ? others.find((o) => aliasCollision([displayName], [{ name: '', aliases: o.aliases }])) : undefined;
-      if (called) refuse(displayName, called);
+      const refusal = columnNamesRefusal(asked !== undefined ? aliases : undefined, renamed ? displayName : '', others);
+      if (refusal) throw new Error(refusal);
     }
     const next: ColumnDoc = {
       description: p.description !== undefined ? clip(p.description, MAX_DESCRIPTION) : cur.description,
@@ -413,6 +410,18 @@ export async function setColumn(
     cols[column] = next;
     return next;
   });
+}
+
+/**
+ * The sentence refusing a column's new names, or null: an "Also called" name (`aliases`, when they change) or a new
+ * display name (`displayName`, '' when it does not change) another column of the dataset (`others`) already answers
+ * to. `setColumn`'s rule, and a model import's (src/app/modelGates.ts).
+ */
+export function columnNamesRefusal(aliases: string[] | undefined, displayName: string, others: NamedColumn[]): string | null {
+  const hit = aliases !== undefined ? aliasCollision(aliases, others) : null;
+  if (hit) return alreadyCalled(hit.alias, hit.column.displayName || hit.column.name);
+  const called = displayName ? others.find((o) => aliasCollision([displayName], [{ name: '', aliases: o.aliases }])) : undefined;
+  return called ? alreadyCalled(displayName, called.displayName || called.name) : null;
 }
 
 /** A patch's value-label list as stored; THROWS the sentence when it holds what a reader would drop. Rows that are not {value, label} text are not rows. */

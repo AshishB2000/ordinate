@@ -28,13 +28,9 @@ export type SetBaseFiltersReply =
   | { ok: true; baseFilters: FilterStep[]; epoch: number }
   | { ok: false; code?: 'not_live' | 'live_refused'; reason?: string; error: string };
 
-export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<SetBaseFiltersReply> {
-  const projectId = str(p.projectId);
-  const datasetId = str(p.datasetId);
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  if (!meta) return { ok: false, error: liveDatasetMissing() };
-  if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
-  const asked = Array.isArray(p.filters) ? p.filters : [];
+/** The list as it will be stored, or the editor's refusal: checked the way every question will read it (the header). A model import asks it too. */
+export function baseFiltersRefusal(meta: { columns: datasets.DatasetMeta['columns'] }, filters: unknown): { steps: FilterStep[] } | { ok: false; code: 'live_refused'; reason: string; error: string } {
+  const asked = Array.isArray(filters) ? filters : [];
   const steps = sanitizeBaseFilters(asked);
   // A step the stored form would drop (an unknown operator, a radius, too many values) is refused, never saved short.
   if (steps.length !== asked.length) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
@@ -45,6 +41,18 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
     const error = base.code === 'baseFilter' ? msg.liveBaseFilterInvalidMessage() : base.message;
     return { ok: false, code: 'live_refused', reason: base.code, error };
   }
+  return { steps };
+}
+
+export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<SetBaseFiltersReply> {
+  const projectId = str(p.projectId);
+  const datasetId = str(p.datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta) return { ok: false, error: liveDatasetMissing() };
+  if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
+  const checked = baseFiltersRefusal(meta, p.filters);
+  if ('ok' in checked) return checked;
+  const { steps } = checked;
   const live = await setBaseFilters(projectId, datasetId, steps);
   if (!live) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
   queryCache.invalidateDataset(datasetId, projectId);

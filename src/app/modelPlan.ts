@@ -26,7 +26,10 @@ import { stableStringify } from '../engine/queryCache';
 import { exportModel, type NotCarried } from './modelExport';
 import { readModelFiles, type ParsedModel } from './modelRead';
 import { mapRefs, matchModel, type ModelMatch } from './modelMatch';
-import { objectBase, type ModelDataset } from './modelFormat';
+import { objectBase, type ModelDataset, type ModelField, type ModelRelationship } from './modelFormat';
+import { baseFilterRefusal, fieldRefusal, metricRefusal, relationshipRefusal, tableRefusal, termRefusal, type PostNames } from './modelGates';
+import type { Relationship } from '../analysis/relationships';
+import type { DatasetMeta } from '../data/datasets';
 import { modelDatasetMoved } from './modelFileMessages';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
@@ -113,13 +116,33 @@ async function hereOf(projectId: string): Promise<{ here: ParsedModel; notCarrie
   return { here, notCarried: exp.notCarried };
 }
 
+const WRITES: ReadonlySet<PlanStatus> = new Set<PlanStatus>(['updated', 'renamed', 'new', 'conflict']);
+const writes = (i: PlanItem): boolean => WRITES.has(i.status);
+/** The editor refused it: kept with its diff, so the person sees what was refused. */
+const refuse = (i: PlanItem, error: string): void => void Object.assign(i, { status: 'skipped', reason: 'invalid', error });
+
+type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
+
 export async function planImport(projectId: string, file: ParsedModel): Promise<ImportPlan> {
   const { here, notCarried } = await hereOf(projectId);
   const m: ModelMatch = matchModel(file, here);
   const items: PlanItem[] = [];
-  /** `kind:fileId` of each file object the import will not write: what depends on it is skipped too. */
-  const skipped = new Set<string>();
+  /** `kind:fileId` of each file object that will not exist after the import: whatever names it is skipped too. */
+  const gone = new Set<string>();
+  /** Each relationship, term and metric item's file form (references mapped) and what it names. */
+  const fileOf = new Map<string, Mapped>();
   const hereName = new Map(here.datasets.map((d) => [d.id, d.name]));
+  const metas = new Map<string, Promise<DatasetMeta | null>>();
+  const metaOf = (id: string): Promise<DatasetMeta | null> => {
+    if (!metas.has(id)) metas.set(id, datasets.getDatasetMeta(projectId, id)); // the record's columns, never its rows
+    return metas.get(id) as Promise<DatasetMeta | null>;
+  };
+  const dependency = (r: Mapped): string | undefined => r.missing[0] ?? r.refs.find((k) => gone.has(k));
+  const created = (k: string): boolean => {
+    const [kind, id] = k.split(':') as [string, string];
+    const map = kind === 'term' ? m.terms : kind === 'metric' ? m.metrics : kind === 'relationship' ? m.relationships : null;
+    return !!map && map.get(id) === null;
+  };
 
   // ── Datasets: never created, never renamed; their table, field and base-filter docs ──
   for (const fd of file.datasets) {
@@ -127,32 +150,46 @@ export async function planImport(projectId: string, file: ParsedModel): Promise<
     const fileWritten = objectBase({ ...fd, ...(guide && { guide }) });
     const target = m.datasets.get(fd.id) ?? null;
     if (!target) {
-      skipped.add(`dataset:${fd.id}`);
+      gone.add(`dataset:${fd.id}`);
       items.push(skip({ key: `dataset:${fd.id}`, kind: 'dataset', name: fd.name, fileHash: fileWritten, hereHash: '' }, 'dataset_missing'));
       continue;
     }
     const pd = here.datasets.find((d) => d.id === target) as ModelDataset;
-    const meta = await datasets.getDatasetMeta(projectId, target); // the record's columns, never its rows
+    const meta = await metaOf(target);
+    const columns = meta?.columns ?? [];
     const sides: Sides = { how: m.how.get(`dataset:${fd.id}`), fileBase: fd.base, fileWritten, hereBase: pd.base };
     const at = (kind: PlanKind, key: string, name: string, f: Json, p: Json): Omit<PlanItem, 'status'> => ({ key, kind, name, targetId: target, fileHash: objectBase(f), hereHash: objectBase(p) });
 
     const ft = tableOf(fd, guide);
     const pt = tableOf(pd, here.guides.get(target));
-    if (Object.keys(ft).length || Object.keys(pt).length) items.push(compared(at('table', `table:${fd.id}`, pd.name, ft, pt), ft, pt, sides));
+    if (Object.keys(ft).length || Object.keys(pt).length) {
+      const item = compared(at('table', `table:${fd.id}`, pd.name, ft, pt), ft, pt, sides);
+      const refusal = writes(item) ? tableRefusal(columns, ft.key) : null;
+      if (refusal) refuse(item, refusal);
+      items.push(item);
+    }
 
+    const fields: Array<{ item: PlanItem; f: ModelField; p: ModelField | undefined }> = [];
     for (const ff of fd.fields ?? []) {
       const pf = (pd.fields ?? []).find((f) => f.name === ff.name);
       const f = content(ff);
       const p = pf ? content(pf) : {};
       const base = at('field', `field:${fd.id}:${ff.name}`, `${pd.name} · ${ff.name}`, f, p);
-      if (!meta?.columns.some((c) => c.name === ff.name)) {
+      if (!columns.some((c) => c.name === ff.name)) {
         items.push(skip(base, 'column_missing'));
         continue;
       }
       const item = compared(base, f, p, sides);
       // Sensitivity rises, never falls: only none → a mark is written.
-      const lowered = !!pf?.sensitivity && ff.sensitivity !== pf.sensitivity;
-      items.push(lowered && (item.status === 'updated' || item.status === 'conflict') ? { ...item, status: 'skipped', reason: 'sensitivity_lowered' } : item);
+      if (!!pf?.sensitivity && ff.sensitivity !== pf.sensitivity && writes(item)) Object.assign(item, { status: 'skipped', reason: 'sensitivity_lowered' });
+      fields.push({ item, f: ff, p: pf });
+      items.push(item);
+    }
+    // Each field's names against the dataset's other field docs as they will be after the import.
+    const post = [...(pd.fields ?? []).filter((pf) => !fields.some((x) => x.f.name === pf.name && writes(x.item))), ...fields.filter((x) => writes(x.item)).map((x) => x.f)];
+    for (const { item, f, p } of fields) {
+      const refusal = writes(item) ? fieldRefusal(columns, f, p, post) : null;
+      if (refusal) refuse(item, refusal);
     }
 
     const { value: mapped, missing } = mapRefs(fd, m);
@@ -162,77 +199,120 @@ export async function planImport(projectId: string, file: ParsedModel): Promise<
       const base = at('baseFilters', `baseFilters:${fd.id}`, pd.name, fb, pb);
       if (fb.baseFilters.length && !isLive(meta)) items.push(skip(base, 'not_live'));
       else if (missing.length) items.push(skip(base, 'depends_on_skipped', { because: missing[0] }));
-      else items.push(compared(base, fb, pb, sides));
+      else {
+        const item = compared(base, fb, pb, sides);
+        const refusal = writes(item) && meta ? baseFilterRefusal(meta, fb.baseFilters) : null;
+        if (refusal) refuse(item, refusal);
+        items.push(item);
+      }
     }
   }
 
   // ── Relationships, terms, metrics: by id then name, each with what it names ──
-  const dependency = (r: { missing: string[]; refs: string[] }): string | undefined => r.missing[0] ?? r.refs.find((k) => skipped.has(k));
+  /** One object's item: skipped when what it names is missing or will not exist, else compared with its project copy. */
+  const objectItem = async (
+    kind: 'relationship' | 'term' | 'metric', fo: { id: string; base: string }, name: string, target: string | null, po: { id: string; base: string; name?: string; dataset?: string } | undefined, tag: (id: string) => Promise<string>,
+  ): Promise<void> => {
+    const key = `${kind}:${fo.id}`;
+    const r = fileOf.get(key) as Mapped;
+    const base = { key, kind, name, fileHash: objectBase(fo), hereHash: '', ...(po && { targetId: po.id, hereHash: await tag(po.id) }) };
+    const dep = dependency(r);
+    if (dep || (po && po.dataset !== undefined && po.dataset !== r.value.dataset)) {
+      if (!target) gone.add(key);
+      items.push(dep ? skip(base, 'depends_on_skipped', { because: dep }) : skip(base, 'invalid', { error: modelDatasetMoved() }));
+      return;
+    }
+    const sides: Sides = { how: m.how.get(key), fileBase: fo.base, fileWritten: objectBase(fo), hereBase: po?.base ?? '' };
+    items.push(compared(base, content(r.value), po && content(po), sides, !!po?.name && po.name !== name));
+  };
 
   for (const fr of file.relationships) {
     const r = mapRefs(fr, m);
+    fileOf.set(`relationship:${fr.id}`, r);
     const end = (e: { dataset: string; column: string }): string => `${hereName.get(e.dataset) ?? '?'}.${e.column}`;
-    const base = { key: `relationship:${fr.id}`, kind: 'relationship' as const, name: fr.label ?? `${end(r.value.from)} → ${end(r.value.to)}`, fileHash: objectBase(fr), hereHash: '' };
-    const dep = dependency(r);
-    if (dep) {
-      skipped.add(base.key);
-      items.push(skip(base, 'depends_on_skipped', { because: dep }));
-      continue;
-    }
     const target = m.relationships.get(fr.id) ?? null;
-    const pr = here.relationships.find((x) => x.id === target);
-    const sides: Sides = { how: m.how.get(base.key), fileBase: fr.base, fileWritten: objectBase(fr), hereBase: pr?.base ?? '' };
-    items.push(compared({ ...base, ...(pr && { targetId: pr.id, hereHash: pr.base }) }, content(r.value), pr && content(pr), sides));
+    await objectItem('relationship', fr, fr.label ?? `${end(r.value.from)} → ${end(r.value.to)}`, target, here.relationships.find((x) => x.id === target), async (id) => here.relationships.find((x) => x.id === id)?.base ?? '');
+  }
+  // A label is checked against the relationships as they will be after the import.
+  const postRels = (): Relationship[] => {
+    const landed = new Map(items.filter((i) => i.kind === 'relationship' && i.targetId).map((i) => [i.targetId as string, i]));
+    const asRel = (r: ModelRelationship, id: string): Relationship => ({ id, from: { datasetId: r.from.dataset, column: r.from.column }, to: { datasetId: r.to.dataset, column: r.to.column }, cardinality: r.cardinality, ...(r.label && { label: r.label }), verified: { matched: 0, unmatchedFrom: 0 } });
+    return [
+      ...here.relationships.map((pr) => { const it = landed.get(pr.id); return asRel(it && writes(it) ? (fileOf.get(it.key) as Mapped).value : pr, pr.id); }),
+      ...items.filter((i) => i.kind === 'relationship' && i.status === 'new').map((i) => asRel((fileOf.get(i.key) as Mapped).value, (fileOf.get(i.key) as Mapped).value.id)),
+    ];
+  };
+  const rels = postRels();
+  for (const item of items.filter((i) => i.kind === 'relationship' && writes(i))) {
+    const r = (fileOf.get(item.key) as Mapped).value as ModelRelationship;
+    const id = item.targetId ?? r.id;
+    const refusal = relationshipRefusal(r, id, await metaOf(r.from.dataset), await metaOf(r.to.dataset), rels.filter((x) => x.id !== id));
+    if (refusal) {
+      Object.assign(item, refusal === 'column_missing' ? { status: 'skipped', reason: 'column_missing' } : { status: 'skipped', reason: 'invalid', error: refusal.error });
+      if (!item.targetId) gone.add(item.key);
+    }
   }
 
   for (const ft of file.terms) {
-    const r = mapRefs(ft, m);
-    const base = { key: `term:${ft.id}`, kind: 'term' as const, name: ft.name, fileHash: objectBase(ft), hereHash: '' };
-    const dep = dependency(r);
-    if (dep) {
-      skipped.add(base.key);
-      items.push(skip(base, 'depends_on_skipped', { because: dep }));
-      continue;
-    }
-    const pt = here.terms.find((x) => x.id === m.terms.get(ft.id));
-    const tagged = pt ? { targetId: pt.id, hereHash: (await readTerm(projectId, pt.id))?.tag ?? '' } : {};
-    if (pt && pt.dataset !== r.value.dataset) {
-      skipped.add(base.key);
-      items.push(skip({ ...base, ...tagged }, 'invalid', { error: modelDatasetMoved() }));
-      continue;
-    }
-    const sides: Sides = { how: m.how.get(base.key), fileBase: ft.base, fileWritten: objectBase(ft), hereBase: pt?.base ?? '' };
-    items.push(compared({ ...base, ...tagged }, content(r.value), pt && content(pt), sides, !!pt && pt.name !== ft.name));
+    fileOf.set(`term:${ft.id}`, mapRefs(ft, m));
+    const target = m.terms.get(ft.id) ?? null;
+    await objectItem('term', ft, ft.name, target, here.terms.find((x) => x.id === target), async (id) => (await readTerm(projectId, id))?.tag ?? '');
   }
-
   // A metric may name another (a period's base, a target): a skip travels until nothing more falls.
-  const mRefs = new Map(file.metrics.map((fm) => [fm.id, mapRefs(fm, m)]));
+  for (const fm of file.metrics) fileOf.set(`metric:${fm.id}`, mapRefs(fm, m));
   for (let more = true; more;) {
     more = false;
     for (const fm of file.metrics) {
       const key = `metric:${fm.id}`;
-      if (!skipped.has(key) && dependency(mRefs.get(fm.id) as ReturnType<typeof mapRefs>)) {
-        skipped.add(key);
-        more = true;
-      }
+      if (gone.has(key) || m.metrics.get(fm.id) || !dependency(fileOf.get(key) as Mapped)) continue;
+      gone.add(key);
+      more = true;
     }
   }
   for (const fm of file.metrics) {
-    const r = mRefs.get(fm.id) as ReturnType<typeof mapRefs<typeof fm>>;
-    const base = { key: `metric:${fm.id}`, kind: 'metric' as const, name: fm.name, fileHash: objectBase(fm), hereHash: '' };
-    const dep = dependency(r);
-    if (dep) {
-      items.push(skip(base, 'depends_on_skipped', { because: dep }));
-      continue;
+    const target = m.metrics.get(fm.id) ?? null;
+    await objectItem('metric', fm, fm.name, target, here.metrics.find((x) => x.id === target), async (id) => (await readMetric(projectId, id))?.tag ?? '');
+  }
+
+  // ── The editor's checks on terms and metrics, names against the names after the import ──
+  const postNames = (): PostNames => {
+    const landed = new Map(items.filter((i) => (i.kind === 'term' || i.kind === 'metric') && i.targetId).map((i) => [`${i.kind}:${i.targetId}`, i]));
+    const form = <T>(kind: string, o: T & { id: string }): T => {
+      const it = landed.get(`${kind}:${o.id}`);
+      return it && (it.status === 'updated' || it.status === 'renamed') ? (fileOf.get(it.key) as Mapped).value : o; // a conflict keeps this project's
+    };
+    const fresh = (kind: string) => items.filter((i) => i.kind === kind && i.status === 'new').map((i) => (fileOf.get(i.key) as Mapped).value);
+    return {
+      metrics: [...here.metrics.map((pm) => ({ ...form('metric', pm), id: pm.id })), ...fresh('metric')].map((x) => ({ id: x.id, name: x.name, dataset: x.dataset, definition: x.definition })),
+      terms: [...here.terms.map((pt) => ({ ...form('term', pt), id: pt.id })), ...fresh('term')].map((x) => ({ id: x.id, name: x.name, aliases: x.aliases ?? [] })),
+    };
+  };
+  for (let pass = 0; pass <= items.length; pass++) {
+    const post = postNames();
+    let fell = false;
+    for (const item of items) {
+      if ((item.kind !== 'term' && item.kind !== 'metric') || !writes(item)) continue;
+      const r = fileOf.get(item.key) as Mapped;
+      const self = item.targetId ?? r.value.id;
+      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, r.refs.some(created));
+      if (refusal) {
+        refuse(item, refusal);
+        if (!item.targetId) gone.add(item.key);
+        fell = true;
+      }
     }
-    const pm = here.metrics.find((x) => x.id === m.metrics.get(fm.id));
-    const tagged = pm ? { targetId: pm.id, hereHash: (await readMetric(projectId, pm.id))?.tag ?? '' } : {};
-    if (pm && pm.dataset !== r.value.dataset) {
-      items.push(skip({ ...base, ...tagged }, 'invalid', { error: modelDatasetMoved() }));
-      continue;
+    // What names a refused new object goes with it.
+    for (let more = true; more;) {
+      more = false;
+      for (const item of items) {
+        const dep = writes(item) ? (fileOf.get(item.key) as Mapped | undefined)?.refs.find((k) => gone.has(k)) : undefined;
+        if (!dep) continue;
+        Object.assign(item, { status: 'skipped', reason: 'depends_on_skipped', because: dep });
+        if (!item.targetId) gone.add(item.key);
+        more = fell = true;
+      }
     }
-    const sides: Sides = { how: m.how.get(base.key), fileBase: fm.base, fileWritten: objectBase(fm), hereBase: pm?.base ?? '' };
-    items.push(compared({ ...base, ...tagged }, content(r.value), pm && content(pm), sides, !!pm && pm.name !== fm.name));
+    if (!fell) break;
   }
 
   // ── Unreadable files: one skipped item each ──
