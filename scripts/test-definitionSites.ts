@@ -23,6 +23,7 @@ const PATTERNS: readonly RegExp[] = [
   /['"]formula['"]\s+in\b/g,
   /\.definition\.(column|aggregation|formula|snapshot)\b/g,
   /\bisExternalDefinition\(/g,
+  /\b(isSimpleDefinition|isFunnelDefinition|isPeriodDefinition|isNewerKind)\(/g, // part 5's kinds (./pendingKinds)
 ];
 
 // Sources only: no emitted .js, declaration files, tests, goldens or prototypes.
@@ -80,6 +81,9 @@ try {
   put('src/__defProbe.ts', "const c = m.definition.column;\nif ('formula' in m.definition) {}\n");
   const reads = mismatches(scan(tree));
   ok('NEGATIVE CONTROL: a `.definition.column` read and a `\'formula\' in` test count too', reads.length === 1 && reads[0].n === 2);
+  put('src/__defProbe.ts', 'if (isSimpleDefinition(d) || isNewerKind(d)) {}\n');
+  const pending = mismatches(scan(tree));
+  ok('NEGATIVE CONTROL: part 5\'s `isSimpleDefinition(` and `isNewerKind(` sites count too', pending.length === 1 && pending[0].n === 2);
   fs.rmSync(path.join(tree, 'src/__defProbe.ts'));
   const [grown, shrunk] = Object.keys(DEFINITION_SITES);
   fs.appendFileSync(path.join(tree, grown), site);
