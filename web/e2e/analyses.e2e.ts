@@ -325,8 +325,11 @@ e2e('metrics: the table from the server, a new metric with a live preview and a 
   await fdlg.getByLabel('Minimum').fill('1000');
   await fdlg.getByRole('button', { name: 'Apply' }).click();
   await fdlg.waitFor({ state: 'detached' });
+  // A snapshot (semantic D8): only the rows on the latest order date, so the figure below is the snapshot's.
+  await dlg.getByRole('combobox', { name: 'Snapshot' }).click();
+  await page.getByRole('option', { name: 'Latest order_date only' }).click();
   const preview = dlg.getByRole('complementary', { name: 'Preview' });
-  await preview.getByText(/where revenue/).waitFor(); // the server's own words for the definition, with the filter
+  await preview.getByText(/on the latest order_date, where revenue/).waitFor(); // the server's own words for the definition, with the snapshot and the filter
   const figure = (await preview.getByText(/^[\d,.]+[KM]?$/).first().textContent()) ?? '';
   assert.match(figure, /^\d/, `a figure computed by the server, got ${figure}`);
   await screensInPlace(page, 'metrics-editor');

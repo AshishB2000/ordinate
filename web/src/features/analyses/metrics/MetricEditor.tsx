@@ -26,7 +26,7 @@ import type { FilterStep } from '../../visuals/api';
 import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
-import { isFormula, useMetricList, type Metric, type MetricFormat } from './api';
+import { isFormula, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
@@ -35,6 +35,12 @@ const AGGS: Agg[] = ['sum', 'avg', 'count', 'min', 'max'];
 const PREVIEW_MS = 300;
 
 export type MetricDraft = Partial<Omit<Metric, 'definition'>> & { definition?: Metric['definition'] };
+
+/** The Snapshot field's value, `take:column` (split on the first colon), or `''` for every row. */
+const snapshotOf = (v: string): Snapshot | null => {
+  const at = v.indexOf(':');
+  return at > 0 ? { column: v.slice(at + 1), take: v.slice(0, at) === 'first' ? 'first' : 'last' } : null;
+};
 
 type EditorProps = { projectId: string; existing?: MetricDraft; onSaved: (m: Metric) => void; onClose: () => void };
 
@@ -69,6 +75,9 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
   const [column, setColumn] = useState<string | null>(def && !isFormula(def) ? def.column || null : null);
   const col = column && cols.data?.columns.some((c) => c.name === column) ? column : (cols.data?.columns[0]?.name ?? null);
   const [agg, setAgg] = useState<Agg>(def && !isFormula(def) ? def.aggregation : 'sum');
+  // A snapshot (D8): `take:column`, or '' for every row. Always sent, so a clear (null) is told from an old tab's save.
+  const [snapshot, setSnapshot] = useState(def && !isFormula(def) && def.snapshot ? `${def.snapshot.take}:${def.snapshot.column}` : '');
+  const [snapError, setSnapError] = useState('');
   const [formula, setFormula] = useState(def && isFormula(def) ? def.formula : '');
   // The builder's filter rows and typed dialog (filterDialog.ts): values, conditions, ranges, periods — never a guessed type.
   const [filters, setFilters] = useState<FilterStep[]>((existing?.filters ?? []) as FilterStep[]);
@@ -93,7 +102,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const definition = mode === 'formula' ? { formula } : col ? { column: col, aggregation: agg } : null;
+  const definition = mode === 'formula' ? { formula } : col ? { column: col, aggregation: agg, snapshot: snapshotOf(snapshot) } : null;
   const live = liveFilters(filters);
   const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
@@ -135,6 +144,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
   const save = async () => {
     setError('');
     setDateError('');
+    setSnapError('');
     if (!name.trim()) return setError('A metric needs a name.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
     setSaving(true);
@@ -144,7 +154,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
     setSaving(false);
     if ('changed' in r) return; // the banner
     // In the dialog, not a toast: the user's work is still in these boxes — a date's refusal beside the date.
-    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : setError(r.error);
+    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : r.field === 'snapshot' ? setSnapError(r.error) : setError(r.error);
     onSaved(r.metric);
     onClose();
   };
@@ -217,6 +227,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
               setColumn(null);
               setFilters([]);
               setTimeColumn('');
+              setSnapshot('');
             }}
           />
           <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' ? 'formula' : 'simple')}>
@@ -243,6 +254,26 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorP
                   </button>
                 ))}
               </div>
+              {(dates.length > 0 || snapshot) && (
+                <Select
+                  label="Snapshot"
+                  value={snapshot}
+                  disabled={!ds || cols.isPending}
+                  hint="For balances, stock and headcount: keeps only the rows on the latest date in scope (per month on a chart by month), then aggregates them."
+                  error={snapError || undefined}
+                  options={[
+                    { value: '', label: 'Every row' },
+                    ...[...new Set(snapshot ? [...dates, snapshotOf(snapshot)!.column] : dates)].flatMap((c) => [
+                      { value: `last:${c}`, label: `Latest ${c} only` },
+                      { value: `first:${c}`, label: `Earliest ${c} only` },
+                    ]),
+                  ]}
+                  onValueChange={(v) => {
+                    setSnapshot(v);
+                    setSnapError('');
+                  }}
+                />
+              )}
             </>
           ) : (
             <>
