@@ -167,6 +167,23 @@ All notable changes to Ordinate are documented here. Format based on
   column's total. In chart and dataset facts alike, a filter on a column marked personal or financial
   names the column and never its value.
 
+### Measures from a dataset's many sides
+
+- **Charts and KPIs can use measures from a dataset's many sides.** On a Customers chart or KPI, "sum
+  of Orders.amount" is now Orders' own total, by the chart's category, instead of a refusal (a chart) or
+  "—" (a KPI). Each measure counts its own table's rows, and the tile says so. The dashboard's filters
+  reach it along the relationship path; a filter that cannot reach a measure leaves it as it is, and the
+  chart says that too. The builder lists a many side's number columns under Measures, as "amount · Orders
+  · counts its own rows".
+- **Formula metrics can total related and many-side columns**, as a KPI and as a chart measure:
+  `sum(amount) / count(id)` on Customers divides Orders' total by Customers' count, per category. Such a
+  chart measure was refused before ("Unknown function").
+- **Still refused, each with a sentence:** a category or split from a many side; a bare column two many
+  sides both have (pick a measure from one of them); pivots, cohorts, funnels, small multiples, maps and
+  key drivers over several tables; a Live dataset on either side; and a caller with row access rules on
+  the chart's own dataset. During a rolling upgrade an older pod shows "—" for such a KPI and refuses
+  such a chart: never a different number.
+
 ### Breaking — Ordinate is now a self-hosted web app (Phase 7)
 
 The Electron desktop app is gone. Ordinate is a server a company runs in its own infrastructure,

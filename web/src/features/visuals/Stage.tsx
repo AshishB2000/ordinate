@@ -1,8 +1,8 @@
 // The builder's stage: the chart-type chips and the chart's controls, the
-// sample note, and the chart itself — where a click on a mark opens the rows
+// sample note, the chart itself — where a click on a mark opens the rows
 // behind it (drill.ts wireDrillClick), a constant reference line can be
 // dragged, and ⌥-click annotates a mark (chartAnnotations.ts, through
-// `annotationHooks`).
+// `annotationHooks`) — and the server's notes under it.
 
 import { useEffect, useState } from 'react';
 import { annotationHooks } from '../../charts/annotations';
@@ -152,6 +152,15 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
           />
         )}
       </div>
+      {reply?.notes && reply.notes.length > 0 && (
+        <div className={s.chartNotes} role="note">
+          {reply.notes.map((n) => (
+            <p key={n} className={s.sample}>
+              {n}
+            </p>
+          ))}
+        </div>
+      )}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}
       {annotating && (
         <NameDialog

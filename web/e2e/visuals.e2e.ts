@@ -10,6 +10,8 @@
 //   new       "+ New visual" → dataset → Open the builder → Map regions → the
 //             region map draws → Save; the card's menu duplicates, renames and
 //             deletes (to the Trash)
+//   fan-out   a measure from a many side (Orders' amount on a Customers chart) is
+//             totalled on its own table, and the note under the chart says so
 //   empty     a project with no data: the designed empty state
 //
 // Every page: no console error or CSP violation, inside the RPC budget.
@@ -420,6 +422,37 @@ e2e('visuals: a calculated column, added from the builder, is recomputed by the 
   // The sample is shared: take the step back out (the pipeline recomputes from its source).
   const removed = await post(s, 'dataset:removeStep', { projectId: pid, datasetId, index: stepsBefore });
   assert.equal(((await removed.json()) as { ok: boolean }).ok, true);
+  report(s);
+});
+
+e2e('visuals: a measure from a many side is totalled on its own table, and the chart says so', async (s) => {
+  const { page } = s;
+  const made = await post(s, 'projects:create', { name: 'Fan-out' });
+  const { id: pid } = (await made.json()) as { id: string };
+  const save = async (name: string, columns: { name: string; type: string }[], rows: unknown[][]): Promise<string> => {
+    const r = (await (await post(s, 'dataset:composeSave', { projectId: pid, name, base: { inline: { name, columns, rows } }, joins: [], steps: [], sourceKind: 'paste' })).json()) as { ok: boolean; dataset: { id: string } };
+    assert.equal(r.ok, true, JSON.stringify(r).slice(0, 300));
+    return r.dataset.id;
+  };
+  const customers = await save('Customers', [{ name: 'id', type: 'text' }, { name: 'segment', type: 'text' }, { name: 'credit', type: 'number' }], [['c1', 'SMB', 1], ['c2', 'Enterprise', 2], ['c3', 'SMB', 3]]);
+  const orders = await save('Orders', [{ name: 'order_id', type: 'text' }, { name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }], [['o1', 'c1', 10], ['o2', 'c1', 5], ['o3', 'c2', 7], ['o4', 'zz', 2]]);
+  const rel = (await (await post(s, 'relationship:save', { projectId: pid, relationship: { from: { datasetId: orders, column: 'customer_id' }, to: { datasetId: customers, column: 'id' }, cardinality: 'many_to_one' } })).json()) as { ok: boolean };
+  assert.equal(rel.ok, true);
+
+  await page.goto(`/visuals/${pid}/new?dataset=${customers}`);
+  await page.locator('[data-chart-type] canvas').waitFor();
+  await page.getByRole('combobox', { name: 'Category' }).click();
+  await page.getByRole('option', { name: 'segment', exact: true }).click();
+  const drawn = page.waitForResponse(async (r: Response) => r.url().endsWith('/api/rpc/visual%3Apreview') && (await r.text()).includes('sum of amount'));
+  await page.getByRole('combobox', { name: 'Measure column' }).click();
+  await page.getByRole('option', { name: 'amount · Orders · counts its own rows' }).click();
+  // Orders' own rows by their customer's segment: c1's two orders, c2's one, and the orphan under the blank label.
+  const reply = (await (await drawn).json()) as { ok: boolean; data: { labels: string[]; series: { name: string; values: (number | null)[] }[] }; notes?: string[] };
+  assert.ok(reply.ok, JSON.stringify(reply).slice(0, 300));
+  assert.deepEqual(Object.fromEntries(reply.data.labels.map((l, i) => [l, reply.data.series[0].values[i]])), { SMB: 15, Enterprise: 7, '': 2 });
+  await page.getByRole('note').getByText('Counted on their own table’s rows: “sum of amount”.').waitFor();
+  await inked(page, '[data-chart-type] canvas', 200);
+  await shots(page, 'visual-fan-out');
   report(s);
 });
 

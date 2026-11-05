@@ -36,6 +36,8 @@ export interface Visual extends VisualSummary {
 /** `visual:data` / `visual:preview`, with the builder's extras. */
 export interface Preview extends VizData {
   category?: { kind?: string; grain?: string; binned?: boolean; note?: string };
+  /** The server's sentences about the figures (which measures count their own rows, which filters reach only some). */
+  notes?: string[];
   sample?: { note: string; by?: string };
   overlay?: { caption?: string; pct?: number };
   /** The labels are places and no map regions are chosen: the level a map of this would use (the server's call). */
@@ -69,6 +71,8 @@ export interface RelatedCol {
   group: string;
   /** The relationship this group is read through ("Ship date"); absent for a dataset's first one. */
   via?: string;
+  /** A many side's column: a measure only, totalled on its own table's rows (the server's fan-out). */
+  many?: true;
 }
 
 export interface Suggestion {
@@ -244,11 +248,12 @@ export function useRelated(projectId: string, datasetId: string | undefined) {
         ? skipToken
         : async (): Promise<RelatedCol[]> => {
             type Group = { datasetId: string; name: string; columns: { name: string; type: string }[]; via?: string };
-            const r = (await rpc('relationship:related', { projectId, datasetId }).catch(() => null)) as { ok: boolean; groups?: Group[]; viaGroups?: Group[] } | null;
-            // The labelled joins come apart from `groups` (an older tab never lists them without their via).
-            return (r && r.ok ? [...(r.groups ?? []), ...(r.viaGroups ?? [])] : []).flatMap((g) =>
+            const r = (await rpc('relationship:related', { projectId, datasetId }).catch(() => null)) as { ok: boolean; groups?: Group[]; viaGroups?: Group[]; manyGroups?: Group[] } | null;
+            // The labelled joins come apart from `groups` (an older tab never lists them without their via), and so do the many sides.
+            const many = new Set(r && r.ok ? r.manyGroups ?? [] : []);
+            return (r && r.ok ? [...(r.groups ?? []), ...(r.viaGroups ?? []), ...many] : []).flatMap((g) =>
               g.columns.map((c) => ({
-                key: fieldKey(c.name, g.datasetId, g.via), column: c.name, type: c.type, datasetId: g.datasetId, group: g.name, ...(g.via && { via: g.via }),
+                key: fieldKey(c.name, g.datasetId, g.via), column: c.name, type: c.type, datasetId: g.datasetId, group: g.name, ...(g.via && { via: g.via }), ...(many.has(g) && { many: true as const }),
               })),
             );
           },
