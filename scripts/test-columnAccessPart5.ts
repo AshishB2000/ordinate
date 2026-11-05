@@ -15,6 +15,8 @@
 // TARGET (p5-09): a headcount whose target is a plan totalling salary shows east its figure and no target, with the
 // sentence, and no plan figure; NEGATIVE CONTROLS: the editor's tile has the plan's target, and a plan counting dept
 // gives east the editor's target, attainment and status.
+// TARGET CHARTS (p5-10): its chart by month and by dept draws east no target series from the salary plan; NEGATIVE
+// CONTROLS: the editor's has one, and the dept plan's series is east's Object.is-equal to the editor's.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -149,6 +151,17 @@ void (async () => {
     const [eastR, edR] = [await tTile('east', ON_ROWS), await tTile('ed', ON_ROWS)];
     const dT = H.diff(tOf(eastR), tOf(edR), {});
     ok('NEGATIVE CONTROL: target: a plan counting dept gives east the editor\'s target, attainment and status', typeof tOf(eastR)?.value === 'number' && dT === '', `${dT} | ${show(eastR)}`);
+
+    // ── Target charts (p5-10) ────────────────────────────────────────────────
+    const tChart = (who: string, id: string, by: object) => W.call(who, 'visual:data', { projectId: P, datasetId: log, encoding: { ...by, values: [{ column: 'employee_id', aggregation: 'count', metricId: id }] }, filters: H1 });
+    const seriesOf = (r: H.Reply): unknown => r.body?.data?.series?.find((x: { target?: boolean }) => x.target)?.values;
+    for (const [label, by] of [['by month', { category: 'day', grain: 'month' }], ['by dept', { category: 'dept' }]] as const) {
+      const [eastC, edC] = [await tChart('east', ON_PAY, by), await tChart('ed', ON_PAY, by)];
+      ok(`target chart ${label}: east's draws no target series from the salary plan`, eastC.body?.ok === true && seriesOf(eastC) === undefined && !C.leaksHidden(eastC.text), show(eastC));
+      ok(`NEGATIVE CONTROL: target chart ${label}: the editor's has one`, Array.isArray(seriesOf(edC)), show(edC));
+      const dTC = H.diff(seriesOf(await tChart('east', ON_ROWS, by)), seriesOf(await tChart('ed', ON_ROWS, by)), {});
+      ok(`NEGATIVE CONTROL: target chart ${label}: the dept plan's series is east's Object.is-equal to the editor's`, Array.isArray(seriesOf(await tChart('east', ON_ROWS, by))) && dTC === '', dTC);
+    }
   } finally {
     await W.close();
   }
