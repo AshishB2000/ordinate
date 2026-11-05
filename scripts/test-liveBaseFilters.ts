@@ -149,7 +149,14 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['answer:card', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d) })).value],
     ['answer:card (a text filter: the case-fix lookup)', async (d) => (await post('answer:card', { projectId: P, spec: SPEC(d, NORTH) })).value],
     ['dataset:syncLiveSchema', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value],
+    // PR 01's key check ("Check now"), one statement through liveLookup: its reply carries the code and the sentence, no reason.
+    ['catalog:checkKey', async (d) => (await post('catalog:checkKey', { projectId: P, datasetId: d })).value],
   ];
+  // A key to check on both Live datasets: a Live key save stores it and asks the warehouse nothing (D2).
+  for (const d of [L, second.liveId]) {
+    const keyed = (await post('catalog:setTable', { projectId: P, datasetId: d, patch: { key: 'cat' } })).value;
+    ok(`setup: a key on ${d === L ? 'the base-filtered' : 'the plain'} Live dataset`, keyed.ok === true && keyed.table.key === 'cat', show(keyed));
+  }
   const unreadable = refusals.liveBaseFiltersUnreadable();
   ok('the unreadable sentence says why and what to do', /always-applied filters can't be applied by this server/.test(unreadable) && /finish upgrading Ordinate/.test(unreadable), unreadable);
   const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
@@ -166,7 +173,8 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
       // A card's failure (ipc/liveAnswers `Failure`) carries the catalog sentence in `reason`; every other reply has the code there.
       // A sync still syncs the columns (names and types, no rows); its sample is what refuses.
       const refusal = label === 'dataset:syncLiveSchema' && r.ok === true ? r.sample : r;
-      const typed = refusal.ok === false && refusal.code === 'live_refused' && (label.startsWith('answer:card') ? refusal.reason === unreadable : refusal.reason === 'baseFilterUnreadable' && refusal.error === unreadable);
+      const typed = refusal.ok === false && refusal.code === 'live_refused' && (label.startsWith('answer:card') ? refusal.reason === unreadable
+        : label === 'catalog:checkKey' ? refusal.error === unreadable : refusal.reason === 'baseFilterUnreadable' && refusal.error === unreadable);
       ok(`${what}: ${label} refuses typed (baseFilterUnreadable)`, typed, show(r));
     }
     let built = false;
@@ -221,6 +229,7 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['KPI', async (d) => (await post('dashboard:metric', { projectId: P, datasetId: d, column: 'qty', aggregation: 'sum' })).value, 1],
     ['answer (case fix + latest + chart)', async (d) => (await post('answer:card', { projectId: P, spec: ANSWER(d) })).value, 3],
     ['schema sync (profile)', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value, 1],
+    ['key check (Check now)', async (d) => (await post('catalog:checkKey', { projectId: P, datasetId: d })).value, 1],
   ];
   const canaried = (c: { params: { value: unknown }[] }): boolean => c.params.some((p) => p.value === CANARY);
   const sends = async (d: string, call: (d: string) => Promise<Reply>): Promise<{ r: Reply; sent: typeof fake.calls }> => {

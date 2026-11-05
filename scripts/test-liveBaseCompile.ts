@@ -45,6 +45,7 @@ const BUILDERS: [string, (env: CompileEnv) => Compiled | { ok: true; query: Comp
   ['compileGrainProbe', (env) => compile.compileGrainProbe(chart({ column: 'd', kind: 'date' }), env)],
   ['compileChart', (env) => compile.compileChart(textIr, { kind: 'text' }, env)],
   ['compileCaseMatches', (env) => compile.compileCaseMatches('region', ['south'], env)],
+  ['compileKeyCheck', (env) => compile.compileKeyCheck('region', env)],
   ['compileProfile', (env) => profile.compileProfile(env, { rows: 1000, percent: 5, samplingKey: true })],
   ['compileProfile (LIMIT only)', (env) => profile.compileProfile(env, { rows: 1000, limitOnly: true })],
 ];
@@ -112,7 +113,10 @@ function builders(files: Map<string, string>): { finishers: [string, number][]; 
   return { finishers, unbased };
 }
 const found = builders(srcFiles());
-ok('inventory: the builders are exactly compile.ts ×6 and profileSql.ts ×2', show(found.finishers) === show([['src/engine/live/compile.ts', 6], ['src/engine/live/profileSql.ts', 2]]), show(found.finishers));
+// compile.ts ×7: PR 01's compileKeyCheck is the seventh. formulaSql.ts (release A, p8-03) makes a ParamSink to check a
+// formula at save and finishes no statement: counted, with 0, so a statement it starts to finish fails here.
+ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0 and profileSql.ts ×2',
+  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2]]), show(found.finishers));
 ok('inventory: every builder function ends its statement through whereOf or sampledFrom', found.unbased.length === 0, show(found.unbased));
 const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
 const caught = builders(planted);

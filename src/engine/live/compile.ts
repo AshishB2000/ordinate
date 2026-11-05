@@ -474,10 +474,13 @@ export function compileKeyCheck(column: string, env: CompileEnv): Compiled {
   if (isRefusal(p)) return p;
   const { c } = p;
   const col = columnOf(c.columns, column)!;
+  // The dataset's base filters (D13): the key is counted over the rows the dataset holds, never more.
+  const where = whereOf(p, probe);
+  if (isRefusal(where)) return where;
   const sql =
     `SELECT ${c.d.toDouble('SUM(lv_n)')} AS k_rows, ` +
     `${c.d.toDouble('SUM(CASE WHEN lv_k IS NULL THEN lv_n ELSE 0 END)')} AS k_empty, ` +
     `${c.d.toDouble('SUM(CASE WHEN lv_k IS NOT NULL AND lv_n > 1 THEN 1 ELSE 0 END)')} AS k_repeated ` +
-    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${keyOf(c, col)} AS lv_k FROM ${p.from}) lv_s GROUP BY lv_k) lv_g`;
+    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${keyOf(c, col)} AS lv_k FROM ${p.from}${where}) lv_s GROUP BY lv_k) lv_g`;
   return { ok: true, query: c.b.finish(sql, c.d, ['k_rows', 'k_empty', 'k_repeated']) };
 }
