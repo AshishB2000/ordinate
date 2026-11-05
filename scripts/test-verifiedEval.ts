@@ -39,7 +39,6 @@ async function main(): Promise<void> {
     const P = String((await sample.seedSampleProject({ again: true })).projectId);
     const dsId = (await H.datasets.listDatasets(P))[0].id;
     const base: Spec = { datasetId: dsId, category: 'region', measures: REV, filters: [], chartType: 'column', title: 'Revenue by region' };
-    await save(P, 'Revenue by region', base);
     const verifiedNamed = async (q: string): Promise<VerifiedQuestion> => (await store.listVerified(P)).find((v) => v.question === q)!;
 
     // ── §1 judgeSpec ────────────────────────────────────────────────────────

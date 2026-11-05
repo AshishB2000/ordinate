@@ -24,7 +24,8 @@ const SPEC = { datasetId: 'd1', category: 'region', measures: [{ column: 'amount
 const ROW = { id: 'v1', question: 'Revenue by region', phrasings: [], datasetId: 'd1', datasetName: 'Orders', describe: '', filters: [], spec: SPEC, verifiedBy: 'a', verifiedAt: NOW, runs: true, tag: 't' };
 const NO_MODEL = { ready: false, reason: 'no_model', models: [], mine: null, copilotEnabled: true, keyStore: null };
 
-type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
+type Out = { status?: number; body?: unknown };
+type Reply = Out | ((payload: unknown) => Out | Promise<Out>);
 function serve(routes: Record<string, Reply>) {
   const calls: { channel: string; payload: unknown }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -33,7 +34,7 @@ function serve(routes: Record<string, Reply>) {
     const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
     if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
     const r = routes[channel] ?? { body: [] };
-    const out = typeof r === 'function' ? r(payload) : r;
+    const out = await (typeof r === 'function' ? r(payload) : r);
     return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
   }));
   return calls;
@@ -113,6 +114,27 @@ describe('verified chips on Home, with no model', () => {
     fireEvent.click(await screen.findByRole('button', { name: '✓ Revenue by region' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toEqual({ projectId: PID, threadId: THREAD, spec: SPEC, label: 'Revenue by region' }));
     expect(screen.getByRole('complementary', { name: 'Assistant' })).toBeTruthy();
+  });
+
+  it('a question typed on Home is asked by the dock, and focus stays in the dock while it is', async () => {
+    let release = (): void => {};
+    const held = new Promise<Out>((r) => { release = () => r({ body: { ok: false, notReady: true } }); });
+    const calls = serve(base([ROW], { 'copilot:ask': () => held }));
+    renderApp('/');
+    const ask = await screen.findByRole('textbox', { name: 'Ask a question or say what to build' });
+    await screen.findByRole('button', { name: '✓ Revenue by region' });
+    fireEvent.change(ask, { target: { value: 'Which month had the most orders?' } });
+    fireEvent.submit(ask.closest('form')!);
+    const dock = await screen.findByRole('complementary', { name: 'Assistant' });
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(true)); // being asked
+    await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:ask')?.payload).toMatchObject({ projectId: PID, question: 'Which month had the most orders?' }));
+    // A browser drops focus from a composer that turns disabled to <body>; jsdom keeps it, so it is checked here.
+    const focused = document.activeElement as HTMLTextAreaElement;
+    expect(dock.contains(focused) && !focused.disabled).toBe(true);
+    release();
+    expect(await within(dock).findByText('Connect a model to ask anything else.')).toBeTruthy();
+    expect(dock.contains(document.activeElement)).toBe(true);
   });
 });
 

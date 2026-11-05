@@ -59,7 +59,10 @@ if (!dbUrl) {
     await setup.getByText(/no database, so it cannot store API keys/).waitFor();
     assert.equal(await page.getByLabel('API key').count(), 0, 'no key field in the dock, ever');
     assert.equal(await setup.getByRole('link', { name: 'Connect a provider' }).count(), 0, 'no Connect link where nothing can be set up');
-    assert.equal(await page.getByRole('textbox', { name: 'Ask the Assistant' }).isDisabled(), true);
+    // The sample ships verified questions (part 3 D13), and those need no model (D8): the composer is open for them.
+    const composer = page.getByRole('textbox', { name: 'Ask the Assistant' });
+    assert.equal(await composer.isDisabled(), false);
+    assert.equal(await composer.getAttribute('placeholder'), 'Ask a verified question, or connect a model to ask anything else.');
     await screens(page, 'dock-setup');
     // The left edge is a handle the pointer can find: it runs the panel's height
     // (it was 0 x 0 once), drags the panel wider, and a double-click restores the default.
@@ -208,45 +211,30 @@ if (!dbUrl) {
   });
 
   // A verified question answers with no model (part 3 D8, D10): a chip, the question typed word for word, and the hint for any other.
-  e2e('dock: a verified question answers with no model', async ({ page, server }) => {
-    const pid = server.sample.projectId;
+  e2e('dock: a verified question answers with no model', async ({ page }) => {
+    // The sample's own "Revenue by region" (part 3 D13): a chip, the question typed word for word, and the hint for any other.
     await page.goto('/');
     await settled(page);
-    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
-    const call = async (channel: string, input: unknown) =>
-      (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [input] } })).json()) as Record<string, any>;
-    const visual = ((await call('visual:list', { projectId: pid })) as unknown as { id: string; name: string }[]).find((v) => v.name === 'Revenue by category');
-    assert.ok(visual);
-    const kept = await call('visual:get', { projectId: pid, id: visual.id });
-    const spec = { datasetId: kept.datasetId, category: 'category', measures: [{ column: 'revenue', aggregation: 'sum' }], filters: [] };
-    const vq = await call('verified:save', { projectId: pid, input: { question: 'Revenue by region', spec } });
-    assert.equal(vq.ok, true, JSON.stringify(vq));
-    try {
-      await page.reload();
-      await settled(page);
-      await openDock(page);
-      const dock = page.getByRole('complementary', { name: 'Assistant' });
-      const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
-      await dock.getByRole('button', { name: 'New conversation' }).click(); // chips are the empty conversation's; an earlier test left one with turns
-      await dock.getByRole('button', { name: '✓ Revenue by region' }).waitFor();
-      assert.equal(await box.isDisabled(), false, 'a verified question needs no model');
-      await dock.getByRole('button', { name: '✓ Revenue by region' }).click();
-      const cards = dock.getByTestId('answer-card');
-      await cards.first().getByText(/✓ Verified/).waitFor();
-      await box.fill('revenue by region');
-      await box.press('Enter');
-      await cards.nth(1).getByText(/✓ Verified/).waitFor();
-      await box.fill('revenue by state');
-      await box.press('Enter');
-      await dock.getByText('Connect a model to ask anything else.').waitFor();
-      assert.equal(await box.inputValue(), 'revenue by state', 'the text is kept');
-      for (const theme of ['light', 'dark'] as const) {
-        await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
-        await page.waitForTimeout(300);
-        await page.screenshot({ path: path.join(SCREENS, `dock-verified-chips-${theme}.png`), fullPage: true });
-      }
-    } finally {
-      await call('verified:delete', { projectId: pid, id: vq.question?.id }); // the sample as it was
+    await openDock(page);
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
+    await dock.getByRole('button', { name: 'New conversation' }).click(); // chips are the empty conversation's; an earlier test left one with turns
+    await dock.getByRole('button', { name: '✓ Revenue by region' }).waitFor();
+    assert.equal(await box.isDisabled(), false, 'a verified question needs no model');
+    await dock.getByRole('button', { name: '✓ Revenue by region' }).click();
+    const cards = dock.getByTestId('answer-card');
+    await cards.first().getByText(/✓ Verified/).waitFor();
+    await box.fill('sales by region');
+    await box.press('Enter');
+    await cards.nth(1).getByText(/✓ Verified/).waitFor();
+    await box.fill('revenue by state');
+    await box.press('Enter');
+    await dock.getByText('Connect a model to ask anything else.').waitFor();
+    assert.equal(await box.inputValue(), 'revenue by state', 'the text is kept');
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(SCREENS, `dock-verified-chips-${theme}.png`), fullPage: true });
     }
   });
 } else {

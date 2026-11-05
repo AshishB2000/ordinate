@@ -8,8 +8,9 @@
 //      date and whether it adds up, a new metric with a live preview and a filter, delete to Trash.
 //   3. Glossary: a term made here, added to a visual's filters, changes its chart, and reads "1 visual".
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
-//   5. Assistant: the sample has no instructions (the empty state); one written with Enter is stored by the
-//      server and still there after a reload, and a figure-like one is flagged.
+//   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
+//      empty state); one written with Enter is stored by the server and still there after a reload, and a
+//      figure-like one is flagged.
 //
 //   npm --prefix web run e2e -- model
 
@@ -226,7 +227,7 @@ e2e('data model: an empty project, and the error and loading states', async (s) 
   await page.getByRole('heading', { name: 'No datasets to describe yet' }).waitFor();
   await screens(page, 'model-empty');
   // Every tab says what it holds when there is nothing yet.
-  for (const [tab, heading] of [['metrics', 'No metrics yet'], ['glossary', 'No terms yet'], ['relationships', 'Relate two datasets']] as const) {
+  for (const [tab, heading] of [['metrics', 'No metrics yet'], ['glossary', 'No terms yet'], ['relationships', 'Relate two datasets'], ['assistant', 'No instructions yet']] as const) {
     await page.getByRole('tab', { name: tab[0]!.toUpperCase() + tab.slice(1) }).click();
     await page.getByRole('heading', { name: heading }).waitFor();
     await screens(page, `model-${tab}-empty`);
@@ -250,8 +251,10 @@ e2e('data model: assistant', async (s) => {
   await page.goto(`/model/${pid}?tab=assistant`);
   await settled(page);
   const section = page.getByRole('region', { name: 'Instructions' });
-  await section.getByRole('heading', { name: 'No instructions yet' }).waitFor();
-  await screens(page, 'model-assistant-empty');
+  // The sample ships three instructions and four verified questions (part 3 D13); an empty project's tab is shot above.
+  const SAMPLE = ['When someone says sales, they mean the revenue column.', 'Profit is already net of discount; never subtract the discount again.', 'Use order_date for any period.'];
+  for (const text of SAMPLE) await section.getByRole('list', { name: 'Instructions' }).getByText(text, { exact: true }).waitFor();
+  await page.getByRole('region', { name: 'Verified questions' }).getByText('Top 5 states by revenue', { exact: true }).waitFor();
 
   await section.getByRole('button', { name: 'Instruction' }).click();
   await section.getByRole('textbox', { name: 'New instruction' }).fill('Revenue means the revenue column.');
@@ -281,8 +284,8 @@ e2e('data model: assistant', async (s) => {
   await settled(page);
   const rows = section.getByRole('list', { name: 'Instructions' }).getByRole('listitem');
   await rows.first().waitFor();
-  assert.deepEqual(await rows.evaluateAll((els) => els.map((e) => e.querySelector('p')?.textContent)), ['Revenue means the revenue column.', 'Targets are 12% above last year.']);
-  assert.match((await rows.first().textContent()) ?? '', /dev@local · /);
+  assert.deepEqual(await rows.evaluateAll((els) => els.map((e) => e.querySelector('p')?.textContent)), [...SAMPLE, 'Revenue means the revenue column.', 'Targets are 12% above last year.']);
+  assert.match((await rows.last().textContent()) ?? '', /dev@local · /);
   await screens(page, 'model-assistant');
 
   // At phone width a row's who-and-when stacks under its text, and nothing scrolls sideways.

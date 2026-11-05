@@ -112,11 +112,12 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   const question = 'Which month had the most orders?';
   await ask.fill(question);
   await ask.press('Enter');
-  // The real dock (T2.12). This server has no model set up, so it cannot ask yet:
-  // the question waits in its composer (with a model it is asked at once, as dkAsk did).
+  // The real dock (T2.12). This server has no model set up, but the sample ships verified questions (part 3
+  // D8, D13), so the dock asks it at once: not one of them, it comes back to the composer with the connect hint.
   const composer = page.getByRole('textbox', { name: 'Ask the Assistant' });
   await page.waitForFunction((q) => (document.querySelector('#dock-panel textarea') as HTMLTextAreaElement | null)?.value === q, question);
   assert.equal(await composer.inputValue(), question);
+  await page.locator('#dock-panel').getByText('Connect a model to ask anything else.').waitFor();
   assert.equal(await ask.inputValue(), '');
   assert.ok(await page.evaluate(() => !!document.getElementById('dock-panel')?.contains(document.activeElement)), 'focus moved into the dock');
   assert.equal(await page.getByRole('button', { name: 'Assistant', exact: true }).getAttribute('aria-expanded'), 'true');
