@@ -24,7 +24,9 @@ const facts: typeof import('../src/connectors/httpFacts') = require('../src/conn
 const conn: typeof import('../src/connectors/http') = require('../src/connectors/http');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const tableFactsRun: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
+const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
 type Ctx = import('../src/connectors/types').ConnectorContext;
+type JsonRequest = import('../src/connectors/liveHttp').JsonRequest;
 type Def = import('../src/connectors/types').ConnectorDef;
 
 const byId = (id: string): Def => conn.CONNECTORS.find((d) => d.id === id)!;
@@ -110,6 +112,125 @@ async function clickhouseReader(): Promise<void> {
   ok('clickhouse def: tableFacts wired, still not browsable', typeof ch.tableFacts === 'function' && typeof ch.describeTable !== 'function' && !('factsWake' in ch));
 }
 
+// ── Databricks SQL ─────────────────────────────────────────────────────────────────────────────────
+
+// Every answer is what the adapter hands the reader: the column names (lower-cased) first, then the rows.
+// The Statement API sends a complex type (partitionColumns) as JSON text, and a TIMESTAMP as text.
+const DBX_ORDERS = byCatalog([
+  [/^SELECT column_name/, [['column_name', 'full_data_type', 'is_nullable', 'comment'],
+    ['line_id', 'bigint', 'NO', ''], ['order_date', 'date', 'NO', 'Day of the order'], ['region', 'decimal(12,2)', 'YES', 'Sales region']]],
+  [/information_schema\.tables/, [['comment', 'last_altered'], ['Orders, one row per line', '2024-04-30T09:00:00.000Z']]],
+  [/information_schema\.table_constraints/, [['column_name'], ['line_id']]],
+  [/^DESCRIBE DETAIL/, [['format', 'location', 'lastmodified', 'partitioncolumns', 'clusteringcolumns', 'numfiles', 'sizeinbytes'],
+    ['delta', 's3://bucket/orders', '2024-05-02T08:30:00.000Z', '["order_date"]', '["region"]', 12, 987654]]],
+]);
+
+async function databricksReader(): Promise<void> {
+  const readDbx = async (answer = DBX_ORDERS, name = 'main.sales.orders', opts: { catalog?: string; schema?: string } = {}) => {
+    const h = recorder(answer);
+    return { h, r: await facts.databricksTableFacts(name, h.open, opts) };
+  };
+  const sels = (h: ReturnType<typeof recorder>) => h.rec.filter((x) => !x.sql.startsWith('DESCRIBE'));
+
+  let t = await readDbx();
+  const f = t.r.ok ? t.r : null;
+  ok('databricks facts: catalog whitelisted and backticked, names bound', t.h.rec[0].sql.startsWith('SELECT column_name') && t.h.rec[0].sql.includes('`main`.information_schema.columns') && JSON.stringify(t.h.rec[0].params) === '["sales","orders"]', JSON.stringify(t.h.rec[0]));
+  ok('databricks facts: four statements; no table name is ever in a SELECT', t.h.rec.length === 4 && sels(t.h).length === 3 && sels(t.h).every((x) => !/sales|orders/.test(x.sql.replace(/information_schema\.\w+/g, '')) && /:p0/.test(x.sql) && /:p1/.test(x.sql)), JSON.stringify(t.h.rec.map((x) => x.sql.slice(0, 40))));
+  ok('databricks facts: every SELECT ends in LIMIT n', sels(t.h).every((x) => /\bLIMIT \d+$/.test(x.sql.trim())), sels(t.h).map((x) => x.sql.trim().slice(-12)).join(' | '));
+  ok('databricks facts: DESCRIBE DETAIL names a whitelisted, quoted path (it takes no LIMIT and no value)', t.h.rec.find((x) => x.sql.startsWith('DESCRIBE DETAIL'))!.sql === 'DESCRIBE DETAIL `main`.`sales`.`orders`' && t.h.rec[3].params.length === 0);
+  ok('databricks facts: columns, types as the catalog spells them, nullability, comments, the key mark', JSON.stringify(f?.columns) ===
+    '[{"name":"line_id","type":"bigint","nullable":false,"key":true},{"name":"order_date","type":"date","nullable":false,"comment":"Day of the order"},{"name":"region","type":"decimal(12,2)","nullable":true,"comment":"Sales region"}]', JSON.stringify(f?.columns));
+  ok('databricks facts: partition, clustering, informational key', JSON.stringify([f?.partition, f?.clusterBy, f?.primaryKey]) === '[{"columns":["order_date"],"method":"IDENTITY"},["region"],{"columns":["line_id"],"enforced":false}]', JSON.stringify(t.r));
+  ok('databricks facts: the comment, the size, and DESCRIBE DETAIL\'s modified time over last_altered; no row count', JSON.stringify([f?.comment, f?.bytes, f?.lastModified, 'rowEstimate' in (f ?? {})]) === '["Orders, one row per line",987654,"2024-05-02T08:30:00.000Z",false]', JSON.stringify(f));
+  ok('databricks facts: one connection, asked for once', t.h.opened() === 1);
+
+  for (const bad of ['main.sales.or`ders', 'main.sales.orders`; DROP TABLE x; --', 'a.b.c.d', '', '.x', 'x.', 'main.sales.my-table', 'sales.1orders']) {
+    t = await readDbx(DBX_ORDERS, bad);
+    ok(`databricks facts: ${JSON.stringify(bad)} never opens a request`, t.h.opened() === 0 && !t.r.ok && t.r.error === 'Invalid table name');
+  }
+
+  t = await readDbx(DBX_ORDERS, 'sales.orders', { catalog: 'main' });
+  ok('databricks facts: two parts use the connection\'s catalog, in the selects and in DESCRIBE DETAIL', /`main`\.information_schema\.columns/.test(t.h.rec[0].sql) && t.h.rec[3].sql === 'DESCRIBE DETAIL `main`.`sales`.`orders`');
+  t = await readDbx(DBX_ORDERS, 'sales.orders');
+  ok('databricks facts: …with no catalog the session\'s own applies (the request sets it)', /FROM information_schema\.columns/.test(t.h.rec[0].sql) && t.h.rec[3].sql === 'DESCRIBE DETAIL `sales`.`orders`' && sels(t.h).every((x) => !x.sql.includes('`')));
+  t = await readDbx(DBX_ORDERS, 'orders', { schema: 'sales' });
+  ok('databricks facts: one part uses the connection\'s schema', JSON.stringify(t.h.rec[0].params) === '["sales","orders"]' && t.h.rec[3].sql === 'DESCRIBE DETAIL `sales`.`orders`');
+  t = await readDbx(DBX_ORDERS, 'orders');
+  ok('databricks facts: …and with none, Databricks\' own "default"', JSON.stringify(t.h.rec[0].params) === '["default","orders"]');
+  t = await readDbx(DBX_ORDERS, 'Sales.Orders');
+  ok('databricks facts: Unity Catalog stores names in lower case, so a typed name is looked up that way', JSON.stringify(t.h.rec[0].params) === '["sales","orders"]');
+  t = await readDbx(DBX_ORDERS, 'sales.orders', { catalog: 'my-catalog' });
+  ok('databricks facts: a configured catalog that is not a plain identifier is never put in text (the session already has it)', t.h.rec.length === 4 && t.h.rec.every((x) => !x.sql.includes('my-catalog')) && t.h.rec[3].sql === 'DESCRIBE DETAIL `sales`.`orders`', JSON.stringify(t.h.rec.map((x) => x.sql.slice(0, 50))));
+  t = await readDbx(DBX_ORDERS, 'orders', { schema: 'my-schema' });
+  ok('databricks facts: …nor a schema: it is still bound for the selects, and only DESCRIBE DETAIL is lost', t.r.ok && t.h.rec.length === 3 && t.h.rec[0].params[0] === 'my-schema' && !('partition' in t.r) && !!t.r.primaryKey, JSON.stringify(t.h.rec.map((x) => x.sql.slice(0, 30))));
+
+  t = await readDbx(refusing(DBX_ORDERS, /^DESCRIBE DETAIL/), 'main.sales.v');
+  ok('databricks facts: a view (DESCRIBE DETAIL fails) keeps the rest', t.r.ok && t.r.columns.length === 3 && !('partition' in t.r) && !('clusterBy' in t.r) && t.r.bytes === undefined && t.r.lastModified === '2024-04-30T09:00:00.000Z' && !!t.r.primaryKey && t.r.comment === 'Orders, one row per line', JSON.stringify(t.r));
+  t = await readDbx(refusing(DBX_ORDERS, /information_schema\.table_constraints/));
+  ok('databricks facts: a refused key read costs only the key', t.r.ok && !('primaryKey' in t.r) && t.r.columns.every((c) => !c.key) && !!t.r.partition && t.r.columns.length === 3);
+  t = await readDbx(refusing(DBX_ORDERS, /information_schema\.tables/));
+  ok('databricks facts: a refused tables read costs the comment, and the size and time still come from DESCRIBE DETAIL', t.r.ok && !('comment' in t.r) && t.r.bytes === 987654 && t.r.lastModified === '2024-05-02T08:30:00.000Z' && !!t.r.partition, JSON.stringify(t.r));
+  t = await readDbx(refusing(DBX_ORDERS, /^SELECT column_name/)).catch((e: Error) => ({ h: recorder(DBX_ORDERS), r: { ok: false as const, error: e.message } }));
+  ok('databricks facts: a refused columns read fails the read (the door turns it into the sentence)', !t.r.ok && /permission denied/.test(t.r.error));
+  t = await readDbx(byCatalog([]));
+  ok('databricks facts: no column is no such table', !t.r.ok && t.r.error === 'No such table: orders' && t.h.rec.length === 1, JSON.stringify(t.r));
+  t = await readDbx(byCatalog([[/^SELECT column_name/, [['column_name', 'full_data_type', 'is_nullable', 'comment'], ['a', 'int', 'YES', '']]],
+    [/^DESCRIBE DETAIL/, [['lastmodified', 'partitioncolumns', 'clusteringcolumns', 'sizeinbytes'], ['not a date', '[]', 'not json', 'junk']]],
+    [/information_schema\.tables/, [['comment', 'last_altered'], ['', '2024-04-30T09:00:00.000Z']]]]));
+  ok('databricks facts: a junk DESCRIBE DETAIL (no list, no JSON, no size, no date) changes nothing', t.r.ok && JSON.stringify(Object.keys(t.r).sort()) === '["columns","lastModified","ok"]' && t.r.lastModified === '2024-04-30T09:00:00.000Z', JSON.stringify(t.r));
+
+  const dbx = byId('databricks-sql');
+  ok('databricks def: tableFacts wired, still not browsable', typeof dbx.tableFacts === 'function' && typeof dbx.describeTable !== 'function');
+  ok('databricks def: reading wakes the warehouse (factsWake), and no other connector says so', dbx.factsWake === true && registry.listConnectors().filter((d) => d.factsWake).map((d) => d.id).join() === 'databricks-sql');
+}
+
+// The adapter and the real runner, over an injected transport (the host is https-only, so no local server can stand in).
+async function databricksWire(): Promise<void> {
+  const succeeded = (columns: string[], rows: unknown[][]) => ({
+    statement_id: 'stmt-1', status: { state: 'SUCCEEDED' },
+    manifest: { schema: { columns: columns.map((name) => ({ name, type_text: 'STRING' })) } }, result: { data_array: rows },
+  });
+  const transport = (script: (statement: string, i: number) => unknown, delayMs = 0) => {
+    const calls: { url: URL; method: string; headers: Record<string, string>; payload: Record<string, unknown>; timeoutMs: number }[] = [];
+    const fn: JsonRequest = async (_c, o) => {
+      const payload = o.body ? JSON.parse(o.body) as Record<string, unknown> : {};
+      calls.push({ url: o.url, method: o.method, headers: o.headers ?? {}, payload, timeoutMs: o.timeoutMs });
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      const out = script(String(payload.statement ?? ''), calls.length - 1);
+      return out && typeof out === 'object' && 'ok' in out && (out as { ok: unknown }).ok === false ? out as never : { ok: true, json: out, clipped: false };
+    };
+    return { calls, fn };
+  };
+  const TOKEN = 'dapi-canary-7731';
+  const values = { host: 'dbc-1.cloud.databricks.com', warehouseId: 'wh-1', catalog: 'main', schema: 'sales' };
+  const full = (statement: string) =>
+    /^SELECT column_name/.test(statement) ? succeeded(['column_name', 'full_data_type', 'is_nullable', 'comment'], [['id', 'bigint', 'NO', `pw ${TOKEN}`]])
+      : /table_constraints/.test(statement) ? succeeded(['column_name'], [['id']])
+        : /information_schema\.tables/.test(statement) ? succeeded(['comment', 'last_altered'], [['Orders', '2024-04-30T09:00:00.000Z']])
+          : /^DESCRIBE DETAIL/.test(statement) ? succeeded(['format', 'partitionColumns', 'clusteringColumns', 'sizeInBytes'], [['delta', '["order_date"]', '[]', '4096']])
+            : { statement_id: 's', status: { state: 'FAILED', error: { message: 'unexpected' } } };
+
+  const tr = transport(full);
+  const got = await facts.databricksTableFacts('main.sales.orders', (read) => read(facts.dbxQuery(ctxFor(values, { token: TOKEN }), tr.fn)), { catalog: 'main', schema: 'sales' });
+  ok('databricks wire: the whole chain (reader, adapter, runner) over the transport', got.ok && got.columns[0].key === true && got.partition?.columns[0] === 'order_date' && got.bytes === 4096 && got.comment === 'Orders', JSON.stringify(got));
+  ok('databricks wire: the names are the API\'s parameters, STRING typed, in order; never in the statement', tr.calls[0].payload.statement !== undefined && JSON.stringify(tr.calls[0].payload.parameters) === '[{"name":"p0","type":"STRING","value":"sales"},{"name":"p1","type":"STRING","value":"orders"}]' && !String(tr.calls[0].payload.statement).includes('orders'), JSON.stringify(tr.calls[0].payload));
+  ok('databricks wire: asynchronous submit to the statements API, the connection\'s warehouse, catalog and schema', tr.calls[0].method === 'POST' && tr.calls[0].url.href === 'https://dbc-1.cloud.databricks.com/api/2.0/sql/statements' && tr.calls[0].payload.wait_timeout === '0s' && tr.calls[0].payload.warehouse_id === 'wh-1' && tr.calls[0].payload.catalog === 'main' && tr.calls[0].payload.schema === 'sales' && tr.calls[0].payload.row_limit === 2001);
+  ok('databricks wire: the token is a header, never the body; DESCRIBE DETAIL carries no parameter', tr.calls.every((c) => c.headers.authorization === `Bearer ${TOKEN}` && !JSON.stringify(c.payload).includes(TOKEN)) && JSON.stringify(tr.calls[3].payload.parameters) === '[]');
+  ok('databricks wire: the API\'s column names (partitionColumns) are lower-cased for the reader', got.ok && got.partition?.method === 'IDENTITY');
+
+  const failed = transport((statement) => (/^SELECT column_name/.test(statement) ? { statement_id: 's', status: { state: 'FAILED', error: { message: `PERMISSION_DENIED for ${TOKEN}` } } } : full(statement)));
+  const err = await facts.dbxQuery(ctxFor(values, { token: TOKEN }), failed.fn)('SELECT column_name FROM x', []).then(() => '', (e: Error) => e.message);
+  ok('databricks wire: a failed statement throws the API\'s reason, redacted', /FAILED: PERMISSION_DENIED/.test(err) && !err.includes(TOKEN), err);
+
+  const slow = transport(full, 200);
+  await facts.databricksTableFacts('sales.orders', (read) => read(facts.dbxQuery(ctxFor(values, { token: TOKEN }, 5_000), slow.fn)), { catalog: 'main' });
+  const submits = slow.calls.filter((c) => c.method === 'POST');
+  ok('databricks wire: the whole read is one budget: each statement gets what the last left', submits.length === 4 && submits[1].timeoutMs <= submits[0].timeoutMs - 150 && submits[3].timeoutMs <= submits[1].timeoutMs - 300, submits.map((c) => c.timeoutMs).join());
+  const spent = transport(full, 120);
+  const tight = await facts.databricksTableFacts('sales.orders', (read) => read(facts.dbxQuery(ctxFor(values, { token: TOKEN }, 60), spent.fn)), { catalog: 'main' });
+  ok('databricks wire: past the budget the optional statements are not sent, and the columns still come back', tight.ok && tight.columns.length === 1 && spent.calls.length === 1 && !('partition' in tight), `${spent.calls.length} ${JSON.stringify(tight)}`);
+}
+
 // The adapter and the real transport: a local server stands in for ClickHouse. SSRF is off here (a desktop process);
 // the guarded run is in `guard()`.
 async function clickhouseWire(): Promise<void> {
@@ -178,6 +299,25 @@ async function guard(): Promise<void> {
   ok('ssrf NEGATIVE CONTROL: SSRF_ALLOW opens the range, and the same read reaches the server', allowed !== null && allowed.ok && allowed.facts.columns[0].name === 'id' && server.hits.length === 2, JSON.stringify(allowed));
   delete process.env.SSRF_ALLOW;
   await server.close();
+
+  // Databricks: a hosted https-only service, so the proof is the refusal (a private address) and the control that lifts it.
+  const dbxValues = { host: '10.0.0.5', warehouseId: 'wh-1' };
+  const dbxRefused = await tableFactsRun.readTableFacts('databricks-sql', dbxValues, { token: 'dapi-x' }, 'main.sales.orders');
+  ok('ssrf: the door refuses a private Databricks host before any request', dbxRefused !== null && !dbxRefused.ok && /^Refused/.test(dbxRefused.error), JSON.stringify(dbxRefused));
+  const dbxAround = await dbxQueryError(dbxValues);
+  ok('ssrf: …and the adapter alone is refused by the transport', /^Refused/.test(dbxAround), dbxAround);
+  process.env.SSRF_ALLOW = '10.0.0.0/8';
+  const dbxAllowed = await dbxQueryError(dbxValues);
+  ok('ssrf NEGATIVE CONTROL: SSRF_ALLOW lifts the refusal (the request is then tried, and fails on the network instead)', dbxAllowed !== '' && !/^Refused/.test(dbxAllowed), dbxAllowed);
+  delete process.env.SSRF_ALLOW;
+}
+async function dbxQueryError(values: Record<string, unknown>): Promise<string> {
+  try {
+    await facts.dbxQuery(ctxFor(values, { token: 'dapi-x' }, 400))('SELECT 1', []);
+    return '';
+  } catch (e) {
+    return (e as Error).message;
+  }
 }
 async function chQueryError(values: Record<string, unknown>): Promise<string> {
   try {
@@ -191,6 +331,8 @@ async function chQueryError(values: Record<string, unknown>): Promise<string> {
 (async () => {
   await clickhouseReader();
   await clickhouseWire();
+  await databricksReader();
+  await databricksWire();
   await guard();
   finish();
 })().catch((err: unknown) => {
