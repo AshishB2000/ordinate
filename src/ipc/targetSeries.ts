@@ -46,15 +46,19 @@ async function byDate(projectId: string, m: Metric, reply: Ok, dateCol: string, 
   return { values };
 }
 
+/** The plan as a chart measure: its column, or (a formula) its name, the door following the metric either way. */
+function planMeasure(plan: Metric): { column: string; aggregation: string; metricId: string } {
+  const d = plan.definition;
+  return isSimpleDefinition(d) ? { column: d.column, aggregation: d.aggregation, metricId: plan.id } : { column: plan.name, aggregation: 'sum', metricId: plan.id };
+}
+
 /** One value for each bar of a column the plan also has: the plan metric by it, each ask's share added up. */
 async function byColumn(projectId: string, m: Metric, reply: Ok, column: string, filters: FilterStep[]): Promise<Drawn> {
   const p = await targetPlan(projectId, m, filters);
   if ('none' in p) return p.none ? { note: p.none } : null;
   if ('fixed' in p) return { values: reply.data.labels.map(() => p.fixed) };
   if (!(await datasets.getDatasetMeta(projectId, p.planDatasetId))?.columns.some((c) => c.name === column)) return { note: msg.targetPlanNoColumn(column) };
-  const d = p.plan.definition;
-  const measure = isSimpleDefinition(d) ? { column: d.column, aggregation: d.aggregation, metricId: p.plan.id } : { column: p.plan.name, aggregation: 'sum' as const, metricId: p.plan.id };
-  const enc = await followedEncoding(projectId, p.planDatasetId, sanitizeEncoding({ category: column, values: [measure] }));
+  const enc = await followedEncoding(projectId, p.planDatasetId, sanitizeEncoding({ category: column, values: [planMeasure(p.plan)] }));
   const byLabel = new Map<string, number>();
   for (const ask of p.asks) {
     const plan = await vizDataFor(projectId, p.planDatasetId, enc, [...p.filters, ...bounds(p.planDate, ask)]);
@@ -72,10 +76,8 @@ async function planWithheld(projectId: string, m: Metric, category: string, shar
   const source = m.target?.source;
   const plan = source && 'metricId' in source ? await metrics.getMetric(projectId, source.metricId) : null;
   if (!plan) return false; // a fixed figure is the metric's own, as its tile shows it
-  const d = plan.definition;
-  const measure = isSimpleDefinition(d) ? { column: d.column, aggregation: d.aggregation, metricId: plan.id } : { column: plan.name, aggregation: 'sum' as const, metricId: plan.id };
   const probe = { ok: true as const, data: { labels: ['·'], series: [{ name: plan.name, values: [0] }] }, warnings: [], recommendedShape: 'categorical' as const };
-  return !(await applyToChart(projectId, plan.datasetId, sanitizeEncoding({ category, values: [measure] }), probe, share)).ok;
+  return !(await applyToChart(projectId, plan.datasetId, sanitizeEncoding({ category, values: [planMeasure(plan)] }), probe, share)).ok;
 }
 
 /** `share`: the outgoing path the chart is shaped for (a target from a plan the policy would hide is left off). */
