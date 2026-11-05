@@ -164,6 +164,9 @@ export interface FunctionDoc {
   example: string;
   insert?: string;
   kind?: 'keyword' | 'recipe';
+  /** Whether a Live calculated field may call it, and if not why (the server's sentence). */
+  live?: boolean;
+  liveWhy?: string;
 }
 
 export function useFunctionDocs() {

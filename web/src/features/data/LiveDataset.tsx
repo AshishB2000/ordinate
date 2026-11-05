@@ -5,7 +5,8 @@
 //              the two ways to get one (./LiveMode LiveNotice)
 //   Schema     the always-applied filters (./BaseFiltersPanel), then the last
 //              sync: columns, a sample's profile, columns gone — and
-//              "Sync schema" (./SchemaPanel)
+//              "Sync schema" (./SchemaPanel); the calculated fields that run in
+//              the warehouse (./CalculatedFieldsPanel)
 //   Columns    the column notes, as on any dataset
 //   About      the table's role, key, grain and guide; "Check now" is its one warehouse query
 //   Quality · Insights · Snapshots   off in v1, each saying why, with "Make a copy"
@@ -20,6 +21,7 @@ import { ColumnsTab } from './ColumnsTab';
 import { LiveNotice } from './LiveMode';
 import { SchemaPanel } from './SchemaPanel';
 import { BaseFiltersPanel } from './BaseFiltersPanel';
+import { CalculatedFieldsPanel } from './CalculatedFieldsPanel';
 import { RowAccessTab } from './RowAccessTab';
 
 export const LIVE_TABS = ['data', 'schema', 'columns', 'quality', 'insights', 'snapshots', 'access', 'about'] as const;
@@ -72,6 +74,7 @@ export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAge
       <TabPanel value="schema">
         <BaseFiltersPanel projectId={projectId} datasetId={datasetId} />
         <SchemaPanel projectId={projectId} datasetId={datasetId} />
+        <CalculatedFieldsPanel projectId={projectId} datasetId={datasetId} />
       </TabPanel>
       <TabPanel value="columns">
         <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} live />

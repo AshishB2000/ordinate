@@ -10,6 +10,7 @@ import { rpc } from '../../api/client';
 import { toast } from '../../ui/Toast';
 import { replyError } from '../live/refusal';
 import type { FilterStep } from '../visuals/api';
+import type { FormulaCheck } from '../prepare/api';
 
 /** src/ipc/liveProfile.ts SchemaColumn. */
 export interface SchemaColumn {
@@ -32,6 +33,22 @@ export interface MissingColumn {
   usedBy: { kind: MissingUseKind; id: string; name: string; dashboardId?: string }[];
 }
 
+/** One Live calculated field (src/ipc/liveCalcs.ts CalcField): `problem` is why it no longer runs; `hidden`, its formula withheld. */
+export interface CalcField {
+  name: string;
+  expression: string;
+  type: 'number' | 'text';
+  problem?: string;
+  hidden?: true;
+}
+
+/** src/ipc/liveCalcs.ts CalculatedView: `allowed` is false where calcs are refused (Databricks), with `why`. */
+export interface LiveCalculated {
+  allowed: boolean;
+  why?: string;
+  fields: CalcField[];
+}
+
 /** src/ipc/liveProfile.ts LiveSchemaView. */
 export interface LiveSchema {
   ok: true;
@@ -46,6 +63,8 @@ export interface LiveSchema {
   missing: MissingColumn[];
   /** The always-applied filters (D13). A caller row access rules restrict gets each one's column and operator only. */
   baseFilters: FilterStep[];
+  /** Absent from a server older than semantic layer part 8 step 04. */
+  calculated?: LiveCalculated;
 }
 
 type Fail = { ok: false; error?: string; code?: string };
@@ -111,3 +130,24 @@ export const useSetBaseFilters = (projectId: string, datasetId: string) =>
 /** "Refresh now" on a Live dataset: the cache epoch moves, so the next figure asks the warehouse. */
 export const useResetCache = (projectId: string, datasetId: string) =>
   useLiveWrite(async () => (await rpc('dataset:refresh', { projectId, id: datasetId })) as { ok: true; live?: { epoch: number } } | Fail);
+
+/** `live:setCalculated`'s refusal: the sentence, which field (`index`) and where in its formula (`at`). */
+export type SetCalculatedReply =
+  | { ok: true; calculated: { name: string; expression: string; type: 'number' | 'text' }[] }
+  | { ok: false; error?: string; code?: string; index?: number; at?: { start: number; end: number } };
+
+/** Replace a Live dataset's calculated fields (the whole list, in order); the server checks and types each. */
+export const useSetCalculated = (projectId: string, datasetId: string) => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (calculated: { name: string; expression: string }[]) =>
+      (await rpc('live:setCalculated', { projectId, datasetId, calculated })) as SetCalculatedReply,
+    onSuccess: (r) => {
+      if (r.ok) for (const key of AFTER) void client.invalidateQueries({ queryKey: [key] });
+    },
+  });
+};
+
+/** The formula editor's check of a Live calc: no rows, no warehouse call. `before`: the field's place in the list. */
+export const checkLiveCalc = async (projectId: string, datasetId: string, expression: string, before?: number) =>
+  (await rpc('live:checkCalc', { projectId, datasetId, expression, ...(before === undefined ? {} : { before }) })) as FormulaCheck;

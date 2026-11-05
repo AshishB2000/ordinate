@@ -176,3 +176,37 @@
   justify-content: flex-end;
   gap: var(--sp-8);
 }
+
+/* Calculated fields on the Schema tab (./CalculatedFieldsPanel): a formula in mono, a broken one warn-coloured. */
+.calcSection {
+  margin-top: var(--sp-32);
+  padding-top: var(--sp-24);
+  border-top: 1px solid var(--border);
+}
+.calcTitle {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.calcFormula {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.calcBroken td {
+  background: var(--warn-soft);
+}
+.calcBroken td:first-child {
+  color: var(--warn);
+}
+.calcProblem {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-12);
+  color: var(--warn);
+}
+.calcActions {
+  white-space: nowrap;
+  text-align: right;
+}

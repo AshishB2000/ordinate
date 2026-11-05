@@ -21,6 +21,18 @@ All notable changes to Ordinate are documented here. Format based on
   query in Athena. Tables and columns come from the Glue catalog.
 - The catalog is now 42 read-only sources.
 
+### Calculated fields on Live datasets
+
+- **A Live dataset can have calculated fields.** An editor adds them on the dataset's **Schema** tab, or as
+  the chart builder's Column kind, in the formula language Prepare steps use. Each is a column like any
+  other — charts, KPIs, filters, controls, answers, the Assistant and MCP see it — and it is computed in the
+  warehouse, in the same statement as the question, with the same figure as the same formula on a copy.
+- **What a formula can use** is a named list (arithmetic, comparisons, `IF`/`CASE`, null handling, rounding,
+  `trim`/`contains`/`concat`, date parts, `datediff`); the editor greys out the rest and says why. Not on
+  Databricks yet. A calculated field has no value list in the filter pickers, and its formula is hidden from
+  viewers that row access rules restrict. "Make a copy" and "Copy the data instead" carry the fields as
+  Prepare steps. See `docs/server/live-data.md`, "Calculated fields".
+
 ### Sign-in hardening
 
 - **OIDC needs a verified email.** An ID token's `email_verified` must be `true`; an absent claim or a

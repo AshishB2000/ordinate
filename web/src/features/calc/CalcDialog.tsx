@@ -10,10 +10,13 @@
 //            sanitizes the step and recomputes the dataset from its immutable
 //            source. The editor is Prepare's own (../prepare/FormulaEditor).
 //
-// A Live dataset keeps no rows here, so it has no pipeline to append to: the
-// Column kind is off, with the reason and "Make a copy". A measure on Live is
-// asked of the warehouse like any other figure; if it is refused the preview
-// carries the server's sentence.
+// A Live dataset keeps no rows here, so it has no pipeline to append to: its
+// Column kind is a Live calculated field instead (semantic layer part 8), appended
+// to the dataset's list through `live:setCalculated` and computed in the
+// warehouse. Where the server does not allow them (Databricks, an older server)
+// the kind is off, with the reason and "Make a copy". A measure on Live is asked
+// of the warehouse like any other figure; if it is refused the preview carries
+// the server's sentence.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -23,6 +26,7 @@ import type { Metric, MetricSummary } from '../analyses/metrics/api';
 import { MakeCopyButton } from '../live/LiveOff';
 import { LIVE_OFF } from '../live/offFeatures';
 import { mutate, useApplyReply, type Column } from '../prepare/api';
+import { checkLiveCalc, useLiveSchema, useSetCalculated } from '../data/liveApi';
 import { useColumnFormula } from '../prepare/FormulaEditor';
 import { useSuggestCalc } from '../prepare/Suggest';
 import { KindPicker, type Kind } from './Kinds';
@@ -37,7 +41,7 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
   datasetId: string;
   columns: readonly Column[];
   metrics: readonly MetricSummary[];
-  /** The dataset is Live: no pipeline, so no Column kind. */
+  /** The dataset is Live: no pipeline, so the Column kind is a Live calculated field (where the server allows one). */
   live: boolean;
   /** Opened from a chart: a measure's operands must be this dataset's. */
   chart?: boolean;
@@ -56,14 +60,29 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
 
   const measure = useMeasureForm({ projectId, datasetId, columns, metrics, existing: editing, chart, onClose, onReload, onSaved: (metric) => onCreated({ kind: 'measure', metric }) });
 
+  // A Live dataset's calculated fields: on where the server allows them and the whole list can be read back.
+  const schema = useLiveSchema(projectId, datasetId, live);
+  const calc = schema.data?.calculated;
+  const liveCalcs = live && !!calc?.allowed && !calc.fields.some((f) => f.hidden);
+  const setCalc = useSetCalculated(projectId, datasetId);
+
   const column = useColumnFormula({
     projectId,
     datasetId,
     columns,
     onClose,
+    ...(liveCalcs ? { live: true, check: checkLiveCalc } : {}),
     saveLabel: 'Add column',
-    savingNote: 'Recomputing the dataset with the new column…',
+    savingNote: liveCalcs ? 'Saving the calculated field…' : 'Recomputing the dataset with the new column…',
     onSave: async (field) => {
+      if (liveCalcs) {
+        const list = [...(calc?.fields ?? []).map((f) => ({ name: f.name, expression: f.expression })), field];
+        const r = await setCalc.mutateAsync(list).catch((err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : undefined }));
+        if (!r.ok) return r.error ?? 'The calculated field could not be saved.';
+        await client.refetchQueries({ queryKey: ['dataset:columns', projectId, datasetId] });
+        onCreated({ kind: 'column', name: field.name, type: r.calculated.at(-1)?.type ?? 'text' });
+        return null;
+      }
       const r = await mutate(projectId, datasetId, { kind: 'add', step: { type: 'calculated_field', name: field.name, expression: field.expression } }).catch(
         (err: unknown) => ({ ok: false as const, error: err instanceof Error ? err.message : 'The column could not be added.' }),
       );
@@ -80,13 +99,13 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
   });
   const suggest = useSuggestCalc(projectId, datasetId, (prefill) => column.fill({ name: column.name.trim() ? undefined : prefill.name, expression: prefill.expression }));
 
-  const columnOff = live ? (
+  const columnOff = live && !liveCalcs ? (
     <>
-      <p>{LIVE_OFF.prepare.why} Make a copy to add columns. This Live dataset stays as it is.</p>
+      <p>{calc?.why ?? `${LIVE_OFF.prepare.why} Make a copy to add columns.`} This Live dataset stays as it is.</p>
       <MakeCopyButton projectId={projectId} datasetId={datasetId} variant="secondary" size="sm" open={copyTo ?? ((id) => LIVE_OFF.prepare.open(projectId, id))} />
     </>
   ) : undefined;
-  const shown: Kind = editing || live ? 'measure' : kind;
+  const shown: Kind = editing || (live && !liveCalcs) ? 'measure' : kind;
 
   return (
     <Dialog

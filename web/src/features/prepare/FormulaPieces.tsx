@@ -172,9 +172,12 @@ export function FormulaSide({
   columnInsert = (name) => `[${name}]`,
   onInsert,
   footer,
+  live = false,
 }: {
   columns: readonly Column[];
   docs: readonly FunctionDoc[];
+  /** A Live calculated field: a function it can't call is greyed, its title the server's reason. */
+  live?: boolean;
   /** The function list is still on its way. */
   loading?: boolean;
   groups?: readonly SideGroup[];
@@ -214,9 +217,10 @@ export function FormulaSide({
             {(i === 0 || fns[i - 1].category !== d.category) && <div className={s.group}>{categoryLabel(d.category)}</div>}
             <button
               type="button"
-              className={`${s.item} ${s.itemFn}`}
-              title={d.insert ? `${d.summary}\n${d.example}` : d.summary}
-              onClick={() => (d.insert ? onInsert(d.insert, lodCaretBack(d)) : onInsert(`${d.name}(`))}
+              className={`${s.item} ${s.itemFn}${live && d.live === false ? ` ${s.itemOff}` : ''}`}
+              title={live && d.live === false ? `${d.signature}\n${d.liveWhy ?? 'Not on a Live table.'}` : d.insert ? `${d.summary}\n${d.example}` : d.summary}
+              aria-disabled={live && d.live === false ? true : undefined}
+              onClick={() => (live && d.live === false ? undefined : d.insert ? onInsert(d.insert, lodCaretBack(d)) : onInsert(`${d.name}(`))}
             >
               {d.signature}
             </button>
