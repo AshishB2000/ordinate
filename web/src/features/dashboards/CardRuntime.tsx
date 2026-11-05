@@ -225,6 +225,16 @@ export function VisualCard({
   // whose marks filter the sheet says so in its tooltip, in place of the sheet's "Click to filter" row (ClickFilters).
   const phone = isPhoneReader(ed);
   const hint = ed.viewing && !phone && !!onMark && !clicks.length ? `Click to filter · ${IS_MAC ? '⌘' : 'Ctrl'}-click picks several` : '';
+  // An editor's "Switch to <replacement>": the saved visual's encoding, written like any visual edit (with its tag as base).
+  const switchEncoding = async (encoding: unknown) => {
+    try {
+      const r = (await rpc('visual:update', { projectId: ed.projectId, id: def.id, base: def.tag, encoding: encoding as never })) as { ok: boolean; visual?: { encoding: typeof def.encoding; updatedAt: string }; error?: string; tag?: string };
+      if (!r.ok || !r.visual) throw new Error(r.error || 'The visual could not be updated.');
+      ed.addVisuals([{ ...def, encoding: r.visual.encoding, updatedAt: r.visual.updatedAt, tag: r.tag }]);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'The visual could not be updated.', { kind: 'error' });
+    }
+  };
   const drawnHere = useMemo(
     () => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : hint ? { ...compared, overrides: { ...compared.overrides, tooltipHint: hint } } : compared),
     [compared, phone, hint],
@@ -271,6 +281,7 @@ export function VisualCard({
       <VisualTileBody
         projectId={ed.projectId}
         def={drawnHere}
+        onSwitch={ed.writer && !ed.readOnly ? (e) => void switchEncoding(e) : undefined}
         filters={filters}
         params={ed.params}
         asTable={asTable}
