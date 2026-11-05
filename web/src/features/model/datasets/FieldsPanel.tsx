@@ -4,6 +4,7 @@
 import type { DatasetColumns } from '../../../api/datasets';
 import { ColumnsTab } from '../../data/ColumnsTab';
 import type { ModelTable } from '../api';
+import { SuggestedMeanings } from './SuggestedMeanings';
 import m from '../Model.module.css';
 
 export function FieldsPanel({ projectId, header, table }: { projectId: string; header: DatasetColumns; table: ModelTable | undefined }) {
@@ -23,6 +24,7 @@ export function FieldsPanel({ projectId, header, table }: { projectId: string; h
           </ul>
         </section>
       )}
+      <SuggestedMeanings projectId={projectId} datasetId={header.id} />
       <ColumnsTab projectId={projectId} datasetId={header.id} header={header} live={header.mode === 'live'} />
     </>
   );
