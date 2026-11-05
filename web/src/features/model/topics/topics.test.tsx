@@ -63,6 +63,24 @@ const drawer = () => screen.findByRole('dialog', {}, LAZY);
 const saved = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === 'topic:save').map((c) => c.payload as { id?: string; base?: string; topic: { datasets: { id: string; fields?: string[] }[]; metricIds: string[]; termIds: string[]; name: string } });
 
 describe('The Data model: topics', () => {
+  it('under Sales the strip keeps only its datasets\' gaps and its members\' review chips, and no project-wide count', async () => {
+    const table = (datasetId: string) => ({ datasetId, role: 'fact', key: '', keyState: '', description: '', alwaysApplied: { kind: 'prepare', steps: [] }, calculated: [] });
+    serve({
+      'projects:roles': { body: { [P]: 'admin' } },
+      'model:overview': { body: { ok: true, tables: [table(O), table(R)], todo: [{ datasetId: O, kind: 'no_key' }, { datasetId: R, kind: 'no_key' }], more: 0,
+        review: [{ ref: 'metric:m1', name: 'Revenue', kind: 'needs_review' }, { ref: 'metric:m5', name: 'Margin', kind: 'needs_review' }, { ref: `dataset:${R}`, name: 'Regions', kind: 'needs_review' }] } },
+      'catalog:suggestions': { body: { ok: true, suggestions: [{ connId: O, docId: O, table: 'ORDERS', datasetId: R, kind: 'column', column: 'amt', text: 'Amount', hash: 'AbCdEf012345' }], total: 2, datasets: 1 } },
+    });
+    const chips = async () => within(await screen.findByRole('region', { name: 'To fill in next' }, LAZY)).getAllByRole('button').map((b) => b.textContent);
+    renderApp(`/model/${P}`);
+    await screen.findByRole('button', { name: '2 suggested meanings' }, LAZY);
+    expect(await chips()).toEqual(['Set a key on Orders', 'Set a key on Regions', 'Revenue changed since certified', 'Margin changed since certified', 'Regions changed since certified', '2 suggested meanings']); // NEGATIVE CONTROL: All
+    cleanup();
+    renderApp(`/model/${P}?topic=${SALES}`);
+    await screen.findByTestId('topic-line', {}, LAZY);
+    await waitFor(async () => expect(await chips()).toEqual(['Set a key on Orders', 'Revenue changed since certified']));
+  }, 30_000);
+
   it('picking Sales puts topic= in the URL and narrows Metrics to its two, in its order; Show all lists five', async () => {
     serve();
     const router = renderApp(`/model/${P}?tab=metrics`);

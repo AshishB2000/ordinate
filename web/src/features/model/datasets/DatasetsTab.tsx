@@ -168,6 +168,12 @@ export function DatasetsTab({ projectId, topic }: { projectId: string; topic?: N
     const mine = new Set(all.map((d) => d.id));
     // shortcut: under a topic the strip drops "+N more" (the server counts the whole project); a topic-scoped count is a server change.
     const todo = topic ? ov.data.todo.filter((i) => mine.has(i.datasetId)) : ov.data.todo;
+    // …and so are review chips: only the topic's datasets, metrics and terms; the suggested meanings count is the project's, so none.
+    const member = (ref: string): boolean => {
+      const [kind, id = ''] = ref.split(':');
+      return kind === 'dataset' ? mine.has(id) : kind === 'metric' ? !!topic?.metricIds.includes(id) : kind === 'term' && !!topic?.termIds.includes(id);
+    };
+    const review = topic ? ov.data.review?.filter((r) => member(r.ref)) : ov.data.review;
     // The list's own order: Facts, then Dimensions, then the rest, each in dataset:list order.
     const shown = GROUPS.flatMap(({ role }) => all.filter((d) => (tables.get(d.id)?.role ?? '') === role));
     const dataset = shown.find((d) => d.id === params.get('dataset')) ?? shown[0];
@@ -178,12 +184,12 @@ export function DatasetsTab({ projectId, topic }: { projectId: string; topic?: N
         {canEdit && (
           <TodoStrip
             todo={todo}
-            review={ov.data.review}
+            review={review}
             more={topic ? 0 : ov.data.more}
             nameOf={(id) => names.get(id)}
             onOpen={open}
             onReview={openReview}
-            extra={sug?.total && sug.suggestions[0] ? { text: `${formatNumber(sug.total)} suggested ${sug.total === 1 ? 'meaning' : 'meanings'}`, onPick: () => go(sug.suggestions[0].datasetId, 'fields') } : undefined}
+            extra={!topic && sug?.total && sug.suggestions[0] ? { text: `${formatNumber(sug.total)} suggested ${sug.total === 1 ? 'meaning' : 'meanings'}`, onPick: () => go(sug.suggestions[0].datasetId, 'fields') } : undefined}
           />
         )}
         <div className={m.split}>
