@@ -31,6 +31,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
+import { clip } from './clip';
 import * as recordFs from './recordFs';
 import { ctx, serverDataDir } from '../server/context';
 import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
@@ -97,10 +98,6 @@ function dict<T>(): Record<string, T> {
 
 function own(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
-}
-
-function clip(raw: unknown, max: number): string {
-  return typeof raw === 'string' ? raw.trim().slice(0, max) : '';
 }
 
 // ── Tags (PURE) ──────────────────────────────────────────────────────────────

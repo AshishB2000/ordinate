@@ -283,6 +283,56 @@ async function main(): Promise<void> {
     === '[{"value":" EU ","label":"Europe"}]');
   ok('value labels are capped at 500', vl.sanitizeValueLabels(Array.from({ length: 600 }, (_, i) => ({ value: `v${i}`, label: `l${i}` }))).length === vl.MAX_VALUE_LABELS);
 
+  // ── 8. sanitizing twice is sanitizing once: a clip that ends on a space would lose a character on every re-save ──
+  const sd: typeof import('../src/app/statusDocs') = require('../src/app/statusDocs');
+  const spaced = 'x '.repeat(5000); // every cap below is even, so a plain slice at the cap ends on a space
+  const again = (f: (x: unknown) => unknown, x: unknown): boolean => JSON.stringify(f(f(x))) === JSON.stringify(f(x));
+  const longGrain = 'g'.repeat(199) + ' tail';
+  ok('a table doc sanitized twice is the doc sanitized once, a grain cut on a space loses it',
+    again(td.sanitizeTableDoc, { role: 'fact', grain: longGrain, guide: spaced, updatedBy: spaced, updatedAt: spaced })
+    && td.sanitizeTableDoc({ grain: longGrain }).grain === 'g'.repeat(199) && td.sanitizeTableDoc({ guide: spaced }).guide === spaced.slice(0, td.MAX_GUIDE).trimEnd());
+  const statusIn = { [`metric:${uuid(70)}`]: { status: 'retired', by: spaced, at: spaced, note: spaced }, [`term:${uuid(71)}`]: { status: 'certified', by: spaced, at: spaced, note: spaced } };
+  ok('a status section sanitized twice is the section sanitized once', again(sd.sanitizeStatus, statusIn) && sd.sanitizeStatus(statusIn)[`metric:${uuid(70)}`].note === spaced.slice(0, 500).trimEnd());
+  const catalogIn = {
+    records: { [`dataset:${uuid(72)}`]: { description: spaced, owner: spaced, updatedBy: spaced, updatedAt: spaced } },
+    columns: { [uuid(72)]: { a: { description: spaced, displayName: spaced, example: spaced, updatedBy: spaced, updatedAt: spaced, values: [{ value: 'EU', label: spaced }] } } },
+  };
+  ok('a catalog sanitized twice is the catalog sanitized once, a value label cut on a space included', again(catalog.sanitizeCatalog, catalogIn)
+    && catalog.sanitizeCatalog(catalogIn).records[`dataset:${uuid(72)}`].description === spaced.slice(0, 2000).trimEnd()
+    && catalog.sanitizeCatalog(catalogIn).columns[uuid(72)].a.values![0].label === spaced.slice(0, vl.MAX_LABEL_LEN).trimEnd());
+
+  // ── 9. hierarchies: a pod that cannot write them keeps them, sanitized, through every catalog write ──
+  const hr: typeof import('../src/app/hierarchies') = require('../src/app/hierarchies');
+  const GEO = { id: uuid(81), name: 'Geography', levels: ['region', 'state'] };
+  const planted = JSON.parse(fs.readFileSync(catalogFile(rpid), 'utf8'));
+  planted.tables[rds].hierarchies = [GEO, { id: uuid(82), name: 'geography', levels: ['a', 'b'] }, { id: uuid(83), name: 'Places', levels: ['state', 'city'] },
+    { id: '../x', name: 'Bad id', levels: ['p', 'q'] }, { id: uuid(84), name: 'One level', levels: ['z'] }, { id: uuid(85), name: 'Twice', levels: ['m', 'm'] }];
+  fs.writeFileSync(catalogFile(rpid), JSON.stringify(planted));
+  await catalog.setDoc(rpid, `dataset:${uuid(78)}`, { description: 'unrelated' }); // the write every older pod makes
+  const kept = JSON.parse(fs.readFileSync(catalogFile(rpid), 'utf8'));
+  ok('an old-path write keeps hierarchies; a repeated name, a repeated column, a bad id, one level and a repeated level are dropped',
+    JSON.stringify(kept.tables[rds].hierarchies) === JSON.stringify([GEO]), JSON.stringify(kept.tables[rds].hierarchies));
+  ok('a level is kept verbatim, the name trimmed', ((h) => h.levels[0] === ' region' && h.name === 'Geo')(hr.sanitizeHierarchies([{ id: uuid(86), name: '  Geo ', levels: [' region', 'state'] }])[0]));
+  ok('ten at most', hr.sanitizeHierarchies(Array.from({ length: 12 }, (_, i) => ({ id: uuid(90 + i), name: `h${i}`, levels: [`a${i}`, `b${i}`] }))).length === hr.MAX_HIERARCHIES);
+  const lv = (levels: unknown): number => hr.sanitizeHierarchies([{ id: uuid(87), name: 'L', levels }]).length;
+  ok('an entry with a non-string, empty or over-long level, or fewer than 2 or more than 6 levels, is dropped whole',
+    lv(['a', 5]) === 0 && lv(['a', '']) === 0 && lv(['a', 'b'.repeat(257)]) === 0 && lv(['a']) === 0 && lv('ab') === 0
+    && lv(['a', 'b', 'c', 'd', 'e', 'f', 'g']) === 0 && lv(['a', 'b', 'c', 'd', 'e', 'f']) === 1 && lv(['a', 'b'.repeat(256)]) === 1);
+  ok('a repeated id: the first entry wins', JSON.stringify(hr.sanitizeHierarchies([GEO, { id: GEO.id, name: 'Other', levels: ['x', 'y'] }])) === JSON.stringify([GEO]));
+  ok('a name or a list of entries that is not text or an array reads as none',
+    hr.sanitizeHierarchies('junk').length === 0 && hr.sanitizeHierarchies({ id: uuid(88), name: 'N', levels: ['a', 'b'] }).length === 0
+    && hr.sanitizeHierarchies([null, 'x', [], { id: uuid(88), name: 5, levels: ['a', 'b'] }, { id: uuid(88), name: '   ', levels: ['a', 'b'] }]).length === 0);
+  const messy = [GEO, { id: uuid(89), name: `${'n'.repeat(79)} tail`, levels: ['one', 'two'] }, { id: uuid(88), name: 'Last', levels: ['k ', ' k'], extra: 'dropped' }];
+  ok('hierarchies sanitized twice are the hierarchies sanitized once, a name cut on a space loses it, an unknown key is dropped',
+    again(hr.sanitizeHierarchies, messy) && hr.sanitizeHierarchies(messy)[1].name === 'n'.repeat(79) && !('extra' in hr.sanitizeHierarchies(messy)[2])
+    && again(td.sanitizeTableDoc, { hierarchies: messy }));
+  const H = (n: number, name: string, levels: string[]): { id: string; name: string; levels: string[] } => ({ id: uuid(n), name, levels });
+  ok('a dropped entry reserves no name and no column: a later valid entry with its name or its columns is kept',
+    JSON.stringify(hr.sanitizeHierarchies([GEO, H(95, 'geography', ['x', 'y']), H(96, 'Other', ['x', 'y']), H(97, 'Solo', ['k']), H(98, 'solo', ['k', 'l']), H(99, 'Later', ['region', 'z']), H(100, 'later', ['p', 'q'])]))
+    === JSON.stringify([GEO, H(96, 'Other', ['x', 'y']), H(98, 'solo', ['k', 'l']), H(100, 'later', ['p', 'q'])]));
+  ok('NEGATIVE CONTROL: a doc without hierarchies, or with none left, writes no key',
+    !('hierarchies' in td.sanitizeTableDoc({ role: 'fact' })) && !('hierarchies' in td.sanitizeTableDoc({ hierarchies: [{ id: '../x', name: 'Bad', levels: ['p', 'q'] }] })));
+
   if (!failureCount()) console.log('\nAll catalog checks passed.');
 }
 
