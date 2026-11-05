@@ -53,7 +53,7 @@ function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
 /** The datasets the question names by id: its category's, its series', its measures' — other than its own. */
 function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[] {
   if (!encoding) return [];
-  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
+  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(namedValues && Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
   return [...new Set(ids.filter((o): o is string => typeof o === 'string' && !!o && o !== datasetId))];
 }
 
@@ -78,6 +78,11 @@ async function reachesOther(projectId: string, datasetId: string, encoding: VizE
 let relatedGate = true;
 export function setRelatedGateForTest(on: boolean): void {
   relatedGate = on;
+}
+// Test seam: D14's negative control drops the measures' dataset ids from the check (scripts/test-rowPolicyFanOutJoins).
+let namedValues = true;
+export function setNamedDatasetsCheckForTest(on: boolean): void {
+  namedValues = on;
 }
 
 /**

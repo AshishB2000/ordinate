@@ -16,7 +16,7 @@ import type { FanOutPlan } from '../analysis/fanOutPlan';
 import { measureLabel } from '../analysis/vizData';
 import { mergeFx } from '../analysis/fx';
 import * as msg from '../analysis/fanOutMessages';
-import { projectModel } from './relationships';
+import { chartReads, projectModel } from './relationships';
 import { lineUp } from './lineUp';
 import type { Ok, Series } from './lineUp';
 import type { VizDataReply } from './visuals';
@@ -72,4 +72,16 @@ export async function fanOutVizData(projectId: string, datasetId: string, encodi
   const planned = planFanOut(datasetId, encoding, filters, rels, infos);
   if (!planned) return null;
   return planned.ok ? askFanOut(planned.plan, encoding, ask) : { ok: false, error: planned.error };
+}
+
+/** Every table a fan-out chart's questions read besides `datasetId` — each question's dataset and its own join's tables, once (row access gates exactly these). */
+export async function fanOutReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
+  if (!namesOther(datasetId, encoding)) return [];
+  const { rels, infos } = await projectModel(projectId, datasetId);
+  const planned = planFanOut(datasetId, encoding, filters, rels, infos);
+  if (!planned || !planned.ok) return [];
+  const out = new Set<string>();
+  for (const q of planned.plan.questions) for (const id of [q.datasetId, ...(await chartReads(projectId, q.datasetId, q.encoding, q.filters))]) out.add(id);
+  out.delete(datasetId);
+  return [...out];
 }

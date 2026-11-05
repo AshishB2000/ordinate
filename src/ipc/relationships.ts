@@ -30,6 +30,7 @@ import * as trace from '../engine/residentTrace';
 import { isValidId } from '../app/ids';
 import { getTableDoc } from '../app/tableDocs';
 import { closedToCaller } from '../data/rowAccess';
+import { fanOutReads } from './vizFanOut';
 
 type Infos = Map<string, DsInfo>;
 
@@ -121,7 +122,7 @@ export async function columnOwner(projectId: string, datasetId: string, column: 
 /** The OTHER datasets a chart's question reads — its join plan's tables (row access rules gate exactly these). */
 export async function chartReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
   const j = await vizJoin(projectId, datasetId, encoding, filters);
-  return j && j.join.ok ? planReads(j.join.value.plan) : [];
+  return j && j.join.ok ? planReads(j.join.value.plan) : j ? fanOutReads(projectId, datasetId, encoding, filters) : []; // refused: a fan-out's questions read each table
 }
 
 export async function joinedVizDataFor(
