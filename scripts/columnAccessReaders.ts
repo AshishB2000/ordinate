@@ -206,6 +206,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'tokens:list': 'META',
   'tokens:revoke': 'META',
   'trash:list': 'META',
+  'verified:checkResult': 'REDACT', // outcomes for every reader; a reason (it can quote the model) dropped on a dataset closed to the caller; test-columnRedact
   'verified:list': 'DROP', // a question whose spec names a hidden column is left out (ipc/verifiedState); test-columnRedact
   'versions:diff': 'NET',
   'versions:figures': 'GATE',
