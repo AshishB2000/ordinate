@@ -24,6 +24,8 @@ import { datasetFilePath, serialized } from './datasetRecord';
 import { liveRefusedMessage } from './liveMessages';
 import type { LiveProfile } from './liveProfile';
 import { sanitizeMissing, sanitizeProfile, sanitizeStamp } from './liveProfile';
+import { sanitizeBaseFilters } from './liveBaseFilters';
+import type { FilterStep } from './transforms';
 
 export type DatasetMode = 'extract' | 'live';
 
@@ -41,6 +43,18 @@ export interface LiveSettings {
   missingColumns?: string[];
   /** When the scheduler last started a daily sync — a failing warehouse is retried hourly, not every tick. */
   syncAttemptAt?: string;
+  /**
+   * Plain filter steps every question must carry (./liveBaseFilters). IN MEMORY ONLY: stored at the
+   * record's top level beside `rowPolicy` and filled by `applyLive`, never by `sanitizeLive`, so no
+   * writer that rebuilds `raw.live` can erase it. A pod that cannot apply them refuses (liveTarget).
+   */
+  baseFilters?: FilterStep[];
+  /**
+   * The stored list held something `sanitizeBaseFilters` dropped (an unknown operator, a non-object, a step
+   * past the cap). In memory only, set by `applyLive`. Answering with part of a list is as wrong as with
+   * none of it, so the guard refuses on it just as on `baseFilters` (./liveBaseFilters `hasBaseFilters`).
+   */
+  baseFiltersUnreadable?: true;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -178,10 +192,14 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
  */
 export function applyLive(
   target: { mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
-  data: { mode?: unknown; live?: unknown; updatedAt?: unknown },
+  data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown },
 ): void {
   const live = sanitizeLive(data);
   if (!live) return;
+  const baseFilters = sanitizeBaseFilters(data.baseFilters);
+  if (baseFilters.length) live.baseFilters = baseFilters;
+  // A stored list is read in full or the dataset answers nothing: a dropped step must never read as "no step".
+  if (Array.isArray(data.baseFilters) && data.baseFilters.length !== baseFilters.length) live.baseFiltersUnreadable = true;
   target.mode = 'live';
   target.live = live;
   delete target.autoRefresh;

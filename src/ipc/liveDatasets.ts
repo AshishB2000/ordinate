@@ -43,6 +43,8 @@ import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
 import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
+import { liveBaseFilterRefused } from '../engine/liveRefusals';
+import { hasBaseFilters } from '../data/liveBaseFilters';
 import { safeError } from '../connectors/types';
 import { logger } from '../app/logger';
 
@@ -163,6 +165,15 @@ async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ o
 }
 
 /**
+ * A copy would hold every row, wider than the dataset's own always-applied filters allow (08a: this pod
+ * cannot apply them). Refused typed, before the source is read, so nothing is fetched or saved.
+ */
+function baseFilterRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'baseFilter'; error: string } | null {
+  if (!hasBaseFilters(meta.live)) return null;
+  return { ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(meta.live?.baseFilters?.[0]?.column ?? '') };
+}
+
+/**
  * The Live dataset's column notes onto its copy — display names, descriptions,
  * examples and, above all, the personal / financial marks, so a copy is never
  * less protected than the dataset it came from. Only columns the copy has.
@@ -193,6 +204,8 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta) return { ok: false, error: liveDatasetMissing() };
   if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveCopyNotLiveMessage() };
+  const held = baseFilterRefusal(meta);
+  if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) {
     if (!ran.source) return { ok: false, error: ran.error };
@@ -249,6 +262,8 @@ export async function setDatasetMode(p: Record<string, unknown>) {
   }
 
   if (!isLive(meta)) return { ok: true, mode: 'extract', dataset: header(meta) };
+  const held = baseFilterRefusal(meta);
+  if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) return { ok: false, error: ran.error };
   const ds = await toExtractRecord(projectId, id, ran.result);

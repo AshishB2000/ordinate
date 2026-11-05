@@ -130,3 +130,8 @@ export function liveBadQuery(): string {
 export function liveColumnMissing(column: string): string {
   return t('liveRefusals.is_no_longer_in_the_warehouse', { column });
 }
+
+/** A Live dataset with always-applied (base) filters this server cannot apply: it answers nothing, never an unfiltered figure. */
+export function liveBaseFilterRefused(column: string): string {
+  return t('liveRefusals.this_dataset_s_always_applied_filters', { column });
+}

@@ -348,6 +348,7 @@
   "liveRefusals.small_multiples_cannot_be_drawn_from": "Les petits multiples ne peuvent pas encore être tracés à partir d’un jeu de données en direct. Faites une copie du jeu de données pour les utiliser.",
   "liveRefusals.the_category_no_longer_has_the": "La catégorie « {column} » n’a plus le type pour lequel ce graphique a été construit.",
   "liveRefusals.the_warehouse_answered_in_a_shape": "L’entrepôt de données a répondu sous une forme que la requête en direct n’a pas demandée.",
+  "liveRefusals.this_dataset_s_always_applied_filters": null,
   "liveRefusals.this_live_dataset_has_no_table": "Ce jeu de données en direct n’a ni table ni requête à lire.",
   "liveRefusals.this_question_cannot_be_asked_of": "Cette question ne peut pas être posée à un jeu de données en direct.",
   "mentionMessages.a_comment_or_reply_can_mention": null,
