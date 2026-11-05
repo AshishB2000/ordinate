@@ -1,5 +1,6 @@
-// The formula PARSER: recursive descent over the token stream, producing the
-// EvalFn tree that `compile` hands back. MAIN PROCESS, PURE logic.
+// The formula PARSER: recursive descent over the token stream, calling a
+// FormulaBuilder at each rule (formulaBuilder.ts; `compile` hands it the JS one,
+// formulaJs.ts). MAIN PROCESS, PURE logic.
 //
 // Precedence, lowest → highest:
 //   or → and → not → comparison → additive → multiplicative → unary → primary
@@ -8,8 +9,8 @@
 // the only edits to the moved code are the `export` keywords.
 
 import { FormulaError, type Tok } from './formulaTokens';
-import { type EvalFn, arith, compareOp, looseEq, num, truthy, FUNCTIONS } from './formulaEval';
-import { spendCall } from './formulaBudget';
+import { type EvalFn, FUNCTIONS } from './formulaEval';
+import type { ArithOp, CompareOp, FormulaBuilder } from './formulaBuilder';
 
 // ── Parser (recursive descent) ───────────────────────────────────────────────
 //
@@ -23,9 +24,9 @@ import { spendCall } from './formulaBudget';
 // table. The body is exactly ONE aggregate over a row-level expression.
 //
 // An LOD is a ROW-LEVEL value: the aggregate at that row's group. The parser
-// cannot compute it — it needs every row — so it records a `LodSpec` and
-// returns a reader of the row-map slot `@lod:<n>`, which formula/lod.ts fills
-// before the row is evaluated. `@` cannot start a token, so no column a user
+// cannot compute it — it needs every row — so it hands the builder the parts of
+// a `LodSpec`; the JS builder records it and returns a reader of the row-map
+// slot `@lod:<n>`, which formula/lod.ts fills before the row is evaluated. `@` cannot start a token, so no column a user
 // can name collides with the slot. A nested LOD is recorded before the one
 // around it, so filling slots in index order is filling them in dependency
 // order.
@@ -62,17 +63,27 @@ export interface LodSpec {
 
 const LITERAL_NAMES = new Set(['true', 'false', 'null']);
 
-export class Parser {
-  private toks: Tok[];
-  private pos = 0;
-  refs: Set<string> = new Set();
-  lods: LodSpec[] = [];
+/** Parse `tokens` through `b`. Throws FormulaError, carrying the token it is about. */
+export function parseTokens<T>(tokens: Tok[], b: FormulaBuilder<T>): { root: T; refs: string[] } {
+  const parser = new Parser(tokens, b);
+  const root = parser.parse();
+  return { root, refs: Array.from(parser.refs) };
+}
 
-  constructor(toks: Tok[]) {
+class Parser<T> {
+  private toks: Tok[];
+  private b: FormulaBuilder<T>;
+  private pos = 0;
+  /** LODs built so far: an `@lod:<n>` key and the `nested` flag count them. */
+  private lodCount = 0;
+  refs: Set<string> = new Set();
+
+  constructor(toks: Tok[], b: FormulaBuilder<T>) {
     this.toks = toks;
+    this.b = b;
   }
 
-  parse(): EvalFn {
+  parse(): T {
     const fn = this.parseOr();
     if (this.pos < this.toks.length) {
       this.fail('Unexpected token: ' + this.toks[this.pos].value);
@@ -125,46 +136,47 @@ export class Parser {
     this.pos += 1;
   }
 
-  private parseOr(): EvalFn {
+  private parseOr(): T {
     let left = this.parseAnd();
     while (this.isName('or')) {
+      const at = this.pos;
       this.pos += 1;
       const right = this.parseAnd();
-      const l = left;
-      const r = right;
-      left = (row) => truthy(l(row)) || truthy(r(row));
+      left = this.b.or(left, right, at);
     }
     return left;
   }
 
-  private parseAnd(): EvalFn {
+  private parseAnd(): T {
     let left = this.parseNot();
     while (this.isName('and')) {
+      const at = this.pos;
       this.pos += 1;
       const right = this.parseNot();
-      const l = left;
-      const r = right;
-      left = (row) => truthy(l(row)) && truthy(r(row));
+      left = this.b.and(left, right, at);
     }
     return left;
   }
 
-  private parseNot(): EvalFn {
+  private parseNot(): T {
     if (this.isName('not')) {
+      const at = this.pos;
       this.pos += 1;
       const e = this.parseNot();
-      return (row) => !truthy(e(row));
+      return this.b.not(e, at);
     }
     return this.parseComparison();
   }
 
-  private parseComparison(): EvalFn {
+  private parseComparison(): T {
     let left = this.parseAdditive();
     // Membership: <expr> IN (v1, v2, …). TRUE if the left value equals any item.
+    // It binds ONCE, before the comparison loop: `a IN (1) = TRUE` is `(a IN (1)) = TRUE`.
     if (this.isName('in')) {
+      const at = this.pos;
       this.pos += 1;
       this.expectPunc('(');
-      const items: EvalFn[] = [];
+      const items: T[] = [];
       if (!this.isPunc(')')) {
         items.push(this.parseOr());
         while (this.isPunc(',')) {
@@ -173,52 +185,48 @@ export class Parser {
         }
       }
       this.expectPunc(')');
-      const l = left;
-      left = (row) => {
-        const v = l(row);
-        for (const it of items) if (looseEq(v, it(row))) return true;
-        return false;
-      };
+      left = this.b.inList(left, items, at);
     }
     while (this.isOp('=', '==', '!=', '>', '<', '>=', '<=')) {
-      const op = this.toks[this.pos].value;
+      const at = this.pos;
+      const op = this.toks[this.pos].value as CompareOp;
       this.pos += 1;
       const right = this.parseAdditive();
-      left = compareOp(op, left, right);
+      left = this.b.compare(op, left, right, at);
     }
     return left;
   }
 
-  private parseAdditive(): EvalFn {
+  private parseAdditive(): T {
     let left = this.parseMultiplicative();
     while (this.isOp('+', '-')) {
-      const op = this.toks[this.pos].value;
+      const at = this.pos;
+      const op = this.toks[this.pos].value as ArithOp;
       this.pos += 1;
       const right = this.parseMultiplicative();
-      left = arith(op, left, right);
+      left = this.b.arith(op, left, right, at);
     }
     return left;
   }
 
-  private parseMultiplicative(): EvalFn {
+  private parseMultiplicative(): T {
     let left = this.parseUnary();
     while (this.isOp('*', '/', '%')) {
-      const op = this.toks[this.pos].value;
+      const at = this.pos;
+      const op = this.toks[this.pos].value as ArithOp;
       this.pos += 1;
       const right = this.parseUnary();
-      left = arith(op, left, right);
+      left = this.b.arith(op, left, right, at);
     }
     return left;
   }
 
-  private parseUnary(): EvalFn {
+  private parseUnary(): T {
     if (this.isOp('-')) {
+      const at = this.pos;
       this.pos += 1;
       const e = this.parseUnary();
-      return (row) => {
-        const v = num(e(row));
-        return v === null ? null : -v;
-      };
+      return this.b.neg(e, at);
     }
     if (this.isOp('+')) {
       this.pos += 1;
@@ -227,20 +235,19 @@ export class Parser {
     return this.parsePrimary();
   }
 
-  private parsePrimary(): EvalFn {
+  private parsePrimary(): T {
     const t = this.peek();
     if (!t) this.fail('Unexpected end of expression');
+    const at = this.pos;
 
     if (t.kind === 'num') {
       this.pos += 1;
-      const v = Number(t.value);
-      return () => v;
+      return this.b.num(Number(t.value), at);
     }
 
     if (t.kind === 'str') {
       this.pos += 1;
-      const v = t.value;
-      return () => v;
+      return this.b.str(t.value, at);
     }
 
     // An UNBOUND parameter. Queries that carry parameters bind them first
@@ -250,29 +257,28 @@ export class Parser {
     // function already propagates, rather than failing the whole field.
     if (t.kind === 'param') {
       this.pos += 1;
-      return () => null;
+      return this.b.param(at);
     }
 
     if (t.kind === 'col') {
       this.pos += 1;
-      const name = t.value;
-      this.refs.add(name);
-      return (row) => row[name] ?? null;
+      this.refs.add(t.value);
+      return this.b.col(t.value, at);
     }
 
     if (t.kind === 'name') {
       const lower = t.value.toLowerCase();
       if (lower === 'true') {
         this.pos += 1;
-        return () => true;
+        return this.b.bool(true, at);
       }
       if (lower === 'false') {
         this.pos += 1;
-        return () => false;
+        return this.b.bool(false, at);
       }
       if (lower === 'null') {
         this.pos += 1;
-        return () => null;
+        return this.b.nul(at);
       }
       const next = this.toks[this.pos + 1];
       const callForm = next && next.kind === 'punc' && next.value === '(';
@@ -286,9 +292,8 @@ export class Parser {
       }
       // otherwise a bare column reference
       this.pos += 1;
-      const name = t.value;
-      this.refs.add(name);
-      return (row) => row[name] ?? null;
+      this.refs.add(t.value);
+      return this.b.col(t.value, at);
     }
 
     if (t.kind === 'punc' && t.value === '(') {
@@ -304,9 +309,10 @@ export class Parser {
   }
 
   // IF <test> THEN <val> [ELSEIF <test> THEN <val>]* [ELSE <val>] END
-  private parseIf(): EvalFn {
+  private parseIf(): T {
+    const at = this.pos;
     this.pos += 1; // consume IF
-    const branches: { test: EvalFn; then: EvalFn }[] = [];
+    const branches: { test: T; then: T }[] = [];
     const test = this.parseOr();
     this.expectName('then');
     branches.push({ test, then: this.parseOr() });
@@ -316,23 +322,21 @@ export class Parser {
       this.expectName('then');
       branches.push({ test: t2, then: this.parseOr() });
     }
-    let elseFn: EvalFn | null = null;
+    let elseFn: T | null = null;
     if (this.isName('else')) {
       this.pos += 1;
       elseFn = this.parseOr();
     }
     this.expectName('end');
-    return (row) => {
-      for (const b of branches) if (truthy(b.test(row))) return b.then(row);
-      return elseFn ? elseFn(row) : null;
-    };
+    return this.b.ifThen(branches, elseFn, at);
   }
 
   // CASE <expr> WHEN <val> THEN <result> [WHEN …]* [ELSE <default>] END
-  private parseCase(): EvalFn {
+  private parseCase(): T {
+    const at = this.pos;
     this.pos += 1; // consume CASE
     const subject = this.parseOr();
-    const whens: { val: EvalFn; then: EvalFn }[] = [];
+    const whens: { val: T; then: T }[] = [];
     while (this.isName('when')) {
       this.pos += 1;
       const val = this.parseOr();
@@ -340,21 +344,18 @@ export class Parser {
       whens.push({ val, then: this.parseOr() });
     }
     if (whens.length === 0) this.fail('CASE requires at least one WHEN');
-    let elseFn: EvalFn | null = null;
+    let elseFn: T | null = null;
     if (this.isName('else')) {
       this.pos += 1;
       elseFn = this.parseOr();
     }
     this.expectName('end');
-    return (row) => {
-      const s = subject(row);
-      for (const w of whens) if (looseEq(s, w.val(row))) return w.then(row);
-      return elseFn ? elseFn(row) : null;
-    };
+    return this.b.caseWhen(subject, whens, elseFn, at);
   }
 
   // { FIXED|INCLUDE|EXCLUDE [dim], … : AGG(<expr>) }
-  private parseLod(): EvalFn {
+  private parseLod(): T {
+    const at = this.pos;
     const open = this.toks[this.pos];
     this.pos += 1; // consume {
     const kw = this.peek();
@@ -385,7 +386,7 @@ export class Parser {
     }
     this.pos += 1;
     this.expectPunc('(');
-    const before = this.lods.length;
+    const before = this.lodCount;
     const argAt = this.pos;
     const arg = this.parseOr();
     const only = this.toks[argAt];
@@ -394,24 +395,27 @@ export class Parser {
     this.expectPunc(')');
     const close = this.peek();
     this.expectPunc('}');
-    const key = '@lod:' + this.lods.length;
-    this.lods.push({
+    const key = '@lod:' + this.lodCount;
+    const nested = this.lodCount > before;
+    this.lodCount += 1;
+    return this.b.lod({
       key, kind: kind as LodKind, dims, agg: agg as LodAgg, arg,
       argCol: bare ? only.value : null,
-      nested: this.lods.length > before,
+      nested,
       cost: this.pos - argAt,
       start: open.start,
       end: close ? close.end : open.end,
-    });
-    return (row) => row[key] ?? null;
+    }, at);
   }
 
-  private parseCall(name: string): EvalFn {
-    const fn = FUNCTIONS[name.toLowerCase()];
-    if (!fn) this.fail('Unknown function: ' + name);
+  private parseCall(name: string): T {
+    const at = this.pos;
+    const lower = name.toLowerCase();
+    // Own names only: FUNCTIONS is an object literal, and what it inherits (`constructor`) is no function of ours.
+    if (!Object.hasOwn(FUNCTIONS, lower)) this.fail('Unknown function: ' + name);
     this.pos += 1; // consume name
     this.expectPunc('('); // consume '('
-    const args: EvalFn[] = [];
+    const args: T[] = [];
     if (!this.isPunc(')')) {
       args.push(this.parseOr());
       while (this.isPunc(',')) {
@@ -420,11 +424,6 @@ export class Parser {
       }
     }
     this.expectPunc(')');
-    return (row) => {
-      const vals = args.map((a) => a(row));
-      const out = fn(vals);
-      spendCall(vals, out); // formulaBudget.ts: the text a call reads and writes is the author's to choose
-      return out;
-    };
+    return this.b.call(lower, args, at);
   }
 }
