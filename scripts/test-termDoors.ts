@@ -106,13 +106,16 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
     return { status: r.statusCode, text: r.body, value };
   };
   const SENTENCE = termMsgs.termUnreadable();
+  // 05b: TERM names no term record, so it is refused as deleted for good. The Assistant's `{ term }` stays unreadable until it reads terms (Task 4).
+  const PURGED = termMsgs.termPurged();
   const items = (v: unknown): any[] => (Array.isArray(v) ? v : [v]); // any: a reply's items
   /** HTTP 409 `term`, or an item `{ok:false, code:'term'}`. */
   const refusedTerm = (r: Reply): boolean =>
     (r.status === 409 && r.value?.code === termStep.TERM_CODE) || (r.status === 200 && items(r.value).some((o) => o && o.ok === false && o.code === termStep.TERM_CODE));
   /** Any item of a 200 that answered. */
   const hasFigure = (r: Reply): boolean => r.status === 200 && items(r.value).some((o) => o && o.ok !== false);
-  const refusedWithSentence = (r: Reply): boolean => refusedTerm(r) && r.text.includes(SENTENCE) && !hasFigure(r);
+  const refusedWith = (sentence: string) => (r: Reply): boolean => refusedTerm(r) && r.text.includes(sentence) && !hasFigure(r);
+  const refusedWithSentence = refusedWith(SENTENCE);
 
   // The records the doors name: a metric on each dataset; on the extract, a scenario over it, and one whose driver is aimed through a term.
   const metricOn = async (datasetId: string): Promise<string> => {
@@ -163,7 +166,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   for (const [label, ch, body, liveToo] of ENTRIES) {
     for (const ds of liveToo ? [EXTRACT, LIVE] : [EXTRACT]) {
       const r = await post(ch, body(ds, true));
-      ok(`${label} on ${ds.mode}: refused, typed, with the sentence — never a figure`, refusedWithSentence(r), `${r.status} ${r.text.slice(0, 300)}`);
+      ok(`${label} on ${ds.mode}: refused, typed, with the sentence — never a figure`, refusedWith(label === 'answer:card' ? SENTENCE : PURGED)(r), `${r.status} ${r.text.slice(0, 300)}`);
       const plain = await post(ch, body(ds, false));
       ok(`NEGATIVE CONTROL: ${label} on ${ds.mode} without the term answers`, !refusedTerm(plain) && hasFigure(plain), `${plain.status} ${plain.text.slice(0, 300)}`);
     }
@@ -174,13 +177,13 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   const scen = await scoped(true);
   const scenPlain = await scoped(false);
   ok('scenario:card under a term in its scope: refused with the sentence — never a figure; NEGATIVE CONTROL: without it, a figure',
-    scen?.ok === false && scen.error === SENTENCE && !('value' in scen) && scenPlain?.ok === true && typeof scenPlain.value === 'number', JSON.stringify({ scen, scenPlain }));
+    scen?.ok === false && scen.error === PURGED && !('value' in scen) && scenPlain?.ok === true && typeof scenPlain.value === 'number', JSON.stringify({ scen, scenPlain }));
 
   // ── § kept ─────────────────────────────────────────────────────────────────
   for (const ds of [EXTRACT, LIVE]) {
     const tilesReply = await post('analysis:tiles', { projectId: P, items: tiles(ds, fl(true)) });
     const kpi = tilesReply.value?.[1];
-    ok(`a KPI with no column whose metric:value refused says why, not "deleted" (${ds.mode})`, kpi?.code === 'term' && kpi.error === SENTENCE && !/was deleted/.test(String(kpi.error)), JSON.stringify(kpi));
+    ok(`a KPI with no column whose metric:value refused says why, not "deleted" (${ds.mode})`, kpi?.code === 'term' && kpi.error === PURGED && !/The metric this card showed/.test(String(kpi.error)), JSON.stringify(kpi));
     for (const [label, step] of [['a future step', FUTURE], ['a term with no id', { type: 'term' }], ['a term with a number id', { type: 'term', term: 5 }]] as const) {
       const chart = await post('visual:data', { projectId: P, datasetId: ds.id, encoding: enc, filters: [F0, step] });
       const card = await post('dashboard:metric', { projectId: P, datasetId: ds.id, column: 'sales', aggregation: 'sum', filters: [F0, step] });
@@ -201,7 +204,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   const aimed = (await whatIf(TERM_SCENARIO)).value?.[0];
   const unaimed = (await whatIf(SCENARIO)).value?.[0];
   ok('a scenario whose driver is aimed through a term refuses at scenario:card, typed (the KPI beside it stands); NEGATIVE CONTROL: one aimed at a column answers',
-    aimed?.ok === true && aimed.scenario?.ok === false && aimed.scenario.code === 'term' && aimed.scenario.error === SENTENCE && !('value' in aimed.scenario)
+    aimed?.ok === true && aimed.scenario?.ok === false && aimed.scenario.code === 'term' && aimed.scenario.error === termMsgs.termNotHere() && !('value' in aimed.scenario)
       && unaimed?.scenario?.ok === true && typeof unaimed.scenario.value === 'number', JSON.stringify({ aimed, unaimed }));
 
   // ── § lock: the refusal is before the lock, so a kept step never reaches withLockSteps ──
@@ -222,19 +225,21 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
       const viz = await rowDoors.lockedViz(P, seed.extract, enc as never, [F0, FUTURE] as FilterStep[], {}, body);
       ok('lockedViz: a kept step under a lock is refused, typed — the lock never asked, the body never run',
         (viz as { code?: string }).code === 'term' && asked === 0 && got.length === 0, JSON.stringify({ viz, asked, got }));
-      const rejects = async (p: Promise<unknown>): Promise<boolean> => p.then(() => false, (e) => termStep.isTermNotExpandedError(e) && e.reason === 'unreadable');
+      const rejectsAs = (reason: string) => async (p: Promise<unknown>): Promise<boolean> => p.then(() => false, (e) => termStep.isTermNotExpandedError(e) && e.reason === reason);
+      const rejects = rejectsAs('unreadable');
       ok('lockedMetric, computeCard and pageFor throw it before the lock',
         await rejects(rowDoors.lockedMetric(P, seed.extract, { column: 'sales' }, [F0, FUTURE] as FilterStep[], undefined, async () => 1))
         && await rejects(answers.computeCard(P, { datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ term: U }] } as never))
-        && await rejects(ipcDatasets.pageFor(P, seed.extract, { offset: 0, limit: 5, filters: [F0, TERM] as FilterStep[] }, 'termDoors'))
+        && await rejectsAs('deleted')(ipcDatasets.pageFor(P, seed.extract, { offset: 0, limit: 5, filters: [F0, TERM] as FilterStep[] }, 'termDoors'))
         && asked === 0, String(asked));
       await rowDoors.lockedViz(P, seed.extract, enc as never, [F0] as FilterStep[], {}, body);
       ok('NEGATIVE CONTROL: a plain filter under the same lock asks it, and the body sees the lock first', asked === 1 && got.length === 1 && got[0][0] === LOCK_STEP && got[0].length === 2, JSON.stringify(got));
       // The expander itself: every step that is not a plain filter, and nothing else.
       const exp = await termExpand.expandTerms(P, seed.extract, [F0 as FilterStep]);
       ok('expandTerms: plain filters come back as they are, with no notes', exp.steps.length === 1 && exp.steps[0] === F0 && exp.notes.length === 0);
-      ok('expandTerms: a term, a malformed term, a future step and a Prepare step each refuse, unreadable',
-        (await Promise.all([TERM, { type: 'term' }, { type: 'term', term: 5 }, FUTURE, { type: 'dedupe' }, null].map((s) => rejects(termExpand.expandTerms(P, seed.extract, [F0, s] as FilterStep[]))))).every(Boolean));
+      ok('expandTerms: a malformed term, a future step and a Prepare step each refuse, unreadable; a term with no record, deleted',
+        (await Promise.all([{ type: 'term' }, { type: 'term', term: 5 }, FUTURE, { type: 'dedupe' }, null].map((s) => rejects(termExpand.expandTerms(P, seed.extract, [F0, s] as FilterStep[]))))).every(Boolean)
+          && await rejectsAs('deleted')(termExpand.expandTerms(P, seed.extract, [F0, TERM] as FilterStep[])));
       const answerSpec = (filters: unknown[]) => ({ datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters }) as never;
       ok('expandAnswerTerms refuses as specFilterSteps does — a { term } and a filter typed term; NEGATIVE CONTROL: a column filter passes',
         await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ term: U }]))) && await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ type: 'term', column: 'region', op: '=', value: 'r1' }])))

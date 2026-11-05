@@ -56,6 +56,9 @@ function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
   if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length) return true;
+  // A glossary term's step on another table (semantic D11) reads that table: its column name alone would not say so.
+  const otherTable = (v: unknown): boolean => (Array.isArray(v) ? v.some(otherTable) : typeof (v as FilterStep | null)?.datasetId === 'string' && (v as FilterStep).datasetId !== datasetId);
+  if (otherTable(rest)) return true;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));

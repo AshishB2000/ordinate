@@ -271,6 +271,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
 
       // ── filter ────────────────────────────────────────────────────────────
       case 'filter': {
+        if (step.datasetId) return bail('another table\'s term step: the JS fold refuses it'); // never this table's same-named column
         if (step.via) { // a related table's column: the JS fold skips it with this warning, never filtering the primary's own
           warnings.push(`Filter skipped: unknown column "${step.column}"`);
           break;

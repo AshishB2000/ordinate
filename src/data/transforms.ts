@@ -19,6 +19,7 @@
 import type { ParsedColumn } from './parse';
 import { RowPolicyError, isRowPolicyError } from './rowPolicyError';
 import { TermNotExpandedError, isTermNotExpandedError } from './termStep';
+import { termNoJoinHere } from './termMessages';
 import { detectColumnType, coerceValue } from './parse';
 import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
@@ -116,6 +117,8 @@ export interface FilterStep {
    * REFUSED by every evaluator that cannot walk it: it never filters the primary's own same-named column.
    */
   via?: string;
+  /** Set on a term's step from another dataset (semantic D11); only the join planner applies it, every single-table engine refuses it. */
+  datasetId?: string;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';
@@ -380,6 +383,7 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep, budget?: Form
 }
 
 function stepFilter(t: TableData, s: FilterStep): StepResult {
+  if (s.datasetId) throw new TermNotExpandedError('unreachable', termNoJoinHere()); // another table's term step: never this table's same-named column
   if (s.via) return skip(t, `Filter skipped: unknown column "${s.column}"`); // a related table's column: never the primary's own
   const ci = colIndex(t.columns, s.column);
   if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)

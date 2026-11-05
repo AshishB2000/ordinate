@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   const withTerm = (await metrics.saveMetric(P, { name: 'East sales', datasetId: ds.id, definition: { column: 'amount', aggregation: 'sum' }, filters: [term] }))!;
   const plain = (await metrics.saveMetric(P, { name: 'All sales', datasetId: ds.id, definition: { column: 'amount', aggregation: 'sum' } }))!;
   ok('fixture: the saved metric keeps the term a later release wrote', show((await metrics.getMetric(P, withTerm.id))!.filters) === show([term]));
-  const sentence = termMsg.termUnreadable();
+  const sentence = termMsg.termPurged(); // 05b reads terms: one with no record is refused as deleted for good
 
   // ── a published dashboard ──────────────────────────────────────────────
   const kpi = (metricId: string, x: number) => ({ id: randomUUID(), type: 'metric', metric: { datasetId: ds.id, column: 'amount', aggregation: 'sum', metricId }, layout: { x, y: 0, w: 3, h: 2 } });

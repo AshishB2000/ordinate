@@ -14,8 +14,10 @@ import type { VizEncoding } from '../analysis/visuals';
 import * as rels from '../analysis/relationships';
 import type { Relationship } from '../analysis/relationships';
 import {
-  VIA_UNSUPPORTED, mergedLayout, mergedName, planTables, relatedColumnGroups, resolveColumnOwner, resolveVizJoin,
+  VIA_UNSUPPORTED, findPath, mergedLayout, mergedName, planTables, relatedColumnGroups, resolveColumnOwner, resolveVizJoin,
 } from '../analysis/joinPlan';
+import { TermNotExpandedError, termRefusal } from '../data/termStep';
+import { termNoJoinHere } from '../data/termMessages';
 import type { DsInfo, JoinPlan } from '../analysis/joinPlan';
 import { joinRateJs, joinedMetricJs, joinedVizDataJs, keyStatsJs } from '../analysis/joinJs';
 import type { KeyStats } from '../analysis/joinJs';
@@ -96,7 +98,7 @@ function hasRefs(encoding: VizEncoding): boolean {
 /** The join a chart's question needs (analysis/joinPlan resolveVizJoin), or null when it needs none. */
 async function vizJoin(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
-  if (list.length === 0 && !hasRefs(encoding) && !(filters || []).some((f) => f && f.via)) return null; // a via filter is refused, not skipped
+  if (list.length === 0 && !hasRefs(encoding) && !(filters || []).some((f) => f && (f.via || f.datasetId))) return null; // a via or a term's other-table filter is refused, not skipped
   const infos = await modelInfos(projectId, datasetId, list);
   const join = resolveVizJoin(datasetId, encoding, filters, live(list, infos), infos);
   return join ? { infos, join } : null;
@@ -125,7 +127,7 @@ export async function joinedVizDataFor(
   const vj = await vizJoin(projectId, datasetId, encoding, filters);
   if (!vj) return null;
   const { infos, join } = vj;
-  if (!join.ok) return { ok: false, error: join.error };
+  if (!join.ok) return join.error === termNoJoinHere() ? termRefusal(new TermNotExpandedError('unreachable', join.error)) : { ok: false, error: join.error };
   const j = join.value;
 
   const sources = await residentSources(projectId, j.plan);
@@ -144,14 +146,17 @@ export async function joinedVizDataFor(
 async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
   const list = await rels.listRelationships(projectId);
   const viaFilter = filters.some((f) => f && f.via);
-  if (list.length === 0 && !viaFilter) return null;
+  const pinned = filters.some((f) => f && f.datasetId);
+  if (list.length === 0 && !viaFilter && !pinned) return null;
   const infos = await modelInfos(projectId, datasetId, list);
   const model = live(list, infos);
   const needed = new Set<string>();
   const owner = resolveColumnOwner(datasetId, column, model, infos);
   if (owner && owner !== datasetId) needed.add(owner);
-  const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos) : null));
+  const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos, f.datasetId) : null));
   for (const o of filterOwners) if (o && o !== datasetId) needed.add(o);
+  // A term's step on another table filters that table or nothing: never this one's same-named column, never a "—".
+  if (filters.some((f, i) => f && f.datasetId && !filterOwners[i])) throw new TermNotExpandedError('unreachable', termNoJoinHere());
   // A via filter is refused (no value), never skipped into an unfiltered total.
   if (viaFilter) return { infos, owner, filterOwners, planned: { ok: false as const, error: VIA_UNSUPPORTED } };
   if (needed.size === 0) return null;
@@ -192,7 +197,10 @@ export async function joinedMetricFor(
   const column = mergedName(layout, plan, tIndex(mOwner), spec.column, infos) ?? spec.column;
   const flt = filters.map((f, i) => {
     const o = filterOwners[i];
-    return o ? { ...f, column: mergedName(layout, plan, tIndex(o), f.column, infos) ?? f.column } : f;
+    if (!o) return f;
+    const out = { ...f, column: mergedName(layout, plan, tIndex(o), f.column, infos) ?? f.column };
+    delete out.datasetId; // on its table's merged column now
+    return out;
   });
 
   const sources = await residentSources(projectId, plan);
@@ -206,6 +214,14 @@ export async function joinedMetricFor(
     ok: true,
     value: joinedMetricJs(plan, layout, tables, infos, { column, aggregation: spec.aggregation, table: tIndex(mOwner) }, flt),
   };
+}
+
+/** Can a figure on `primary` read `target` through the data model (a safe hop path; ../analysis/joinPlan findPath)? What a term on another dataset needs. */
+export async function reaches(projectId: string, primary: string, target: string): Promise<boolean> {
+  const list = await rels.listRelationships(projectId);
+  if (!list.length) return primary === target;
+  const infos = await modelInfos(projectId, primary, list);
+  return findPath(primary, target, live(list, infos)).ok;
 }
 
 /** Column names a metric formula on `datasetId` may also name — every related dataset's. */

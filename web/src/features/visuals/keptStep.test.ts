@@ -5,7 +5,7 @@ import { deepStrictEqual, notStrictEqual, strictEqual } from 'node:assert/strict
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'vitest';
-import { PREPARE_STEP_TYPES, isKeptStep, keptKey } from './keptStep';
+import { PREPARE_STEP_TYPES, isKeptStep, keptKey, markScopeTerms } from './keptStep';
 
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
@@ -41,5 +41,14 @@ describe('keptKey', () => {
     strictEqual(keptKey({ type: 'term', term: U, n: { b: 1, a: [2, { d: 1, c: 2 }] } }), keptKey({ n: { a: [2, { c: 2, d: 1 }], b: 1 }, term: U, type: 'term' }));
     notStrictEqual(keptKey(TERM), keptKey({ type: 'term', term: U.replace('7d', '7e') }));
     strictEqual(keptKey(TERM), 'kept:' + stableStringify(TERM)); // the server's own key
+  });
+});
+
+describe('markScopeTerms mirrors the server', () => {
+  it('marks a scope\'s well-formed terms only, as the server does', () => {
+    const battery = [TERM, { ...TERM, fromControl: true }, { type: 'term' }, { type: 'filter', column: 'city', op: '=', value: 'Paris' }, { type: 'future_x' }];
+    deepStrictEqual(markScopeTerms(battery), server.markScopeTerms(battery));
+    deepStrictEqual(markScopeTerms([TERM]), [{ ...TERM, fromControl: true }]);
+    strictEqual(markScopeTerms(battery)[3], battery[3]); // NEGATIVE CONTROL: a filter comes back as it was
   });
 });

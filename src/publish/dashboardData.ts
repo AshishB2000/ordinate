@@ -52,6 +52,7 @@ import { embedTileLocked } from '../server/embedMessages';
 import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
+import { markScopeTerms } from '../data/filterList';
 import { kpiHidden } from './kpiPolicy';
 
 export interface PublishedControl {
@@ -358,7 +359,7 @@ export async function planDashboard(projectId: string, analysisId: string, maxCo
 function comboScope(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, key: string, lock?: Lock | null): { filters: FilterStep[]; params: ParamValues } {
   const picks = parseKey(key);
   const params = paramValues((a.parameters || []).map((p) => ({ name: p.name, kind: p.kind, value: p.value, min: p.min, max: p.max })));
-  const filters: FilterStep[] = [...(lock ? lock.steps : []), ...(Array.isArray(a.filters) ? a.filters : [])];
+  const filters: FilterStep[] = [...(lock ? lock.steps : []), ...markScopeTerms(Array.isArray(a.filters) ? a.filters : [])]; // a scope term a tile cannot use: a note
   specs.forEach((s, i) => {
     // The plan may have TRIMMED this control's options; map back by label.
     const label = plan.domains[i] ? plan.domains[i].options[picks[i] ?? 0] : undefined;

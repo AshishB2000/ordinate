@@ -38,3 +38,14 @@ const stable = (v: unknown): string =>
 
 /** A kept step's identity for a dedupe: its whole body (key order aside), under a prefix no filter's key shares. */
 export const keptKey = (s: KeptStep): string => 'kept:' + stable(s);
+
+/**
+ * A dashboard's scope with each glossary term marked `fromControl`, every other step as it was — the server's
+ * markScopeTerms (src/data/filterList.ts). A scope term a tile cannot use is a note on the tile, not a refusal.
+ */
+export function markScopeTerms<S>(steps: readonly S[]): S[] {
+  return steps.map((s) => {
+    const o = s as { type?: unknown; term?: unknown; fromControl?: unknown } | null;
+    return o && o.type === 'term' && typeof o.term === 'string' && o.fromControl !== true ? ({ ...o, fromControl: true } as S) : s;
+  });
+}

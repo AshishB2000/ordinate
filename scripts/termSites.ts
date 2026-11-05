@@ -73,7 +73,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/visuals/builderState.ts': { count: 1, how: 'keeps' },
   'web/src/features/visuals/filters/filterText.ts': { count: 1, how: 'keeps' },
   // door: the figure entry. Expands a term (expandTerms), or refuses it typed; the row lock keeps one.
-  'src/analysis/termExpand.ts': { count: 1, how: 'door' },
+  'src/analysis/termExpand.ts': { count: 2, how: 'door' },
   // withLockSteps keeps a term; only the door that expanded it may drop it
   'src/data/rowAccess.ts': { count: 2, how: 'door' },
   'src/ipc/rowDoors.ts': { count: 2, how: 'door' },

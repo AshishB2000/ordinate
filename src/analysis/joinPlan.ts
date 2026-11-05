@@ -16,6 +16,7 @@ import type { ParsedColumn } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
 import type { Relationship } from './relationships';
 import type { VizEncoding } from './visuals';
+import { termNoJoinHere } from '../data/termMessages';
 
 export interface Hop {
   relId: string;
@@ -181,14 +182,20 @@ export interface VizJoin {
   measureTable: Map<string, number>;
 }
 
-/** Which dataset a bare column name means from `primary`: its own, else the NEAREST related one. */
+/**
+ * Which dataset a bare column name means from `primary`: its own, else the NEAREST related one. `pinned`: a
+ * glossary term's step from another dataset (semantic D11) means exactly that one, when it is reachable and
+ * has the column — never a same-named column of another table — or nothing.
+ */
 export function resolveColumnOwner(
   primary: string,
   column: string,
   rels: Relationship[],
   infos: Map<string, DsInfo>,
+  pinned?: string,
 ): string | null {
   const has = (id: string): boolean => !!infos.get(id)?.columns.some((c) => c.name === column);
+  if (pinned) return has(pinned) && (pinned === primary || reachable(primary, rels).has(pinned)) ? pinned : null;
   if (has(primary)) return primary;
   for (const id of reachable(primary, rels).keys()) if (has(id)) return id;
   return null;
@@ -218,6 +225,9 @@ export function resolveVizJoin(
   infos: Map<string, DsInfo>,
 ): Result<VizJoin> | null {
   if (hasVia(encoding, filters)) return { ok: false, error: VIA_UNSUPPORTED };
+  const pinned = (filters || []).some((f) => f && f.datasetId);
+  // A term on another dataset filters THAT table: a figure that cannot join refuses it, never filters its own same-named column.
+  if (pinned && (!encoding || encoding.pivot || encoding.cohort || encoding.eventFunnel)) return { ok: false, error: termNoJoinHere() };
   if (!encoding || encoding.pivot || !infos.has(primary)) return null;
   if (encoding.cohort || encoding.eventFunnel) return null; // their shelves name the primary's own columns
   const nameOf = (id: string): string => infos.get(id)?.name || 'A dataset';
@@ -231,10 +241,11 @@ export function resolveVizJoin(
   const serDs = encoding.series ? want(encoding.seriesDatasetId) : primary;
   const valDs = (encoding.values || []).map((v) => want(v.datasetId));
   const filterDs = (filters || []).map((f) => {
-    const owner = f && typeof f.column === 'string' ? resolveColumnOwner(primary, f.column, rels, infos) : null;
+    const owner = f && typeof f.column === 'string' ? resolveColumnOwner(primary, f.column, rels, infos, f.datasetId) : null;
     if (owner && owner !== primary) needed.add(owner);
     return owner;
   });
+  if ((filters || []).some((f, i) => f && f.datasetId && !filterDs[i])) return { ok: false, error: termNoJoinHere() };
   if (needed.size === 0) return null;
   for (const id of needed) if (!infos.has(id)) return { ok: false, error: 'A related dataset no longer exists.' };
 
@@ -257,7 +268,12 @@ export function resolveVizJoin(
     delete out.datasetId;
     return out;
   });
-  const flt = (filters || []).map((f, i) => (filterDs[i] ? { ...f, column: rename(filterDs[i] as string, f.column) } : f));
+  const flt = (filters || []).map((f, i) => {
+    if (!filterDs[i]) return f;
+    const out = { ...f, column: rename(filterDs[i] as string, f.column) };
+    delete out.datasetId; // renamed onto its table's merged column: what every engine can apply
+    return out;
+  });
   return { ok: true, value: { plan, layout, encoding: enc, filters: flt, measureTable } };
 }
 

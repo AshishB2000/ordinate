@@ -53,6 +53,8 @@ import {
 } from './scenarioModel';
 import type { Driver, DriverKind, DriverTarget, Nudge, Partition, Scenario, TornadoBar } from './scenarioModel';
 import { expandTerms } from './termExpand';
+import { isTermStep, TermNotExpandedError } from '../data/termStep';
+import { termNotHere } from '../data/termMessages';
 import { metricScope } from './metricTimeScope';
 import type { DateScope } from './metricTimeScope';
 
@@ -151,6 +153,8 @@ async function namesFor(ctx: Ctx): Promise<Map<string, Metric>> {
 async function loadInputs(ctx: Ctx, datasetId: string, column: string, all: FilterStep[], filters: Array<FilterStep | null>): Promise<Partition[] | null> {
   // A step it cannot apply THROWS (typed 'term'): in the scope, or as a driver's ONE target step (never widened to the whole column).
   all = (await expandTerms(ctx.projectId, datasetId, all)).steps;
+  // A target is ONE step: a glossary term (several, maybe another table's) is refused, never widened or guessed at.
+  if (filters.some((f) => isTermStep(f))) throw new TermNotExpandedError('unreachable', termNotHere());
   await expandTerms(ctx.projectId, datasetId, filters.filter((f): f is FilterStep => !!f));
   const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
   if (!meta) return null;

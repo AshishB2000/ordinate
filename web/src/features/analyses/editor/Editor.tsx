@@ -18,6 +18,7 @@ import { allControls, fromAnalysis, initial, reduce, sheetOf, type Doc } from '.
 import { clickFilterSteps, controlSteps, paramPayload } from './filters';
 import type { FilterStep } from '../../visuals/api';
 import { liveFilters } from '../../visuals/filters/filterText';
+import { markScopeTerms } from '../../visuals/keptStep';
 import { pickSize, type Size } from './geometry';
 import { Head } from './Head';
 import { Rail } from './Rail';
@@ -225,7 +226,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
     const steps = allControls(doc).flatMap((c) => (c.control ? controlSteps(c.control, controls.get(c.id)) : []));
     // A filter row still being set up (no operator yet) filters nothing (filterText.ts liveFilters).
     // The reader's selection (a navigation's carry, a map click) joins after the controls (dashboards.ts effectiveFilters).
-    return mergeFilters(liveFilters(doc.filters as FilterStep[]), [...steps, ...view.selection]);
+    return markScopeTerms(mergeFilters(liveFilters(doc.filters as FilterStep[]), [...steps, ...view.selection])); // MetricCard, stats, tree and summary send it as is
   }, [doc, controls, view.selection]);
   // Click-to-filter joins last. The card that was clicked reads the sheet WITHOUT its own clicks (filtersFor).
   const filters = useMemo(() => (view.clicks.length ? mergeFilters(baseFilters, clickFilterSteps(view.clicks)) : baseFilters), [baseFilters, view.clicks]);

@@ -44,6 +44,7 @@ export function sanitizeFilterStep(o: Record<string, unknown>): FilterStep | nul
   }
   // UUID-shaped only, as a measure's `datasetId` is: a relationship id, never a path or a name.
   if (isValidId(o.via)) step.via = o.via;
+  if (isValidId(o.datasetId)) step.datasetId = o.datasetId; // a term's step from another dataset: kept, so no save turns it into this table's
   if (o.fromControl === true) step.fromControl = true;
   return step;
 }
