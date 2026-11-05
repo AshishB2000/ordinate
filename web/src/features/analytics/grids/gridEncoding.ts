@@ -13,7 +13,7 @@ import type { Column } from '../../visuals/model';
 
 export type Shelf = 'rows' | 'columns' | 'values';
 export const SHELF_LIMITS: Record<Shelf, number> = { rows: 3, columns: 2, values: 4 };
-export const PIVOT_AGGS: readonly Exclude<Agg, 'none'>[] = ['sum', 'avg', 'count', 'min', 'max'];
+export const PIVOT_AGGS: readonly Exclude<Agg, 'none'>[] = ['sum', 'avg', 'count', 'countd', 'min', 'max'];
 
 export interface PivotDim {
   column: string;

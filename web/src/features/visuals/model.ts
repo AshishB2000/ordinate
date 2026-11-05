@@ -12,8 +12,8 @@ export interface Column {
   type: 'text' | 'number' | 'date';
 }
 
-export const AGGS: readonly Agg[] = ['sum', 'avg', 'count', 'min', 'max', 'none'];
-export const AGG_LABELS: Record<Agg, string> = { sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max', none: 'Raw (no aggregation)' };
+export const AGGS: readonly Agg[] = ['sum', 'avg', 'count', 'countd', 'min', 'max', 'none'];
+export const AGG_LABELS: Record<Agg, string> = { sum: 'Sum', avg: 'Average', count: 'Count', countd: 'Count distinct', min: 'Min', max: 'Max', none: 'Raw (no aggregation)' };
 export const GRAINS = [
   { value: 'day', label: 'Day' },
   { value: 'week', label: 'Week' },

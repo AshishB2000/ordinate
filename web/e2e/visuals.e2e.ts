@@ -20,7 +20,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page, Response } from 'playwright';
-import { copiedText, csrfToken, e2e, grantClipboard, hasWebGL2, screens, SCREENS, settled, watchCopies, type Session } from './fixtures.ts';
+import { copiedText, csrfToken, e2e, grantClipboard, hasWebGL2, screens, screensInPlace, SCREENS, settled, watchCopies, type Session } from './fixtures.ts';
 
 /** Both themes WITHOUT a reload: an open dialog, or an unsaved draft, would not survive `screens`. */
 async function shots(page: Page, name: string): Promise<void> {
@@ -98,6 +98,16 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   await page.getByRole('option', { name: 'Average' }).click();
   const body = (await (await recomputed).json()) as unknown;
   assert.ok(JSON.stringify(body).includes('avg of revenue'), 'the reply is the average');
+
+  // Count distinct (part 5): the server's own series name, drawn.
+  const distinct = rpcReply(page, 'visual:preview');
+  await page.getByRole('combobox', { name: 'Aggregation' }).click();
+  await page.getByRole('option', { name: 'Count distinct' }).click();
+  assert.ok(JSON.stringify(await (await distinct).json()).includes('count distinct of revenue'), 'the reply is the distinct count');
+  await inked(page, '[data-chart-type] canvas', 1000);
+  await screensInPlace(page, 'visuals-countd');
+  await page.getByRole('combobox', { name: 'Aggregation' }).click();
+  await page.getByRole('option', { name: 'Average' }).click();
 
   // A chip switches the type.
   await page.getByRole('radio', { name: /^Bar$/ }).click();

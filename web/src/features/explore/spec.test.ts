@@ -104,3 +104,14 @@ describe('the question in words', () => {
     expect(questionTitle(e as never)).toBe(want);
   });
 });
+
+describe('a distinct count in the link', () => {
+  it('round-trips a countd measure', () => {
+    const q = Q({ category: 'region', values: [{ column: 'customer_id', aggregation: 'countd' }] });
+    expect(decodeQuestion(encodeQuestion(q))).toEqual(q);
+  });
+  it('NEGATIVE CONTROL: an aggregation no store knows is dropped', () => {
+    const q = Q({ category: 'region', values: [{ column: 'c', aggregation: 'median' as never }] });
+    expect(decodeQuestion(encodeQuestion(q))!.encoding.values).toEqual([]);
+  });
+});

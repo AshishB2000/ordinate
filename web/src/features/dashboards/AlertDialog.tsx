@@ -25,7 +25,7 @@ import s from './Alerts.module.css';
 export interface AlertSubject {
   datasetId: string;
   column: string;
-  aggregation: 'sum' | 'avg' | 'count' | 'min' | 'max';
+  aggregation: 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max';
   label?: string;
   metricId?: string;
   filters: Step[];

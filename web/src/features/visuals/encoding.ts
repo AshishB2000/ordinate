@@ -3,7 +3,7 @@
 // ONLY, no imports, so a page's pure helpers (and the e2e, type-stripped in
 // Node) can name them without pulling in the RPC client. ./api re-exports them.
 
-export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
+export type Agg = 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max' | 'none';
 
 export interface Measure {
   column: string;

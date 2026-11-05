@@ -5,7 +5,7 @@
 
 import { Button } from '../../ui/Button';
 import { formatNumber } from '../../../../src/app/format.ts';
-import { AGG_FNS, FILTER_OPS, isListOp, isValuelessOp } from './steps';
+import { FILTER_OPS, GROUP_FNS, isListOp, isValuelessOp } from './steps';
 import { arr, ColumnSelect, Hint, NameChecks, PickSelect, RowLine, str, TextField, type FormProps } from './FormParts';
 import s from './Prepare.module.css';
 
@@ -35,7 +35,7 @@ export function GroupAggregateForm({ draft, set, ctx }: FormProps) {
       <div className={s.rules}>
         {aggs.map((a, i) => (
           <RowLine key={i} removeLabel="Remove aggregation" onRemove={() => set({ aggregations: aggs.filter((_, k) => k !== i) })}>
-            <PickSelect ariaLabel="Aggregation" value={str(a.fn) || 'sum'} options={AGG_FNS.map((f) => [f, f] as const)} onChange={(fn) => put(i, { fn })} />
+            <PickSelect ariaLabel="Aggregation" value={str(a.fn) || 'sum'} options={GROUP_FNS.map((f) => [f, f === 'countd' ? 'Count distinct' : f] as const)} onChange={(fn) => put(i, { fn })} />
             <ColumnSelect ariaLabel="Column to aggregate" value={str(a.column)} columns={ctx.columns} onChange={(column) => put(i, { column })} />
             <TextField label="Output name" value={a.as} placeholder="output name" onChange={(as) => put(i, { as })} />
           </RowLine>

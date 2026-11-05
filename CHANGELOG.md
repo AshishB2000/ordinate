@@ -105,6 +105,15 @@ All notable changes to Ordinate are documented here. Format based on
   count distinct (below), so that release can roll out beside it. See `docs/server/upgrade.md`
   ("Metrics a newer release writes are kept").
 
+### Count distinct, offered
+
+- "Count distinct" is in every aggregation picker (the metric editor, the chart builder, KPI cards,
+  Explore, the Assistant's plan editor, pivot charts and Prepare's group step) and is `countd(col)`
+  in a metric formula. The Assistant reads "unique" and "distinct", and MCP tools accept `countd`.
+  A point, hexbin or flow map, key drivers, rebuild and Prepare's pivot step do not offer it. On a
+  key with no repeats the metric editor suggests Count, which gives the same number.
+  **Needs the `p5-01` release on every pod first** (see `docs/server/upgrade.md`).
+
 ### Count distinct, computed
 
 - A count distinct (`countd`) on a copied dataset is computed wherever a figure is: KPIs, charts

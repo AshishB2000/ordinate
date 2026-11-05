@@ -206,7 +206,7 @@ e2e('data model: metrics', async ({ page, server }) => {
   await page.getByRole('option', { name: 'Retail orders' }).click();
   await dlg.getByRole('combobox', { name: 'Column', exact: true }).click();
   await page.getByRole('option', { name: 'revenue (number)' }).click();
-  await dlg.getByRole('radio', { name: 'Count' }).click();
+  await dlg.getByRole('radio', { name: 'Count', exact: true }).click();
   // The builder's filter rows and typed dialog: a number column is a range, typed on its declared type by the server.
   await dlg.getByRole('button', { name: 'Add filter' }).click();
   await dlg.getByRole('combobox', { name: 'Filter column' }).click();
@@ -239,6 +239,29 @@ e2e('data model: metrics', async ({ page, server }) => {
   await confirm.getByRole('button', { name: 'Delete' }).click();
   await page.getByText('Moved “Large orders” to Trash').waitFor();
   await row.waitFor({ state: 'detached' });
+});
+
+e2e('data model: count distinct', async ({ page, server }) => {
+  // Part 5: a text column's distinct values, counted by the server and said in its words.
+  const pid = server.sample.projectId;
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  const table = page.getByRole('table');
+  await page.getByRole('button', { name: 'New metric' }).click();
+  const cd = page.getByRole('dialog', { name: 'New metric' });
+  await cd.getByLabel('Name').fill('Regions served');
+  await cd.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await cd.getByRole('combobox', { name: 'Column', exact: true }).click();
+  await page.getByRole('option', { name: 'region (text)' }).click();
+  await cd.getByRole('radio', { name: 'Count distinct' }).click();
+  const cdPreview = cd.getByRole('complementary', { name: 'Preview' });
+  await cdPreview.getByText('count distinct of region').waitFor();
+  await cdPreview.getByText(/^\d+$/).first().waitFor();
+  await screensInPlace(page, 'model-metrics-countd');
+  await cd.getByRole('button', { name: 'Create metric' }).click();
+  const cdRow = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Regions served' }) });
+  await cdRow.getByText('count distinct of region').waitFor();
 });
 
 e2e('data model: glossary', async ({ page, server }) => {

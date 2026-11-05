@@ -88,6 +88,8 @@ export function EncodingForm({
   // Which dialog is open: a new field for a slot (-1 = a new measure), or a metric to edit.
   // `gen`: a new form on each open — the banner's Reload opens the metric again (docs/edit-conflicts).
   const [calc, setCalc] = useState<{ slot: number; editing?: MetricSummary; full?: Metric; gen?: number } | null>(null);
+  // A point, hexbin or flow map folds counts, sums and averages per cell; the server refuses a distinct count there.
+  const noDistinct = ['point', 'hexbin', 'flow'].includes(encoding.geo?.level ?? '');
   const set = (patch: Partial<Encoding>) => {
     const next: Encoding = { ...encoding, ...patch };
     for (const k of Object.keys(patch)) if (next[k] === undefined) delete next[k];
@@ -239,7 +241,7 @@ export function EncodingForm({
                     aria-label="Aggregation"
                     size="sm"
                     value={m.aggregation}
-                    options={AGGS.map((a) => ({ value: a, label: AGG_LABELS[a] }))}
+                    options={AGGS.filter((a) => a !== 'countd' || !noDistinct).map((a) => ({ value: a, label: AGG_LABELS[a] }))}
                     onValueChange={(a) => setMeasure(i, { ...m, aggregation: a as Agg })}
                   />
                 </div>

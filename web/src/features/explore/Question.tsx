@@ -21,9 +21,9 @@ import { FieldList } from './FieldList';
 import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
 import s from './Question.module.css';
 
-const AGG_OPTIONS = (['sum', 'avg', 'count', 'min', 'max'] as const).map((a) => ({ value: a, label: AGG_LABELS[a] }));
+const AGG_OPTIONS = (['sum', 'avg', 'count', 'countd', 'min', 'max'] as const).map((a) => ({ value: a, label: AGG_LABELS[a] }));
 /** A pill's aggregate, short: "Raw (no aggregation)" would leave no room for the field. */
-const AGG_SHORT: Record<Agg, string> = { ...AGG_LABELS, none: 'Raw' };
+const AGG_SHORT: Record<Agg, string> = { ...AGG_LABELS, countd: 'Distinct', none: 'Raw' };
 const GRAIN_OPTIONS = [{ value: 'auto', label: 'Auto' }, ...GRAINS];
 const ROLE_WORD = { measure: 'Measure', category: 'Group by', series: 'Split by' } as const;
 /** A field's declared type, as the field list draws it: an id-like number is a dimension with a number's mark. */
