@@ -79,6 +79,12 @@ async function main(): Promise<void> {
   const clash = await distinct({ search: 'euro' }, C);
   ok('picker: a label that is another stored value reads "Label (raw)"', json(clash.values) === '["Europe","EU"]' && json(clash.valueLabels) === '[["EU","Europe (EU)"]]' && clash.total === 2, json(clash));
 
+  // A cascading picker's parent picks (release A, p6-05a) hold for the label search's second ask too: NA is gold only.
+  const silver = [{ type: 'filter', column: 'tier', op: '=', value: 'silver' }];
+  const underSilver = await distinct({ search: 'north', filters: silver });
+  ok('parents: under tier = silver, a search for "north" finds no value and no pair', json(underSilver) === '{"values":[],"total":0}', json(underSilver));
+  ok('NEGATIVE CONTROL: under tier = gold the same search finds NA', json((await distinct({ search: 'north', filters: [{ ...silver[0], value: 'gold' }] })).values) === '["NA"]');
+
   // 3. The lock holds: a label search asks again through the caller's row lock, never around it.
   const realLock = rowDoors.withLockOf;
   const lockTo = (value: string) => {

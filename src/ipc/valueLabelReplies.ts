@@ -113,7 +113,8 @@ export async function distinctWithLabels<R extends DistinctResult & { approximat
   let out: R = first;
   const needle = (req.search ?? '').toLowerCase();
   const wanted = needle ? list.filter((l) => l.label.toLowerCase().includes(needle) && !l.value.toLowerCase().includes(needle)).map((l) => l.value) : [];
-  const more = wanted.length ? await read({ limit: MAX_DISTINCT, search: '', filters: [{ type: 'filter', column, op: 'in', values: wanted }] }) : null;
+  // The request's own filters (a cascading picker's parent picks) narrow the second ask too.
+  const more = wanted.length ? await read({ limit: MAX_DISTINCT, search: '', filters: [...(req.filters ?? []), { type: 'filter', column, op: 'in', values: wanted }] }) : null;
   if (more && 'values' in more) {
     const want = new Set(wanted);
     const found = more.values.filter((v) => want.has(v));
