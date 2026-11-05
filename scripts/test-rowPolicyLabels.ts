@@ -201,6 +201,23 @@ const totalsOf = (r: H.Reply): string[] =>
     const plainChart = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: eastStep() });
     const plainKpi = await W.call('east', 'dashboard:metric', { projectId: P, datasetId: orders, column: 'sales', aggregation: 'sum', filters: eastStep() });
     ok('NEGATIVE CONTROL (lock): the same filter without via answers, chart and KPI', plainChart.body?.ok === true && plainKpi.body?.ok === true, `${plainChart.text.slice(0, 120)} ${plainKpi.text.slice(0, 120)}`);
+
+    // ── 6. A value label said as a filter value (semantic layer part 3 D6): mapped only within the caller's rows ──
+    const labelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'customer', patch: { values: [{ value: canary(1), label: 'West one' }] } });
+    const said = { datasetId: orders, category: 'customer', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ column: 'customer', op: '=', value: 'west one' }], chartType: 'bar', title: 'Sales' };
+    // answer:rerun matches a just-written spec and stores it on the turn; answer:card draws the stored spec, as a reload does.
+    const asked = async (who: string) => {
+      const r = await W.call(who, 'answer:rerun', { projectId: P, spec: said });
+      const spec = r.body?.turns?.at(-1)?.answer;
+      const card = await W.call(who, 'answer:card', { projectId: P, spec });
+      return { text: r.text + card.text, ok: r.body?.ok === true && card.body?.ok === true, spec, card: card.body };
+    };
+    const byEast = await asked('east');
+    ok('labels: east says West\'s label — no match, no note naming it, no rows', labelled.body?.ok === true && byEast.ok && !byEast.spec.matched
+      && !(byEast.card.notes as string[]).some((n) => n.startsWith('Matched')) && byEast.card.data.labels.length === 0 && !H.leaks(byEast.text) && !byEast.text.includes('West one'), byEast.text.slice(0, 400));
+    const byWest = await asked('west');
+    ok('NEGATIVE CONTROL: west, whose rows hold it, gets the match, the note and rows', byWest.ok && byWest.spec.matched?.[0]?.value === canary(1) && byWest.spec.filters[0].value === canary(1)
+      && (byWest.card.notes as string[]).includes('Matched "west one" to West one in customer.') && byWest.card.data.labels.length > 0, byWest.text.slice(0, 400));
   } finally {
     await W.close();
   }

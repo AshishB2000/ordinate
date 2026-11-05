@@ -37,7 +37,7 @@ export type Held = Map<string, Map<string, string>>;
 /** The operators whose values are stored values (`contains EU` is not the value EU): matched, case-fixed and said by a label. */
 export const MATCH_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
 const MAX_SAID = 80;
-const MAX_MATCHED = 16;
+export const MAX_MATCHED = 16;
 const MAX_OPTIONS = 3;
 
 /**
@@ -86,13 +86,18 @@ export function canonicaliseTextFilters(steps: FilterStep[], held: Held): void {
   }
 }
 
+/** column → its value labels (catalog `ColumnDoc.values`: each a STORED value and what it reads as). */
+export type FilterLabels = ReadonlyMap<string, readonly { value: string; label: string }[]>;
+
 /**
  * The spec with each filter value the column does not hold replaced by the ONE
- * stored value it means, and `matched` saying so. A value that is stored (in any
- * case), or that two stored values could be, is left exactly as asked — and the
- * very spec comes back when nothing was matched.
+ * stored value it means, and `matched` saying so: a value LABEL said ("europe")
+ * becomes its stored value ("EU") when `held` — the caller's own rows — holds it,
+ * else the one stored value a prefix or one edit away. A value that is stored (in
+ * any case), or that two stored values could be, is left exactly as asked — and
+ * the very spec comes back when nothing was matched.
  */
-export function matchValues(spec: AnswerSpec, held: Held): AnswerSpec {
+export function matchValues(spec: AnswerSpec, held: Held, labels?: FilterLabels): AnswerSpec {
   const matched: ValueMatch[] = [];
   // Bounded WORK, not only bounded columns: at most this many loose lookups per spec, each against at
   // most LOOSE_MAX_DISTINCT values (~1 ms). A long `in` list — a client may send any spec to
@@ -108,6 +113,11 @@ export function matchValues(spec: AnswerSpec, held: Held): AnswerSpec {
     const fix = (v: Cell): Cell => {
       if (typeof v !== 'string' || byKey.has(exactKey(v)) || budget <= 0) return v;
       budget -= 1;
+      const label = labels?.get(column)?.find((l) => exactKey(l.label) === exactKey(v) && byKey.has(exactKey(l.value)));
+      if (label) {
+        matched.push({ column, said: v.slice(0, MAX_SAID), value: label.value });
+        return label.value;
+      }
       keys ??= valueKeys(byKey.values());
       const near = oneNearValue(v, keys);
       if (!near) return v;
