@@ -21,6 +21,16 @@ export interface FactTerm {
   aliases: string[];
   description?: string;
   definition: string;
+  /** Governance (part 4): certified, or retired (kept only because the question named it). Absent for none and needs_review. */
+  status?: { state: 'certified' | 'needs_review' | 'retired' };
+  replacedBy?: string;
+}
+
+/** ` (certified)` or ` (retired; use "X")`: fixed words plus a JSON-quoted name, so a name stays data. '' for anything else. */
+export function statusClause(i: { status?: { state: string }; replacedBy?: string }): string {
+  if (i.status?.state === 'certified') return ' (certified)';
+  if (i.status?.state !== 'retired') return '';
+  return i.replacedBy ? ` (retired; use ${JSON.stringify(i.replacedBy)})` : ' (retired)';
 }
 
 /**
@@ -47,6 +57,6 @@ export function termLines(lines: string[], terms: readonly FactTerm[]): void {
   lines.push('Glossary terms — filter by one with {"term":"<name>"}:');
   for (const t of terms) {
     const also = t.aliases.length ? ` (also called ${t.aliases.map((a) => JSON.stringify(a)).join(', ')})` : '';
-    lines.push(`- ${JSON.stringify(t.name)}${also}: ${t.definition}${t.description ? ` — ${JSON.stringify(t.description)}` : ''}`);
+    lines.push(`- ${JSON.stringify(t.name)}${statusClause(t)}${also}: ${t.definition}${t.description ? ` — ${JSON.stringify(t.description)}` : ''}`);
   }
 }

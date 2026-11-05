@@ -48,6 +48,8 @@ import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
 import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
 import { termFactsFor } from './terms';
+import { statusFor } from '../analysis/statusStore';
+import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -155,8 +157,9 @@ function reasonLedger(reason: string): LedgerEntry[] {
  * no metric vocabulary, which is exactly the state every project was in before
  * this layer existed.
  */
-async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope): Promise<FactMetric[]> {
+async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope, question?: string): Promise<FactMetric[]> {
   try {
+    const status = statusFor(projectId); // once per request (part 4)
     const list = await metrics.listMetrics(projectId);
     const byName = await metrics.metricsByName(projectId);
     const out: FactMetric[] = [];
@@ -176,9 +179,10 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
       const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
       const snapshot = metrics.isSimpleDefinition(s.definition) ? s.definition.snapshot : undefined;
-      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}) });
+      const st = await status(`metric:${s.id}`);
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}) });
     }
-    return out;
+    return vocabularyOrder(out, (m) => namedIn(question, [m.name]));
   } catch (_) {
     return [];
   }
@@ -193,6 +197,7 @@ export async function buildFacts(
   projectId: string,
   context: ContextRef,
   emit: ActivityEmit = NO_ACTIVITY,
+  question?: string, // vocabulary: a retired metric or term the question names stays in it (./statusNotes)
 ): Promise<copilot.CopilotFacts> {
   const kind = context && typeof context.kind === 'string' ? context.kind : '';
   const id = context && typeof context.id === 'string' ? context.id : '';
@@ -208,7 +213,7 @@ export async function buildFacts(
     // A Live dataset keeps no rows: its columns, its sampled profile and — unless
     // withheld — its sample values (L2.5), with its defined metrics' figures from
     // the warehouse (L2.4). One source: ai/liveFacts.
-    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id), () => termFactsFor(projectId, id));
+    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id, undefined, question), () => termFactsFor(projectId, id, question));
     if (live) {
       emit({ kind: 'read', label: 'Read the schema of ' + live.name });
       if (live.metrics) emit({ kind: 'compute', label: 'Resolved ' + plural(live.metrics, 'metric'), count: live.metrics });
@@ -227,12 +232,12 @@ export async function buildFacts(
       // narrate "West fell 31%" from the app's figure rather than deriving one.
       const insights = await listInsights(projectId, id);
       emit({ kind: 'compute', label: 'Read ' + plural(insights.length, 'insight'), count: insights.length });
-      const defined = await factMetrics(projectId, id);
+      const defined = await factMetrics(projectId, id, undefined, question);
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id), await termFactsFor(projectId, id)); // its glossary terms beside its metrics
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id), await termFactsFor(projectId, id, question)); // its glossary terms beside its metrics
     }
   }
 
@@ -307,7 +312,7 @@ export async function buildFacts(
       // …and in the dashboard's own currency, as the page asks every tile.
       const { cards, defined } = await inDashboardCurrency(projectId, a.id, async () => ({
         cards: await metricCardFigures(projectId, a, scope),
-        defined: await factMetrics(projectId, undefined, scope),
+        defined: await factMetrics(projectId, undefined, scope, question),
       }));
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
       if (defined.length) {
@@ -520,7 +525,7 @@ export function register() {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = turns.map((t) => ({ role: t.role, text: t.text }));
-      const facts = await buildFacts(projectId, context || {}, emit);
+      const facts = await buildFacts(projectId, context || {}, emit, q);
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.

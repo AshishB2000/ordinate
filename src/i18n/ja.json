@@ -584,6 +584,8 @@
   "semanticMessages.this_question_needs_the_latest_date": "この質問には{dataset}の最新の日付か保存された値が必要ですが、{layer}はそれを調べられません。",
   "semanticMessages.your_access_to_is_limited_to": "{dataset}へのアクセスは一部の行に制限されていますが、{layer}はその制限を正確に適用できないため、数値は表示されません。",
   "statusMessages.an_item_cannot_replace_itself_pick": "項目を自分自身で置き換えることはできません。別の項目を選んでください。",
+  "statusMessages.is_retired": "{name} は廃止されました。",
+  "statusMessages.is_retired_replaces_it": "{name} は廃止されました。代わりに {replacement} を使ってください。",
   "statusMessages.is_retired_too_pick_a_replacement": "{name}も廃止されています。廃止されていない置き換え先を選んでください。",
   "statusMessages.is_the_replacement_for_another_item": "{name}は別の項目の置き換え先です。先にその項目の置き換え先を変更してください。",
   "statusMessages.pick_a_replacement_of_the_same": "同じ種類の置き換え先を選んでください。指標には指標、用語には用語、データセットにはデータセットです。",

@@ -29,8 +29,7 @@ import type { CopilotFacts } from './copilot';
 import { WITHHELD, columnNameBits, columnNoteLines, tableHeadline, tableNoteLines, withheldColumns } from './columnNotes';
 import type { FactColumnDoc, FactTableDoc } from './columnNotes';
 import { cell, oneLine } from './promptText';
-import { termLines } from './termFacts';
-import type { FactTerm } from './termFacts';
+import { statusClause, termLines, type FactTerm } from './termFacts';
 import type { MetricSnapshot } from '../analysis/snapshot';
 
 // The column-notes block lives in ./columnNotes (this file is near its size
@@ -131,6 +130,9 @@ export interface FactMetric {
   timeColumn?: string;
   /** A snapshot (D8): its figure is one day's rows, so the model must never add it up over dates. */
   snapshot?: MetricSnapshot;
+  /** Governance (part 4): see termFacts `FactTerm.status`. */
+  status?: { state: 'certified' | 'needs_review' | 'retired' };
+  replacedBy?: string;
 }
 
 const snapshotNote = (s?: MetricSnapshot): string => (s ? ` Snapshot: the value on the ${s.take === 'last' ? 'latest' : 'earliest'} ${s.column} in the period, not a sum over dates.` : '');
@@ -145,9 +147,9 @@ function addsUpNote(a?: Additivity): string {
 export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
   if (!metrics.length) return;
   lines.push('');
-  lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
+  lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:' + (metrics.some((m) => m.status) ? ' Prefer a certified metric when several fit.' : ''));
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}" = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}${snapshotNote(m.snapshot)}` + (m.timeColumn ? ` Counts by ${m.timeColumn}.` : '') + (m.description ? ` Means: ${m.description}` : ''));
+    lines.push(`- "${m.name}"${statusClause(m)} = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}${snapshotNote(m.snapshot)}` + (m.timeColumn ? ` Counts by ${m.timeColumn}.` : '') + (m.description ? ` Means: ${m.description}` : ''));
     num(ledger, m.name, m.value, 'number', 'metrics');
   });
 }
