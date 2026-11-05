@@ -274,9 +274,10 @@ export async function planMetricMeasures(
       return shared.length || changed ? { ok: true, values, filters: shared } : null;
     }
     // A filtered simple metric is one leaf under its own filters; values[i] holds its metric's column and aggregation.
+    // A simple metric stays on the chart's own table, as it always drew (p8-07: only formula operands fan out).
     for (const [i, m] of filtered) {
       const snap = metrics.isSimpleDefinition(m.definition) ? m.definition.snapshot : undefined;
-      plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name, snap), simple: true });
+      plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name, () => undefined, snap), simple: true });
     }
   } catch (err) {
     if (err instanceof PlanError) return err.live ? { ok: false, error: err.message, code: 'live_refused', reason: 'snapshot' } : { ok: false, error: err.message };
