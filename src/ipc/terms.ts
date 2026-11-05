@@ -8,6 +8,7 @@
 
 import { ipcMain } from './bus';
 import * as terms from '../analysis/terms';
+import { withStatus } from '../analysis/statusStore';
 import type { Term } from '../analysis/terms';
 import * as datasets from '../data/datasets';
 import * as versions from '../app/versions';
@@ -59,7 +60,7 @@ export async function termFactsFor(projectId: string, datasetId: string): Promis
 }
 
 export function register(): void {
-  ipcMain.handle('term:list', async (_e, { projectId }: { projectId: string }) => ({ ok: true, terms: await listForCaller(projectId) }));
+  ipcMain.handle('term:list', async (_e, { projectId }: { projectId: string }) => ({ ok: true, terms: await withStatus(projectId, 'term', await listForCaller(projectId)) }));
 
   ipcMain.handle('term:get', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const t = await terms.readTerm(projectId, id);

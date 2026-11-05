@@ -54,7 +54,7 @@ async function recordOf(projectId: string, kind: StatusKind, id: string): Promis
   return ds && versionRecordOf(ds);
 }
 
-async function nameOf(projectId: string, ref: string): Promise<string | null> {
+export async function nameOf(projectId: string, ref: string): Promise<string | null> {
   const r = parseStatusRef(ref);
   if (!r) return null;
   if (r.kind === 'metric') return (await metrics.getMetric(projectId, r.id))?.name ?? null;
@@ -158,4 +158,14 @@ export async function clearStatus(projectId: string, rawRef: string): Promise<nu
   const rec = had ? await recordOf(projectId, r.kind, r.id) : null;
   if (rec) await versions.record(projectId, r.kind, rec, { event: 'cleared' });
   return null;
+}
+
+/** Each item that has a status gets `status`; the same objects, untouched, when the catalog holds none. Read-only, per request. */
+export async function withStatus<T extends { id: string }>(projectId: string, kind: StatusKind, items: T[]): Promise<Array<T & { status?: StatusView }>> {
+  if (!Object.keys(await sectionOf(projectId)).length) return items;
+  const status = statusFor(projectId);
+  return Promise.all(items.map(async (it) => {
+    const s = await status(`${kind}:${it.id}`);
+    return s ? { ...it, status: s } : it;
+  }));
 }

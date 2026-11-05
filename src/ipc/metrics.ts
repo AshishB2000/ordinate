@@ -29,6 +29,7 @@ import { distinctFor } from './distinctFor';
 import { isRowPolicyError } from '../data/rowAccess';
 
 import * as metrics from '../analysis/metrics';
+import { withStatus } from '../analysis/statusStore';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
 import { isNewerKind } from '../analysis/pendingKinds';
@@ -472,7 +473,7 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
       definitionText: describeDefinition({ definition: s.definition, filters: [] }),
     });
   }
-  return out;
+  return withStatus(projectId, 'metric', out);
 }
 
 /**
