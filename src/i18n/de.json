@@ -514,6 +514,8 @@
   "metricTreeMessages.rose": "{metric} ist {compare} um {change} ({pct}) gestiegen.",
   "metricTreeMessages.rose_2": "{metric} ist {compare} um {change} gestiegen.",
   "metricTreeMessages.that_metric_no_longer_exists": "Diese Kennzahl gibt es nicht mehr.",
+  "modelFileMessages.the_model_files_hold_a_file": "Die Modelldateien enthalten eine Datei, die Ordinate nicht liest ({name}) – sie wurden vollständig abgelehnt.",
+  "modelFileMessages.your_access_to_this_project_is": "Ihr Zugriff auf dieses Projekt ist durch Zeilenzugriffsregeln eingeschränkt, daher können seine Definitionen weder exportiert noch importiert werden.",
   "pendingMessages.counts_distinct_values_which_a_point": "„{measure}“ zählt eindeutige Werte, die eine Punkt-, Hexagon- oder Flusskarte nicht darstellen kann. Wählen Sie eine Anzahl, eine Summe oder einen Durchschnitt, oder stellen Sie es auf einer Karte nach Region dar.",
   "pendingMessages.is_a_kind_of_metric_from": "„{name}“ ist eine Art von Metrik aus einer neueren Version von Ordinate. Schließen Sie das Upgrade ab und versuchen Sie es dann erneut.",
   "pendingMessages.is_a_kind_of_metric_that": "„{name}“ ist eine Art von Metrik, die hier noch nicht angezeigt werden kann.",

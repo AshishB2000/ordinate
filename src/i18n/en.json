@@ -511,6 +511,8 @@
   "metricTreeMessages.rose": "{metric} rose {change} ({pct}) {compare}.",
   "metricTreeMessages.rose_2": "{metric} rose {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "That metric no longer exists.",
+  "modelFileMessages.the_model_files_hold_a_file": "The model files hold a file Ordinate does not read ({name}). They were refused as a whole.",
+  "modelFileMessages.your_access_to_this_project_is": "Your access to this project is limited by row access rules, so its definitions can't be exported or imported.",
   "pendingMessages.counts_distinct_values_which_a_point": "“{measure}” counts distinct values, which a point, hexbin or flow map cannot show. Pick a count, a sum or an average, or map it by region.",
   "pendingMessages.is_a_kind_of_metric_from": "“{name}” is a kind of metric from a newer version of Ordinate. Finish the upgrade, then try again.",
   "pendingMessages.is_a_kind_of_metric_that": "“{name}” is a kind of metric that can't be shown here yet.",

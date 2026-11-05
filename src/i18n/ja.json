@@ -514,6 +514,8 @@
   "metricTreeMessages.rose": "{metric}は{compare}で{change}（{pct}）増加しました。",
   "metricTreeMessages.rose_2": "{metric}は{compare}で{change}増加しました。",
   "metricTreeMessages.that_metric_no_longer_exists": "その指標はもう存在しません。",
+  "modelFileMessages.the_model_files_hold_a_file": "モデルファイルに Ordinate が読み込まないファイル（{name}）が含まれているため、全体を拒否しました。",
+  "modelFileMessages.your_access_to_this_project_is": "このプロジェクトへのアクセスは行アクセスルールで制限されているため、定義をエクスポートもインポートもできません。",
   "pendingMessages.counts_distinct_values_which_a_point": "「{measure}」は重複を除いた値の数を数えるため、ポイント、六角形、フローの地図では表示できません。件数、合計、平均のいずれかを選ぶか、地域別の地図にしてください。",
   "pendingMessages.is_a_kind_of_metric_from": "「{name}」は新しいバージョンの Ordinate で作られた種類のメトリックです。アップグレードを完了してから、もう一度お試しください。",
   "pendingMessages.is_a_kind_of_metric_that": "「{name}」は、ここではまだ表示できない種類のメトリックです。",
