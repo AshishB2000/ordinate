@@ -7,6 +7,8 @@
 // - No prompt sent for east carries an ssn value, a salary figure (the total, the mean, the largest), the salary
 //   example or a hidden column's value label; the dataset facts do not name salary, and still hold dept.
 //   NEGATIVE CONTROL: hr's dataset prompt carries the canary and the salary total.
+// - A copy's sample values (part 3, its value index) skip a hidden column even inside the dataset branch's checked
+//   scope: dept's for east, never ssn's. NEGATIVE CONTROL: hr's list ssn's.
 // - MCP as east: list_metrics and the terms leave out what reads salary; aggregate over salary and query_sql over
 //   Staff are refused. NEGATIVE CONTROL: hr's list_metrics names Payroll and its aggregate answers.
 //
@@ -21,6 +23,11 @@ const automation: typeof import('../src/automation/handlers') = require('../src/
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const datasetsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const searchIdx: typeof import('../src/engine/dataSearchResident') = require('../src/engine/dataSearchResident');
+const copyValues: typeof import('../src/ipc/copyValues') = require('../src/ipc/copyValues');
+const rowAccessMod: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+const { tablePath }: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const { SALARY_FIGURES, leaksHidden, stubModel, factsWorld } = C;
 
 const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 'employee_id', aggregation: 'count' }] };
@@ -55,6 +62,19 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     const realInsights = insightsMod.listInsights;
     (insightsMod as { listInsights: unknown }).listInsights = async () => [{ id: 'planted', kind: 'outlier', severity: 'info', title: 'Planted', detail: `${C.SSN_CANARY}_9 stands out`, column: 'dept' }];
     const CONTEXTS = [{ kind: 'dataset', id: staff }, { kind: 'visual', id: SALARY_V }, { kind: 'visual', id: DEPT_V }, { kind: 'analysis', id: BOARD }, { kind: '' }, { kind: 'dataset', id: liveStaff }];
+    // A copy's sample values come from its value index (part 3, p3-04): built now, so a hidden text column's values
+    // would reach east's dataset facts if they were not skipped.
+    const built = await W.as('boss', async () => {
+      const meta = (await datasetsMod.getDatasetMeta(P, staff))!;
+      return !!meta.resident && searchIdx.writeIndex({ parquetPath: tablePath(P, staff, meta.storageVersion), columns: meta.columns });
+    });
+    ok('setup: Staff is resident and has its value index', built === true);
+    // copyValueNotes itself skips a hidden column, even inside the dataset branch's checked scope, where the net
+    // that would refuse east the whole table is opened (ai/hiddenFacts factsOf).
+    const notesAs = (who: string) => W.as(who, () => rowAccessMod.withColumnsChecked(new Set([staff]), () => copyValues.copyValueNotes(P, staff, 'facts')));
+    const eastNotes = await notesAs('east');
+    ok("a copy's sample values for east: dept's, never ssn's", !!eastNotes?.dept?.includes('"Ops"') && !('ssn' in (eastNotes ?? {})) && !JSON.stringify(eastNotes).includes(C.SSN_CANARY), JSON.stringify(eastNotes));
+    ok("NEGATIVE CONTROL: hr's list ssn's values", !!(await notesAs('hr'))?.ssn?.includes(C.SSN_CANARY));
     const east = await promptsAs('east', CONTEXTS);
     ok('setup: east is answered in every context, with a chart narrated', east.replies.every((r) => r.body?.ok === true) && east.prompts.length === 2 * CONTEXTS.length, east.replies.map((r) => r.text.slice(0, 120)).join(' | '));
     const promptLeak = (p: string): string | null => leaksHidden(p) ?? (p.includes(C.NOTE) ? C.NOTE : null);
@@ -73,6 +93,13 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     (insightsMod as { listInsights: unknown }).listInsights = realInsights;
     const asked = await promptsAs('east', [{ kind: 'dataset', id: staff }], { ...BY_DEPT_SPEC, measures: [{ column: 'salary', aggregation: 'sum' }] });
     ok('an answer the model writes over salary draws no chart for east, and no narration is asked', asked.replies[0].body?.ok === true && asked.prompts.length === 1 && !leaksHidden(asked.replies[0].text), asked.replies[0].text.slice(0, 200));
+    // Part 3's label matching (p3-04) runs behind the column gate: a filter said as a hidden column's label is refused
+    // before any label is read, so it is never mapped to the stored value.
+    const BY_LABEL = { ...BY_DEPT_SPEC, filters: [{ column: 'ssn', op: '=', value: C.LABEL }] };
+    const byLabel = await promptsAs('east', [{ kind: 'dataset', id: staff }], BY_LABEL);
+    ok("a filter said as ssn's value label draws no chart for east and is never mapped to its value", byLabel.replies[0].body?.ok === true && byLabel.prompts.length === 1 && !byLabel.replies[0].text.includes(C.SSN_CANARY), byLabel.replies[0].text.slice(0, 300));
+    const hrLabel = await promptsAs('hr', [{ kind: 'dataset', id: staff }], BY_LABEL);
+    ok("NEGATIVE CONTROL: hr's is mapped to the stored value and drawn", hrLabel.replies[0].text.includes(`${C.SSN_CANARY}_1`) && hrLabel.prompts.length === 2, hrLabel.replies[0].text.slice(0, 300));
 
     // ── MCP, as the token's user ─────────────────────────────────────────────
     const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };

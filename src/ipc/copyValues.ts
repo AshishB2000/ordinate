@@ -6,11 +6,12 @@
 // `readIndex` answers null and nothing is listed: the index is per pod (plan index call 6).
 //
 // The index holds EVERY row's values, so a caller the dataset's rules close (row-policy D9, part 3 D5) gets
-// none, whoever calls this. A column marked personal or financial never lists a value.
+// none, whoever calls this. A column marked personal or financial never lists a value, nor one hidden from the
+// caller (part 4, D21), even where a door opened the net for the dataset.
 
 import * as datasets from '../data/datasets';
 import { tablePath } from '../data/datasetRecord';
-import { closedToCaller } from '../data/rowAccess';
+import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import { isLive } from '../data/liveDataset';
 import { withheldColumns } from '../app/sharePolicy';
 import { isSupportedAsync } from '../engine/parquetStore';
@@ -32,6 +33,7 @@ export async function copyValueNotes(projectId: string, datasetId: string, kind:
   if (await closedToCaller(projectId, datasetId).catch(() => true)) return undefined; // rules unread: none
   const withheld = await withheldColumns(projectId, datasetId).catch(() => null);
   if (!withheld) return undefined;
+  for (const c of await hiddenColumnsFor(projectId, datasetId)) withheld.add(c);
   const src = { parquetPath: tablePath(projectId, meta.id, meta.storageVersion), columns: meta.columns };
   const index = await readIndex(src.parquetPath);
   if (!index) {
