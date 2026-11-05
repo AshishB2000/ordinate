@@ -17,6 +17,7 @@ import { harvestAppNumbers } from './numberAudit';
 import type { StatsSpec } from '../analysis/stats/spec';
 import type { StatsResult } from '../analysis/stats/run';
 import { statsTitle } from '../analysis/stats/present';
+import { cell, oneLine } from './promptText';
 
 const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
@@ -39,7 +40,7 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
   };
   for (const { spec, result } of items) {
     lines.push(`Analysis: ${statsTitle(spec)} on "${datasetName}".`);
-    if (!result.ok) { lines.push(`- Not computed: ${result.error}`, ''); continue; }
+    if (!result.ok) { lines.push(`- Not computed: ${oneLine(result.error)}`, ''); continue; }
     add(`${statsTitle(spec)} rows read`, result.rows, 'count');
     if (result.kind === 'correlation') {
       const { columns, cells, method } = result.matrix;
@@ -56,9 +57,10 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
     } else if (result.kind === 'regression') {
       const f = result.fit;
       lines.push(`OLS of "${f.target}" on ${f.terms.length - 1} term(s); ${f.n} complete rows used, ${f.dropped} dropped for a missing value.`);
-      for (const r of f.references) lines.push(`- "${r.column}" is one-hot encoded against its reference level "${r.level}".`);
+      for (const r of f.references) lines.push(`- "${r.column}" is one-hot encoded against its reference level ${cell(r.level)}.`);
       for (const t of f.terms) {
-        lines.push(`- ${t.name}: estimate ${raw(t.estimate)}, std. error ${raw(t.se)}, t ${raw(t.t)}, p ${raw(t.p)}, 95% CI ${raw(t.ciLow)} to ${raw(t.ciHigh)}`);
+        const term = t.level === undefined ? t.name : `${t.column}[${cell(t.level)}]`; // D3: a level is a cell
+        lines.push(`- ${term}: estimate ${raw(t.estimate)}, std. error ${raw(t.se)}, t ${raw(t.t)}, p ${raw(t.p)}, 95% CI ${raw(t.ciLow)} to ${raw(t.ciHigh)}`);
         add(`${t.name} estimate`, t.estimate);
         add(`${t.name} std. error`, t.se);
         add(`${t.name} t`, t.t);
@@ -69,11 +71,11 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
       lines.push(`R² ${raw(f.r2)}, adjusted R² ${raw(f.adjR2)}, F ${raw(f.f)} on ${f.fDf1} and ${f.fDf2} df, p ${raw(f.fP)}, residual SE ${raw(f.sigma)}.`);
       add('R²', f.r2); add('R² %', f.r2 * 100, 'percent'); add('adjusted R²', f.adjR2); add('F', f.f); add('F p', f.fP); add('residual SE', f.sigma);
       add('n', f.n, 'count'); add('rows dropped', f.dropped, 'count'); add('df', f.df, 'count');
-      lines.push(`App's sentence: ${result.sentence}`);
+      lines.push(`App's sentence: ${oneLine(result.sentence)}`);
     } else if (result.kind === 'groups') {
       lines.push(`Outcome "${result.outcome}" by "${result.group}", ${result.groups.length} groups.`);
       for (const g of result.groups) {
-        lines.push(result.mode === 'table' ? `- "${g.label}": n = ${g.n}` : `- "${g.label}": n = ${g.n}, mean ${raw(g.mean)}, SD ${raw(g.sd)}, median ${raw(g.median)}`);
+        lines.push(result.mode === 'table' ? `- ${cell(g.label)}: n = ${g.n}` : `- ${cell(g.label)}: n = ${g.n}, mean ${raw(g.mean)}, SD ${raw(g.sd)}, median ${raw(g.median)}`);
         add(`${g.label} n`, g.n, 'count');
         if (result.mode !== 'table') { add(`${g.label} mean`, g.mean); add(`${g.label} SD`, g.sd); add(`${g.label} median`, g.median); }
       }
@@ -103,7 +105,7 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
         const { rows, cols, counts } = result.table;
         lines.push(`Counts (rows "${result.group}", columns "${result.outcome}"):`);
         rows.forEach((r, i) => {
-          lines.push(`- "${r}": ${cols.map((c, j) => `"${c}" ${counts[i][j]}`).join(', ')}`);
+          lines.push(`- ${cell(r)}: ${cols.map((c, j) => `${cell(c)} ${counts[i][j]}`).join(', ')}`);
           cols.forEach((c, j) => add(`${r} × ${c}`, counts[i][j], 'count'));
         });
       }
@@ -114,12 +116,12 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
       }
       if (result.prop) {
         const p = result.prop;
-        lines.push(`Two-proportion z-test on "${result.outcome}" = "${p.success}": ${raw(p.p1)} vs ${raw(p.p2)}, z ${raw(p.z)}, p ${raw(p.p)}, difference 95% CI ${raw(p.ciLow)} to ${raw(p.ciHigh)}, Cohen's h ${raw(p.cohenH)}.`);
+        lines.push(`Two-proportion z-test on "${result.outcome}" = ${cell(p.success)}: ${raw(p.p1)} vs ${raw(p.p2)}, z ${raw(p.z)}, p ${raw(p.p)}, difference 95% CI ${raw(p.ciLow)} to ${raw(p.ciHigh)}, Cohen's h ${raw(p.cohenH)}.`);
         add('rate 1', p.p1); add('rate 1 %', p.p1 * 100, 'percent'); add('rate 2', p.p2); add('rate 2 %', p.p2 * 100, 'percent');
         add('rate gap (points)', Math.abs(p.diff) * 100); add('z', p.z); add('z p', p.p); add('CI low', p.ciLow); add('CI high', p.ciHigh); add("Cohen's h", p.cohenH);
       }
       for (const w of result.warnings) lines.push(`Warning: ${w}`);
-      lines.push(`App's sentence: ${result.sentence}`);
+      lines.push(`App's sentence: ${oneLine(result.sentence)}`);
     } else {
       const m = result.moments;
       lines.push(`Column "${result.column}": n ${m.n}, mean ${raw(m.mean)}, SD ${raw(m.sd)}, median ${raw(m.median)}, min ${raw(m.min)}, max ${raw(m.max)}, skewness (adjusted G1) ${raw(m.skewness)}, excess kurtosis (G2) ${raw(m.kurtosis)}.`);
@@ -132,7 +134,7 @@ export function statsFacts(items: StatsFactItem[], datasetName: string): Copilot
       }
       lines.push(`Histogram: ${result.histogram.labels.map((l, i) => `${l}: ${result.histogram.counts[i]}`).join('; ')}.`);
       result.histogram.counts.forEach((c, i) => add(`bin ${result.histogram.labels[i]}`, c, 'count'));
-      lines.push(`App's sentence: ${result.sentence}`);
+      lines.push(`App's sentence: ${oneLine(result.sentence)}`);
     }
     lines.push('');
   }

@@ -19,6 +19,7 @@ import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { AnswerFilter, AnswerSpec } from './answerSpec';
 import { WITHHELD } from './columnNotes';
+import { cell, oneLine } from './promptText';
 
 /** The spec in words — "sum of revenue by region, split by tier" — for `AnswerFactsInput.describe`. */
 export function describeAnswer(spec: AnswerSpec): string {
@@ -74,6 +75,8 @@ export interface AnswerFactsInput {
    * its digits neither enter the ledger nor count against the answer.
    */
   asOf?: string;
+  /** A split column named the series, so their names are cells (D3); set by `cardFacts`. */
+  split?: boolean;
 }
 
 export interface Headline {
@@ -100,7 +103,7 @@ export function pct(v: number): string {
   return (Object.is(r, -0) ? 0 : r) + '%';
 }
 
-interface Mark { label: string; value: number }
+interface Mark { label: string | number; value: number }
 
 function marks(data: ChartData, s: number): Mark[] {
   const series = data.series[s];
@@ -108,7 +111,7 @@ function marks(data: ChartData, s: number): Mark[] {
   const out: Mark[] = [];
   data.labels.forEach((lab, i) => {
     const v = series.values[i];
-    if (typeof v === 'number' && Number.isFinite(v)) out.push({ label: String(lab), value: v });
+    if (typeof v === 'number' && Number.isFinite(v)) out.push({ label: lab, value: v });
   });
   return out;
 }
@@ -139,11 +142,13 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   const bullets: string[] = [];
   const headline: Headline[] = [];
   const lines: string[] = [GUARD_LINE, ''];
+  // D3: in the TEXT a label is a cell, and so is a series name a split made; an app sentence is on one line.
+  const name = (n: string): string => (input.split ? cell(n) : oneLine(n));
 
   lines.push(`Answer: "${input.title}" — ${input.describe}, over dataset "${input.datasetName}".`);
   if (input.asOf) lines.push(`Data as of: ${input.asOf}.`);
   const said = input.saidFilterLabels ?? input.filterLabels;
-  if (said.length) lines.push(`Filtered to: ${said.join('; ')}.`);
+  if (said.length) lines.push(`Filtered to: ${said.map(oneLine).join('; ')}.`);
   if (input.withheldLabels?.length) lines.push(`(Labels from ${input.withheldLabels.join(' and ')} are withheld — marked personal or financial data.)`);
 
   const labels = Array.isArray(data.labels) ? data.labels : [];
@@ -159,7 +164,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
 
   lines.push('', 'Chart values (app-computed):');
   series.forEach((s) => {
-    lines.push(`- ${s.name}: ${labels.map((lab, i) => `${lab}=${fmtRaw(s.values[i])}`).join(', ')}`);
+    lines.push(`- ${name(s.name)}: ${labels.map((lab, i) => `${cell(lab)}=${fmtRaw(s.values[i])}`).join(', ')}`);
     labels.forEach((lab, i) => num(ledger, `${s.name} @ ${lab}`, s.values[i], 'number'));
   });
 
@@ -172,21 +177,21 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
     if (!ex) return;
     const what = noun(s.name);
     lines.push('');
-    lines.push(`${s.name} — ${ms.length} ${input.categoryIsDate ? 'periods' : 'values'}.`);
+    lines.push(`${name(s.name)} — ${ms.length} ${input.categoryIsDate ? 'periods' : 'values'}.`);
     num(ledger, `${s.name}: count of marks`, ms.length, 'count');
 
     const total = input.additive ? ms.reduce((a, m) => a + m.value, 0) : null;
     const allPositive = ms.every((m) => m.value >= 0);
     if (total !== null) {
-      lines.push(`Total ${what}: ${total}.`);
+      lines.push(`Total ${name(what)}: ${total}.`);
       num(ledger, `total ${s.name}`, total, 'number');
     }
-    lines.push(`Highest: ${ex.hi.label} at ${ex.hi.value}. Lowest: ${ex.lo.label} at ${ex.lo.value}.`);
+    lines.push(`Highest: ${cell(ex.hi.label)} at ${ex.hi.value}. Lowest: ${cell(ex.lo.label)} at ${ex.lo.value}.`);
 
     let share: number | null = null;
     if (total !== null && total > 0 && allPositive && ms.length > 1) {
       share = (ex.hi.value / total) * 100;
-      lines.push(`${ex.hi.label} is ${share}% of the total.`);
+      lines.push(`${cell(ex.hi.label)} is ${share}% of the total.`);
       num(ledger, `${ex.hi.label} share of ${s.name}`, share, 'percent');
     }
 
@@ -198,7 +203,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
       const prev = ms[ms.length - 2];
       const p = prev.value !== 0 ? ((last.value - prev.value) / Math.abs(prev.value)) * 100 : null;
       change = { prev, last, pct: p };
-      lines.push(`Latest period ${last.label}: ${last.value}; previous ${prev.label}: ${prev.value}` +
+      lines.push(`Latest period ${cell(last.label)}: ${last.value}; previous ${cell(prev.label)}: ${prev.value}` +
         (p === null ? '.' : `; change ${p}%.`));
       num(ledger, `${s.name} change, ${prev.label} to ${last.label}`, p, 'percent');
       num(ledger, `${s.name} difference, ${prev.label} to ${last.label}`, last.value - prev.value, 'number');
@@ -228,11 +233,11 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   bullets.push(`${labels.length} ${input.categoryIsDate ? 'periods' : 'categories'} shown.`);
   num(ledger, 'categories shown', labels.length, 'count');
 
-  if (input.caption) lines.push('', `Caption shown under the chart (app-written): ${input.caption}`);
+  if (input.caption) lines.push('', `Caption shown under the chart (app-written): ${oneLine(input.caption)}`);
   lines.push('', 'Summary points (app-written):');
-  bullets.forEach((b) => lines.push(`- ${b}`));
+  bullets.forEach((b) => lines.push(`- ${oneLine(b)}`));
   // The last point is the filters: in the text as a model may read them, on the card as they are.
-  if (said.length) lines.push(`- Filtered to ${said.join('; ')}.`);
+  if (said.length) lines.push(`- Filtered to ${said.map(oneLine).join('; ')}.`);
   if (input.filterLabels.length) bullets.push(`Filtered to ${input.filterLabels.join('; ')}.`);
 
   const text = lines.join('\n');
@@ -250,6 +255,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
  * labels. The bullets and headline a PERSON sees come from the real chart.
  */
 export function cardFacts(input: AnswerFactsInput, spec: Pick<AnswerSpec, 'category' | 'series'>, withheld: ReadonlySet<string>): AnswerFacts {
+  input = { ...input, split: !!spec.series };
   const shown = answerFacts(input);
   const hideCat = withheld.has(spec.category);
   const hideSer = !!spec.series && withheld.has(spec.series);

@@ -14,6 +14,7 @@ import type { LedgerEntry } from './numberAudit';
 import { harvestAppNumbers } from './numberAudit';
 import { STATUS_WORDS } from '../analysis/scorecardModel';
 import type { RowStatus } from '../analysis/scorecardModel';
+import { oneLine } from './promptText';
 
 const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
@@ -59,8 +60,8 @@ export function scorecardFacts(sc: ScorecardFactInput): CopilotFacts {
     if (r.attainment !== null) parts.push(`attainment ${raw(r.attainment)}%`);
     parts.push(`status: ${STATUS_WORDS[r.status]}`);
     if (r.delta !== null) parts.push(`change ${raw(r.delta)}` + (r.pct !== null ? ` (${raw(r.pct)}%)` : ''));
-    if (r.group) parts.push(`group ${r.group}`);
-    if (r.owner) parts.push(`owner ${r.owner}`);
+    if (r.group) parts.push(`group ${oneLine(r.group)}`);
+    if (r.owner) parts.push(`owner ${oneLine(r.owner)}`);
     lines.push(parts.join(', '));
     num(`${r.name} value`, r.value);
     num(`${r.name} target`, r.target);
@@ -78,7 +79,7 @@ export function scorecardFacts(sc: ScorecardFactInput): CopilotFacts {
   num('rows at risk', warn.length, 'count');
   for (const g of sc.groups) {
     if (!g.group) continue;
-    lines.push(`Group "${g.group}": ${g.onTrack} of ${g.scored} with a target on track (${g.total} rows).`);
+    lines.push(`Group "${oneLine(g.group)}": ${g.onTrack} of ${g.scored} with a target on track (${g.total} rows).`);
     num(`${g.group} on track`, g.onTrack, 'count');
     num(`${g.group} with a target`, g.scored, 'count');
     num(`${g.group} rows`, g.total, 'count');

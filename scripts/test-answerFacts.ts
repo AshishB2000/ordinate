@@ -62,7 +62,8 @@ ok('facts: every mark is in the ledger, unrounded',
   REGION.labels.every((l, i) => facts.ledger.some((e) => e.label === `sum of revenue @ ${l}` && Object.is(e.value, REGION.series[0].values[i]))));
 ok('facts: the total and the share are ledger entries, the share as a percent',
   facts.ledger.some((e) => Object.is(e.value, TOTAL)) && facts.ledger.some((e) => e.unit === 'percent' && Math.abs(e.value - 30.13) < 0.01));
-ok('facts: the text block carries the guard line', /computed by the app/.test(facts.text) && /Highest: West at 1565150.46/.test(facts.text));
+// D3: cells are quoted in the facts text
+ok('facts: the text block carries the guard line', /computed by the app/.test(facts.text) && /Highest: "West" at 1565150.46/.test(facts.text));
 
 // When the data is from (L0.2): a line the narration can copy — never a figure.
 const dated = F.answerFacts({
@@ -188,7 +189,7 @@ async function main(): Promise<void> {
     && JSON.stringify(last.answer.filters) === '[{"column":"order_date","period":"last_quarter"}]' && !('data' in last.answer),
     JSON.stringify(last));
   ok('ask: the narration was asked of the CARD\'s facts', asked.length === 2 && /Answer: "Revenue by region last quarter"/.test(asked[1])
-    && /West=160/.test(asked[1]), asked[1]);
+    && /"West"=160/.test(asked[1]), asked[1]); // D3: cells are quoted
   ok('ask: …which say when the data is from (the dataset\'s import, never refreshed), in UTC',
     asked[1].includes(`Data as of: ${asOfMod.utcLabel(ds!.createdAt)}.`), asked[1]);
   ok('ask: the narration is audited against the card — the invented 12.4% is flagged, the real 160 is not',

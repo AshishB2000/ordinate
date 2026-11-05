@@ -32,9 +32,10 @@ import type { LedgerEntry } from './numberAudit';
 import type { ParsedColumn } from '../data/parse';
 import type { LiveColumnProfile, LiveProfile } from '../data/liveProfile';
 import { utcLabel } from '../data/figureAsOf';
+import { PROMPT_VALUE_CHARS, quoted } from './promptText';
 
-/** A sample value is cut to this many characters in a prompt. */
-export const PROMPT_VALUE_CHARS = 60;
+// The cell printers moved to ./promptText (D3: every builder quotes cells); re-exported for this file's readers.
+export { PROMPT_VALUE_CHARS, quoted };
 
 /**
  * How much of a profile's sample values one dataset may put in a prompt: the
@@ -69,18 +70,6 @@ export interface LiveFactsInput {
   docs?: Record<string, FactColumnDoc>;
   /** The dataset's defined metrics, each figure the warehouse's (L2.4) — in the ledger like any other. */
   metrics?: FactMetric[];
-}
-
-/** A value as a prompt shows it: cut (never inside a surrogate pair), JSON-quoted, line separators escaped too. */
-export function quoted(v: string): string {
-  let cut = v;
-  if (v.length > PROMPT_VALUE_CHARS) {
-    let end = PROMPT_VALUE_CHARS - 1;
-    const c = v.charCodeAt(end - 1);
-    if (c >= 0xd800 && c <= 0xdbff) end -= 1;
-    cut = `${v.slice(0, end)}…`;
-  }
-  return JSON.stringify(cut).replace(/[\u2028\u2029]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16)}`);
 }
 
 /** As many of `values` as the budget allows, spent from it, "…" when some were left out; '' when none fit. */

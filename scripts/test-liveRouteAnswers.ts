@@ -209,7 +209,7 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const chart = (await post('visual:data', { projectId: P, datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] } })).value;
   ok('copilot: a chart\'s facts are drawn through vizDataFor (the spy saw the Live dataset)', drawn.includes(L), show(drawn));
   ok('…carrying the live figures, every one in the ledger', !!facts && chart.ok === true && chart.data.labels.every((lab: string, i: number) =>
-    facts.text.includes(`${lab === null ? '' : lab}=${String(chart.data.series[0].values[i])}`) && facts.ledger.some((e) => Object.is(e.value, chart.data.series[0].values[i]))), facts ? facts.text : '');
+    facts.text.includes(`${lab === null ? '' : JSON.stringify(lab)}=${String(chart.data.series[0].values[i])}`) /* D3: cells are quoted */ && facts.ledger.some((e) => Object.is(e.value, chart.data.series[0].values[i]))), facts ? facts.text : '');
   (visualsIpc as { vizDataFor: typeof realViz }).vizDataFor = realViz;
   const dsFacts = await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'dataset', id: L }));
   ok('copilot: a Live dataset\'s facts are its schema — every column, LIVE, and never a row count', dsFacts.provenance.kind === 'dataset' && /— Live: its rows stay in the warehouse/.test(dsFacts.text)

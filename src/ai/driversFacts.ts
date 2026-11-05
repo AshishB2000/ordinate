@@ -10,6 +10,7 @@ import type { CopilotFacts } from './copilot';
 import type { LedgerEntry } from './numberAudit';
 import { harvestAppNumbers } from './numberAudit';
 import type { DriversResult } from '../ipc/drivers';
+import { cell, oneLine } from './promptText';
 
 const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
@@ -24,7 +25,7 @@ export function driversFacts(r: DriversResult): CopilotFacts {
     if (typeof v === 'number' && Number.isFinite(v)) ledger.push({ label, value: v, unit, source: 'drivers' });
   };
 
-  const where = r.path.length ? ' within ' + r.path.map((p) => `${p.column} = "${p.label}"`).join(' and ') : '';
+  const where = r.path.length ? ' within ' + r.path.map((p) => `${p.column} = ${cell(p.label)}`).join(' and ') : '';
   lines.push(`Question: why did "${r.metric.name}"${where} change from ${r.periods.b} to ${r.periods.a}?`);
   lines.push(`"${r.metric.name}" was ${raw(r.totals.b)} (shown as ${r.totals.bText}) in ${r.periods.b} and ${raw(r.totals.a)} (shown as ${r.totals.aText}) in ${r.periods.a}; change ${raw(r.totals.delta)} (shown as ${r.totals.deltaText})` +
     (r.totals.pct !== null ? `, ${raw(r.totals.pct)}%.` : '.'));
@@ -42,7 +43,7 @@ export function driversFacts(r: DriversResult): CopilotFacts {
     lines.push('Dimensions ranked by explained variance of the change (0–100%, the share of the change that is member-specific rather than across the board):');
     for (const d of r.dimensions) {
       const pct = d.explained * 100;
-      lines.push(`- ${d.column}: ${raw(pct)}% explained, ${d.memberCount} members` + (d.lead ? `, moved most by "${d.lead}"` : ''));
+      lines.push(`- ${d.column}: ${raw(pct)}% explained, ${d.memberCount} members` + (d.lead ? `, moved most by ${cell(d.lead)}` : ''));
       num(`${d.column} explained variance`, pct, 'percent');
       num(`${d.column} members`, d.memberCount, 'count');
     }
@@ -54,7 +55,7 @@ export function driversFacts(r: DriversResult): CopilotFacts {
     lines.push(`Contributors by ${s.column} (a waterfall from ${s.waterfall.startText} to ${s.waterfall.endText}):`);
     if (s.offsetting) lines.push('The members largely OFFSET each other: the net change is small beside how much they moved, so a member\'s "% of the change" can pass 100%; its "% of all movement" is the fairer weight.');
     for (const m of s.waterfall.steps) {
-      const parts = [`- "${m.label}": ${raw(m.delta)} (shown as ${m.deltaText})`];
+      const parts = [`- ${cell(m.label)}: ${raw(m.delta)} (shown as ${m.deltaText})`];
       if (m.share !== null) parts.push(`${raw(m.share)}% of the change`);
       parts.push(`${raw(m.moveShare)}% of all movement`);
       if (m.mixText !== undefined) parts.push(`mix ${raw(m.mix)} (${m.mixText}), rate ${raw(m.rate)} (${m.rateText})`);
@@ -75,13 +76,13 @@ export function driversFacts(r: DriversResult): CopilotFacts {
   }
   if (r.caption) {
     lines.push('');
-    lines.push(`The app's own summary: ${r.caption}`);
+    lines.push(`The app's own summary: ${oneLine(r.caption)}`);
   }
   if (r.events && r.events.length) {
     // r8:events — matched by DATE from the project's Events list, not inferred.
     lines.push('');
     lines.push(`Project events during ${r.periods.a} (from the Events list, matched by date — a coincidence in time, not a proven cause):`);
-    for (const e of r.events) lines.push(`- "${e.title}" (${e.kind}, ${e.when})`);
+    for (const e of r.events) lines.push(`- "${oneLine(e.title)}" (${e.kind}, ${e.when})`);
   }
 
   const text = lines.join('\n');

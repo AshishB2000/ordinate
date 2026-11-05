@@ -283,7 +283,7 @@ async function main(): Promise<void> {
     catCard.ok && catCard.data.labels.includes(CANARY) && catCard.headline.some((h) => h.label.includes('@x.test')) && catCard.bullets.some((b) => b.includes('@x.test')), show(catCard));
   const split = await byEmail({ category: 'region', series: 'email', chartType: 'clustered_column' });
   ok('labels: a SPLIT by a marked column withholds the series names, and keeps the axis',
-    split.told.length === 2 && !show(split.told).includes('@x.test') && split.told[1].facts.includes('West=') && split.told[1].facts.includes('(Labels from email are withheld'), split.told[1]?.facts);
+    split.told.length === 2 && !show(split.told).includes('@x.test') && split.told[1].facts.includes('"West"=') /* D3: cells are quoted */ && split.told[1].facts.includes('(Labels from email are withheld'), split.told[1]?.facts);
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'none' });
   const open = await answers.computeCard(pid, cat.turn.answer);
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'personal' });

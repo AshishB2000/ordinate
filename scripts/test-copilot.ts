@@ -151,7 +151,8 @@ async function main(): Promise<void> {
     viz,
   );
   ok('visualFacts has the guard line', /computed by the app/i.test(vFacts.text));
-  ok('visualFacts embeds the computed series values', vFacts.text.includes('Paris=100') && vFacts.text.includes('Berlin=300'));
+  // D3: cells are quoted
+  ok('visualFacts embeds the computed series values', vFacts.text.includes('"Paris"=100') && vFacts.text.includes('"Berlin"=300'));
   ok('visualFacts provenance names the visual + dataset',
     vFacts.provenance.kind === 'visual' && vFacts.provenance.name === 'Pop chart' && vFacts.provenance.datasetName === 'Cities');
 

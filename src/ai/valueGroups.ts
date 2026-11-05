@@ -15,6 +15,7 @@
 import * as execConfig from '../app/execConfig';
 import { dispatch } from './analyze';
 import { checkGroups } from '../data/valueClusters';
+import { promptJson } from './promptText';
 
 /** Values shown to the model: the most frequent, and none too long to be a label. */
 export const MAX_VALUES = 300;
@@ -53,7 +54,7 @@ export async function suggestValueGroups(column: string, counts: ReadonlyArray<r
     .slice(0, MAX_VALUES)
     .map(([v]) => v);
   if (values.length < 2) return { ok: true, groups: [] };
-  const { rawText, error } = await dispatch(VALUE_GROUPS_SYSTEM_PROMPT, [{ role: 'user', text: `Column: ${JSON.stringify(column)}\nValues:\n${JSON.stringify(values)}` }]);
+  const { rawText, error } = await dispatch(VALUE_GROUPS_SYSTEM_PROMPT, [{ role: 'user', text: `Column: ${promptJson(column)}\nValues:\n${promptJson(values)}` }]);
   if (error) return { ok: false, error: error.message };
   const parsed = firstArray(rawText);
   if (!Array.isArray(parsed)) return { ok: false, error: "Couldn't read the model's response. Try again." };

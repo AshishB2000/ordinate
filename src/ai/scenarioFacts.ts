@@ -11,6 +11,7 @@ import type { CopilotFacts } from './copilot';
 import type { LedgerEntry } from './numberAudit';
 import { harvestAppNumbers } from './numberAudit';
 import type { ScenarioResult } from '../analysis/scenarioResolve';
+import { oneLine } from './promptText';
 
 const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
@@ -29,7 +30,7 @@ export function scenarioFacts(sc: Pick<ScenarioResult, 'name' | 'metrics' | 'dri
   lines.push('Drivers, applied in this order:');
   if (!sc.drivers.length) lines.push('- (none — every scenario figure equals its baseline)');
   for (const d of sc.drivers) {
-    lines.push(`- ${d.label} (${d.kind === 'pct' ? 'percent change' : 'set to'} ${raw(d.value)}; ${d.targetText}${d.applied ? '' : '; changes none of these metrics'})`);
+    lines.push(`- ${oneLine(d.label)} (${d.kind === 'pct' ? 'percent change' : 'set to'} ${raw(d.value)}; ${oneLine(d.targetText)}${d.applied ? '' : '; changes none of these metrics'})`);
     num(`${d.label} driver value`, d.value, d.kind === 'pct' ? 'percent' : 'number');
   }
 
@@ -52,7 +53,7 @@ export function scenarioFacts(sc: Pick<ScenarioResult, 'name' | 'metrics' | 'dri
     lines.push(`Sensitivity of "${t.name}" (scenario value ${raw(t.value)}): each driver's target moved −${raw(t.step * 100)}% and +${raw(t.step * 100)}%, the others as set, widest swing first.`);
     num('sensitivity step %', t.step * 100, 'percent');
     for (const b of t.bars) {
-      lines.push(`- ${b.label}: ${raw(b.low)} to ${raw(b.high)} (swing ${raw(b.swing)})`);
+      lines.push(`- ${oneLine(b.label)}: ${raw(b.low)} to ${raw(b.high)} (swing ${raw(b.swing)})`);
       num(`${b.label} at −step`, b.low);
       num(`${b.label} at +step`, b.high);
       num(`${b.label} swing`, b.swing);
