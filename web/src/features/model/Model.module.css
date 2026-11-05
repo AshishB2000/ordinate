@@ -500,4 +500,9 @@
   background: var(--error-soft);
   color: var(--error-text);
   font-size: var(--t-13);
+.traceBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-12);
 }

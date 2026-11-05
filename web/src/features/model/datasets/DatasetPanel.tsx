@@ -16,10 +16,10 @@ import { Tab, TabList, TabPanel, Tabs } from '../../../ui/Tabs';
 import { TableGuide } from '../../data/AboutTab';
 import { RecordDetails } from '../../data/Details';
 import { ago } from '../../data/format';
-import { LineageView } from '../../data/LineageDrawer';
 import { useTableDoc } from '../../data/tableApi';
 import { useRoles } from '../../projects/api';
 import type { ModelTable } from '../api';
+import { ColumnLineage } from '../lineage/ColumnLineage';
 import { FieldsPanel } from './FieldsPanel';
 import { SourceNotes } from './SourceNotes';
 import { OverviewPanel } from './OverviewPanel';
@@ -103,7 +103,7 @@ function Body({ projectId, dataset, table }: { projectId: string; dataset: Datas
         <SourceNotes projectId={projectId} datasetId={dataset.id} />
       </TabPanel>
       <TabPanel value="lineage">
-        <LineageView projectId={projectId} id={dataset.id} />
+        <ColumnLineage projectId={projectId} datasetId={dataset.id} columns={header.data.columns} />
       </TabPanel>
     </Tabs>
   );

@@ -3,9 +3,9 @@
 // server's ranked "To fill in next" list. Contracts carry inputs only, so the reply is narrowed here
 // by hand. Every count in it is the server's; this only words it.
 
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
-import { okOr, type Fail } from '../data/api';
+import { okOr, type Fail, type Lineage } from '../data/api';
 import { formatNumber } from '../data/format';
 import type { TableRole } from '../data/tableApi';
 import type { FilterStep } from '../visuals/api';
@@ -89,3 +89,44 @@ export function reviewText(item: ReviewItem): string {
   if (item.kind === 'needs_review') return `${item.name} changed since certified`;
   return item.uses === undefined ? `${item.name} is retired, still used` : `${item.name} is retired, used by ${formatNumber(item.uses)}`;
 }
+/** What `lineage:column` and `lineage:fields` count: node kind → how many. Every number is the server's. */
+export type UsedCounts = Partial<Record<string, number>>;
+
+// ponytail: the order a person reads it in, and the word for each kind (a visual is a "chart" where a delete asks)
+const USED_ORDER = ['metric', 'visual', 'dashboard', 'report', 'alert', 'calc', 'term', 'dataset'] as const;
+const USED_WORD: Record<string, string> = { calc: 'calculated field', term: 'term' };
+
+/** "2 metrics", "1 term": the server's counts per kind, in reading order. `word` renames a kind (visual → chart). */
+export function countParts(usedIn: UsedCounts, word: Partial<Record<string, string>> = {}): string[] {
+  return USED_ORDER.filter((k) => usedIn[k]).map((k) => {
+    const n = usedIn[k] ?? 0;
+    const w = word[k] ?? USED_WORD[k] ?? k;
+    return `${formatNumber(n)} ${n === 1 ? w : `${w}s`}`;
+  });
+}
+
+/** "Used by 2 metrics · 6 visuals · 1 term"; '' when nothing uses it. */
+export function usedByText(usedIn: UsedCounts): string {
+  const parts = countParts(usedIn);
+  return parts.length ? `Used by ${parts.join(' · ')}` : '';
+}
+
+export interface LineageFields {
+  ok: true;
+  fields: Record<string, { usedIn: UsedCounts }>;
+  steps: { index: number; produces: string[]; usedIn: UsedCounts }[];
+}
+
+/** The graph around one column, or null when nothing reads it. Not asked for until a column is picked. */
+export const useColumnLineage = (projectId: string, datasetId: string, column: string | null) =>
+  useQuery({
+    queryKey: ['lineage:column', projectId, datasetId, column],
+    queryFn: column === null ? skipToken : async () => (await rpc('lineage:column', { projectId, datasetId, column })) as Lineage | null,
+  });
+
+/** "Used by" for every field of a dataset and for each Prepare step that makes one: one read per dataset. */
+export const useLineageFields = (projectId: string, datasetId: string) =>
+  useQuery({
+    queryKey: ['lineage:fields', projectId, datasetId],
+    queryFn: async () => okOr((await rpc('lineage:fields', { projectId, datasetId })) as LineageFields | Fail, 'The usage'),
+  });
