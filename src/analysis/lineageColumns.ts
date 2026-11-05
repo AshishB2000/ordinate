@@ -131,3 +131,29 @@ export function keyColumns(primary: string, others: string[], input: LineageInpu
   }
   return map;
 }
+
+/** A dashboard card that has no visual or saved metric behind it: a metric tile's own column and filters, a control's column. */
+export function cardReads(c: Rec, input: LineageInput): Map<string, string[]> | null {
+  if (c && c.type === 'metric' && c.metric && !c.metric.metricId) {
+    const { map, add } = reads(str(c.metric.datasetId));
+    add(str(c.metric.datasetId), c.metric.column);
+    filterReads(str(c.metric.datasetId), c.metric.filters, input, add);
+    return map;
+  }
+  if (c && c.type === 'control' && c.control) {
+    const { map, add } = reads(str(c.control.datasetId));
+    add(str(c.control.datasetId), c.control.column);
+    return map;
+  }
+  return null;
+}
+
+/** An alert rule that reads a column directly (no saved metric): its column, its filters and its period column. */
+export function alertReads(al: Rec, input: LineageInput): Map<string, string[]> {
+  const m: Rec = al.metric || {};
+  const { map, add } = reads(str(al.datasetId));
+  add(str(al.datasetId), m.column);
+  filterReads(str(al.datasetId), m.filters, input, add);
+  add(str(al.datasetId), al.change && al.change.periodColumn);
+  return map;
+}

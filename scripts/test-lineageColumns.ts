@@ -111,4 +111,81 @@ ok('lineage:get: the related visual now has an edge from Customers', edgesInto(g
 const withTable = (t: string): LineageInput => ({ ...base(), connections: [{ id: 'cn', name: 'Warehouse', kind: 'postgres' }], datasets: [{ ...base().datasets[0], origin: { kind: 'connection', connId: 'cn', table: t } }] });
 ok('D20: a connection source never names its table, and says its kind', !buildGraph(withTable('secret_tbl')).nodes.some((n) => /secret_tbl/.test(n.sub)) && buildGraph(withTable('x')).nodes.find((n) => n.kind === 'source')?.sub === 'postgres');
 
+// ── § nodes ─────────────────────────────────────────────────────────────────
+const { addColumnNodes, columnFields }: typeof import('../src/analysis/lineageNodes') = require('../src/analysis/lineageNodes');
+const { focus }: typeof import('../src/analysis/lineage') = require('../src/analysis/lineage');
+const id = (n: number) => `00000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`;
+const [TIER_DS, LIVE, REV, MPCT, WEST, VTERM, VPLAIN, DASH, ALERT] = [id(1), id(2), id(3), id(4), id(5), id(6), id(7), id(8), id(9)];
+const col = (n: string, type = 'text') => ({ name: n, type });
+const nodesInput = (): LineageInput => ({
+  datasets: [
+    {
+      id: ORDERS, name: 'Orders', rowCount: 3,
+      sourceColumns: [col('amt'), col('cost'), col('customer_id'), col('order_date'), col('unused')],
+      columns: [col('amount'), col('cost'), col('customer_id'), col('order_date'), col('unused'), col('Margin'), col('tier')],
+      steps: [R('amt', 'amount'), CALC('Margin', '[amount] - [cost]'), step({ type: 'lookup_join', datasetId: TIER_DS, leftKey: 'customer_id', rightKey: 'id', columns: ['tier'] })],
+    },
+    { id: CUSTOMERS, name: 'Customers', rowCount: 2, columns: [col('id'), col('region')], steps: [], origin: { kind: 'sql', sql: 'select secret_sql_7q' } },
+    { id: TIER_DS, name: 'Tiers', rowCount: 2, columns: [col('id'), col('tier')], steps: [] },
+    { id: LIVE, name: 'Live orders', columns: [col('amt'), col('cost')], steps: [], live: { calculated: [{ name: 'Margin', expression: '[amt] - [cost]', type: 'number' }] } },
+  ],
+  relationships: [REL],
+  metrics: [
+    { id: REV, name: 'Revenue', datasetId: ORDERS, timeColumn: 'order_date', definition: { column: 'amount', aggregation: 'sum' } },
+    { id: MPCT, name: 'Margin %', datasetId: ORDERS, definition: { formula: 'sum(Margin) / sum(amount)' } },
+  ],
+  terms: [{ id: WEST, name: 'West', datasetId: CUSTOMERS, filters: [flt('region', 'West')] }],
+  visuals: [
+    { id: V, name: 'Related', datasetId: ORDERS, encoding: { category: 'region', categoryDatasetId: CUSTOMERS, values: [{ column: 'amount', aggregation: 'sum' }] }, filters: [] },
+    { id: VTERM, name: 'Term chart', datasetId: ORDERS, encoding: { category: 'tier', values: [{ column: 'units', aggregation: 'sum' }] }, filters: [{ type: 'term', term: WEST }] },
+    { id: VPLAIN, name: 'Plain', datasetId: ORDERS, encoding: { category: 'tier', values: [{ column: 'Margin', aggregation: 'sum' }] }, filters: [] },
+    { id: id(10), name: 'Live chart', datasetId: LIVE, encoding: { category: 'amt', values: [{ column: 'Margin', aggregation: 'sum' }] }, filters: [] },
+  ],
+  dashboards: [{ id: DASH, name: 'Board', sheets: [{ cards: [{ type: 'visual', visualId: VTERM }, { type: 'visual', visualId: V }] }], filters: [] }],
+  alerts: [{ id: ALERT, name: 'Alert', datasetId: ORDERS, metric: { metricId: REV }, compare: 'threshold' }],
+  reports: [],
+});
+const ni = nodesInput();
+const g = addColumnNodes(buildGraph(ni), ni);
+const node = (gr: { nodes: Array<{ id: string; name: string; sub: string }> }, nid: string) => gr.nodes.find((n) => n.id === nid) as { id: string; name: string; sub: string };
+const down = (gr: { edges: Array<{ from: string; to: string }> }, nid: string): string[] => {
+  const seen = new Set<string>();
+  const stack = [nid];
+  while (stack.length) {
+    const cur = stack.pop() as string;
+    for (const e of gr.edges) if (e.from === cur && !seen.has(e.to)) { seen.add(e.to); stack.push(e.to); }
+  }
+  return [...seen];
+};
+const f1 = focus(g, `column:${ORDERS}:amount`);
+ok('amount feeds Margin (calc), Revenue and Margin %', [`calc:${ORDERS}:Margin`, `metric:${REV}`, `metric:${MPCT}`].every((n) => f1.nodes.some((x) => x.id === n)), show(f1.nodes.map((x) => x.id)));
+ok('the rename is one column, named by its final name', node(g, `column:${ORDERS}:amount`).sub === 'Renamed from amt');
+ok('a dropped-or-kept input of a calc has a node: cost feeds Margin', down(g, `column:${ORDERS}:cost`).includes(`calc:${ORDERS}:Margin`));
+ok('the join key Orders.customer_id is used by the related visual', down(g, `column:${ORDERS}:customer_id`).includes(`visual:${V}`) && down(g, `column:${CUSTOMERS}:id`).includes(`visual:${V}`));
+ok('a lookup column is fed by the other dataset\'s column', down(g, `column:${TIER_DS}:tier`).includes(`column:${ORDERS}:tier`));
+ok('a term node, by name only, between its column and the visual', node(g, `term:${WEST}`).name === 'West' && down(g, `column:${CUSTOMERS}:region`).includes(`term:${WEST}`) && down(g, `term:${WEST}`).includes(`visual:${VTERM}`) && g.nodes.filter((n) => n.id !== `term:${WEST}`).every((n) => !/West/.test(n.name + n.sub)) && !/secret_sql_7q/.test(JSON.stringify(g)));
+ok('a term is not also a direct column edge to the figure that uses it', !g.edges.some((e) => e.from === `column:${CUSTOMERS}:region` && e.to === `visual:${VTERM}`));
+ok('a Live calc reads its inputs', down(g, `column:${LIVE}:amt`).includes(`calc:${LIVE}:Margin`) && down(g, `calc:${LIVE}:Margin`).includes(`visual:${id(10)}`));
+ok('a dataset with a SQL origin has column nodes, fed from the dataset only', g.edges.filter((e) => e.to === `column:${CUSTOMERS}:region`).every((e) => e.from === `dataset:${CUSTOMERS}`));
+// Lineage's term usage, by kind, against the records (part 1's termUsage is not in this branch: step 10's tasks 2-3 add it).
+const wu = focus(g, `term:${WEST}`).usedIn;
+ok('term usage by kind: the chart that holds it, the dashboard that holds the chart', wu.visual === 1 && wu.dashboard === 1 && (wu.metric ?? 0) === 0 && (wu.alert ?? 0) === 0, show(wu));
+ok('lineage:get draws no column or term node', !buildGraph(ni).nodes.some((n) => n.kind === 'column' || n.kind === 'term'));
+ok('NEGATIVE CONTROL: a column nothing reads has no node', !g.nodes.some((n) => n.id === `column:${ORDERS}:unused`));
+ok('addColumnNodes is pure: the graph it was given is unchanged', buildGraph(ni).nodes.length === buildGraph(ni).nodes.length && g.nodes.length > buildGraph(ni).nodes.length);
+ok('every edge still points left to right in rank', g.edges.every((e) => {
+  const k = new Map(g.nodes.map((n) => [n.id, n.kind])); const rank = (x: string) => (({ source: 0, dataset: 1, prepare: 2, calc: 3, column: 3, term: 4, metric: 4, visual: 5, dashboard: 6, report: 7, alert: 7 }) as Record<string, number>)[k.get(x) as string];
+  return rank(e.from) <= rank(e.to);
+}));
+
+// ── "Used by": columnFields ─────────────────────────────────────────────────
+const cf = columnFields(g, ni, ORDERS);
+ok('fields: amount is used by 2 metrics; the unread column is absent', cf.fields.amount.usedIn.metric === 2 && !('unused' in cf.fields), show(cf.fields.amount));
+ok('fields is a null-prototype record', Object.getPrototypeOf(cf.fields) === null && !('constructor' in cf.fields));
+ok('fields agree with focus: the same usedIn', show(cf.fields.amount.usedIn) === show(focus(g, `column:${ORDERS}:amount`).usedIn));
+const calcStep = cf.steps.find((s) => s.produces.includes('Margin'));
+ok('steps: the calc step reports what it feeds, once each', !!calcStep && calcStep.usedIn.metric === 1 && calcStep.usedIn.visual === 1, show(cf.steps));
+ok('steps: the rename and the lookup are listed, a filter would not be', show(cf.steps.map((s) => s.index)) === show([0, 1, 2]) && show(cf.steps[0].produces) === show(['amount']));
+ok('fields: a Live dataset\'s calcs appear', columnFields(g, ni, LIVE).fields.Margin.usedIn.visual === 1);
+
 finish();
