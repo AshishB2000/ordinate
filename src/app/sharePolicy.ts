@@ -33,6 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
+import { carriersOf } from '../data/columnAccess';
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
@@ -74,23 +75,24 @@ export interface PolicySummary {
 // ── Which columns ────────────────────────────────────────────────────────────
 
 /**
- * column → level for every column the user marked, CARRIED ACROSS later
- * rename steps. A catalog key is the column's name when it was marked; a
- * rename added afterwards leaves the doc under the old name, and a policy that
- * only looked names up would let the renamed column leave unmasked.
+ * column → level for every column the user marked, CARRIED to every column a
+ * later step computes from it: a rename, a formula, a step writing columns it
+ * does not name (data/columnAccess carriersOf, the one carrier rule; part 4,
+ * D22). A catalog key is the column's name when it was marked; a policy that
+ * only looked names up would let `bonus = [salary] * 0.1` leave unmasked.
  */
-async function markedLevels(projectId: string, datasetId: string, steps: unknown): Promise<Map<string, SensitiveLevel>> {
+async function markedLevels(projectId: string, datasetId: string, meta: Pick<datasets.DatasetMeta, 'steps' | 'columns' | 'sourceColumns'> | null): Promise<Map<string, SensitiveLevel>> {
   const docs = await catalog.getColumns(projectId, datasetId, true);
   const out = new Map<string, SensitiveLevel>();
   for (const k of Object.keys(docs)) {
     const s = docs[k].sensitivity;
     if (s === 'personal' || s === 'financial') out.set(k, s);
   }
-  for (const st of Array.isArray(steps) ? steps : []) {
-    const o = st && typeof st === 'object' ? (st as Record<string, unknown>) : {};
-    if (o.type !== 'rename_column' || typeof o.from !== 'string' || typeof o.to !== 'string') continue;
-    const level = out.get(o.from);
-    if (level && !out.has(o.to.trim())) out.set(o.to.trim(), level);
+  const steps = Array.isArray(meta?.steps) ? meta.steps : [];
+  const final = (meta?.columns ?? []).map((c) => c.name);
+  const source = (meta?.sourceColumns ?? meta?.columns ?? []).map((c) => c.name);
+  for (const [marked, level] of out) { // a carrier added here is visited too: its own carriers are already among them
+    for (const c of carriersOf(steps, source, final, [marked]).carriers.keys()) if (!out.has(c)) out.set(c, level);
   }
   return out;
 }
@@ -101,7 +103,7 @@ export async function markedColumns(
 ): Promise<Array<{ column: string; level: SensitiveLevel; maskedInPrepare: boolean }>> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
   if (!meta) return [];
-  const levels = await markedLevels(projectId, datasetId, meta.steps);
+  const levels = await markedLevels(projectId, datasetId, meta);
   const masked = maskedColumns(meta.steps);
   return meta.columns
     .map((c) => String(c.name))
@@ -124,7 +126,7 @@ export async function sensitiveColumns(projectId: string, datasetId: string): Pr
  */
 export async function withheldColumns(projectId: string, datasetId: string): Promise<Set<string>> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
-  return new Set((await markedLevels(projectId, datasetId, meta ? meta.steps : [])).keys());
+  return new Set((await markedLevels(projectId, datasetId, meta)).keys());
 }
 
 /**
@@ -137,7 +139,7 @@ export async function withheldColumns(projectId: string, datasetId: string): Pro
 export async function assistantColumnDocs(projectId: string, datasetId: string): Promise<Record<string, catalog.ColumnDoc>> {
   const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId, true));
   const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
-  const marked = await markedLevels(projectId, datasetId, meta ? meta.steps : []);
+  const marked = await markedLevels(projectId, datasetId, meta);
   for (const [name, level] of marked) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
       docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
