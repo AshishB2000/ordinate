@@ -274,6 +274,8 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       'sourceTable:forDataset': { projectId: P, datasetId: D },
       'dataset:setSourceTables': { projectId: P, datasetId: D, tables: [TABLE] },
       'dataset:sourceTableChoices': { projectId: P, datasetId: D },
+      'catalog:suggestions': { projectId: P, datasetId: D },
+      'catalog:dismissSuggestion': { projectId: P, datasetId: D, connId, docId, kind: 'table', hash: 'AbCdEf012345' },
     };
     const channels = Object.keys(require('../src/api/sourceTables').sourceTables);
     ok('every source table channel has a viewer case here', channels.every((ch) => ch in PAYLOAD), channels.filter((ch) => !(ch in PAYLOAD)).join());

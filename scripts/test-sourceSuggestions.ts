@@ -8,6 +8,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { H, close, post, hydrated, type Reply } from './liveRouteHarness';
 
 const { suggestionsFor, hashOf }: typeof import('../src/analysis/sourceSuggestions') = require('../src/analysis/sourceSuggestions');
 type Suggestion = import('../src/analysis/sourceSuggestions').Suggestion;
@@ -43,7 +44,78 @@ function pure(): void {
   ok('hashOf: 12 url-safe chars, stable', /^[A-Za-z0-9_-]{12}$/.test(hashOf('x')) && hashOf('x') === hashOf('x') && hashOf('x') !== hashOf('y'));
 }
 
+async function channels(): Promise<void> {
+  const { fakeMod, fake, ORG_A } = H;
+  const path: typeof import('path') = require('path');
+  const store: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+  const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+  const api: typeof import('../src/api/index') = require('../src/api/index');
+  const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+  const s = await H.as(ORG_A, async () => {
+    await H.projects.init();
+    const P = (await H.projects.createProject('Suggestions')).id;
+    await fakeMod.loadWarehouseTable('wh_orders', [{ name: 'line_id', type: 'number' }, { name: 'discount', type: 'number' }, { name: 'region', type: 'text' }], [[1, 2, 'EU']] as never);
+    const conn = await H.connections.saveConnection(P, { name: 'Warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
+    if (!conn) throw new Error('connection not saved');
+    const live = async (name: string) => {
+      const r = await H.liveRecord.saveLiveRecord(P, { name, columns: [{ name: 'line_id', type: 'number' }, { name: 'discount', type: 'number' }, { name: 'region', type: 'text' }], origin: { kind: 'connection', connId: conn.id, table: 'wh_orders' } });
+      if (!r) throw new Error('not saved');
+      return r.id;
+    };
+    const [L, L2, L3] = [await live('Orders'), await live('Orders two'), await live('Orders three')];
+    await catalog.setColumn(P, L, 'region', { description: 'Region of sale' });
+    const doc = await store.createSourceDoc(P, conn.id, 'wh_orders', {});
+    if (!doc.ok) throw new Error(doc.error);
+    const facts = (comment: string) => ({ comment, columns: [{ name: 'discount', type: 'double', comment: 'Discount in USD, after tax' }, { name: 'region', type: 'text', comment: 'Sales region' }, { name: 'line_id', type: 'int', key: true as const }], primaryKey: { columns: ['line_id'], enforced: true }, readAt: '2026-11-01T00:00:00.000Z', readBy: 'sam' });
+    await store.updateSourceDoc(P, conn.id, doc.docId, (d) => ({ ...d, facts: facts('Order lines') }));
+    return { P, C: conn.id, D: doc.docId, L, L2, L3, facts };
+  });
+  const { P, C, D, L, L2, L3 } = s;
+  const bytes = () => H.as(ORG_A, () => recordFs.readFile(path.join(appPaths.userData(), 'projects', P, 'catalog.json'), 'utf8'));
+  const docText = () => H.as(ORG_A, () => recordFs.readFile(store.docPath(P, C, D), 'utf8'));
+  const sug = async (id: string): Promise<Reply[]> => (await post('catalog:suggestions', { projectId: P, datasetId: id })).value.suggestions;
+  const n0 = fake.catalogCalls;
+  const h0 = hydrated.length;
+
+  const c0 = await bytes();
+  const c1 = await bytes();
+  const got = (await post('catalog:suggestions', { projectId: P, datasetId: L })).value;
+  const c2 = await bytes();
+  ok('never silent: the catalog is byte-identical before, and after catalog:suggestions', c0 === c1 && c1 === c2);
+  ok('suggestions: discount, the table comment, the key (region has a meaning)', got.ok === true && got.suggestions.map((x: Reply) => x.kind + ':' + (x.column ?? '')).join() === 'column:discount,table:,key:', JSON.stringify(got));
+  // The planted auto-apply, on a second dataset of the same table, so L's later asserts stay clean.
+  const p0 = await bytes();
+  await H.as(ORG_A, () => catalog.setColumn(P, L3, 'discount', { description: got.suggestions[0].text }));
+  ok('NEGATIVE CONTROL: a planted setColumn in the path is caught by the same comparison', p0 !== (await bytes()));
+
+  await post('catalog:setColumn', { projectId: P, datasetId: L, column: 'discount', patch: { description: got.suggestions[0].text } }); // Use
+  ok('Use: the meaning is the dataset\'s own, and the suggestion is gone', (await post('catalog:columns', { projectId: P, datasetId: L })).value.columns.discount.description === 'Discount in USD, after tax' && !(await sug(L)).some((x) => x.column === 'discount'));
+
+  const tableSug = (await sug(L)).find((x) => x.kind === 'table') as Reply;
+  const dis = await post('catalog:dismissSuggestion', { projectId: P, datasetId: L, connId: C, docId: D, kind: 'table', hash: tableSug.hash });
+  ok('Dismiss: ok', dis.value.ok === true, dis.body);
+  ok('Dismiss sticks, for this dataset only', !(await sug(L)).some((x) => x.kind === 'table') && (await sug(L2)).some((x) => x.kind === 'table'));
+  ok('Dismiss stores the hash, never the text', ((raw) => raw.includes(tableSug.hash) && !JSON.stringify(JSON.parse(raw).dismissed).includes('Order lines'))(await docText()));
+  await post('catalog:dismissSuggestion', { projectId: P, datasetId: L, connId: C, docId: D, kind: 'column', column: '__proto__', hash: 'AbCdEf012345' });
+  ok('Dismiss of a column named __proto__ is data, not a prototype', ((raw) => Object.keys(JSON.parse(raw).dismissed[L].columns).join() === '__proto__')(await docText()));
+
+  await H.as(ORG_A, () => store.updateSourceDoc(P, C, D, (d) => ({ ...d, facts: s.facts('Order lines (net)') })));
+  ok('a changed comment returns', (await sug(L)).some((x) => x.kind === 'table' && x.text === 'Order lines (net)'));
+  const total = (await post('catalog:suggestions', { projectId: P })).value;
+  ok('the project total is the server\'s, and counts the datasets with one', total.total === (await sug(L)).length + (await sug(L2)).length + (await sug(L3)).length && total.datasets === 3, JSON.stringify([total.total, total.datasets]));
+  ok('records only: no warehouse call, nothing hydrated', fake.catalogCalls === n0 && hydrated.length === h0);
+  ok('a hash that is not 12 url-safe chars is refused at the door', (await post('catalog:dismissSuggestion', { projectId: P, datasetId: L, connId: C, docId: D, kind: 'table', hash: 'the text itself' })).status === 400);
+  ok('a column suggestion with no column is refused at the door', (await post('catalog:dismissSuggestion', { projectId: P, datasetId: L, connId: C, docId: D, kind: 'column', hash: 'AbCdEf012345' })).status === 400);
+  const gone = (await post('catalog:dismissSuggestion', { projectId: P, datasetId: L, connId: C, docId: '0b9f3c2a-7d1e-4f5a-9c8d-1e2f3a4b5c6e', kind: 'key', hash: 'AbCdEf012345' })).value;
+  ok('a doc that is gone gets the sentence', gone.ok === false && typeof gone.error === 'string');
+  const contracts = api.contracts as unknown as Record<string, { access: string; project(i: unknown): unknown }>;
+  ok('contracts: both write, scoped by projectId', ['catalog:suggestions', 'catalog:dismissSuggestion'].every((n) => contracts[n]?.access === 'write' && contracts[n].project({ projectId: P }) === P));
+}
+
 (async () => {
   pure();
+  await channels();
+  await close();
   finish();
 })().catch((err: unknown) => { console.error(err); process.exit(1); });
