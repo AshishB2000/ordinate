@@ -519,6 +519,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     // …and the same value labels Orders' customer was given above (PR 06): a reply carries them beside its labels.
     const twinLabelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: twin, column: 'customer', patch: { values: labelRows } });
     ok('setup: the twin\'s customer has Orders\' value labels', twinLabelled.body?.ok === true && twinLabelled.body.column.values.length === 2, twinLabelled.text.slice(0, 160));
+    // …and the Prepare filter step the Data model's check (PR 10) added to Orders above: it keeps every row.
+    const twinStep = await W.call('boss', 'dataset:addStep', { projectId: P, datasetId: twin, step: { type: 'filter', column: 'customer', op: '!=', value: `${H.W_CANARY}_m` } });
+    ok('setup: the twin has Orders\' Prepare step', twinStep.body?.ok === true, twinStep.text.slice(0, 160));
     await mkRecs(twin);
     const swapTwin = { [twin]: orders, [recs[twin].visualId]: recs[orders].visualId, [recs[twin].metricId]: recs[orders].metricId, [recs[twin].dash]: recs[orders].dash };
     await setColumns(orders, true);
