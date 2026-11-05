@@ -210,7 +210,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       }
       return out;
     });
-    const colCall = (who: string, ds: string) => W.call(who, 'lineage:column', { projectId: P, datasetId: ds, column: 'sales' });
+    const colCall = (who: string, ds: string, column = 'sales') => W.call(who, 'lineage:column', { projectId: P, datasetId: ds, column });
     const fieldsCall = (who: string, ds: string) => W.call(who, 'lineage:fields', { projectId: P, datasetId: ds });
     const [colViewer, colEditor, fieldsViewer, fieldsEditor, getViewer] = [await colCall('nobody', D), await colCall('ed', D), await fieldsCall('nobody', D), await fieldsCall('ed', D), await lin('nobody')];
     const [colEast, fieldsEast, getEast] = [await colCall('east', W.orders), await fieldsCall('east', W.orders), await W.call('east', 'lineage:get', { projectId: P, type: 'dataset', id: W.orders })];
@@ -219,6 +219,9 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('lineage:column and lineage:fields: the editor gets the same bytes (nothing a viewer is denied is in them)', colViewer.text === colEditor.text && fieldsViewer.text === fieldsEditor.text);
     ok('lineage:get draws no column or term node, for a viewer', !getViewer.body.nodes.some((n: N) => n.kind === 'column' || n.kind === 'term'));
     ok('a row-restricted viewer: no value of the West rule or the West rows in lineage:column, lineage:fields or lineage:get, and the record counts are the same as the editor\'s', colEast.body?.usedIn.metric === 1 && fieldsEast.body?.fields.sales.usedIn.metric === 1 && getEast.body?.nodes.length > 0 && hides(colEast.text + fieldsEast.text + getEast.text) && colEast.text === (await colCall('ed', W.orders)).text, colEast.text);
+    // the term node sits on the `region` column (its filter's column): a row-restricted viewer reads its name, never its values
+    const termEast = await colCall('east', W.orders, 'region');
+    ok('a row-restricted viewer reads the term by name on the column it filters, and none of its values', termEast.body?.nodes.some((n: N) => n.kind === 'term' && n.sub === 'Glossary term') && hides(termEast.text), termEast.text.slice(0, 300));
     const storedTerm = JSON.stringify(await W.as('boss', () => termsStore.getTerm(P, linePlanted.O)));
     ok('NEGATIVE CONTROL: the stored term and the stored table name hold the values the replies above lack', storedTerm.includes(H.POLICY_CANARY) && storedTerm.includes(H.W_CANARY) && CANARY.test(JSON.stringify(await W.as('boss', () => datasets.getDatasetMeta(P, D)))));
     ok('NEGATIVE CONTROL: the check can fail: the same test over a reply that does carry a value reads as a leak', !hides(storedTerm) && !hides(`Table ${TABLE}`));
