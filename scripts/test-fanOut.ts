@@ -150,6 +150,8 @@ const CASES: Case[] = [
   { label: 'an auto-grained date, many sides only: Orders\' grain', enc: { category: 'signup', values: [M('amount', 'sum', O), M('refund', 'min', R)] }, filters: [], grain: 'day' },
   { label: 'a split by tier', enc: { category: 'segment', series: 'tier', values: [M('amount', 'sum', O)] }, filters: [] },
   { label: 'an empty many side under a filter only Returns has', enc: { category: 'segment', values: [M('id', 'count'), M('refund', 'sum', R)] }, filters: [F('refund', '>', 100)] },
+  // Part 5's distinct count (cross-part items 2, 12): counted on its own table, never over the fanned rows.
+  { label: 'a distinct count of Orders\' customers by tier, beside a Customers count', enc: { category: 'tier', values: [M('id', 'count'), M('customer_id', 'countd', O), M('amount', 'countd', O)] }, filters: [] },
 ];
 
 const viaAsk = async (c: Case, ask: Ask): Promise<Reply> => {
@@ -184,6 +186,7 @@ function rowsOf(d: string): { ctx: Ctx; cell: (col: string) => Cell }[] {
 }
 function agg(cells: Cell[], a: string): number | null {
   if (a === 'count') return cells.filter((x) => x != null && String(x).trim() !== '').length;
+  if (a === 'countd') return new Set(cells.filter((x) => x != null && String(x).trim() !== '').map((x) => (Object.is(x, -0) ? '0' : String(x)))).size;
   const nums = cells.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
   if (!nums.length) return null;
   let s = nums[0];
@@ -256,6 +259,9 @@ async function answers(): Promise<void> {
     }
     ok(`${c.label}: each series equals its own table's chart`, own);
   }
+  const distinct = CASES[CASES.length - 1];
+  const counted = { ...distinct, enc: { ...distinct.enc, values: distinct.enc.values.map((v) => (v.aggregation === 'countd' ? { ...v, aggregation: 'count' as const } : v)) } };
+  ok('NEGATIVE CONTROL: the distinct counts are not plain counts (a customer orders more than once)', mapDiff(asMap(await viaAsk(distinct, residentAsk), distinct), bruteForce(counted)) !== '');
   ok('the resident path declined only the split (it has no resident twin)', declined === 1, String(declined));
 
   const seg = await viaAsk(CASES[0], residentAsk);
