@@ -10,7 +10,7 @@
 //    `sourceView(hideNames)` keeps "a query". NEGATIVE CONTROL: the editor still reads the names.
 // 2. `seesSourceNames` fails closed on an id that is not a project id.
 // 3. `lineage:get` and `pipelines:get`: a viewer's source node says the connector's kind ("postgres") or "Web address",
-//    the editor and an org admin read "Table <table>" and the host and get the same bytes. NEGATIVE CONTROL: the editor.
+//    the editor and an org admin read the same kind (D20: no reader reads the table there) and the web import's host. NEGATIVE CONTROL: the editor.
 // 4. `dataset:list` and `pipelines:get`: a warehouse driver's refresh error ("relation … does not exist") names the table,
 //    so a viewer gets the failure without its text; a dataset not from a connection keeps its text.
 //    NEGATIVE CONTROL: the editor reads the text. The runner stores the editor's run under the web import's real id.
@@ -186,7 +186,9 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('lineage:get: a viewer reads the connector kind', srcNode(linViewer).sub === 'postgres' && !CANARY.test(linViewer.text), linViewer.text);
     ok('lineage:get: a viewer reads "Web address", not its host', webNode(linWebViewer).name === 'Web address' && !CANARY.test(linWebViewer.text), linWebViewer.text);
     ok('pipelines:get: a viewer reads the connector kind and "Web address", nothing of a source', connNode(pipeViewer).sub === 'postgres' && feeds(pipeViewer, web).name === 'Web address' && !CANARY.test(pipeViewer.text), pipeViewer.text);
-    ok('NEGATIVE CONTROL: the editor reads "Table public.canary_tbl_9f3" in lineage and in pipelines', srcNode(linEditor).sub === `Table ${TABLE}` && connNode(pipeEditor).sub === `Table ${TABLE}`, linEditor.text);
+    // D20 (semantic layer part 8): a connection source says its connector's kind to every reader, never the table. The editor's
+    // non-vacuous anchor for the name rule is `dataset:source` above ("Connection · Warehouse · public.canary_tbl_9f3").
+    ok('NEGATIVE CONTROL: the editor reads the connector kind too, and the table in neither lineage nor pipelines', srcNode(linEditor).sub === 'postgres' && connNode(pipeEditor).sub === 'postgres' && !CANARY.test(linEditor.text) && !CANARY.test(connNode(pipeEditor).sub), linEditor.text);
     ok('NEGATIVE CONTROL: the editor reads the web import\'s host in lineage and in pipelines', webNode(linWebEditor).name === WEB_HOST && feeds(pipeEditor, web).name === WEB_HOST, linWebEditor.text);
     const [linDbViewer, linDbEditor] = [await lin('nobody', dDb), await lin('ed', dDb)];
     ok('lineage:get and pipelines:get: a connection named after its database reads as the connector for a viewer', srcNode(linDbViewer).name === 'PostgreSQL' && connNode(pipeViewer, byDb).name === 'PostgreSQL' && !CANARY.test(linDbViewer.text), linDbViewer.text);

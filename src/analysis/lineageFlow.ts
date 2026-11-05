@@ -36,7 +36,7 @@ export interface FlowColumn {
   lookup?: { datasetId: string; column: string };
 }
 
-interface Id { names: string[]; from: Id[]; how: FlowColumn['how']; dropped?: true; lookup?: FlowColumn['lookup'] }
+interface Id { names: string[]; from: Id[]; how: FlowColumn['how']; dropped?: true; lookup?: FlowColumn['lookup']; steps: number[] }
 
 type Step = Record<string, unknown>;
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -69,12 +69,25 @@ function namesMade(s: Step): string[] {
  * First-seen order.
  */
 export function columnFlow(source: string[], steps: readonly TransformStep[], final?: string[]): FlowColumn[] {
+  return fold(source, steps, final).columns;
+}
+
+/** For each step that makes or renames a column: the keys of the columns it made (`lineage:fields`' "Prepare steps"). */
+export function stepProduces(source: string[], steps: readonly TransformStep[], final?: string[]): Map<number, string[]> {
+  const { columns, ids } = fold(source, steps, final);
+  const out = new Map<number, string[]>();
+  ids.forEach((id, i) => { for (const s of id.steps) out.set(s, [...(out.get(s) ?? []), columns[i].key]); });
+  return out;
+}
+
+function fold(source: string[], steps: readonly TransformStep[], final?: string[]): { columns: FlowColumn[]; ids: Id[] } {
+  let at = -1; // the step being folded
   const all: Id[] = [];
   const live = new Map<string, Id>();
   const make = (name: string, from: Id[], how: Id['how'], extra: Partial<Id> = {}): Id => {
     const old = live.get(name);
     if (old) old.dropped = true; // overwritten: the earlier column ends here, and still fed whatever read it
-    const id: Id = { names: [name], from: [...new Set(from)], how, ...extra };
+    const id: Id = { names: [name], from: [...new Set(from)], how, steps: at < 0 ? [] : [at], ...extra };
     all.push(id);
     live.set(name, id);
     return id;
@@ -83,6 +96,7 @@ export function columnFlow(source: string[], steps: readonly TransformStep[], fi
   for (const n of source) make(n, [], 'source');
 
   (steps as readonly unknown[]).forEach((raw, i) => {
+    at = i;
     if (!raw || typeof raw !== 'object') return;
     const s = raw as Step;
     const rule = FLOW_RULES[str(s.type)] ?? 'approximate';
@@ -97,6 +111,7 @@ export function columnFlow(source: string[], steps: readonly TransformStep[], fi
         if (clash) clash.dropped = true;
         live.delete(str(s.from));
         id.names.push(str(s.to));
+        id.steps.push(i);
         live.set(str(s.to), id);
         return;
       }
@@ -114,7 +129,7 @@ export function columnFlow(source: string[], steps: readonly TransformStep[], fi
         const by = list(s.groupBy).map(str);
         const aggs = list(s.aggregations) as Array<{ column?: unknown; as?: unknown }>;
         const made = aggs.filter((a) => str(a?.as)).map((a) => ({ as: str(a.as), from: read([str(a.column)]) }));
-        for (const [name, id] of [...live]) if (!by.includes(name)) { id.dropped = true; live.delete(name); }
+        for (const [name, id] of live) if (!by.includes(name)) { id.dropped = true; live.delete(name); }
         for (const m of made) make(m.as, m.from, 'aggregate');
         return;
       }
@@ -145,12 +160,13 @@ export function columnFlow(source: string[], steps: readonly TransformStep[], fi
     keyOf.set(id, k);
     taken.add(k);
   }
-  return all.map((id) => {
+  const columns = all.map((id) => {
     const out: FlowColumn = { key: keyOf.get(id)!, was: id.names.slice(0, -1), from: id.from.map((f) => keyOf.get(f)!), how: id.how };
     if (id.dropped || (final && live.get(id.names[id.names.length - 1]) === id && !final.includes(id.names[id.names.length - 1]))) out.dropped = true;
     if (id.lookup) out.lookup = id.lookup;
     return out;
   });
+  return { columns, ids: all };
 }
 
 // STEP_TYPES is imported so the module fails to load if the set moves; the test holds the key sets equal.

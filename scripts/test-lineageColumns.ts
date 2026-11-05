@@ -49,4 +49,66 @@ ok('NEGATIVE CONTROL: a step with no rule is not a no-op', columnFlow(['a'], [st
 
 // ── § consumers ─────────────────────────────────────────────────────────────
 
+const { consumerColumns, metricColumns, keyColumns, ENCODING_FIELDS }: typeof import('../src/analysis/lineageColumns') = require('../src/analysis/lineageColumns');
+const { buildGraph }: typeof import('../src/analysis/lineage') = require('../src/analysis/lineage');
+import type { LineageInput } from '../src/analysis/lineage';
+
+const ORDERS = '00000000-0000-4000-8000-0000000000a1';
+const CUSTOMERS = '00000000-0000-4000-8000-0000000000a2';
+const V = '00000000-0000-4000-8000-0000000000b1';
+const cols = (...names: string[]) => names.map((name) => ({ name, type: 'text' }));
+const flt = (column: string, value: unknown) => ({ type: 'filter', column, op: '=', value });
+const REL = { id: '00000000-0000-4000-8000-0000000000c1', from: { datasetId: ORDERS, column: 'customer_id' }, to: { datasetId: CUSTOMERS, column: 'id' }, cardinality: 'many_to_one' as const, verified: { matched: 1, unmatchedFrom: 0 } };
+const base = (): LineageInput => ({
+  datasets: [
+    { id: ORDERS, name: 'Orders', rowCount: 3, columns: cols('amount', 'cost', 'customer_id', 'order_date', 'units'), steps: [] },
+    { id: CUSTOMERS, name: 'Customers', rowCount: 2, columns: cols('id', 'region', 'segment'), steps: [] },
+  ],
+  visuals: [], dashboards: [], metrics: [], reports: [], alerts: [], relationships: [REL],
+});
+const input = base();
+
+// ── § consumers ─────────────────────────────────────────────────────────────
+const v = { id: V, datasetId: ORDERS, encoding: { category: 'region', categoryDatasetId: CUSTOMERS, values: [{ column: 'amount', aggregation: 'sum' }] }, filters: [flt('segment', 'SMB')] };
+ok('D19: Customers.region hangs off Customers, not Orders', show([...consumerColumns(v, input)]) === show([[ORDERS, ['amount']], [CUSTOMERS, ['region', 'segment']]]), show([...consumerColumns(v, input)]));
+ok('a figure with no column on its own dataset still reads its primary (figureDatasets only grows)', show([...consumerColumns({ id: V, datasetId: ORDERS, encoding: { category: 'region', categoryDatasetId: CUSTOMERS, values: [] } }, input).keys()]) === show([ORDERS, CUSTOMERS]));
+
+// Every column-naming field set to its own name: a field the reader skips shows up as a missing name.
+const FULL = {
+  id: V, datasetId: ORDERS,
+  encoding: {
+    category: 'cat', series: 'ser', values: [{ column: 'val', aggregation: 'sum' }, { column: 'viaMetric', aggregation: 'sum', metricId: 'm' }],
+    geo: { level: 'flow', lat: 'g_lat', lon: 'g_lon', lat2: 'g_lat2', lon2: 'g_lon2', from: 'g_from', to: 'g_to', color: 'g_color', property: 'g_prop' },
+    pivot: { rows: [{ column: 'p_row' }], columns: [{ column: 'p_col' }], values: [{ column: 'p_val', aggregation: 'sum' }] },
+    cohort: { entity: 'c_ent', date: 'c_date', value: 'c_val' },
+    eventFunnel: { entity: 'f_ent', event: 'f_evt', time: 'f_time', breakdown: 'f_brk' },
+    drivers: { metric: { column: 'd_col', aggregation: 'sum' }, path: [{ column: 'd_path', value: 'x' }], compare: { mode: 'bucket', column: 'd_cmp', label: 'a', prev: 'b', grain: 'month' } },
+    facet: { rows: 'fa_row', cols: 'fa_col' },
+  },
+  filters: [flt('flt', 1), { type: 'term', term: 'T' }],
+};
+const FULL_NAMES = ['cat', 'ser', 'val', 'g_lat', 'g_lon', 'g_lat2', 'g_lon2', 'g_from', 'g_to', 'g_color', 'g_prop', 'p_row', 'p_col', 'p_val', 'c_ent', 'c_date', 'c_val', 'f_ent', 'f_evt', 'f_time', 'f_brk', 'd_col', 'd_path', 'd_cmp', 'fa_row', 'fa_col', 'flt'];
+const readFull = [...consumerColumns(FULL, input).values()].flat();
+ok('every column-naming encoding field is read, and a metric measure and a term name no column', show([...readFull].sort()) === show([...FULL_NAMES].sort()), show(readFull));
+const named = Object.entries(ENCODING_FIELDS).filter(([, k]) => k === 'column' || k === 'columns').map(([k]) => k);
+ok('FULL sets every field ENCODING_FIELDS says names columns', named.every((k) => k in FULL.encoding), show(named));
+ok('NEGATIVE CONTROL: ENCODING_FIELDS holds a field the reader ignores (grain), so classification, not reading, is what tsc enforces', ENCODING_FIELDS.grain === 'none' && !readFull.includes('month'));
+
+const mF = { id: 'm1', datasetId: ORDERS, definition: { formula: 'sum(amount) / [Units]' } };
+ok('D17: a formula naming a metric and a column', show([...metricColumns(mF, input)]) === show([[ORDERS, ['amount']]]), show([...metricColumns(mF, input)]));
+// NEGATIVE CONTROL: the old regex reading is not what the graph now holds (it took the metric's name for a column).
+const oldRegex = [...'sum(amount) / [Units]'.matchAll(/\[([^\]]+)\]/g)].map((x) => x[1]);
+ok('NEGATIVE CONTROL: the old regex read `Units` as a column; the parser does not', oldRegex.includes('Units') && !metricColumns(mF, input).get(ORDERS)!.includes('Units'));
+ok('an LOD aggregate reads the columns inside its braces', show(metricColumns({ id: 'm2', datasetId: ORDERS, definition: { formula: 'sum({FIXED [units] : sum([amount])})' } }, input).get(ORDERS)) === show(['units', 'amount']), show([...metricColumns({ id: 'm2', datasetId: ORDERS, definition: { formula: 'sum({FIXED [units] : sum([amount])})' } }, input)]));
+ok('a simple metric reads its column, timeColumn, snapshot column and filters', show(metricColumns({ id: 'm3', datasetId: ORDERS, timeColumn: 'order_date', filters: [flt('region', 'W')], definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'order_date', take: 'last' } } }, input)) === show(new Map([[ORDERS, ['units', 'order_date']], [CUSTOMERS, ['region']]])));
+ok('keyColumns: both ends of the hop to Customers', show([...keyColumns(ORDERS, [CUSTOMERS], input)]) === show([[ORDERS, ['customer_id']], [CUSTOMERS, ['id']]]));
+ok('NEGATIVE CONTROL: keyColumns names nothing for the primary alone', keyColumns(ORDERS, [ORDERS], input).size === 0);
+
+const withV = { ...base(), visuals: [{ ...v, name: 'Related' }] };
+const g0 = buildGraph(withV);
+const edgesInto = (g: { edges: Array<{ from: string; to: string }> }, id: string): string[] => g.edges.filter((e) => e.to === id).map((e) => e.from);
+ok('lineage:get: the related visual now has an edge from Customers', edgesInto(g0, `visual:${V}`).includes(`dataset:${CUSTOMERS}`) && edgesInto(g0, `visual:${V}`).includes(`dataset:${ORDERS}`), show(g0.edges));
+const withTable = (t: string): LineageInput => ({ ...base(), connections: [{ id: 'cn', name: 'Warehouse', kind: 'postgres' }], datasets: [{ ...base().datasets[0], origin: { kind: 'connection', connId: 'cn', table: t } }] });
+ok('D20: a connection source never names its table, and says its kind', !buildGraph(withTable('secret_tbl')).nodes.some((n) => /secret_tbl/.test(n.sub)) && buildGraph(withTable('x')).nodes.find((n) => n.kind === 'source')?.sub === 'postgres');
+
 finish();
