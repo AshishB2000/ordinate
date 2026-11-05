@@ -4,7 +4,7 @@
 // by hand. Every count in it is the server's; this only words it.
 
 import { skipToken, useQuery } from '@tanstack/react-query';
-import { rpc } from '../../api/client';
+import { rpc, upload } from '../../api/client';
 import { okOr, type Fail, type Lineage } from '../data/api';
 import { formatNumber } from '../data/format';
 import type { TableRole } from '../data/tableApi';
@@ -157,4 +157,57 @@ export function exportedText(notCarried: readonly string[]): string {
   if (!words.length) return 'Exported the model files.';
   const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
   return `Exported the model files. Not in them: ${list}.`;
+}
+
+// ── Import (semantic layer part 7, a3): `model:importPlan` and `model:importApply` (src/ipc/modelFiles.ts) ──
+// The file is uploaded once for the dry run and again for the apply: an upload token is used once (any pod).
+
+/** src/app/modelPlan.ts PlanStatus, PlanKind and SkipReason. */
+export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
+export type PlanKind = 'dataset' | 'table' | 'field' | 'baseFilters' | 'relationship' | 'term' | 'metric';
+export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skipped' | 'sensitivity_lowered' | 'not_live' | 'invalid' | 'external';
+
+export interface PlanItem {
+  key: string;
+  kind: PlanKind;
+  name: string;
+  status: PlanStatus;
+  changes?: { field: string; here?: unknown; file?: unknown }[];
+  newerHere?: true;
+  reason?: SkipReason;
+  /** The key of the skipped or missing object this one names. */
+  because?: string;
+  /** The editor's own sentence, for `invalid`. */
+  error?: string;
+}
+
+export interface ImportPlan {
+  hash: string;
+  items: PlanItem[];
+  counts: Record<PlanStatus, number>;
+  source: { appVersion: string; project: string };
+  notCarried: string[];
+}
+
+export type ImportPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
+export type ImportApplyReply =
+  | { ok: true; written: string[]; failed: { key: string; error: string }[]; before?: { downloadToken: string } }
+  | { ok: false; code?: 'plan_changed'; error: string };
+
+export async function planModelImport(projectId: string, file: File): Promise<ImportPlanReply> {
+  const { fileToken } = await upload(file, file.name);
+  return (await rpc('model:importPlan', { projectId, fileToken })) as ImportPlanReply;
+}
+
+export async function applyModelImport(projectId: string, file: File, planHash: string, choices: Record<string, 'file' | 'here'>): Promise<ImportApplyReply> {
+  const { fileToken } = await upload(file, file.name);
+  return (await rpc('model:importApply', { projectId, fileToken, planHash, choices })) as ImportApplyReply;
+}
+
+/** "This project also has a and b: an import leaves them as they are.", or '' when it has none of them. */
+export function notCarriedText(notCarried: readonly string[]): string {
+  const words = notCarried.map((k) => NOT_CARRIED_WORDS[k] ?? k);
+  if (!words.length) return '';
+  const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  return `Model files never carry ${list}: an import leaves this project's as they are.`;
 }
