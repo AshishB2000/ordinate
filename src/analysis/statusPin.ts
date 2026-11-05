@@ -15,8 +15,8 @@
 //   Model     a relationship's ends and cardinality (pin), its label (out)
 // Part 5 and part 7 (kept, not computed, on this release): a funnel, period or external definition and a snapshot's
 // `per` (pin, inside definition; a funnel reads only its own dataset); a period metric's base (a metric dep); a
-// metric's target and importedFrom (pin: a reviewer certified them too); a Live dataset that asks another tool's
-// layer (`semanticPending`, pin: its figures stop being ours).
+// metric's target and importedFrom (out: neither changes the metric's value, cross-part check item 7); a Live
+// dataset that asks another tool's layer (`semanticPending`, pin: its figures stop being ours).
 
 import { createHash } from 'crypto';
 import * as metrics from './metrics';
@@ -46,7 +46,7 @@ export const METRIC_PIN: Record<keyof Metric, Pin> = {
   filters: 'pin',
   format: 'pin',
   timeColumn: 'pin',
-  target: 'pin', importedFrom: 'pin',
+  target: 'out', importedFrom: 'out', // neither changes the value (cross-part check item 7)
   description: 'out', direction: 'out', tree: 'out',
   createdAt: 'out', updatedAt: 'out', schemaVersion: 'out',
 };

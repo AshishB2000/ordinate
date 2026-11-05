@@ -17,10 +17,12 @@
 //               both certified; so does one on a dataset the figure reaches by the nearest owner (no via).
 //               NEGATIVE CONTROLS: a metric on another dataset, and one after an unrelated dataset's Prepare edit, stay certified.
 //   § kinds     part 5's funnel and period definitions, a snapshot's `per` and a target, and part 7's external
-//               definition and importedFrom, each written as the later release writes it: an edit of each turns a
-//               certified metric to needs_review; a period metric's base is a dep; a Live dataset that gains a
-//               `semantic` block (b0) reads needs_review.
-//               NEGATIVE CONTROLS: a description edit keeps each certified; editing the period metric does not move its base.
+//               definition and importedFrom, each written as the later release writes it: an edit of a definition
+//               turns a certified metric to needs_review; a target or importedFrom edit keeps it certified (neither
+//               changes the value); a period metric's base is a dep; a Live dataset that gains a `semantic` block
+//               (b0) reads needs_review.
+//               NEGATIVE CONTROLS: a description edit keeps each certified; after a kept target or importedFrom edit,
+//               a definition edit still moves it; editing the period metric does not move its base.
 //   § channels  over the route: review hands back the pin certify takes and the newest version key; a stale base is
 //               409 record_changed with the current pin; a refusal is { ok:false, error, field }. A restore never
 //               certifies, and one to other content reads needs_review (control: back to what was certified reads
@@ -251,7 +253,15 @@ async function partKinds(fx: Fixtures): Promise<void> {
     const r = JSON.parse(fs.readFileSync(f, 'utf8')) as Raw;
     edit(r);
     writeRaw(f, r);
-    ok(`${label}: an edit turns the certified metric to needs_review`, (await state()) === 'needs_review');
+    if (label !== 'a target' && label !== 'importedFrom') {
+      ok(`${label}: an edit turns the certified metric to needs_review`, (await state()) === 'needs_review');
+      continue;
+    }
+    const took = stableStringify((await as(() => metrics.getMetric(P, id)))?.[label === 'a target' ? 'target' : 'importedFrom']);
+    ok(`${label}: an edit keeps the certified metric certified (it changes no value)`, (await state()) === 'certified' && took.includes(label === 'a target' ? '120' : 'net_sales'), took);
+    r.definition = { column: 'qty', aggregation: 'sum' };
+    writeRaw(f, r);
+    ok(`NEGATIVE CONTROL: ${label}: a definition edit after it still turns it to needs_review`, (await state()) === 'needs_review');
   }
   const ytd = uuid(201); // the period case: certified again on its current pin, then its base is edited
   await as(async () => store.certify(P, `metric:${ytd}`, (await pinOf(P, `metric:${ytd}`))!, ''));
