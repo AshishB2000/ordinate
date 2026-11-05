@@ -55,7 +55,7 @@ function AlwaysApplied({ projectId, datasetId, table }: { projectId: string; dat
       ) : (
         <span className={m.muted}>None</span>
       )}
-      {live ? <Link to={`/data/${projectId}/${datasetId}?tab=schema`}>Open the Schema tab</Link> : <Link to={`/data/${projectId}/${datasetId}/prepare`}>Open Prepare</Link>}
+      {live ? <Link className={m.link} to={`/data/${projectId}/${datasetId}?tab=schema`}>Open the Schema tab</Link> : <Link className={m.link} to={`/data/${projectId}/${datasetId}/prepare`}>Open Prepare</Link>}
     </div>
   );
 }
@@ -81,7 +81,7 @@ function Quality({ projectId, dataset }: { projectId: string; dataset: DatasetSu
   return (
     <span className={m.inline}>
       {verdict}
-      <Link to={`/data/${projectId}/${dataset.id}?tab=quality`}>Quality checks</Link>
+      <Link className={m.link} to={`/data/${projectId}/${dataset.id}?tab=quality`}>Quality checks</Link>
     </span>
   );
 }
@@ -101,7 +101,7 @@ function Access({ projectId, dataset, header }: { projectId: string; dataset: Da
         <span className={parts.length ? undefined : m.muted}>{parts.length ? parts.join(' · ') : 'No column is marked personal or financial'}</span>
       )}
       {dataset.scoped && <span className={m.muted}>Row access rules limit what you see here</span>}
-      {admin && <Link to={`/data/${projectId}/${dataset.id}?tab=access`}>Row access rules</Link>}
+      {admin && <Link className={m.link} to={`/data/${projectId}/${dataset.id}?tab=access`}>Row access rules</Link>}
     </div>
   );
 }

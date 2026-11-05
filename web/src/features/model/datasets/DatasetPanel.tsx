@@ -42,7 +42,13 @@ function Body({ projectId, dataset, table }: { projectId: string; dataset: Datas
       return q;
     }, { replace: true });
 
-  if (doc.isPending || header.isPending || roles.isPending) return <SkeletonBlock label={`Loading ${dataset.name}`} />;
+  if (doc.isPending || header.isPending || roles.isPending) {
+    return (
+      <div className={m.bodyLoading}>
+        <SkeletonBlock label={`Loading ${dataset.name}`} />
+      </div>
+    );
+  }
   if (doc.isError || header.isError) {
     return (
       <ErrorState

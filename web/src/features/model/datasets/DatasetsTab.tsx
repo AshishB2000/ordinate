@@ -29,7 +29,7 @@ function CalendarLine() {
     <p className={m.calendar}>
       <Icon name="calendar" size={16} />
       <span>Calendar and fiscal year are workspace settings.</span>
-      {admin && <Link to="/admin?tab=workspace">Workspace settings</Link>}
+      {admin && <Link className={m.link} to="/admin?tab=workspace">Workspace settings</Link>}
     </p>
   );
 }
@@ -40,7 +40,7 @@ function Loading() {
       <div className={m.list}>
         <SkeletonRows rows={4} label="Loading the datasets" />
       </div>
-      <div className={m.panel}>
+      <div className={`${m.panel} ${m.panelLoading}`}>
         <SkeletonBlock label="Loading the data model" />
       </div>
     </div>

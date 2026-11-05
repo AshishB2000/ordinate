@@ -11,6 +11,20 @@
   font-size: var(--t-12);
 }
 
+.link {
+  font-weight: 500;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
 /* ── The strip ─────────────────────────────────────────────────────── */
 .strip {
   display: flex;
@@ -52,8 +66,8 @@
   color: var(--accent-text);
 }
 .chip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .chipWarn {
   color: var(--warn-text);
@@ -112,7 +126,7 @@
   background: var(--surface-2);
 }
 .item:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: -2px;
 }
 .itemOn,
@@ -139,6 +153,13 @@
   background: var(--surface-1);
   border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
+}
+/* A panel arriving keeps the height of one that has arrived, so the page does not jump. */
+.panelLoading {
+  height: 360px;
+}
+.bodyLoading {
+  height: 280px;
 }
 .panelHead {
   display: flex;
