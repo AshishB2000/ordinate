@@ -48,14 +48,20 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   assert.equal(await filterBy('Starred').count(), 0, 'no Starred filter: the pins have their own row');
   await filterBy('All').click();
 
-  // ── Starred: the seed's pinned dashboard as a card with its picture drawn, then the way to pin more ──
+  // ── Starred: the seed's pinned dashboard as a card with its picture drawn, then the sample's newest work to pin ──
   const pins = page.getByRole('region', { name: 'Starred', exact: true });
+  const pinned = pins.locator('a:not([aria-label$=", suggested"])');
   await pins.getByRole('link').first().waitFor();
-  assert.equal(await pins.getByRole('link').count(), 1);
-  assert.match((await pins.getByRole('link').getAttribute('aria-label')) ?? '', /, Dashboard, /);
-  assert.match((await pins.getByRole('link').getAttribute('href')) ?? '', new RegExp(`^/analyses/${server.sample.projectId}/[0-9a-f-]{36}$`));
+  assert.equal(await pinned.count(), 1);
+  assert.match((await pinned.getAttribute('aria-label')) ?? '', /, Dashboard, /);
+  assert.match((await pinned.getAttribute('href')) ?? '', new RegExp(`^/analyses/${server.sample.projectId}/[0-9a-f-]{36}$`));
   await pins.locator('canvas').first().waitFor();
-  await pins.getByText('Star what you come back to').waitFor();
+  // The rest of the row: three suggestions, each with its own Star, so no hint is left.
+  assert.equal(await pins.getByRole('link', { name: /, suggested$/ }).count(), 3);
+  assert.equal(await pins.getByRole('button', { name: /^Star / }).count(), 3);
+  assert.equal(await pins.getByText('Star what you come back to').count(), 0);
+  // Data freshness: the sample is an uploaded file, so nothing refreshes and there is no section.
+  assert.equal(await page.getByRole('region', { name: 'Data freshness' }).count(), 0);
   // No side column, and nothing on the page repeats the New menu's doors.
   assert.equal(await page.getByRole('complementary', { name: 'This project' }).count(), 0);
   assert.equal(await page.getByRole('link', { name: 'CSV / Excel' }).count(), 0);
@@ -82,9 +88,9 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await page.reload();
   await settled(page);
   await pins.getByRole('link', { name: /^Retail orders, Dataset, / }).waitFor();
-  assert.equal(await pins.getByRole('link').count(), 2);
+  assert.equal(await pinned.count(), 2);
   await recent.getByRole('button', { name: 'Unstar Retail orders' }).click();
-  await page.waitForFunction(() => document.querySelectorAll('section[aria-labelledby="home-starred"] a').length === 1);
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-labelledby="home-starred"] a:not([aria-label$=", suggested"])').length === 1);
   await recent.getByRole('button', { name: 'Star Retail orders' }).waitFor();
 
   // ── Get started: the tour (no Assistant stop without a model), folds to the pill and comes back ──

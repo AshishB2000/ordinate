@@ -6,6 +6,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from './client';
+import type { AutoRefreshEvery } from './datasets';
 
 export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report' | 'visual';
 
@@ -21,11 +22,29 @@ export interface RecentItem {
 
 export interface HomeOverview {
   counts: { datasets: number; dashboards: number; captures: number; visuals: number };
-  datasets: { id: string; name: string; rowCount: number; columnCount: number; qualityFailing?: number }[];
+  datasets: OverviewDataset[];
   /** T2.11: "What stands out" — insights with a chart, each with its sparkline's figures (src/ipc/insights.ts standsOut). */
   standsOut: Array<{ id: string; spark: { labels: unknown[]; series: unknown[] } | null } & Record<string, unknown>>;
   /** Home's "Recent comments" (T2.9): the open threads, newest activity first. */
   comments: { open: number; recent: RecentComment[] };
+}
+
+/** One dataset in `home:overview`: its size, and its refresh state as the dataset list has it (src/ipc/recent.ts). */
+export interface OverviewDataset {
+  id: string;
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  qualityFailing?: number;
+  sourceKind?: string;
+  mode?: 'live';
+  /** Its refresh schedule; absent = none. */
+  every?: AutoRefreshEvery;
+  lastRefreshedAt?: string;
+  lastRefreshStatus?: 'ok' | 'error';
+  /** Why the last refresh failed, already redacted by the server. */
+  lastRefreshError?: string;
+  behindSchedule?: true;
 }
 
 export interface RecentComment {

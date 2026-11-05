@@ -82,8 +82,15 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
       rows: [['007', 1.5], ['010', 2]],
     });
     const a = await save('Orders');
-    const b = await save('Returns');
+    // Returns refreshes daily from a URL, and its last refresh failed quoting the URL's key.
+    const b = await datasets.saveDataset(p.id, {
+      name: 'Returns', sourceKind: 'url', origin: { kind: 'url', url: 'https://files.example.com/returns.csv?key=CANARY-KEY' },
+      columns: [{ name: 'zip', type: 'text' }, { name: 'amount', type: 'number' }],
+      rows: [['007', 1.5]],
+    });
     if (!a || !b) throw new Error('dataset not saved');
+    await datasets.setAutoRefresh(p.id, b.id, { every: 'daily' });
+    await datasets.markRefresh(p.id, b.id, 'error', 'Could not fetch https://files.example.com/returns.csv?key=CANARY-KEY (HTTP 403)');
     for (let i = 0; i < 5; i++) {
       await visuals.saveVisual(p.id, { name: `V${i}`, datasetId: a.id, chartType: 'bar', encoding: { category: 'zip', values: [{ column: 'amount', aggregation: 'sum' }] } });
     }
@@ -106,8 +113,20 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
   ok('the datasets are the store\'s, in its order, with the same figures', ov.body.datasets.length === 2
     && ov.body.datasets.every((d: any, i: number) => d.id === direct.ds[i].id && Object.is(d.rowCount, direct.ds[i].rowCount) && Object.is(d.columnCount, direct.ds[i].columnCount)), // any: a reply row
   JSON.stringify(ov.body.datasets));
-  ok('only the picked fields leave (no origin, no crop path, no source kind)',
-    ov.body.datasets.every((d: object) => Object.keys(d).every((k) => ['id', 'name', 'rowCount', 'columnCount', 'qualityFailing'].includes(k))), JSON.stringify(ov.body.datasets));
+  const PICKED = ['id', 'name', 'rowCount', 'columnCount', 'qualityFailing', 'sourceKind', 'mode', 'every', 'lastRefreshedAt', 'lastRefreshStatus', 'lastRefreshError', 'behindSchedule'];
+  ok('only the picked fields leave (no origin, no crop path)',
+    ov.body.datasets.every((d: object) => Object.keys(d).every((k) => PICKED.includes(k))), JSON.stringify(ov.body.datasets));
+  // Data freshness: each dataset's refresh state is the store summary's own (differential).
+  const FRESH = ['sourceKind', 'lastRefreshedAt', 'lastRefreshStatus', 'lastRefreshError', 'behindSchedule'] as const;
+  ok('home:overview freshness equals the dataset list\'s, field for field',
+    ov.body.datasets.every((d: any, i: number) => FRESH.every((k) => Object.is(d[k], (direct.ds[i] as any)[k])) // any: a reply row and the summary, read by key
+      && Object.is(d.every, direct.ds[i].autoRefresh?.every) && Object.is(d.mode, direct.ds[i].mode)),
+  JSON.stringify(ov.body.datasets));
+  const returns = ov.body.datasets.find((d: { name: string }) => d.name === 'Returns');
+  ok('a failed daily refresh reaches Home with its reason', returns?.every === 'daily' && returns.lastRefreshStatus === 'error' && /HTTP 403/.test(returns.lastRefreshError), JSON.stringify(returns));
+  // Negative control for the redaction: the store keeps the key, and the reply never carries it.
+  const raw = await context.runInContext(who('org-a', 'u1'), 'raw', () => datasets.getDatasetMeta(seed.pid, returns.id));
+  ok('the stored reason quotes the key (the control) and Home\'s reply does not', /CANARY-KEY/.test(String(raw?.lastRefreshError)) && !JSON.stringify(ov.body).includes('CANARY-KEY'), String(raw?.lastRefreshError));
   // Saved visuals are work like the rest: they ride recent:list (differential against the store's own list).
   const rl = await rpc('org-a', 'u1', 'recent:list');
   const recentVis = (rl.body as any[]).filter((r) => r.type === 'visual'); // any: a reply row

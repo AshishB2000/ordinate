@@ -90,6 +90,15 @@ export function register() {
         rowCount: d.rowCount,
         columnCount: d.columnCount,
         ...(d.qualityFailing !== undefined ? { qualityFailing: d.qualityFailing } : {}),
+        // Home's "Data freshness": the summary's own refresh state. The error is
+        // already redacted there (no URL past its host, no server path).
+        sourceKind: d.sourceKind,
+        ...(d.mode === 'live' ? { mode: 'live' as const } : {}),
+        ...(d.autoRefresh?.every ? { every: d.autoRefresh.every } : {}),
+        ...(d.lastRefreshedAt ? { lastRefreshedAt: d.lastRefreshedAt } : {}),
+        ...(d.lastRefreshStatus ? { lastRefreshStatus: d.lastRefreshStatus } : {}),
+        ...(d.lastRefreshError ? { lastRefreshError: d.lastRefreshError } : {}),
+        ...(d.behindSchedule ? { behindSchedule: true as const } : {}),
       })),
       standsOut: stands,
       comments: await recentComments(projectId),

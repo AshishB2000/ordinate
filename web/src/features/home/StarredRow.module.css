@@ -168,3 +168,45 @@
     grid-column: 1 / -1;
   }
 }
+
+/* The header: the section's name, and what the suggestions are. */
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.headHint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+/* A suggestion: dashed, its picture quieter, its Star over the card's corner
+   (a button cannot sit inside the card's link). */
+.sug {
+  position: relative;
+}
+.sug .card {
+  border-style: dashed;
+  border-color: var(--border-2);
+  background: transparent;
+}
+.sug .meta {
+  padding-right: 76px;
+}
+.star {
+  position: absolute;
+  right: var(--sp-8);
+  bottom: var(--sp-8);
+}
+.star svg {
+  color: var(--warn);
+}
+@media (max-width: 600px) {
+  .headHint {
+    display: none;
+  }
+}
