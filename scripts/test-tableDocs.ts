@@ -150,6 +150,13 @@ async function main(): Promise<void> {
   ok('a different key is checked afresh, not carried over', other.ok === true && other.table.key === 'qty' && JSON.stringify(counts(other.table)) === JSON.stringify({ rows: 4, empty: 0, repeatedKeys: 0 }), JSON.stringify(other));
   await call('catalog:setTable', { projectId: P, datasetId: D, patch: { key: 'line_id' } });
 
+  // A doc's drill hierarchies (written by a later release; this one only keeps them) survive a notes save.
+  const GEO = { id: '00000000-0000-4000-8000-000000000081', name: 'Geography', levels: ['line_id', 'qty'] };
+  await catalog.mutateCatalog(P, (file) => { file.tables![D] = store.sanitizeTableDoc({ ...file.tables![D], hierarchies: [GEO] }); });
+  const kept = await call('catalog:setTable', { projectId: P, datasetId: D, patch: { grain: 'One row per line' } });
+  ok('a notes save keeps the doc\'s hierarchies', kept.ok === true && JSON.stringify((await store.getTableDoc(P, D)).hierarchies) === JSON.stringify([GEO]), JSON.stringify(await store.getTableDoc(P, D)));
+  ok('…and the reply carries them', JSON.stringify(kept.table.hierarchies) === JSON.stringify([GEO]));
+
   // ── 4. Stamps are the server's ─────────────────────────────────────────────
   const forged = await call('catalog:setTable', { projectId: P, datasetId: D, patch: { grain: 'One row per line', updatedBy: 'mallory', updatedAt: '1999-01-01', keyCheck: { rows: 1, empty: 1, repeatedKeys: 1, checkedAt: 'x' } } });
   ok('updatedBy is the server\'s user, never the payload\'s', forged.ok === true && forged.table.updatedBy === catalog.osUser() && forged.table.updatedBy !== 'mallory', JSON.stringify(forged));

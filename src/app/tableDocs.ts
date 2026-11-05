@@ -103,6 +103,7 @@ export async function setTableDoc(projectId: string, datasetId: string, patch: T
       grain: p.grain !== undefined ? p.grain : cur.grain,
       guide: p.guide !== undefined ? p.guide : cur.guide,
       keyCheck: p.key === undefined || p.key === cur.key ? cur.keyCheck : undefined,
+      hierarchies: cur.hierarchies, // no channel writes them yet; a save of the notes must keep them
       updatedBy: osUser(),
       updatedAt: new Date().toISOString(),
     });
