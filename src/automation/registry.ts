@@ -12,7 +12,7 @@
 //
 // ── What is exposed, and what never is ─────────────────────────────────────
 // Everything is READ-ONLY except `create_visual`, `create_dashboard`,
-// `publish_dashboard` and `unpublish_dashboard`, which write RECORDS (a visual,
+// `publish_dashboard`, `unpublish_dashboard` and `import_model` (never a delete), which write RECORDS (a visual,
 // an analysis) and never data — a plan's calculated fields are refused because
 // they would add a column to a dataset. Publish and unpublish are the app's own
 // (analysis/publishDashboard.ts, as `analysis:publish` / `analysis:unpublish`
@@ -28,6 +28,7 @@
 import { CHART_TYPE_IDS } from '../analysis/analysisPlan';
 import { onlyEditorsPublish } from '../analysis/draftMessages';
 import * as h from './handlers';
+import * as modelTools from './modelTools';
 import { AutomationError } from './errors';
 import { AGGREGATIONS } from '../data/aggregations';
 
@@ -98,6 +99,8 @@ export interface Command {
   readOnly: boolean;
   /** What a non-read-only command changes, for the docs and the Settings list. */
   writes?: 'data' | 'files' | 'records';
+  /** Server only: a tool that writes nothing but still asks for an editor (it hands out what a viewer's row and column rules hide). */
+  needs?: 'editor';
   /** The sentence a caller without access is told (server only), when the generic one would not say enough. */
   denied?: () => string;
   run: (args: Args, ctx: Ctx) => Promise<unknown>;
@@ -340,6 +343,24 @@ export const COMMANDS: readonly Command[] = [
     denied: onlyEditorsPublish,
     run: (a, ctx) => h.dashboardsUnpublish(ctx, String(a.dashboard)),
   },
+  {
+    tool: 'export_model', readOnly: true, needs: 'editor',
+    summary: "The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export.",
+    args: {},
+    run: (_a, ctx) => modelTools.exportModelTool(ctx),
+  },
+  {
+    tool: 'import_model', readOnly: false, writes: 'records',
+    summary: "Import model files (path to text, as export_model returns them). A dry run unless apply is true with the dry run's planHash. Never deletes; a conflict keeps the project's version unless choices says 'file'. Editors only. Over 1 MiB, use the app's Import.",
+    args: {
+      files: { type: 'object', description: 'Model file path to its text, e.g. { "model.json": "…", "metrics/revenue.json": "…" }. Untrusted: the same checks as an uploaded zip.' },
+      apply: { type: 'boolean', description: 'Write the plan. Needs planHash. Omit for a dry run.' },
+      planHash: { type: 'string', description: "The hash of the dry run's plan; a project that changed since refuses the apply." },
+      choices: { type: 'object', description: "A conflicting item's key to 'file' (take the file's version) or 'here' (keep the project's; the default)." },
+    },
+    required: ['files'],
+    run: (a, ctx) => modelTools.importModelTool(ctx, a),
+  },
 ];
 
 /** The CLI command for these words, or null. */
@@ -417,7 +438,7 @@ export async function dispatch(
   const scope = opts.scope;
   const projectId = cmd.project === false ? '' : (await h.resolveProject(args.project as string | undefined, scope?.canRead)).id;
   if (scope && projectId && !(await scope.allow(cmd, projectId))) {
-    throw new AutomationError('usage', cmd.denied ? cmd.denied() : `${cmd.tool || cmd.cli} needs ${cmd.readOnly ? 'viewer' : 'editor'} access to this project.`);
+    throw new AutomationError('usage', cmd.denied ? cmd.denied() : `${cmd.tool || cmd.cli} needs ${cmd.readOnly && !cmd.needs ? 'viewer' : 'editor'} access to this project.`);
   }
   return cmd.run(args, {
     ...(scope ? { canRead: (id: string) => scope.canRead(id) } : {}),

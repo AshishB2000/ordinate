@@ -22,8 +22,8 @@ import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../se
 import { readModelZip, type ParsedModel } from '../app/modelRead';
 import { applyImport, type ApplyChoice, type ApplyReply } from '../app/modelApply';
 import { planImport, type ImportPlan } from '../app/modelPlan';
-import { modelRestricted, modelUploadExpired } from '../app/modelFileMessages';
-import { restrictedOn } from '../data/rowAccess';
+import { modelUploadExpired } from '../app/modelFileMessages';
+import { modelRefusal } from '../app/modelAccess';
 
 export type ModelPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
 export type ModelApplyReply = ApplyReply | { ok: false; error: string };
@@ -79,7 +79,8 @@ export async function beforeImportZip(projectId: string): Promise<string> {
  */
 async function withModelUpload<T>(projectId: unknown, fileToken: unknown, run: (projectId: string, read: ParsedModel) => Promise<T>): Promise<T | { ok: false; error: string }> {
   const p = typeof projectId === 'string' ? projectId : '';
-  if (await restrictedOn(p)) return { ok: false, error: modelRestricted() };
+  const refusal = await modelRefusal(p);
+  if (refusal) return { ok: false, error: refusal };
   let upload: Upload;
   try {
     upload = await resolveUpload(fileToken);
