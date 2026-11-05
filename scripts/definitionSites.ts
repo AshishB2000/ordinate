@@ -43,6 +43,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/scenarios.ts': { count: 5, how: 'refuses' }, // the picker leaves it out
   'src/ipc/stories.ts': { count: 4, how: 'refuses' }, // an inline KPI is never tied to it
   'src/ipc/summary.ts': { count: 1, how: 'refuses' }, // no sentence; the tile says why
+  'src/app/modelExport.ts': { count: 1, how: 'refuses' }, // never in the model files, only listed as not carried (D13)
   'src/ipc/targetSeries.ts': { count: 1, how: 'refuses' }, // a plan as a chart measure: an external plan is refused by the chart door, so no line
   'src/publish/embedLock.ts': { count: 3, how: 'refuses' }, // never allowed under a lock
   // keeps

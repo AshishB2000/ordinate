@@ -12,6 +12,10 @@
 //    modelFiles, ids and bases normalized: ./modelFixture.ts goldenOf); one edited description changes one file.
 // 7. model:export: a viewer gets 403; a restricted caller reaching the handler gets modelRestricted().
 //    NEGATIVE CONTROL: an editor gets a token, the counts and what is not carried, and no path.
+// 8. Release B's kinds, each written by its own store (cross-part check item 10): a drill hierarchy, a certification,
+//    a verified question, a source table's notes, a Live calculated field and a topic are listed as not carried and
+//    none of their text is in a file; a metric another tool's layer defines is no file and not counted (D13).
+//    NEGATIVE CONTROL: before them, the list was the fixture's own.
 //
 //   npm run build:ts && node scripts/test-modelExport.js
 
@@ -134,6 +138,38 @@ const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/m
   const r = (await post('model:export', input)).value;
   ok('NEGATIVE CONTROL: an unrestricted editor gets a token, the counts and what is not carried', r.ok === true && typeof r.downloadToken === 'string' && r.counts?.metrics === 5 && JSON.stringify(r.notCarried) === '["metricTrees","instructions"]', JSON.stringify(r));
   ok('the reply names no file path', !JSON.stringify(r).includes(os.tmpdir()) && !/\.zip|temp/.test(JSON.stringify(r)), JSON.stringify(r));
+
+  // ── 8. Release B's kinds: listed, never carried ──────────────────────────
+  const before8 = (await H.as(H.ORG_A, () => exportModel(F.P))).notCarried.join();
+  ok('NEGATIVE CONTROL: before B\'s kinds, the list is the fixture\'s own', before8 === 'metricTrees,instructions', before8);
+  const B_CANARY = 'B_KIND_CANARY_5e1';
+  const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+  const statusStore: typeof import('../src/analysis/statusStore') = require('../src/analysis/statusStore');
+  const { pinOf }: typeof import('../src/analysis/statusPin') = require('../src/analysis/statusPin');
+  const verifiedStore: typeof import('../src/analysis/verifiedQuestions') = require('../src/analysis/verifiedQuestions');
+  const sourceTables: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+  const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
+  const topics: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const now8 = new Date().toISOString();
+  const external = await H.as(H.ORG_A, async () => {
+    await tableDocs.setTableDoc(F.P, F.orders, { hierarchies: [{ name: `Geo ${B_CANARY}`, levels: ['region', 'customer_id'] }] });
+    await statusStore.certify(F.P, `metric:${F.revenue}`, (await pinOf(F.P, `metric:${F.revenue}`))!, `Signed ${B_CANARY}`);
+    await verifiedStore.writeVerified(F.P, { id: '7b000000-0000-4000-8000-000000000008', projectId: F.P, question: `Revenue by region ${B_CANARY}`, phrasings: [], note: '',
+      spec: { datasetId: F.orders, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Revenue' },
+      verifiedBy: 'x', verifiedAt: now8, createdAt: now8, updatedAt: now8, schemaVersion: 1 } as never);
+    const doc = await sourceTables.createSourceDoc(F.P, F.connId, 'public.orders', { guide: `Orders table ${B_CANARY}` } as never);
+    if (!doc.ok) throw new Error(`fixture: source doc: ${doc.error}`);
+    await liveDataset.setLiveCalcs(F.P, F.live, [{ name: 'margin_x', expression: `[amount] * 2 + 0 /* ${B_CANARY} */`, type: 'number' }] as never);
+    await topics.saveTopic(F.P, { name: `Sales ${B_CANARY}`, datasets: [{ id: F.orders }], metricIds: [F.revenue], termIds: [] });
+    return (await metricsStore.saveMetric(F.P, { name: `Net revenue ${B_CANARY}`, datasetId: F.orders, definition: { external: 'net_revenue', layer: 'dbt' } } as never))!;
+  });
+  const withB = await H.as(H.ORG_A, () => exportModel(F.P));
+  const bText = [...withB.files.values()].join('\n');
+  ok('B\'s kinds: each is listed as not carried, by kind', withB.notCarried.join() === 'metricTrees,hierarchies,status,instructions,verifiedQuestions,sourceDocs,liveCalcs,topics,externalMetrics', withB.notCarried.join());
+  ok('B\'s kinds: none of their text is in any file', !bText.includes(B_CANARY), [...withB.files].filter(([, t]) => t.includes(B_CANARY)).map(([p]) => p).join());
+  ok('a metric another tool\'s layer defines is no file and not counted (D13)', !bText.includes(external.id) && !bText.includes('net_revenue') && withB.counts.metrics === 5, JSON.stringify(withB.counts));
+  ok('NEGATIVE CONTROL: the other files are as before', [...files.keys()].every((p) => p === 'datasets/orders.json' || withB.files.get(p) === now.get(p)), [...files.keys()].filter((p) => withB.files.get(p) !== now.get(p)).join());
 
   await close();
   finish();

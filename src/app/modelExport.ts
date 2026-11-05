@@ -6,8 +6,8 @@
 // Every record is mapped to its shape by an explicit whitelist, never spread, so a field a store adds later
 // stays home until the format names it. Never written: an origin (path, table, SQL, URL, connection),
 // connections, row or column access rules, the privacy salt, secrets, stamps (`updatedAt`, `updatedBy`,
-// `createdAt`), what a count derived (`keyCheck`, a relationship's `verified` and `warning`) and a metric's
-// tree. References are ids, resolved through the export's own files.
+// `createdAt`), what a count derived (`keyCheck`, a relationship's `verified` and `warning`), a metric's tree
+// and a metric another tool's layer defines (D13). References are ids, resolved through the export's own files.
 //
 // A caller row access rules restrict is refused (D7): the files hold term values and value labels part 1
 // withholds from them.
@@ -30,7 +30,7 @@ import {
 } from './modelFormat';
 
 /** Kinds a project may hold that formatVersion 1 does not carry (cross-part check item 10): fixed words, never a name. */
-export const NOT_CARRIED = ['metricTrees', 'hierarchies', 'status', 'instructions', 'verifiedQuestions', 'sourceDocs', 'liveCalcs'] as const;
+export const NOT_CARRIED = ['metricTrees', 'hierarchies', 'status', 'instructions', 'verifiedQuestions', 'sourceDocs', 'liveCalcs', 'topics', 'externalMetrics'] as const;
 export type NotCarried = typeof NOT_CARRIED[number];
 
 export interface ModelCounts { datasets: number; metrics: number; terms: number; relationships: number }
@@ -72,7 +72,9 @@ export async function exportModel(projectId: string): Promise<ModelExport> {
     projects.getProject(projectId), datasets.listDatasets(projectId), loadStrict(projectId),
     metrics.listMetrics(projectId), listFullTerms(projectId), listRelationships(projectId),
   ]);
-  const full = (await Promise.all(summaries.map((m) => metrics.getMetric(projectId, m.id)))).filter((m): m is metrics.Metric => !!m);
+  const stored = (await Promise.all(summaries.map((m) => metrics.getMetric(projectId, m.id)))).filter((m): m is metrics.Metric => !!m);
+  // A metric another tool's layer defines stays with its layer (part 7 D13): never in the files, only listed.
+  const full = stored.filter((m) => !metrics.isExternalDefinition(m.definition));
   const files: ModelFiles = new Map();
   const notCarried = new Set<NotCarried>();
   const put = (p: string, v: unknown): void => void files.set(p, modelJson(v));
@@ -141,9 +143,11 @@ export async function exportModel(projectId: string): Promise<ModelExport> {
 
   if (catalog.status && Object.keys(catalog.status).length) notCarried.add('status');
   if (catalog.instructions?.length) notCarried.add('instructions');
+  if (full.length < stored.length) notCarried.add('externalMetrics');
   const dir = projectDir(projectId);
   if (await hasRecords(path.join(dir, 'verified'), /\.json$/i)) notCarried.add('verifiedQuestions');
   if (await hasRecords(path.join(dir, 'connections'), /\.tables\.json$/i)) notCarried.add('sourceDocs');
+  if (await hasRecords(path.join(dir, 'topics'), /\.json$/i)) notCarried.add('topics');
 
   const manifest: ModelManifest = {
     format: MODEL_FORMAT,

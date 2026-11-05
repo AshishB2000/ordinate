@@ -147,6 +147,8 @@ const NOT_CARRIED_WORDS: Record<string, string> = {
   verifiedQuestions: 'verified questions',
   sourceDocs: 'source table notes',
   liveCalcs: 'Live calculated fields',
+  topics: 'topics',
+  externalMetrics: 'metrics another tool defines',
 };
 
 /** "Exported the model files." plus, when something was left out, "Not in them: a, b and c." */
