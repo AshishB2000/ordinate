@@ -56,7 +56,7 @@ import { ROWS_PROMPT, flattenRows, validateRows, type PlanRow } from './planRows
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { fillMapRegions, geoHitsFor, type GeoHits } from './geoHits';
-import { NUMBER_AGGREGATIONS, isAggregation } from '../data/aggregations';
+import { NUMBER_AGGREGATIONS, isAggregation, aggWord } from '../data/aggregations';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
@@ -654,7 +654,7 @@ function validateVisual(
       dropped.push({
         kind: 'encoding',
         where,
-        message: `${at} ("${title}") dropped: ${m.aggregation} of "${m.column}" needs a number column, but "${m.column}" is ${real.get(m.column)} in "${ds.name}".`,
+        message: `${at} ("${title}") dropped: ${aggWord(m.aggregation)} of "${m.column}" needs a number column, but "${m.column}" is ${real.get(m.column)} in "${ds.name}".`,
       });
       return null;
     }

@@ -109,7 +109,7 @@ import * as duck from './duckdb';
 // cap; re-exported so every existing importer keeps its import.
 import { colIndex, filterPredicates } from './residentFilter';
 export { filterPredicate, filterPredicates } from './residentFilter';
-import { AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS, aggWord } from '../data/aggregations';
 import { countDistinctSql } from './countDistinctSql';
 
 export type { ResidentCatKey } from './residentCategory';
@@ -667,7 +667,7 @@ function metricNumber(raw: duck.DuckValue): number | null {
 
 /** `vizData.measureLabel` — the series name a chart legend shows. */
 function measureLabel(m: ResidentMeasure): string {
-  return m.aggregation === 'count' ? m.column : `${m.aggregation} of ${m.column}`;
+  return m.aggregation === 'count' ? m.column : `${aggWord(m.aggregation)} of ${m.column}`;
 }
 
 function schemaOf(src: ResidentSource): ParsedColumn[] | null {

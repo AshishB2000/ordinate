@@ -39,7 +39,7 @@ import type { Parameter } from './params';
 import { CHART_TYPE_IDS } from './analysisPlan';
 import { fillMapRegions } from './geoHits';
 import type { PlanDataset } from './analysisPlan';
-import { NUMBER_AGGREGATIONS, isAggregation } from '../data/aggregations';
+import { NUMBER_AGGREGATIONS, aggWord, isAggregation } from '../data/aggregations';
 
 /** Aggregations that need a `number` column — the same set `validatePlan` uses,
  *  restated because it is private there. `count` is the only one that works on
@@ -281,7 +281,7 @@ function encodingError(enc: VizEncoding, ds: PlanDataset, at: string): string | 
       return `${at} dropped: ${JSON.stringify(m.column)} is not a column of "${ds.name}".`;
     }
     if (NUMERIC_AGGS.has(m.aggregation) && types.get(m.column) !== 'number') {
-      return `${at} dropped: ${m.aggregation} of ${JSON.stringify(m.column)} needs a number column, but ${JSON.stringify(m.column)} is ${types.get(m.column)} in "${ds.name}".`;
+      return `${at} dropped: ${aggWord(m.aggregation)} of ${JSON.stringify(m.column)} needs a number column, but ${JSON.stringify(m.column)} is ${types.get(m.column)} in "${ds.name}".`;
     }
   }
   if (enc.series !== undefined && !types.has(enc.series)) {
@@ -457,7 +457,7 @@ function opAddMetric(
     datasetId: ds.id,
     column,
     aggregation: aggregation as MetricAggregation,
-    label: str(raw.label) || str(raw.name) || `${aggregation} of ${column}`,
+    label: str(raw.label) || str(raw.name) || `${aggWord(aggregation)} of ${column}`,
   };
 }
 

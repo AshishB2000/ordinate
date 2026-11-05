@@ -10,6 +10,7 @@
 // metric records and dataset metadata, never a row, so a Live chart is not hydrated.
 
 import type { ParsedColumn } from '../data/parse';
+import { aggWord } from '../data/aggregations';
 import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
 import { getMetric, isExternalDefinition, isFormulaDefinition, metricsByName } from './metrics';
@@ -108,7 +109,7 @@ async function resolveMeasure(
   const dataset = m.datasetId ?? datasetId;
   const found = m.metricId ? await getMetric(projectId, m.metricId) : null;
   const metric = found && found.datasetId === dataset ? found : null;
-  const stored = { name: metric?.name ?? `${m.aggregation} of ${m.column}`, additivity: aggregationAdditivity(m.aggregation) };
+  const stored = { name: metric?.name ?? `${aggWord(m.aggregation)} of ${m.column}`, additivity: aggregationAdditivity(m.aggregation) };
   if (!metric || plotsStored) return stored;
   const def = metric.definition;
   if (!isFormulaDefinition(def) && !isNewerKind(def) && !isExternalDefinition(def) && !def.snapshot) return stored;

@@ -24,6 +24,11 @@ export function isPlainAggregation(s: unknown): s is PlainAggregation {
   return typeof s === 'string' && PLAIN.has(s);
 }
 
+/** The aggregation as a series or a sentence says it: "sum of price", "count distinct of customer_id". */
+export function aggWord(a: string): string {
+  return a === 'countd' ? 'count distinct' : a;
+}
+
 /** A count of cells: any column type, never FX-converted. */
 export function isCountLike(a: string): boolean {
   return a === 'count' || a === 'countd';

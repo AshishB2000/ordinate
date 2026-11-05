@@ -21,6 +21,7 @@
 // project now (`people`) — no one else.
 
 import { ipcMain } from './bus';
+import { aggWord } from '../data/aggregations';
 import { serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import * as config from '../app/config';
@@ -39,7 +40,7 @@ interface TargetInfo { name: string; analysisId?: string }
 /** A card's name as its head shows it — the visual's name for a chart tile. */
 function cardTitle(card: Card, visualNames: Map<string, string>): string {
   if (card.type === 'visual') return (card.visual && card.visual.name) || visualNames.get(card.visualId || '') || 'Visual';
-  if (card.type === 'metric' && card.metric) return card.metric.label || `${card.metric.aggregation} of ${card.metric.column}`;
+  if (card.type === 'metric' && card.metric) return card.metric.label || `${aggWord(card.metric.aggregation)} of ${card.metric.column}`;
   if (card.type === 'control' && card.control) return card.control.label || 'Filter';
   return card.heading || card.type;
 }

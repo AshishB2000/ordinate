@@ -42,7 +42,7 @@ import type { DateGrain } from './categoryKey';
 import { applyPivotCalcs, applyShowAs, calcSets } from './pivotCalc';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
-import { AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS, aggWord } from '../data/aggregations';
 
 // ── Encoding ─────────────────────────────────────────────────────────────────
 
@@ -358,7 +358,7 @@ function aggFn(v: PivotValue): Exclude<PivotValue['aggregation'], 'none'> {
 /** The legend/header name for a value field — `vizData.measureLabel`'s rule. */
 export function pivotValueName(v: PivotValue): string {
   const fn = aggFn(v);
-  return fn === 'count' ? v.column : `${fn} of ${v.column}`;
+  return fn === 'count' ? v.column : `${aggWord(fn)} of ${v.column}`;
 }
 
 /** One grouping set, folded in JS by the same pipeline every other surface uses. */

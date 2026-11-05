@@ -10,6 +10,7 @@
 // control, an alert rule — each on THIS dataset.
 
 import type { LineageInput } from './lineage';
+import { aggWord } from '../data/aggregations';
 import { visualColumns } from './lineage';
 
 export type MissingUseKind = 'visual' | 'metric' | 'kpi' | 'control' | 'alert';
@@ -55,7 +56,7 @@ function uses(input: LineageInput, datasetId: string): [string, MissingUse][] {
       if (!c) continue;
       const where = { dashboardId: str(a.id) };
       if (c.type === 'metric' && c.metric && !c.metric.metricId && str(c.metric.datasetId) === datasetId) {
-        const label = str(c.metric.label) || `${str(c.metric.aggregation) || 'sum'} of ${str(c.metric.column)}`;
+        const label = str(c.metric.label) || `${aggWord(str(c.metric.aggregation) || 'sum')} of ${str(c.metric.column)}`;
         add([str(c.metric.column)], { kind: 'kpi', id: str(c.id), name: `${label} · ${str(a.name) || 'Dashboard'}`, ...where });
       } else if (c.type === 'control' && c.control && str(c.control.datasetId) === datasetId) {
         const label = str(c.control.label) || str(c.control.column);

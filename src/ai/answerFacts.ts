@@ -14,6 +14,7 @@
 // and the last period's change off them, and says which is which.
 
 import type { ChartData } from '../analysis/vizData';
+import { aggWord } from '../data/aggregations';
 import { compact } from '../analysis/captions';
 import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
@@ -23,7 +24,7 @@ import { cell, oneLine } from './promptText';
 
 /** The spec in words — "sum of revenue by region, split by tier" — for `AnswerFactsInput.describe`. */
 export function describeAnswer(spec: AnswerSpec): string {
-  const ms = spec.measures.map((m) => `${m.aggregation} of ${m.column}`).join(', ');
+  const ms = spec.measures.map((m) => `${aggWord(m.aggregation)} of ${m.column}`).join(', ');
   return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
 }
 

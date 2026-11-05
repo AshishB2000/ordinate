@@ -21,6 +21,7 @@
 // only as bound parameters; identifiers only as positional `c<i>`.
 
 import { randomUUID } from 'crypto';
+import { aggWord } from '../data/aggregations';
 import type { ParsedColumn } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
 import { FILTER_OPS, LIST_OPS } from '../data/filterOps';
@@ -98,7 +99,7 @@ function finiteOrNull(raw: duck.DuckValue): number | null {
 }
 
 function measureLabel(m: ResidentMeasure): string {
-  return m.aggregation === 'count' ? m.column : `${m.aggregation} of ${m.column}`;
+  return m.aggregation === 'count' ? m.column : `${aggWord(m.aggregation)} of ${m.column}`;
 }
 
 // `visualsResident.filterCannotWarn` over merged names: a step that would make

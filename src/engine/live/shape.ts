@@ -23,6 +23,7 @@
 // changes nothing here. A reply of the wrong width is refused, not guessed at.
 
 import type { CategoryInfo, CivilDate, DateGrain } from '../../analysis/categoryKey';
+import { aggWord } from '../../data/aggregations';
 import {
   CATEGORY_CAP, DATE_GRAINS, OTHER_NOTE, binLabel, binPlan, chooseGrain, civilFromDays, gregorianBucketLabel,
 } from '../../analysis/categoryKey';
@@ -105,7 +106,7 @@ export function measureValue(m: LiveMeasure, parts: Parts): number | null {
 /** `vizData.measureLabel`, over a measure already coerced from 'none' to 'sum'. */
 export function measureName(m: LiveMeasure): string {
   if (isMetricMeasure(m)) return m.metric;
-  return m.aggregation === 'count' ? m.column : `${m.aggregation} of ${m.column}`;
+  return m.aggregation === 'count' ? m.column : `${aggWord(m.aggregation)} of ${m.column}`;
 }
 
 function columnIndex(query: CompiledQuery): Map<string, number> {

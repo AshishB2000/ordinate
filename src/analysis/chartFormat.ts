@@ -25,6 +25,7 @@
 // Pure and main-safe: no fs, only `import type`.
 
 import type { ColorToken } from './colorMap';
+import { aggWord } from '../data/aggregations';
 
 export const NUMBER_FORMAT_IDS = ['auto', 'plain', 'thousands', 'compact', 'percent', 'currency'] as const;
 export type NumberFormatId = (typeof NUMBER_FORMAT_IDS)[number];
@@ -103,7 +104,7 @@ export function measureNames(encoding: FormatContext['encoding']): string[] {
     const agg = typeof v.aggregation === 'string' ? v.aggregation : 'sum';
     if (agg === 'count') out.push(col);
     else if (agg === 'none') out.push('sum of ' + col, col);
-    else out.push(agg + ' of ' + col);
+    else out.push(aggWord(agg) + ' of ' + col);
   }
   return out;
 }

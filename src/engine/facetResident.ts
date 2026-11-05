@@ -14,6 +14,7 @@
 // codebase's one definition.
 
 import type { ParsedColumn } from '../data/parse';
+import { aggWord } from '../data/aggregations';
 import type { FilterStep } from '../data/transforms';
 import type { FacetDim, FacetGroup } from '../analysis/facets';
 import { facetDims, foldFacets, planFacetDim } from '../analysis/facets';
@@ -157,7 +158,7 @@ export async function facetDataResident(src: ResidentSource, enc: VizEncoding, f
   if (!groups) { trace.record('vizFacets', 'failed', `${dims.length} dims`); return null; }
   trace.record('vizFacets', 'resident');
   // vizData.measureLabel over the coerced aggregation, as residentQuery names its series.
-  const names = split ? null : measures.map((m) => (m.aggregation === 'count' ? m.column : `${m.aggregation} of ${m.column}`));
+  const names = split ? null : measures.map((m) => (m.aggregation === 'count' ? m.column : `${aggWord(m.aggregation)} of ${m.column}`));
   const { grid, data } = foldFacets(groups, dims, names, facet);
   return { data: { ...data, facets: grid }, recommendedShape: recommendChartType(src.columns, enc).shape, warnings: [], category: plan.info };
 }

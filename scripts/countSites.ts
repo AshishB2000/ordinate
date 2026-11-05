@@ -48,7 +48,7 @@ export const COUNT_SITES: Readonly<Record<string, { count: number; how: CountSit
   // the scenario metric's kind, which scenarios.ts already sets with isCountLike
   'web/src/features/analytics/scenarios/ScenarioParts.tsx': { count: 1, how: 'countOnly' },
 
-  // names: a count's series is its column; any other is "<agg> of <column>" (a countd series is "countd of <column>")
+  // names: a count's series is its column; any other is "<agg> of <column>" (a countd series is "count distinct of <column>")
   'src/ai/answerSpec.ts': { count: 1, how: 'name' },
   'src/analysis/chartFormat.ts': { count: 1, how: 'name' },
   'src/analysis/pivotData.ts': { count: 1, how: 'name' },
