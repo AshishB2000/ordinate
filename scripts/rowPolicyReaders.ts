@@ -183,6 +183,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'template:plan': 'NET',
   'term:get': 'REDACT', // a restricted caller gets no filter value (ipc/terms termForCaller)
   'term:list': 'REDACT', // …and a definition without one
+  'term:usage': 'META', // record names a viewer's own lists show (caller-aware stores); no value, row or figure
   'text:preview': 'NET',
   'text:profile': 'NET',
   'themes:list': 'META',

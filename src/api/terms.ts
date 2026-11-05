@@ -33,4 +33,6 @@ export const terms = {
   }),
   // To the project's Trash, restorable. A figure that still uses it is refused with its name until then.
   'term:delete': rpc({ access: 'write', input: ById, project: byProjectId }),
+  // Where each term is used (the Data model Glossary's "Used by"): record names only, read through the caller-aware stores.
+  'term:usage': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
 } as const;

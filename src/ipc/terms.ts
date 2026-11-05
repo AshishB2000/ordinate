@@ -19,6 +19,7 @@ import type { FilterStep } from '../data/transforms';
 import type { FactTerm } from '../ai/termFacts';
 import { withheldColumns } from '../ai/columnNotes';
 import { assistantColumnDocs } from '../app/sharePolicy';
+import { termUsage } from '../analysis/termUsage';
 
 /** A term as `projectId`'s caller may read it: unchanged, or (restricted) every filter value left out. */
 export async function termForCaller(projectId: string, t: Term): Promise<Term & { valuesHidden?: true }> {
@@ -97,4 +98,6 @@ export function register(): void {
     const done = await trash.trashRecord(projectId, 'term', id); // to the Trash
     return done.ok ? { ok: true } : { ok: false, error: 'Could not delete the term' };
   });
+
+  ipcMain.handle('term:usage', async (_e, { projectId }: { projectId: string }) => ({ ok: true, usage: await termUsage(projectId) }));
 }
