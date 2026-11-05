@@ -309,6 +309,27 @@ e2e('data model: a period metric', async ({ page, server }) => {
   await page.getByText('Jan 1 – Oct 31, 2024').waitFor();
   await screens(page, 'model-period-tile');
 
+  // Step 06: on charts, every point is its tile. YTD by month (one resolution a month) and % change on last year by region (two scopes, paired by label).
+  const vsLy = (await rpc('metric:save', { projectId: pid, input: { name: 'Sales YTD vs last year', datasetId: ds, definition: { base, window: { to_date: 'year' }, compare: { vs: 'previous_year', show: 'pct_change' } }, format: { kind: 'percent', decimals: 1 } } })).metric.id as string;
+  const visual = async (name: string, chartType: string, encoding: object, overrides?: object): Promise<string> => {
+    const r = await rpc('visual:save', { projectId: pid, datasetId: ds, name, chartType, encoding, ...(overrides ? { overrides } : {}) });
+    return (r.visual?.id ?? r.id) as string;
+  };
+  const byMonth = await visual('Sales YTD by month', 'line', { category: 'order_date', grain: 'month', values: [{ column: 'Sales YTD', aggregation: 'count', metricId: ytd }] });
+  const byRegion = await visual('Sales YTD vs last year, by region', 'column', { category: 'region', values: [{ column: 'Sales YTD vs last year', aggregation: 'count', metricId: vsLy }] }, { numberFormat: 'percent' }); // a chart takes its number format from its own control, not the metric's
+  const y2024 = [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2024-01-01', to: '2024-12-31' } }];
+  const tile = (visualId: string, x: number) => ({ type: 'visual', layout: { x, y: 0, w: 6, h: 7 }, visualId });
+  const charts = (await rpc('analysis:create', { projectId: pid, name: 'Period charts', filters: y2024, sheets: [{ name: 'Sheet 1', cards: [tile(byMonth, 0), tile(byRegion, 6)] }] })).id as string;
+  const monthly = await rpc('visual:data', { projectId: pid, datasetId: ds, encoding: { category: 'order_date', grain: 'month', values: [{ column: 'Sales YTD', aggregation: 'count', metricId: ytd }] }, filters: y2024 });
+  assert.ok(monthly.ok && monthly.data.labels.length === 12 && monthly.category.kind === 'date', JSON.stringify(monthly).slice(0, 300));
+  const oct24 = (await rpc('metric:values', { projectId: pid, ids: [ytd], filters: oct })) as unknown as { value: number }[];
+  assert.equal(monthly.data.series[0].values[9], oct24[0].value, 'October\'s point is the YTD tile under October');
+  await page.goto(`/analyses/${pid}/${charts}`);
+  await settled(page);
+  for (const name of ['Sales YTD by month', 'Sales YTD vs last year, by region']) await page.getByRole('group', { name: `${name} card` }).getByRole('img', { name }).waitFor();
+  await screens(page, 'model-period-charts');
+
+  for (const [channel, id] of [['analysis:delete', charts], ['visual:delete', byMonth], ['visual:delete', byRegion], ['metric:delete', vsLy]] as const) await rpc(channel, { projectId: pid, id });
   for (const [channel, id] of [['analysis:delete', board], ['metric:delete', ytd]] as const) await rpc(channel, { projectId: pid, id });
   await page.goto(`/model/${pid}?tab=metrics`);
   await settled(page);
