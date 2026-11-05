@@ -1,6 +1,6 @@
 // Fixtures shared by the Source tables tab's tests: two connections, a used table with no doc, the server's strip.
 import { serveRpc, type RpcReply } from '../../../test-utils';
-import type { SourceList } from './api';
+import type { SourceDoc, SourceFacts, SourceList } from './api';
 
 export const P = '0b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 export const W = 'c1000000-2f0a-4b8e-9d34-1c2d3e4f5a6b';
@@ -51,3 +51,30 @@ export function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'v
     ...routes,
   });
 }
+
+/** What a read stored (src/connectors/tableFacts.ts), with the server's size label. */
+export const FACTS: SourceFacts = {
+  columns: [
+    { name: 'LINE_ID', type: 'NUMBER(38,0)', nullable: false, key: true },
+    { name: 'ORDER_DATE', type: 'DATE' },
+    { name: 'DISCOUNT', type: 'NUMBER(12,2)', comment: 'Discount in USD, after tax' },
+  ],
+  primaryKey: { columns: ['LINE_ID'], enforced: false },
+  partition: { columns: ['ORDER_DATE'], method: 'DAY', required: true },
+  clusterBy: ['ORDER_DATE', 'REGION'],
+  rowEstimate: 48_200_000,
+  bytes: 12_400_000_000,
+  sizeLabel: '~12.4 GB',
+  readAt: daysAgo(3),
+  readBy: 'sam@acme.test',
+};
+export const doc = (more: Partial<SourceDoc> = {}): SourceDoc => ({
+  docId: ORD, table: 'ANALYTICS.ORDERS', owner: 'Data platform (Priya N.)', refresh: 'Hourly at :15, by the orders_hourly job', requiredFilters: 'Filter on ORDER_DATE, or a query scans every partition',
+  guide: '# Filter on ORDER_DATE\n\nEvery partition is a day.', facts: FACTS, updatedBy: 'pat@acme.test', updatedAt: daysAgo(1), ...more,
+});
+export const got = (d: SourceDoc = doc(), tag = 'TAG-1') => body({
+  ok: true, doc: d, tag, connection: { connId: W, name: 'Warehouse', connectorId: 'snowflake', label: 'Snowflake', readsFacts: true },
+  datasets: [{ id: X, name: 'Orders (copy)' }, { id: Y, name: 'Orders (Live)' }],
+});
+/** The list with the Warehouse connection changed (a SaaS source, Databricks). */
+export const listWith = (conn: Partial<SourceList['connections'][number]>): SourceList => ({ ...LIST, connections: [{ ...LIST.connections[0], ...conn }, LIST.connections[1]] });
