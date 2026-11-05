@@ -94,7 +94,11 @@ All notable changes to Ordinate are documented here. Format based on
 - A count distinct (`countd`) on a copied dataset is computed wherever a figure is: KPIs, charts
   (their "Other" too), pivots and their totals, joins, answers, alerts and Prepare's group step. It
   counts distinct non-empty values: text as stored, numbers by value, dates by day. It is never
-  converted as money and never added up. No picker offers it yet; a Live dataset refuses it.
+  converted as money and never added up. No picker offers it yet.
+- On a Live dataset the warehouse counts it (ClickHouse with `uniqExact`), counted again from rows
+  wherever a chart ranks or folds ("Other", a split's ranking, the totals), so it is the copy's
+  figure. A chart by a week calendar's periods (4-4-5, ISO weeks) refuses it with a sentence; by day
+  it is drawn.
 - A pivot count over a multi-currency dataset is no longer converted as money: a row with no rate
   is counted.
 
