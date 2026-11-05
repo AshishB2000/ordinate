@@ -355,7 +355,8 @@ async function charts(P: string): Promise<void> {
     && !/\bEU\b|\bNA\b/.test(json([card.headline, card.bullets])), json([card.headline, card.bullets]));
   ok('…its chart keeps the raw labels, the pairs beside them', card.data.labels.includes('EU') && json(card.data.valueLabels) === PAIRS, json(card.data));
   const built = await answers.computeCard(P, spec as never);
-  ok('…and the model\'s facts keep the stored values', 'factsText' in built && built.factsText.includes('EU=7') && !built.factsText.includes('Europe'), 'factsText' in built ? built.factsText : json(built));
+  // D3 (release A): a label is a cell, so the facts quote it.
+  ok('…and the model\'s facts keep the stored values', 'factsText' in built && built.factsText.includes('"EU"=7') && !built.factsText.includes('Europe'), 'factsText' in built ? built.factsText : json(built));
   const unlabelled = await call('answer:card', { projectId: P2, spec: { ...spec, datasetId: S2 } });
   ok('control: unlabelled, the card says the stored value and carries no pairs', unlabelled.caption.startsWith('EU') && !('valueLabels' in unlabelled.data), json(unlabelled).slice(0, 200));
 

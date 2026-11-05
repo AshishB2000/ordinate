@@ -305,7 +305,8 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const namedFacts = await H.as(ORG_A, () => answers.computeCard(P, bare));
   ok('Live card: its caption and headline say the label; its chart keeps the stored value, the pair beside it', labelledCard.ok === true && labelledCard.caption.includes('Top cat')
     && labelledCard.headline.some((h: { label: string }) => h.label === 'Highest · Top cat') && labelledCard.data.labels[0] === v0 && show(labelledCard.data.valueLabels) === show({ category: [[v0, 'Top cat']] }), show(labelledCard).slice(0, 300));
-  ok('…and the model\'s facts keep the stored value', 'factsText' in namedFacts && namedFacts.factsText.includes(`${v0}=`) && !namedFacts.factsText.includes('Top cat'));
+  // D3 (release A): a label is a cell, so the facts quote it.
+  ok('…and the model\'s facts keep the stored value', 'factsText' in namedFacts && namedFacts.factsText.includes(`${JSON.stringify(v0)}=`) && !namedFacts.factsText.includes('Top cat'));
   // Its filter text too: a value the warehouse holds under the caller's lock (the case fix found it) is said by its label.
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'region', { values: [{ value: 'North', label: 'The north' }] }));
   const liveFiltered = (await post('answer:card', { projectId: P, spec: spec(['North']) })).value;
