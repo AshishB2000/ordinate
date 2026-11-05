@@ -7,6 +7,7 @@
 // into `raw.columns`, which a schema sync rewrites from the warehouse: `declaredColumns` is what it read.
 
 import type { ParsedColumn } from './parse';
+import type { CalculatedFieldStep } from './transforms';
 
 export type LiveCalcType = 'number' | 'text';
 export interface LiveCalc { name: string; expression: string; type: LiveCalcType }
@@ -54,4 +55,9 @@ export function calcColumns(calcs: readonly LiveCalc[]): ParsedColumn[] {
 export function declaredColumns<C extends ParsedColumn>(meta: { columns: C[]; live?: { calculated?: readonly LiveCalc[] } }): C[] {
   const calcs = new Set((meta.live?.calculated ?? []).map((c) => c.name));
   return calcs.size ? meta.columns.filter((c) => !calcs.has(c.name)) : meta.columns;
+}
+
+/** The calcs as a copy's Prepare steps, in order: the same formulas, which Prepare computes in JS (test-liveParity holds the two). */
+export function calcSteps(calcs: readonly LiveCalc[]): CalculatedFieldStep[] {
+  return calcs.map((c) => ({ type: 'calculated_field', name: c.name, expression: c.expression }));
 }

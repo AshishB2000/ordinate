@@ -13,6 +13,9 @@
 //            dropped input refuses only what reads the calc; a warehouse column spelled like a calc
 //            refuses both; a calc is never a row access column; no value list (`notSampled`).
 //            NEGATIVE CONTROL: a statement naming no calc is byte-identical to before.
+// § copies   "Make a copy" is born with the calcs as its Prepare steps, in its first write, and its figures
+//            are Live's (Object.is); "Copy the data instead" keeps the id, takes the steps and drops the
+//            top-level `calculated` key in the same write. An unreadable list still refuses both.
 //
 //   npm run build:ts && node scripts/test-liveCalcs.js
 
@@ -261,6 +264,47 @@ const CALCS = [
   ok('a warehouse column spelled like a calc (ignoring case): the calc refuses, typed', clash.ok === false && clash.reason === 'calculated' && /Band/.test(clash.error), show(clash));
   ok('…and so does the warehouse column: nothing silently reads either', ((r) => r.ok === false && r.reason === 'calculated')(await chart({ category: 'band', values: [M('amt', 'sum')] }, [], L2)));
   ok('…while a statement naming neither answers', (await chart(PLAIN, [], L2)).ok);
+
+  // ── § copies ─────────────────────────────────────────────────────────────
+  ok('the copy calcs save', (await set(INPUT)).ok === true);
+  H.queryCache.clear();
+  const metaOf = (d: string) => meta(d);
+  const liveMax = await kpi('Margin', 'max');
+  const liveBand = await kpi('Band', 'count');
+  const n1 = (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
+  const copied = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
+  ok('Make a copy answers', copied.ok === true && (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length === n1 + 1, show(copied));
+  const C = copied.dataset.id as string;
+  ok('Make a copy: its Prepare steps are the calcs, in order', show((await metaOf(C)).steps) === show(INPUT.map((c) => ({ type: 'calculated_field', ...c }))), show((await metaOf(C)).steps));
+  ok('…its columns are the warehouse\'s then the calcs', show((await metaOf(C)).columns.map((c) => c.name).slice(-2)) === '["Margin","Band"]' && (await metaOf(C)).sourceColumns?.length === H.fx.COLUMNS.length);
+  ok('…its record has no Live keys', ((r) => !('calculated' in r) && r.mode === undefined && r.live === undefined)(await raw(C)));
+  const copyMax = await kpi('Margin', 'max', [], C);
+  const copyBand = await kpi('Band', 'count', [], C);
+  ok('…and its figures are Live\'s (max and count, Object.is)', liveMax.ok && copyMax.ok && Object.is(copyMax.value, liveMax.value)
+    && Object.is(copyBand.value, liveBand.value), show([liveMax.value, copyMax.value, liveBand.value, copyBand.value]));
+  ok('…and the Live record is left as it was', show((await raw()).calculated) === show(saved.calculated) && (await meta()).mode === 'live');
+
+  await H.warehouseExec(ORG_A, 'CREATE TABLE live_calc3 AS SELECT * FROM live_typed');
+  const L3 = (await H.as(ORG_A, () => H.liveOver(P, { table: 'live_calc3' }, H.fx.COLUMNS))).liveId;
+  await set(INPUT, L3);
+  const switched = (await post('dataset:setMode', { projectId: P, datasetId: L3, mode: 'extract' })).value;
+  const after = await raw(L3);
+  ok('Copy the data instead: same id, the steps, no calculated key, no Live block', switched.ok === true && switched.mode === 'extract' && after.id === L3
+    && show(after.steps.map((x: Reply) => x.type)) === '["calculated_field","calculated_field"]' && !('calculated' in after) && after.mode === undefined, show(switched));
+  ok('…and its figures are Live\'s too', Object.is((await kpi('Margin', 'max', [], L3)).value, liveMax.value));
+
+  await H.warehouseExec(ORG_A, 'CREATE TABLE live_calc4 AS SELECT * FROM live_typed');
+  const L4 = (await H.as(ORG_A, () => H.liveOver(P, { table: 'live_calc4' }, H.fx.COLUMNS))).liveId;
+  await set(INPUT, L4);
+  await H.warehouseExec(ORG_A, 'ALTER TABLE live_calc4 DROP COLUMN qty');
+  const n2 = (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
+  const short = (await post('dataset:copyLive', { projectId: P, datasetId: L4 })).value;
+  ok('a copy whose fetched rows lack a calc\'s input refuses, typed, and saves nothing', short.ok === false && short.code === 'live_refused' && short.reason === 'calculated' && /Margin/.test(short.error)
+    && (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length === n2, show(short));
+  const shortSwitch = (await post('dataset:setMode', { projectId: P, datasetId: L4, mode: 'extract' })).value;
+  ok('…and so does Copy the data instead: the record stays Live', shortSwitch.ok === false && shortSwitch.reason === 'calculated' && (await meta(L4)).mode === 'live', show(shortSwitch));
+  await H.as(ORG_A, () => rec.serialized(rec.datasetFilePath(P, L4), (r) => { r.calculated = [saved.calculated[0], 7]; }));
+  ok('an unreadable list still refuses a copy (calculatedUnreadable)', ((r) => r.ok === false && r.reason === 'calculatedUnreadable')((await post('dataset:copyLive', { projectId: P, datasetId: L4 })).value));
 
   await close();
   finish();
