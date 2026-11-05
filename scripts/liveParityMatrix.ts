@@ -423,6 +423,17 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
       measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('amt', 'min')]],
       stride,
     });
+    // Days do not roll up into a distinct count (part 5, D2): refused, typed, before any statement. By day nothing rolls
+    // up, so it answers and agrees (the NEGATIVE CONTROL: the refusal is the roll-up's, not the calendar's).
+    for (const grain of [undefined, 'month'] as const) {
+      const a = spec.fromVizEncoding({ category: 'd', ...(grain ? { grain } : {}), values: [M('amt', 'countd')] }, [], TYPED.columns, {});
+      let sent = 0;
+      const out = a.ok ? await ev.evaluateLive(a.ir, TYPED, (q, step) => { sent += 1; return engine.run(q, step); }) : a;
+      ok(label(`week calendar ${calendarType}: a distinct count by ${grain ?? 'the chosen grain'} is refused (distinctByWeekCalendar), no statement sent`), !out.ok && out.code === 'distinctByWeekCalendar' && sent === 0, show(out));
+    }
+    n += await charts(kit, ok, label(`week calendar ${calendarType}, a distinct count by day`), TYPED, {
+      categories: [{ category: 'd', grain: 'day' }], measures: [[M('amt', 'countd')], [M('cat', 'countd')], [M('d', 'countd')]], stride,
+    });
   }
   dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1 });
 

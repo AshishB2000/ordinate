@@ -331,8 +331,8 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const dated = key.kind === 'date' || key.kind === 'days';
   if (dated && (ir.order === 'value' || ir.top !== undefined)) return refuse('rankOnDate');
   if (ir.top !== undefined && (!Number.isInteger(ir.top) || ir.top < 1 || ir.order !== 'value')) return refuse('badQuery');
-  // shortcut: a distinct count under a week calendar is not counted again per bucket yet (step 03, Task 3 refuses it).
-  if (ir.measures.some((m) => m.aggregation === 'countd') && key.kind === 'days') return refuse('badQuery');
+  // Days roll up into a week calendar's periods in ./shape.ts, which no distinct count survives (part 5, D2).
+  if (key.kind === 'days' && ir.measures.some((m) => m.aggregation === 'countd')) return refuse('distinctByWeekCalendar');
 
   const g = keyExpr(c, catCol, key);
   if (isRefusal(g)) return g;

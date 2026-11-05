@@ -66,7 +66,7 @@ export function liveNotNumeric(column: string): string {
   return t('liveRefusals.is_not_a_number_column_so', { column });
 }
 
-/** An aggregation outside sum / avg / count / min / max. */
+/** An aggregation outside sum / avg / count / min / max / countd. */
 export function liveUnknownAggregation(aggregation: string): string {
   return t('liveRefusals.is_not_an_aggregation_a_live', { aggregation });
 }
@@ -149,4 +149,9 @@ export function liveCalculatedRefused(column: string): string {
 /** A snapshot metric (semantic D8): its latest day is not compiled for a warehouse yet. */
 export function liveSnapshotRefused(): string {
   return t('liveRefusals.a_snapshot_metric_can_t_be');
+}
+
+/** A distinct count by a week calendar's periods (part 5, D2): the warehouse groups by day, and days' distinct counts do not add up. */
+export function liveDistinctByWeekCalendar(): string {
+  return t('liveRefusals.a_distinct_count_can_t_be');
 }

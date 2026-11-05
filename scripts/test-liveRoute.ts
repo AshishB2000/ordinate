@@ -34,7 +34,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import type { Reply } from './liveRouteHarness';
-import { H, close, hydrated, median, post } from './liveRouteHarness';
+import { H, close, hydrated, hydrates, median, post } from './liveRouteHarness';
 
 const cmp: typeof import('./liveParityCompare') = require('./liveParityCompare');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
@@ -50,6 +50,7 @@ const stories: typeof import('../src/analysis/stories') = require('../src/analys
 const storyData: typeof import('../src/publish/storyData') = require('../src/publish/storyData');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const lfe: typeof import('../src/engine/live/liveFigureError') = require('../src/engine/live/liveFigureError');
+const dateIntel: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 
 const { fake, queryCache, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v, (_k, x) => (Object.is(x, -0) ? '-0' : x));
@@ -280,6 +281,24 @@ function sameChart(label: string, ext: Reply, live: Reply): void {
   }
   const extPivot = (await post('visual:data', { projectId: P, datasetId: X, encoding: PIVOT })).value;
   ok('negative control: the extract draws the same pivot', extPivot.ok === true, show(extPivot).slice(0, 200));
+
+  // A distinct count by the periods of a week calendar (part 5, step 03): the warehouse would group by day and our
+  // code would add the days' counts up, so the door refuses it, typed, before any warehouse call. In-process: no
+  // contract takes countd before step 04.
+  const byPeriod = (d: string) => H.as(ORG_A, async () => {
+    dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1, calendarType: '445', yearEnd: 'nearest' });
+    try {
+      return await rpc.handlers.get('visual:data')!(null, { projectId: P, datasetId: d, encoding: { category: 'd', grain: 'month', values: [M('amt', 'countd')] } }) as Reply;
+    } finally {
+      dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1 });
+    }
+  });
+  const callsBefore = fake.calls.length;
+  const weekly = await hydrates(L, () => byPeriod(L));
+  ok('Live countd by week-calendar months: refused, typed (distinctByWeekCalendar), never hydrated, no warehouse call',
+    refusedAs(weekly.value, 'distinctByWeekCalendar') && !weekly.hydrated && fake.calls.length === callsBefore, show(weekly).slice(0, 300));
+  const weeklyExt = await byPeriod(X);
+  ok('negative control: the extract counts the same months in place', weeklyExt.ok === true && weeklyExt.data.series[0].values.some((v: unknown) => typeof v === 'number' && v > 0), show(weeklyExt).slice(0, 200));
 
   // An "as of" read: the warehouse answers now, and a Live dataset keeps no history.
   const now = new Date().toISOString();

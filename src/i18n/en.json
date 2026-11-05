@@ -360,6 +360,7 @@
   "liveRefusals.a_contains_filter_cannot_run_on": "A \"contains\" filter cannot run on the number column \"{column}\" of a live dataset. Compare it with a value instead.",
   "liveRefusals.a_date_axis_keeps_time_order": "A date axis keeps time order, so it cannot be ranked or cut to a top N.",
   "liveRefusals.a_distance_filter_cannot_run_on": "A distance filter cannot run on a live dataset yet.",
+  "liveRefusals.a_distinct_count_can_t_be": "A distinct count can't be drawn by the periods of a week calendar from a live dataset yet. Chart it by day, or make a copy of the dataset.",
   "liveRefusals.a_field_from_a_related_dataset": "A field from a related dataset cannot be combined with a live dataset yet.",
   "liveRefusals.a_live_chart_cannot_be_split": "A live chart cannot be split by the date column \"{column}\" yet.",
   "liveRefusals.a_live_chart_needs_a_total": "A live chart needs a total, an average, a count, a minimum or a maximum. It never fetches individual rows.",

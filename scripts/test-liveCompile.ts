@@ -313,6 +313,8 @@ function refusals(): void {
       comp.compileMetric({ kind: 'metric', measures: [{ column: 'secret_col', aggregation: 'count' }], filters: [], order: 'natural', weekCal: null }, env('duckdb')), 'unknownColumn'],
     ['an unresolved data-relative period',
       comp.compileMetric({ kind: 'metric', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [{ kind: 'latest', column: 'order_date', period: 'last_month', yearsBack: 0 }], order: 'natural', weekCal: null }, env('duckdb')), 'unresolvedPeriod'],
+    ['a distinct count by week-calendar periods',
+      comp.compileChart({ kind: 'chart', category: { column: 'order_date', kind: 'date', grain: 'month' }, measures: [{ column: 'note', aggregation: 'countd' }], filters: [], order: 'natural', weekCal: { type: '445', yearEnd: 'nearest' } }, { kind: 'days', grain: 'month', weekCal: { type: '445', yearEnd: 'nearest' } }, env('duckdb')), 'distinctByWeekCalendar'],
     ['a top N over a date axis',
       comp.compileChart({ kind: 'chart', category: { column: 'order_date', kind: 'date' }, measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], order: 'value', top: 3, weekCal: null }, { kind: 'date', grain: 'month' }, env('duckdb')), 'rankOnDate'],
   ];
@@ -322,7 +324,7 @@ function refusals(): void {
   }
   const all: import('../src/engine/live/liveSpec').LiveRefusalCode[] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
     'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate', 'unresolvedPeriod',
-    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable'];
+    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable', 'distinctByWeekCalendar'];
   ok(`every refusal code (${all.length}) renders its catalog key with its parameters`, all.every((c) => t(spec.refuse(c, 'col'))));
 
   // What the extract SKIPS with a warning is skipped with the byte-identical warning.

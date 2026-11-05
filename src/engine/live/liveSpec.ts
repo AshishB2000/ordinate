@@ -126,7 +126,7 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable';
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'distinctByWeekCalendar';
 
 /**
  * A question live cannot answer, said in a catalog sentence (`message`, through
@@ -182,6 +182,7 @@ const MESSAGES: Record<LiveRefusalCode, Sentence> = {
   baseFilter: { key: 'liveRefusals.the_always_applied_filter_on_can', param: 'column', text: (c) => msg.liveBaseFilterRefused(c) },
   calculated: { key: 'liveRefusals.this_dataset_s_calculated_fields_can', param: 'column', text: (c) => msg.liveCalculatedRefused(c) },
   baseFilterUnreadable: { key: 'liveRefusals.this_dataset_s_always_applied_filters', text: () => msg.liveBaseFiltersUnreadable() },
+  distinctByWeekCalendar: { key: 'liveRefusals.a_distinct_count_can_t_be', text: () => msg.liveDistinctByWeekCalendar() },
 };
 
 export function refuse(code: LiveRefusalCode, arg = ''): LiveRefusal {
