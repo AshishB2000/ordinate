@@ -314,6 +314,13 @@ describe('Columns tab: "Also called"', () => {
     expect(input.title).toBe('sales, gross'); // a list longer than the cell is still readable, by a viewer too
   });
 
+  it('the dataset page\'s Columns tab has no Used by column (only the Data model passes one)', async () => {
+    renderTab(routes());
+    await field('gross');
+    expect(screen.queryByRole('columnheader', { name: 'Used by' })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Sensitivity' })).toBeTruthy();
+  });
+
   it('does not write the server\'s reply over what was typed while it saved', async () => {
     renderTab(routes({ [SET]: { body: { ok: true, column: { aliases: ['top line'] } } } }));
     const input = await field('gross');
