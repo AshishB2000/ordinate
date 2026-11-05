@@ -161,6 +161,7 @@ export function register(): void {
         if (r && (r.code === TERM_CODE || r.code === EXTERNAL_CODE || r.code === ROW_POLICY_CODE)) return r; // a filter it cannot apply, a layer's metric, a refused one: says so — never "deleted", never the stored column's figure
         if (r && r.hiddenByPolicy) return r; // the Share policy's words — never the stored column's figure, nor a Compare
         if (r && r.refused) return { ok: false, error: r.refused }; // D9: dates that disagree under a date control — nor the stored column's figure
+        if (r && r.ok === false && r.code && !it.column) return r; // a funnel or period metric's card has no column to fall back on: its typed failure (Live), never "deleted"
         if (r && r.ok !== false) {
           res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}), ...(r.periodOn ? { periodOn: r.periodOn } : {}), ...(r.notes ? { notes: r.notes } : {}), ...(r.periodRange ? { periodRange: r.periodRange } : {}) };
         }

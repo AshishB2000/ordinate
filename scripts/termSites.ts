@@ -48,6 +48,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/drillScope.ts': { count: 3, how: 'keeps' },
   'src/ipc/drivers.ts': { count: 3, how: 'keeps' },
   'src/ipc/driversPoint.ts': { count: 2, how: 'keeps' },
+  // a funnel metric's own filters, params bound (resolveFilterParams keeps a term), asked of the chart door, which expands it;
+  // its scope's terms are expanded first (expandTerms throws typed), so the entry filters inside the encoding hold none
+  'src/ipc/funnelMetric.ts': { count: 1, how: 'keeps' },
   'src/ipc/insights.ts': { count: 1, how: 'keeps' },
   'src/ipc/metricTree.ts': { count: 2, how: 'keeps' },
   'src/ipc/metrics.ts': { count: 7, how: 'keeps' },

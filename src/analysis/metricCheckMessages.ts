@@ -203,3 +203,23 @@ export function snapshotPerIsDate(per: string): string {
 export function snapshotPerLod(per: string): string {
   return t('metricCheckMessages.a_snapshot_per_can_t_yet_2', { per });
 }
+
+/** A funnel metric (part 5, D6) whose entry period ends less than a window before today: its last entrants have not had their full window. */
+export function funnelMayStillConvert(): string {
+  return t('metricCheckMessages.recent_entries_may_still_convert');
+}
+
+/** A funnel metric's rows left out: no entity, or a time its grammar can't read. `n` is formatted. */
+export function funnelExcluded(n: string): string {
+  return t('metricCheckMessages.rows_without_an_entity_or_a', { n });
+}
+
+/** A scope filter a funnel metric can't use to pick who enters: another table's column, or none of its dataset's. */
+export function funnelEntryNotOwn(column: string): string {
+  return t('metricCheckMessages.a_filter_on_can_t_pick', { column });
+}
+
+/** A context filter in a funnel metric's scope over a dataset with LOD fields: the entry would read the stored values, not the context's. */
+export function funnelEntryLod(): string {
+  return t('metricCheckMessages.a_context_filter_can_t_pick');
+}

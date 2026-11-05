@@ -18,10 +18,10 @@ import { VALUELESS_OPS, LIST_OPS } from '../data/filterOps';
 import type { Metric, MetricFormat, MetricDefinition } from './metrics';
 import { formatMetric } from '../app/format';
 import { describePeriod, getCalendar } from './dateIntel';
-import { isExternalDefinition, isFormulaDefinition, isPeriodDefinition } from './metrics';
-import { isNewerKind } from './pendingKinds';
+import { isExternalDefinition, isFormulaDefinition, isFunnelDefinition, isPeriodDefinition } from './metrics';
 import { definedElsewhere } from './externalMetricMessages';
 import { periodWords } from './periodMetric';
+import { funnelWords } from './funnelMetric';
 
 /**
  * The ONE rendering of a metric's number — now `app/format.formatMetric`, the
@@ -93,7 +93,7 @@ export function describeFilterHidden(s: FilterStep): string {
 export function describeDefinitionShort(definition: MetricDefinition, base?: string): string {
   if (isFormulaDefinition(definition)) return definition.formula;
   if (isPeriodDefinition(definition)) return periodWords(definition, base);
-  if (isNewerKind(definition)) return 'a newer kind of metric'; // part 5's kinds, kept and not computed here
+  if (isFunnelDefinition(definition)) return funnelWords(definition);
   if (isExternalDefinition(definition)) return definedElsewhere(); // b2 names the layer
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
   const head = definition.column ? `${agg} of ${definition.column}` : agg;

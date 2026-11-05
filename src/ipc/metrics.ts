@@ -71,6 +71,7 @@ import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 import { baseName, checkPeriodDefinition, periodMetricValue } from './periodMetric';
 import { periodSeries } from './periodChart';
+import { checkFunnelDefinition, funnelMetricValue } from './funnelMetric';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -162,7 +163,7 @@ export async function resolveDefinition(
   if (metrics.isExternalDefinition(definition)) throw new ExternalMetricError('pending', name ?? definition.external); // only its layer can answer it (part 7 b0)
 
   if (metrics.isPeriodDefinition(definition)) return periodMetricValue(ctx, datasetId, definition, all, depth); // its base under a rewritten scope
-  if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
+  if (metrics.isFunnelDefinition(definition)) return funnelMetricValue(ctx, datasetId, definition, filters, depth); // the grid's matching, the scope picking who enters (./funnelMetric)
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
     ctx.reads?.push({ datasetId, column: definition.column, aggregation: definition.aggregation });
@@ -330,7 +331,7 @@ export async function previewDefinition(projectId: string, datasetId: string, de
     ok: true as const,
     value,
     display: displayOf(value, metrics.sanitizeFormat(format), ctx.fx, metrics.isSimpleDefinition(def)),
-    ...(ctx.fx ? { fx: ctx.fx } : {}), ...(ctx.periodRange ? { periodRange: ctx.periodRange } : {}), ...(ctx.notes && metrics.isPeriodDefinition(def) ? { notes: ctx.notes } : {}),
+    ...(ctx.fx ? { fx: ctx.fx } : {}), ...(ctx.periodRange ? { periodRange: ctx.periodRange } : {}), ...(ctx.notes && isNewerKind(def) ? { notes: ctx.notes } : {}),
     ...(ctx.asOf ? { asOf: ctx.asOf } : {}),
     definitionText: describeDefinition({ definition: def, filters: own }, undefined, await baseName(projectId, def)),
   };
@@ -542,7 +543,7 @@ export function register() {
       // `field`: which box of the editor the sentence belongs beside.
       const taken = await nameRefusal(projectId, raw.name);
       if (taken) return { ok: false, error: taken, field: 'name' };
-      const per = await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn); if (per) return { ok: false, ...per };
+      const per = (await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, raw.datasetId, raw.definition)); if (per) return { ok: false, ...per };
       const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
       if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = await settleOnSave(projectId, raw);
@@ -567,7 +568,7 @@ export function register() {
       const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
       if (taken) return { ok: false, error: taken, field: 'name' };
       const before = await metrics.getMetric(projectId, id);
-      const per = before && (raw.definition !== undefined || raw.timeColumn !== undefined) ? await checkPeriodDefinition(projectId, before.datasetId, raw.definition ?? before.definition, raw.timeColumn) : null; if (per) return { ok: false, ...per };
+      const per = before && (raw.definition !== undefined || raw.timeColumn !== undefined) ? (await checkPeriodDefinition(projectId, before.datasetId, raw.definition ?? before.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, before.datasetId, raw.definition ?? before.definition)) : null; if (per) return { ok: false, ...per };
       const snap = before ? await snapshotProblem(projectId, before.datasetId, raw.definition) : null;
       if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};

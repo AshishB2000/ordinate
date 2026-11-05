@@ -2,7 +2,8 @@
 // A running total, a percent of total and a moving sum add the measure's values, so they are right only when
 // the values add: a sum of averages is not an average. A snapshot (a stock count) adds across categories but
 // not across time. A period metric's window (part 5, D10) adds across categories as its base does and never across
-// time (two YTDs overlap); a compare adds across neither.
+// time (two YTDs overlap); a compare adds across neither. A funnel's entered and converted add across categories (one entry
+// per entity), never across time; its rate across neither.
 //
 //   categories   the values of two members of a dimension (two regions) add to the whole
 //   time         the values of two periods (two days) add to the whole
@@ -14,7 +15,7 @@ import type { ParsedColumn } from '../data/parse';
 import { aggWord } from '../data/aggregations';
 import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
-import { getMetric, isExternalDefinition, isFormulaDefinition, isPeriodDefinition, metricsByName } from './metrics';
+import { getMetric, isExternalDefinition, isFormulaDefinition, isFunnelDefinition, isPeriodDefinition, metricsByName } from './metrics';
 import { isNewerKind } from './pendingKinds';
 import { metricShape } from './driverShape';
 import { tokenize } from '../formula/formulaTokens';
@@ -49,7 +50,7 @@ export function additivityOf(
     const b = base && !isPeriodDefinition(base.definition) ? additivityOf(base, columns, byName, params) : null;
     return { categories: !!b?.categories && !def.compare, time: false };
   }
-  if (isNewerKind(def)) return { categories: false, time: false }; // part 5's kinds: not computed here, so nothing adds
+  if (isFunnelDefinition(def)) return { categories: def.show !== 'rate', time: false }; // D7: one entry per entity adds across categories, never across time; a rate adds across neither
   if (isExternalDefinition(def)) return { categories: false, time: false }; // the layer's figure, which this pod cannot give (b2 reads `additive`)
   if (!isFormulaDefinition(def)) {
     const a = aggregationAdditivity(def.aggregation);

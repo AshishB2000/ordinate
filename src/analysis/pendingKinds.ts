@@ -1,7 +1,7 @@
-// The shapes part 5 writes and this release keeps but cannot compute (semantic layer part 5, step 01): a funnel or
-// period metric (a per-entity snapshot is computed from step 07, ipc/snapshotPer). Every reader asks here, so the
-// release that computes one removes its refusal in one place. KPI doors show no figure; chart and answer doors refuse with a sentence. A count distinct is computed
-// from step 02 (analysis/countDistinct), but no writer is offered it before step 04 (unofferedMetric).
+// Part 5's metric kinds that a reader of a metric's bare column can't draw (semantic layer part 5): a funnel or period
+// metric has no column whose total is its figure. Their KPIs, alerts and charts are computed (steps 05, 06, 08); an
+// answer card, a plan card, a scenario and a template role still refuse them here, in one place. A count distinct is
+// computed from step 02 (analysis/countDistinct) and offered to writers from step 04 (unofferedMetric).
 
 import * as metrics from './metrics';
 import type { Metric, MetricDefinition } from './metrics';
@@ -18,7 +18,7 @@ export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | 
   return metrics.isFunnelDefinition(d) || metrics.isPeriodDefinition(d);
 }
 
-/** A funnel or period kind: no card writer on this release (a period metric's KPI and alerts are computed from step 05, its charts from step 06: chartPending). */
+/** A funnel or period kind: no card writer reads it as a column (its KPI, alerts and chart are computed: ./metricMeasures charts it alone). */
 export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   return isNewerKind(m.definition);
 }
@@ -48,11 +48,10 @@ export async function pendingMeasureRefusal(projectId: string, encoding: VizEnco
 }
 
 /**
- * Why an alert rule is not evaluated on this release, or null: a rule it cannot evaluate (alerts.canEvaluate), or one
- * on a saved metric that is pending. Such a rule is skipped whole — no value, no `lastEvaluatedAt`, no edge state —
- * so a newer pod's evaluation of it is never overwritten.
+ * Why an alert rule is not evaluated on this release, or null: a rule it cannot evaluate (alerts.canEvaluate). Such a
+ * rule is skipped whole — no value, no `lastEvaluatedAt`, no edge state — so a newer pod's evaluation of it is never
+ * overwritten. A rule on a period or funnel metric is evaluated by its metric (./alertMetric, steps 05 and 08).
  */
-export async function alertSkipped(projectId: string, rule: AlertRule): Promise<string | null> {
-  const m = canEvaluate(rule) && rule.metric.metricId ? await metrics.getMetric(projectId, rule.metric.metricId) : null;
-  return !canEvaluate(rule) || (m && pendingMetric(m) && !metrics.isPeriodDefinition(m.definition)) ? msg.alertPending() : null; // a period metric's figure is computed (step 05)
+export async function alertSkipped(_projectId: string, rule: AlertRule): Promise<string | null> {
+  return canEvaluate(rule) ? null : msg.alertPending();
 }
