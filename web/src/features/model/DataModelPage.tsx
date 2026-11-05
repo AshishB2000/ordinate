@@ -16,8 +16,10 @@ import { DatasetsTab } from './datasets/DatasetsTab';
 import { MetricsTab } from './metrics/MetricsTab';
 import { GlossaryTab } from './terms/GlossaryTab';
 import { TermDialog } from './terms/TermDialog';
+import { RelationshipsTab } from '../data/RelationshipsTab';
+import { DefaultJoins } from './relationships/DefaultJoins';
 
-const TABS = ['datasets', 'metrics', 'glossary'] as const;
+const TABS = ['datasets', 'metrics', 'glossary', 'relationships'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
@@ -75,6 +77,9 @@ function Section({ projectId }: { projectId: string }) {
           <Tab value="glossary" icon="list">
             Glossary
           </Tab>
+          <Tab value="relationships" icon="link">
+            Relationships
+          </Tab>
         </TabList>
         <TabPanel value="datasets">
           <DatasetsTab projectId={projectId} />
@@ -84,6 +89,10 @@ function Section({ projectId }: { projectId: string }) {
         </TabPanel>
         <TabPanel value="glossary">
           <GlossaryTab projectId={projectId} />
+        </TabPanel>
+        <TabPanel value="relationships">
+          <RelationshipsTab projectId={projectId} />
+          <DefaultJoins projectId={projectId} />
         </TabPanel>
       </Tabs>
       {newMetric && canEdit && <MetricEditor projectId={projectId} existing={{}} onClose={() => setNewMetric(false)} onSaved={metricSaved} />}
