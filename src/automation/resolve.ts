@@ -9,6 +9,9 @@ import * as projects from '../app/projects';
 import * as jobs from '../app/jobs';
 import type { JobKind } from '../app/jobs';
 import { AutomationError } from './errors';
+import { listTerms } from '../analysis/terms';
+import { matchTerm } from '../ai/termFacts';
+import type { FilterStep } from '../data/transforms';
 
 /**
  * The project a command runs in when none is named: the one the user was last
@@ -67,4 +70,19 @@ export async function runJob<T>(
     resultOf: (v) => ({ message: message(v) }),
   });
   return job.done;
+}
+
+/** A glossary term's id, by its id, its name or an alias (case- and punctuation-blind, unambiguous: ../ai/termFacts matchTerm). */
+export async function resolveTermRef(projectId: string, ref: string): Promise<string> {
+  const list = (await listTerms(projectId)).map((t) => ({ id: t.id, name: t.name, aliases: t.aliases, datasetId: t.datasetId }));
+  const t = matchTerm(ref, list);
+  if (!t) throw new AutomationError('usage', `No glossary term called "${ref}".`);
+  return t.id;
+}
+
+/** `terms` (names, aliases or ids) as filter steps the doors expand: each applies as its filter. */
+export async function termSteps(projectId: string, refs: unknown): Promise<FilterStep[]> {
+  const out: FilterStep[] = [];
+  for (const r of Array.isArray(refs) ? refs : []) out.push({ type: 'term', term: await resolveTermRef(projectId, String(r)) } as unknown as FilterStep);
+  return out;
 }

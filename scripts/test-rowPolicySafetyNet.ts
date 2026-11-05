@@ -331,6 +331,12 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     }
     ok('NEGATIVE CONTROL: the editor\'s diff words the values', (await W.call('ed', 'versions:diff', { projectId: P, type: 'term', id: TERM, from: K0, to: K1 })).text.includes(H.W_CANARY));
 
+    const mcpHandlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+    const mcpTerms = async (who: string) => JSON.stringify(await W.as(who, () => mcpHandlers.termsList({ projectId: P } as never)));
+    const mcpEast = await mcpTerms('east');
+    eastReplies.push(mcpEast);
+    ok('redact: MCP list_terms as east names the term and holds no value', mcpEast.includes('"EMEA"') && !mcpEast.includes(H.W_CANARY), mcpEast.slice(0, 300));
+    ok('NEGATIVE CONTROL: MCP list_terms as the editor holds the value', (await mcpTerms('ed')).includes(H.W_CANARY));
     // …and the Assistant's facts word a term without its values for east, on a dataset with no rules too (D12).
     await W.call('boss', 'term:save', { projectId: P, input: { name: 'Plain pair', datasetId: W.plain, filters: [{ type: 'filter', column: 'customer', op: 'in', values: [`${H.W_CANARY}_7`] }] } });
     const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');

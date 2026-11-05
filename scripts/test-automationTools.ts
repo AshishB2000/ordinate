@@ -155,6 +155,20 @@ async function main(): Promise<void> {
   const mr = (await mets.resolveMetric(pid, margin.id, {}))!;
   ok('metric_value: by name, case-insensitive, identical to resolveMetric', Object.is(mv.value, mr.value) && mv.display === mr.display);
   ok('metric_value: an unknown metric is not_found', (await refusal('metric_value', { metric: 'Nope' })).code === 'not_found');
+  // Glossary terms (semantic D12): list_terms, and a `terms` arg on aggregate and metric_value that the doors expand.
+  const termsStore: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+  const westT = (await termsStore.saveTerm(pid, { name: 'West only', aliases: ['Westside'], datasetId: ds.id, filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] }))!;
+  const tAgg = await call('aggregate', { dataset: ds.name, encoding: enc, terms: ['westside'] });
+  ok('aggregate with terms:["westside"] (an alias) equals the inline filter', JSON.stringify(tAgg.labels) === JSON.stringify(fAgg.labels)
+    && tAgg.series.every((sr: any, i: number) => sr.values.every((v: unknown, k: number) => Object.is(v, fAgg.series[i].values[k]))), JSON.stringify([tAgg, fAgg]).slice(0, 300));
+  const withT = await call('metric_value', { metric: 'margin %', terms: ['West only'] });
+  const inlineT = (await mets.resolveMetric(pid, margin.id, { filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] }))!;
+  ok('metric_value with a term differs from without, and equals the metric under the inline filter', withT.value !== mv.value && Object.is(withT.value, inlineT.value), JSON.stringify([withT, mv.value, inlineT.value]));
+  ok('a term nobody is called is refused, never dropped', (await refusal('aggregate', { dataset: ds.name, encoding: enc, terms: ['Nope'] })).code === 'usage'
+    && (await refusal('metric_value', { metric: 'margin %', terms: ['Nope'] })).code === 'usage');
+  const tl = await call('list_terms', {});
+  ok('list_terms: the term, its other names, its dataset and its filter in words', tl.length === 1 && tl[0].id === westT.id && tl[0].aliases[0] === 'Westside'
+    && tl[0].dataset === ds.name && tl[0].definition === 'region = West', JSON.stringify(tl));
   const found = await call('insights', { dataset: ds.name });
   ok('insights: the same findings the app ranks', found.length === (await ins.insightsForDataset(pid, ds.id)).length && found.length > 0);
   const dash = await call('list_dashboards', {});

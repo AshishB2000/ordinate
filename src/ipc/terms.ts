@@ -31,7 +31,7 @@ export async function termForCaller(projectId: string, t: Term): Promise<Term & 
 }
 
 /** Every term with its dataset's name and its definition in words — without values for a restricted caller. */
-async function listForCaller(projectId: string) {
+export async function listForCaller(projectId: string) {
   const hide = await restrictedOn(projectId);
   const names = new Map<string, string>();
   const out = [];

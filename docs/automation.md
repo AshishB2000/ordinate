@@ -96,6 +96,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | — | `aggregate` | read | Compute chart data (labels and series) for an encoding: the numbers a visual would draw. |
 | `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. |
 | `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. |
+| `terms list` | `list_terms` | read | List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value. |
 | `insights` | `insights` | read | What the app found in a dataset: trends, movers, concentration and anomalies. |
 | `dashboards list` | `list_dashboards` | read | List dashboards with their sheets, status (draft, published, edited: published with edits not live yet) and the reports built on them. A viewer's token lists published dashboards only. |
 | `dashboards export` | `export_dashboard` | read | Export a dashboard as one self-contained HTML page, a PDF or a PNG. |
@@ -180,6 +181,7 @@ Compute chart data (labels and series) for an encoding: the numbers a visual wou
 | `dataset` | string | yes | Dataset id or exact name. |
 | `encoding` | object | yes | What to chart: a category column and one or more measures, exactly as a visual stores it. |
 | `filters` | array | no | Row filters applied before aggregation: the same filter steps a visual stores. |
+| `terms` | array | no | Glossary term names, aliases or ids; each applies as its filter. |
 
 ### metrics list
 
@@ -193,7 +195,7 @@ List the project's saved metrics and how each is defined. Each carries adds_up: 
 
 ### metrics value
 
-CLI `metrics value <metric>` · MCP tool `metric_value` · read-only
+CLI `metrics value <metric> [--terms <terms>]` · MCP tool `metric_value` · read-only
 
 The current value of a saved metric, computed by the app and formatted by the metric.
 
@@ -201,6 +203,17 @@ The current value of a saved metric, computed by the app and formatted by the me
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 | `metric` | string | yes | Metric name (case-insensitive) or id. |
+| `terms` | array | no | Glossary term names, aliases or ids; each applies as its filter. |
+
+### terms list
+
+CLI `terms list` · MCP tool `list_terms` · read-only
+
+List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 
 ### insights
 
