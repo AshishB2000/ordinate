@@ -40,6 +40,7 @@ async function loadingShots(page: Page, url: string, channel: string, label: str
 /** One RPC the spec sends itself, as the signed-in user, with the CSRF pair. */
 async function post(s: Session, channel: string, payload: unknown): Promise<any> { // any: each channel's own reply
   const r = await s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': await csrfToken(s) }, data: { args: [payload] } });
+  assert.equal(r.status(), 200, `${channel}: ${await r.text()}`);
   return r.json();
 }
 
@@ -129,14 +130,6 @@ e2e('data model: datasets', async (s) => {
   await screens(page, 'model-phone');
   assert.deepEqual(misfits, []);
 });
-
-/** An RPC from the spec itself, with the CSRF pair the web client sends. */
-async function post(s: Session, channel: string, payload: unknown): Promise<any> {
-  const csrf = await csrfToken(s);
-  const r = await s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } });
-  assert.equal(r.status(), 200, `${channel}: ${await r.text()}`);
-  return r.json();
-}
 
 e2e('data model: lineage, used by, and the ask before removing what feeds a metric', async (s) => {
   const { page } = s;
