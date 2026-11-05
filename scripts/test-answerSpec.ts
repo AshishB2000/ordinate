@@ -303,10 +303,12 @@ ok('chips: a table answer offers no "Show as table"', labels(table) === 'Same fo
 const G = ['year', 'quarter', 'month', 'day'] as const;
 const W = ['year', 'quarter', 'month', 'week', 'day'] as const;
 const GEO = { id: 'h1', name: 'Geography', levels: ['region', 'state'] };
-const CTX = { columns: COLS, splitCandidates: [] as string[] };
+const CTX = { columns: [...COLS, { name: 'state', type: 'text' as const }], splitCandidates: [] as string[] }; // every level a column, as navHierarchies leaves a usable one
 const lvl = A.answerChips({ ...base, category: 'region' }, { ...CTX, hierarchies: [GEO], ladder: G });
 const byState = lvl.find((c) => c.label === 'By state');
 ok('next level: By state regroups the whole answer, adding no filter', !!byState && byState.spec.category === 'state' && JSON.stringify(byState.spec.filters) === JSON.stringify(base.filters) && byState.spec.title.endsWith('by state'));
+ok('next level: a level that is none of the answer\'s columns (hidden from the caller, part 4) is no chip; By state above is the NEGATIVE CONTROL',
+  !A.answerChips({ ...base, category: 'region' }, { ...CTX, columns: COLS.filter((c) => c.name !== 'state'), hierarchies: [GEO], ladder: G }).some((c) => c.label.startsWith('By ')));
 ok('next level: no chip at the last level', !A.answerChips({ ...base, category: 'state' }, { ...CTX, hierarchies: [GEO], ladder: G }).some((c) => c.label.startsWith('By ')));
 ok('next level: a month answer offers days', A.answerChips({ ...base, category: 'order_date', grain: 'month' }, { ...CTX, ladder: G }).find((c) => c.label === 'By day')?.spec.grain === 'day');
 ok('next level: a week calendar month offers weeks', A.answerChips({ ...base, category: 'order_date', grain: 'month' }, { ...CTX, ladder: W }).some((c) => c.label === 'By week'));

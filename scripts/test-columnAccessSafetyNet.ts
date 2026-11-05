@@ -379,6 +379,13 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       ok(`gate: ${ch} answers east the question on dept, Object.is-equal to the editor's`, mine.status === 200 && !noFigure(mine, ch) && d === '', `${d} | ${show(mine)}`);
     }
 
+    // ── The next-level chip (part 6): an answer never offers a level hidden from the caller ──
+    must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'ssn'] }] } }));
+    const chipsOf = async (who: string): Promise<string[]> => ((await W.call(who, 'answer:card', { projectId: P, spec: spec('dept') })).body?.chips ?? []).map((c: { label: string }) => c.label);
+    const [eastChips, edChips] = [await chipsOf('east'), await chipsOf('ed')];
+    ok('chips: east\'s answer by dept offers no "By ssn" (Org: dept › ssn)', eastChips.length > 0 && !eastChips.some((l) => /ssn/.test(l)), eastChips.join(' | '));
+    ok('NEGATIVE CONTROL: the editor\'s does', edChips.includes('By ssn'), edChips.join(' | '));
+
     // ── Check the Assistant (p3-10): east's last check has no row and no count of a question east's list leaves out ──
     const verify = async (question: string, measures: object[]): Promise<string> => String(must(question, await W.call('boss', 'verified:save', { projectId: P,
       input: { question, spec: { datasetId: staff, category: 'dept', measures, filters: [], chartType: 'column', title: question } } })).body?.question?.id);

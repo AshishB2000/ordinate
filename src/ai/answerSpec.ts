@@ -622,9 +622,10 @@ export function answerChips(
   }
 
   // One step down: a hierarchy's next level regroups the whole answer; a set grain steps to the finer one (an auto grain has no rung).
+  // A next level that is none of `columns` (a column hidden from the caller, part 4) is no chip.
   const down = ctx.hierarchies && nextLevel(ctx.hierarchies, spec.category);
   const finer = ctx.ladder && spec.grain && catCol?.type === 'date' ? nextGrain(ctx.ladder, spec.grain) : null;
-  if (down) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
+  if (down && ctx.columns.some((c) => c.name === down.next)) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
   else if (finer) chips.push({ label: `By ${grainWord(finer, ctx.ladder!)}`, spec: { ...spec, grain: finer } });
 
   const periodIdx = spec.filters.findIndex((f) => 'period' in f);
