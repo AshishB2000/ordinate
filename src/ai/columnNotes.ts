@@ -8,24 +8,11 @@
 // dashboard draft's (src/analysis/planFacts.ts).
 
 import type { ValueLabel } from '../analysis/valueLabels';
+// The one cell printer (D3). ./promptText reads WITHHELD from here only when it prints, so the cycle is safe.
+import { quoted } from './promptText';
 
 /** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). `values`: what its stored codes mean. */
 export interface FactColumnDoc { description?: string; displayName?: string; aliases?: string[]; sensitivity?: string; values?: ValueLabel[] }
-
-/** A cell value is cut to this many characters in a prompt. */
-export const PROMPT_VALUE_CHARS = 60;
-
-/** A value as a prompt shows it: cut (never inside a surrogate pair), JSON-quoted, line separators escaped too. */
-export function quoted(v: string): string {
-  let cut = v;
-  if (v.length > PROMPT_VALUE_CHARS) {
-    let end = PROMPT_VALUE_CHARS - 1;
-    const c = v.charCodeAt(end - 1);
-    if (c >= 0xd800 && c <= 0xdbff) end -= 1;
-    cut = `${v.slice(0, end)}…`;
-  }
-  return JSON.stringify(cut).replace(/[\u2028\u2029]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16)}`);
-}
 
 /** A column's value labels a model reads: at most this many pairs, then how many more. */
 export const VALUE_LABEL_FACT_MAX = 20;
