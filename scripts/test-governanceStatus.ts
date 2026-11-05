@@ -14,7 +14,8 @@
 //               NEGATIVE CONTROL: an item never certified reads no status.
 //   § dataset   a metric's pin holds its dataset's (and a via's far dataset's): a Prepare edit turns a certified
 //               metric and its dataset to needs_review; a refresh and a docs, key, value-label or row-rule edit keep
-//               both certified. NEGATIVE CONTROL: a metric on another dataset stays certified.
+//               both certified; so does one on a dataset the figure reaches by the nearest owner (no via).
+//               NEGATIVE CONTROLS: a metric on another dataset, and one after an unrelated dataset's Prepare edit, stay certified.
 //   § channels  over the route: review hands back the pin certify takes and the newest version key; a stale base is
 //               409 record_changed with the current pin; a refusal is { ok:false, error, field }. A restore never
 //               certifies, and one to other content reads needs_review (control: back to what was certified reads
@@ -305,6 +306,24 @@ async function partDatasetDep(): Promise<void> {
   ok('a Prepare edit turns the dataset and the metric on it to needs_review', (await states()) === 'needs_review,needs_review,certified');
   ok('NEGATIVE CONTROL: the metric on another dataset stays certified', (await as(() => store.statusFor(P)(`metric:${OTHER}`)))?.state === 'certified'
     && (await as(() => store.statusFor(P)(`dataset:${OTHER_DS}`))) === null);
+
+  // Reached by the nearest-owner rule only: `tier` is no column of Sales, so the figure reads it from Accounts (no via).
+  const { ACCOUNTS, UNRELATED, GOLD } = await as(async () => {
+    const cols = [{ name: 'region', type: 'text' as const }, { name: 'sales', type: 'number' as const }, { name: 'account', type: 'text' as const }];
+    const salesDs = (await datasets.saveDataset(P, { name: 'Sales', sourceKind: 'csv', columns: cols, rows: [['EU', 10, 'a1'], ['US', 5, 'a2']] }))!.id;
+    const accounts = (await datasets.saveDataset(P, { name: 'Accounts', sourceKind: 'csv', columns: [{ name: 'id', type: 'text' }, { name: 'tier', type: 'text' }], rows: [['a1', 'gold'], ['a2', 'tin']] }))!.id;
+    const unrelated = (await datasets.saveDataset(P, { name: 'Unrelated', sourceKind: 'csv', columns: cols, rows: [['EU', 1, 'a1']] }))!.id;
+    await rels.saveRelationship(P, { from: { datasetId: salesDs, column: 'account' }, to: { datasetId: accounts, column: 'id' }, cardinality: 'many_to_one' });
+    const gold = (await metrics.saveMetric(P, { name: 'Gold sales', datasetId: salesDs, definition: { column: 'sales', aggregation: 'sum' },
+      filters: [{ type: 'filter', column: 'tier', op: '=', value: 'gold' }] }))!.id;
+    await store.certify(P, `metric:${gold}`, (await pinOf(P, `metric:${gold}`))!, '');
+    return { ACCOUNTS: accounts, UNRELATED: unrelated, GOLD: gold };
+  });
+  const gold = () => as(async () => (await store.statusFor(P)(`metric:${GOLD}`))?.state);
+  await as(() => datasets.updateSteps(P, UNRELATED, [{ type: 'filter', column: 'sales', op: '>', value: 0 } as never]));
+  ok('NEGATIVE CONTROL: an unrelated dataset\'s Prepare edit keeps a metric certified', (await gold()) === 'certified');
+  await as(() => datasets.updateSteps(P, ACCOUNTS, [{ type: 'filter', column: 'tier', op: '=', value: 'gold' } as never]));
+  ok('a Prepare edit on a dataset reached only by the nearest owner turns the metric to needs_review', (await gold()) === 'needs_review');
 }
 
 async function partChannels(fx: Fixtures): Promise<void> {

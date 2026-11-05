@@ -7,7 +7,7 @@
 //   Metric    timeColumn (pin); definition.snapshot (pin, inside definition); additivity (derived from definition and
 //             the column types, both pinned); filters' term steps (pin, and each names a term dep); filters' `via`, the
 //             labelled join a column is read through (pin, and the data model becomes a dep); its own dataset and every
-//             dataset it reads through a `via` or another table's term (each one's pin is a dep: a Prepare edit moves it)
+//             other dataset its figure reads, resolved as the door resolves them (each one's pin is a dep)
 //   Term      the record (TERM_PIN); a metric that names one has it as a dep
 //   Dataset   Live baseFilters and calculated fields (LIVE_PIN, pin); origin.readsTables (out: a label, p2-02)
 //   Catalog   TableDoc (role, key, grain, guide, keyCheck, hierarchies) and ColumnDoc (value labels, display names,
@@ -21,11 +21,12 @@ import { getTerm, type Term } from './terms';
 import { compileMetricFormula } from './metricFormula';
 import { bindFormulaText } from './params';
 import { listRelationships, type Relationship } from './relationships';
-import { viaPath } from './joinPlan';
+import { expandTerms } from './termExpand';
+import { metricReads } from '../ipc/relationships';
 import { getDatasetMeta, type DatasetMeta } from '../data/datasets';
 import type { LiveSettings } from '../data/liveDataset';
 import type { DatasetOrigin } from '../data/datasetOrigin';
-import { isTermStep } from '../data/termStep';
+import { isTermNotExpandedError, isTermStep } from '../data/termStep';
 import { pipelineHash, stableStringify } from '../engine/queryCache';
 import { parseStatusRef } from '../app/statusDocs';
 import type { ColumnDoc } from '../app/catalog';
@@ -111,6 +112,19 @@ function datasetOwn(meta: DatasetMeta): Record<string, unknown> {
 }
 
 /** One pinOf call tree: ref -> its pin, computed once. Never shared across calls: a dep inside a loop reads 'cycle'. */
+/** The other datasets the figure reads, resolved as its door resolves them: terms expanded, then its join plan. */
+async function relatedDatasets(projectId: string, m: Metric, measures: readonly string[]): Promise<string[] | 'refused'> {
+  try {
+    const filters = (await expandTerms(projectId, m.datasetId, m.filters)).steps;
+    const out = new Set<string>();
+    for (const column of measures.length ? measures : ['']) for (const id of await metricReads(projectId, m.datasetId, column, filters)) out.add(id);
+    return [...out].sort();
+  } catch (err) {
+    if (isTermNotExpandedError(err)) return 'refused'; // the door refuses this figure too; hashed as such, never as no read
+    throw err;
+  }
+}
+
 interface Walk { projectId: string; memo: Map<string, Promise<string | null>>; byName?: Promise<Map<string, Metric>> }
 
 async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise<Record<string, string>> {
@@ -121,34 +135,26 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
   const meta = await getDatasetMeta(w.projectId, m.datasetId);
   await dep(`dataset:${m.datasetId}`); // the figure is computed over its Prepare output (D4 heading, D5)
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
-  const reads: string[] = [];
-  const vias: string[] = [];
+  const reads: string[] = []; // every column the figure names, filters included
+  const measures: string[] = []; // the columns it aggregates
   let crosses = false;
   for (const s of m.filters) {
     const step: unknown = s; // a term step is stored in a filter list, typed as a FilterStep
     if (isTermStep(step)) {
       await dep(`term:${step.term}`);
-      const termDs = (await getTerm(w.projectId, step.term))?.datasetId;
-      if (termDs !== m.datasetId) crosses = true;
-      if (termDs && termDs !== m.datasetId) await dep(`dataset:${termDs}`);
+      if ((await getTerm(w.projectId, step.term))?.datasetId !== m.datasetId) crosses = true;
     } else {
       if (s.via || s.datasetId) crosses = true;
-      if (s.via) vias.push(s.via);
       if (s.type === 'filter') reads.push(s.column);
     }
   }
-  const model = vias.length > 0 || crosses ? listRelationships(w.projectId) : null;
-  for (const via of [...new Set(vias)].sort()) {
-    const path = viaPath(m.datasetId, via, await model!); // a via that no longer walks: the model's digest below says so
-    if (path.ok) for (const hop of path.value) await dep(`dataset:${hop.to.datasetId}`);
-  }
   if (!metrics.isFormulaDefinition(m.definition)) {
-    if (m.definition.column) reads.push(m.definition.column);
+    if (m.definition.column) measures.push(m.definition.column);
   } else {
     const compiled = compileMetricFormula(bindFormulaText(m.definition.formula, new Map()).text, own);
     if (!compiled.ok) deps.formula = 'uncompiled';
     else {
-      reads.push(...compiled.program.aggregates.map((a) => a.column).filter((c) => c[0] !== '{')); // an LOD reads its own dataset
+      measures.push(...compiled.program.aggregates.map((a) => a.column).filter((c) => c[0] !== '{')); // an LOD reads its own dataset
       for (const name of [...new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()))].sort()) {
         const other = (await (w.byName ??= metrics.metricsByName(w.projectId))).get(name);
         if (other) await dep(`metric:${other.id}`);
@@ -156,8 +162,15 @@ async function metricDeps(w: Walk, m: Metric, stack: readonly string[]): Promise
       }
     }
   }
-  // A column read through the data model (its nearest owner, a `via`, a term on another table): the model is a dep.
-  if (crosses || reads.some((c) => !own.has(c))) deps.relationships = digest((await (model ?? listRelationships(w.projectId))).map((r) => pinned(r, RELATIONSHIP_PIN)));
+  reads.push(...measures);
+  // A column read through the data model (its nearest owner, a `via`, a term on another table): the model is a dep,
+  // and so is every other dataset the figure reads (its Prepare output, as its own dataset's).
+  if (crosses || reads.some((c) => !own.has(c))) {
+    deps.relationships = digest((await listRelationships(w.projectId)).map((r) => pinned(r, RELATIONSHIP_PIN)));
+    const related = await relatedDatasets(w.projectId, m, measures);
+    if (related === 'refused') deps.reads = 'refused';
+    else for (const id of related) await dep(`dataset:${id}`);
+  }
   return deps;
 }
 
