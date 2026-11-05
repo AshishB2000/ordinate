@@ -80,6 +80,7 @@ import { hasVia } from '../analysis/joinPlan';
 import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
 import { statusFor, type StatusState } from '../analysis/statusStore';
 import { instructionsGuidance } from './guidance';
+import { verifiedMark } from './verifiedMark'; // "✓ Verified", by comparison at every draw (part 3 D9)
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -502,7 +503,7 @@ export function register(guard: Guard): void {
       const said = sanitizeLearn(learn, s);
       const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
       const kept = typeof savedVisualId === 'string' && (await visuals.getVisual(projectId, savedVisualId)) ? savedVisualId : undefined;
-      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}) };
+      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}), ...(await verifiedMark(projectId, built.card.spec)) };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }

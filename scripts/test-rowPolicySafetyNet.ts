@@ -255,6 +255,12 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       && vRow.filters[0] === 'customer · values hidden by row access rules' && !H.leaks(vEastList.text), `${westQ.text.slice(0, 160)} | ${vEastList.text.slice(0, 300)}`);
     const vEdList = await W.call('ed', 'verified:list', { projectId: P });
     ok('NEGATIVE CONTROL: the editor\'s row has the spec and the value', vEdList.body?.questions?.[0]?.spec?.filters?.[0]?.value === `${H.W_CANARY}_1` && H.leaks(vEdList.text), vEdList.text.slice(0, 300));
+    // Its mark (D9) too: east may draw the spec (it is east's own input, so its reply is not swept), but gets no "✓ Verified".
+    const westSpec = vEdList.body?.questions?.[0]?.spec;
+    const markOf = async (who: string) => (await W.call(who, 'answer:card', { projectId: P, spec: westSpec })).body;
+    const [markEast, markEd] = [await markOf('east'), await markOf('ed')];
+    ok('redact: answer:card — east\'s card of a hidden verified spec carries no mark', markEast?.ok === true && markEast.verified === undefined, JSON.stringify(markEast).slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s card of it is marked', markEd?.verified?.id === westQ.body?.question?.id, JSON.stringify(markEd?.verified));
     ok('write: east gets 403 from verified:save and verified:delete',
       (await W.call('east', 'verified:save', { projectId: P, input: { question: 'Mine', spec: spec(orders) } })).status === 403
         && (await W.call('east', 'verified:delete', { projectId: P, id: westQ.body?.question?.id })).status === 403);

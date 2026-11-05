@@ -192,6 +192,24 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   ok('…and leaves the list', !(await call('verified:list', { projectId: P })).body.questions.some((x: { id: string }) => x.id === id));
   ok('a bad id is refused at the contract', (await call('verified:delete', { projectId: P, id: 'nope' })).status === 400);
 
+  // ── § mark: "✓ Verified" by comparison only, worked out at every draw ─────
+  const answerSpec: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
+  const card = async (spec: unknown) => (await call('answer:card', { projectId: P, spec })).body;
+  const SEG = { ...SPEC, category: 'segment' }; // the spec of segQ, "Revenue by segment"
+  const VQ: string = segQ.body?.question?.id ?? '';
+  const marked = await card(SEG);
+  ok('the identical spec is marked, with the question, who and when', marked?.verified?.id === VQ && marked.verified.question === 'Revenue by segment'
+    && marked.verified.by === TEST_USER && !Number.isNaN(Date.parse(marked.verified.at)), JSON.stringify(marked?.verified));
+  ok('another chart type is still that answer', (await card({ ...SEG, chartType: 'bar' }))?.verified?.id === VQ);
+  ok('a client cannot claim it', (await card({ ...SPEC, verified: { id: VQ, question: 'x', by: 'x', at: T } }))?.verified === undefined);
+  ok('…and a stored turn keeps no mark', !('verified' in (answerSpec.sanitizeStoredSpec({ ...SEG, verified: { id: VQ } }) ?? {})));
+  ok('one filter off is not marked', (await card({ ...SEG, filters: [{ column: 'region', op: '=', value: 'West' }] }))?.verified === undefined);
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS.map((c) => (c.name === 'amount' ? { ...c, type: 'text' as const } : c)), rows: ROWS }));
+  const drawn = await card(SEG);
+  ok('broken (its measure no longer fits): the card draws, unmarked', drawn?.ok === true && drawn.verified === undefined, JSON.stringify(drawn).slice(0, 200));
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
+  ok('NEGATIVE CONTROL: restored, the mark is back', (await card(SEG))?.verified?.id === VQ);
+
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });
   finish();

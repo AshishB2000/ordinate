@@ -46,6 +46,15 @@
 .asOf {
   margin-right: var(--sp-4);
 }
+.verified {
+  font-size: var(--t-11);
+  font-weight: 600;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+  white-space: nowrap;
+}
 .filter {
   font-size: var(--t-11);
   padding: 1px var(--sp-8);

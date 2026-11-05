@@ -16,6 +16,9 @@
 // can be kept: "Save as visual" (./SaveAsVisual), for a member who may edit.
 // An answer run from a "Did you mean" column carries the name that was said
 // (`learn`), and the card offers to remember it (./RememberName).
+//
+// A card whose spec is a working verified question's says so, "✓ Verified · who" (part 3 D9): the server's
+// `verified`, worked out at every draw, never the card's own guess.
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -26,6 +29,7 @@ import type { ChartDataShape } from '../../charts/types';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { AsOfCaption } from '../../ui/AsOf';
+import { day } from '../data/format';
 import type { AsOf } from '../../ui/asOfView';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
@@ -53,6 +57,8 @@ interface Card {
   learn?: CardLearn;
   /** The visual its turn records, handed back only while it exists. */
   savedVisualId?: string;
+  /** Its spec is a working verified question's (semantic part 3 D9): worked out by the server at every draw. */
+  verified?: { id: string; question: string; by: string; at: string };
 }
 type Reply = Card | { ok: false; reason?: string };
 
@@ -120,6 +126,11 @@ export function AnswerCard({
         <div className={s.meta}>
           <span className={s.dataset}>{card.datasetName}</span>
           <AsOfCaption asOf={card.asOf} className={s.asOf} />
+          {card.verified && (
+            <span className={s.verified} title={`Verified ${day.format(new Date(card.verified.at))}: ${card.verified.question}`}>
+              ✓ Verified · {card.verified.by}
+            </span>
+          )}
           {card.filterLabels.map((f) => (
             <span key={f} className={s.filter}>
               {f}
