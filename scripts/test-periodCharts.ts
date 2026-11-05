@@ -175,6 +175,9 @@ void (async () => {
   ok('a text axis is named by its metric', byRegion.ok && byRegion.data.series[0].name === 'Revenue YTD vs LY' && byMonth.data.series[0].name === 'Revenue YTD');
   const asStored = { column: 'Revenue YTD', aggregation: 'count', metricId: ytd.id }; // how the web stores a period measure (calc/api metricMeasure)
   ok('the web\'s stored shape draws the same chart', JSON.stringify(await chart({ category: 'day', grain: 'month', values: [asStored] }, [Y2024])) === JSON.stringify(byMonth) && JSON.stringify(await chart({ category: 'region', values: [asStored] }, [OCT])) === JSON.stringify(await chart({ category: 'region', values: [M(ytd)] }, [OCT])));
+  const mm: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
+  const leaf = await H.as(H.ORG_A, () => mm.withLeafMeasures(P, D, { category: 'region', values: [asStored] } as never));
+  ok('the share policy is shown the base\'s column, never the stored copy\'s', leaf.values[0].column === 'amt' && leaf.values[0].aggregation === 'sum', show(leaf));
   const ytdByRegion = await chart({ category: 'region', values: [M(ytd)] }, [OCT]);
   ok('YTD by region: one question over the window', ytdByRegion.ok && Object.is(pointAt(ytdByRegion, 'East'), await kpi(ytd.id, [OCT, eq('region', 'East')])), show(ytdByRegion));
 
