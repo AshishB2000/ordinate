@@ -224,8 +224,8 @@ write. Each item says what a pod older than this release does, and what this rel
   adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
   duplicate erases the setting. This release keeps it and shows no figure for it: a KPI shows none,
   the Summary card leaves it out, and charts, Explain, alerts, the metric tree and drivers refuse,
-  until a later release adds snapshots. The one exception is under
-  [What stays open](#what-stays-open).
+  until a later release adds snapshots ([Snapshot metrics](#snapshot-metrics-07)). The one
+  exception is under [What stays open](#what-stays-open).
 
 ### What stays open
 
@@ -245,6 +245,8 @@ release that adds these features:
 
 - **The metric editor's preview** on a pod of this release shows a plain total for a snapshot
   metric. The saved metric keeps its snapshot, and the figures listed above still show none for it.
+  The later release previews the snapshot's own figure
+  ([Snapshot metrics](#snapshot-metrics-07)), so this closes once every pod runs it.
 - **Restoring an earlier version of a metric** on a pod of this release does not restore its date
   column: the metric keeps the one it has now.
 - **Explain refuses a saved chart with more than 8 filters** instead of narrating it: it reads at
@@ -429,6 +431,36 @@ a `05a` pod still runs beside this release, the figures above differ between the
 refuses them, except the three places listed under [What stays open](#what-stays-open)); the
 difference ends when the rollout does. A rollback to `05a` keeps every date and mark, and shows the
 refusals again.
+
+## Snapshot metrics (`07`)
+
+A simple metric can be a snapshot (Metrics → the metric → "Snapshot" → "Latest <date> only"), for
+a balance, a stock count or a headcount: its figure is the rows on the latest (or earliest) day of
+that date column in scope, aggregated as usual, never a sum over every day. With none set, nothing
+changes. On a chart by that same date, each month (or other bucket) shows its own latest day. On any
+other chart, the latest day is the one over the whole chart: a region with no row on that day has no
+bar, never its own older value. Its KPI tile and comparison period, the metric tree, scorecards and
+the sparkline, the Summary card, published pages, an alert made from its KPI, a formula built on it
+and the editor's preview all show the snapshot's figure. A what-if card keeps a snapshot at its
+baseline and says its drivers were not applied. `list_metrics` (MCP) carries it as `snapshot`, and
+the Assistant is told a snapshot is not a sum over dates.
+
+Some figures are refused with a sentence instead of guessed:
+
+- a snapshot metric on a Live dataset ("Make a copy" of the dataset to use it);
+- a chart of it by another date column than its own;
+- a pivot table of it, an answer card or Explain over a chart of it, and its key drivers or a
+  metric-tree split;
+- small multiples of it, and a chart of it beside another measure on a binned or folded ("Other")
+  axis.
+
+**This release needs the `05a` release on every pod first**
+([Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a)). A pod
+older than that drops a metric's snapshot when it saves the metric, and draws a sum over every date
+in its place. While a `05a` pod still runs beside this release, that pod shows no figure for a
+snapshot metric and refuses its charts, Explain, alerts, tree and drivers, and its editor preview
+shows a plain total; an alert it evaluates shows no figure. The difference ends when the rollout
+does. A rollback to `05a` keeps every snapshot and shows the refusals again.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
