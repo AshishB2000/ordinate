@@ -31,6 +31,25 @@ export function redactBaseFilters(steps: readonly FilterStep[], closed: boolean)
 }
 
 /**
+ * A stored record's base filters with each step on one of `columns` cut to its redacted form (column and
+ * operator, as `redactBaseFilters` shows them): a project bundle the Share policy shapes (app/sharePolicy),
+ * where a marked column's values leave as its sample values do. True when a step changed.
+ */
+export function withoutBaseValues(record: { baseFilters?: unknown }, columns: ReadonlySet<string>): boolean {
+  if (!Array.isArray(record.baseFilters)) return false;
+  let changed = false;
+  record.baseFilters = record.baseFilters.map((s: unknown) => {
+    const step = s && typeof s === 'object' ? (s as FilterStep) : null;
+    if (!step || !columns.has(step.column)) return s;
+    const cut = redactBaseFilters([step], true)[0];
+    if (Object.keys(step).length === Object.keys(cut).length) return s;
+    changed = true;
+    return cut;
+  });
+  return changed;
+}
+
+/**
  * The plain `filter` steps of an untrusted stored list, rebuilt with the keys a base filter may carry:
  * no `lock`, `context` or `via`, no radius, and nothing that is not a filter step (a term, a stray
  * value). Capped at MAX_BASE_FILTERS; a step listing more than MAX_BASE_FILTER_VALUES is dropped, never cut.
