@@ -43,7 +43,8 @@ export interface DrillTarget {
   description?: string;
 }
 
-type Head = { ok: true; available: true; columns: GridColumn[]; filters: FilterStep[]; total: number } | { ok: true; available: false; reason: string } | { ok: false; error: string };
+/** `hidden`: the columns a column rule hides from the caller — their cells are null, in place (semantic layer part 4). */
+type Head = { ok: true; available: true; columns: GridColumn[]; filters: FilterStep[]; total: number; hidden?: string[] } | { ok: true; available: false; reason: string } | { ok: false; error: string };
 
 const fmt = new Intl.NumberFormat();
 
@@ -110,6 +111,9 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
   const h = head.data;
   const ready = h && h.ok && h.available ? h : null;
   const reason = h && h.ok && !h.available ? h.reason : h && !h.ok ? h.error : '';
+  // Hidden columns are left out of the header; the rest keep their source index, so each draws over its own cell.
+  const secret = ready?.hidden ?? [];
+  const shown: GridColumn[] = useMemo(() => (ready?.columns ?? []).flatMap((c, at) => (ready?.hidden?.includes(c.name) ? [] : [{ ...c, at }])), [ready]);
 
   const exportRows = async () => {
     setExporting(true);
@@ -159,17 +163,29 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
         ) : (
           <>
             <div className={s.tools}>
-              <Input aria-label="Search these rows" icon="search" placeholder="Search these rows…" value={typed} onChange={(e) => setTyped(e.target.value)} />
+              <Input
+                aria-label="Search these rows"
+                icon="search"
+                placeholder={secret.length ? 'Search is off: columns are hidden from you' : 'Search these rows…'}
+                disabled={secret.length > 0 /* the server refuses it: a search reads every cell */}
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+              />
               <Select
                 aria-label="Sort by"
                 size="sm"
                 value={sortColumn}
-                options={[{ value: '', label: 'Data order' }, ...ready.columns.map((c: Cx) => ({ value: String(c.name), label: `Sort by ${c.name}` }))]}
+                options={[{ value: '', label: 'Data order' }, ...shown.map((c: Cx) => ({ value: String(c.name), label: `Sort by ${c.name}` }))]}
                 onValueChange={setSortColumn}
               />
               <Button size="sm" variant="ghost" icon={sortDir === 'asc' ? 'arrow-up' : 'arrow-down'} disabled={!sortColumn} onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}>
                 {sortDir === 'asc' ? 'Ascending' : 'Descending'}
               </Button>
+              {secret.length > 0 && (
+                <span className={s.hiddenNote} title={`Hidden from you: ${secret.join(', ')}`}>
+                  {secret.length === 1 ? '1 column hidden' : `${secret.length} columns hidden`}
+                </span>
+              )}
               <span className={s.count} aria-live="polite">
                 {ready.total === 1 ? '1 row' : `${fmt.format(ready.total)} rows`}
               </span>
@@ -177,7 +193,7 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
             <div className={s.grid}>
               <DataGrid
                 key={JSON.stringify(page)}
-                columns={ready.columns}
+                columns={shown}
                 source={source}
                 label="Underlying rows"
                 emptyTitle={search ? 'No rows match that search' : 'No rows'}

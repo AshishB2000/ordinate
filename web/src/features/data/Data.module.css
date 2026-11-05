@@ -51,6 +51,15 @@
   font-weight: 500;
   color: var(--text-strong);
 }
+/* A column a rule hides from this viewer (ColumnsTab): its name, then a lock. */
+.lockedName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.lockedName > svg {
+  color: var(--muted);
+}
 .mono {
   font-family: var(--font-mono);
   font-size: var(--t-12);

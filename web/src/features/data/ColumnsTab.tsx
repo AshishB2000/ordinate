@@ -10,6 +10,7 @@
 
 import { useId, useRef, useState } from 'react';
 import type { DatasetColumns } from '../../api/datasets';
+import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
@@ -189,7 +190,9 @@ export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { pro
               const common = live ? schema.data?.columns.find((x) => x.name === c.name)?.values[0] : stats.data?.summaries[i]?.mostCommon?.value;
               return (
                 <tr key={c.name} data-column={c.name}>
-                  <td className={s.strong}>{c.name}</td>
+                  <td className={s.strong}>
+                    {c.hidden ? <span className={s.lockedName}>{c.name}<Icon name="lock" size={12} label="Hidden from you" /></span> : c.name}
+                  </td>
                   <td>
                     <span className={s.typeChip}>{c.type}</span>
                   </td>
@@ -200,12 +203,17 @@ export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { pro
                   <td>
                     <AlsoCalled projectId={projectId} datasetId={datasetId} column={c.name} names={d.aliases ?? []} helpId={helpId} readOnly={!canEdit} />
                   </td>
-                  <td>{c.type === 'text' && <ValueLabelsCell projectId={projectId} datasetId={datasetId} column={c.name} values={d.values} canEdit={canEdit} />}</td>
+                  {/* A column a rule hides from this caller: its notes stay (names are not secret), its example and value labels do not (the server sends none). */}
+                  <td>{c.hidden ? <span className={s.muted}>—</span> : c.type === 'text' && <ValueLabelsCell projectId={projectId} datasetId={datasetId} column={c.name} values={d.values} canEdit={canEdit} />}</td>
                   <td>
                     <Cell multiline readOnly={!canEdit} value={d.description ?? ''} placeholder={canEdit ? 'Add a description' : '—'} label={`Description of ${c.name}`} onSave={(v, no) => patch(c.name, { description: v }, no)} />
                   </td>
                   <td>
-                    <Cell readOnly={!canEdit} value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v, no) => patch(c.name, { example: v }, no)} />
+                    {c.hidden ? (
+                      <span className={s.muted}>Hidden from you</span>
+                    ) : (
+                      <Cell readOnly={!canEdit} value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v, no) => patch(c.name, { example: v }, no)} />
+                    )}
                   </td>
                   <td>
                     <Select
