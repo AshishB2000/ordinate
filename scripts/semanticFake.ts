@@ -9,6 +9,7 @@
 //
 // Test code: values are bound parameters, identifiers come from the declared columns only.
 
+import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows } from '../src/connectors/types';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
 import type { SemanticAnswer, SemanticQuery } from '../src/engine/live/semantic/semanticQuery';
 
@@ -71,4 +72,83 @@ export function fakeSql(table: string, columns: LiveColumn[], q: SemanticQuery):
 export async function runFake(table: string, columns: LiveColumn[], q: SemanticQuery): Promise<SemanticAnswer> {
   const compiled = fakeSql(table, columns, q);
   return { columns: [...q.dimensions.map((x) => x.name), ...q.metrics], rows: await fx.runDuck(compiled) };
+}
+
+// ── The fake as a connector (semantic layer part 7, b1 Task 4) ───────────────
+//
+// `semantic-fake` answers `semantic.run(ctx, body)` with `body = { table, columns, query }` — its own request,
+// as each backend's encoder writes its own — and `semantic-fake-net` is the same with a `host` field, so the
+// SSRF guard resolves, checks and pins it first. Registered ONLY by a test, through `registerTestConnector`: the
+// registry resolves the id, no catalog lists it. `layerFake.calls` records every call; `layerFake.hook` may hold,
+// fail or slow one, as a real layer would.
+
+
+export const SEMANTIC_FAKE_ID = 'semantic-fake';
+export const SEMANTIC_FAKE_NET_ID = 'semantic-fake-net';
+
+export interface LayerCall {
+  body: { table: string; columns: LiveColumn[]; query: SemanticQuery };
+  signal: AbortSignal | undefined;
+  timeoutMs: number;
+  rowLimit: number;
+  costTag: ConnectorContext['costTag'];
+  pinned: string | undefined;
+}
+
+export const layerFake: {
+  calls: LayerCall[];
+  hook: ((call: LayerCall, ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError | undefined>) | null;
+} = { calls: [], hook: null };
+
+async function layerRun(ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError> {
+  const b = body as LayerCall['body'];
+  const call: LayerCall = { body: b, signal: ctx.signal, timeoutMs: ctx.timeoutMs, rowLimit: ctx.rowLimit, costTag: ctx.costTag, pinned: ctx.pinned?.address };
+  layerFake.calls.push(call);
+  try {
+    const held = layerFake.hook ? await layerFake.hook(call, ctx) : undefined;
+    if (held) return held;
+    if (ctx.signal?.aborted) return { ok: false, error: 'Cancelled' };
+    const a = await runFake(b.table, b.columns, b.query);
+    return { ok: true, columns: a.columns.map((name) => ({ name, type: '' })), rows: a.rows.slice(0, ctx.rowLimit) as ConnectorRows['rows'], truncated: a.rows.length > ctx.rowLimit };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function layerDef(id: string, withHost: boolean): ConnectorDef {
+  return {
+    id,
+    label: 'Fake semantic layer (tests)',
+    family: 'semantic-fake',
+    category: 'Cloud warehouses',
+    readOnly: true,
+    fields: [...(withHost ? [{ key: 'host', label: 'Host', type: 'text' as const }] : []), { key: 'token', label: 'Token', type: 'password', secret: true }],
+    listTables: async () => ({ ok: true, tables: [] }),
+    run: async () => ({ ok: false, error: 'A semantic layer has no rows to copy.' }),
+    semantic: {
+      backend: 'fake',
+      caps: { lookups: true, binaryCompare: false },
+      listModels: async () => ({ ok: true, models: [{ name: 'fixture' }] }),
+      describeModel: async () => ({ ok: true, dimensions: fx.COLUMNS.map((c) => ({ name: c.name, type: c.type })), metrics: Object.keys(FAKE_METRICS).map((name) => ({ name, additive: FAKE_ADDITIVE.has(name) })) }),
+      run: layerRun,
+    },
+  };
+}
+
+let registered = false;
+
+/** Make the fake layer resolvable by id (never listed), with its label for the sentences. Idempotent. */
+export function registerSemanticFake(): void {
+  if (registered) return;
+  const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
+  const refusals: typeof import('../src/engine/live/semantic/semanticRefusals') = require('../src/engine/live/semantic/semanticRefusals');
+  registry.registerTestConnector(layerDef(SEMANTIC_FAKE_ID, false));
+  registry.registerTestConnector(layerDef(SEMANTIC_FAKE_NET_ID, true));
+  refusals.registerLayerLabel('fake', 'Fake layer');
+  registered = true;
+}
+
+export function resetLayerFake(): void {
+  layerFake.calls.length = 0;
+  layerFake.hook = null;
 }

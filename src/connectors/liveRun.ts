@@ -21,7 +21,7 @@
 // user, and the secrets are resolved by the caller (src/engine/live/liveTarget.ts)
 // exactly as ipc/connections resolves them for a refresh.
 
-import type { ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from './types';
+import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from './types';
 import { safeError } from './types';
 import { guardHost } from './connectionRun';
 import { maxBytesBilled } from '../server/liveEnv';
@@ -52,6 +52,20 @@ export async function runLiveBound(
 ): Promise<ConnectorRows | ConnectorError> {
   const live = def.live;
   if (!live || typeof live.runBound !== 'function') return { ok: false, error: 'This source cannot answer live questions.' };
+  return boundCall(def, values, secrets, opts, (ctx) => live.runBound(ctx, sql, params));
+}
+
+/**
+ * The per-call context, the SSRF guard, the row cap and the redaction every Live call shares: a statement's
+ * (`runLiveBound`) and a semantic layer's question (./semanticRun `runSemanticBound`).
+ */
+export async function boundCall(
+  def: ConnectorDef,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  opts: LiveRunOpts,
+  call: (ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError>,
+): Promise<ConnectorRows | ConnectorError> {
   const ctx = {
     values: values && typeof values === 'object' ? values : {},
     secrets: secrets && typeof secrets === 'object' ? secrets : {},
@@ -64,7 +78,7 @@ export async function runLiveBound(
   const refused = await guardHost(def, ctx);
   if (refused) return { ok: false, error: refused };
   try {
-    const res = await live.runBound(ctx, sql, params);
+    const res = await call(ctx);
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
     const rows = Array.isArray(res.rows) ? res.rows : [];
     // Trust, then verify — as fetchRows does: a connector that ignored the cap is clipped AND reported.
