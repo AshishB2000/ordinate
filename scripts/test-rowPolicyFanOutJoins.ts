@@ -9,6 +9,9 @@
 //   3. RESTRICTED ON ORDERS, or CLOSED ON REGIONS (read only by the questions' joins): refused `related`.
 //      NEGATIVE CONTROL: with the related gate off, the cached answers reach the caller closed on Regions.
 //   4. LIVE: a Live many side is refused, typed, never a figure.
+//   5. A HIDDEN MANY-SIDE COLUMN (part 4, cross-part item 6): Orders hides `amount` from viewers; east's chart on
+//      Customers with a measure over it is refused `hidden` at the column gate, before any sub-question. NEGATIVE
+//      CONTROLS: the editor gets the figure; east's fan-out over Returns' refund answers, Object.is-equal to the editor's.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicyFanOutJoins.js
 
@@ -24,6 +27,8 @@ const doors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
+const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 
 const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 240)}`;
 const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
@@ -106,6 +111,22 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     ok('visual:get: a fan-out visual filtered through the closed Regions is sent to east without its stored labels', zoneVis !== '' && (await order(zoneVis)) === undefined, zoneVis);
     ok('NEGATIVE CONTROL: the same visual without that filter keeps them', JSON.stringify(await order(segVis)) === '["SMB","Mid"]');
     ok('setup: Regions\' rules removed', (await policy(G, null)).body?.ok === true);
+
+    // ── 5. A hidden many-side column ────────────────────────────────────
+    const hideAmount = (on: boolean) => W.as('boss', () => rec.serialized(rec.datasetFilePath(P, O), (raw) => {
+      if (on) raw.columnAccess = access.buildColumnAccess(raw, [{ column: 'amount', visibleTo: [] }], 'boss@acme.test', new Date().toISOString());
+      else delete raw.columnAccess;
+      return true;
+    }));
+    await hideAmount(true);
+    subQuestions = 0;
+    const hiddenSeg = await chart('east', FAN_SEG);
+    ok('hidden on Orders: east\'s chart with a measure over amount is refused hidden, before any sub-question', H.refused(hiddenSeg, 'hidden') && subQuestions === 0, `${subQuestions} ${show(hiddenSeg)}`);
+    ok('NEGATIVE CONTROL: the editor gets the figure', (await chart('ed', FAN_SEG)).body?.ok === true);
+    const REFUNDS = { category: 'segment', values: [M('id', 'count'), M('refund', 'sum', R)] };
+    const [mine, theirs] = [await chart('east', REFUNDS), await chart('ed', REFUNDS)];
+    ok('NEGATIVE CONTROL: east\'s fan-out over Returns\' refund answers, Object.is-equal to the editor\'s', mine.body?.ok === true && H.diff(mine.body.data, theirs.body?.data, {}) === '', show(mine));
+    await hideAmount(false);
 
     // ── 4. Live: a many side on a warehouse refuses, typed ─────────────
     fakeMod.registerLiveFake();
