@@ -27,6 +27,7 @@ import { failure } from '../api';
 import { formatBadge, type Metric, type MetricSummary, type Usage } from './api';
 import { MetricEditor, type MetricDraft } from './MetricEditor';
 import { Sparkline } from './Sparkline';
+import { TermsList } from '../../model/terms/TermsList';
 import s from './Metrics.module.css';
 
 interface Row {
@@ -255,6 +256,8 @@ function Metrics({ projectId }: { projectId: string }) {
       }
     >
       {body}
+      {/* Glossary terms: named filters (semantic D10). A later step moves them to a tab of their own. */}
+      <TermsList projectId={projectId} canEdit={canEdit} />
       {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       <Dialog
         open={deleting !== null}

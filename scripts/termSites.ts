@@ -115,9 +115,12 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },
   'src/ipc/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/ipc/segments.ts': { count: 1, how: 'prepare' },
+  // a term's own filter rows (no term inside a term: FilterRows terms={false}); the server refuses one anyway
+  'web/src/features/model/terms/TermDialog.tsx': { count: 1, how: 'prepare' },
   'web/src/features/prepare/drafts.ts': { count: 3, how: 'prepare' },
   'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
-  'web/src/features/projects/VersionPreview.tsx': { count: 1, how: 'ignores' },
+  // names a term by its name and any other kept step by its kind, in a version's facts (05b)
+  'web/src/features/projects/VersionPreview.tsx': { count: 2, how: 'ignores' },
 };

@@ -11,6 +11,9 @@ import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../api';
 import type { Column } from '../model';
 import { isKeptStep, KEPT_STEP_WORDS } from '../keptStep';
+import { Menu } from '../../../ui/Menu';
+import { TermChip } from '../../model/terms/TermChip';
+import { termIdOf, useTerms } from '../../model/terms/api';
 import { FilterDialog } from './FilterDialog';
 import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
@@ -29,14 +32,20 @@ export function FilterRows({
   cols,
   filters,
   onChange,
+  terms = true,
 }: {
   projectId: string;
   datasetId: string;
   cols: readonly Column[];
   filters: FilterStep[];
   onChange: (next: FilterStep[]) => void;
+  /** Offer the project's glossary terms (false in a term's own filters: no term inside a term). */
+  terms?: boolean;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
+  const glossary = useTerms(terms ? projectId : undefined);
+  // This dataset's terms first; another dataset's applies through a relationship (or is refused, with a sentence).
+  const offered = [...(glossary.data ?? [])].sort((a, b) => Number(b.datasetId === datasetId) - Number(a.datasetId === datasetId));
   const cur = editing === null ? null : filters[editing];
   return (
     <div className={s.rows} role="group" aria-labelledby="enc-filters">
@@ -44,7 +53,13 @@ export function FilterRows({
         Filters
       </span>
       {filters.map((f, i) =>
-        isKeptStep(f) ? (
+        termIdOf(f) ? (
+          // A glossary term: named, and removable; the term itself is edited in the Glossary.
+          <div key={i} className={s.row}>
+            <TermChip projectId={projectId} term={termIdOf(f) as string} />
+            <IconButton icon="x" size="sm" label="Remove term" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
+          </div>
+        ) : isKeptStep(f) ? (
           // A step this version cannot edit (a glossary term, a newer release's): kept through every save, shown, and removable.
           <div key={i} className={s.row}>
             <span className={s.kept}>{KEPT_STEP_WORDS}</span>
@@ -77,6 +92,20 @@ export function FilterRows({
       <Button size="sm" icon="plus" className={s.add} disabled={!cols.length} onClick={() => onChange([...filters, { type: 'filter', column: cols[0]?.name ?? '', op: '' }])}>
         Add filter
       </Button>
+      {terms && offered.length > 0 && (
+        <Menu
+          label="Add a glossary term"
+          trigger={
+            <Button size="sm" icon="list" className={s.add}>
+              Add term
+            </Button>
+          }
+          items={offered.map((t) => ({
+            label: t.datasetId === datasetId ? t.name : `${t.name} (${t.datasetName ?? 'another dataset'})`,
+            onSelect: () => onChange([...filters, { type: 'term', term: t.id } as unknown as FilterStep]),
+          }))}
+        />
+      )}
       {cur && editing !== null && (
         <FilterDialog
           projectId={projectId}

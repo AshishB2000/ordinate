@@ -14,6 +14,7 @@ afterEach(() => {
 });
 
 const TERM = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' } as unknown as FilterStep;
+const FUTURE = { type: 'future_x', a: 1 } as unknown as FilterStep;
 const F: FilterStep = { type: 'filter', column: 'region', op: '=', value: 'East' };
 const FIELDS = [{ name: 'region', kind: 'dimension' as const, type: 'text' as const }];
 
@@ -36,12 +37,20 @@ function draw(filters: FilterStep[]) {
 
 describe('a filter this version cannot edit, in the question', () => {
   it('is an inert pill: its sentence, no edit, and Remove takes it out alone', () => {
-    const { onChange } = draw([F, TERM]);
+    const { onChange } = draw([F, FUTURE]);
     expect(screen.getByText('A filter from a newer version')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /^Change the filter on/ })).toHaveLength(1); // the plain filter's, not the term's
+    expect(screen.getAllByRole('button', { name: /^Change the filter on/ })).toHaveLength(1); // the plain filter's, not the kept step's
     expect(screen.queryByText(/undefined/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Remove filter from a newer version' }));
     expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]![0].filters).toEqual([F]);
+  });
+
+  it('a glossary term is an inert pill named as a term (05b), and Remove takes it out alone', () => {
+    const { onChange } = draw([F, TERM]);
+    expect(screen.getAllByRole('button', { name: /^Change the filter on/ })).toHaveLength(1);
+    expect(screen.queryByText(/undefined/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove term' }));
     expect(onChange.mock.calls[0]![0].filters).toEqual([F]);
   });
 

@@ -6,6 +6,8 @@
 import { VIZ_LABELS } from '../../charts/vizLabels';
 import type { VersionMeta, VersionType } from './api';
 import s from './Versions.module.css';
+import { termLabel, useTerms, type TermSummary } from '../model/terms/api';
+import { KEPT_STEP_WORDS } from '../visuals/keptStep';
 
 type Rec = Record<string, unknown>;
 // ponytail: a version's record is its store's own shape; read field by field, never trusted.
@@ -13,9 +15,11 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'n
 const arr = (v: unknown): Rec[] => (Array.isArray(v) ? v.filter((x): x is Rec => !!x && typeof x === 'object') : []);
 const obj = (v: unknown): Rec => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Rec) : {});
 
-function filterWords(filters: Rec[]): string {
+function filterWords(filters: Rec[], terms?: readonly TermSummary[]): string {
   return filters
-    .map((f) => `${str(f.column)} ${str(f.op)} ${Array.isArray(f.values) ? f.values.map(str).join(', ') : str(f.value)}`.trim())
+    // A glossary term by its name (semantic D10); one this version cannot read, as every screen words it.
+    .map((f) => (f.type === 'term' && typeof f.term === 'string' ? termLabel(terms, f.term) : f.type !== undefined && f.type !== 'filter' ? KEPT_STEP_WORDS
+      : `${str(f.column)} ${str(f.op)} ${Array.isArray(f.values) ? f.values.map(str).join(', ') : str(f.value)}`.trim()))
     .join('; ');
 }
 
@@ -121,9 +125,10 @@ function TablePreview({ table, steps }: { table: Rec; steps: Rec[] }) {
   );
 }
 
-export function VersionPreview({ type, record, meta }: { type: VersionType; record: Rec; meta: VersionMeta | undefined }) {
+export function VersionPreview({ type, record, meta, projectId }: { type: VersionType; record: Rec; meta: VersionMeta | undefined; projectId?: string }) {
+  const terms = useTerms(projectId);
   const filters = arr(record.filters);
-  const filterText = filters.length ? filterWords(filters) : 'None';
+  const filterText = filters.length ? filterWords(filters, terms.data) : 'None';
   if (type === 'dashboard') {
     const sheets = arr(record.sheets);
     return (

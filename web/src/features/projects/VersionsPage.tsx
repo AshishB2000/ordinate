@@ -146,7 +146,7 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
     else if (preview.isError) {
       content = <ErrorState compact heading={3} title="That version could not be read" message={preview.error.message} onRetry={() => void preview.refetch()} />;
     } else if (!preview.data) content = <ErrorState compact heading={3} title="That version could not be read" message="It may have been removed with its record." />;
-    else content = <VersionPreview type={type} record={preview.data.record} meta={picked} />;
+    else content = <VersionPreview type={type} record={preview.data.record} meta={picked} projectId={projectId} />;
     right = comparing ? (
       <VersionCompare projectId={projectId} type={type} id={id} versions={versions} from={cmpFrom} to={cmpTo} onPick={compare} onClose={closeCompare} />
     ) : (

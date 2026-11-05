@@ -267,6 +267,7 @@ export function VisualTileBody({
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
       {!thumb && q.data.periodOn && <p className={s.periodOn}>Date range applied to {q.data.periodOn}</p>}
+      {!thumb && q.data.notes?.map((n) => <p key={n} role="note" className={s.periodOn}>{n}</p>) /* a dashboard term this tile leaves out */}
     </div>
   );
 }
