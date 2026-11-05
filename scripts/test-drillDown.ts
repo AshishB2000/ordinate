@@ -6,6 +6,11 @@
 //   refusals   each is the rows panel's own sentence (visual:rows, the same mark); NEGATIVE CONTROL: a column
 //              in no hierarchy has its own sentence
 //   pinned     an old chart's visual:data and visual:rows replies are byte-identical after a hierarchy is saved
+//   walk       for every bar on every level (region › state › city; year › quarter › month › day; and the 4-5-4
+//              calendar's year › quarter › period › week › day): the bar is exactly its rows (visual:rows, summed
+//              in JS), its drilled chart's children add up to it, and the drill's steps are the rows panel's
+//   springfield  a city in two states of one region: drilled under Ohio it is Ohio's rows only; NEGATIVE
+//              CONTROL: without the state step the same chart draws a bigger Springfield
 //
 //   npm run build:ts && node scripts/test-drillDown.js
 
@@ -24,6 +29,7 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const { stableStringify }: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
 const msg: typeof import('../src/ipc/drillMessages') = require('../src/ipc/drillMessages');
+const dateIntel: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 
 type Any = any; // any: each handler's own reply shape, read field by field below
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
@@ -32,7 +38,7 @@ const COLS = [
   { name: 'category', type: 'text' }, { name: 'sub_category', type: 'text' }, { name: 'order_date', type: 'date' }, { name: 'revenue', type: 'number' },
 ] as Any;
 const PLACES: Array<[string, string, string]> = [
-  ['East', 'New York', 'New York City'], ['East', 'New York', 'Albany'], ['East', 'Pennsylvania', 'Philadelphia'], ['East', 'Pennsylvania', 'Pittsburgh'],
+  ['East', 'New York', 'New York City'], ['East', 'New York', 'Albany'], ['East', 'Pennsylvania', 'Philadelphia'], ['East', 'Pennsylvania', 'Springfield'],
   ['East', 'Ohio', 'Columbus'], ['East', 'Ohio', 'Springfield'], ['West', 'California', 'Los Angeles'], ['West', 'California', 'San Diego'],
   ['West', 'Oregon', 'Portland'], ['Central', 'Illinois', 'Chicago'], ['Central', 'Illinois', 'Springfield'], ['Central', 'Texas', 'Houston'], ['Central', 'Texas', 'Austin'],
 ];
@@ -102,6 +108,66 @@ async function main(): Promise<void> {
   await call('catalog:setColumn', { projectId: P, datasetId: D, column: 'region', patch: { values: [{ value: 'East', label: 'Eastern region' }] } });
   const lab = await drill(BY_REGION, 'East');
   ok('a labelled value: the crumb reads the label, the step the stored value', lab.available && lab.crumb.label === 'Eastern region' && lab.steps[0].value === 'East', show(lab));
+  // ── walk: every bar is its rows, and its children add up to it ─────────────
+  const REVENUE = COLS.findIndex((c: Any) => c.name === 'revenue');
+  const jsSum = (rs: unknown[][]): number => rs.reduce((n, row) => n + Number(row[REVENUE]), 0);
+  const chartOf = (encoding: unknown, filters: unknown[]): Promise<Any> => call('visual:data', { projectId: P, datasetId: D, encoding, filters });
+  const rowsUnder = (encoding: unknown, filters: unknown[], category: unknown): Promise<Any> => call('visual:rows', { projectId: P, datasetId: D, encoding, filters, mark: { category }, page: { offset: 0, limit: 5000 } });
+  /** Walk every bar from `encoding` down; the levels drawn, and the first problem found. */
+  const walk = async (encoding: Any, last: string, levelOfEnc: (e: Any) => string): Promise<{ levels: string[]; bars: number; wrong: string }> => {
+    const seen = new Set<string>();
+    let bars = 0;
+    let wrong = '';
+    const down = async (enc: Any, filters: unknown[], path: string): Promise<void> => {
+      seen.add(levelOfEnc(enc));
+      const chart = await chartOf(enc, filters);
+      if (!chart.ok || chart.data.series.length !== 1) { wrong ||= `${path}: the chart did not draw ${show(chart)}`; return; }
+      for (let i = 0; i < chart.data.labels.length && !wrong; i += 1) {
+        const label = chart.data.labels[i];
+        const value = chart.data.series[0].values[i];
+        if (value === null) continue;
+        bars += 1;
+        const here = `${path} › ${label}`;
+        const behind = await rowsUnder(enc, filters, label);
+        if (!behind.available || !Object.is(jsSum(behind.rows), value)) { wrong = `${here}: the bar is not exactly its rows ${show([value, behind.available && jsSum(behind.rows), behind.reason])}`; return; }
+        const r = await drill(enc, label, { filters });
+        if (!r.available) { if (r.reason !== last) wrong = `${here}: ${show(r)}`; continue; }
+        if (stableStringify(r.steps) !== stableStringify(behind.filters.slice(filters.length))) { wrong = `${here}: the steps are not the rows panel's ${show([r.steps, behind.filters])}`; return; }
+        const child = await chartOf(r.encoding, [...filters, ...r.steps]);
+        const total = child.ok ? child.data.series[0].values.reduce((n: number, v: number | null) => n + (v ?? 0), 0) : NaN;
+        if (!Object.is(total, value)) { wrong = `${here}: the children add up to ${total}, the bar is ${value}`; return; }
+        await down(r.encoding, [...filters, ...r.steps], here);
+      }
+    };
+    await down(encoding, [], '');
+    return { levels: [...seen], bars, wrong };
+  };
+  const geo = await walk(BY_REGION, msg.drillLastLevel('city', 'Geography'), (e) => e.category);
+  ok('walk (region › state › city): every bar is exactly its rows, its children add up to it, its steps are the rows panel\'s', !geo.wrong && geo.levels.join() === 'region,state,city' && geo.bars > 20, geo.wrong || show(geo));
+  const BY_YEAR = { category: 'order_date', grain: 'year', values: REV };
+  const greg = await walk(BY_YEAR, msg.drillFinestDate(), (e) => e.grain);
+  ok('walk (year › quarter › month › day, Gregorian): the same, on every date step', !greg.wrong && greg.levels.join() === 'year,quarter,month,day' && greg.bars > 700, greg.wrong || show(greg));
+
+  // ── springfield: a child is counted under its whole path ──────────────────
+  const east = (await drill(BY_REGION, 'East')).steps;
+  const ohio = await drill({ ...BY_REGION, category: 'state' }, 'Ohio', { filters: east });
+  const cities = await chartOf(ohio.encoding, [...east, ...ohio.steps]);
+  const springOf = (c: Any): number => c.data.series[0].values[c.data.labels.indexOf('Springfield')];
+  const ohioRows = ROWS.filter((row) => row[1] === 'Ohio' && row[2] === 'Springfield') as unknown[][];
+  ok('springfield: drilled under East › Ohio, Springfield is Ohio\'s rows only', ohio.available && Object.is(springOf(cities), jsSum(ohioRows)) && jsSum(ohioRows) > 0, show([springOf(cities), jsSum(ohioRows)]));
+  const loose = await chartOf(ohio.encoding, east);
+  ok('NEGATIVE CONTROL: without the state step the same chart draws a bigger Springfield', springOf(loose) > springOf(cities), show([springOf(loose), springOf(cities)]));
+
+  // ── calendar: under 4-5-4 a period holds whole weeks, so period › week › day ──
+  dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1, calendarType: '454', yearEnd: 'nearest' });
+  try {
+    const retail = await walk(BY_YEAR, msg.drillFinestDate(), (e) => e.grain);
+    ok('walk (4-5-4: year › quarter › period › week › day): the same, on every retail step', !retail.wrong && retail.levels.join() === 'year,quarter,month,week,day' && retail.bars > 800, retail.wrong || show(retail));
+  } finally {
+    dateIntel.setCalendar({});
+  }
+  ok('NEGATIVE CONTROL: back on Gregorian, a month drills to days again', (await drill(BY_MONTH, '2024-03')).encoding?.grain === 'day');
+
   ok('a missing dataset is an error', (await call('visual:drillDown', { projectId: P, datasetId: '00000000-0000-4000-8000-000000000000', encoding: BY_REGION, mark: { category: 'East' } })).ok === false);
 }
 
