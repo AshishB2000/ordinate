@@ -430,6 +430,11 @@ function calcLayerShapes(): void {
     ok(`${id}: …every value bound, placeholders in text order`, r.ok && placeholdersInOrder(id, r.query) && !sql.includes("'big'")
       && r.query.params.some((p) => p.value === 'big') && r.query.params.some((p) => p.value === 'x'), r.ok && show(r.query.params));
     ok(`${id}: …only the columns still needed (no note, no order_date)`, !sql.includes(d.ident('note')) && !sql.includes(d.ident('order_date')));
+    // Over a defining query — the shape the nightly's literal twins take on Snowflake and BigQuery (step 05).
+    const lit = `SELECT ${COLS.map((col) => `NULL AS ${d.ident(col.name)}`).join(', ')}`;
+    const overLit = sqlOf(comp.compileChart(ir, { kind: 'text' }, env(id, { kind: 'sql', sql: lit, calcs: CALCS }, cols))).split(lit).join('');
+    ok(`${id}: …and over a defining query, its layers read only amount, tier and region`, ['amount', 'tier', 'region'].every((n) => overLit.includes(d.ident(n)))
+      && !overLit.includes(d.ident('note')) && !overLit.includes(d.ident('order_date')), overLit);
     // Base filters (part 1 step 08) sit in the innermost layer, over the source's own columns.
     const c = { d, b: new params.ParamSink(), columns: cols };
     const inner = `${['db', 'sch', 'orders'].map((p) => d.ident(p)).join('.')} AS lv_src`;
