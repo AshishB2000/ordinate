@@ -9,7 +9,8 @@ import { refineSpec } from '../ai/answerRefine';
 import { validateAnswerSpec } from '../ai/answerSpec';
 import type { SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
-import { closedToCaller } from '../data/rowAccess';
+import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
+import { mentionsHidden } from '../data/columnAccess';
 import { hasValueFilter, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { listTagged } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
@@ -40,13 +41,17 @@ export interface VerifiedState { q: VerifiedQuestion; problem: string | null; hi
 /**
  * Every question of the project with whether it runs, and whether it is HIDDEN from the caller (D5): its dataset
  * is closed to them by row access rules and its spec compares with a row value. One env; one row-rules check per dataset.
+ * A question whose spec names a column hidden from the caller (part 4, D18) is left out for them altogether.
  */
 export async function verifiedStates(projectId: string): Promise<VerifiedState[]> {
   const [list, env] = await Promise.all([listTagged(projectId), verifiedEnv(projectId)]);
   const closed = new Map<string, boolean>();
+  const hiddenOf = new Map<string, ReadonlySet<string>>();
   const out: VerifiedState[] = [];
   for (const { rec: q, tag } of list) {
     const id = q.spec.datasetId;
+    if (!hiddenOf.has(id)) hiddenOf.set(id, await hiddenColumnsFor(projectId, id));
+    if (mentionsHidden(q.spec, hiddenOf.get(id)!)) continue;
     if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id));
     out.push({ q, problem: verifiedProblem(q, env), hidden: !!closed.get(id) && hasValueFilter(q.spec), tag });
   }

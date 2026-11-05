@@ -9,6 +9,8 @@
 // - metric:list and term:list: Payroll, Payroll per head and High earners read a hidden column, so `hidden: true` for
 //   east; Headcount is not (CONTROL); nothing is for hr (CONTROL). Part 5's kinds likewise: a distinct count of salary,
 //   a period metric over Payroll (through its base) and a funnel by ssn; a period over Headcount is not (CONTROL).
+// - verified:list (part 3) leaves out, for east, a verified question whose spec names a hidden column, with no value
+//   filter; People by dept stays (CONTROL); hr lists both (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnRedact.js
@@ -142,6 +144,17 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
       kEast['Distinct salaries'] === true && kEast['Payroll YTD'] === true && kEast['By ssn funnel'] === true, JSON.stringify(kEast));
     ok('NEGATIVE CONTROL: a period over Headcount is not hidden for east', 'Headcount YTD' in kEast && kEast['Headcount YTD'] === undefined, JSON.stringify(kEast));
     ok("NEGATIVE CONTROL: none of part 5's kinds is hidden for hr", Object.values(await flags('hr', 'metric:list')).every((v) => v === undefined));
+
+    // ── verified:list (part 3): a question whose spec names a hidden column is left out, value filter or none ──
+    const QUESTION = 'VERIFIED_PAY_CANARY by dept';
+    const verify = async (question: string, measures: object[]): Promise<void> => must(`verified ${question}`, await W.call('boss', 'verified:save', { projectId: P,
+      input: { question, spec: { datasetId: staff, category: 'dept', measures, filters: [], chartType: 'column', title: question } } }));
+    await verify(QUESTION, [{ column: 'salary', aggregation: 'sum' }]);
+    await verify('People by dept', [{ column: 'employee_id', aggregation: 'count' }]);
+    const vEast = await W.call('east', 'verified:list', { projectId: P });
+    ok('verified:list: a question over salary (no value filter) reaches no east; People by dept does', vEast.body?.ok === true && !vEast.text.includes('VERIFIED_PAY_CANARY') && !/salary/i.test(vEast.text)
+      && vEast.body.questions.some((q: { question: string }) => q.question === 'People by dept'), vEast.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: hr lists both', ((t) => t.includes('VERIFIED_PAY_CANARY') && t.includes('People by dept'))((await W.call('hr', 'verified:list', { projectId: P })).text));
 
     // ── quality:list and dataset:liveSchema: the whole dataset (closedToCaller) ──
     must('quality', await W.call('boss', 'quality:save', { projectId: P, datasetId: staff, rule: { kind: 'in_set', column: 'ssn', args: { values: [`${C.SSN_CANARY}_0`] }, severity: 'warn' } }));
