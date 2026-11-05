@@ -152,7 +152,8 @@ void (async () => {
     if (x === periodM) ok(`${x.name}: its KPI says its base is gone`, (await ipcMetrics.resolveMetric(P, x.id))!.notes?.[0] === checkMsg.periodBaseMissing());
     // Step 06 charts a period metric: this one's base is gone, so its chart says so, and a formula over it is not charted yet.
     const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
-    ok(`${x.name}: a chart says why`, c.ok === false && c.error === (x === periodM ? checkMsg.periodBaseMissing() : msg.metricKindPending(x.name)), JSON.stringify(c).slice(0, 300));
+    // Step 08 charts a funnel metric: this one's event column holds customer ids, so nobody entered and every bucket has no figure.
+    ok(`${x.name}: a chart says why, or draws no figure`, x === periodM ? c.ok === false && c.error === checkMsg.periodBaseMissing() : c.ok === true && c.data.series[0].values.every((v: unknown) => v === null), JSON.stringify(c).slice(0, 300));
     const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
     ok(`${x.name}: a formula over it has no KPI figure`, (await ipcMetrics.resolveMetric(P, f.id))!.value === null);
     const cf = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: f.id }]);

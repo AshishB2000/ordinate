@@ -23,11 +23,6 @@ export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   return isNewerKind(m.definition);
 }
 
-/** pendingMetric, less what a chart draws: a period metric (step 06, ./metricMeasures charts it alone). */
-export function chartPending(m: Pick<Metric, 'definition'>): boolean {
-  return pendingMetric(m) && !metrics.isPeriodDefinition(m.definition);
-}
-
 /** Not offered to a template role, which reads a metric as its bare column: pending, or a count distinct (a role's picker is plain). */
 export function unofferedMetric(m: Pick<Metric, 'definition'>): boolean {
   return pendingMetric(m) || (metrics.isSimpleDefinition(m.definition) && m.definition.aggregation === 'countd');

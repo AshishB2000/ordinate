@@ -4,7 +4,7 @@
 // visits, carts and buys, with Object.is the boss's same metric over the physical store subset.
 //
 // NEGATIVE CONTROLS: the boss's figure over every row is another one, and so is the lock applied to the entry alone
-// (store visitors who bought on the web would count).
+// (store visitors who bought on the web would count). A chart is refused them, as every chart with a metric measure is (part 1).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-funnelMetricsRowLock.js
 
@@ -52,6 +52,10 @@ void (async () => {
     ok('NEGATIVE CONTROL: the lock on the entry alone (store visitors buying on the web) is another figure: the lock filters every event', !Object.is(entryOnly, mine) && entryOnly > (mine as number), JSON.stringify([entryOnly, mine]));
     const G = [eq('country', 'Germany')];
     ok('east, scoped to Germany: the boss\'s on the subset under the same scope', Object.is(await value('east', all, G), await value('boss', sub, G)), JSON.stringify([await value('east', all, G), await value('boss', sub, G)]));
+    const chart = (who: string) => W.call(who, 'visual:data', { projectId: P, datasetId: shop, encoding: { category: 'country', values: [{ column: 'user', aggregation: 'countd', metricId: all }] }, filters: [] });
+    const refused = await chart('east');
+    ok('east: a funnel metric chart is refused, never drawn over every row', refused.body?.ok === false && refused.body?.code === 'row_policy', refused.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the boss draws it', (await chart('boss')).body?.ok === true);
   } finally {
     await W.close();
   }

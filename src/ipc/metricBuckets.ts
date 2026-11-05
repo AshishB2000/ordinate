@@ -43,7 +43,8 @@ async function pooled<T>(jobs: (() => Promise<T>)[], n: number): Promise<T[]> {
 
 /**
  * `figure` once per bucket of `dateColumn` at `grain` (undefined: the door's own) under `filters`. `name` is the
- * measure a refusal names; `last` keeps only the latest buckets (a sparkline), before the cap is checked.
+ * measure a refusal names; `last` keeps only the latest buckets (a sparkline), before the cap is checked; `tooMany` says the cap
+ * in the caller's words (a period metric's, by default).
  */
 export async function bucketSeries(
   projectId: string,
@@ -52,14 +53,14 @@ export async function bucketSeries(
   grain: DateGrain | undefined,
   filters: FilterStep[],
   figure: (bucketScope: FilterStep[], label: string) => Promise<number | null>,
-  opts: { params?: ParamValues; name: string; last?: number },
+  opts: { params?: ParamValues; name: string; last?: number; tooMany?: (grain: DateGrain, n: number) => string },
 ): Promise<BucketSeries | BucketRefusal> {
   const axis = await vizDataFor(projectId, datasetId, { category: dateColumn, ...(grain ? { grain } : {}), values: [{ column: dateColumn, aggregation: 'count' }] }, filters, { params: opts.params });
   if (!axis.ok) return axis;
   const g: DateGrain = axis.category?.grain ?? grain ?? 'month';
   let labels = fillBuckets(axis.data.labels.map(String), g);
   if (opts.last) labels = labels.slice(-opts.last);
-  if (labels.length > MAX_BUCKETS) return { ok: false, error: msg.periodTooManyBuckets(opts.name, g, labels.length) };
+  if (labels.length > MAX_BUCKETS) return { ok: false, error: opts.tooMany?.(g, labels.length) ?? msg.periodTooManyBuckets(opts.name, g, labels.length) };
   const types = new Map([[dateColumn, 'date']]);
   const scope = scopeRange(filters, [{ name: dateColumn, type: 'date' }])?.range ?? {};
   const values = await pooled(labels.map((label) => () => {

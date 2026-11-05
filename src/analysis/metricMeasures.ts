@@ -34,7 +34,7 @@
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
-import { chartPending, pendingMeasureRefusal, pendingMetric, pendingSentence } from './pendingKinds';
+import { pendingMetric, pendingSentence } from './pendingKinds';
 import { ExternalMetricError, externalRefusal, isExternalMetricError, type EXTERNAL_CODE } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
@@ -48,6 +48,7 @@ import type { DatasetMeta } from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import * as msg from './metricCheckMessages';
 import type { MetricSnapshot } from './snapshot';
+import { funnelColumns } from './funnelEvents';
 import { isLive } from '../data/liveDataset';
 import { liveSnapshotRefused } from '../engine/liveRefusals';
 import { relatedColumnGroups, resolveColumnOwner } from './joinPlan';
@@ -163,8 +164,6 @@ export async function planMetricMeasures(
   encoding: VizEncoding,
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
-  const pending = await pendingMeasureRefusal(projectId, encoding, chartPending); // a funnel metric: no chart on this release
-  if (pending) return { ok: false, error: pending };
   const alone = await chartsAlone(projectId, datasetId, encoding);
   if (alone) return 'error' in alone ? { ok: false, error: alone.error } : { ok: true, values: encoding.values, filters: [], special: { kind: metrics.isPeriodDefinition(alone.metric.definition) ? 'period' : 'funnel', metric: alone.metric, params } };
   const inPivot = await pivotSnapshot(projectId, encoding);
@@ -337,6 +336,7 @@ export async function withLeafMeasures(projectId: string, datasetId: string, enc
   if (res.special) {
     // A period metric is drawn from its base's columns: the policy is shown those (once: a base is never a period metric).
     const { id, definition } = res.special.metric;
+    if (metrics.isFunnelDefinition(definition)) return { ...encoding, values: funnelColumns(definition.funnel).map((column) => ({ column, aggregation: 'count' })) }; // a funnel metric counts its funnel's columns
     const base = metrics.isPeriodDefinition(definition) ? definition.base : id;
     return inner ? encoding : withLeafMeasures(projectId, datasetId, { ...encoding, values: encoding.values.map((v) => (v.metricId === id ? { ...v, metricId: base } : v)) }, true);
   }

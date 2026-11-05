@@ -223,3 +223,18 @@ export function funnelEntryNotOwn(column: string): string {
 export function funnelEntryLod(): string {
   return t('metricCheckMessages.a_context_filter_can_t_pick');
 }
+
+/** A funnel metric by a category (D7): the engine's breakdown keeps its `n` biggest groups by entries. */
+export function funnelTopGroups(n: number, column: string): string {
+  return t('metricCheckMessages.only_the_values_of_with_the', { n, column });
+}
+
+/** A funnel metric on a date axis is one resolution per bucket, at most 24. */
+export function funnelTooManyBuckets(name: string, grain: string, n: number): string {
+  return t('metricCheckMessages.by_needs_points_and_a_funnel', { name, grain, n });
+}
+
+/** A funnel metric charted by a column of another dataset, or by none: its breakdown is its entry event's own value. */
+export function funnelOwnColumn(name: string, category: string): string {
+  return t('metricCheckMessages.can_be_charted_by_a_column', { name, category });
+}

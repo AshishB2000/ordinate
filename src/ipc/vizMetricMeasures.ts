@@ -39,6 +39,7 @@ import { lineUp } from './lineUp';
 import type { Ok, Series } from './lineUp';
 import type { PerAt } from './snapshotPer';
 import { periodChartData } from './periodChart';
+import { funnelChartData } from './funnelChart';
 
 type Ask = (encoding: VizEncoding, filters: FilterStep[]) => Promise<VizDataReply>;
 
@@ -74,6 +75,7 @@ const older = (a: Ok['asOf'], b: Ok['asOf']): Ok['asOf'] => (!a ? b : !b ? a : b
 /** `at`: the door's own project, dataset and options, where a per-entity snapshot leaf is asked (./snapshotPer). */
 export function followMetricMeasures(res: Extract<PlanResult, { ok: true }>, encoding: VizEncoding, filters: FilterStep[], ask: Ask, at: PerAt): Promise<VizDataReply> {
   if (res.special?.kind === 'period') return periodChartData(res.special.metric, encoding, filters, ask, res.special.params); // charted alone (./periodChart)
+  if (res.special?.kind === 'funnel') return funnelChartData(res.special.metric, encoding, filters, ask, res.special.params); // charted alone (./funnelChart)
   if (res.plan) return metricMeasureData(res.plan, { ...encoding, values: res.values }, filters, ask, at);
   // One question: the shared metric filters ahead of the chart's, and no metricId (the door would plan again).
   return ask({ ...encoding, values: res.values.map(({ metricId: _m, ...v }) => v) }, res.filters.concat(filters));

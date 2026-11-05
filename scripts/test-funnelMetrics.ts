@@ -6,7 +6,8 @@
 //          a period as an entry period ("may still convert"), Live refused typed and never hydrated, the save's
 //          refusals, the words, additivity; the scope's combinations (an LOD field, a context filter, a related table);
 //          metrics and grids with nothing new reply byte for byte as before (a pinned hash)
-//   chart  (Task 3) by entry date, one resolution per bucket; by a category, the engine's breakdown; alerts
+//   chart  by entry date, one resolution per bucket (each point its tile); by a category, the engine's breakdown
+//          (bars add up; a bar is its tile for one-country entities, the documented edge pinned); alone; Live; alerts
 //
 // Every guard has its NEGATIVE CONTROL beside it.
 //
@@ -155,6 +156,58 @@ void (async () => {
   const same = (a: { categories: boolean; time: boolean }, c: boolean, t: boolean): boolean => a.categories === c && a.time === t;
   const byName = await H.as(H.ORG_A, () => metricsMod.metricsByName(P));
   ok('additivity: converted and entered add across categories, not time; rate neither', same(additivity.additivityOf(await rec(conv), SHOP_COLS, byName), true, false) && same(additivity.additivityOf(await rec(ent), SHOP_COLS, byName), true, false) && same(additivity.additivityOf(await rec(rate), SHOP_COLS, byName), false, false));
+
+  // ── chart ───────────────────────────────────────────────────────────────────
+  const M = (m: M) => ({ column: 'user', aggregation: 'countd', metricId: m.id }); // the stored shape a chart measure keeps
+  const at = (r: Reply, label: string): number | null | undefined => r.data?.series?.[0]?.values?.[r.data.labels.indexOf(label)];
+  const sum = (xs: (number | null)[]): number => xs.reduce<number>((a, v) => a + (v ?? 0), 0);
+  const TWO = { type: 'filter', column: 'user', op: 'not in', values: ['x1', 't1'] } as FilterStep; // the two entities whose visits carry two countries
+  const byCountry = await chart({ category: 'country', values: [M(conv)] });
+  ok('a chart by country draws, named after the metric', byCountry.ok === true && byCountry.data.series[0].name === 'Buyers' && byCountry.data.labels.length === 4, show(byCountry));
+  const one = await chart({ category: 'country', values: [M(conv)] }, [TWO]);
+  for (const c of ['Germany', 'France', 'Spain', 'Italy']) {
+    ok(`${c}'s bar equals the ${c} tile (one-country entities)`, Object.is(at(one, c), await kpi(conv, [TWO, eq('country', c)])), show([at(one, c), await kpi(conv, [TWO, eq('country', c)])]));
+  }
+  ok('the bars add up to the tile (one entry per entity)', Object.is(sum(byCountry.data.series[0].values), await kpi(conv, [])) && Object.is(sum((await chart({ category: 'country', values: [M(ent)] })).data?.series?.[0]?.values ?? []), await kpi(ent, [])));
+  const x1 = await chart({ category: 'country', values: [M(ent)] }, [eq('user', 'x1')]);
+  ok('the documented edge: x1 counts under France in the chart (its first visit), and in both filtered tiles', JSON.stringify(x1.data?.labels) === '["France"]' && (await kpi(ent, [GERMANY, eq('user', 'x1')])) === 1 && (await kpi(ent, [FRANCE, eq('user', 'x1')])) === 1, show(x1));
+  ok('… so the Germany bar is the Germany tile less x1', Object.is(at(byCountry, 'Germany'), (await kpi(conv, [GERMANY]))! - 1));
+  const rates = await chart({ category: 'country', values: [M(rate)] });
+  const ents = await chart({ category: 'country', values: [M(ent)] });
+  ok('a rate by country: each group\'s converted ÷ entered', rates.ok === true && rates.data.labels.every((l: string, k: number) => Object.is(rates.data.series[0].values[k], at(byCountry, l)! / at(ents, l)!)), show(rates));
+  const byWeek = await chart({ category: 'ts', grain: 'week', values: [M(rate)] }, [MARCH_TS]);
+  const pb: typeof import('../src/analysis/periodBuckets') = require('../src/analysis/periodBuckets');
+  const tileUnder = async (m: M, label: string): Promise<number | null> => {
+    const b = pb.bucketRange(label, 'week')!;
+    return kpi(m, [between(b.from < '2024-03-01' ? '2024-03-01' : b.from, b.to > '2024-03-31' ? '2024-03-31' : b.to)]);
+  };
+  const weekly = [];
+  for (const l of byWeek.data?.labels ?? []) weekly.push(Object.is(byWeek.data.series[0].values[byWeek.data.labels.indexOf(l)], await tileUnder(rate, l)));
+  ok('by entry week: each point is its week\'s tile', byWeek.ok === true && weekly.length >= 4 && weekly.every(Boolean), show([byWeek, weekly]));
+  ok('… on a date axis, with its grain', byWeek.category?.kind === 'date' && byWeek.category?.grain === 'week');
+  const byDay = await chart({ category: 'ts', grain: 'day', values: [M(conv)] }, [MARCH_TS]);
+  ok('more than 24 days: refused with the funnel\'s sentence', byDay.ok === false && byDay.error === msg.funnelTooManyBuckets('Buyers', 'day', 29), show(byDay));
+  const byCity = await chart({ category: 'city', values: [M(conv)] });
+  ok('more than 12 cities: the top 12, and the truncated note', byCity.ok === true && byCity.data.labels.length === 12 && byCity.warnings?.includes(msg.funnelTopGroups(12, 'city')), show(byCity));
+  ok('NEGATIVE CONTROL: four countries carry no such note', !(byCountry.warnings ?? []).includes(msg.funnelTopGroups(12, 'country')));
+  ok('a funnel measure with a second measure is refused', (await chart({ category: 'country', values: [M(conv), M(ent)] })).error === msg.measureChartsAlone('Buyers'));
+  ok('… and under a split', (await chart({ category: 'country', series: 'channel', values: [M(conv)] })).error === msg.measureChartsAlone('Buyers'));
+  ok('a formula over it is not charted yet', (await chart({ category: 'country', values: [M(twice)] })).error === msg.periodInChartFormula('Buyers'));
+  ok('a chart scope it can\'t use to pick who enters is refused, never drawn over everyone', (await chart({ category: 'country', values: [M(conv)] }, [eq('segment', 'B2B')])).error === msg.funnelEntryNotOwn('segment'));
+  const liveChart = await hydrates(L, async () => chart({ category: 'country', values: [M({ id: rateL, name: '' })] }, [], L));
+  ok('Live: a chart by country is the typed funnel refusal, never hydrated', liveChart.value.ok === false && liveChart.value.code === 'live_refused' && liveChart.value.reason === 'funnel' && !liveChart.hydrated, show(liveChart));
+  const liveWeek = await hydrates(L, async () => chart({ category: 'ts', grain: 'week', values: [M({ id: rateL, name: '' })] }, [], L));
+  ok('Live: … by date too', liveWeek.value.ok === false && liveWeek.value.code === 'live_refused' && liveWeek.value.reason === 'funnel' && !liveWeek.hydrated, show(liveWeek));
+  const mm: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
+  const leaves = await H.as(H.ORG_A, () => mm.withLeafMeasures(P, D, { category: 'country', values: [M(conv)] } as never));
+  ok('the share policy is shown the funnel\'s columns, as a formula\'s leaves', JSON.stringify(leaves.values.map((v) => v.column)) === '["user","event","ts"]', show(leaves.values));
+  const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+  const { randomUUID }: typeof import('crypto') = require('crypto');
+  const rule = { id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '<', value: 0.9 }, metric: { column: '', aggregation: 'sum', metricId: rate.id, filters: [GERMANY] } };
+  const watched = await H.as(H.ORG_A, () => alertStore.metricFor(P, rule as never));
+  ok('an alert on a funnel metric watches its figure', typeof watched.value === 'number' && Object.is(watched.value, await kpi(rate, [GERMANY])), show(watched));
+  const tested = await H.as(H.ORG_A, () => alertStore.testRule(P, rule as never));
+  ok('the Test button: the funnel figure', tested.ok && tested.fire === true && Object.is(tested.value, await kpi(rate, [GERMANY])), show(tested));
 
   await close();
   finish();
