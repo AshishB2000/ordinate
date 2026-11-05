@@ -78,7 +78,7 @@ export async function metricProblem(
 }
 
 /** `metric:save`'s body: the reply. */
-export async function saveMetricInput(projectId: string, input: unknown) { // the reply as it always was
+export async function saveMetricChecked(projectId: string, input: unknown) { // the reply as it always was
   try {
     const raw: any = input && typeof input === 'object' ? input : {}; // any: the zod-checked input
     const checked = await metricProblem(projectId, raw);
@@ -98,7 +98,7 @@ export async function saveMetricInput(projectId: string, input: unknown) { // th
 }
 
 /** `metric:update`'s body: the reply. `base`: the editor's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base. */
-export async function updateMetricPatch(projectId: string, id: string, base: unknown, patch: unknown) { // the reply as it always was
+export async function updateMetricChecked(projectId: string, id: string, patch: unknown, base?: unknown) { // the reply as it always was
   try {
     const raw: any = patch && typeof patch === 'object' ? patch : {}; // any: the zod-checked patch
     const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;

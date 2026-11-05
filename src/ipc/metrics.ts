@@ -68,7 +68,7 @@ import { kpiHidden } from '../publish/kpiPolicy';
 import { baseName, periodMetricValue } from './periodMetric';
 import { periodSeries } from './periodChart';
 import { funnelMetricValue } from './funnelMetric';
-import { saveMetricInput, updateMetricPatch } from './metricSave';
+import { saveMetricChecked, updateMetricChecked } from './metricSave';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -510,10 +510,10 @@ export function register() {
     return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec, undefined, await baseName(projectId, t.rec.definition)), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
-  ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => saveMetricInput(projectId, input));
+  ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => saveMetricChecked(projectId, input));
 
   // `base`: the editor's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base.
-  ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => updateMetricPatch(projectId, id, base, patch));
+  ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => updateMetricChecked(projectId, id, patch, base));
 
   ipcMain.handle('metric:duplicate', async (_e, { projectId, id }: any = {}) => {
     const src = await metrics.getMetric(projectId, id);
