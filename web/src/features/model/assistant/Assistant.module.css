@@ -16,6 +16,7 @@
 
 .head {
   display: flex;
+  flex-wrap: wrap; /* a head action that does not fit beside the title goes under it */
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--sp-12);

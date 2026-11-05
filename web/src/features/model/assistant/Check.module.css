@@ -1,0 +1,67 @@
+/* Check the Assistant (./CheckAssistant): the button in the verified questions' head, and each row's outcome. */
+
+.check {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.meta {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+  text-align: right;
+}
+.error {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error-text);
+}
+.error svg {
+  flex: none;
+}
+.body {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+/* A row's outcome: a pill on the success tone, or the error tone for an answer that is not the team's. */
+.outcome {
+  display: inline-flex;
+  align-items: center;
+  margin: var(--sp-4) 0 0;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  font-size: var(--t-12);
+  font-weight: 500;
+}
+.pass {
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+.fail {
+  background: var(--error-soft);
+  color: var(--error-text);
+}
+.reason {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 599px) {
+  .check {
+    align-items: flex-start;
+  }
+  .meta {
+    text-align: left;
+  }
+}

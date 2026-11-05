@@ -78,3 +78,36 @@ export const useVerified = (projectId: string, datasetId?: string, opts: { enabl
       return { broken: r.broken, questions: r.questions };
     },
   });
+
+// ── Check the Assistant (`verified:check`, `verified:checkResult`; src/ipc/assistantCheck.ts) ───────────────
+
+/** One question's outcome in the last check; `reason` is absent where row access rules close its dataset to the caller. */
+export interface CheckResult {
+  id: string;
+  outcome: 'match' | 'differs' | 'refused';
+  reason?: string;
+}
+/** The project's last check, as its record says (a stale `running` one arrives as `stopped`). Every count is the server's. */
+export interface CheckRun {
+  runId: string;
+  state: 'running' | 'done' | 'stopped' | 'error';
+  startedBy: string;
+  startedAt: string;
+  heartbeatAt: string;
+  finishedAt?: string;
+  total: number;
+  asked: number;
+  matched: number;
+  skipped: number;
+  results: CheckResult[];
+  error?: string;
+}
+type CheckReply = { ok: true; run: CheckRun | null } | Fail;
+
+export const checkKey = (projectId: string) => ['verified:checkResult', projectId] as const;
+
+export const useCheckResult = (projectId: string) =>
+  useQuery({
+    queryKey: checkKey(projectId),
+    queryFn: async () => okOr((await rpc('verified:checkResult', { projectId })) as CheckReply, 'The last check').run,
+  });
