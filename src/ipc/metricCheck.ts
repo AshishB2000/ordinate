@@ -18,7 +18,7 @@ import { checkMetricFormula } from '../analysis/metricCheck';
 import type { KnownMetric, MetricCheck } from '../analysis/metricCheck';
 import { compileMetricFormula } from '../analysis/metricFormula';
 import * as datasets from '../data/datasets';
-import { relatedColumnNames } from './relationships';
+import { manySideColumnNames, relatedColumnNames } from './relationships';
 import { liveCodeOf } from './liveRoute';
 import { nameRefusal, previewDefinition } from './metrics';
 
@@ -71,7 +71,7 @@ export async function checkMetric(input: {
     expression,
     datasetId,
     columns: meta.columns.map((c) => ({ name: c.name, type: c.type })),
-    related: await relatedColumnNames(projectId, datasetId),
+    related: (await relatedColumnNames(projectId, datasetId)).concat(await manySideColumnNames(projectId, datasetId)),
     metrics: await knownMetrics(projectId, id),
     self: name || undefined,
     chart: input.chart === true,

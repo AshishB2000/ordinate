@@ -83,7 +83,8 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
   // Inner measures are plain: no metricId (the door would plan again), no calc (it runs on the finished reply).
   const bare = (m: VizMeasure): VizMeasure => (m.datasetId ? { column: m.column, aggregation: m.aggregation, datasetId: m.datasetId } : { column: m.column, aggregation: m.aggregation });
   const run = (c: Call, enc: VizEncoding): Promise<VizDataReply> => {
-    const asked = c.plain.map((i) => bare(values[i])).concat(c.leaves.map((i) => ({ column: plan.leaves[i].column, aggregation: plan.leaves[i].aggregation })));
+    // A leaf on another table names it, so the door joins it in (forward) or asks it on its own table (a many side, ./vizFanOut).
+    const asked = c.plain.map((i) => bare(values[i])).concat(c.leaves.map((i) => bare(plan.leaves[i])));
     // The axis-only question counts the category: its labels are read, its figures are not.
     const e = { ...enc, values: asked.length ? asked : [{ column: enc.category, aggregation: 'count' as const }] };
     return c.snapshot ? snapshotAnswer(c.snapshot, e, c.own.concat(filters), ask) : ask(e, c.own.concat(filters));
@@ -148,6 +149,8 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
     data.geo = { ...first.data.geo, items };
   }
   const out: Ok = { ...first, data, warnings: Array.from(new Set(replies.flatMap((r) => r.warnings))) };
+  const notes = Array.from(new Set(replies.flatMap((r) => r.notes ?? []))); // a many-side leaf's (./vizFanOut)
+  if (notes.length) out.notes = notes;
   const fx = replies.reduce<Ok['fx']>((a, r) => mergeFx(a, r.fx), undefined);
   const asOf = replies.reduce<Ok['asOf']>((a, r) => older(a, r.asOf), undefined);
   if (fx) out.fx = fx;

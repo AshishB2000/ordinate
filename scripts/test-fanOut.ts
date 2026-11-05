@@ -9,6 +9,8 @@
 //   § names    (step 07) the many sides' column lists and a bare name's one many-side owner
 //   § kpi      (step 07) a KPI on Customers over a many-side column is that table's KPI, filtered by D11,
 //              against a brute-force sum; a KPI over its own or a forward column is today's reply
+//   § formula  (step 07) a formula metric naming a many-side column, as a KPI and as a chart measure: each
+//              leaf on its own table, lined up by label, against a brute-force loop
 //
 //   npm run build:ts && node scripts/test-fanOut.js
 
@@ -32,6 +34,9 @@ const rels: typeof import('../src/analysis/relationships') = require('../src/ana
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
 const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const metricsIpc: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const metricCheckIpc: typeof import('../src/ipc/metricCheck') = require('../src/ipc/metricCheck');
+const { compileMetricFormula }: typeof import('../src/analysis/metricFormula') = require('../src/analysis/metricFormula');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
@@ -117,6 +122,7 @@ async function main(): Promise<void> {
   await answers();
   await names();
   await kpis();
+  await formulas();
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
@@ -210,6 +216,52 @@ async function kpis(): Promise<void> {
 }
 
 const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
+
+// ── § formula (step 07) ─────────────────────────────────────────────────────
+
+async function formulas(): Promise<void> {
+  const { P, swap } = await doorProject();
+  if (!handlers.has('metric:save')) metricsIpc.register();
+  if (!handlers.has('metric:check')) metricCheckIpc.register();
+  const save = async (name: string, formula: string): Promise<string> => {
+    const r = await handlers.get('metric:save')!(null, { projectId: P, input: { name, datasetId: swap(C), definition: { formula } } });
+    if (!r.ok) throw new Error(`metric "${name}" not saved: ${show(r)}`);
+    return r.metric.id as string;
+  };
+  const chart = (encoding: VizEncoding): Promise<Reply> => handlers.get('visual:data')!(null, { projectId: P, datasetId: swap(C), encoding: swap(encoding) });
+  const perCustomer = await save('Revenue per customer', 'sum(amount) / count(id)');
+  const amountOf = (keepIt: (o: Cell[]) => boolean): number | null => ((rs) => (rs.length ? rs.reduce((a, o) => a + (o[4] as number), 0) : null))(ORDERS.rows.filter(keepIt));
+
+  const value = await handlers.get('metric:value')!(null, { projectId: P, id: perCustomer });
+  ok('KPI: the formula over two tables (every order over every customer row)', value.ok && Object.is(value.value, (amountOf(() => true) as number) / CUSTOMERS.rows.length), show(value));
+
+  const c = await chart({ category: 'segment', values: [{ column: 'Revenue per customer', aggregation: 'sum', metricId: perCustomer }] });
+  // Brute force: per segment label, the orders of customers with it (first row per id; orphans under ''), over its customer rows.
+  const segOf = (o: Cell[]): string => String(custOf(o[1])?.[COL.segment] ?? '');
+  const labels = [...new Set([...CUSTOMERS.rows.map((r) => String(r[COL.segment])), ...ORDERS.rows.map(segOf)])];
+  const brute = new Map(labels.map((l) => {
+    const n = CUSTOMERS.rows.filter((r) => String(r[COL.segment]) === l).length;
+    const a = amountOf((o) => segOf(o) === l);
+    return [l, a === null || n === 0 ? null : a / n] as const;
+  }));
+  const drawn = c.ok ? new Map(c.data.labels.map((l, k) => [String(l), c.data.series[0].values[k]] as const)) : new Map();
+  ok('chart: per segment, each leaf on its own table, lined up', c.ok && drawn.size === brute.size && [...brute].every(([l, v]) => drawn.has(l) && Object.is(drawn.get(l), v)), show([c, [...brute]]));
+  ok('the blank segment: no customer count, so the formula is null, never Infinity', c.ok && drawn.has('') && drawn.get('') === null && amountOf((o) => segOf(o) === '') !== null, show(c));
+  ok('Gov (the repeated c1 that no order reaches): a count and no amount, so null', c.ok && drawn.get('Gov') === null, show(c));
+
+  const zoneShare = await save('Zones counted', 'count(zone)');
+  const viaFormula = await chart({ category: 'segment', values: [{ column: 'Zones counted', aggregation: 'sum', metricId: zoneShare }] });
+  const plainZone = await chart({ category: 'segment', values: [M('zone', 'count', G)] });
+  ok('a forward column in a formula draws, and equals the same measure charted plainly', viaFormula.ok && plainZone.ok
+    && show(viaFormula.data.labels) === show(plainZone.data.labels) && viaFormula.data.series[0].values.every((v, k) => Object.is(v, plainZone.data.series[0].values[k])), show([viaFormula, plainZone]));
+  const twoOwners = await chart({ category: 'segment', values: [{ column: 'Ambiguous', aggregation: 'sum', metricId: await save('Ambiguous', 'count(customer_id)') }] });
+  ok('a formula naming a column two many sides have: refused, naming both', !twoOwners.ok && /Orders and on Returns/.test(twoOwners.error), show(twoOwners));
+
+  const check = await handlers.get('metric:check')!(null, { projectId: P, datasetId: swap(C), expression: 'sum(amount) / count(id)' });
+  ok('metric:check accepts sum(amount) on Customers, and previews the KPI', check.valid === true && check.preview?.value === value.value, show(check));
+  const own = compileMetricFormula('sum(amount) / count(id)', CUSTOMERS.columns.map((x) => x.name));
+  ok('NEGATIVE CONTROL: with own columns only (today), the formula does not compile', !own.ok && /Unknown function/.test(own.error), show(own));
+}
 
 // ── § answers ───────────────────────────────────────────────────────────────
 

@@ -46,7 +46,7 @@ import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
 import { periodPlan } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
-import { relatedColumnNames } from './relationships';
+import { manySideColumnNames, relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import { withAsOf } from '../data/asOf';
@@ -172,8 +172,8 @@ async function resolveDefinition(
 
   const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
   // A related dataset's columns too: `sum(revenue) / sum(target)` reaches Targets
-  // through the project's relationships, resolved by computeCardMetric's join hook.
-  const columns = (meta ? meta.columns.map((c) => c.name) : []).concat(await relatedColumnNames(ctx.projectId, datasetId));
+  // through the project's relationships (computeCardMetric's join hook, or a many side's own KPI).
+  const columns = (meta ? meta.columns.map((c) => c.name) : []).concat(await relatedColumnNames(ctx.projectId, datasetId), await manySideColumnNames(ctx.projectId, datasetId));
   // `[Revenue] * [[growth]]` — the parameter becomes a literal before parsing.
   const compiled = compileMetricFormula(bindFormulaText(definition.formula, ctx.params).text, columns);
   if (!compiled.ok) return null;

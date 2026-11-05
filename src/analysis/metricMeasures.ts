@@ -1,5 +1,5 @@
 // A chart measure that IS a formula metric — MAIN PROCESS. Reads the metrics
-// store and dataset metadata; never a row.
+// store, dataset metadata and relationships; never a row.
 //
 // `Margin % = sum(profit) / sum(revenue)` on a chart by region must be each
 // region's profit over each region's revenue: CALCULATED AFTER TOTALS. Averaging
@@ -44,6 +44,9 @@ import * as msg from './metricCheckMessages';
 import type { MetricSnapshot } from './snapshot';
 import { isLive } from '../data/liveDataset';
 import { liveSnapshotRefused } from '../engine/liveRefusals';
+import { relatedColumnGroups, resolveColumnOwner } from './joinPlan';
+import { manySideColumnGroups, manySideOwner } from './fanOutPlan';
+import { projectModel } from '../ipc/relationships';
 
 /** How deep `[A]` → `[B]` may go — ipc/metrics.ts's MAX_FORMULA_DEPTH, for the same reason. */
 const MAX_DEPTH = 10;
@@ -54,6 +57,8 @@ export interface Leaf {
   aggregation: MetricAggregation;
   filters: FilterStep[];
   snapshot?: MetricSnapshot;
+  /** The column's table when it is not the chart's own: the nearest forward one, else its one many side (./fanOutPlan). */
+  datasetId?: string;
 }
 
 /** A leaf by index, or a formula over operands keyed by the reference as written. */
@@ -146,10 +151,28 @@ export async function planMetricMeasures(
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
   const leafAt = new Map<string, number>();
   let byName: Map<string, Metric> | null = null;
-  let columns: string[] | null = null;
   let meta: DatasetMeta | null | undefined; // read once, by the first snapshot
 
-  const leafOf = (column: string, aggregation: MetricAggregation, own: FilterStep[], owner: string, snapshot?: MetricSnapshot): Operand => {
+  // The names a formula may total — its own, its forward tables' and its many sides' — and the table each is on.
+  let model: { columns: string[]; tableOf: (column: string) => string | undefined } | null = null;
+  const modelOf = async (): Promise<NonNullable<typeof model>> => {
+    if (model) return model;
+    const own = ((await datasets.getDatasetMeta(projectId, datasetId))?.columns ?? []).map((c) => c.name);
+    const { rels, infos } = await projectModel(projectId, datasetId);
+    const names = (gs: { columns: { name: string }[] }[]): string[] => gs.flatMap((g) => g.columns.map((c) => c.name));
+    const tableOf = (column: string): string | undefined => {
+      if (own.includes(column)) return undefined;
+      const fwd = resolveColumnOwner(datasetId, column, rels, infos);
+      if (fwd) return fwd;
+      const many = manySideOwner(datasetId, column, rels, infos);
+      if (many && !many.ok) throw new PlanError(many.error);
+      return many ? many.datasetId : undefined;
+    };
+    model = { columns: own.concat(names(relatedColumnGroups(datasetId, rels, infos)), names(manySideColumnGroups(datasetId, rels, infos))), tableOf };
+    return model;
+  };
+
+  const leafOf = (column: string, aggregation: MetricAggregation, own: FilterStep[], owner: string, tableOf: (column: string) => string | undefined, snapshot?: MetricSnapshot): Operand => {
     // ponytail: an LOD total is per ROW of the whole table, not per chart cell;
     // refused until the chart door can group one (analysis/lodQuery.ts).
     if (column[0] === '{') throw new PlanError(msg.measureNoLod(owner));
@@ -158,7 +181,8 @@ export async function planMetricMeasures(
     let at = leafAt.get(key);
     if (at === undefined) {
       at = plan.leaves.length;
-      plan.leaves.push(snapshot ? { column, aggregation, filters, snapshot } : { column, aggregation, filters });
+      const table = tableOf(column);
+      plan.leaves.push({ column, aggregation, filters, ...(snapshot ? { snapshot } : {}), ...(table ? { datasetId: table } : {}) });
       leafAt.set(key, at);
     }
     return { leaf: at };
@@ -177,13 +201,13 @@ export async function planMetricMeasures(
     if (isExternalDefinition(m.definition)) throw new ExternalMetricError('pending', m.name); // a formula naming a layer's metric
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
     if (pendingMetric(m)) throw new PlanError(pendingSentence(m)); // part 5's shapes: no figure on this release
+    const { columns, tableOf } = await modelOf();
     if (metrics.isSimpleDefinition(m.definition)) {
       const snap = m.definition.snapshot;
       if (snap) await checkSnapshot(m, snap);
-      return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name, snap) : null;
+      return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name, tableOf, snap) : null;
     }
     if (depth > MAX_DEPTH || !isFormulaDefinition(m.definition)) return null;
-    if (!columns) columns = ((await datasets.getDatasetMeta(projectId, datasetId))?.columns ?? []).map((c) => c.name);
     const compiled = compileMetricFormula(bindFormulaText(m.definition.formula, params).text, columns);
     if (!compiled.ok) {
       // The chart's own measure says why; an operand degrades to null, as a KPI's does.
@@ -191,7 +215,7 @@ export async function planMetricMeasures(
       return null;
     }
     const operands = new Map<string, Operand | null>();
-    for (const agg of compiled.program.aggregates) operands.set(agg.ref, leafOf(agg.column, agg.aggregation, m.filters, m.name));
+    for (const agg of compiled.program.aggregates) operands.set(agg.ref, leafOf(agg.column, agg.aggregation, m.filters, m.name, tableOf));
     for (const ref of compiled.program.metricRefs) {
       const key = ref.toLowerCase();
       if (!byName) byName = await metrics.metricsByName(projectId);
