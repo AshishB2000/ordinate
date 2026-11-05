@@ -160,6 +160,18 @@ async function asks(): Promise<void> {
   const home = await promptFor({ kind: '' });
   ok('project context: 200 per guide, each dataset\'s', guideLen(home, 'Orders') === 200 + 1 && guideLen(home, 'Budget') === 200 + 1, home.slice(-700));
   ok('…and the inventory\'s own table notes stay as they were', !home.includes('- Guide:'));
+  // A topic's context (part 6): its datasets' guides in its order, at the inventory's cap; one outside it has none.
+  const topicsStore: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const third = (await datasets.saveDataset(P, { name: 'Leads', sourceKind: 'csv', columns: [{ name: 'n', type: 'number' }], rows: [[1]] }))!.id;
+  await tableDocs.setTableDoc(P, third, { guide: 'Leads are raw.' });
+  // The topic lists Orders and Budget in the reverse of the project's own order.
+  const [firstName, secondName] = (await datasets.listDatasets(P)).map((d) => d.name).filter((n) => n === 'Orders' || n === 'Budget');
+  const money = (await topicsStore.saveTopic(P, { name: 'Money', datasets: [secondName, firstName].map((n) => ({ id: n === 'Orders' ? D : OTHER })), metricIds: [], termIds: [] }))!;
+  const inTopic = await promptFor({ kind: 'topic', id: money.id });
+  ok('a topic: its datasets\' guides in its order, 200 each, none from outside it', guideLen(inTopic, 'Budget') === 200 + 1 && guideLen(inTopic, 'Orders') === 200 + 1
+    && inTopic.indexOf(`Guide for "${secondName}"`) < inTopic.indexOf(`Guide for "${firstName}"`) && !inTopic.includes('Guide for "Leads"'), inTopic.slice(-700));
+  ok('NEGATIVE CONTROL: the project context has the guide of the dataset outside it, in the project\'s order', ((t) => t.includes('Guide for "Leads"') && t.indexOf(`Guide for "${firstName}"`) < t.indexOf(`Guide for "${secondName}"`))(await promptFor({ kind: '' })));
+  ok('a topic that is gone: the project\'s guides', (await promptFor({ kind: 'topic', id: '0b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b' })).includes('Guide for "Leads"'));
   const dash = await promptFor({ kind: 'analysis', id: A });
   ok('a dashboard context: instructions, no guide', dash.includes('- Revenue means') && !dash.includes('Guide for'), dash.slice(-400));
 
