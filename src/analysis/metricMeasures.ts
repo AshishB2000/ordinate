@@ -24,11 +24,15 @@
 // A SNAPSHOT (D8) is always its own leaf: the door asks for it on its latest
 // day (ipc/snapshotDoors.snapshotAnswer), per date bucket on a chart by its own
 // date. A chart by another date, and a pivot, are refused here.
+//
+// A PERIOD metric (part 5, D10) is not planned into leaves: it charts ALONE (one
+// measure, no split, no facets, no pivot) and the plan names it as `special`, for
+// ipc/periodChart to draw one resolution per date bucket or one rewritten scope.
 
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
-import { pendingMeasureRefusal, pendingMetric, pendingSentence } from './pendingKinds';
+import { chartPending, pendingMeasureRefusal, pendingMetric, pendingSentence } from './pendingKinds';
 import { ExternalMetricError, externalRefusal, isExternalMetricError, type EXTERNAL_CODE } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
@@ -74,7 +78,9 @@ export interface MeasurePlan {
  * `values`: the encoding's measures, each drawn simple metric's `column`/`aggregation` replaced by its metric's.
  * `filters`: the metric filters every measure shares, params bound. `plan`: only when the measures need separate questions.
  */
-export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string; code?: 'live_refused' | typeof EXTERNAL_CODE; reason?: string };
+export type PlanResult =
+  | { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan; special?: { kind: 'period' | 'funnel'; metric: Metric; params: ParamValues } }
+  | { ok: false; error: string; code?: 'live_refused' | typeof EXTERNAL_CODE; reason?: string };
 
 /** Whether a simple metric reads other rows than its column's plain total: its own filters, or a snapshot's day. */
 export function needsMetricPlan(m: Metric): boolean {
@@ -93,6 +99,19 @@ async function pivotSnapshot(projectId: string, encoding: VizEncoding | null | u
   for (const v of encoding?.pivot && Array.isArray(encoding.pivot.values) ? encoding.pivot.values : []) {
     const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
     if (m && (isExternalDefinition(m.definition) || (metrics.isSimpleDefinition(m.definition) && m.definition.snapshot))) return m;
+  }
+  return null;
+}
+
+/** The period metric a chart draws alone, or the sentence refusing the company it keeps (a second measure, a split, facets, a pivot). */
+async function chartsAlone(projectId: string, datasetId: string, encoding: VizEncoding): Promise<{ metric: Metric } | { error: string } | null> {
+  const pivot = encoding.pivot && Array.isArray(encoding.pivot.values) ? encoding.pivot.values : [];
+  const drawn = drawnMeasures(encoding);
+  for (const v of [...pivot, ...drawn]) {
+    const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
+    if (!m || !metrics.isPeriodDefinition(m.definition)) continue;
+    if (m.datasetId !== datasetId) return { error: msg.otherDataset(m.name) };
+    return !pivot.length && drawn.length === 1 && !encoding.series && !encoding.facet ? { metric: m } : { error: msg.measureChartsAlone(m.name) };
   }
   return null;
 }
@@ -142,8 +161,10 @@ export async function planMetricMeasures(
   encoding: VizEncoding,
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
-  const pending = await pendingMeasureRefusal(projectId, encoding); // part 5's shapes: no figure on this release
+  const pending = await pendingMeasureRefusal(projectId, encoding, chartPending); // part 5's shapes: no figure on this release
   if (pending) return { ok: false, error: pending };
+  const alone = await chartsAlone(projectId, datasetId, encoding);
+  if (alone) return 'error' in alone ? { ok: false, error: alone.error } : { ok: true, values: encoding.values, filters: [], special: { kind: 'period', metric: alone.metric, params } };
   const inPivot = await pivotSnapshot(projectId, encoding);
   if (inPivot) return isExternalDefinition(inPivot.definition) ? externalRefusal(new ExternalMetricError('pending', inPivot.name)) : { ok: false, error: msg.snapshotInPivot(inPivot.name) };
   if (!hasMetricMeasure(encoding)) return null;
@@ -200,6 +221,8 @@ export async function planMetricMeasures(
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
     if (isExternalDefinition(m.definition)) throw new ExternalMetricError('pending', m.name); // a formula naming a layer's metric
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
+    // shortcut: metricMeasures cannot plan a period operand; plan one when formula charts over period metrics are asked for
+    if (metrics.isPeriodDefinition(m.definition)) throw new PlanError(msg.periodInChartFormula(m.name));
     if (pendingMetric(m)) throw new PlanError(pendingSentence(m)); // part 5's shapes: no figure on this release
     const { columns, tableOf } = await modelOf();
     if (metrics.isSimpleDefinition(m.definition)) {
@@ -307,9 +330,15 @@ export function evaluateOperand(op: Operand | null, leafValue: (leaf: number) =>
  * it totals — what a policy that decides by column must be shown (app/sharePolicy.ts):
  * a formula over a sensitive column, or a metric edited onto one, is a figure drawn from that column.
  */
-export async function withLeafMeasures(projectId: string, datasetId: string, encoding: VizEncoding): Promise<VizEncoding> {
+export async function withLeafMeasures(projectId: string, datasetId: string, encoding: VizEncoding, inner = false): Promise<VizEncoding> {
   const res = await planMetricMeasures(projectId, datasetId, encoding);
   if (!res || !res.ok) return encoding;
+  if (res.special) {
+    // A period metric is drawn from its base's columns: the policy is shown those (once: a base is never a period metric).
+    const { id, definition } = res.special.metric;
+    const base = metrics.isPeriodDefinition(definition) ? definition.base : id;
+    return inner ? encoding : withLeafMeasures(projectId, datasetId, { ...encoding, values: encoding.values.map((v) => (v.metricId === id ? { ...v, metricId: base } : v)) }, true);
+  }
   const plan = res.plan;
   if (!plan) return { ...encoding, values: res.values };
   const plain = res.values.filter((_, i) => !plan.formulas.has(i));

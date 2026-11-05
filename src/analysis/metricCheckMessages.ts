@@ -163,3 +163,18 @@ export function periodTooManyBuckets(name: string, grain: string, n: number): st
   const calc = CALC_KIND_NAMES.moving_sum;
   return t('metricCheckMessages.by_needs_points_and_a_period', { name, grain, n, calc });
 }
+
+/** A period metric (part 5, D10) is charted alone: one resolution per bucket, or one scope rewritten for the whole chart. */
+export function measureChartsAlone(name: string): string {
+  return t('metricCheckMessages.is_charted_on_its_own_one', { name });
+}
+
+/** A period metric on a date axis other than the date its base counts by: its window would be laid on one date and the axis on another. */
+export function periodOtherDate(name: string, date: string, category: string): string {
+  return t('metricCheckMessages.counts_by_so_it_can_be', { name, date, category });
+}
+
+/** A formula over a period metric on a chart (planned on tiles only). */
+export function periodInChartFormula(name: string): string {
+  return t('metricCheckMessages.a_formula_over_can_t_be', { name });
+}

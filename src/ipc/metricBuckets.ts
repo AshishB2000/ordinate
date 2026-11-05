@@ -14,13 +14,15 @@ import type { ParamValues } from '../analysis/params';
 import * as msg from '../analysis/metricCheckMessages';
 import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from './visuals';
+import type { VizDataReply } from './visuals';
 
 /** A sparkline's cap, and a period chart's (ipc/metrics SERIES_MAX_POINTS). */
 const MAX_BUCKETS = 24;
 const AT_ONCE = 4;
 
 export interface BucketSeries { ok: true; labels: string[]; values: (number | null)[]; grain: DateGrain }
-export type BucketRefusal = { ok: false; error: string; code?: string; reason?: string };
+/** The door's refusal of the axis (typed: Live, row access, a term), or too many buckets. */
+export type BucketRefusal = Extract<VizDataReply, { ok: false }>;
 
 const later = (a: string, b: string | undefined): string => (b && b > a ? b : a);
 const sooner = (a: string, b: string | undefined): string => (b && b < a ? b : a);
@@ -53,7 +55,7 @@ export async function bucketSeries(
   opts: { params?: ParamValues; name: string; last?: number },
 ): Promise<BucketSeries | BucketRefusal> {
   const axis = await vizDataFor(projectId, datasetId, { category: dateColumn, ...(grain ? { grain } : {}), values: [{ column: dateColumn, aggregation: 'count' }] }, filters, { params: opts.params });
-  if (!axis.ok) return { ok: false, error: axis.error, ...(axis.code ? { code: axis.code } : {}), ...(axis.reason ? { reason: axis.reason } : {}) };
+  if (!axis.ok) return axis;
   const g: DateGrain = axis.category?.grain ?? grain ?? 'month';
   let labels = fillBuckets(axis.data.labels.map(String), g);
   if (opts.last) labels = labels.slice(-opts.last);

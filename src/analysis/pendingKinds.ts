@@ -18,10 +18,15 @@ export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | 
   return metrics.isFunnelDefinition(d) || metrics.isPeriodDefinition(d);
 }
 
-/** A funnel or period kind, or a per-entity snapshot: no chart or card writer on this release (a period metric's KPI and alerts are computed from step 05; its charts are step 06). */
+/** A funnel or period kind, or a per-entity snapshot: no card writer on this release (a period metric's KPI and alerts are computed from step 05, its charts from step 06: chartPending). */
 export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   const d = m.definition;
   return isNewerKind(d) || (metrics.isSimpleDefinition(d) && !!d.snapshot?.per);
+}
+
+/** pendingMetric, less what a chart draws: a period metric (step 06, ./metricMeasures charts it alone). */
+export function chartPending(m: Pick<Metric, 'definition'>): boolean {
+  return pendingMetric(m) && !metrics.isPeriodDefinition(m.definition);
 }
 
 /** Not offered to a template role, which reads a metric as its bare column: pending, or a count distinct (a role's picker is plain). */
@@ -34,11 +39,11 @@ export function pendingSentence(m: Pick<Metric, 'definition' | 'name'>): string 
   return msg.metricKindPending(m.name);
 }
 
-/** The sentence refusing a chart whose drawn measure (values[0] under a split; every pivot value) names a pending metric, or null. */
-export async function pendingMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined): Promise<string | null> {
+/** The sentence refusing a chart (or an answer card) whose drawn measure (values[0] under a split; every pivot value) names a pending metric, or null. */
+export async function pendingMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined, pending: (m: Metric) => boolean = pendingMetric): Promise<string | null> {
   for (const v of snapshotDrawn(encoding)) {
     const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m && pendingMetric(m)) return pendingSentence(m);
+    if (m && pending(m)) return pendingSentence(m);
   }
   return null;
 }
