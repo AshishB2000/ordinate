@@ -10,6 +10,10 @@
 // 7. model:importApply through the route: the upload, the before file (importing it is the undo), access.
 // 8. Byte for byte: a fresh fixture exported, imported into a clone with the same datasets and exported again gives
 //    the same files, ids and bases aside; the golden still matches (never re-recorded).
+// 9. Release B's kinds the files never carry are kept by an import that updates their objects (cross-part check
+//    item 10): Orders' drill hierarchy, the Live dataset's calculated field, Revenue's certification (a description is
+//    out of its pin), a topic and a verified question on them. NEGATIVE CONTROL: a definition the file changes moves
+//    the certified metric to needs review, as the editor's save does.
 //
 //   npm run build:ts && node scripts/test-modelApply.js
 
@@ -286,6 +290,47 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const twinRev = jsonAt(b, 'metrics/revenue.json').id as string;
   ok('NEGATIVE CONTROL: one differing description shows', stripIds(a) !== stripIds(edit(b, 'metrics', twinRev, (m) => { m.description = 'x'; })));
   ok('… and the twin\'s own ids are new, so the comparison is not of the same records', twinRev !== G.revenue);
+
+  // ── 9. Release B's kinds survive an import that updates their objects ───
+  const statusStore: typeof import('../src/analysis/statusStore') = require('../src/analysis/statusStore');
+  const { pinOf }: typeof import('../src/analysis/statusPin') = require('../src/analysis/statusPin');
+  const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
+  const datasetsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
+  const topics: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const verifiedStore: typeof import('../src/analysis/verifiedQuestions') = require('../src/analysis/verifiedQuestions');
+  const K = await buildModelFixture();
+  const GEO = [{ name: 'Geo', levels: ['region', 'customer_id'] }];
+  const CALC = { name: 'double_amount', expression: '[amount] * 2', type: 'number' };
+  const at9 = new Date().toISOString();
+  const bKinds = async () => as(async () => ({
+    hierarchies: JSON.stringify((await catalog.loadStrict(K.P)).tables?.[K.orders]?.hierarchies),
+    calcs: JSON.stringify((await datasetsMod.getDatasetMeta(K.P, K.live))?.live?.calculated),
+    state: (await statusStore.statusFor(K.P)(`metric:${K.revenue}`))?.state,
+    topic: JSON.stringify(await topics.listTopics(K.P)),
+    verified: JSON.stringify(await verifiedStore.listVerified(K.P)),
+  }));
+  await as(async () => {
+    await tableDocs.setTableDoc(K.P, K.orders, { hierarchies: GEO });
+    await liveDataset.setLiveCalcs(K.P, K.live, [CALC] as never);
+    await statusStore.certify(K.P, `metric:${K.revenue}`, (await pinOf(K.P, `metric:${K.revenue}`))!, '');
+    await topics.saveTopic(K.P, { name: 'Sales', datasets: [{ id: K.orders }, { id: K.live }], metricIds: [K.revenue], termIds: [] });
+    await verifiedStore.writeVerified(K.P, { id: fid(70), projectId: K.P, question: 'Revenue by region', phrasings: [], note: '',
+      spec: { datasetId: K.orders, category: 'region', measures: [{ column: 'amount', aggregation: 'sum', metricId: K.revenue }], filters: [], chartType: 'column', title: 'Revenue' },
+      verifiedBy: 'x', verifiedAt: at9, createdAt: at9, updatedAt: at9, schemaVersion: 1 } as never);
+  });
+  const before9 = await bKinds();
+  ok('setup: B\'s kinds are in place', before9.hierarchies.includes('"levels":["region","customer_id"]') && before9.calcs?.includes('double_amount') && before9.state === 'certified' && before9.topic.includes('Sales') && before9.verified.includes('Revenue by region'), show(before9));
+  const k0 = await exported(K.P);
+  let k1 = edit(k0, 'datasets', K.orders, (d) => { d.description = 'Orders, from git'; d.grain = 'One row per order'; });
+  k1 = edit(k1, 'datasets', K.live, (d) => { d.baseFilters = [{ type: 'filter', column: 'region', op: '=', value: 'ME' }]; });
+  k1 = edit(k1, 'metrics', K.revenue, (m) => { m.description = 'Revenue, from git'; });
+  const r9 = await applyPlanned(K.P, k1);
+  ok('the import lands its three updates', done(r9).failed.length === 0 && done(r9).written.length === 3, show(r9));
+  const after9 = await bKinds();
+  ok('…and keeps the hierarchy, the Live calc, the topic and the verified question as they were', after9.hierarchies === before9.hierarchies && after9.calcs === before9.calcs && after9.topic === before9.topic && after9.verified === before9.verified, show([before9, after9]));
+  ok('…and the certification: a description is out of the metric\'s pin', after9.state === 'certified', String(after9.state));
+  const r9b = await applyPlanned(K.P, edit(await exported(K.P), 'metrics', K.revenue, (m) => { m.filters = []; }));
+  ok('NEGATIVE CONTROL: a definition the file changes moves the certified metric to needs review', done(r9b).written.length === 1 && (await bKinds()).state === 'needs_review', show([r9b, await bKinds()]));
 
   await close();
   finish();
