@@ -1369,3 +1369,13 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
   `NULL` (`SqlFormulaBuilder.out`), which every engine coerces. Its value cannot change (it is always
   NULL); the SQL text of a calc holding one does, so its cache key moves. Fragment: test-formulaSql
   "a term that is always NULL is spelled NULL". 3 of 2,000 expressions.
+- **Postgres: a formula that binds more than the connector takes.** Every value a formula writes is a
+  parameter of each statement it lands in, a CASE spelling repeats its operands (and a number result's
+  projection reads it four times), and `liveParams` refuses a statement past 1,000 parameters. Two corpus
+  expressions bound 1,504 alone: they saved, then every statement over them failed (`live_failed`).
+  **Refused typed, every dialect:** a formula binding more than `MAX_CALC_PARAMS` (500, half the gate) is
+  `tooLong` at save ("This formula is too long to run on a Live table."), and a statement whose calcs
+  together pass 1,000 is `calcTooLarge`, like one past 256 KB. Nothing that answered stops: such a calc
+  failed at the gate on every warehouse before. The differential now packs its statements under the same
+  gate (and 200,000 characters, under ClickHouse's default `max_query_size`), so 400 expressions are
+  about 8 statements on a billed account.

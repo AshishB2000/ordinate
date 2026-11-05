@@ -447,6 +447,13 @@ function calcLayerShapes(): void {
   const bigCols = [...COLS, { name: 'X1', type: 'number' as const }, { name: 'X2', type: 'number' as const }];
   ok('over 256 KB of derived tables refuses calcTooLarge', ((r) => !r.ok && r.code === 'calcTooLarge')(metric('X2', { ...TABLE, calcs: BIG }, bigCols)));
   ok('NEGATIVE CONTROL: one of the two fits', metric('X1', { ...TABLE, calcs: BIG }, bigCols).ok);
+  // Step 05: three calcs of 400 bound values each are 1,200 parameters, past the connector's 1,000 a statement.
+  const MANY = ['P1', 'P2', 'P3'].map((name) => ({ name, expression: `[amount]${' + 1'.repeat(100)}`, type: 'number' as const }));
+  const manyCols = [...COLS, ...MANY.map((c) => ({ name: c.name, type: 'number' as const }))];
+  const sums = (names: string[]) => comp.compileChart(adapt(spec.fromVizEncoding({ category: 'region', values: names.map((column) => ({ column, aggregation: 'sum' as const })) }, [], manyCols, { weekCal: null })),
+    { kind: 'text' }, env('duckdb', { ...TABLE, calcs: MANY }, manyCols));
+  ok('past the connector\'s 1,000 parameters, the calcs a statement reads refuse calcTooLarge', ((r) => !r.ok && r.code === 'calcTooLarge')(sums(['P1', 'P2', 'P3'])));
+  ok('NEGATIVE CONTROL: two of the three (800) fit', sums(['P1', 'P2']).ok);
   const broken = [{ name: 'Margin', expression: '[amount] - [gone]', type: 'number' as const }, { name: 'Odd', expression: '[amount]', type: 'text' as const }];
   ok('a dropped input refuses columnMissing, naming it', ((r) => !r.ok && r.code === 'columnMissing' && r.params.column === 'gone')(metric('Margin', { ...TABLE, calcs: broken }, cols)));
   ok('a calc whose stored type moved refuses calculated', ((r) => !r.ok && r.code === 'calculated' && r.params.column === 'Odd')(

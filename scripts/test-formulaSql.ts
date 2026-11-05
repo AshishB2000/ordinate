@@ -11,7 +11,8 @@ import { DIALECT_IDS, dialectFor } from '../src/engine/live/dialects';
 import { likeAffix, likePattern } from '../src/engine/live/dialect';
 import { ParamSink } from '../src/engine/live/sqlParams';
 import { LIVE_FUNCTIONS, SPELL, V1_FUNCTIONS, liveFn } from '../src/engine/live/formulaSqlFunctions';
-import { CalcError, SqlFormulaBuilder, checkCalc, compileCalcSql, MAX_CALC_SQL } from '../src/engine/live/formulaSql';
+import { CalcError, SqlFormulaBuilder, checkCalc, compileCalcSql, MAX_CALC_PARAMS, MAX_CALC_SQL } from '../src/engine/live/formulaSql';
+import { MAX_LIVE_PARAMS } from '../src/connectors/liveParams';
 import type { CalcRefusalCode } from '../src/engine/live/formulaSql';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
 import type { CompileDialectId } from '../src/engine/live/dialect';
@@ -132,6 +133,11 @@ ok('an empty formula is refused', !r6.ok && r6.code === 'syntax');
 refuses(`min(${Array(200).fill('[amt]').join(', ')})`, 'tooLong');
 refuses('round(round(round(round(round(round(round(round(round([amt], 1), 1), 1), 1), 1), 1), 1), 1), 1)', 'tooLong');
 ok('a formula under the cap compiles', check(`min(${Array(10).fill('[amt]').join(', ')})`).ok && MAX_CALC_SQL === 262144);
+// Step 05: every value a formula binds is a parameter of each statement it lands in, and the connector takes 1,000 a
+// statement. A number result's projection reads it four times, so 200 literals are 800 parameters: refused at save.
+const plus = (n: number): string => `[amt]${' + 1'.repeat(n)}`;
+refuses(plus(200), 'tooLong');
+ok(`a formula binding at most MAX_CALC_PARAMS (${MAX_CALC_PARAMS}, half the connector's ${MAX_LIVE_PARAMS}) values compiles`, check(plus(125)).ok && MAX_CALC_PARAMS * 2 === MAX_LIVE_PARAMS);
 
 // § shapes — the fragments each dialect must spell (and must not)
 function compiled(id: CompileDialectId, expr: string): string {
