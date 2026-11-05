@@ -37,7 +37,7 @@ import type { FilterStep } from '../data/transforms';
 import { planMetricMeasures } from '../analysis/metricMeasures';
 import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
-import type { DrillMark, DrillResolution } from './visuals';
+import type { DrillMark, DrillResolution, VizDataReply } from './visuals';
 import { externalPending } from '../analysis/externalMetricMessages';
 
 export interface DrillRequest {
@@ -49,7 +49,12 @@ export interface DrillRequest {
   metricId?: unknown;
 }
 
-export async function drillFilters(projectId: string, datasetId: string, meta: { columns: ParsedColumn[]; mode?: unknown }, req: DrillRequest): Promise<DrillResolution> {
+/** What `resolveDrill` reads, sanitized and bound: the rows panel's (drillFilters) and the drill-down's (./drillDown). */
+export interface DrillInputs { columns: ParsedColumn[]; enc: VizEncoding; filters: FilterStep[]; mark?: DrillMark; grain?: DateGrain }
+/** `failure` (with `liveGrain` only): the grain lookup's own typed refusal (Live, row access, a term), answered as it is. */
+export type DrillInputsResult = { ok: true; inputs: DrillInputs } | { ok: false; reason: string } | { ok: false; failure: Extract<VizDataReply, { ok: false }> };
+
+export async function drillInputs(projectId: string, datasetId: string, meta: { columns: ParsedColumn[]; mode?: unknown }, req: DrillRequest, opts?: { liveGrain?: boolean }): Promise<DrillInputsResult> {
   const columns = meta.columns;
   const enc = visuals.sanitizeEncoding(req.encoding);
   const values = paramValues(req.params);
@@ -59,18 +64,18 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
 
   if (typeof req.metricId === 'string' && req.metricId) {
     const metric = await metrics.getMetric(projectId, req.metricId);
-    if (!metric || metric.datasetId !== datasetId) return { available: false, reason: 'That metric no longer exists.' };
-    if (metrics.isExternalDefinition(metric.definition)) return { available: false, reason: externalPending(metric.name) }; // only its layer has its rows
+    if (!metric || metric.datasetId !== datasetId) return { ok: false, reason: 'That metric no longer exists.' };
+    if (metrics.isExternalDefinition(metric.definition)) return { ok: false, reason: externalPending(metric.name) }; // only its layer has its rows
     if ('formula' in metric.definition) {
       // ponytail: every formula is refused; one whose operands share their filters could list those rows — add when asked for.
-      return { available: false, reason: `"${metric.name}" is calculated from other metrics, so no one set of rows adds up to it. Open a metric it is built from to see its rows.` };
+      return { ok: false, reason: `"${metric.name}" is calculated from other metrics, so no one set of rows adds up to it. Open a metric it is built from to see its rows.` };
     }
     const scoped = await metricScope(projectId, metric, filters);
-    if (!scoped.ok) return { available: false, reason: scoped.error };
+    if (!scoped.ok) return { ok: false, reason: scoped.error };
     filters = resolveFilterParams(metric.filters || [], values).steps.concat(scoped.filters);
   } else {
     const scoped = await chartScope(projectId, datasetId, enc, filters);
-    if (!scoped.ok) return { available: false, reason: scoped.error };
+    if (!scoped.ok) return { ok: false, reason: scoped.error };
     filters = scoped.filters;
     const plan = await planMetricMeasures(projectId, datasetId, enc, values);
     if (plan?.ok && !plan.plan) followed = plan.filters;
@@ -80,12 +85,21 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
   const mark = (req.mark && typeof req.mark === 'object' ? req.mark : undefined) as DrillMark | undefined;
   let grain: DateGrain | undefined;
   const dated = mark && mark.category !== undefined && columns.some((c) => c.name === enc.category && c.type === 'date');
-  // Not for a Live dataset: its rows cannot be listed (D6), so the warehouse is not asked a question only to refuse after.
-  if (dated && !isLive(meta)) {
+  // Not for a Live dataset unless asked (the drill-down, D4): its rows cannot be listed (D6), so the warehouse is not asked a question only to refuse after.
+  if (dated && (!isLive(meta) || opts?.liveGrain)) {
     const chart = await vizDataFor(projectId, datasetId, enc, filters, { params: values });
     if (chart.ok && chart.category && chart.category.kind === 'date') grain = chart.category.grain;
+    else if (!chart.ok && chart.code && opts?.liveGrain) return { ok: false, failure: chart }; // the drill-down's only: the rows panel keeps resolveDrill's sentence
   }
-  return resolveDrill(columns, enc, followed.concat(filters), mark, grain);
+  return { ok: true, inputs: { columns, enc, filters: followed.concat(filters), mark, grain } };
+}
+
+/** The rows behind a mark: `drillInputs`, then `resolveDrill`. A failed grain lookup leaves no grain, so resolveDrill's own sentence (as before the split). */
+export async function drillFilters(projectId: string, datasetId: string, meta: { columns: ParsedColumn[]; mode?: unknown }, req: DrillRequest): Promise<DrillResolution> {
+  const r = await drillInputs(projectId, datasetId, meta, req);
+  if (!r.ok) return { available: false, reason: 'reason' in r ? r.reason : r.failure.error };
+  const { columns, enc, filters, mark, grain } = r.inputs;
+  return resolveDrill(columns, enc, filters, mark, grain);
 }
 
 /** A category (or split) from a related dataset is not this table's column, even under the same name: no rows of this table are behind it. */
