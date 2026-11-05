@@ -539,7 +539,7 @@ export function register() {
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {}, emit, q);
-      const guided = await askGuidance(projectId, context || {}, facts.provenance.kind); // the editors' instructions and guide (./guidance), after the facts
+      const guided = await askGuidance(projectId, context || {}, facts.provenance.kind, q); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.
@@ -610,6 +610,7 @@ export function register() {
           // in `answer`. Nothing new reaches a user in this PR.
           ledger: built ? built.ledger : ledger,
           numberAudit: guarded.audit,
+          guidance: guided.used,
         };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };

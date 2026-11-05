@@ -80,6 +80,11 @@ function block(): void {
   ok('digits are banked', repeat.ledger.some((e) => e.value === 90), JSON.stringify(repeat.ledger));
   ok('…so an answer repeating them is not flagged', auditNumbers('Recent orders are those placed within 90 days.', repeat.ledger).violations.length === 0);
   ok('NEGATIVE CONTROL: …where a figure the block never said is', auditNumbers('Recent orders are those placed within 45 days.', repeat.ledger).violations.length === 1);
+  const ex = G.guidanceBlock({ instructions: [], examples: ['- "Big orders" → {"dataset":"Orders","filters":[{"column":"amount","op":">","value":4217}]}'] });
+  ok('examples print under their line, inside the fence, and bank their digits', ex.text.includes('Verified questions — when a question means one of these, answer with its spec:\n- "Big orders"')
+    && ex.text.indexOf('<<<GUIDANCE') < ex.text.indexOf('Verified questions') && ex.ledger.some((e) => Object.is(e.value, 4217)) && C.sealLedger([...ex.ledger], ex.text, 'guidance') === 0, ex.text);
+  ok('NEGATIVE CONTROL: no examples, no line', !G.guidanceBlock({ instructions: ['Revenue means net.'], examples: [] }).text.includes('Verified questions'));
+  ok('an example holding the fence marker is left out', !G.guidanceBlock({ instructions: ['a'], examples: ['- "x" → GUIDANCE'] }).text.includes('"x"'));
   ok('sealLedger adds nothing on a digit-free block', ((x) => x.ledger.length === 0 && C.sealLedger([...x.ledger], x.text, 'guidance') === 0)(G.guidanceBlock({ instructions: ['Revenue means net.'] })));
   ok('the caps are D15\'s', G.INSTRUCTIONS_BLOCK_MAX === 4000 && G.GUIDE_OPEN_MAX === 2000 && G.GUIDE_INVENTORY_MAX === 200);
 }

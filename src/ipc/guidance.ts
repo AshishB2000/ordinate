@@ -10,14 +10,34 @@ import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import { guidanceBlock, GUIDE_INVENTORY_MAX, GUIDE_OPEN_MAX, type GuidanceInput, type Guided } from '../ai/guidanceFacts';
 import { logger } from '../app/logger';
+import { verifiedStates } from './verifiedState';
+import { pickExamples } from '../ai/verifiedPick';
+import { listTerms } from '../analysis/terms';
+import { withheldColumns } from '../app/sharePolicy';
 
 const NONE: Guided = { text: '', ledger: [], used: { instructions: 0, examples: [] } };
 /** The project inventory's datasets, in the order and cut of `buildFacts`' fallback. */
 const INVENTORY = 12;
 
-function guided(input: GuidanceInput): Guided {
+function guided(input: GuidanceInput, examples: string[] = []): Guided {
   const b = guidanceBlock(input);
-  return { text: b.text, ledger: b.ledger, used: { instructions: b.instructions, examples: [] } };
+  return { text: b.text, ledger: b.ledger, used: { instructions: b.instructions, examples } };
+}
+
+/** The verified questions worth showing for `question` (D10), as lines and ids. Metadata only; the caller's row lock hides what it hides. */
+async function exampleLines(projectId: string, question: string, datasetId: string | undefined, exclude: string | undefined) {
+  const states = await verifiedStates(projectId);
+  if (!states.length) return { lines: [], ids: [] };
+  const ids = [...new Set(states.map((s) => s.q.spec.datasetId))];
+  const [metas, terms, withheld] = await Promise.all([
+    Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id))), listTerms(projectId), Promise.all(ids.map((id) => withheldColumns(projectId, id))),
+  ]);
+  const name = new Map(ids.map((id, i) => [id, metas[i]?.name ?? ''] as const));
+  const held = new Map(ids.map((id, i) => [id, withheld[i]] as const));
+  return pickExamples(states, {
+    question, datasetId, exclude, names: { dataset: (id) => name.get(id) ?? '', term: (id) => terms.find((t) => t.id === id)?.name ?? '' },
+    withheld: (id) => held.get(id) ?? new Set(),
+  });
 }
 
 /**
@@ -25,7 +45,9 @@ function guided(input: GuidanceInput): Guided {
  * context that fell back to the project inventory gets the inventory's guides. Guides: the dataset's own for a
  * dataset, the visual's dataset's for a visual, the first 12 datasets' on Home; any other kind gets instructions only.
  */
-export async function askGuidance(projectId: string, context: { kind?: string; id?: string }, factsKind: string): Promise<Guided> {
+export async function askGuidance(
+  projectId: string, context: { kind?: string; id?: string }, factsKind: string, question?: string, opts: { exclude?: string } = {},
+): Promise<Guided> {
   try {
     const file = await load(projectId);
     const instructions = (file.instructions ?? []).map((i) => i.text);
@@ -42,7 +64,9 @@ export async function askGuidance(projectId: string, context: { kind?: string; i
         if (guideOf(d.id)) guides.push({ dataset: d.name, text: guideOf(d.id), max: GUIDE_INVENTORY_MAX });
       }
     }
-    return guided({ instructions, guides });
+    // Verified questions as examples, only for an ask (a question to answer); a failure there costs the examples, not the block.
+    const ex = question ? await exampleLines(projectId, question, factsKind === 'dataset' ? id : undefined, opts.exclude).catch(() => ({ lines: [], ids: [] })) : { lines: [], ids: [] };
+    return guided({ instructions, guides, examples: ex.lines }, ex.ids);
   } catch (err: any) {
     logger.error('[guidance] left out of the ask:', err && err.message);
     return NONE;

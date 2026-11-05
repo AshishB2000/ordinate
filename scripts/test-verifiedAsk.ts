@@ -64,6 +64,22 @@ async function main(): Promise<void> {
   const narrated = await ask('Revenue by region');
   ok('a model narrates a hit, but never picks it', narrated.ok && narrated.answer === 'West leads.' && narrated.guidance.verifiedId === V);
 
-  await finish();
+  // ── Examples ──────────────────────────────────────────────────────────────
+  const sent: string[] = [];
+  (analyze as any).askCopilot = async (_p: unknown, facts: string) => { sent.push(facts); return { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }; };
+  const ex = await ask('profit by region');
+  const open = sent[0].indexOf('<<<GUIDANCE');
+  const block = sent[0].slice(open, sent[0].indexOf('\nGUIDANCE', open));
+  ok('a model-bound question carries the verified questions as examples, in the fence',
+    block.includes('Verified questions — when a question means one of these') && block.includes('- "Revenue by region" → {"dataset":"Orders"'), sent[0].slice(-600));
+  ok('the reply names the examples shown', ex.ok && ex.guidance.examples.join() === V && ex.guidance.instructions === 0 && ex.guidance.verifiedId === undefined, JSON.stringify(ex.guidance));
+  ok('a question that no longer runs is no example', !block.includes('Scratch by k'));
+  const bare = (await projects.createProject('No verified'))!.id;
+  await call('copilot:ask', { projectId: bare, context: { kind: '' }, question: 'profit by region' });
+  const guidanceMod: typeof import('../src/ipc/guidance') = require('../src/ipc/guidance');
+  ok('NEGATIVE CONTROL: with no verified question the prompt is the old one', !sent[1].includes('Verified questions') && Object.is(sent[1].includes('GUIDANCE'), false)
+    && Object.is((await guidanceMod.askGuidance(bare, { kind: '' }, 'project', 'profit by region')).text, (await guidanceMod.askGuidance(bare, { kind: '' }, 'project')).text));
+
+  finish();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

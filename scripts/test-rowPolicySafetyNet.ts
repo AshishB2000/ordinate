@@ -264,9 +264,15 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     // Asked word for word (part 3 D8), east is not answered by a question its lock hides — it goes to the model (stubbed not ready).
     const analyzeMod: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
     const askStub = (analyzeMod as any).askCopilot;
-    (analyzeMod as any).askCopilot = async () => ({ ok: false, errorType: 'not_ready' });
-    const askWest = async (who: string) => (await W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question: 'West customers' })).body;
+    const prompts: Record<string, string> = {};
+    let asker = '';
+    (analyzeMod as any).askCopilot = async (_p: unknown, facts: string) => { prompts[asker] = facts; return { ok: false, errorType: 'not_ready' }; };
+    const askWest = async (who: string, question = 'West customers') => { asker = who; return (await W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question })).body; };
     const [exEast, exEd] = [await askWest('east'), await askWest('ed')];
+    await askWest('east', 'sales by customer');
+    await askWest('ed', 'sales by customer');
+    ok('examples: east\'s prompt holds no value-filtered verified question', prompts.east.includes('Verified questions') === false && !prompts.east.includes(H.W_CANARY), prompts.east.slice(-300));
+    ok('NEGATIVE CONTROL: the editor\'s prompt shows it as an example', prompts.ed.includes('"West customers" → ') && prompts.ed.includes(H.W_CANARY));
     (analyzeMod as any).askCopilot = askStub;
     ok('explicit: east is not answered by a value-filtered verified question', exEast?.notReady === true, JSON.stringify(exEast).slice(0, 200));
     ok('NEGATIVE CONTROL: the editor\'s ask is answered by it', exEd?.ok === true && exEd.guidance?.verifiedId === westQ.body?.question?.id, JSON.stringify(exEd).slice(0, 200));
