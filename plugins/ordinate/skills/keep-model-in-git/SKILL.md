@@ -35,7 +35,7 @@ The apply goes through the same checks as the app's Import. A project that chang
 
 - It never deletes: an object missing from the files stays in the project.
 - It never lowers a column's sensitivity.
-- It cannot carry hierarchies, metric trees, instructions or verified questions; those stay in the app.
+- It cannot carry what `export_model`'s `notCarried` lists (hierarchies, metric trees, certified marks, instructions, verified questions, source table notes, Live calculated fields, topics, metrics another tool defines); those stay in the app, and an import keeps them.
 - A whole import is refused for a file name outside the layout, or a file that is not valid JSON.
 
 Bodies are capped at 1 MiB. A larger model needs the app's Export and Import.

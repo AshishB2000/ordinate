@@ -66,6 +66,7 @@ async function mcp(who: Identity, tool: string, args: Record<string, unknown>): 
   const ex = await mcp(EDITOR, 'export_model', { project: P });
   ok('export_model returns the same files as model:export\'s, inline', stableStringify(ex.files) === stableStringify(files), Object.keys(ex.files ?? {}));
   ok('…with the format and its version', ex.format === 'ordinate-model' && ex.formatVersion === 1, [ex.format, ex.formatVersion]);
+  ok('…and what the files leave out, as the app\'s export says (cross-part check item 10)', JSON.stringify(ex.notCarried) === JSON.stringify(exp.notCarried) && exp.notCarried.length > 0, JSON.stringify([ex.notCarried, exp.notCarried]));
   const asViewer = await mcp(VIEWER, 'export_model', { project: P });
   ok('a restricted caller is refused with the sentence, and gets no files', asViewer.error === msg.modelRestricted() && !('files' in asViewer), JSON.stringify(asViewer).slice(0, 300));
 

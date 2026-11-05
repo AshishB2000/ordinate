@@ -17,10 +17,11 @@ async function refuseRestricted(ctx: Ctx): Promise<void> {
   if (refusal) throw new AutomationError('usage', refusal);
 }
 
-export async function exportModelTool(ctx: Ctx): Promise<{ format: string; formatVersion: number; files: Record<string, string> }> {
+export async function exportModelTool(ctx: Ctx): Promise<{ format: string; formatVersion: number; files: Record<string, string>; notCarried: string[] }> {
   await refuseRestricted(ctx);
   try {
-    return { format: MODEL_FORMAT, formatVersion: MODEL_VERSION, files: Object.fromEntries((await exportModel(ctx.projectId)).files) };
+    const out = await exportModel(ctx.projectId);
+    return { format: MODEL_FORMAT, formatVersion: MODEL_VERSION, files: Object.fromEntries(out.files), notCarried: out.notCarried }; // what the files leave out, as the app's toast says
   } catch (err) {
     if (err instanceof ModelExportRefused) throw new AutomationError('runtime', err.message);
     throw err;

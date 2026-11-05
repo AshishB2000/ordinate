@@ -345,7 +345,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     tool: 'export_model', readOnly: true, needs: 'editor',
-    summary: "The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export.",
+    summary: "The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export. notCarried names the kinds the project holds that the files leave out (they stay in the app).",
     args: {},
     run: (_a, ctx) => modelTools.exportModelTool(ctx),
   },

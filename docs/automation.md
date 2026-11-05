@@ -110,7 +110,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until it is published (publish_dashboard, or Publish in the app). Leave it a draft until the user asks to publish. Writes records, never data. Logged in Jobs. |
 | — | `publish_dashboard` | writes records | Publish a dashboard: its draft as it is now becomes the version EVERYONE in the project sees, viewers included, until someone publishes again. Layout, filters and charts freeze; figures stay live. Only publish when the user asks you to. Publishing a dashboard already in sync is fine (it re-freezes its charts). Editors and admins only. Writes records, never data. |
 | — | `unpublish_dashboard` | writes records | Unpublish a dashboard: it disappears for the project's viewers; the draft stays, for editors and admins. Only unpublish when the user asks you to. Editors and admins only. Writes records, never data. |
-| — | `export_model` | read (editors) | The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export. |
+| — | `export_model` | read (editors) | The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export. notCarried names the kinds the project holds that the files leave out (they stay in the app). |
 | — | `import_model` | writes records | Import model files (path to text, as export_model returns them). A dry run unless apply is true with the dry run's planHash. Never deletes; a conflict keeps the project's version unless choices says 'file'. Editors only. Over 1 MiB, use the app's Import. |
 
 ### projects list
@@ -377,7 +377,7 @@ Unpublish a dashboard: it disappears for the project's viewers; the draft stays,
 
 MCP only · MCP tool `export_model` · read-only (editors)
 
-The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export.
+The project's definitions as model files (JSON, and a markdown guide per dataset), inline: path to text. Metadata only, never rows or secrets. Commit them to git. Editors only. Over 1 MiB, use the app's Export. notCarried names the kinds the project holds that the files leave out (they stay in the app).
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -72,8 +72,11 @@ A dataset, `datasets/orders.json`, with its guide beside it in `datasets/orders.
 ## What travels, and what never does
 
 Travels: table and field docs, value labels, Live base filters, metrics, glossary terms, relationships.
-Never: rows, connections, a dataset's origin (table name, SQL, URL), row access rules, secrets. Metric trees,
-hierarchies, instructions and verified questions are not carried yet; an export lists what it left out. A
+Never: rows, connections, a dataset's origin (table name, SQL, URL), row and column access rules, secrets, a metric
+another tool's semantic layer defines (it stays with that tool; a file holding one is skipped on import). Not carried
+yet: metric trees, drill hierarchies, certified and retired marks, Assistant instructions, verified questions, source
+table notes, Live calculated fields and topics; an export lists what it left out (`notCarried`), and an import keeps
+them on the objects it updates. A
 caller whom a row access rule restricts is refused, since the files hold term values and value labels the
 rule withholds.
 
