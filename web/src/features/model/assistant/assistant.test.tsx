@@ -84,7 +84,7 @@ describe('The Data model: Assistant', () => {
     expect(box.getAttribute('aria-invalid')).toBe('true');
   });
 
-  it('Edit saves in place on Enter, Escape keeps the old text, and Remove sends one remove', async () => {
+  it('Edit saves in place on Enter, and Escape keeps the old text', async () => {
     const calls = serve({ 'catalog:setInstructions': { body: { ok: true, instructions: TWO } } });
     renderApp(`/model/${P}?tab=assistant`);
     const [first] = await rows();
@@ -98,9 +98,23 @@ describe('The Data model: Assistant', () => {
     fireEvent.change(within(first).getByRole('textbox', { name: 'Edit instruction' }), { target: { value: 'Revenue means net_amount.' } });
     fireEvent.keyDown(within(first).getByRole('textbox', { name: 'Edit instruction' }), { key: 'Enter' });
     await waitFor(() => expect(sent(calls, 'catalog:setInstructions')).toEqual([{ projectId: P, op: { kind: 'edit', id: I1, text: 'Revenue means net_amount.' } }]));
+  });
+
+  it('Remove asks first: Keep it sends no write and keeps the row; Remove in the confirm deletes it', async () => {
+    const calls = serve({ 'catalog:setInstructions': { body: { ok: true, instructions: [TWO[0]] } } });
+    renderApp(`/model/${P}?tab=assistant`);
     const [, second] = await rows();
+    fireEvent.click(await within(second).findByRole('button', { name: 'Remove' }));
+    const ask = await screen.findByRole('dialog', { name: 'Remove this instruction?' });
+    expect(ask.textContent).toContain('Targets are 12% above last year.');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent(calls, 'catalog:setInstructions')).toEqual([]);
+    expect(await rows()).toHaveLength(2);
     fireEvent.click(within(second).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(sent(calls, 'catalog:setInstructions').at(-1)).toEqual({ projectId: P, op: { kind: 'remove', id: I2 } }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Remove this instruction?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(sent(calls, 'catalog:setInstructions')).toEqual([{ projectId: P, op: { kind: 'remove', id: I2 } }]));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('NEGATIVE CONTROL: a viewer reads the rows and gets no button', async () => {

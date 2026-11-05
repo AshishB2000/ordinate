@@ -1,10 +1,12 @@
 // The project's Assistant instructions (semantic D1): short rules every ask, narration and dashboard draft reads,
-// fenced as the editors' words. Editors add, edit (inline, Enter saves, Escape cancels) and remove one at a time;
-// a refusal is the server's sentence at the field, with the text kept. A figure-like token is flagged, never refused.
+// fenced as the editors' words. Editors add, edit (inline, Enter saves, Escape cancels) and remove one at a time,
+// a remove behind the house confirm (no Trash brings one back); a refusal is the server's sentence at the field, with
+// the text kept. A figure-like token is flagged, never refused.
 
 import { useId, useState } from 'react';
 import { Badge } from '../../../ui/Badge';
 import { Button, IconButton } from '../../../ui/Button';
+import { ConfirmDelete } from '../../../ui/ConfirmDelete';
 import { Input } from '../../../ui/Field';
 import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonRows } from '../../../ui/Skeleton';
@@ -77,6 +79,15 @@ function Row({ item, canEdit, editing, onEdit, onDone, change }: {
 }) {
   const textId = useId();
   const [error, setError] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const remove = async () => {
+    setBusy(true);
+    const refused = await change({ kind: 'remove', id: item.id });
+    setBusy(false);
+    setAsking(false);
+    setError(refused);
+  };
   const when = Number.isNaN(Date.parse(item.updatedAt)) ? '' : day.format(new Date(item.updatedAt));
   const meta = [item.updatedBy, when].filter(Boolean).join(' · ');
   if (editing) {
@@ -109,10 +120,20 @@ function Row({ item, canEdit, editing, onEdit, onDone, change }: {
         {canEdit && (
           <span className={a.actions}>
             <IconButton icon="pencil" size="sm" label="Edit" aria-describedby={textId} onClick={onEdit} />
-            <IconButton icon="trash" size="sm" label="Remove" aria-describedby={textId} onClick={() => void change({ kind: 'remove', id: item.id }).then(setError)} />
+            <IconButton icon="trash" size="sm" label="Remove" aria-describedby={textId} onClick={() => setAsking(true)} />
           </span>
         )}
       </div>
+      {asking && (
+        <ConfirmDelete
+          title="Remove this instruction?"
+          description={`“${item.text}” goes for everyone in this project, and the Assistant stops following it. Nothing brings it back.`}
+          confirm="Remove"
+          busy={busy}
+          onConfirm={() => void remove()}
+          onClose={() => setAsking(false)}
+        />
+      )}
     </li>
   );
 }
