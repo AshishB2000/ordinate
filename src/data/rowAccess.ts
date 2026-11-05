@@ -14,7 +14,10 @@
 //     dataset with rules, or built from one, for every caller — and the scope
 //     remembers it, so a tile-level catch cannot turn the refusal into a page
 //     that publishes; `assertFanOutAllowed` checks a send's dataset ids;
-//   - EXPORTS (D11): inside `exportScope` a restricted caller is refused.
+//   - EXPORTS (D11): inside `exportScope` a restricted caller is refused;
+//   - COLUMN RULES (semantic layer part 4): a dataset that hides a column from the
+//     caller (./columnGate) is closed to every reader outside a door that gated the
+//     question (ipc/columnDoors.gateColumns, the `checked` scope).
 //
 // The rules are read RAW from the current record (never through the as-of hooks,
 // which swap in a snapshot's metadata), once per request per dataset.
@@ -22,11 +25,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { ctx } from '../server/context';
 import { callerOn } from '../server/authz/caller';
-import * as recordFs from '../app/recordFs';
-import { entryPath } from '../app/trashStore';
 import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
-import { datasetFilePath, storedRules, withFirstWritePolicy, type KeptRules } from './datasetRecord';
+import { storedRules, withFirstWritePolicy, type KeptRules } from './datasetRecord';
+import { memoOf, readRawRecord as readRaw, type Raw } from './rawRecord';
+import { columnReason, columnView, columnsRuled, upstreamHides } from './columnGate';
 import { asOfIso } from './asOf';
 import { isTermStep } from './termStep';
 import type { FilterStep } from './transforms';
@@ -50,20 +53,29 @@ interface Scope {
   /** The one dataset the innermost door locked. */
   readonly locked?: string;
   readonly out?: Outgoing;
+  /** The datasets the innermost door's column gate checked the question against (ipc/columnDoors). */
+  readonly checked?: ReadonlySet<string>;
 }
 
 const scopes = new AsyncLocalStorage<Scope>();
 
-function refuse(reason: RowPolicyReason): never {
+/** Refuses, typed — and a fan-out or export build remembers it, so a tile-level catch cannot publish around it. */
+export function refuseInScope(reason: RowPolicyReason): never {
   const out = scopes.getStore()?.out;
   if (out && !out.refused) out.refused = reason;
   throw new RowPolicyError(reason);
 }
+const refuse: (reason: RowPolicyReason) => never = refuseInScope;
 
 /** Runs `fn` as the door that locked `datasetId`: the storage net lets that one dataset through. */
 export function withRowLock<T>(datasetId: string, fn: () => Promise<T>): Promise<T> {
   const parent = scopes.getStore();
-  return scopes.run({ locked: datasetId, ...(parent?.out ? { out: parent.out } : {}) }, fn);
+  return scopes.run({ locked: datasetId, ...(parent?.out ? { out: parent.out } : {}), ...(parent?.checked ? { checked: parent.checked } : {}) }, fn);
+}
+
+/** Runs `fn` as a door whose column gate checked the question against `ids`: the net lets their whole-table reads through. */
+export function withColumnsChecked<T>(ids: ReadonlySet<string>, fn: () => Promise<T>): Promise<T> {
+  return scopes.run({ ...scopes.getStore(), checked: ids }, fn);
 }
 
 async function outgoing<T>(kind: Outgoing['kind'], fn: () => Promise<T>): Promise<{ value: T; datasets: string[] }> {
@@ -88,73 +100,22 @@ export function inFanOut(): boolean {
   return scopes.getStore()?.out?.kind === 'fanout';
 }
 
+/** Inside an export? */
+export function inExport(): boolean {
+  return scopes.getStore()?.out?.kind === 'export';
+}
+
+/** The columns of `id` hidden from the caller here (inside a fan-out: from its least-entitled audience). Empty for an unrestricted caller. */
+export async function hiddenColumnsFor(projectId: string, id: string): Promise<ReadonlySet<string>> {
+  return (await columnView(projectId, id, inFanOut() ? 'fanout' : 'caller')).hidden;
+}
+
 // ── The record, raw ─────────────────────────────────────────────────────────
 
-type Raw = Record<string, unknown>;
-/**
- * none: no rules here or upstream; own: this dataset's row rules; derived: built from a dataset that has rules;
- * columns: column access rules (a newer release writes them) this release cannot apply, row rules or not.
- */
-type Effective = { kind: 'none' } | { kind: 'own'; policy: RowPolicy; raw: Raw } | { kind: 'derived' } | { kind: 'columns' };
+/** none: no row rules here or upstream; own: this dataset's row rules; derived: built from a dataset that has row rules. */
+type Effective = { kind: 'none' } | { kind: 'own'; policy: RowPolicy; raw: Raw } | { kind: 'derived' };
 
-/** Does the record carry column access rules? Their mere presence closes it: this release cannot read them. */
-export function hasColumnRules(raw: Raw): boolean {
-  return Object.prototype.hasOwnProperty.call(raw, 'columnAccess');
-}
-
-const reads = new WeakMap<object, Map<string, Promise<Raw | null>>>();
 const effects = new WeakMap<object, Map<string, Promise<Effective>>>();
-
-function memoOf<T>(m: WeakMap<object, Map<string, T>>): Map<string, T> {
-  const store = ctx() as object;
-  let inner = m.get(store);
-  if (!inner) {
-    inner = new Map();
-    m.set(store, inner);
-  }
-  return inner;
-}
-
-/** What a record that does not parse reads as: rules that do not sanitize, so CLOSED (rowPolicy.policyFromRecord). */
-const CORRUPT: Raw = Object.freeze({ rowPolicy: '\u0000unparseable' });
-
-/** A file's text, or null when it is not there (ENOENT); any other failure rejects. */
-function textOrNull(file: string): Promise<string | null> {
-  if (!file) return Promise.resolve(null);
-  return recordFs.readFile(file, 'utf8').catch((err: unknown) => {
-    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return null;
-    throw err;
-  });
-}
-
-/**
- * The record as stored — live, else its Trash entry (NV-16): a trashed dataset keeps its rules, restorable,
- * so its versions, its capture and what was built from it stay governed. A record in neither place has no
- * rules: null (a purge forgets them, as removing the rules would). One that does not parse is CLOSED.
- * Any other failure REJECTS — never "no rules" — and is not remembered, so the next ask reads again.
- */
-function readRaw(projectId: string, id: string): Promise<Raw | null> {
-  const memo = memoOf(reads);
-  const key = `${projectId}\0${id}`;
-  let hit = memo.get(key);
-  if (!hit) {
-    hit = (async (): Promise<Raw | null> => {
-      const live = datasetFilePath(projectId, id);
-      // Live once more after a Trash miss: a restore writes the live record, then removes the entry, between our reads.
-      const text = (await textOrNull(live)) ?? (await textOrNull(entryPath(projectId, 'dataset', id))) ?? (await textOrNull(live));
-      if (text === null) return null;
-      try {
-        const raw: unknown = JSON.parse(text);
-        return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
-      } catch {
-        return CORRUPT;
-      }
-    })();
-    memo.set(key, hit);
-    hit.catch(() => memo.delete(key));
-  }
-  return hit;
-}
 
 async function effectiveUncached(projectId: string, id: string): Promise<Effective> {
   const raw = await readRaw(projectId, id);
@@ -164,12 +125,10 @@ async function effectiveUncached(projectId: string, id: string): Promise<Effecti
   const up = await upstreamIds(id, async (p) => (isValidId(p) ? parentsOfRecord(await readRaw(projectId, p)) : []));
   for (const p of up.ids) {
     const r = isValidId(p) ? await readRaw(projectId, p) : null;
-    if (r && (policyFromRecord(r) || hasColumnRules(r))) return { kind: 'derived' };
+    if (r && policyFromRecord(r)) return { kind: 'derived' };
   }
   // A chain longer than the walk is unknown, never clean (fail closed).
   if (!up.complete) return { kind: 'derived' };
-  // Before its own row rules: a lock would hand a named viewer the columns these rules hide.
-  if (raw && hasColumnRules(raw)) return { kind: 'columns' };
   return raw && own ? { kind: 'own', policy: own, raw } : { kind: 'none' };
 }
 
@@ -201,10 +160,18 @@ async function effectiveOrRefuse(projectId: string, id: string): Promise<Effecti
   }
 }
 
-/** Is `id` governed by rules — its own, or an upstream dataset's? For the admin screens and the fan-out checks. */
+/** Is `id` governed by ROW rules — its own, or an upstream dataset's? For the admin screens and the fan-out checks. */
 export async function policyClosed(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   return (await effective(projectId, id)).kind !== 'none';
+}
+
+/**
+ * Row rules (`policyClosed`) or column rules, here or upstream, for anyone: what a reply sent alike to every
+ * reader (a push, a legacy published site, the project's colours) treats as closed.
+ */
+export async function governed(projectId: string, id: string): Promise<boolean> {
+  return (await policyClosed(projectId, id)) || (isValidId(projectId) && isValidId(id) && (await columnsRuled(projectId, id)));
 }
 
 // ── The doors ───────────────────────────────────────────────────────────────
@@ -222,10 +189,10 @@ function lockValuesOf(raw: Raw, policy: RowPolicy, userId: string | null, teamId
 
 /**
  * The caller's lock on `datasetId` (D6, D7): null when nothing restricts them
- * there; a Lock to prepend; or a THROWN RowPolicyError — fan-out, column rules
- * this release cannot apply, export, as-of, derived, a missing or non-text
- * column, a cross-row / parameterised / changed pipeline, no entitlement.
- * Called by every door before anything is read.
+ * there; a Lock to prepend; or a THROWN RowPolicyError — fan-out, export,
+ * as-of, derived, a missing or non-text column, a cross-row / parameterised /
+ * changed pipeline, no entitlement. Row rules only: every door asks the column
+ * gate (ipc/columnDoors) first.
  */
 export async function rowLockFor(projectId: string, datasetId: string): Promise<Lock | null> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
@@ -236,7 +203,6 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   if (out) out.datasets.add(datasetId);
   if (eff.kind === 'none') return null;
   if (out?.kind === 'fanout') refuse('fanout');
-  if (eff.kind === 'columns') refuse('columns'); // whatever the row rules give them (an editor returned above)
   if (!caller.restricted) return null;
   if (out?.kind === 'export') refuse('export');
   if (asOfIso()) refuse('asOf');
@@ -249,7 +215,7 @@ async function closedReason(projectId: string, id: string): Promise<RowPolicyRea
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const scope = scopes.getStore();
   const out = scope?.out;
-  if (scope?.locked === id && out?.kind !== 'fanout') return null;
+  if (scope?.locked === id && out?.kind !== 'fanout') return columnReason(projectId, id, scope.checked, out?.kind); // its door gated the question
   const caller = await callerOn(projectId);
   if (!caller.restricted && out?.kind !== 'fanout') return null;
   let eff: Effective;
@@ -259,9 +225,8 @@ async function closedReason(projectId: string, id: string): Promise<RowPolicyRea
     if (isRowPolicyError(err)) return err.reason; // unreadable: closed
     throw err;
   }
-  if (eff.kind === 'none') return null;
+  if (eff.kind === 'none') return columnReason(projectId, id, scope?.checked, out?.kind);
   if (out?.kind === 'fanout') return 'fanout';
-  if (eff.kind === 'columns') return 'columns';
   if (!caller.restricted) return null;
   if (out?.kind === 'export') return 'export';
   return eff.kind === 'derived' ? 'derived' : 'reader';
@@ -309,12 +274,12 @@ export function withLockSteps(lock: Lock, filters: readonly FilterStep[] | undef
   return starts ? only : [...lock.steps, ...only];
 }
 
-/** Does any dataset of the project have rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
+/** Does any dataset of the project have row or column rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
 export async function anyPolicyClosed(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   // Lazy: the dataset store calls into this module, so it is not imported at load time.
   const datasets = require('./datasets') as typeof import('./datasets');
-  for (const d of await datasets.listDatasets(projectId)) if (await policyClosed(projectId, d.id)) return true;
+  for (const d of await datasets.listDatasets(projectId)) if (await governed(projectId, d.id)) return true;
   return false;
 }
 
@@ -346,19 +311,20 @@ export function rulesChanged(projectId: string): void {
 /**
  * The rules a NEW dataset made from `sourceId`'s rows is born with (round 2, #3): none when the source has
  * none; the source's own stored rules (row and column); and, for a closed source with no row rules on its
- * record (closed by an upstream dataset's rules, or its record gone since the check read it), row rules that
- * open nothing (a closed policy). Pass the result to `datasetRecord.withFirstWritePolicy` around the save.
+ * record (closed by an upstream dataset's row or column rules, or its record gone since the check read it),
+ * row rules that open nothing (a closed policy). Pass the result to `datasetRecord.withFirstWritePolicy` around the save.
  * A source whose rules cannot be read THROWS — no copy is made without them.
  */
 export async function rulesForCopyOf(projectId: string, sourceId: string): Promise<KeptRules | undefined> {
   if (!isValidId(projectId) || !isValidId(sourceId)) return undefined;
   const { kind } = await effective(projectId, sourceId);
+  // Its rows carry the values a dataset upstream hides: the copy, with no origin to walk, is born closed.
+  const closed = kind !== 'none' || (await upstreamHides(projectId, sourceId, 'fanout'));
   const own = await storedRules(projectId, sourceId);
   // Rules the stored read finds count even when the check found none (saved meanwhile, or a restore mid-read).
-  if (kind === 'none' && own.rowPolicy == null && !('columnAccess' in own)) return undefined;
-  // Closed only by its own column rules, which the copy keeps: no row rules added. A record gone since gives {}: closed.
-  const keepsItsColumns = kind === 'columns' && 'columnAccess' in own;
-  return kind !== 'none' && own.rowPolicy == null && !keepsItsColumns ? { ...own, rowPolicy: { column: '', rules: [], stepsHash: '' } } : own;
+  if (!closed && own.rowPolicy == null && !('columnAccess' in own)) return undefined;
+  // Its own column rules the copy keeps verbatim. A record gone since gives {}: closed.
+  return closed && own.rowPolicy == null ? { ...own, rowPolicy: { column: '', rules: [], stepsHash: '' } } : own;
 }
 
 /** Saves a new dataset made from `sourceId`'s rows so that its first record write carries `rulesForCopyOf`. */

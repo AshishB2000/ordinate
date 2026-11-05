@@ -197,6 +197,11 @@ async function columnAccess(): Promise<void> {
     const builtCopy = await copyOf(BUILT);
     ok('a copy of a source closed by an upstream dataset\'s rules keeps its columnAccess and is born closed',
       (await kept(builtCopy)) && stableStringify((await raw(builtCopy)).rowPolicy) === stableStringify(CLOSED));
+    // Built from a dataset with column rules only (no row rules anywhere): its rows carry what they hide, and a copy has no origin to walk.
+    const OVER_OWN = await save('Built on own column rules');
+    await as(() => datasets.updateSteps(P, OVER_OWN, [{ type: 'union', datasetId: OWN }]));
+    const overCopy = await raw(await copyOf(OVER_OWN));
+    ok('a copy of a source built from a dataset with column rules only is born closed', stableStringify(overCopy.rowPolicy) === stableStringify(CLOSED) && !('columnAccess' in overCopy), JSON.stringify(overCopy.rowPolicy));
     const PLAIN = await save('Plain');
     const plainCopy = await raw(await copyOf(PLAIN));
     ok('a copy of a source with no rules carries none', !('columnAccess' in plainCopy) && !('rowPolicy' in plainCopy));
@@ -266,11 +271,12 @@ async function columnAccess(): Promise<void> {
     const raced = await midRestore(RESTORING, () => rec.storedRules(P, RESTORING));
     ok('storedRules: a restore between its live and Trash reads still finds the column rules', raced.fired && stableStringify(raced.value) === stableStringify({ columnAccess: CA }), JSON.stringify(raced));
     await as(() => trash.trashRecord(P, 'dataset', RESTORING));
-    const gated = await midRestore(RESTORING, () => access.policyClosed(P, RESTORING));
+    // `governed`: row or column rules (policyClosed is rows only since part 4 step 05), through the same raw read.
+    const gated = await midRestore(RESTORING, () => access.governed(P, RESTORING));
     ok('the row access check: the same restore race still reads it as closed', gated.fired && gated.value === true, JSON.stringify(gated));
     const restoredOpen = await save('No rules, restored mid-read');
     await as(() => trash.trashRecord(P, 'dataset', restoredOpen));
-    const open = await midRestore(restoredOpen, () => access.policyClosed(P, restoredOpen));
+    const open = await midRestore(restoredOpen, () => access.governed(P, restoredOpen));
     ok('NEGATIVE CONTROL: the same race on a dataset with no rules reads open', open.fired && open.value === false, JSON.stringify(open));
 
     // NEGATIVE CONTROL: the real guard, with 'columnAccess' taken out of KEPT_RECORD_KEYS, drops it on every persist and copy.

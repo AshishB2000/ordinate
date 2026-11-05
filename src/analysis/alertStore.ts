@@ -23,7 +23,7 @@
 // (`explainEvent`), and the notification never waits for it.
 
 import * as fs from 'fs';
-import { assertFanOutAllowed, fanOutScope, isRowPolicyError, policyClosed } from '../data/rowAccess';
+import { assertFanOutAllowed, fanOutScope, governed, isRowPolicyError } from '../data/rowAccess';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -646,7 +646,7 @@ export async function allProjectIds(): Promise<string[]> {
 export async function pushableEvents(projectId: string, events: AlertEvent[]): Promise<AlertEvent[]> {
   const out: AlertEvent[] = [];
   for (const e of await withoutRunError(projectId, events, connectionDatasetIds)) {
-    if (!(await policyClosed(projectId, e.datasetId))) { out.push(e); continue; }
+    if (!(await governed(projectId, e.datasetId))) { out.push(e); continue; } // row or column rules: one payload for every reader
     const { diagnosis: _d, ...kept } = e;
     out.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: '' } as AlertEvent);
   }

@@ -74,7 +74,12 @@ export function rowUnreadableMessage(): string {
   return t('rowAccessMessages.the_row_access_rules_of_this');
 }
 
-/** Column access rules (a newer release writes them) this release cannot apply: closed to every viewer. */
+/** Column access rules this reader cannot keep to (a whole-table reader, rules that no longer hold, an as-of read): off here. */
 export function rowColumnsMessage(): string {
   return t('rowAccessMessages.some_columns_of_this_dataset_are');
+}
+
+/** The question names a column hidden from the caller (or one computed from it). Names no column, team or value. */
+export function rowHiddenMessage(): string {
+  return t('rowAccessMessages.this_uses_a_column_a_project');
 }
