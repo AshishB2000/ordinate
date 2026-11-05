@@ -5,6 +5,7 @@
 //   selection   sheet-wide filter steps the reader arrived with (a navigate
 //               action's carry) or clicked into (a map mark); every tile reads them
 //   tileSteps   per-tile narrowing from a `filter_target` action
+//   drills      per-tile drill (tileDrill.ts): the levels a reader went down by clicking a mark; only that tile reads them
 //   clicks      click-to-filter: the marks the reader clicked, each attributed to
 //               its card (filters.ts toggleClickFilter) — every OTHER card reads them
 //   crumb      where a navigate action came FROM, for "From …" ← Back
@@ -28,6 +29,7 @@ import { toggleClickFilter, type ClickFilter, type ClickMark } from '../analyses
 import { isKeptStep, keptKey } from '../visuals/keptStep';
 import { useFx, type TargetKind } from './api';
 import { linkedThread } from './CommentsPanel';
+import type { TileDrill, TileDrillLevel } from './tileDrill';
 
 const NAV_KEY = 'ordinate.dashNav';
 
@@ -52,6 +54,12 @@ export interface Viewer {
   narrowed: ReadonlyMap<string, Step[]>;
   narrow(tiles: string[], steps: Step[]): void;
   unnarrow(tiles: string[]): void;
+  /** Each drilled tile's levels (never saved, never on another tile). */
+  drills: ReadonlyMap<string, TileDrill>;
+  /** One level deeper; the first one names the path's root. */
+  drillInto(cardId: string, root: string, level: TileDrillLevel): void;
+  /** Keep the first `keep` levels; 0 is the saved level. */
+  drillUp(cardId: string, keep: number): void;
   /** Click-to-filter (never saved): one entry per (card, column). */
   clicks: readonly ClickFilter[];
   /** A click on a mark of card `origin`; `additive` is ⌘/Ctrl held. */
@@ -136,6 +144,19 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
   const [selection, setSelection] = useState<Step[]>(() => merged(opening?.selection ?? [], arrived?.carry ?? []));
   const [narrowed, setNarrowed] = useState<ReadonlyMap<string, Step[]>>(() => opening?.narrowed ?? new Map());
   const [clicks, setClicks] = useState<readonly ClickFilter[]>([]);
+  const [drills, setDrills] = useState<ReadonlyMap<string, TileDrill>>(new Map());
+  const drillInto = useCallback((id: string, root: string, level: TileDrillLevel) => setDrills((m) => new Map(m).set(id, { root: m.get(id)?.root ?? root, levels: [...(m.get(id)?.levels ?? []), level] })), []);
+  const drillUp = useCallback(
+    (id: string, keep: number) =>
+      setDrills((m) => {
+        const next = new Map(m);
+        const d = m.get(id);
+        if (d && keep > 0) next.set(id, { root: d.root, levels: d.levels.slice(0, keep) });
+        else next.delete(id);
+        return next;
+      }),
+    [],
+  );
   const [clickNames, setClickNames] = useState<ReadonlyMap<string, string>>(new Map());
   const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => {
     setClicks((c) => toggleClickFilter(c, origin, mark, additive));
@@ -154,6 +175,7 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
     setNarrowed(tiles);
     setAsOf(at);
     setClicks([]);
+    setDrills(new Map());
   }, []);
   const [compare, setCompare] = useState<Compare | null>(null);
   const [presenting, setPresenting] = useState(false);
@@ -199,6 +221,9 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
           for (const t of tiles) next.delete(t);
           return next;
         }),
+      drills,
+      drillInto,
+      drillUp,
       clicks,
       clickMark,
       clickNames,
@@ -218,6 +243,6 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
       openComments,
       restore,
     }),
-    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clickNames, clearClicks, arrived, asOf, currency, compare, presenting, expanded, comments, restore],
+    [selection, toggleSelection, narrowed, narrow, drills, drillInto, drillUp, clicks, clickMark, clickNames, clearClicks, arrived, asOf, currency, compare, presenting, expanded, comments, restore],
   );
 }

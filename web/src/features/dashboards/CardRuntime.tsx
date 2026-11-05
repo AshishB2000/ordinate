@@ -27,6 +27,7 @@ import { pinsOn } from './CommentsPanel';
 import { presentRow } from './DashboardChrome';
 import { pivotToCsv, pivotToTsv, saveText } from './pivotExport';
 import { actionMenu, actionsOf, TooltipVisual, useRunAction } from './tileActions';
+import { drillSteps } from './tileDrill';
 import { isPhoneReader } from './phone/phoneBlocks';
 import { IS_MAC } from '../palette/registry';
 import { PointSheet, type PointAction } from './phone/PointSheet';
@@ -66,11 +67,11 @@ export function explainTarget(ed: EditorApi, cardId: string, def: VisualDef, poi
 const explainable = (def: VisualDef): boolean => !VIZ_RENDERER[def.chartType as VizId] && !def.encoding.drivers;
 
 /** The pivot as it may LEAVE the app: the server's grid through the Share policy's export path. */
-/** What a tile reads: the sheet's filters (less the click-filters it made itself), then a filter_target narrowing on this tile. */
+/** What a tile reads: the sheet's filters (less the click-filters it made itself), then a filter_target narrowing on this tile, then the drill's steps. */
 export function tileFilters(ed: EditorApi, cardId: string) {
-  const narrow = ed.view.tileSteps(cardId);
+  const extra = [...ed.view.tileSteps(cardId), ...drillSteps(ed.view.drills.get(cardId))];
   const own = ed.filtersFor(cardId);
-  return narrow.length ? [...own, ...narrow] : own;
+  return extra.length ? [...own, ...extra] : own;
 }
 
 async function sharedPivot(ed: EditorApi, def: VisualDef, cardId: string): Promise<PivotGridShape | null> {
