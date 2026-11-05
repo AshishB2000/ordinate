@@ -37,6 +37,7 @@ const queryCache: typeof import('../src/engine/queryCache') = require('../src/en
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each handler's reply is narrowed where it is read
 const { countDistinct }: typeof import('../src/analysis/countDistinct') = require('../src/analysis/countDistinct');
+const pendingMsg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
 
 type Cell = string | number | null;
 type Kind = 'text' | 'number' | 'date';
@@ -211,6 +212,21 @@ void (async () => {
   const fig = (id: string) => sc.metrics.find((m) => m.metricId === id);
   ok('scenario: a countd metric keeps its baseline under a value driver', Object.is(fig(amounts.id)?.value, countDistinct(ROWS_O.map((r) => r[4]), 'number')) && Object.is(fig(amounts.id)?.value, fig(amounts.id)?.baseline), show(fig(amounts.id)));
   ok('NEGATIVE CONTROL: the sum metric moves', typeof fig(revenue.id)?.value === 'number' && fig(revenue.id)?.value !== fig(revenue.id)?.baseline, show(fig(revenue.id)));
+
+  // ── maps: a point, hexbin or flow map never draws a distinct count as a sum or as a row's value ──
+  const PLACES = Array.from({ length: 40 }, (_, i) => [['NY', 'CA', 'TX'][i % 3], 40 + (i % 4) * 0.01, -74 + (i % 3) * 0.01, i % 6]);
+  const GEO = await save('places', [{ name: 'state', type: 'text' }, { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }, { name: 'amount', type: 'number' }], PLACES);
+  const mapOf = (level: string, aggregation: string): Promise<any> => chartOn(GEO, { // any: the visual:data reply
+    category: 'state', values: [{ column: 'amount', aggregation }],
+    geo: { level, lat: 'lat', lon: 'lng', ...(level === 'flow' ? { lat2: 'lat', lon2: 'lng', from: 'state', to: 'state' } : {}) },
+  });
+  for (const level of ['hexbin', 'flow', 'point']) {
+    const m = await mapOf(level, 'countd');
+    ok(`a ${level} map over a distinct count is refused with the sentence, never drawn as a sum`, m.ok === false && m.error === pendingMsg.mapCountdRefused('countd of amount'), show(m));
+    ok(`NEGATIVE CONTROL: the ${level} map over a sum draws`, (await mapOf(level, 'sum')).ok === true, show(await mapOf(level, 'sum')));
+  }
+  const byState = await mapOf('us_state', 'countd');
+  ok('a map by region counts distinct values per region', byState.ok === true && ['NY', 'CA', 'TX'].every((st) => Object.is(byState.data.series[0].values[byState.data.labels.indexOf(st)], countDistinct(PLACES.filter((r) => r[0] === st).map((r) => r[3]), 'number'))), show(byState));
 
   // Old content draws byte-identically: every plain aggregation's chart, split, pivot and KPI (a related filter too) on
   // ORDERS, hashed. The hash was taken on p5-01's tip (db42ab5b) and on this branch, and they agreed; never re-record it.

@@ -440,6 +440,7 @@
   "metricTreeMessages.rose": "{metric}は{compare}で{change}（{pct}）増加しました。",
   "metricTreeMessages.rose_2": "{metric}は{compare}で{change}増加しました。",
   "metricTreeMessages.that_metric_no_longer_exists": "その指標はもう存在しません。",
+  "pendingMessages.counts_distinct_values_which_a_point": "「{measure}」は重複を除いた値の数を数えるため、ポイント、六角形、フローの地図では表示できません。件数、合計、平均のいずれかを選ぶか、地域別の地図にしてください。",
   "pendingMessages.is_a_kind_of_metric_from": "「{name}」は新しいバージョンの Ordinate で作られた種類のメトリックです。アップグレードを完了してから、もう一度お試しください。",
   "pendingMessages.this_alert_uses_a_figure_from": "このアラートは新しいバージョンの Ordinate の数値を使っています。アップグレードが完了すると、もう一度チェックされます。",
   "pivotRender.ascending": "、昇順",
