@@ -10,7 +10,7 @@ itself live in `.claude/skills/` at the repo root.
 | Skill | Use it for |
 |---|---|
 | `build-dashboard` | "Build me a sales dashboard": finds the data, writes a plan, builds it as a draft with `create_dashboard`, reports anything Ordinate dropped, and publishes it with `publish_dashboard` only when you say so. |
-| `answer-data-questions` | "Which region is most profitable?": picks the tool that computes the answer, and quotes the server's figures without changing them. |
+| `answer-data-questions` | "Which region is most profitable?": checks the instructions and verified questions the team wrote down first, then picks the tool that computes the answer, and quotes the server's figures without changing them. |
 
 ## Install (Claude Code)
 
