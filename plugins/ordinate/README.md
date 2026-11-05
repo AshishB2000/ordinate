@@ -31,8 +31,8 @@ itself live in `.claude/skills/` at the repo root.
 
 The plugin's `plugin.json` connects to `<address>/api/mcp` with `Authorization: Bearer <token>`.
 The tools are listed in [`docs/automation.md`](../../docs/automation.md). They are read-only
-except `create_visual`, `create_dashboard`, `publish_dashboard` and `unpublish_dashboard`, which
-save records, never data. A dashboard the agent builds is a draft until it is published, which
+except `create_visual`, `create_dashboard`, `publish_dashboard`, `unpublish_dashboard` and
+`import_model`, which save records, never data (`export_model` reads, for editors only). A dashboard the agent builds is a draft until it is published, which
 makes it visible to everyone in the project.
 
 ## Other agents
