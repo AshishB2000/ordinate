@@ -42,14 +42,18 @@ export interface VersionFile {
   restoredFrom?: string;
   /** Who saved it: the signed-in user's email. Absent on versions saved before it was kept (docs/version-diff). */
   by?: string;
-  /** A dashboard's Publish, Unpublish or Discard edits (analysis/publishedCopy.ts): recorded even when the content did not move. */
+  /** A dashboard's Publish, Unpublish or Discard edits (analysis/publishedCopy.ts), or a status change: recorded even when the content did not move. */
   event?: VersionEvent;
   // ponytail: content of one of five record shapes; its own store re-sanitizes on restore
   record: Record<string, any>;
 }
 
-export type VersionEvent = 'published' | 'unpublished' | 'discarded';
-const EVENT_SUMMARY: Record<VersionEvent, string> = { published: 'Published', unpublished: 'Unpublished', discarded: 'Discarded the edits since publishing' };
+/** A status change (../analysis/statusStore) is an event too: `certified`, `retired`, `cleared`. */
+export type VersionEvent = 'published' | 'unpublished' | 'discarded' | 'certified' | 'retired' | 'cleared';
+const EVENT_SUMMARY: Record<VersionEvent, string> = {
+  published: 'Published', unpublished: 'Unpublished', discarded: 'Discarded the edits since publishing',
+  certified: 'Certified', retired: 'Retired', cleared: 'Status cleared',
+};
 
 export interface VersionMeta {
   key: string;

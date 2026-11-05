@@ -388,6 +388,7 @@ export const MAIN_FILES = [
   'src/analysis/pendingMessages.ts',
   'src/analysis/externalMetricMessages.ts',
   'src/engine/semanticMessages.ts',
+  'src/analysis/statusMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

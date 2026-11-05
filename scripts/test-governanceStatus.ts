@@ -7,6 +7,11 @@
 //               dependent metric; a relationship edit moves a metric read through it, its label does not; a refresh
 //               does not move a dataset; a loop is stable; a deleted item has no pin.
 //               NEGATIVE CONTROL: a planted unclassified field is reported.
+//   § store     certify stamps the server's by and a version event; an edit reads needs_review; a stale base is
+//               refused 409-shaped with the current pin; a metric, term, extract and Live dataset certify; retire
+//               refuses another kind, itself, a gone or retired replacement and a chain; a replacement is named as it
+//               is called now and left out once gone; clear removes the entry with an event.
+//               NEGATIVE CONTROL: an item never certified reads no status.
 //
 //   npm run build:ts && node scripts/test-governanceStatus.js
 
@@ -29,6 +34,10 @@ const metrics: typeof import('../src/analysis/metrics') = require('../src/analys
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const { stableStringify } = require('../src/engine/queryCache') as typeof import('../src/engine/queryCache');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+const versions: typeof import('../src/app/versions') = require('../src/app/versions');
+const { sanitizeStatus } = require('../src/app/statusDocs') as typeof import('../src/app/statusDocs');
+const store: typeof import('../src/analysis/statusStore') = require('../src/analysis/statusStore');
 const pinMod: typeof import('../src/analysis/statusPin') = require('../src/analysis/statusPin');
 const { pinOf, unclassified, METRIC_PIN, TERM_PIN, DATASET_PIN, LIVE_PIN, RELATIONSHIP_PIN } = pinMod;
 
@@ -47,6 +56,7 @@ const ORDER_ROWS = [['EU', 10, 1, '2026-01-01', 'c1'], ['ME', 20, 2, '2026-01-02
 const EMEA_F = { type: 'filter', column: 'region', op: 'in', values: ['EU', 'ME', 'AF'] };
 const F0 = { type: 'filter', column: 'qty', op: '>', value: 1 };
 
+const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then(() => null, (e: unknown) => e);
 const file = (P: string, dir: string, id: string): string => path.join(appPaths.userData(), 'projects', P, dir, id + '.json');
 const writeRaw = (f: string, r: Raw): void => fs.writeFileSync(f, JSON.stringify(r));
 
@@ -76,7 +86,9 @@ async function tableLoop(label: string, table: Record<string, string>, f: string
 
 let PROJECT = '';
 
-async function partPin(): Promise<void> {
+interface Fixtures { ORD: string; CUST: string; EMEA: string; LIVE: string }
+
+async function partPin(): Promise<Fixtures> {
   const P = PROJECT;
   const { ORD, CUST, EMEA, FULL, REV, MARGIN, LOOP_A, GONE, VIA, REL, LIVE } = await as(async () => {
     const ord = (await datasets.saveDataset(P, { name: 'Orders', sourceKind: 'csv', columns: ORDER_COLUMNS, rows: ORDER_ROWS,
@@ -181,6 +193,67 @@ async function partPin(): Promise<void> {
   ok('a formula naming itself through another stops (cycle), stable', loop !== null && loop === (await pin(`metric:${LOOP_A}`)));
   ok('a deleted metric has no pin', (await pin(`metric:${GONE}`)) === null);
   ok('a ref of no status kind has no pin', (await pin(`visual:${ORD}`)) === null);
+  return { ORD, CUST, EMEA, LIVE };
+}
+
+async function partStore(fx: Fixtures): Promise<void> {
+  const P = PROJECT;
+  const { M, PLAIN, A, RETIRED, NET, GROSS, OTHER } = await as(async () => {
+    const save = async (name: string) => (await metrics.saveMetric(P, { name, datasetId: fx.ORD, definition: { column: 'sales', aggregation: 'sum' } }))!.id;
+    const [m, plain, a, retired, net, gross, other] = await Promise.all(['Certified sales', 'Plain', 'Old A', 'Retired R', 'Net revenue', 'Gross revenue', 'Other'].map(save));
+    return { M: m, PLAIN: plain, A: a, RETIRED: retired, NET: net, GROSS: gross, OTHER: other };
+  });
+  const REF = `metric:${M}`;
+  const pin = (await as(() => pinOf(P, REF)))!;
+  const v = await as(() => store.certify(P, REF, pin, 'checked'));
+  const stored = (await as(() => catalog.load(P))).status![REF];
+  ok('certified, stamped by the server', v.state === 'certified' && v.by === EMAIL && v.note === 'checked' && stored.pin === pin && stored.by === EMAIL);
+  ok('a written entry reads back verbatim, and sanitizing it twice is once', stableStringify(sanitizeStatus({ [REF]: stored })[REF]) === stableStringify(stored)
+    && stableStringify(sanitizeStatus(sanitizeStatus({ [REF]: stored }))) === stableStringify(sanitizeStatus({ [REF]: stored })));
+  const listed = await as(() => versions.list(P, 'metric', M));
+  ok('the event is a version, even with no content change', listed[0]?.event === 'certified' && listed[0].summary === 'Certified' && v.versionKey === listed[0].key);
+  ok('read back as certified while nothing moved', (await as(() => store.statusFor(P)(REF)))?.state === 'certified');
+  await as(() => metrics.updateMetric(P, M, { filters: [F0] }));
+  const after = await as(() => store.statusFor(P)(REF));
+  ok('an edit reads needs_review, with the stored by and versionKey kept', after?.state === 'needs_review' && after.by === EMAIL && after.versionKey === v.versionKey);
+  const stale = await caught(() => as(() => store.certify(P, REF, pin, '')));
+  const now = await as(() => pinOf(P, REF));
+  ok('a stale base is refused with the current pin', !!stale && (stale as Raw).code === 'ERECORDCHANGED' && (stale as Raw).tag === now && now !== pin);
+  ok('certifying again on the current pin reads certified', (await as(() => store.certify(P, REF, now!, ''))).state === 'certified' && (await as(() => store.statusFor(P)(REF)))?.state === 'certified');
+
+  const dsPin = (await as(() => pinOf(P, `dataset:${fx.ORD}`)))!;
+  ok('a dataset certifies, and its event is a dataset version', (await as(() => store.certify(P, `dataset:${fx.ORD}`, dsPin, ''))).state === 'certified'
+    && (await as(() => versions.list(P, 'dataset', fx.ORD)))[0]?.event === 'certified');
+  const livePin = (await as(() => pinOf(P, `dataset:${fx.LIVE}`)))!;
+  ok('a Live dataset certifies from metadata (getDataset would refuse it)', (await as(() => store.certify(P, `dataset:${fx.LIVE}`, livePin, ''))).state === 'certified');
+  const termPin = (await as(() => pinOf(P, `term:${fx.EMEA}`)))!;
+  ok('a term certifies, and its event is a term version', (await as(() => store.certify(P, `term:${fx.EMEA}`, termPin, ''))).state === 'certified'
+    && (await as(() => versions.list(P, 'term', fx.EMEA)))[0]?.event === 'certified');
+
+  const rejectsStatus = async (f: () => Promise<unknown>, field: string): Promise<boolean> => {
+    const e = await caught(() => as(f));
+    return e instanceof store.StatusError && e.field === field && e.message.length > 0;
+  };
+  ok('retire: another kind is refused', await rejectsStatus(() => store.retire(P, `metric:${A}`, `term:${fx.EMEA}`, ''), 'replacedBy'));
+  ok('retire: itself is refused', await rejectsStatus(() => store.retire(P, `metric:${A}`, `metric:${A}`, ''), 'replacedBy'));
+  ok('retire: a replacement that is gone is refused', await rejectsStatus(() => store.retire(P, `metric:${A}`, `metric:${uuid(404)}`, ''), 'replacedBy'));
+  ok('retire: an item that is gone is refused', await rejectsStatus(() => store.retire(P, `metric:${uuid(404)}`, undefined, ''), 'ref'));
+  await as(() => store.retire(P, `metric:${RETIRED}`, undefined, ''));
+  ok('retire: a retired replacement is refused', await rejectsStatus(() => store.retire(P, `metric:${A}`, `metric:${RETIRED}`, ''), 'replacedBy'));
+  const gross = await as(() => store.retire(P, `metric:${GROSS}`, `metric:${NET}`, 'use Net'));
+  ok('retire with a replacement: named by its current name, and a version event', gross.state === 'retired' && gross.replacedBy?.name === 'Net revenue'
+    && (await as(() => versions.list(P, 'metric', GROSS)))[0]?.event === 'retired');
+  ok('retire: retiring a replacement would chain: refused', await rejectsStatus(() => store.retire(P, `metric:${NET}`, `metric:${OTHER}`, ''), 'ref'));
+  ok('the chain refusal wrote nothing', !((await as(() => catalog.load(P))).status ?? {})[`metric:${NET}`]);
+  await as(() => metrics.updateMetric(P, NET, { name: 'Net sales v2' }));
+  ok('a replacement is named as it is called now', (await as(() => store.statusFor(P)(`metric:${GROSS}`)))?.replacedBy?.name === 'Net sales v2');
+  await as(() => metrics.deleteMetric(P, NET));
+  const orphan = await as(() => store.statusFor(P)(`metric:${GROSS}`));
+  ok('a replacement that is gone is left out, the retirement kept', orphan?.state === 'retired' && !('replacedBy' in orphan));
+
+  ok('clear: the entry is gone and the event recorded', (await as(() => store.clearStatus(P, REF))) === null
+    && !(REF in ((await as(() => catalog.load(P))).status ?? {})) && (await as(() => versions.list(P, 'metric', M)))[0]?.event === 'cleared');
+  ok('NEGATIVE CONTROL: nothing certified, nothing read', (await as(() => store.statusFor(P)(`metric:${PLAIN}`))) === null);
 }
 
 (async () => {
@@ -188,7 +261,7 @@ async function partPin(): Promise<void> {
   appMod.registerHandlers();
   appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => ADMIN);
   PROJECT = await as(async () => { await projects.init(); return (await projects.createProject('Governance')).id; });
-  await partPin();
+  await partStore(await partPin());
 })().catch((err) => {
   console.error('FAIL harness', err);
   process.exitCode = 1;
