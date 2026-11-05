@@ -20,6 +20,7 @@ import type { Scenario } from '../analysis/scenarioModel';
 import { compareScenarios, computeScenario, scenarioCardValue, scenarioTargets } from '../analysis/scenarioResolve';
 import { unofferedMetric } from '../analysis/pendingKinds';
 import { contentTag, recordReply } from '../app/editConflict';
+import { isCountLike } from '../data/aggregations';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -114,7 +115,7 @@ export function register(): void {
     (await metrics.listMetrics(id(projectId))).filter((m) => metrics.isFormulaDefinition(m.definition) || (metrics.isSimpleDefinition(m.definition) && !unofferedMetric(m) && !m.definition.snapshot)).map((m) => ({
       id: m.id,
       name: m.name,
-      kind: !metrics.isSimpleDefinition(m.definition) ? 'formula' : m.definition.aggregation === 'count' ? 'count' : 'column',
+      kind: !metrics.isSimpleDefinition(m.definition) ? 'formula' : isCountLike(m.definition.aggregation) ? 'count' : 'column',
     })));
 
   ipcMain.handle('scenario:targets', async (_e, { projectId, baseMetricIds }: any = {}) => {

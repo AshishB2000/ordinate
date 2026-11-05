@@ -26,6 +26,7 @@ import type { AsOf } from '../api/asOf';
 import { LiveFigureError, liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
 import { liveSnapshotRefused } from '../engine/liveRefusals';
 import { snapshotCardMetric } from './snapshotDoors';
+import { isCountLike } from '../data/aggregations';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 
@@ -178,8 +179,8 @@ async function computeCardMetricUnlocked(
   // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key.
   if (spec.snapshot) return snapshotCardMetric(projectId, datasetId, { ...spec, snapshot: spec.snapshot }, filters, params, (s, f) => computeCardMetricUnlocked(projectId, datasetId, s, f, params));
   await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
-  // A declared money column converts to the target currency (./fxQuery); a count never does.
-  const fxc = spec.aggregation !== 'count' ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
+  // A declared money column converts to the target currency (./fxQuery); a count (or a distinct count) never does.
+  const fxc = !isCountLike(spec.aggregation) ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
   const run = (): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> => fxc
     ? fxCardMetric(projectId, datasetId, spec, filters, params, fxc)
     : computeCardMetricUncached(projectId, datasetId, spec, filters, params);

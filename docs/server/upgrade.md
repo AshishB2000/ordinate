@@ -516,15 +516,14 @@ A later release adds deeper metrics: **count distinct** (wherever an aggregation
 `countd(col)` in a metric formula), **funnel metrics** ("Visit → buy"), **period metrics** (year to
 date, the last N days, the change on the previous period or year), **snapshots per account** (each
 account's own latest day), a **target** on a metric, and **target alerts** ("below 90% of target").
-None of them exists in this release. It keeps each one exactly as written, through every load and
-save, and computes none of them:
+None of them can be picked in this release. It keeps each one exactly as written, through every load
+and save. It counts distinct values as the later release does on a copied dataset (`p5-02`: in KPIs,
+charts, pivots, answers, alerts and Prepare's group step), and computes none of the others:
 
 - A KPI tile, the Summary card and a metric's value show no figure.
-- A chart, a pivot table, an answer card and Explain refuse with a sentence such as "“Customers”
-  counts distinct values, which needs a newer version of Ordinate. Finish the upgrade, then try
-  again."
-- A Prepare step that counts distinct values refuses its run, so no table is written without that
-  column.
+- A chart, a pivot table, an answer card and Explain refuse with a sentence such as "“Visit → buy”
+  is a kind of metric from a newer version of Ordinate. Finish the upgrade, then try again."
+- A count distinct on a Live dataset is refused with a sentence until the release that counts it there.
 - An alert on one is not evaluated, and its state is left as it was. Its Test button says why.
 - A target is kept and shown nowhere.
 

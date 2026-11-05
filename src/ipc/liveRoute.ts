@@ -44,6 +44,7 @@ import * as msg from '../engine/liveQueryMessages';
 import { relatedColumnNames } from './relationships';
 import { fxContext, fxVizContext } from './fxQuery';
 import type { VizDataReply } from './visuals';
+import { isCountLike } from '../data/aggregations';
 
 /** The dataset's metadata when it is Live, else null — one metadata read, no rows. */
 export async function liveMetaOf(projectId: string, datasetId: string): Promise<DatasetMeta | null> {
@@ -103,7 +104,7 @@ export async function liveCardMetric(
 ): Promise<{ ok: true; value: number | null; asOf: AsOf }> {
   const touched = [spec.column, ...(filters || []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string');
   const pre = await preRefusal(projectId, meta, touched,
-    async () => spec.aggregation !== 'count' && !!(await fxContext(projectId, meta.id, [spec.column], touched)));
+    async () => !isCountLike(spec.aggregation) && !!(await fxContext(projectId, meta.id, [spec.column], touched)));
   if (pre) throw new LiveFigureError(pre);
   const r = await liveMetric(projectId, meta.id, spec, filters);
   if (!r.ok) throw new LiveFigureError(r);

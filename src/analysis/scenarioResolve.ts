@@ -58,6 +58,7 @@ import { isTermStep, TermNotExpandedError } from '../data/termStep';
 import { termNotHere } from '../data/termMessages';
 import { metricScope } from './metricTimeScope';
 import type { DateScope } from './metricTimeScope';
+import { isCountLike } from '../data/aggregations';
 
 const MAX_FORMULA_DEPTH = 10; // as src/ipc/metrics.ts
 
@@ -206,7 +207,7 @@ async function operand(pass: Pass, datasetId: string, spec: { column: string; ag
   // Scenarios are off for a Live dataset in v1 (plan L2.6): refused, typed — though its
   // KPIs are routed (L2.4), a driver's partitions read rows, so never a half-live figure.
   requireExtract(await datasets.getDatasetMeta(pass.ctx.projectId, datasetId));
-  const moves = spec.aggregation === 'count' ? [] : columnMoves(pass.ctx.drivers, spec.column);
+  const moves = isCountLike(spec.aggregation) ? [] : columnMoves(pass.ctx.drivers, spec.column);
   // A snapshot's figure is one day's rows (D8): moving every row's value would re-sum it, so it keeps its baseline.
   if (spec.snapshot && moves.length) pass.ctx.notes.add(`Drivers on "${spec.column}" were not applied to a snapshot metric.`);
   else if (moves.length) {
@@ -441,11 +442,11 @@ export async function scenarioTargets(projectId: string, baseMetricIds: string[]
     };
     // `count` counts non-empty cells: no value driver moves it, so it offers no target.
     if (isNewerKind(m.definition)) return; // part 5's kinds: nothing a driver moves on this release
-    if (!isFormulaDefinition(m.definition)) { if (m.definition.column && m.definition.aggregation !== 'count') add(m.definition.column); return; }
+    if (!isFormulaDefinition(m.definition)) { if (m.definition.column && !isCountLike(m.definition.aggregation)) add(m.definition.column); return; }
     const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
     const compiled = compileMetricFormula(m.definition.formula, meta ? meta.columns.map((c) => c.name) : []);
     if (!compiled.ok) return;
-    for (const a of compiled.program.aggregates) if (a.aggregation !== 'count') add(a.column);
+    for (const a of compiled.program.aggregates) if (!isCountLike(a.aggregation)) add(a.column);
     for (const ref of compiled.program.metricRefs) {
       const r = (await namesFor(ctx)).get(String(ref).toLowerCase());
       if (r) await visit(r, via, depth + 1);

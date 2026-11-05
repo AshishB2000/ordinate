@@ -21,6 +21,7 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { isDeepStrictEqual }: typeof import('util') = require('util');
 const crypto: typeof import('crypto') = require('crypto');
+const { randomUUID }: typeof import('crypto') = require('crypto');
 
 process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-countd-'));
 
@@ -183,6 +184,33 @@ void (async () => {
   ok('a related filter counts over the orders in scope ("customers who ordered")', Object.is(await kpiOn(D, [eq('segment', 'Pro')]), refPro) && refPro === 100, show([await kpiOn(D, [eq('segment', 'Pro')]), refPro]));
   const xBars = (await chartOn(DX, { category: 'region', values: [M] })).data.series[0].values.reduce((a: number, b: number) => a + b, 0);
   ok('NEGATIVE CONTROL: the sum of the bars by region is not the KPI when customers cross regions', xBars !== (await kpiOn(DX)) && (await kpiOn(DX)) === 300, show([xBars, await kpiOn(DX)]));
+
+  // ── money: a distinct count is a count, never converted (D1) ────────────────
+  const fxStore: typeof import('../src/app/fxStore') = require('../src/app/fxStore');
+  const SALES = [['2024-03-01', 'West', 100], ['2024-03-02', 'East', 200], ['2024-03-03', 'East', 100], ['2020-01-05', 'West', 50]]; // 2020: no rate
+  const S = await save('sales', [{ name: 'date', type: 'date' }, { name: 'region', type: 'text' }, { name: 'amount', type: 'number' }], SALES);
+  await fxStore.setProjectFx(P, { target: 'USD' });
+  await fxStore.setColumnCurrency(P, S, 'amount', { kind: 'fixed', code: 'EUR', date: 'date' });
+  const kpiFx = (aggregation: string) => dashboards.computeCardMetric(P, S, { column: 'amount', aggregation } as never);
+  const cd = await kpiFx('countd');
+  ok('a countd over a money column is never converted', Object.is(cd.value, countDistinct(SALES.map((r) => r[2]), 'number')) && cd.fx === undefined, show(cd));
+  ok('NEGATIVE CONTROL: its sum is', (await kpiFx('sum')).fx !== undefined);
+  const pivotOf = (aggregation: string) => chartOn(S, { category: 'region', values: [{ column: 'amount', aggregation }], pivot: { rows: [{ column: 'region' }], columns: [], values: [{ column: 'amount', aggregation }], totals: { grand: true } } });
+  const pcd = await pivotOf('countd');
+  ok('a pivot countd value is not money either, and keeps the row with no rate', pcd.ok === true && pcd.fx === undefined && Object.is(pcd.data?.pivot?.grand?.[0], 3), show([pcd.fx, pcd.data?.pivot?.grand]));
+  const pc = await pivotOf('count');
+  ok('a pivot count value is not money: every row counts, rate or not', pc.ok === true && pc.fx === undefined && Object.is(pc.data?.pivot?.grand?.[0], 4), show([pc.fx, pc.data?.pivot?.grand]));
+  ok('NEGATIVE CONTROL: a pivot sum value is', (await pivotOf('sum')).fx !== undefined);
+
+  // ── scenarios: a value driver moves a sum, never a count of distinct values ──
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const scenarioResolve: typeof import('../src/analysis/scenarioResolve') = require('../src/analysis/scenarioResolve');
+  const amounts = (await metricsStore.saveMetric(P, { name: 'Distinct amounts', datasetId: D, definition: { column: 'amount', aggregation: 'countd' } }))!;
+  const revenue = (await metricsStore.saveMetric(P, { name: 'Revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' } }))!;
+  const sc = await scenarioResolve.computeScenario(P, { id: randomUUID(), name: 'up 10%', baseMetricIds: [amounts.id, revenue.id], drivers: [{ kind: 'pct', target: { column: 'amount' }, value: 10 }] as never });
+  const fig = (id: string) => sc.metrics.find((m) => m.metricId === id);
+  ok('scenario: a countd metric keeps its baseline under a value driver', Object.is(fig(amounts.id)?.value, countDistinct(ROWS_O.map((r) => r[4]), 'number')) && Object.is(fig(amounts.id)?.value, fig(amounts.id)?.baseline), show(fig(amounts.id)));
+  ok('NEGATIVE CONTROL: the sum metric moves', typeof fig(revenue.id)?.value === 'number' && fig(revenue.id)?.value !== fig(revenue.id)?.baseline, show(fig(revenue.id)));
 
   // Old content draws byte-identically: every plain aggregation's chart, split, pivot and KPI (a related filter too) on
   // ORDERS, hashed. The hash was taken on p5-01's tip (db42ab5b) and on this branch, and they agreed; never re-record it.

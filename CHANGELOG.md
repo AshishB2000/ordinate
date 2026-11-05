@@ -85,9 +85,18 @@ All notable changes to Ordinate are documented here. Format based on
 ### Metrics a newer release writes are kept
 
 - This release keeps the metrics a later release writes (count distinct, funnel and period metrics,
-  snapshots per account, targets and target alerts) through every save and computes none of them, so
-  that release can roll out beside it. See `docs/server/upgrade.md` ("Metrics a newer release writes
-  are kept").
+  snapshots per account, targets and target alerts) through every save and computes none of them but
+  count distinct (below), so that release can roll out beside it. See `docs/server/upgrade.md`
+  ("Metrics a newer release writes are kept").
+
+### Count distinct, computed
+
+- A count distinct (`countd`) on a copied dataset is computed wherever a figure is: KPIs, charts
+  (their "Other" too), pivots and their totals, joins, answers, alerts and Prepare's group step. It
+  counts distinct non-empty values: text as stored, numbers by value, dates by day. It is never
+  converted as money and never added up. No picker offers it yet; a Live dataset refuses it.
+- A pivot count over a multi-currency dataset is no longer converted as money: a row with no rate
+  is counted.
 
 ### Data model
 

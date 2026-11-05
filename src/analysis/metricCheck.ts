@@ -22,6 +22,7 @@ import type { SourceSpan } from '../formula/formula';
 import { nearestColumn } from '../formula/didYouMean';
 import { compileMetricFormula } from './metricFormula';
 import * as msg from './metricCheckMessages';
+import { isCountLike } from '../data/aggregations';
 
 export type MetricIssueCode = 'syntax' | 'circular' | 'column' | 'unknown' | 'dataset' | 'type';
 
@@ -132,7 +133,7 @@ export function checkMetricFormula(input: MetricCheckInput): MetricCheck {
   }
 
   for (const agg of compiled.program.aggregates) {
-    if (agg.aggregation === 'count') continue;
+    if (isCountLike(agg.aggregation)) continue;
     const col = input.columns.find((c) => c.name === agg.column);
     // A related column or a level-of-detail value: its type is not known here.
     if (!col || col.type === 'number') continue;

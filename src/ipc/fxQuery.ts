@@ -44,6 +44,7 @@ import { isFaceted } from './visualsFacets';
 import { residentVizData } from './visualsResident';
 import type { VizDataReply } from './visuals';
 import { orgKey } from '../server/context';
+import { isCountLike } from '../data/aggregations';
 
 const als = new AsyncLocalStorage<string>();
 
@@ -193,11 +194,11 @@ export async function fxCardMetric(
 
 // ── A chart ──────────────────────────────────────────────────────────────────
 
-/** The money measures of a chart: a count is not money and never converts. */
+/** The money measures of a chart: a count (or a distinct count), a pivot's too, is not money and never converts. */
 function measuresOf(e: VizEncoding): string[] {
-  const out = (Array.isArray(e.values) ? e.values : []).filter((v) => v && !v.datasetId && v.aggregation !== 'count').map((v) => v.column);
+  const out = (Array.isArray(e.values) ? e.values : []).filter((v) => v && !v.datasetId && !isCountLike(v.aggregation)).map((v) => v.column);
   const pv = e.pivot && Array.isArray(e.pivot.values) ? e.pivot.values : [];
-  for (const v of pv) if (v && typeof v.column === 'string') out.push(v.column);
+  for (const v of pv) if (v && typeof v.column === 'string' && !isCountLike(v.aggregation)) out.push(v.column);
   return out;
 }
 
