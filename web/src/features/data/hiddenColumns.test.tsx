@@ -9,7 +9,7 @@ import { render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { serveRpc } from '../../test-utils';
+import { renderApp, serveRpc } from '../../test-utils';
 import type { DatasetColumns } from '../../api/datasets';
 import { DataTab } from './DataTab';
 import { ColumnsTab } from './ColumnsTab';
@@ -122,4 +122,30 @@ describe('the rows behind a mark, for that viewer', () => {
     expect(heads('Underlying rows').map((h) => h.split(/Abc|123/)[0])).toEqual(['salary', 'dept', 'ssn', 'employee_id']);
     expect(screen.queryByText(/columns? hidden/)).toBeNull();
   });
+});
+
+describe('the dataset page, for that viewer', () => {
+  const page = (header: DatasetColumns) => ({
+    ...routes('viewer', ROW_HIDDEN, ['salary', 'ssn']),
+    'projects:list': { body: [{ id: P, name: 'People', createdAt: '', updatedAt: '' }] },
+    'dataset:list': { body: [{ id: D, name: 'Staff', sourceKind: 'csv', rowCount: 1, columnCount: 4, updatedAt: '2026-10-01T10:00:00Z' }] },
+    'dataset:columns': { body: header },
+    'dataset:source': { body: { kind: 'csv', label: 'CSV', refreshable: false } },
+    'catalog:tags': { body: { ok: true, tags: [], refs: {} } },
+    'lineage:get': { body: null },
+  });
+  it('says its access is limited, not its rows, and why Quality is off', async () => {
+    serveRpc(page({ ...hiddenHeader(), scoped: true }));
+    renderApp(`/data/${P}/${D}?tab=quality`);
+    expect(await screen.findByText('Limited to your access', {}, { timeout: 15_000 })).toBeTruthy();
+    expect(screen.queryByText('Rows limited to your access')).toBeNull();
+    expect(screen.getByText(/some of its columns are hidden from you/)).toBeTruthy();
+  }, 30_000);
+
+  it('NEGATIVE CONTROL: row rules alone keep the row words', async () => {
+    serveRpc(page({ ...openHeader(), scoped: true }));
+    renderApp(`/data/${P}/${D}?tab=quality`);
+    expect(await screen.findByText('Rows limited to your access', {}, { timeout: 15_000 })).toBeTruthy();
+    expect(screen.getByText(/your access covers only some of its rows/)).toBeTruthy();
+  }, 30_000);
 });

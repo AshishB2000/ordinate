@@ -208,7 +208,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
           size="sm"
           className={g.rowSearch}
           aria-label="Search rows"
-          placeholder={secret.length ? 'Search is off: columns are hidden from you' : 'Search rows…'}
+          placeholder={secret.length ? 'Search off: columns hidden' : 'Search rows…'}
           disabled={secret.length > 0 /* the server refuses it: a search reads every cell */}
           value={text}
           onChange={(e) => setText(e.target.value)}

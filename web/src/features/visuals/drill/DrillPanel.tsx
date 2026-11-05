@@ -166,7 +166,7 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
               <Input
                 aria-label="Search these rows"
                 icon="search"
-                placeholder={secret.length ? 'Search is off: columns are hidden from you' : 'Search these rows…'}
+                placeholder={secret.length ? 'Search off: columns hidden' : 'Search these rows…'}
                 disabled={secret.length > 0 /* the server refuses it: a search reads every cell */}
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
