@@ -5,12 +5,13 @@
 
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { buttonClass } from '../../../ui/Button';
+import { Button, buttonClass } from '../../../ui/Button';
 import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonBlock, SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { ChipStrip } from '../datasets/TodoStrip';
 import { sourceTodoPanel, sourceTodoText, useSourceTables, type SourceConn, type SourceTodo } from './api';
+import { AddSourceDialog } from './AddSourceDialog';
 import { SourceList, type Picked } from './SourceList';
 import { SourcePanel } from './SourcePanel';
 import m from '../Model.module.css';
@@ -49,6 +50,7 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
   const list = useSourceTables(projectId);
   const [params, setParams] = useSearchParams();
   const [loose, setLoose] = useState<{ connId: string; table: string } | null>(null);
+  const [adding, setAdding] = useState<{ connId: string; name?: string; documented: Set<string> } | null>(null);
 
   const go = (connId: string, docId: string | undefined, panel = 'overview') => {
     setParams((p) => {
@@ -72,12 +74,17 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
     return `?${q.toString()}`;
   };
 
+  const connP = params.get('conn');
+  const shown = list.data?.connections.filter((c) => c.rows.length) ?? [];
+  // Connections' link for a connection with nothing listed yet: the way to its first table.
+  const newConn = connP && !shown.some((c) => c.connId === connP) ? connP : null;
+
   let body;
   if (list.isError) {
     body = <ErrorState heading={3} title="Source tables could not be loaded" message={list.error?.message || 'Try again.'} onRetry={() => void list.refetch()} />;
   } else if (list.isPending) {
     body = <SourcesLoading />;
-  } else if (!list.data.connections.some((c) => c.rows.length)) {
+  } else if (!shown.length && !newConn) {
     body = (
       <EmptyState
         icon="database"
@@ -93,9 +100,8 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
       </EmptyState>
     );
   } else {
-    const { connections, todo, more } = list.data;
-    const picked = pickOf(connections, loose, params.get('conn'), params.get('doc'));
-    const readAtOf = (t: SourceTodo) => connections.find((c) => c.connId === t.connId)?.rows.find((r) => r.docId === t.docId)?.readAt;
+    const { todo, more } = list.data;
+    const readAtOf = (t: SourceTodo) => shown.find((c) => c.connId === t.connId)?.rows.find((r) => r.docId === t.docId)?.readAt;
     const open = (id: string) => {
       const t = todo.find((item) => todoKey(item) === id);
       if (!t) return;
@@ -103,23 +109,62 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
       setLoose(null);
       go(t.connId, t.docId, sourceTodoPanel(t.kind));
     };
+    const documentedOf = (c: SourceConn) => new Set(c.rows.filter((r) => r.docId).map((r) => r.table));
+    let panel;
+    if (newConn) {
+      panel = (
+        <section className={m.panel} aria-label="A connection with no source tables yet">
+          <EmptyState
+            icon="table"
+            heading={3}
+            title="No source tables on this connection yet"
+            actions={
+              <Button variant="primary" icon="plus" onClick={() => setAdding({ connId: newConn, documented: new Set() })}>
+                Add a table
+              </Button>
+            }
+          >
+            Pick one of its tables to write who owns it, when it refreshes and the filters to always use, and to read what the warehouse knows about it.
+          </EmptyState>
+        </section>
+      );
+    } else {
+      const picked = pickOf(shown, loose, connP, params.get('doc'));
+      const sourcePanel = (
+        <SourcePanel
+          key={`${picked.conn.connId}:${picked.row.docId ?? `used:${picked.row.table}`}`}
+          projectId={projectId}
+          conn={picked.conn}
+          row={picked.row}
+          onStarted={(docId) => {
+            setLoose(null);
+            go(picked.conn.connId, docId);
+          }}
+          onDeleted={() => go(picked.conn.connId, undefined)}
+        />
+      );
+      panel = (
+        <div className={m.split}>
+          <SourceList
+            conns={shown}
+            picked={picked}
+            hrefOf={hrefOf}
+            onLoose={pickLoose}
+            onLink={() => setLoose(null)}
+            addFor={(c) => (
+              <Button size="sm" variant="ghost" icon="plus" aria-label={`Add a table from ${c.name}`} onClick={() => setAdding({ connId: c.connId, name: c.name, documented: documentedOf(c) })}>
+                Add
+              </Button>
+            )}
+          />
+          {sourcePanel}
+        </div>
+      );
+    }
     body = (
       <>
         <ChipStrip items={todo.map((t) => ({ id: todoKey(t), text: sourceTodoText(t, readAtOf(t)), warn: t.kind === 'used_no_doc' }))} more={more} onPick={open} />
-        <div className={m.split}>
-          <SourceList conns={connections} picked={picked} hrefOf={hrefOf} onLoose={pickLoose} onLink={() => setLoose(null)} />
-          <SourcePanel
-            key={`${picked.conn.connId}:${picked.row.docId ?? `used:${picked.row.table}`}`}
-            projectId={projectId}
-            conn={picked.conn}
-            row={picked.row}
-            onStarted={(docId) => {
-              setLoose(null);
-              go(picked.conn.connId, docId);
-            }}
-            onDeleted={() => go(picked.conn.connId, undefined)}
-          />
-        </div>
+        {panel}
       </>
     );
   }
@@ -130,6 +175,20 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
         <span>Tables in your databases and warehouses that datasets are built from. Only editors of this project see this tab.</span>
       </p>
       {body}
+      {adding && (
+        <AddSourceDialog
+          projectId={projectId}
+          connId={adding.connId}
+          connName={adding.name}
+          documented={adding.documented}
+          onPicked={(docId) => {
+            setAdding(null);
+            setLoose(null);
+            go(adding.connId, docId);
+          }}
+          onClose={() => setAdding(null)}
+        />
+      )}
     </>
   );
 }

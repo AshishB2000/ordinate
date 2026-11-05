@@ -14,6 +14,7 @@ import { Input } from '../../ui/Field';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { Select } from '../../ui/Select';
 import { EmptyState, ErrorState } from '../../ui/States';
+import { DocumentTableButton } from '../model/sources/DocumentTable';
 import type { Preview, SaveMode } from './api';
 import s from './Workbench.module.css';
 
@@ -39,12 +40,14 @@ const MODES = [
   { value: 'live', label: 'Live' },
 ];
 
-export function Results({ state, saving, live = false, onSave }: {
+export function Results({ state, saving, live = false, onSave, documentTo }: {
   state: ResultState;
   saving: boolean;
   /** The connector can answer a Live dataset itself. */
   live?: boolean;
   onSave: (name: string, mode: SaveMode) => void;
+  /** With a table shown: its notes in the Data model, one click away. */
+  documentTo?: { projectId: string; connId: string };
 }) {
   const shown = state.kind === 'shown' ? state.shown : null;
   const [name, setName] = useState('');
@@ -95,6 +98,7 @@ export function Results({ state, saving, live = false, onSave }: {
         <span className={s.note} title={warnings.join(' ')}>
           {note}
         </span>
+        {documentTo && shown?.table && <DocumentTableButton {...documentTo} table={shown.table} />}
         <Input size="sm" className={s.saveName} aria-label="Dataset name" placeholder="Dataset name" value={name} onChange={(e) => setName(e.target.value)} disabled={!shown} />
         {live && (
           <span title={asLive ? 'Keeps the columns only. Charts, KPI tiles and answers ask the warehouse each time, cached for 5 minutes.' : 'Copies the rows into Ordinate; refresh to bring in new ones.'}>

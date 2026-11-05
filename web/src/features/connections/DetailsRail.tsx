@@ -12,7 +12,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { formatNumber } from '../../../../src/app/format.ts';
 import { Badge, type BadgeTone } from '../../ui/Badge';
-import { Button } from '../../ui/Button';
+import { Button, buttonClass } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
@@ -260,6 +260,11 @@ export function DetailsRail({
             <span>{w}</span>
           </p>
         ))}
+      <Link className={buttonClass('ghost', 'sm', s.dsHook)} to={`/model/${projectId}?tab=sources&conn=${conn.id}`} title="The notes on this connection's tables: owner, refresh, guide and what the warehouse knows">
+        <Icon name="file-text" size={16} />
+        <span>Document in Data model</span>
+        <Icon name="external-link" size={16} />
+      </Link>
       <h2 className={s.detailsH}>Datasets from this connection</h2>
       {datasets.length === 0 ? (
         <p className={s.msg}>Nothing imported from this connection yet. Pick a table or run a query, then Save as dataset.</p>

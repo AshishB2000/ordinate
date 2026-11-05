@@ -2,6 +2,7 @@
 // connection and doc ids, never its name); a table datasets are built from that has no doc yet is a
 // button, picked in the page, so no address ever names it.
 
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Icon } from '../../../ui/icons/Icon';
 import { formatNumber } from '../../data/format';
@@ -42,12 +43,14 @@ function Item({ row, on, href, onLoose, onLink }: { row: SourceRow; on: boolean;
   );
 }
 
-export function SourceList({ conns, picked, hrefOf, onLoose, onLink }: {
+export function SourceList({ conns, picked, hrefOf, onLoose, onLink, addFor }: {
   conns: SourceConn[];
   picked: Picked;
   hrefOf: (connId: string, docId: string) => string;
   onLoose: (connId: string, table: string) => void;
   onLink: () => void;
+  /** The group's + Add. */
+  addFor: (conn: SourceConn) => ReactNode;
 }) {
   return (
     <nav className={m.list} aria-label="Source tables">
@@ -62,6 +65,7 @@ export function SourceList({ conns, picked, hrefOf, onLoose, onLink }: {
                 </span>
                 <span className={x.connKind}>{c.label}</span>
               </span>
+              {addFor(c)}
             </div>
             <ul className={m.group} aria-labelledby={capId}>
               {c.rows.map((r) => (
