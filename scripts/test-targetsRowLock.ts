@@ -45,6 +45,20 @@ void (async () => {
       const t = await target('east');
       ok(`east, row rules ${who}: ${shown ? 'shown' : 'not shown'}`, shown ? t?.none === undefined && t?.value !== null : t?.none === tm.targetRowRules() && t?.value === null, JSON.stringify(t));
     }
+    // An alert reaches every reader (fan-out): a target rule that reads a dataset with row rules, actuals or plan, is refused whole.
+    const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+    const rule = { id: '6b1c2f00-0000-4000-8000-000000000001', name: 'Rev off plan', datasetId: S, enabled: true, compare: 'target', targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: rev!.id, filters: NOV } };
+    const refused = (): Promise<boolean> => W.as('boss', () => alertStore.testRule(P, rule)).then(() => false, () => true);
+    await setRules(S, false);
+    await setRules(PD, false);
+    ok('NEGATIVE CONTROL: with no row rules the target rule would fire', (await W.as('boss', () => alertStore.testRule(P, rule))).fire === true);
+    await W.as('boss', () => alertStore.restoreRule(P, rule));
+    await setRules(PD, true);
+    ok('a plan with row rules: the target rule is refused, not compared with a slice', await refused());
+    ok('…and a tick fires nothing and leaves the rule as it was', (await W.as('boss', () => alertStore.evaluateProject(P, S))).length === 0 && (await W.as('boss', () => alertStore.load(P))).rules.find((r) => r.id === rule.id)?.lastEvaluatedAt === undefined);
+    await setRules(PD, false);
+    await setRules(S, true);
+    ok('a dataset with row rules: the target rule is refused', await refused());
     await setRules(S, true);
     await setRules(PD, true);
     const east = await target('east');

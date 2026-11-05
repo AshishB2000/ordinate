@@ -235,7 +235,7 @@ void (async () => {
   // ── alerts: a rule this release cannot evaluate is kept, untouched by an evaluation tick ──
   const R = (over: object) => ({ id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '>', value: 0 }, metric: { column: 'amount', aggregation: 'sum' }, ...over });
   const countdRule = R({ metric: { column: 'customer_id', aggregation: 'countd' } }); // evaluated from step 02
-  const rules = [
+  const rules = [ // a target rule is evaluated through its metric's target from step 10: a metric with none is never in breach
     R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: periodM.id } }),
   ];
   const funnelRule = R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }); // evaluated by its metric from step 08
@@ -249,8 +249,8 @@ void (async () => {
   await alertStore.evaluateProject(P, D, Date.parse('2026-11-04T12:00:00Z'));
   const after = (await alertStore.load(P)).rules;
   for (const r of rules) {
-    const was = JSON.stringify(before.find((x) => x.id === r.id));
-    ok(`kept, byte-identical after an evaluation tick: ${tag(r)}`, was !== undefined && JSON.stringify(after.find((x) => x.id === r.id)) === was, JSON.stringify(after.find((x) => x.id === r.id)));
+    const now = after.find((x) => x.id === r.id);
+    ok(`evaluated, never fired (no target to breach): ${tag(r)}`, typeof now?.lastEvaluatedAt === 'string' && now?.lastFiredAt === undefined && now?.armed === undefined && isDeepStrictEqual(now?.targetPct, { op: 'below', pct: 90 }), JSON.stringify(now));
   }
   ok('NEGATIVE CONTROL: the plain rule was evaluated', typeof after.find((x) => x.id === plainRule.id)?.lastEvaluatedAt === 'string');
   ok('a rule on a per-entity snapshot metric is evaluated (step 07)', typeof after.find((x) => x.id === perRule.id)?.lastEvaluatedAt === 'string');
@@ -263,8 +263,9 @@ void (async () => {
   ok('a plain rule is byte-identical through sanitize', JSON.stringify(alerts.sanitizeRule(plainRule)) === JSON.stringify(alerts.sanitizeRule(alerts.sanitizeRule(plainRule))) && !('targetPct' in alerts.sanitizeRule(plainRule)!));
   for (const r of rules) {
     const tested = await alertStore.testRule(P, r);
-    ok(`the Test button says why: ${tag(r)}`, tested.ok && !tested.fire && tested.message === msg.alertPending() && tested.value === null, JSON.stringify(tested));
+    ok(`the Test button evaluates it, and says nothing is pending: ${tag(r)}`, tested.ok && !tested.fire && tested.message !== msg.alertPending(), JSON.stringify(tested));
   }
+  ok('NEGATIVE CONTROL: a target rule with no metric is still left alone', (await alertStore.testRule(P, R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 } }))).message === msg.alertPending());
   ok('NEGATIVE CONTROL: the Test button evaluates the plain rule', (await alertStore.testRule(P, plainRule)).fire === true);
   const testedF = await alertStore.testRule(P, funnelRule);
   ok('the Test button evaluates a funnel rule by its metric: no figure (nobody entered), never sum(amount)', testedF.ok && !testedF.fire && testedF.value === null && testedF.message !== msg.alertPending(), JSON.stringify(testedF));

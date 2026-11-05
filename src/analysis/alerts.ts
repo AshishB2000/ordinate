@@ -42,7 +42,7 @@ import { AGGREGATIONS } from '../data/aggregations';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
-export type AlertCompare = 'threshold' | 'change' | 'anomaly' | 'target'; // 'target': written by a later release (part 5), kept and skipped here
+export type AlertCompare = 'threshold' | 'change' | 'anomaly' | 'target'; // 'target': below or above a share of the metric's target (part 5, D14)
 export type ThresholdOp = '>' | '<' | '>=' | '<=';
 export type ChangeDirection = 'up' | 'down' | 'either';
 export type ChangeVs = 'previous_refresh' | 'previous_period';
@@ -315,9 +315,10 @@ export function sanitizeRule(raw: any): AlertRule | null {
   return rule;
 }
 
-/** False for a rule a later release writes and this one keeps but never evaluates (part 5): a target, or no column and no metric (one with a metric is watched through it: alertMetric). */
+/** False for a rule that can't be evaluated and is kept untouched: no column and no metric (one with a metric is watched through it: alertMetric), or a target rule with no metric. */
 export function canEvaluate(rule: AlertRule): boolean {
-  return rule.compare !== 'target' && (!!rule.metric.column || !!rule.metric.metricId || rule.compare === 'anomaly');
+  if (rule.compare === 'target') return !!rule.metric.metricId; // evaluated through its metric's target (alertTarget)
+  return !!rule.metric.column || !!rule.metric.metricId || rule.compare === 'anomaly';
 }
 
 export function sanitizeEvent(raw: any): AlertEvent | null {
@@ -346,6 +347,13 @@ export function sanitizeEvent(raw: any): AlertEvent | null {
 }
 
 // ── The conditions ───────────────────────────────────────────────────────────
+
+/** Is the metric below (or above) its share of the target? No value or no target is never a breach. */
+export function targetBreached(rule: AlertRule, value: number | null, target: number | null): boolean {
+  const p = rule.compare === 'target' ? rule.targetPct : undefined;
+  if (!p || value == null || target == null) return false;
+  return p.op === 'below' ? value < (target * p.pct) / 100 : value > (target * p.pct) / 100;
+}
 
 /** Is the metric currently in breach of a threshold rule? */
 export function thresholdBreached(rule: AlertRule, value: number | null): boolean {
@@ -437,6 +445,7 @@ export function alertMessage(
   value: number | null,
   previous: number | null,
   newAnomalies = 0,
+  target: number | null = null,
 ): string {
   // The surface's own word for this number, falling back to the column it is
   // computed over — see AlertMetric.label.
@@ -447,6 +456,12 @@ export function alertMessage(
   }
   if (rule.compare === 'threshold' && rule.threshold) {
     return t('alerts.is', { label, value: fmtMetric(value), op: opWord(rule.threshold.op), value2: fmtMetric(rule.threshold.value) });
+  }
+  if (rule.compare === 'target') {
+    const shown = fmtMetric(value);
+    const share = fmtPct(value != null && target ? (value / target) * 100 : null);
+    const goal = fmtMetric(target);
+    return t('alerts.is_of_its_target_of', { label, shown, share, goal });
   }
   const pct = changePct(value, previous);
   const verb = pct != null && pct < 0 ? 'fell' : 'rose';
@@ -486,6 +501,8 @@ export interface EvaluateInput {
   period?: string;
   /** For an `anomaly` rule: this run's findings, already scoped to the column. */
   anomalies?: Anomaly[];
+  /** For a `target` rule: the metric's target in the scope its figure was read in (null: none). */
+  target?: number | null;
   now: number;
   /** Supplied by the caller so this module never reaches for randomUUID. */
   eventId: string;
@@ -526,8 +543,8 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
   let newAnomalies = 0;
   let previous: number | null = null;
 
-  if (rule.compare === 'threshold') {
-    const breached = thresholdBreached(rule, value);
+  if (rule.compare === 'threshold' || rule.compare === 'target') {
+    const breached = rule.compare === 'target' ? targetBreached(rule, value, input.target ?? null) : thresholdBreached(rule, value);
     // The edge: fire on the transition INTO breach, and re-arm on the way out.
     hit = breached && !rule.armed;
     if (breached) next.armed = true;
@@ -565,7 +582,7 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
     previous,
     delta,
     deltaPct: changePct(value, previous),
-    message: alertMessage(rule, value, previous, newAnomalies),
+    message: alertMessage(rule, value, previous, newAnomalies, input.target ?? null),
     seen: false,
   };
   if (rule.createdFrom) event.analysisId = rule.createdFrom.analysisId;
@@ -596,7 +613,9 @@ export function wouldFire(
   value: number | null,
   previous?: number | null,
   anomalies?: Anomaly[],
+  target?: number | null,
 ): { fire: boolean; message: string } {
+  if (rule.compare === 'target') return { fire: targetBreached(rule, value, target ?? null), message: alertMessage(rule, value, null, 0, target ?? null) };
   if (rule.compare === 'threshold') {
     return { fire: thresholdBreached(rule, value), message: alertMessage(rule, value, null) };
   }
@@ -619,10 +638,11 @@ export function wouldFire(
 
 /** The auto-filled name in the dialog. App-composed, like the message. */
 export function suggestRuleName(
-  rule: Pick<AlertRule, 'compare' | 'metric' | 'threshold' | 'change'>,
+  rule: Pick<AlertRule, 'compare' | 'metric' | 'threshold' | 'change' | 'targetPct'>,
   label?: string,
 ): string {
   const name = label || rule.metric.label || rule.metric.column || t('common.metric');
+  if (rule.compare === 'target' && rule.targetPct) return t('alerts.of_target', { name, op: opWord(rule.targetPct.op === 'below' ? '<' : '>'), pct: fmtPct(rule.targetPct.pct) });
   if (rule.compare === 'threshold' && rule.threshold) {
     return `${name} ${opWord(rule.threshold.op)} ${fmtMetric(rule.threshold.value)}`;
   }

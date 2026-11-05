@@ -209,6 +209,12 @@
   font-weight: 600;
   color: var(--text-strong);
 }
+.gone {
+  margin-top: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-weight: 400;
+}
 .quiet {
   display: flex;
   gap: var(--sp-4);

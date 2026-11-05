@@ -39,6 +39,7 @@ import { computeCardMetric } from '../ipc/dashboards';
 import { snapshotMetric } from './snapshotGuards';
 import { alertSkipped } from './pendingKinds';
 import { metricWatch } from './alertMetric';
+import { ruleTarget } from './alertTarget';
 import type { MetricSnapshot } from './snapshot';
 import { getMetric } from './metrics';
 import { rewriteControlPeriods } from './metricTime';
@@ -329,7 +330,7 @@ export async function markSeen(projectId: string, eventId?: string): Promise<boo
 export async function metricFor(
   projectId: string,
   rule: AlertRule,
-): Promise<{ value: number | null; previous: number | null; period?: string; skip?: true }> {
+): Promise<{ value: number | null; previous: number | null; period?: string; skip?: true; target?: number | null }> {
   const stored = (rule.metric.filters || []) as FilterStep[];
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   const named = typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
@@ -360,6 +361,10 @@ export async function metricFor(
 
   const res = watch ? null : await computeCardMetric(projectId, rule.datasetId, spec, filters);
   const value = watch ? await watch() : res && res.ok ? res.value : null;
+  if (rule.compare === 'target') { // compared with the metric's target in this very scope; a deleted metric leaves the rule as it is
+    const target = await ruleTarget(projectId, rule, filters, value);
+    return target === 'gone' ? { value: null, previous: null, skip: true } : { value, previous: null, target };
+  }
   return { value, previous: rule.lastValue ?? null };
 }
 
@@ -487,10 +492,10 @@ export async function evaluateProject(
       // ONE rule per fan-out scope (docs/row-policy D10, N1): an alert reaches every reader and its channels,
       // so a rule over a dataset with row access rules (or built from one) is not evaluated — the others still are.
       res = (await fanOutScope(async () => {
-        const { value, previous, period, skip } = await metricFor(projectId, rule);
+        const { value, previous, period, skip, target } = await metricFor(projectId, rule);
         if (skip) return null;
         const r = alerts.evaluateRule({
-          rule, value, previous, period,
+          rule, value, previous, period, target,
           anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
           now,
           eventId: randomUUID(),
@@ -555,7 +560,7 @@ export async function testRule(projectId: string, raw: any): Promise<{
   // "does this dataset have anomalies", not "are any of them new since a run the
   // user has not made yet".
   const probe: AlertRule = rule.compare === 'anomaly' ? { ...rule, anomalyKeys: undefined } : rule;
-  const out = alerts.wouldFire(probe, value, previous, anomalies);
+  const out = alerts.wouldFire(probe, value, previous, anomalies, read.target);
   return { ok: true, fire: out.fire, message: out.message, value, previous };
 }
 

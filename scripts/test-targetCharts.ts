@@ -24,6 +24,9 @@ const overlay: typeof import('../src/ipc/visualsOverlay') = require('../src/ipc/
 const tableCalc: typeof import('../src/analysis/tableCalc') = require('../src/analysis/tableCalc');
 const driverScope: typeof import('../src/analysis/driverScope') = require('../src/analysis/driverScope');
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const { randomUUID }: typeof import('crypto') = require('crypto');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
 const PLAIN_PIN = 'f0af71e7c3b1cc3ea706ba82a9c6e00ba12e7dbaed26999b6b2797489abf7c2b';
@@ -116,8 +119,53 @@ async function chartsSection(): Promise<void> {
   ok('NEGATIVE CONTROL: a chart with no metric measure is the reply itself, and nothing was read', Object.is(out, PLAIN_REPLY) && reads === 0, String(reads));
 }
 
+async function alertsSection(): Promise<void> {
+  const { P, D, rev, units } = await fixtures();
+  const THIS_MONTH = on('2024-11-01', '2024-11-30');
+  const NOW = Date.parse('2024-11-20T12:00:00Z');
+  const rule = { id: randomUUID(), name: 'Revenue off plan', datasetId: D, enabled: true, compare: 'target', targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: rev.id, filters: THIS_MONTH } };
+  const stored = async () => (await H.as(H.ORG_A, () => alertStore.load(P))).rules.find((r) => r.id === rule.id)!;
+  const evaluate = (now: number) => H.as(H.ORG_A, () => alertStore.evaluateProject(P, D, now));
+
+  // The pure decision.
+  const R = alerts.sanitizeRule(rule)!;
+  ok('below 90% of 800: 700 is a breach, 720 is not', alerts.targetBreached(R, 700, 800) && !alerts.targetBreached(R, 720, 800));
+  ok('above 110% of 800: 900 is a breach', alerts.targetBreached({ ...R, targetPct: { op: 'above', pct: 110 } }, 900, 800) && !alerts.targetBreached({ ...R, targetPct: { op: 'above', pct: 110 } }, 880, 800));
+  ok('NEGATIVE CONTROL: no target and no value are never a breach', !alerts.targetBreached(R, 700, null) && !alerts.targetBreached(R, null, 800));
+  ok('NEGATIVE CONTROL: a threshold rule is never a target breach', !alerts.targetBreached({ ...R, compare: 'threshold' }, 1, 800));
+
+  await H.as(H.ORG_A, () => alertStore.restoreRule(P, rule));
+  const fired = await evaluate(NOW);
+  const want = 800_000;
+  ok('below 90% of target: fires once, with the share and the target in the sentence', fired.length === 1 && fired[0].message === alerts.alertMessage(R, fired[0].value, null, 0, want), show(fired));
+  ok('…the sentence names both figures', /% of its target of 800\.0K/.test(fired[0]?.message ?? ''), fired[0]?.message);
+  ok('…and not again while still below (the edge)', (await evaluate(NOW + 3_600_000)).length === 0 && (await stored()).armed === true);
+  // Raise the sales' share of the target by lowering the target: the rule re-arms on the way out, without firing.
+  await post('metric:update', { projectId: P, id: rev.id, patch: { target: { source: { value: 2000 }, per: 'month' } } });
+  ok('back above re-arms without firing', (await evaluate(NOW + 7_200_000)).length === 0 && (await stored()).armed === undefined);
+  await post('metric:update', { projectId: P, id: rev.id, patch: { target: { source: { value: 90_000 }, per: 'month' } } });
+  ok('and below again fires again', (await evaluate(NOW + 10_800_000)).length === 1);
+
+  const probe = { ...rule, id: randomUUID() };
+  ok('NEGATIVE CONTROL: no period in scope, no target, never fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, { ...probe, metric: { ...rule.metric, filters: [] } }))).fire === false);
+  ok('the Test button says it would fire for the period in scope', (await H.as(H.ORG_A, () => alertStore.testRule(P, probe))).fire === true);
+  const plainRule = { ...rule, id: randomUUID(), metric: { ...rule.metric, metricId: units.id } };
+  ok('NEGATIVE CONTROL: a metric with no target never fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, plainRule))).fire === false);
+
+  await post('metric:delete', { projectId: P, id: rev.id });
+  const before = JSON.stringify(await stored());
+  await evaluate(NOW + 14_400_000);
+  ok('a deleted metric: the rule is not evaluated, untouched', JSON.stringify(await stored()) === before);
+  const listed = (await post('alerts:list', { projectId: P })).value.rules.find((r: Reply) => r.id === rule.id);
+  ok('…and the inbox says its metric is gone', listed?.metricGone === true, show(listed));
+  const other = { id: randomUUID(), name: 'Plain', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '>', value: 0 }, metric: { column: 'amount', aggregation: 'sum', metricId: units.id } };
+  await H.as(H.ORG_A, () => alertStore.restoreRule(P, other));
+  ok('NEGATIVE CONTROL: a rule whose metric is there carries no metricGone', (await post('alerts:list', { projectId: P })).value.rules.every((r: Reply) => r.id === rule.id || !('metricGone' in r)));
+}
+
 async function main(): Promise<void> {
   await chartsSection();
+  await alertsSection();
   await close();
   finish();
 }

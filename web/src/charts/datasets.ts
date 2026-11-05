@@ -15,20 +15,21 @@ import { t } from './strings';
 import type { ChartCtx, ChartSeriesShape, Cx } from './types';
 
 // The server's target series (visualsOverlay → targetSeries): a stepped dashed line in the muted ink, on a bar chart too.
-const targetLine = (s: ChartSeriesShape, color: string): Cx => ({
+const targetLine = (s: ChartSeriesShape, color: string, canvas: ChartCtx['canvas']): Cx => ({
   _overlay: true,
   type: 'line',
   label: s.name || '',
   data: s.values,
   stepped: 'middle',
-  borderColor: chartMuted(color),
+  borderColor: getCSSVar('--text-strong', canvas) || chartMuted(color), // the ink of the page: a target must read over the columns in both themes
   backgroundColor: 'transparent',
-  borderWidth: 1.8,
+  borderWidth: 2,
   borderDash: [4, 3],
   pointRadius: 0,
   pointHoverRadius: 4,
   fill: false,
   order: 0,
+  pointStyle: 'line',
 });
 
 // The datasets plus the category labels Chart.js should draw them against —
@@ -271,7 +272,7 @@ export function buildChartDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
       outlierBackgroundColor: palette[4 % palette.length],
     }];
   } else if (isLine) {
-    datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0]) : s.role === 'overlay' ? {
+    datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0], canvas) : s.role === 'overlay' ? {
       // The prior period: its series' colour, faded and dashed — present
       // enough to compare against, quiet enough never to be mistaken for it.
       _overlay: true,
@@ -308,7 +309,7 @@ export function buildChartDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
     const buildBarData = (s: ChartSeriesShape, i: number) => (opts.pct ? c.figures.sharePct![i] : s.values);
     if (opts.combo && series.length >= 2) {
       // Mixed chart: first series as columns, the rest as lines on a 2nd y-axis.
-      datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0]) : i === 0
+      datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0], canvas) : i === 0
         ? {
             label: s.name || '',
             data: buildBarData(s, i),
@@ -328,7 +329,7 @@ export function buildChartDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
             fill: false, order: 1,
           });
     } else {
-      datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0]) : s.role === 'overlay' ? {
+      datasets = series.map((s: ChartSeriesShape, i: number) => s.target ? targetLine(s, palette[0], canvas) : s.role === 'overlay' ? {
         _overlay: true,
         label: s.name || '',
         data: s.values,
