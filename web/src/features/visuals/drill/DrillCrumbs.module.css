@@ -1,0 +1,58 @@
+/* The drill path (./DrillCrumbs.tsx): one quiet strip over the chart, tokens only. It wraps at 375 px. */
+
+.path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-8);
+  padding: var(--sp-4) var(--sp-8) var(--sp-4) var(--sp-12);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.crumbs {
+  display: flex;
+  flex: 1 1 200px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-13);
+}
+.crumb {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sep {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+.go {
+  padding: 2px var(--sp-4);
+  font: inherit;
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.go:hover {
+  background: var(--accent-soft);
+}
+.go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.here {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.by {
+  margin-left: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}

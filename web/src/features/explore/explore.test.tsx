@@ -33,7 +33,7 @@ const SUGGEST = {
 const ANSWER = { ok: true, data: { labels: ['East', 'West'], series: [{ name: 'sum of revenue', values: [1406441.74, 1565150.46] }] }, recommendedShape: 'categorical', warnings: [] };
 
 /** The read channels this page may send — the shell's and Explore's own. Anything else fails the test. */
-const READS = new Set(['projects:overview', 'projects:roles', 'ai:status', 'dataset:list', 'explore:suggest', 'visual:data', 'visual:dataBatch', 'format:colors:get', 'onboarding:get', 'alerts:events', 'jobs:list', 'prefs:get', 'period:picker']);
+const READS = new Set(['projects:overview', 'projects:roles', 'ai:status', 'dataset:list', 'explore:suggest', 'visual:data', 'visual:dataBatch', 'format:colors:get', 'onboarding:get', 'alerts:events', 'jobs:list', 'prefs:get', 'period:picker', 'model:navigation']);
 /** Channels that compute a figure: Explore uses only the two that run vizDataFor. */
 const FIGURES = new Set(['visual:data', 'visual:dataBatch']);
 

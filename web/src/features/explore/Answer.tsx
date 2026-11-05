@@ -23,6 +23,11 @@ import { chartCanRender, countNumericSeries, eligibleChartTypes, GRID_TYPES, nee
 import { liveFilters } from '../visuals/filters/filterText';
 import { useColorMap } from '../visuals/format/colorMap';
 import { AnswerActions } from './AnswerActions';
+import { DrillCrumbs } from '../visuals/drill/DrillCrumbs';
+import { crumbsOf } from './drillCrumbs';
+import { useExploreDrill } from './useExploreDrill';
+import type { NavHierarchy } from '../model/navigation';
+import type { DateGrain } from '../../../../src/analysis/categoryKey.ts';
 import { useAnswer, type Ask } from './api';
 import { FIGURE_TYPES, figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 import { questionTitle, type Question } from './spec';
@@ -35,7 +40,7 @@ const LIVE_POOL = POOL.filter((t) => !LIVE_OFF_CHARTS.has(t));
 
 type Data = ChartDataShape & { geo?: MapGeo | null };
 
-export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdit, question, onChange }: {
+export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdit, question, onChange, hierarchies, ladder }: {
   projectId: string;
   datasetId: string;
   datasetName: string;
@@ -45,6 +50,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   canEdit: boolean;
   question: Question;
   onChange: (next: Question) => void;
+  /** The dataset's drill hierarchies and the calendar's date ladder (model:navigation); empty when that read failed. */
+  hierarchies: readonly NavHierarchy[];
+  ladder: readonly DateGrain[];
 }) {
   const e = question.encoding;
   // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
@@ -69,6 +77,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const offered = level && !suited.includes('map_choropleth') ? [...suited, 'map_choropleth'] : suited;
   // Before the answer arrives it is the asked type (the table's skeleton holds its place); an answer no chart suits is a table.
   const current = !data ? asked : asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
+
+  const drill = useExploreDrill({ projectId, datasetId, question, reply: stale ? undefined : reply, chartType: current, hierarchies, ladder, onChange });
+  const crumbs = stale ? null : crumbsOf(question, hierarchies);
 
   /** A region map names its regions (the level the server saw in the labels); leaving one drops them. */
   const pick = (t: string) => {
@@ -111,6 +122,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
             ))}
           </ul>
         )}
+        {crumbs && (
+          <DrillCrumbs crumbs={crumbs.map((c) => ({ label: c.label, go: c.to ? () => onChange(c.to!) : undefined }))} by={e.category} onUp={() => onChange(crumbs[crumbs.length - 2].to!)} />
+        )}
         <div className={answer.isFetching && data ? `${s.chart} ${s.dim}` : s.chart} aria-busy={answer.isFetching || undefined}>
           {refusal !== null ? (
             <LiveRefusal refusal={answer.error} projectId={projectId} datasetId={datasetId} />
@@ -138,8 +152,10 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
               needs={needsText(current, data, hasGeo)}
               label={title}
               onChart={() => undefined}
+              onMark={drill.onMark}
             />
           )}
+          {drill.sheet}
         </div>
       </section>
       {current !== 'table' && !answer.isError && (
