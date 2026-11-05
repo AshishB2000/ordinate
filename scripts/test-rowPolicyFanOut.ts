@@ -342,6 +342,37 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
       ok(`MCP: ${name} refuses, with the sentence and no West value`, r.includes('isError":true') && /row access rules|your access/.test(r) && !H.leaks(r), r.slice(0, 200));
     }
 
+    // The verified-question tools (part 3 step 09): the same doors, as the token's own user.
+    const tokens: Record<string, string> = { east: token };
+    const mcp = async (who: string, name: string, args: Record<string, unknown>): Promise<{ error: boolean; data: any; text: string }> => {
+      tokens[who] ??= String((await W.call(who, 'tokens:create', { name: `robot-${who}`, expiresInDays: 30 })).body?.token ?? '');
+      const r = await W.app.inject({ method: 'POST', url: '/api/mcp', headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': 'application/json' }, remoteAddress: '127.0.0.1', payload: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { project: P, ...args } } }) });
+      const res = JSON.parse(r.body).result;
+      const text = String(res?.content?.[0]?.text ?? '');
+      return { error: res?.isError === true, data: res?.isError === true ? null : JSON.parse(text), text };
+    };
+    const REV = { datasetId: orders, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Revenue by region' };
+    const savedRev = await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Revenue by region', spec: REV } });
+    const savedWest = await W.call('boss', 'verified:save', { projectId: P, input: { question: 'West customers', spec: { ...REV, category: 'customer', filters: [{ column: 'customer', op: '=', value: `${H.W_CANARY}_1` }], title: 'West customers' } } });
+    ok('setup: boss verified both questions', savedRev.body?.ok === true && savedWest.body?.ok === true, show(savedRev) + show(savedWest));
+    const byQ = (l: any[], q: string): any => l.find((x) => x.question === q) ?? {};
+    const eastList = await mcp('east', 'list_verified_questions', {});
+    ok('mcp: east lists the value-filtered question without aggregate args, and no West value',
+      eastList.data?.questions?.length === 2 && 'question' in byQ(eastList.data.questions, 'West customers') && !('aggregate' in byQ(eastList.data.questions, 'West customers')) && !H.leaks(eastList.text), eastList.text.slice(0, 300));
+    const westAns = await mcp('east', 'answer_verified_question', { question: 'West customers' });
+    ok('mcp: east cannot answer it — "No verified question", never "hidden"', westAns.error && /No verified question/.test(westAns.text) && !/hidden/i.test(westAns.text) && !H.leaks(westAns.text), westAns.text);
+    const eastAns = await mcp('east', 'answer_verified_question', { question: 'Revenue by region' });
+    const eastCard = (await W.call('east', 'answer:card', { projectId: P, spec: REV })).body;
+    ok('mcp: east\'s figures are locked — equal to east\'s answer:card',
+      !eastAns.error && eastAns.data.labels.length > 0 && eastAns.data.labels.every((l: unknown, i: number) => Object.is(l, eastCard.data.labels[i]))
+      && eastAns.data.series[0].values.every((v: number, i: number) => Object.is(v, eastCard.data.series[0].values[i])) && !H.leaks(eastAns.text), eastAns.text.slice(0, 300));
+    ok('mcp: …and show no West row (only East\'s label)', eastAns.data.labels.length === 1 && eastAns.data.labels[0] === 'East', JSON.stringify(eastAns.data.labels));
+    const edList = await mcp('ed', 'list_verified_questions', {});
+    ok('NEGATIVE CONTROL: the editor gets the args, the answer, and more rows',
+      !!byQ(edList.data.questions, 'West customers').aggregate && !!byQ(edList.data.questions, 'Revenue by region').aggregate
+      && (await mcp('ed', 'answer_verified_question', { question: 'West customers' })).error === false
+      && (await mcp('ed', 'answer_verified_question', { question: 'Revenue by region' })).data.labels.length > eastAns.data.labels.length);
+
     // ── 8. A cached JOINED answer still gates and records its related dataset (NV-18) ──
     // Facts (no rules) take a chart's labels and a KPI's column from Dim through a relationship. A hit in the
     // answer cache never reaches the storage net, so the door itself gates (and records) Dim inside a publish.
