@@ -261,6 +261,15 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const [markEast, markEd] = [await markOf('east'), await markOf('ed')];
     ok('redact: answer:card — east\'s card of a hidden verified spec carries no mark', markEast?.ok === true && markEast.verified === undefined, JSON.stringify(markEast).slice(0, 200));
     ok('NEGATIVE CONTROL: the editor\'s card of it is marked', markEd?.verified?.id === westQ.body?.question?.id, JSON.stringify(markEd?.verified));
+    // Asked word for word (part 3 D8), east is not answered by a question its lock hides — it goes to the model (stubbed not ready).
+    const analyzeMod: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+    const askStub = (analyzeMod as any).askCopilot;
+    (analyzeMod as any).askCopilot = async () => ({ ok: false, errorType: 'not_ready' });
+    const askWest = async (who: string) => (await W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question: 'West customers' })).body;
+    const [exEast, exEd] = [await askWest('east'), await askWest('ed')];
+    (analyzeMod as any).askCopilot = askStub;
+    ok('explicit: east is not answered by a value-filtered verified question', exEast?.notReady === true, JSON.stringify(exEast).slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s ask is answered by it', exEd?.ok === true && exEd.guidance?.verifiedId === westQ.body?.question?.id, JSON.stringify(exEd).slice(0, 200));
     ok('write: east gets 403 from verified:save and verified:delete',
       (await W.call('east', 'verified:save', { projectId: P, input: { question: 'Mine', spec: spec(orders) } })).status === 403
         && (await W.call('east', 'verified:delete', { projectId: P, id: westQ.body?.question?.id })).status === 403);

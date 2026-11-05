@@ -54,6 +54,7 @@ import { termFactsFor } from './terms';
 import { statusFor } from '../analysis/statusStore';
 import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import { askGuidance } from './guidance';
+import { verifiedAsk } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
@@ -533,6 +534,8 @@ export function register() {
         : undefined;
 
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+      const hit = await verifiedAsk(projectId, q, tid, guardAnswer); // a verified question, word for word (./verifiedAsk)
+      if (hit) return hit;
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {}, emit, q);

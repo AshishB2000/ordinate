@@ -276,7 +276,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 }
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
-async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
+export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
   if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT };
   const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
   const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
@@ -465,7 +465,7 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
   return spec && spec.filters.length === (t.filters || []).length ? spec : null;
 }
 
-async function appendAnswer(
+export async function appendAnswer(
   projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec, learn?: AnswerLearn,
 ): Promise<{ turns: copilot.CopilotTurn[]; threadId: string | null }> {
   let target = threadId || (await copilot.latestThreadId(projectId)) || undefined;
