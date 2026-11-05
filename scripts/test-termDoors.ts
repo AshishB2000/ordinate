@@ -106,7 +106,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
     return { status: r.statusCode, text: r.body, value };
   };
   const SENTENCE = termMsgs.termUnreadable();
-  // 05b: TERM names no term record, so it is refused as deleted for good. The Assistant's `{ term }` stays unreadable until it reads terms (Task 4).
+  // 05b: TERM names no term record, so it is refused as deleted for good — the Assistant's `{ term }` too.
   const PURGED = termMsgs.termPurged();
   const items = (v: unknown): any[] => (Array.isArray(v) ? v : [v]); // any: a reply's items
   /** HTTP 409 `term`, or an item `{ok:false, code:'term'}`. */
@@ -166,7 +166,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   for (const [label, ch, body, liveToo] of ENTRIES) {
     for (const ds of liveToo ? [EXTRACT, LIVE] : [EXTRACT]) {
       const r = await post(ch, body(ds, true));
-      ok(`${label} on ${ds.mode}: refused, typed, with the sentence — never a figure`, refusedWith(label === 'answer:card' ? SENTENCE : PURGED)(r), `${r.status} ${r.text.slice(0, 300)}`);
+      ok(`${label} on ${ds.mode}: refused, typed, with the sentence — never a figure`, refusedWith(PURGED)(r), `${r.status} ${r.text.slice(0, 300)}`);
       const plain = await post(ch, body(ds, false));
       ok(`NEGATIVE CONTROL: ${label} on ${ds.mode} without the term answers`, !refusedTerm(plain) && hasFigure(plain), `${plain.status} ${plain.text.slice(0, 300)}`);
     }
@@ -207,6 +207,40 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
     aimed?.ok === true && aimed.scenario?.ok === false && aimed.scenario.code === 'term' && aimed.scenario.error === termMsgs.termNotHere() && !('value' in aimed.scenario)
       && unaimed?.scenario?.ok === true && typeof unaimed.scenario.value === 'number', JSON.stringify({ aimed, unaimed }));
 
+  // ── § assistant: the Assistant reads and filters by a real term (05b) ────────
+  /** Two replies' figures agree, number by number with Object.is (a chart's data, a KPI's value, an answer card's data). */
+  const sameFigure = (a: Reply, b: Reply): boolean => {
+    const fig = (r: Reply): unknown => { const v = Array.isArray(r.value) ? r.value[0] : r.value; return v && v.ok !== false ? (v.data ?? v.value) : undefined; };
+    const same = (x: unknown, y: unknown): boolean => (Array.isArray(x) && Array.isArray(y) ? x.length === y.length && x.every((v, i) => same(v, y[i]))
+      : x && y && typeof x === 'object' && typeof y === 'object' ? Object.keys({ ...x, ...y }).every((k) => same((x as Record<string, unknown>)[k], (y as Record<string, unknown>)[k])) : Object.is(x, y));
+    return fig(a) !== undefined && same(fig(a), fig(b));
+  };
+  const R12 = { type: 'filter', column: 'region', op: 'in', values: ['r1', 'r2'] };
+  const termOn = async (d: Ds, name: string): Promise<string> =>
+    String((await post('term:save', { projectId: P, input: { name, datasetId: d.id, filters: [R12] } })).value?.term?.id ?? '');
+  for (const ds of [EXTRACT, LIVE]) {
+    const T = await termOn(ds, `Pair ${ds.mode}`);
+    const spec = (filters: unknown[]) => ({ projectId: P, spec: { datasetId: ds.id, category: 'customer', measures: [{ column: 'sales', aggregation: 'sum' }], filters } });
+    const withT = await post('answer:card', spec([{ term: T }]));
+    const inline = await post('answer:card', spec([{ column: 'region', op: 'in', values: ['r1', 'r2'] }]));
+    const bare = await post('answer:card', spec([]));
+    ok(`answer:card (${ds.mode}): a term equals its filter written inline, and its steps and spec keep the reference`, sameFigure(withT, inline)
+      && withT.value.steps.some((x: { type: string; term?: string }) => x.type === 'term' && x.term === T) && withT.value.spec.filters.some((f: { term?: string }) => f.term === T)
+      && withT.value.filterLabels.includes(`Pair ${ds.mode}`), `${withT.text.slice(0, 300)} | ${inline.text.slice(0, 300)}`);
+    ok(`NEGATIVE CONTROL: answer:card (${ds.mode}) — the term filters something`, !sameFigure(withT, bare));
+    ok(`answer:card (${ds.mode}): its chips keep the term`, withT.value.chips.every((c: { spec: { filters: { term?: string }[] } }) => c.spec.filters.some((f) => f.term === T)));
+    const saved = await post('answer:saveVisual', spec([{ term: T }]));
+    const vis = await post('visual:get', { projectId: P, id: saved.value?.visual?.id });
+    ok(`answer:saveVisual (${ds.mode}) stores the term step`, Array.isArray(vis.value?.filters) && vis.value.filters.some((x: { type: string; term?: string }) => x.type === 'term' && x.term === T), `${saved.text.slice(0, 200)} | ${vis.text.slice(0, 200)}`);
+  }
+  const otherT = await termOn(LIVE, 'Live pair');
+  const far = await post('answer:card', { projectId: P, spec: { datasetId: EXTRACT.id, category: 'customer', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ term: otherT }] } });
+  ok('answer:card: a term of another dataset is refused, typed, with both names', refusedTerm(far) && far.text.includes(termMsgs.termOtherDataset('Live pair', 'Orders live', 'Orders copy')) && !hasFigure(far), far.text.slice(0, 300));
+  const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+  const facts = await context.runInContext(ADMIN, 'facts', () => copilotIpc.buildFacts(P, { kind: 'dataset', id: EXTRACT.id }));
+  ok('the dataset facts name its terms and how to filter by one', facts.text.includes('{"term":"<name>"}') && facts.text.includes('"Pair extract"') && facts.text.includes('region in r1, r2')
+    && !facts.text.includes('"Live pair"'), facts.text.slice(-600));
+
   // ── § lock: the refusal is before the lock, so a kept step never reaches withLockSteps ──
   const rowDoors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');
   const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
@@ -229,7 +263,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
       const rejects = rejectsAs('unreadable');
       ok('lockedMetric, computeCard and pageFor throw it before the lock',
         await rejects(rowDoors.lockedMetric(P, seed.extract, { column: 'sales' }, [F0, FUTURE] as FilterStep[], undefined, async () => 1))
-        && await rejects(answers.computeCard(P, { datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ term: U }] } as never))
+        && await rejectsAs('deleted')(answers.computeCard(P, { datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ term: U }] } as never))
         && await rejectsAs('deleted')(ipcDatasets.pageFor(P, seed.extract, { offset: 0, limit: 5, filters: [F0, TERM] as FilterStep[] }, 'termDoors'))
         && asked === 0, String(asked));
       await rowDoors.lockedViz(P, seed.extract, enc as never, [F0] as FilterStep[], {}, body);
@@ -242,7 +276,7 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
           && await rejectsAs('deleted')(termExpand.expandTerms(P, seed.extract, [F0, TERM] as FilterStep[])));
       const answerSpec = (filters: unknown[]) => ({ datasetId: seed.extract, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters }) as never;
       ok('expandAnswerTerms refuses as specFilterSteps does — a { term } and a filter typed term; NEGATIVE CONTROL: a column filter passes',
-        await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ term: U }]))) && await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ type: 'term', column: 'region', op: '=', value: 'r1' }])))
+        await rejectsAs('deleted')(termExpand.expandAnswerTerms(P, answerSpec([{ term: U }]))) && await rejects(termExpand.expandAnswerTerms(P, answerSpec([{ type: 'term', column: 'region', op: '=', value: 'r1' }])))
           && (await termExpand.expandAnswerTerms(P, answerSpec([ANSWER_F0]))).steps.length === 0);
     });
   } finally {

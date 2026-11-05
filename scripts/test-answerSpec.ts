@@ -358,4 +358,24 @@ ok('prompt: offers "answer" and describes its spec', /"answer"/.test(sa.CHAT_SYS
   ok('prompt: a period may leave its column out to use a metric\'s own date', /leave "column" out to use a metric's own date/.test(sa.CHAT_SYSTEM_PROMPT));
 }
 
+// ── Glossary terms (semantic D10): a word the FACTS list resolves to the term's id ───────────
+{
+  const EMEA = '33333333-3333-4333-8333-333333333333';
+  const TERMS = [{ id: EMEA, name: 'EMEA', aliases: ['Europe'], datasetId: DS.id }, { id: '44444444-4444-4444-8444-444444444444', name: 'Budget EU', aliases: [], datasetId: OTHER.id }];
+  const RAW = { dataset: DS.name, category: 'region', measures: [{ column: 'revenue', aggregation: 'sum' }] };
+  const r = A.validateAnswerSpec({ ...RAW, filters: [{ term: 'europe' }] }, [DS], { terms: TERMS });
+  ok('term: an alias resolves to the term id', r.ok && JSON.stringify(r.spec.filters) === JSON.stringify([{ term: EMEA }]), JSON.stringify(r));
+  const byId = A.validateAnswerSpec({ ...RAW, filters: [{ term: EMEA }, { column: 'region', op: '=', value: 'EU' }] }, [DS], { terms: TERMS });
+  ok('term: its id and its squashed name resolve too, beside a column filter', byId.ok && byId.spec.filters.length === 2
+    && A.validateAnswerSpec({ ...RAW, filters: [{ term: 'e.m.e.a' }] }, [DS], { terms: TERMS }).ok);
+  const far = A.validateAnswerSpec({ ...RAW, filters: [{ term: 'Budget EU' }] }, [DS, OTHER], { terms: TERMS });
+  ok('term: a term of another dataset is refused with a reason (an answer never joins)', !far.ok && /another dataset/.test(far.reason), JSON.stringify(far));
+  const none = A.validateAnswerSpec({ ...RAW, filters: [{ term: 'APAC' }] }, [DS], { terms: TERMS });
+  ok('term: a word no term answers to is refused, never dropped', !none.ok && /no glossary term called "APAC"/.test(none.reason));
+  ok('NEGATIVE CONTROL: without the term list, a term filter is refused', !A.validateAnswerSpec({ ...RAW, filters: [{ term: 'EMEA' }] }, [DS]).ok);
+  const two = [{ id: EMEA, name: 'EMEA', aliases: ['EU'], datasetId: DS.id }, { id: '55555555-5555-4555-8555-555555555555', name: 'Eu', aliases: [], datasetId: DS.id }];
+  ok('term: a word two terms answer to means neither', !A.validateAnswerSpec({ ...RAW, filters: [{ term: 'eu' }] }, [DS], { terms: two }).ok);
+  ok('term: the prompt says how to filter by one', sa.CHAT_SYSTEM_PROMPT.includes('{"term":"<term name>"}'));
+}
+
 finish();

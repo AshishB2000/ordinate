@@ -38,6 +38,7 @@ import type { FactMetric } from '../ai/copilotFacts';
 import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
+import type { FactTerm } from '../ai/termFacts';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -74,6 +75,7 @@ export async function liveCopilotFacts(
   projectId: string,
   datasetId: string,
   defined: () => Promise<FactMetric[]> = async () => [],
+  glossary: () => Promise<FactTerm[]> = async () => [],
 ): Promise<{ name: string; facts: CopilotFacts; metrics: number } | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !isLive(meta) || !meta.live) return null;
@@ -87,6 +89,7 @@ export async function liveCopilotFacts(
     docs: await assistantColumnDocs(projectId, datasetId),
     table: await tableFacts(projectId, datasetId),
     metrics,
+    terms: await glossary(),
   });
   return { name: meta.name, facts, metrics: metrics.length };
 }

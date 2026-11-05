@@ -47,6 +47,7 @@ import { tableFacts } from '../app/tableDocs';
 import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
 import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
+import { termFactsFor } from './terms';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -206,7 +207,7 @@ export async function buildFacts(
     // A Live dataset keeps no rows: its columns, its sampled profile and — unless
     // withheld — its sample values (L2.5), with its defined metrics' figures from
     // the warehouse (L2.4). One source: ai/liveFacts.
-    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id));
+    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id), () => termFactsFor(projectId, id));
     if (live) {
       emit({ kind: 'read', label: 'Read the schema of ' + live.name });
       if (live.metrics) emit({ kind: 'compute', label: 'Resolved ' + plural(live.metrics, 'metric'), count: live.metrics });
@@ -230,7 +231,7 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id));
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id), await termFactsFor(projectId, id)); // its glossary terms beside its metrics
     }
   }
 

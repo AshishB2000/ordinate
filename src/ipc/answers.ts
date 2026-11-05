@@ -31,6 +31,7 @@ import type { FilterStep } from '../data/transforms';
 import { isKeptStep } from '../data/filterList';
 import { isTermStep, type TERM_CODE } from '../data/termStep';
 import { expandAnswerTerms } from '../analysis/termExpand';
+import type { AnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
 import { displayNames, load as loadCatalog } from '../app/catalog';
 import { shownNames, taughtNames } from '../app/columnNames';
@@ -40,6 +41,8 @@ import {
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
+import type { SpecTerm } from '../ai/termFacts';
+import { listTerms } from '../analysis/terms';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
 import { sanitizeLearn, suggestFixes } from '../ai/answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
@@ -147,15 +150,32 @@ function ranked(data: ChartData, top?: number): ChartData {
  */
 /** THE answer door: row access rules first (./rowDoors — a refusal throws), then the body with the caller's lock. */
 export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
-  const { spec } = await expandAnswerTerms(projectId, asked); // a term THROWS (typed 'term'), before the lock and the Live split
-  return withLockOf(projectId, spec && spec.datasetId, (lock) => computeCardWith(projectId, spec, loose, lock));
+  // A glossary term is expanded FIRST (a refusal THROWS, typed 'term'), before the lock and the Live split; the card keeps the reference.
+  const x = await expandAnswerTerms(projectId, asked);
+  const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock) => computeCardWith(projectId, x.spec, loose, lock, x));
+  return x.terms.length && 'card' in built ? withTermRefs(built, x) : built;
 }
 
-async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null): Promise<Built | Failure> {
+/** The card as asked: each term back in its spec (and its chips'), its steps holding the reference in place of the expansion, so a save keeps it. */
+function withTermRefs(built: Built, x: AnswerTerms): Built {
+  const refs = x.terms.map((t) => ({ term: t.term }));
+  const withRefs = (s: AnswerSpec): AnswerSpec => ({ ...s, filters: [...s.filters, ...refs] });
+  const card = built.card;
+  const chips = (list: AnswerChip[]): AnswerChip[] => list.map((c) => ({ ...c, spec: withRefs(c.spec) }));
+  return {
+    ...built,
+    card: {
+      ...card, spec: withRefs(card.spec), chips: chips(card.chips), steps: [...card.steps, ...(x.terms as unknown as FilterStep[])],
+      ...(card.noMatch ? { noMatch: { ...card.noMatch, options: chips(card.noMatch.options) } } : {}),
+    },
+  };
+}
+
+async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }): Promise<Built | Failure> {
   const snapshot = await snapshotMeasureRefusal(projectId, { category: asked.category, values: asked.measures }); // extract and Live alike
   if (snapshot) return { ok: false, reason: snapshot };
-  // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
-  const live = await liveCardFor(projectId, asked, lock ? lock.steps : []);
+  // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
+  const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels);
   if (live) return live;
   await ensureFresh(projectId, [asked.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
@@ -173,12 +193,13 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   // What the filtered text columns hold: read once, for the loose match, the case fix and the empty answer's suggestions.
   const held = heldValues(asked.filters, ds.columns, ds.rows);
   const spec = loose ? matchValues(asked, held) : asked;
-  const { steps, labels: filterLabels } = specFilterSteps(spec, ds.columns, ds.rows);
+  const { steps, labels } = specFilterSteps(spec, ds.columns, ds.rows);
   canonicaliseTextFilters(steps, held);
+  const filterLabels = [...labels, ...terms.labels]; // a glossary term reads as its name
   const encoding: VizEncoding = { category: spec.category, values: spec.measures };
   if (spec.series) encoding.series = spec.series;
   if (spec.grain) encoding.grain = spec.grain;
-  const viz = buildVizData(ds.columns, ds.rows, encoding, steps);
+  const viz = buildVizData(ds.columns, ds.rows, encoding, [...steps, ...terms.steps]);
 
   const catCol = ds.columns.find((c) => c.name === spec.category);
   const isDate = !!catCol && catCol.type === 'date';
@@ -198,7 +219,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   // labels and bullets, drawn for the person, are untouched.
   const withheld = await withheldColumns(projectId, ds.id);
   const saidFilterLabels = spec.filters.some((f) => 'column' in f && withheld.has(f.column))
-    ? specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels : undefined;
+    ? [...specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels, ...terms.labels] : undefined;
   const facts = cardFacts({
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
@@ -270,6 +291,11 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   return out;
 }
 
+/** The glossary terms a spec may name (semantic D10): names and aliases only, no filter value. */
+export async function specTerms(projectId: string): Promise<SpecTerm[]> {
+  return (await listTerms(projectId)).map((t) => ({ id: t.id, name: t.name, aliases: t.aliases, datasetId: t.datasetId }));
+}
+
 export interface AnswerTurn {
   text: string;
   audit: NumberAudit;
@@ -304,7 +330,7 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
   if (!spec || !meta) return null;
   if (answerNames(spec).some((n) => !meta.columns.some((c) => c.name === n))) return null;
   const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
-  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds]).ok) return null;
+  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds], { terms: await specTerms(projectId) }).ok) return null;
   // A Live dataset's set is its facts' own, stricter one (./liveProfile): pending and detected columns too.
   const withheld = isLive(meta) ? await liveWithheld(projectId, meta.id, meta) : await withheldColumns(projectId, meta.id);
   const { text, ledger } = previousAnswerBlock(spec, meta.name, withheld);
@@ -348,7 +374,7 @@ export async function answerFromAction(
   // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
   const base = previous && on && isRefine(action.spec) ? previous : null;
   const raw = base && on ? refineSpec(base, action.spec, on, defined, withheld) : action.spec;
-  const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question };
+  const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question, terms: await specTerms(projectId) };
   const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
   if (!v.ok) {
     // A name that does not exist: what it may have meant, picked by the app from the names alone

@@ -16,6 +16,9 @@ import { restrictedOn } from '../data/rowAccess';
 import { tagForCaller } from './rowDoors';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import type { FilterStep } from '../data/transforms';
+import type { FactTerm } from '../ai/termFacts';
+import { withheldColumns } from '../ai/columnNotes';
+import { assistantColumnDocs } from '../app/sharePolicy';
 
 /** A term as `projectId`'s caller may read it: unchanged, or (restricted) every filter value left out. */
 export async function termForCaller(projectId: string, t: Term): Promise<Term & { valuesHidden?: true }> {
@@ -37,6 +40,21 @@ async function listForCaller(projectId: string) {
     out.push({ ...terms.toSummary(t), datasetName: names.get(t.datasetId) || null, definition: terms.describeTermFilters(t, () => hide) });
   }
   return out;
+}
+
+/**
+ * The glossary terms of `datasetId` as the Assistant's FACTS state them (../ai/termFacts termLines): a value is
+ * written as "…" for a caller row access rules restrict, and for a column marked personal or financial.
+ */
+export async function termFactsFor(projectId: string, datasetId: string): Promise<FactTerm[]> {
+  const own = (await terms.listFullTerms(projectId)).filter((t) => t.datasetId === datasetId);
+  if (!own.length) return [];
+  const hideAll = await restrictedOn(projectId);
+  const withheld = withheldColumns(await assistantColumnDocs(projectId, datasetId));
+  return own.map((t) => ({
+    name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}),
+    definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)),
+  }));
 }
 
 export function register(): void {

@@ -30,6 +30,8 @@ import type { CivilDate, DateGrain } from '../analysis/categoryKey';
 import { squash, taughtColumn } from '../app/columnNames';
 // Pure too, and it takes only this file's TYPES back: what a loosely matched filter value remembers.
 import { sanitizeMatched } from './answerValues';
+import { matchTerm } from './termFacts';
+import type { SpecTerm } from './termFacts';
 import type { ValueMatch } from './answerValues';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
@@ -317,7 +319,7 @@ export function defaultAnswerChart(categoryType: string, hasSeries: boolean): st
 export function validateAnswerSpec(
   raw: unknown,
   datasets: SpecDataset[],
-  opts: { defaultDatasetId?: string; metrics?: SpecMetric[]; title?: string } = {},
+  opts: { defaultDatasetId?: string; metrics?: SpecMetric[]; title?: string; terms?: SpecTerm[] } = {},
 ): SpecResult {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, reason: 'The answer has no spec.' };
   const o = raw as Record<string, unknown>;
@@ -354,6 +356,14 @@ export function validateAnswerSpec(
   const shared = dates.size === 1 ? [...dates][0] : '';
   const periodOn = shared && ds.columns.some((c) => c.name === shared && c.type === 'date') ? shared : '';
   for (const [i, f] of filtersRaw.entries()) {
+    if (f && typeof f === 'object' && 'term' in f) { // a glossary term, by its name, an alias or its id (./termFacts)
+      const said = (f as { term: unknown }).term;
+      const t = matchTerm(said, opts.terms || []);
+      if (!t) return { ok: false, reason: `There is no glossary term called "${String(said)}".` };
+      if (t.datasetId !== ds.id) return { ok: false, reason: `"${t.name}" is a term of another dataset, not ${ds.name}.` }; // an answer never joins
+      filters.push({ term: t.id });
+      continue;
+    }
     const r = resolveFilter(f, ds.columns, ds.names, periodOn);
     if (typeof r === 'string') return { ok: false, reason: r };
     if ('unknown' in r) return unknownName('filter', 'filter column', r.unknown, ds.id, i);
