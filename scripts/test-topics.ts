@@ -156,6 +156,11 @@ const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStar
   ok('topic:delete moves it to the Trash, and model:navigation no longer lists it', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string }) => e.type === 'topic' && e.id === id)
     && navAfter.body?.topics.map((x: { id: string }) => x.id).join() === second.body.topic.id, navAfter.text.slice(0, 300));
   ok('topic:get of a deleted topic says so', (await call('topic:get', { projectId: Q, id })).body?.ok === false);
+  const keeps = await call('topic:save', { projectId: Q, topic: { ...body, name: 'Ops', datasets: [{ id: A, fields: ['region', 'revenue'] }, { id: B }] } });
+  await as(() => datasets.deleteDataset(Q, B));
+  const opened = await call('topic:get', { projectId: Q, id: keeps.body?.topic?.id });
+  ok('topic:get of a topic with a gone member: as stored, stale 1, and `kept` without it', opened.body?.ok === true && opened.body.stale === 1 && opened.body.topic.datasets.length === 2
+    && JSON.stringify(opened.body.kept.datasets) === JSON.stringify([{ id: A, fields: ['region', 'revenue'] }]), opened.text.slice(0, 400));
 
   finish();
 })().catch((err: unknown) => {

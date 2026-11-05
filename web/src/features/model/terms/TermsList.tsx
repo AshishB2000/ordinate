@@ -15,12 +15,15 @@ import { toastMovedToTrash } from '../../projects/trashToast';
 import { StatusActions } from '../status/StatusActions';
 import { StatusBadge } from '../status/StatusBadge';
 import { useTerms, type TermSummary, type TermUsage } from './api';
+import type { NavTopic } from '../navigation';
+import { inOrder } from '../topics/api';
+import { TopicLine } from '../topics/TopicPicker';
 import { TermDialog } from './TermDialog';
 import d from '../../data/Data.module.css';
 import s from './Terms.module.css';
 
-/** `usage`: the server's, by term id; absent (an older pod, a failed read) reads "—", never "Not used yet". */
-export function TermsList({ projectId, canEdit, usage }: { projectId: string; canEdit: boolean; usage?: Record<string, TermUsage> }) {
+/** `usage`: the server's, by term id; absent (an older pod, a failed read) reads "—", never "Not used yet". `topic`: its terms only, in its order. */
+export function TermsList({ projectId, canEdit, usage, topic }: { projectId: string; canEdit: boolean; usage?: Record<string, TermUsage>; topic?: NavTopic }) {
   const q = useTerms(projectId);
   const client = useQueryClient();
   const [editing, setEditing] = useState<TermSummary | null>(null);
@@ -35,6 +38,7 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
     void client.invalidateQueries({ queryKey: ['term:list', projectId] });
   };
 
+  const shown = q.data && topic ? inOrder(q.data, topic.termIds) : q.data;
   let body;
   if (q.isPending) body = <SkeletonTable rows={3} cols={4} label="Loading the glossary" />;
   else if (q.isError)
@@ -51,6 +55,12 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
         A term is a filter with a name — EMEA, Enterprise, Recent order — that every chart and the
         Assistant can use.
         {canEdit ? ' Use New term to define one.' : ' An editor of this project can define one.'}
+      </EmptyState>
+    );
+  } else if (topic && !shown?.length) {
+    body = (
+      <EmptyState icon="list" heading={3} title={`${topic.name} lists no terms`}>
+        {canEdit ? `Choose Edit ${topic.name}… in the Topic menu to add some.` : 'Show all lists every term in this project.'}
       </EmptyState>
     );
   } else {
@@ -70,7 +80,7 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
             </tr>
           </thead>
           <tbody>
-            {q.data.map((t) => (
+            {(shown ?? []).map((t) => (
               <tr key={t.id}>
                 <td>
                   {canEdit ? (
@@ -135,7 +145,11 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
   return (
     <section className={d.section} aria-label="Glossary">
       <div className={d.listBar}>
-        {count > 0 && <span className={d.muted}>{count === 1 ? '1 term' : `${formatNumber(count)} terms`}</span>}
+        {topic && q.data ? (
+          <TopicLine projectId={projectId} topic={topic} shown={shown?.length ?? 0} total={count} noun="term" />
+        ) : (
+          count > 0 && <span className={d.muted}>{count === 1 ? '1 term' : `${formatNumber(count)} terms`}</span>
+        )}
         <p className={d.lead}>Business words defined once as filters, so “EMEA” means the same rows everywhere.</p>
       </div>
       {body}

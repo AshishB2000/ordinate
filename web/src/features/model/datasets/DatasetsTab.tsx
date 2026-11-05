@@ -17,6 +17,9 @@ import { formatNumber } from '../../data/format';
 import { useSuggestions } from '../sources/suggestApi';
 import { DatasetPanel } from './DatasetPanel';
 import { TodoStrip } from './TodoStrip';
+import type { NavTopic } from '../navigation';
+import { inOrder } from '../topics/api';
+import { TopicLine } from '../topics/TopicPicker';
 import m from '../Model.module.css';
 
 const GROUPS = [
@@ -86,7 +89,8 @@ function DatasetList({ list, tables, picked, hrefOf }: { list: DatasetSummary[];
   );
 }
 
-export function DatasetsTab({ projectId }: { projectId: string }) {
+/** `topic`: its datasets only, in its order within each role, and the strip's items on them (part 6 step 07). */
+export function DatasetsTab({ projectId, topic }: { projectId: string; topic?: NavTopic }) {
   const list = useDatasets(projectId);
   const ov = useModelOverview(projectId);
   const canEdit = useCanEdit(projectId);
@@ -152,20 +156,30 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
         {canEdit ? 'Import a file or connect a database, then say here what each dataset means.' : 'An editor of this project can bring data in.'}
       </EmptyState>
     );
+  } else if (topic && !inOrder(list.data, topic.datasets.map((t) => t.id)).length) {
+    body = (
+      <EmptyState icon="database" heading={3} title={`${topic.name} lists no datasets`}>
+        {canEdit ? `Choose Edit ${topic.name}… in the Topic menu to add some.` : 'Show all lists every dataset in this project.'}
+      </EmptyState>
+    );
   } else {
-    const all = list.data;
+    const all = topic ? inOrder(list.data, topic.datasets.map((t) => t.id)) : list.data;
     const tables = new Map(ov.data.tables.map((t) => [t.datasetId, t]));
+    const mine = new Set(all.map((d) => d.id));
+    // shortcut: under a topic the strip drops "+N more" (the server counts the whole project); a topic-scoped count is a server change.
+    const todo = topic ? ov.data.todo.filter((i) => mine.has(i.datasetId)) : ov.data.todo;
     // The list's own order: Facts, then Dimensions, then the rest, each in dataset:list order.
     const shown = GROUPS.flatMap(({ role }) => all.filter((d) => (tables.get(d.id)?.role ?? '') === role));
     const dataset = shown.find((d) => d.id === params.get('dataset')) ?? shown[0];
     const names = new Map(all.map((d) => [d.id, d.name]));
     body = (
       <>
+        {topic && <TopicLine projectId={projectId} topic={topic} shown={all.length} total={list.data.length} noun="dataset" />}
         {canEdit && (
           <TodoStrip
-            todo={ov.data.todo}
+            todo={todo}
             review={ov.data.review}
-            more={ov.data.more}
+            more={topic ? 0 : ov.data.more}
             nameOf={(id) => names.get(id)}
             onOpen={open}
             onReview={openReview}

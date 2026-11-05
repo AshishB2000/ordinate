@@ -16,8 +16,8 @@ const Topic = z.strictObject({
 });
 
 export const topics = {
-  // The topic as stored, its tag (the drawer's base) and how many of its members have gone since (deleted, or a field a
-  // refresh dropped): the editor removes them on its next save. Ids and names only (scripts/rowPolicyReaders.ts: META).
+  // The topic as stored, its tag (the drawer's base), how many of its members have gone since (deleted, or a field a
+  // refresh dropped) and the topic without them, which the drawer saves. Ids and names only (scripts/rowPolicyReaders.ts: META).
   'topic:get': rpc({ access: 'read', input: ById, project: byProjectId }),
   // Creates without `id`, replaces the whole topic with one. A member that does not exist is refused with a sentence;
   // a stale `base` is 409 record_changed. `updatedBy` is stamped on the server.

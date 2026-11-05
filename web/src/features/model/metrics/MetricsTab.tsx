@@ -29,6 +29,9 @@ import { Sparkline } from '../../analyses/metrics/Sparkline';
 import { StatusActions } from '../status/StatusActions';
 import { StatusBadge } from '../status/StatusBadge';
 import { AddsUp, CountsBy, type Additivity } from './MetricCells';
+import type { NavTopic } from '../navigation';
+import { inOrder } from '../topics/api';
+import { TopicLine } from '../topics/TopicPicker';
 import d from '../../data/Data.module.css';
 import s from '../../analyses/metrics/Metrics.module.css';
 
@@ -64,7 +67,8 @@ function useTable(projectId: string) {
   });
 }
 
-export function MetricsTab({ projectId }: { projectId: string }) {
+/** `topic`: its metrics only, in its order (part 6 step 07). */
+export function MetricsTab({ projectId, topic }: { projectId: string; topic?: NavTopic }) {
   const q = useTable(projectId);
   const tags = useTags(projectId);
   const [tag, setTag] = useActiveTag();
@@ -147,12 +151,19 @@ export function MetricsTab({ projectId }: { projectId: string }) {
         {canEdit ? ' Use New metric to define one from a column or as a formula of other metrics.' : ' An editor of this project can define one. You have view-only access.'}
       </EmptyState>
     );
+  } else if (topic && !inOrder(q.data.metrics, topic.metricIds).length) {
+    body = (
+      <EmptyState icon="target" heading={3} title={`${topic.name} lists no metrics`}>
+        {canEdit ? `Choose Edit ${topic.name}… in the Topic menu to add some.` : 'Show all lists every metric in this project.'}
+      </EmptyState>
+    );
   } else {
     const rows = q.data.rows;
+    const base = topic ? inOrder(q.data.metrics, topic.metricIds) : q.data.metrics;
     // Catalog tags on each row and the tag filter bar over the list (catalogUi.ts ctDecorate / ctAfterPaint).
     const tagged = (m: MetricSummary) => tagsOf(tags.data, `metric:${m.id}`);
-    const present = [...new Set(q.data.metrics.flatMap((m) => tagged(m).map((t) => t.name)))];
-    const byTag = tag ? q.data.metrics.filter((m) => tagged(m).some((t) => t.name === tag)) : q.data.metrics;
+    const present = [...new Set(base.flatMap((m) => tagged(m).map((t) => t.name)))];
+    const byTag = tag ? base.filter((m) => tagged(m).some((t) => t.name === tag)) : base;
     const shown = state === 'all' ? byTag : byTag.filter((m) => (state === 'retired' ? m.status?.state === 'retired' : m.status?.state === 'certified'));
     const tree = (m: MetricSummary) => void navigate(`/data/metrics/${projectId}/${m.id}/tree`);
     body = (
@@ -269,7 +280,11 @@ export function MetricsTab({ projectId }: { projectId: string }) {
   return (
     <section className={d.section} aria-label="Metrics">
       <div className={d.listBar}>
-        {count > 0 && <span className={d.muted}>{count === 1 ? '1 metric' : `${formatNumber(count)} metrics`}</span>}
+        {topic && q.data ? (
+          <TopicLine projectId={projectId} topic={topic} shown={inOrder(q.data.metrics, topic.metricIds).length} total={count} noun="metric" />
+        ) : (
+          count > 0 && <span className={d.muted}>{count === 1 ? '1 metric' : `${formatNumber(count)} metrics`}</span>
+        )}
         <p className={d.lead}>What this project&apos;s numbers mean, defined once so every chart and KPI agrees.</p>
       </div>
       {body}

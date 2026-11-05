@@ -14,8 +14,9 @@ export function register(): void {
   ipcMain.handle('topic:get', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const t = await topics.readTopic(projectId, id);
     if (!t) return { ok: false, error: topicNotFound() };
-    const { stale } = await topics.topicForReaders(projectId, t.rec);
-    return { ok: true, topic: t.rec, tag: t.tag, stale }; // as stored: the drawer removes what is stale, and says so
+    // `topic` as stored; `kept`, what readers get (gone members dropped): the drawer starts from it, saying `stale` went.
+    const { topic: kept, stale } = await topics.topicForReaders(projectId, t.rec);
+    return { ok: true, topic: t.rec, tag: t.tag, stale, kept };
   });
 
   // `base`: the drawer's tag — a stale one is 409 record_changed (../app/editConflict); `tag` is the next base.

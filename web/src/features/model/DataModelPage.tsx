@@ -1,6 +1,8 @@
 // /model and /model/:projectId — the Data model (docs/semantic-layer/00-design.md "The name and where it
 // sits"): what the project's data means, on one screen. /model goes to the current project, as /data does.
 // The tab is in the URL (?tab=); TABS lists them in the order they are drawn (Source tables second, editors only).
+// The header's topic (?topic=, part 6 step 07) narrows Datasets, Metrics, Glossary and Relationships to its members;
+// it never limits access.
 
 import { useState } from 'react';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
@@ -20,6 +22,9 @@ import { GlossaryTab } from './terms/GlossaryTab';
 import { TermDialog } from './terms/TermDialog';
 import { RelationshipsTab } from '../data/RelationshipsTab';
 import { DefaultJoins } from './relationships/DefaultJoins';
+import { useNavigation } from './navigation';
+import { useTopicPick } from './topics/rememberTopic';
+import { TopicPicker } from './topics/TopicPicker';
 
 const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant'] as const;
 type TabId = (typeof TABS)[number];
@@ -37,6 +42,9 @@ function Section({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [newMetric, setNewMetric] = useState(false);
   const [newTerm, setNewTerm] = useState(false);
+  const nav = useNavigation(projectId);
+  const [pick, setPick] = useTopicPick(projectId);
+  const topic = nav.data?.topics?.find((t) => t.id === pick); // a pick that names no topic (deleted, another project's) is All
   const asked = params.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   const setTab = (v: string) =>
@@ -59,16 +67,19 @@ function Section({ projectId }: { projectId: string }) {
       sub={SUB}
       actions={
         // On every tab, so an empty Metrics or Glossary tab does not repeat them (one door, never two).
-        canEdit && (
-          <>
-            <Button icon="plus" onClick={() => setNewTerm(true)}>
-              New term
-            </Button>
-            <Button variant="primary" icon="plus" onClick={() => setNewMetric(true)}>
-              New metric
-            </Button>
-          </>
-        )
+        <>
+          <TopicPicker projectId={projectId} value={pick} onChange={setPick} />
+          {canEdit && (
+            <>
+              <Button icon="plus" onClick={() => setNewTerm(true)}>
+                New term
+              </Button>
+              <Button variant="primary" icon="plus" onClick={() => setNewMetric(true)}>
+                New metric
+              </Button>
+            </>
+          )}
+        </>
       }
     >
       <Tabs value={tab} onValueChange={setTab}>
@@ -95,17 +106,17 @@ function Section({ projectId }: { projectId: string }) {
           </Tab>
         </TabList>
         <TabPanel value="datasets">
-          <DatasetsTab projectId={projectId} />
+          <DatasetsTab projectId={projectId} topic={topic} />
         </TabPanel>
         <TabPanel value="sources">{canEdit ? <SourceTablesTab projectId={projectId} /> : <SourcesLoading />}</TabPanel>
         <TabPanel value="metrics">
-          <MetricsTab projectId={projectId} />
+          <MetricsTab projectId={projectId} topic={topic} />
         </TabPanel>
         <TabPanel value="glossary">
-          <GlossaryTab projectId={projectId} />
+          <GlossaryTab projectId={projectId} topic={topic} />
         </TabPanel>
         <TabPanel value="relationships">
-          <RelationshipsTab projectId={projectId} />
+          <RelationshipsTab projectId={projectId} topic={topic} />
           <DefaultJoins projectId={projectId} />
         </TabPanel>
         <TabPanel value="assistant">

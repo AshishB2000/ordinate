@@ -15,7 +15,7 @@ import s from './ConflictBanner.module.css';
 let leavingForCopy = false;
 
 /** What the banner calls the record. */
-export type ConflictNoun = 'dashboard' | 'visual' | 'metric' | 'metric tree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'source table doc';
+export type ConflictNoun = 'dashboard' | 'visual' | 'metric' | 'metric tree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'source table doc' | 'topic';
 
 export function ConflictBanner({
   noun,
