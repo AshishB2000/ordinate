@@ -11,3 +11,8 @@ export function countdPending(measure: string): string {
 export function metricKindPending(name: string): string {
   return t('pendingMessages.is_a_kind_of_metric_from', { name });
 }
+
+/** An alert rule this release keeps but cannot evaluate: a target rule, a count distinct, or a part-5 metric. */
+export function alertPending(): string {
+  return t('pendingMessages.this_alert_uses_a_figure_from');
+}

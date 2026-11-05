@@ -44,6 +44,9 @@ const driverShape: typeof import('../src/analysis/driverShape') = require('../sr
 const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
 const metricFormat: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const msg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
+const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const { randomUUID }: typeof import('crypto') = require('crypto');
 const { isPendingError }: typeof import('../src/data/pendingError') = require('../src/data/pendingError');
 
 const COLS = [{ name: 'customer_id', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] as any; // any: the dataset column shape, as the sibling suites build it
@@ -203,6 +206,37 @@ void (async () => {
   const out = await stories.blocksFromRecords(p2, { name: 'S', sheets: [{ name: 'A', cards: [{ type: 'metric', metric: { datasetId: d2, column: 'amount', aggregation: 'sum' } }] }] }, '');
   const tied = (out.find((b) => b.kind === 'metric') as { metricId?: string } | undefined)?.metricId;
   ok('stories: an inline KPI is not tied to a per-entity snapshot metric of the same column', !!tied && tied !== kept2.id);
+
+  // ── alerts: a rule this release cannot evaluate is kept, untouched by an evaluation tick ──
+  const R = (over: object) => ({ id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '>', value: 0 }, metric: { column: 'amount', aggregation: 'sum' }, ...over });
+  const rules = [
+    R({ metric: { column: 'customer_id', aggregation: 'countd' } }),
+    R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: periodM.id } }),
+    R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }),
+    R({ metric: { column: 'amount', aggregation: 'sum', metricId: perM.id } }),
+  ];
+  const plainRule = R({});
+  const tag = (r: { metric: object; compare: string }): string => `${(r.metric as { aggregation: string }).aggregation}/${r.compare}/${(r.metric as { metricId?: string }).metricId ? 'a metric' : 'no metric'}`;
+  for (const r of [...rules, plainRule]) await alertStore.restoreRule(P, r);
+  const before = (await alertStore.load(P)).rules;
+  for (const r of rules) ok(`kept on load: ${tag(r)}`, before.some((x) => x.id === r.id));
+  ok('the target rule keeps its targetPct and its empty column', isDeepStrictEqual((before.find((x) => x.id === rules[1].id) as { targetPct?: unknown } | undefined)?.targetPct, { op: 'below', pct: 90 }) && before.find((x) => x.id === rules[1].id)?.metric.column === '');
+  await alertStore.evaluateProject(P, D, Date.parse('2026-11-04T12:00:00Z'));
+  const after = (await alertStore.load(P)).rules;
+  for (const r of rules) {
+    const was = JSON.stringify(before.find((x) => x.id === r.id));
+    ok(`kept, byte-identical after an evaluation tick: ${tag(r)}`, was !== undefined && JSON.stringify(after.find((x) => x.id === r.id)) === was, JSON.stringify(after.find((x) => x.id === r.id)));
+  }
+  ok('NEGATIVE CONTROL: the plain rule was evaluated', typeof after.find((x) => x.id === plainRule.id)?.lastEvaluatedAt === 'string');
+  ok('NEGATIVE CONTROL: a target rule with no targetPct is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined })) === null);
+  ok('NEGATIVE CONTROL: a target rule over 1000% is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 1001 } })) === null);
+  ok('NEGATIVE CONTROL: a threshold rule with no column and no metric is still not a rule', alerts.sanitizeRule(R({ metric: { column: '', aggregation: 'sum' } })) === null);
+  ok('a plain rule is byte-identical through sanitize', JSON.stringify(alerts.sanitizeRule(plainRule)) === JSON.stringify(alerts.sanitizeRule(alerts.sanitizeRule(plainRule))) && !('targetPct' in alerts.sanitizeRule(plainRule)!));
+  for (const r of rules) {
+    const tested = await alertStore.testRule(P, r);
+    ok(`the Test button says why: ${tag(r)}`, tested.ok && !tested.fire && tested.message === msg.alertPending() && tested.value === null, JSON.stringify(tested));
+  }
+  ok('NEGATIVE CONTROL: the Test button evaluates the plain rule', (await alertStore.testRule(P, plainRule)).fire === true);
 
   finish();
 })();

@@ -9,6 +9,8 @@ import type { MetricPeriodDefinition } from './periodMetric';
 import * as msg from './pendingMessages';
 import { snapshotDrawn } from './snapshotGuards';
 import type { VizEncoding } from './visuals';
+import { canEvaluate } from './alerts';
+import type { AlertRule } from './alerts';
 
 /** A funnel or period kind: neither a column rolled up nor a formula. */
 export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | MetricPeriodDefinition {
@@ -37,4 +39,14 @@ export async function pendingMeasureRefusal(projectId: string, encoding: VizEnco
     if (m ? pendingMetric(m) : v?.aggregation === 'countd') return m ? pendingSentence(m) : msg.countdPending(`countd of ${v.column}`);
   }
   return null;
+}
+
+/**
+ * Why an alert rule is not evaluated on this release, or null: a rule it cannot evaluate (alerts.canEvaluate), or one
+ * on a saved metric that is pending. Such a rule is skipped whole — no value, no `lastEvaluatedAt`, no edge state —
+ * so a newer pod's evaluation of it is never overwritten.
+ */
+export async function alertSkipped(projectId: string, rule: AlertRule): Promise<string | null> {
+  const m = canEvaluate(rule) && rule.metric.metricId ? await metrics.getMetric(projectId, rule.metric.metricId) : null;
+  return !canEvaluate(rule) || (m && pendingMetric(m)) ? msg.alertPending() : null;
 }

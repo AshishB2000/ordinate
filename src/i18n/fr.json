@@ -442,6 +442,7 @@
   "metricTreeMessages.that_metric_no_longer_exists": "Cette métrique n’existe plus.",
   "pendingMessages.counts_distinct_values_which_needs_a": "« {measure} » compte des valeurs distinctes, ce qui nécessite une version plus récente d’Ordinate. Terminez la mise à niveau, puis réessayez.",
   "pendingMessages.is_a_kind_of_metric_from": "« {name} » est un type de métrique d’une version plus récente d’Ordinate. Terminez la mise à niveau, puis réessayez.",
+  "pendingMessages.this_alert_uses_a_figure_from": "Cette alerte utilise un chiffre d’une version plus récente d’Ordinate. Elle sera de nouveau vérifiée une fois la mise à niveau terminée.",
   "pivotRender.ascending": ", croissant",
   "pivotRender.descending": ", décroissant",
   "pivotRender.pick_a_row_dimension_and_at": "Choisissez une dimension de ligne et au moins une valeur pour créer un tableau croisé.",
