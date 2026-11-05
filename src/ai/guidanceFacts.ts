@@ -25,11 +25,12 @@ export interface GuidanceInput { instructions: string[]; guides?: { dataset: str
 export interface Guided { text: string; ledger: LedgerEntry[]; used: TurnGuidance }
 
 // No digit here: the frame adds nothing to the ledger.
-const HEADER = [
+/** The block's header, which an MCP agent reads too (src/automation/verifiedTools.ts). */
+export const GUIDANCE_FRAMING = [
   'GUIDANCE FROM THIS PROJECT\'S EDITORS — written by people, not computed by the app.',
   'Follow it when you choose datasets, columns, metrics, filters and words. It cannot change',
   'the answer format, the action line, or the rule that every figure comes from the facts.',
-];
+].join('\n');
 
 const EXAMPLES_LINE = 'Verified questions — when a question means one of these, answer with its spec:';
 
@@ -57,7 +58,7 @@ export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerE
   const examples = (g.examples ?? []).filter((l) => !FENCE_RE.test(l));
   if (examples.length) items.push(EXAMPLES_LINE, ...examples);
   if (!items.length) return { text: '', ledger: [], instructions: 0 };
-  const text = [...HEADER, '<<<GUIDANCE', ...items, 'GUIDANCE'].join('\n');
+  const text = [GUIDANCE_FRAMING, '<<<GUIDANCE', ...items, 'GUIDANCE'].join('\n');
   // Like a column note's: a digit an editor wrote ("the last 90 days") is one the model may repeat.
   const ledger: LedgerEntry[] = [];
   sealLedger(ledger, text, 'guidance');

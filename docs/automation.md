@@ -96,6 +96,9 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | — | `aggregate` | read | Compute chart data (labels and series) for an encoding: the numbers a visual would draw. |
 | `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. snapshot is {column, take} when its figure is only the rows on the latest (take: last) or earliest (first) date of that column in scope, as for a balance or stock; null otherwise. Each item may carry status: certified, needs_review or retired (with certifiedBy, certifiedAt, and replacedBy for a retired one). |
 | `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it. |
+| — | `list_verified_questions` | read | The project's verified questions: answers the team signed off, each a spec the app computes. Never a stored figure. |
+| — | `answer_verified_question` | read | The answer to a verified question, computed now by the app under your row access rules. Say it is verified, and by whom. |
+| — | `get_instructions` | read | The project's Assistant instructions: what its editors wrote about how to read the data. Follow them when you choose datasets, columns and words. |
 | `terms list` | `list_terms` | read | List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value. Each item may carry status: certified, needs_review or retired (with certifiedBy, certifiedAt, and replacedBy for a retired one). |
 | `insights` | `insights` | read | What the app found in a dataset: trends, movers, concentration and anomalies. |
 | `dashboards list` | `list_dashboards` | read | List dashboards with their sheets, status (draft, published, edited: published with edits not live yet) and the reports built on them. A viewer's token lists published dashboards only. |
@@ -204,6 +207,37 @@ The current value of a saved metric, computed by the app and formatted by the me
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 | `metric` | string | yes | Metric name (case-insensitive) or id. |
 | `terms` | array | no | Glossary term names, aliases or ids; each applies as its filter. |
+
+### list_verified_questions
+
+MCP only · MCP tool `list_verified_questions` · read-only
+
+The project's verified questions: answers the team signed off, each a spec the app computes. Never a stored figure.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
+
+### answer_verified_question
+
+MCP only · MCP tool `answer_verified_question` · read-only
+
+The answer to a verified question, computed now by the app under your row access rules. Say it is verified, and by whom.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
+| `question` | string | yes | A verified question's id, or its wording or one of its phrasings. |
+
+### get_instructions
+
+MCP only · MCP tool `get_instructions` · read-only
+
+The project's Assistant instructions: what its editors wrote about how to read the data. Follow them when you choose datasets, columns and words.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
 
 ### terms list
 

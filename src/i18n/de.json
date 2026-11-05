@@ -714,6 +714,8 @@
   "verifiedMessages.this_verified_question_was_deleted": "Diese verifizierte Frage wurde gelöscht.",
   "verifiedMessages.values_hidden_by_row_access_rules": "{column} · Werte durch Zeilenzugriffsregeln verborgen",
   "verifiedMessages.write_the_question_in_words": "Schreiben Sie die Frage in Worten.",
+  "verifiedToolMessages.no_verified_question_in_this_project": "Keine verifizierte Frage „{question}“ in diesem Projekt.",
+  "verifiedToolMessages.use_answer_verified_question_for_its": "Nutze answer_verified_question für ihre Zahlen.",
   "versionDiffMessages.a_deleted_visual": "Ein gelöschtes Visual",
   "versionDiffMessages.a_filter_changed": "ein Filter geändert",
   "versionDiffMessages.a_product_of_metrics": "ein Produkt aus {count} Kennzahlen",

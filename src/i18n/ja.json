@@ -714,6 +714,8 @@
   "verifiedMessages.this_verified_question_was_deleted": "この検証済みの質問は削除されました。",
   "verifiedMessages.values_hidden_by_row_access_rules": "{column} · 行アクセスルールにより値は非表示",
   "verifiedMessages.write_the_question_in_words": "質問を言葉で書いてください。",
+  "verifiedToolMessages.no_verified_question_in_this_project": "このプロジェクトに「{question}」という検証済みの質問はありません。",
+  "verifiedToolMessages.use_answer_verified_question_for_its": "数値は answer_verified_question で確認してください。",
   "versionDiffMessages.a_deleted_visual": "削除されたビジュアル",
   "versionDiffMessages.a_filter_changed": "フィルターを1件変更",
   "versionDiffMessages.a_product_of_metrics": "{count}個の指標の積",
