@@ -8,6 +8,8 @@
 //               mirror metric per layer metric, holding a name and never math, idempotent, name clashes, Trash, drops
 //   § add       connection:semanticModels lists the layer's models; connection:addSemanticDataset saves a Live record
 //               (no table, no SQL) and queues the sync that writes its mirrors; editors only; no origin in a reply
+//   § saves     a mirror's definition and filters are its layer's, its format and name ours; no column metric on a layer;
+//               "Defined in {layer}"; no copy of a semantic dataset; model files carry no mirror
 //
 //   npm run build:ts && node scripts/test-semanticDatasets.js
 
@@ -33,6 +35,7 @@ const authz: typeof import('../src/server/authz/index') = require('../src/server
 const secretsIpc: typeof import('../src/ipc/connectionSecrets') = require('../src/ipc/connectionSecrets');
 const smsg: typeof import('../src/engine/semanticMessages') = require('../src/engine/semanticMessages');
 const catalogMod: typeof import('../src/connectors/index') = require('../src/connectors/index');
+const modelExport: typeof import('../src/app/modelExport') = require('../src/app/modelExport');
 
 const { ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
@@ -224,6 +227,36 @@ void (async () => {
   const log = logged.lines.join('\n');
   ok('the layer\'s words go to the log, the token redacted', log.includes('denied:') && log.includes(ENV_ID) && !log.includes(TOKEN), log.slice(0, 400));
   ok('CANARY: the grep finds the dataset\'s own name', all.includes('Sales'));
+
+  // ── § saves ──
+  const said = (fn: () => string): Promise<string> => as(async () => fn());
+  const ORD = named(await mirrorsOf(D), 'orders')!.id as string;
+  const F = { type: 'filter', column: 'region', op: '=', value: 'West' };
+  const filtered = (await post('metric:update', { projectId: P, id: ORD, patch: { filters: [F] } })).value;
+  ok('metric:update of a mirror\'s filters: "Defined in Fake layer: edit it there."', filtered.ok === false && filtered.error === (await said(() => smsg.externalReadOnly('Fake layer'))) && filtered.field === 'filters', show(filtered));
+  const redefined = (await post('metric:update', { projectId: P, id: ORD, patch: { definition: { column: 'amt', aggregation: 'sum' } } })).value;
+  ok('…and of its definition (an editor that knows no mirror sends one)', redefined.ok === false && redefined.field === 'definition' && /Fake layer/.test(String(redefined.error)), show(redefined));
+  ok('…nothing written', isDeepStrictEqual((await as(() => metrics.getMetric(P, ORD)))!.filters, []) && ext.isExternalDefinition((await as(() => metrics.getMetric(P, ORD)))!.definition));
+  const formatted = (await post('metric:update', { projectId: P, id: ORD, patch: { name: 'Order count', format: { kind: 'number', decimals: 0 }, description: 'Ours', direction: 'up_good', filters: [] } })).value;
+  ok('NEGATIVE CONTROL: its name, format, description and direction save (no filter is no filter)', formatted.ok === true && formatted.metric.name === 'Order count' && formatted.metric.description === 'Ours' && ext.isExternalDefinition(formatted.metric.definition), show(formatted));
+  const column = (await post('metric:save', { projectId: P, input: { name: 'Amount', datasetId: D, definition: { column: 'amt', aggregation: 'sum' } } })).value;
+  ok('metric:save of a column metric on a semantic dataset: columnOnLayer, nothing saved', column.ok === false && column.field === 'definition' && /amt is a field of Orders layer, not a metric: Fake layer/.test(String(column.error))
+    && !(await as(() => metrics.listMetrics(P))).some((m) => m.name === 'Amount'), show(column));
+  const onExtract = (await post('metric:save', { projectId: P, input: { name: 'Amount', datasetId: s.extractId, definition: { column: 'amt', aggregation: 'sum' } } })).value;
+  ok('NEGATIVE CONTROL: the same metric on the extract saves', onExtract.ok === true, show(onExtract));
+  const row = ((await post('metric:list', { projectId: P })).value.metrics as Reply[]).find((m) => m.id === ORD);
+  ok('metric:list words a mirror "Defined in Fake layer"', row?.definitionText === (await said(() => smsg.definedIn('Fake layer'))), show(row));
+  const datasetsBefore = (await as(() => H.datasets.listDatasets(P))).length;
+  const noCopy = await said(() => smsg.semanticNoCopy('Orders layer', 'Fake layer'));
+  for (const [ch, body] of [['dataset:copyLive', { projectId: P, datasetId: D }], ['dataset:setMode', { projectId: P, datasetId: D, mode: 'extract' }]] as const) {
+    const r = (await post(ch, body)).value;
+    ok(`${ch}: "A copy can't be made from Orders layer: Fake layer returns totals, not rows."`, r.ok === false && r.code === 'live_refused' && r.reason === 'semanticNoCopy' && r.error === noCopy, show(r));
+  }
+  ok('…nothing saved, and the dataset is still Live with its block', (await as(() => H.datasets.listDatasets(P))).length === datasetsBefore && (await meta(D)).mode === 'live' && !!(await raw(D)).semantic);
+  const files = await as(() => modelExport.exportModel(P));
+  const text = [...files.files].map(([path, body]) => `${path}\n${body}`).join('\n');
+  ok('model files carry no mirror, and say so', !text.includes(ORD) && !text.includes('Order count') && files.notCarried.includes('externalMetrics'), show(files.notCarried));
+  ok('NEGATIVE CONTROL: they carry the extract\'s metric', text.includes('Amount'), text.slice(0, 300));
 
   await close();
   finish();

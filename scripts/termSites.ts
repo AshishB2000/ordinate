@@ -56,7 +56,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/insights.ts': { count: 1, how: 'keeps' },
   'src/ipc/metricTree.ts': { count: 2, how: 'keeps' },
   // metric:save and metric:update's sanitizeDashboardFilters (moved out of ./metrics.ts as they were; it keeps a term)
-  'src/ipc/metricSave.ts': { count: 2, how: 'keeps' },
+  'src/ipc/metricSave.ts': { count: 3, how: 'keeps' }, // + b2: a mirror's filters checked as the save keeps them (sanitizeDashboardFilters), to refuse a non-empty list
   'src/ipc/metrics.ts': { count: 5, how: 'keeps' },
   // a period metric's own filters, params bound (resolveFilterParams keeps a term), asked of the chart door, which expands it
   'src/ipc/periodChart.ts': { count: 1, how: 'keeps' },

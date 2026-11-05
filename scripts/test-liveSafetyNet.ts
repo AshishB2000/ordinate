@@ -28,6 +28,9 @@
 //    (`dataset:profile`) answer from it — flagged as a sample's — and every
 //    other row reader above still refuses, typed. Before it, they refuse (1).
 //
+// 6. A SEMANTIC DATASET (part 7 b2) holds no rows either: every reader refuses it, typed — its doors refuse a column
+//    measure (`columnOnLayer`) or are its layer's — and a picker's list is the layer's own (the extract is § 4's control).
+//
 //   npm run build:ts && node scripts/test-liveSafetyNet.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -48,6 +51,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
+const semFake: typeof import('./semanticFake') = require('./semanticFake');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -260,6 +264,24 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     bodies.push(r.body);
     ok(`Live, connection gone → ${label} (${channel}) is a typed failure`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
+  // 6. A semantic dataset over the same rows: a layer's block, a mirror metric, no table.
+  const sem = await context.runInContext(ADMIN, 'semantic', async () => {
+    const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
+    semFake.registerSemanticFake();
+    (require('../src/engine/live/semantic/adapters') as typeof import('../src/engine/live/semantic/adapters')).registerTestSemanticAdapter('fake', { encode: (q, model) => ({ kind: 'semantic', body: { table: model, columns: COLUMNS, query: q }, columns: sq.answerColumns(q) }) });
+    const c = (await connections.saveConnection(P, { name: 'Layer', connectorId: semFake.SEMANTIC_FAKE_ID, values: {} }))!;
+    const d = (await liveRecord.saveSemanticRecord(P, { name: 'Orders layer', connId: c.id, columns: COLUMNS, semantic: { backend: 'fake', model: 'live_net_orders', metrics: [{ name: 'revenue', additive: true }], grains: [], syncedAt: new Date().toISOString() } }))!;
+    const m = (await (require('../src/analysis/metrics') as typeof import('../src/analysis/metrics')).saveMetric(P, { name: 'Layer revenue', datasetId: d.id, definition: { external: 'revenue', additive: true, layer: 'fake' } }))!;
+    return { id: d.id, metricId: m.id };
+  });
+  await post('catalog:setTable', { projectId: P, datasetId: sem.id, patch: { key: 'region' } });
+  for (const [label, channel, payload] of ROW_READERS(sem.id, seed.extract, sem.metricId)) {
+    const r = await post(channel, payload);
+    bodies.push(r.body);
+    const listed = label === 'distinct values' && r.status === 200 && Array.isArray((r.value as { values?: unknown }).values) && (r.value as { values: unknown[] }).values.length === 5;
+    ok(`Semantic → ${label} (${channel}) ${label === 'distinct values' ? 'is the layer\'s list' : 'refuses, typed'}`, label === 'distinct values' ? listed : isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
+  }
+
   // The project's SQL over a Live dataset by name: refused, never an empty table.
   const sqlRun = await post('sql:run', { projectId: P, sql: 'SELECT count(*) AS n FROM "Orders live"' });
   bodies.push(sqlRun.body);
@@ -467,7 +489,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ok('getDatasetMeta reads it — Live, schema only, not resident', meta?.mode === 'live' && meta.resident === false && meta.columns.length === COLUMNS.length);
     ok('residentSource is null for it (so every resident path falls through to the refusal)', (await datasets.residentSource(P, seed.live)) === null);
     const summaries = await datasets.listDatasets(P);
-    ok('listDatasets does not throw and lists all three', summaries.length === 3);
+    ok('listDatasets does not throw and lists all four (the semantic one too)', summaries.length === 4);
   });
 
   await app.close();

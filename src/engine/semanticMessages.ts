@@ -112,3 +112,18 @@ export function layerReadFailed(layer: string): string {
 export function layerBaseFilter(layer: string): string {
   return t('semanticMessages.always_applied_filters_are_not_available', { layer });
 }
+
+/** A mirror metric's definition in a picker, the Metrics table and a model's facts. */
+export function definedIn(layer: string): string {
+  return t('semanticMessages.defined_in', { layer });
+}
+
+/** An edit of a mirror metric's definition or filters: the layer's to change. */
+export function externalReadOnly(layer: string): string {
+  return t('semanticMessages.defined_in_edit_it_there', { layer });
+}
+
+/** "Make a copy" or "Copy the data instead" of a semantic dataset. */
+export function semanticNoCopy(dataset: string, layer: string): string {
+  return t('semanticMessages.a_copy_can_t_be_made', { dataset, layer });
+}

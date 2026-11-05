@@ -373,6 +373,8 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   if (layer) return layer;
   const c = build(t);
   if (!c.ok) return refused(t.dialect, c);
+  // A statement is never sent to a semantic layer: a lookup that only knows SQL (a key check) is the layer's to refuse.
+  if (t.semantic && !('semantic' in c)) return refused(t.dialect, refuseLayer('layerLookup', t.semantic.env));
   const op = opOf(t.dialect);
   const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params });
   const ages = agesOf(t);
