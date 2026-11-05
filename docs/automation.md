@@ -126,7 +126,7 @@ List a project's datasets with row and column counts. Each item may carry status
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
-| `topic` | string | no | Topic name or id: list its members only, in its order. Only this list is narrowed. |
+| `topic` | string | no | Topic name or id: list its members only, in its order (certified ones first). Only this list is narrowed. |
 
 ### datasets describe
 
@@ -198,7 +198,7 @@ List the project's saved metrics and how each is defined. Each carries adds_up: 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
-| `topic` | string | no | Topic name or id: list its members only, in its order. Only this list is narrowed. |
+| `topic` | string | no | Topic name or id: list its members only, in its order (certified ones first). Only this list is narrowed. |
 
 ### metrics value
 
@@ -252,7 +252,7 @@ List the project's glossary terms: named row filters (EMEA, Enterprise, Recent o
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
 | `project` | string | no | Project id or exact name; `--project` on the CLI. Defaults to the project opened most recently. |
-| `topic` | string | no | Topic name or id: list its members only, in its order. Only this list is narrowed. |
+| `topic` | string | no | Topic name or id: list its members only, in its order (certified ones first). Only this list is narrowed. |
 
 ### topics list
 

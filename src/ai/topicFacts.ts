@@ -2,8 +2,9 @@
 // sees that topic's datasets (in its order, with their fields' notes), its metrics and its terms, and no more.
 //
 // It narrows and never widens: every dataset's notes go through the same readers the project inventory uses
-// (`assistantColumnDocs`, `closedToCaller`), so a caller the rules restrict gets no value list a topic would otherwise
-// carry, and a term's filter values are worded as `termFactsFor` words them. No figure here, so no ledger entry.
+// (`assistantColumnDocs`, `closedToCaller`, a copy's sample values), so a caller the rules restrict gets no value list a
+// topic would otherwise carry, and a term's filter values are worded as `termFactsFor` words them. A column hidden from
+// the caller, and a metric or term that reads one, is not named at all (part 4, D21). No figure here, so no ledger entry.
 // A topic that is gone gives null and `buildFacts` falls through to the project inventory.
 
 import * as copilot from './copilot';
@@ -18,8 +19,11 @@ import { describeDefinitionShort } from '../analysis/metricFormat';
 import { readTopic, topicForReaders } from '../analysis/topics';
 import { tableFacts } from '../app/tableDocs';
 import { assistantColumnDocs } from '../app/sharePolicy';
-import { closedToCaller, restrictedOn } from '../data/rowAccess';
+import { closedToCaller, hiddenColumnsFor, restrictedOn } from '../data/rowAccess';
 import { liveInventoryNotes } from '../ipc/liveProfile';
+import { copyValueNotes } from '../ipc/copyValues';
+import { dropHidden, tableWithout } from './hiddenFacts';
+import { metricHidden, termHidden } from '../analysis/columnHidden';
 import type { ActivityEmit } from '../ipc/copilot';
 
 const CLOSING = '\n\nNo specific dataset/visual/dashboard is open';
@@ -36,12 +40,14 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   for (const d of topic.datasets) {
     const m = await datasets.getDatasetMeta(projectId, d.id);
     if (!m) continue;
+    const hidden = await hiddenColumnsFor(projectId, m.id);
+    const shown = dropHidden(m.columns, hidden);
     const keep = d.fields ? new Set(d.fields) : null;
-    const columns = keep ? m.columns.filter((c) => keep.has(c.name)) : m.columns;
-    sets.push({ name: m.name, fields: d.fields, all: m.columns.filter((c) => !keep || !keep.has(c.name)).map((c) => c.name) });
+    const columns = keep ? shown.filter((c) => keep.has(c.name)) : shown;
+    sets.push({ name: m.name, fields: d.fields, all: shown.filter((c) => !keep || !keep.has(c.name)).map((c) => c.name) });
     schemas.push({
-      name: m.name, columns, docs: await assistantColumnDocs(projectId, m.id), table: await tableFacts(projectId, m.id),
-      notes: (await closedToCaller(projectId, m.id)) ? undefined : await liveInventoryNotes(projectId, m),
+      name: m.name, columns, docs: await assistantColumnDocs(projectId, m.id), table: tableWithout(await tableFacts(projectId, m.id), hidden),
+      notes: (await closedToCaller(projectId, m.id)) ? undefined : ((await liveInventoryNotes(projectId, m)) ?? (await copyValueNotes(projectId, m.id, 'inventory'))),
     });
   }
   const base = copilot.projectFacts(proj ? proj.name : 'Untitled project', { datasets: sets.map((s) => s.name), visuals: [], dashboards: [] }, schemas);
@@ -49,7 +55,8 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   const lines: string[] = [`Topic: "${topic.name}"${topic.description ? ` — ${topic.description}` : ''}. Its datasets, metrics and terms are listed here; the project holds more, which a question may still name.`];
   for (const s of sets) if (s.fields && s.all.length) lines.push(`- ${s.name} also has, outside this topic: ${s.all.join(', ')}`);
   const allMetrics = new Map((await metrics.listMetrics(projectId)).map((m) => [m.id, m]));
-  const own = topic.metricIds.map((mid) => allMetrics.get(mid)).filter((m): m is NonNullable<typeof m> => !!m);
+  const own = [];
+  for (const mid of topic.metricIds) { const m = allMetrics.get(mid); if (m && !(await metricHidden(projectId, m.id))) own.push(m); }
   if (own.length) {
     lines.push('', 'Topic metrics (the app computes their figures):');
     for (const m of own) lines.push(`- Metric ${m.name}: ${describeDefinitionShort(m.definition)}`);
@@ -58,7 +65,7 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   const facts: FactTerm[] = [];
   for (const tid of topic.termIds) {
     const t = await terms.getTerm(projectId, tid);
-    if (!t) continue;
+    if (!t || (await termHidden(projectId, t.id))) continue;
     const withheld = withheldColumns(await assistantColumnDocs(projectId, t.datasetId));
     facts.push({ name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}), definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)) });
   }

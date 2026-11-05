@@ -53,7 +53,7 @@ import { statusFor, withStatus } from '../analysis/statusStore';
 import { vocabularyOrder } from '../analysis/statusNotes';
 import { statusFields } from './statusFields';
 import { hiddenColumnsFor } from '../data/rowAccess';
-import { metricHidden } from '../analysis/columnHidden';
+import { metricHidden, termHidden } from '../analysis/columnHidden';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
@@ -264,13 +264,21 @@ export async function termsList(ctx: Ctx, topic?: string): Promise<unknown> {
   }));
 }
 
-/** The project's topics, each with its datasets (and field subsets), metrics and terms by name; stale members dropped. */
+/**
+ * The project's topics, each with its datasets (and field subsets), metrics and terms by name; stale members dropped,
+ * and a column hidden from the caller, or a metric or term that reads one, left out (part 4, D19).
+ */
 export async function topicsList(ctx: Ctx): Promise<unknown> {
-  const [kept, sets, mets, terms] = [await topicsForReaders(ctx.projectId, await listTopics(ctx.projectId)), await datasets.listDatasets(ctx.projectId), await metrics.listMetrics(ctx.projectId), await termsStore.listTerms(ctx.projectId)];
+  const [kept, sets, allMets, allTerms] = [await topicsForReaders(ctx.projectId, await listTopics(ctx.projectId)), await datasets.listDatasets(ctx.projectId), await metrics.listMetrics(ctx.projectId), await termsStore.listTerms(ctx.projectId)];
+  const [mets, terms] = [[] as typeof allMets, [] as typeof allTerms];
+  for (const m of allMets) if (!(await metricHidden(ctx.projectId, m.id))) mets.push(m);
+  for (const t of allTerms) if (!(await termHidden(ctx.projectId, t.id))) terms.push(t);
+  const hiddenOf = new Map<string, ReadonlySet<string>>();
+  for (const { topic: t } of kept) for (const d of t.datasets) if (d.fields && !hiddenOf.has(d.id)) hiddenOf.set(d.id, await hiddenColumnsFor(ctx.projectId, d.id));
   const name = (list: readonly { id: string; name: string }[], ids: readonly string[]): string[] => inTopicOrder(list, ids).map((x) => x.name);
   return kept.map(({ topic: t }) => ({
     id: t.id, name: t.name, description: t.description || '',
-    datasets: t.datasets.flatMap((d) => name(sets, [d.id]).map((n) => ({ name: n, fields: d.fields ?? null }))),
+    datasets: t.datasets.flatMap((d) => name(sets, [d.id]).map((n) => ({ name: n, fields: d.fields?.filter((f) => !hiddenOf.get(d.id)?.has(f)) ?? null }))),
     metrics: name(mets, t.metricIds), terms: name(terms, t.termIds),
   }));
 }

@@ -125,7 +125,7 @@ const FILTERS: ArgSpec = {
 
 const TERMS: ArgSpec = { type: 'array', items: { type: 'string' }, description: 'Glossary term names, aliases or ids; each applies as its filter.' };
 
-const TOPIC: ArgSpec = { type: 'string', description: 'Topic name or id: list its members only, in its order. Only this list is narrowed.' };
+const TOPIC: ArgSpec = { type: 'string', description: 'Topic name or id: list its members only, in its order (certified ones first). Only this list is narrowed.' };
 
 const ENCODING: ArgSpec = {
   type: 'object',
