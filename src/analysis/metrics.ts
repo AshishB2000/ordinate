@@ -91,6 +91,8 @@ export interface Metric {
   direction?: 'up_good' | 'down_good';
   /** How it breaks down into parts — the metric tree (./metricTree). Absent = not broken down. */
   tree?: TreeNode;
+  /** The date column this metric counts by (semantic D9). Absent = no opinion. */
+  timeColumn?: string;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
@@ -237,6 +239,8 @@ function normalize(data: any, projectId: string): Metric {
   if (data.direction === 'up_good' || data.direction === 'down_good') m.direction = data.direction;
   const tree = sanitizeTree(data.tree, m.id);
   if (tree) m.tree = tree;
+  const timeColumn = trimTo(data.timeColumn, 512);
+  if (timeColumn) m.timeColumn = timeColumn;
   return m;
 }
 
@@ -355,6 +359,7 @@ export interface MetricInput {
   direction?: unknown;
   /** null clears it. */
   tree?: unknown;
+  timeColumn?: unknown;
 }
 
 /**
