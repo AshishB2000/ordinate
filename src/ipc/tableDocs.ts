@@ -16,6 +16,7 @@ import { isLive, isLiveDatasetError } from '../data/liveDataset';
 import { isRowPolicyError } from '../data/rowAccess';
 import { getTableDoc, readableTableDoc, setTableDoc, writeKeyCheck } from '../app/tableDocs';
 import type { TableDoc, TablePatch } from '../app/tableDocs';
+import { hierarchyProblem } from '../app/hierarchies';
 import { keyCheckFailed, keyNotAColumn, noKeyToCheck, tableNotesNotRead, tableNotesNotSaved } from '../app/tableDocMessages';
 import { logger } from '../app/logger';
 import { listRelationships, relWarning, updateRelationships } from '../analysis/relationships';
@@ -203,6 +204,8 @@ export function register(): void {
       if (!meta) return { ok: false, error: 'Dataset not found' };
       const asked = str(patch?.key);
       if (asked && !meta.columns.some((c) => c.name === asked)) return { ok: false, error: keyNotAColumn(asked) };
+      const problem = patch?.hierarchies && hierarchyProblem(patch.hierarchies, meta.columns);
+      if (problem) return { ok: false, error: problem };
       const saved = await setTableDoc(p, d, patch ?? {});
       if (!saved) return { ok: false, error: tableNotesNotSaved() };
       let table = saved.table;

@@ -42,6 +42,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const store: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
 const msg: typeof import('../src/app/tableDocMessages') = require('../src/app/tableDocMessages');
+const msg2: typeof import('../src/app/hierarchyMessages') = require('../src/app/hierarchyMessages');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
@@ -118,6 +119,27 @@ async function main(): Promise<void> {
   ok('a key is matched exactly: another case is not the column', caseKey.ok === false, JSON.stringify(caseKey));
   const noDs = await call('catalog:setTable', { projectId: P, datasetId: '5d3b6f0e-6c1f-4a8e-9a3e-0e5a1b2c3d4e', patch: { key: 'line_id' } });
   ok('a dataset that does not exist is refused, nothing stored', noDs.ok === false, JSON.stringify(noDs));
+
+  // ── 2b. Hierarchies: levels are the dataset's text columns, saved whole ──────
+  {
+    const G = (await datasets.saveDataset(P, { name: 'Geo orders', sourceKind: 'csv', columns: [T('region'), T('state'), T('city'), N('amount')], rows: [['E', 'NY', 'NYC', 1]] }))!.id;
+    const setH = (hierarchies: unknown) => call('catalog:setTable', { projectId: P, datasetId: G, patch: { hierarchies } });
+    const getH = async () => (await call('catalog:getTable', { projectId: P, datasetId: G })).table;
+    const r = await setH([{ name: 'Geography', levels: ['region', 'state', 'city'] }]);
+    ok('hierarchies: saved with a server id', r.ok === true && /^[0-9a-f-]{36}$/.test(r.table.hierarchies[0].id), JSON.stringify(r));
+    ok('hierarchies: a number level is refused', (await setH([{ name: 'G', levels: ['region', 'amount'] }])).error === 'Hierarchy levels are text columns. amount is a number column.');
+    ok('hierarchies: a missing column is refused', (await setH([{ name: 'G', levels: ['region', 'zip'] }])).error === msg2.hierarchyLevelMissing('zip'));
+    ok('hierarchies: a column in two is refused', /already a level of Geography/.test((await setH([{ name: 'Geography', levels: ['region', 'state'] }, { name: 'Places', levels: ['state', 'city'] }])).error));
+    ok('hierarchies: a name used twice is refused', (await setH([{ name: 'Geo', levels: ['region', 'state'] }, { name: 'GEO', levels: ['city', 'amount'] }])).ok === false && (await setH([{ name: 'Geo', levels: ['region', 'state'] }])).ok === true);
+    await setH([{ name: 'Geography', levels: ['region', 'state', 'city'] }]); // back to the first save's shape
+    ok('hierarchies: a refused save leaves the list as it was', (await getH()).hierarchies.length === 1 && (await getH()).hierarchies[0].name === 'Geography');
+    const before = (await getH()).hierarchies[0].id;
+    await call('catalog:setTable', { projectId: P, datasetId: G, patch: { role: 'fact' } });
+    ok('hierarchies: a role save keeps the hierarchies it was not asked to change', (await getH()).hierarchies[0].id === before);
+    ok('hierarchies: re-sending an id keeps it', (await setH([{ ...(await getH()).hierarchies[0], name: 'Geo' }])).table.hierarchies[0].id === before);
+    ok('hierarchies: an id that is not one of its own is replaced', (await setH([{ id: '5d3b6f0e-6c1f-4a8e-9a3e-0e5a1b2c3d4e', name: 'Geo', levels: ['region', 'state'] }])).table.hierarchies[0].id !== '5d3b6f0e-6c1f-4a8e-9a3e-0e5a1b2c3d4e');
+    ok('NEGATIVE CONTROL: [] removes them, and the doc has no key', !('hierarchies' in (await setH([])).table) && !('hierarchies' in (await getH())));
+  }
 
   // ── Check now ──────────────────────────────────────────────────────────────
   const nokey = await call('catalog:checkKey', { projectId: P, datasetId: NOKEY });

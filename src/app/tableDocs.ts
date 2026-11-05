@@ -4,7 +4,7 @@
 
 import { isValidId } from './ids';
 import { clip } from './clip';
-import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
+import { sanitizeHierarchies, withIds, type Hierarchy, type HierarchyDraft } from './hierarchies';
 import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
 import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
@@ -85,7 +85,7 @@ export async function getTableDoc(projectId: string, datasetId: string, strict =
 }
 
 /** What a person typed: the fields PRESENT are merged. Clipped by `sanitizeTableDoc`; never `keyCheck`, `updatedBy` or `updatedAt`. */
-export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown }
+export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown; hierarchies?: HierarchyDraft[] }
 
 /**
  * Merge the fields present in `patch`. A changed `key` drops the old key's `keyCheck`. Stamps who and when, here.
@@ -103,7 +103,7 @@ export async function setTableDoc(projectId: string, datasetId: string, patch: T
       grain: p.grain !== undefined ? p.grain : cur.grain,
       guide: p.guide !== undefined ? p.guide : cur.guide,
       keyCheck: p.key === undefined || p.key === cur.key ? cur.keyCheck : undefined,
-      hierarchies: cur.hierarchies, // no channel writes them yet; a save of the notes must keep them
+      hierarchies: p.hierarchies ? withIds(p.hierarchies, cur.hierarchies ?? []) : cur.hierarchies, // absent = keep; [] removes
       updatedBy: osUser(),
       updatedAt: new Date().toISOString(),
     });
