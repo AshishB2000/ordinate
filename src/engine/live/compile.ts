@@ -105,6 +105,7 @@ export function partsOf(m: LiveMeasure): Part[] {
 interface Prepared {
   c: Ctx;
   from: string;
+  /** The base filters `whereOf` ANDs in: none when they already sit innermost, in the calc layers. */
   base: LiveFilter[];
   /** The IR's measures, every one a column's (a layer metric was refused). */
   ms: LiveColumnMeasure[];
@@ -164,10 +165,12 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   }
   const c: Ctx = { d, b: new ParamSink(), columns };
   const inner = fromItem(d, env.source);
-  // A calc the statement reads: one derived table per calc it needs (./calcLayers). None: today's FROM, byte for byte.
-  const from = isRefusal(inner) || !namesCalc(names, env.source) ? inner : calcFrom(c, env.source, names, inner);
+  // A calc the statement reads: one derived table per calc it needs (./calcLayers), the base filters innermost,
+  // before any calc exists. None: today's FROM and WHERE, byte for byte.
+  const layered = !isRefusal(inner) && namesCalc(names, env.source);
+  const from = layered ? calcFrom(c, env.source, names, inner, env.base) : inner;
   if (isRefusal(from)) return from;
-  return { c, from, base: env.base ?? [], ms };
+  return { c, from, base: layered ? [] : env.base ?? [], ms };
 }
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */

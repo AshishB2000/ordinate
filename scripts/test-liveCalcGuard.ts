@@ -105,6 +105,8 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['writeSchemaSync', async () => H.liveDataset.writeSchemaSync(P, L, {
       columns: calcs.declaredColumns((await meta()) as { columns: import('../src/data/parse').ParsedColumn[] }), profile: { columns: [] }, missingColumns: [], syncedAt: stamp, changed: false,
     })],
+    // Part 1 step 08's write of the base filters (and their removal) keeps the calculated fields too.
+    ['setBaseFilters', async () => (await H.liveDataset.setBaseFilters(P, L, BASE as never)) && H.liveDataset.setBaseFilters(P, L, [])],
   ];
   const holdsKey = async (): Promise<boolean> => {
     const r = await raw();

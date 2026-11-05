@@ -497,7 +497,8 @@ the same job is a Prepare filter step.
   every question on the dataset refuse, in a sentence, until an editor changes it. The schema sync
   still syncs the columns and skips the sample.
 - **At most 20 filters, at most 1,000 values each.** Saving checks each one against the dataset's
-  columns and refuses one it cannot apply.
+  columns and refuses one it cannot apply. They name the warehouse's columns only, never a
+  calculated field: they run first, before any calculated field exists.
 - **A change asks the warehouse again**: it resets the dataset's cache and queues a schema sync.
   Until the sync lands, the value pickers say the column has not been sampled yet, rather than list
   values sampled under the old filters. The sync's statement counts against `LIVE_DAILY_QUERY_LIMIT`
@@ -544,8 +545,11 @@ Prepare step on a copy. Every value a formula writes is a bound parameter, never
   wrong, and only the questions that read it say "column missing"; a warehouse column that now spells
   a field's name (ignoring case) makes the questions naming either refuse. Neither is ever answered
   without the field.
-- **Copies:** "Make a copy" and "Copy the data instead" carry the fields as Prepare steps, in the
-  copy's first write. A field is never a row access column.
+- **Copies:** "Make a copy" and "Copy the data instead" carry the fields as Prepare steps, after the
+  always-applied filters, in the copy's first write. A field is never a row access column.
+- **With always-applied filters:** a question that reads a calculated field runs the filters in the
+  innermost derived table, before any field is computed, exactly as the copy's Prepare steps run them
+  first. A question that reads none is sent exactly as before.
 - **Who sees the formula:** a viewer whom row access rules restrict sees each field's name and type,
   not its formula, which may name a customer.
 - **Known differences from a copy** (each held by a test, `scripts/liveParityPins.ts`): Prepare types a

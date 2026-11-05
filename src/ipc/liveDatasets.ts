@@ -44,7 +44,7 @@ import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { liveBaseFilterRefused, liveCalcBroken, liveCalculatedRefused, liveSemanticPending } from '../engine/liveRefusals';
-import { calcSteps } from '../data/liveCalcs';
+import { calcSteps, declaredColumns } from '../data/liveCalcs';
 import { baseOfLive } from '../engine/live/liveBase';
 import type { LiveRefusalCode } from '../engine/live/liveSpec';
 import type { FilterStep } from '../data/transforms';
@@ -177,7 +177,7 @@ type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; e
  */
 function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
   if (meta.live?.semanticPending) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
-  const b = meta.live ? baseOfLive(meta.live, meta.columns) : null;
+  const b = meta.live ? baseOfLive(meta.live, declaredColumns(meta)) : null;
   if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
   return { ok: true, steps: meta.live?.baseFilters ?? [] };
 }

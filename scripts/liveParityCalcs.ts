@@ -10,8 +10,9 @@
 //
 // Cases: every aggregation over the number calcs; the text calcs (a boolean is text on both) as categories;
 // bins over a calc; a split by one; every filter op moved onto a text and a number calc; the KPI of each; all
-// of it again under a row access lock. Part 1 step 08's base filters (BASE_P) are on another branch: they join
-// here, innermost, when it lands. NEGATIVE CONTROL: Live with a wrong formula disagrees with the copy.
+// of it again under a row access lock; then again under part 1 step 08's base filters (./liveParityBase BASE_P),
+// which a copy runs as Prepare steps before the calcs and Live runs innermost, below every calc layer.
+// NEGATIVE CONTROLS: Live with a wrong formula disagrees with the copy; so do the base-filtered questions without the base.
 
 import type { FilterStep } from '../src/data/transforms';
 import type { VizEncoding, VizMeasure } from '../src/analysis/visuals';
@@ -24,6 +25,7 @@ import type { Extract, Ok } from './liveParityMatrix';
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const liveCalcs: typeof import('../src/data/liveCalcs') = require('../src/data/liveCalcs');
 const rowLock: typeof import('../src/data/rowLock') = require('../src/data/rowLock');
+const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
 const formulaSql: typeof import('../src/engine/live/formulaSql') = require('../src/engine/live/formulaSql');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
@@ -136,4 +138,34 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
   ok(label('calcs NEGATIVE CONTROL: …and a wrong filter value on a calc is seen too'),
     (await kit.metricProblems({ column: 'Margin', aggregation: 'sum' }, [F('Band', '=', 'mid')], withCalcs(typed, typedCalcs(typed.columns, [
       ...CALC_STEPS.slice(0, 2), { name: 'Band', expression: "IF [amt] > 100 THEN 'high' ELSEIF [amt] > 11 THEN 'mid' ELSE 'low' END" }, ...CALC_STEPS.slice(3)])))).length > 0);
+
+  // Under the base filters: the copy's Prepare steps are BASE_P, then the calcs; Live puts the base innermost.
+  const { BASE_P } = require('./liveParityBase') as typeof import('./liveParityBase');
+  const bds = await datasets.saveDataset(x.pid, { name: 'Fixture with base filters and calcs', sourceKind: 'csv', ...fx.importTyped(fx.COLUMNS, x.rows) });
+  const bStepped = bds ? await datasets.updateSteps(x.pid, bds.id, [...BASE_P, ...CALC_STEPS.map((c) => ({ type: 'calculated_field' as const, ...c }))]) : null;
+  const b = liveBase.liveBaseOf(BASE_P, typed.columns);
+  if (!bds || !bStepped || bStepped.output.warnings.length || !b.ok) { ok(label('calcs under base: the copy saved and the base adapts'), false, show([bStepped?.output.warnings, b])); return; }
+  const bKit = mx.parityKit({ ...x, did: bds.id, stored: { columns: bStepped.dataset.columns, rows: bStepped.dataset.rows } }, run);
+  const bEnv: CompileEnv = { ...env, base: b.base };
+  let bn = 0;
+  let bbad = 0;
+  for (const enc of encodings) {
+    for (const filters of [[], [LOCK], moved(mx.FILTERS[k % mx.FILTERS.length])]) {
+      if (++k % stride !== 0) continue;
+      const p = await bKit.chartProblems(enc, filters, bEnv);
+      bn += 1;
+      if (p.length && ++bbad <= 8) ok(label(`calcs under base: ${show(enc)} ${show(filters)}`), false, p.join(' | '));
+    }
+  }
+  for (const [column, aggregation] of kpis) {
+    for (const filters of [[], [LOCK]]) {
+      if (++k % stride !== 0) continue;
+      const p = await bKit.metricProblems({ column, aggregation }, filters, bEnv);
+      bn += 1;
+      if (p.length && ++bbad <= 8) ok(label(`calcs under base: KPI ${aggregation}(${column}) ${show(filters)}`), false, p.join(' | '));
+    }
+  }
+  ok(label(`calcs under base: ${bn} charts and KPIs agree with the copy stepped [...BASE_P, ...calcs] (plain, locked, filtered)`), bn > 0 && bbad === 0, `${bbad} disagree`);
+  ok(label('calcs under base NEGATIVE CONTROL: the same questions without the base disagree with that copy'),
+    (await bKit.chartProblems({ category: 'Band', values: [M('Margin', 'sum')] }, [], env)).length > 0);
 }

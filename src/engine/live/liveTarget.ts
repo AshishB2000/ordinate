@@ -32,6 +32,7 @@ import type { CompileEnv, LiveSource } from './compile';
 import type { LiveColumn, LiveRefusal } from './liveSpec';
 import { refuse } from './liveSpec';
 import { baseOfLive } from './liveBase';
+import { declaredColumns } from '../../data/liveCalcs';
 
 export interface LiveTarget {
   projectId: string;
@@ -121,7 +122,8 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   const columns = typedColumns(meta);
   const env: CompileEnv = { dialect, source, columns };
   if (opts.base !== 'skip') {
-    const b = baseOfLive(meta.live, columns);
+    // Over the declared columns: a base filter sits innermost, before any calc exists, so one naming a calc refuses.
+    const b = baseOfLive(meta.live, declaredColumns({ columns, live: meta.live }));
     if (!b.ok) return { ok: false, kind: 'refused', refusal: b, dialect };
     if (b.base.length) env.base = b.base;
   }

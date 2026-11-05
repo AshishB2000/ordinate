@@ -249,7 +249,49 @@ const CALCS = [
 
   ok('a row access rule on a calc is refused (its column is checked against raw.columns, which never holds one)',
     !rowPolicy.textColumn(await raw(), 'Band') && rowPolicy.textColumn(await raw(), 'cat'));
-  // Base filters (part 1 step 08) are on another branch: there, `live:setBaseFilters` adapts against declaredColumns, so a calc is refused at save.
+  // ── § base filters (part 1 step 08 with step 04) ─────────────────────────
+  // On its own table, so the other sections never see the filters.
+  await H.warehouseExec(ORG_A, 'CREATE TABLE live_calc5 AS SELECT * FROM live_typed');
+  const L5 = (await H.as(ORG_A, () => H.liveOver(P, { table: 'live_calc5' }, H.fx.COLUMNS))).liveId;
+  const setBase = async (filters: unknown[]): Promise<Reply> => (await post('live:setBaseFilters', { projectId: P, datasetId: L5, filters })).value;
+  const BASE = [F('region', '!=', 'North')];
+  ok('base: the filter on a warehouse column saves', (await setBase(BASE)).ok === true);
+  H.queryCache.clear();
+  await chart(PLAIN, [], L5);
+  const part1 = { sql: last().sql, params: show(last().params) };
+  ok('the calcs save beside the base filters', (await set(INPUT, L5)).ok === true);
+  const onCalc = await setBase([...BASE, F('Band', '=', 'big')]);
+  ok('a base filter naming a calc is refused at save (it would run before any calc exists)', onCalc.ok === false && onCalc.reason === 'baseFilter'
+    && show((await raw(L5)).baseFilters) === show(BASE), show(onCalc));
+  H.queryCache.clear();
+  await chart(PLAIN, [], L5);
+  ok('NEGATIVE CONTROL: with base filters, a statement naming no calc is byte-identical to part 1\'s', last().sql === part1.sql && show(last().params) === part1.params, last().sql);
+  const byCalc = await chart({ category: 'cat', values: [M('Margin', 'sum')] }, [F('Band', '=', 'big')], L5);
+  const layered = last().sql;
+  const outer = layered.slice(layered.lastIndexOf(') AS lv_src')); // after the layers: the outer WHERE
+  ok('a statement naming a calc: the base filter sits innermost, once, and the outer WHERE holds the question\'s filter only',
+    byCalc.ok === true && /"live_calc5" AS lv_src WHERE [^)]*"region"/.test(layered) && (layered.match(/"region"/g) ?? []).length === 1
+    && !outer.includes('"region"') && outer.includes('"Band"'), layered);
+  ok('…the region values are bound, never SQL text', !layered.includes("'North'") && last().params.some((x) => x.value === 'North'), show(last().params));
+  const kBase = await kpi('Margin', 'sum', [], L5);
+  await setBase([]);
+  const kNone = await kpi('Margin', 'sum', [], L5);
+  ok('NEGATIVE CONTROL: the base filter changes a calc\'s KPI', kBase.ok === true && kNone.ok === true && kBase.value !== kNone.value, show([kBase.value, kNone.value]));
+  await setBase(BASE);
+  const baseCopy = (await post('dataset:copyLive', { projectId: P, datasetId: L5 })).value;
+  const BC = baseCopy.dataset?.id as string;
+  ok('Make a copy: its Prepare steps are the base filters, then the calcs', baseCopy.ok === true && show((await meta(BC)).steps) === show([...BASE, ...INPUT.map((c) => ({ type: 'calculated_field', ...c }))]), show(baseCopy));
+  // max and count are exact on both sides (Object.is); chart parity over base filters and calcs is test-liveParity's (liveParityCalcs).
+  const KPIS: [string, string, unknown[]][] = [['Margin', 'max', []], ['Band', 'count', []], ['Margin', 'max', [F('Band', '=', 'big')]], ['amt', 'count', [F('Band', '=', 'small')]]];
+  const pairs: Reply[][] = [];
+  for (const [c, a, fl] of KPIS) pairs.push([await kpi(c, a, fl, L5), await kpi(c, a, fl, BC)]);
+  const kMax = pairs[0][0];
+  ok('…and its figures are Live\'s: max and count of calcs, plain and filtered on a calc (Object.is)', pairs.every(([l, c]) => l.ok && c.ok && typeof l.value === 'number' && Object.is(l.value, c.value)),
+    show(pairs.map(([l, c]) => [l.value, c.value])));
+  const switchedB = (await post('dataset:setMode', { projectId: P, datasetId: L5, mode: 'extract' })).value;
+  ok('Copy the data instead: the base filters then the calcs, and neither top-level key', switchedB.ok === true
+    && show((await raw(L5)).steps.map((x: Reply) => x.type)) === '["filter","calculated_field","calculated_field"]'
+    && !('calculated' in (await raw(L5))) && !('baseFilters' in (await raw(L5))) && Object.is((await kpi('Margin', 'max', [], L5)).value, kMax.value), show(switchedB));
 
   // A second dataset over its own table, so its warehouse can change under it.
   await H.warehouseExec(ORG_A, 'CREATE TABLE live_calc2 AS SELECT * FROM live_typed');
