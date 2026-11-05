@@ -350,3 +350,30 @@
 .grow {
   flex: 1 1 auto;
 }
+
+/* A cascading picker (p6-05): what the list was narrowed to, and a pick the parent now rules out. */
+.narrowed {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+.ruled {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex: 0 0 auto;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+}
+.ruled > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ruledTag {
+  flex: 0 0 auto;
+  font-size: var(--t-11);
+  color: var(--warn-text);
+  white-space: nowrap;
+}

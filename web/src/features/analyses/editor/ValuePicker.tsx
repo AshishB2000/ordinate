@@ -21,11 +21,13 @@ import { Checkbox } from '../../../ui/Choice';
 import { Popover } from '../../../ui/Popover';
 import { Icon } from '../../../ui/icons/Icon';
 import { useSyncSchema } from '../../data/liveApi';
+import { navFor, useNavigation } from '../../model/navigation';
 import { distinctValues, type UnlistedReason } from '../../live/distinct';
 import { LiveRefusalError } from '../../live/refusal';
 import { useCanEdit } from '../../projects/api';
 import { useDebounced } from '../../subscriptions/api';
-import type { Card, ControlValue } from '../api';
+import type { Card, ControlValue, Step } from '../api';
+import { cascadeOf, type Sibling } from './cascade';
 import s from './FilterBar.module.css';
 
 type Control = NonNullable<Card['control']>;
@@ -37,11 +39,11 @@ const MAX_SEARCH = 200;
  * A column's distinct values; the query key `freshness.ts` invalidates when the dataset refreshes. While a search
  * loads, the last list of THIS column stays up (another column's — the control dialog switching — never does).
  */
-export function useDistinct(projectId: string, datasetId: string, column: string, search = '') {
+export function useDistinct(projectId: string, datasetId: string, column: string, search = '', parents: readonly Step[] = []) {
   return useQuery({
-    queryKey: ['dataset:distinct', projectId, datasetId, column, search],
+    queryKey: ['dataset:distinct', projectId, datasetId, column, search, parents],
     enabled: !!datasetId && !!column,
-    queryFn: () => distinctValues({ projectId, datasetId, column, limit: 200, ...(search ? { search } : {}) }),
+    queryFn: () => distinctValues({ projectId, datasetId, column, limit: 200, ...(search ? { search } : {}), ...(parents.length ? { filters: parents.map((p) => ({ ...p })) as never } : {}) }),
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === datasetId && prevQuery.queryKey[3] === column ? prev : undefined),
   });
 }
@@ -149,12 +151,28 @@ export function NoList({
 }
 
 /** A dropdown or multi control's chip and its popover of values. */
-export function ValuePicker({ projectId, control, value, onChange }: { projectId: string; control: Control; value: ControlValue | undefined; onChange: (v: ControlValue | undefined) => void }) {
+export function ValuePicker({
+  projectId,
+  control,
+  value,
+  siblings = [],
+  onChange,
+}: {
+  projectId: string;
+  control: Control;
+  value: ControlValue | undefined;
+  /** The sheet's other controls: those on higher levels of this column's hierarchy narrow the list (p6-05). */
+  siblings?: readonly Sibling[];
+  onChange: (v: ControlValue | undefined) => void;
+}) {
   const multi = control.kind === 'multi';
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const search = useDebounced(typed, 250);
-  const q = useDistinct(projectId, control.datasetId, control.column, search);
+  // The hierarchies load on the first open, never with the page; a failed read means an unnarrowed list.
+  const nav = useNavigation(projectId, open && siblings.length > 0);
+  const cascade = cascadeOf(control, siblings, navFor(nav.data, control.datasetId));
+  const q = useDistinct(projectId, control.datasetId, control.column, search, cascade.steps);
   const picked = picksOf(control, value);
   const label = control.label || control.column;
   // A value's label ("Europe" for EU), kept from every list seen, so the chip still says it while a search hides the value.
@@ -171,6 +189,12 @@ export function ValuePicker({ projectId, control, value, onChange }: { projectId
 
   const values = (q.data?.values ?? []).map(str);
   const outside = picked.filter((p) => !values.includes(p));
+  const unnarrowed = cascade.steps.length > 0 && q.data?.narrowed === false;
+  // shortcut: on a capped list a pick it lacks may still exist; ask a pick-check when people meet it
+  const ruledOut = cascade.steps.length > 0 && !unnarrowed && !search && !!q.data && q.data.total === q.data.values.length;
+  const via = cascade.by.map((b) => `${b.label}: ${b.summary}`);
+  const notIn = cascade.by.length === 1 ? `not in ${cascade.by[0].summary}` : 'not in this selection';
+  const dropPick = (v: string) => (multi ? set(picked.filter((x) => x !== v)) : onChange(undefined));
   // Live: the list is a sample, so a value it lacks may still be in the warehouse.
   const offerUse = !!q.data?.approximate && typed !== '' && !values.includes(typed);
   const set = (next: string[]) => onChange(next.length ? { values: next } : undefined);
@@ -216,14 +240,28 @@ export function ValuePicker({ projectId, control, value, onChange }: { projectId
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
         />
-        {q.data?.approximate && <p className={s.more}>Values from a sample of {formatNumber(q.data.sampleRows ?? 0)} rows.</p>}
+        {cascade.steps.length > 0 && !unnarrowed && <p className={s.narrowed}>Narrowed to {via.join(' · ')}</p>}
+        {unnarrowed && <p className={s.more}>Not narrowed by {cascade.by.map((b) => b.label).join(', ')}: values come from a sample</p>}
+        {q.data?.approximate && !unnarrowed && <p className={s.more}>Values from a sample of {formatNumber(q.data.sampleRows ?? 0)} rows.</p>}
         <div className={s.multiList} role="group" aria-label={`${label} values`} aria-busy={q.isFetching || undefined}>
           {!multi && (
             <button type="button" className={s.pick} aria-pressed={picked.length === 0} onClick={() => choose(undefined)}>
               All
             </button>
           )}
-          {outside.map(row)}
+          {outside.map((v) =>
+            ruledOut ? (
+              <div key={v} className={s.ruled}>
+                {row(v)}
+                <span className={s.ruledTag}>{notIn}</span>
+                <Button size="sm" variant="ghost" aria-label={`Clear ${said(v)}`} onClick={() => dropPick(v)}>
+                  Clear
+                </Button>
+              </div>
+            ) : (
+              row(v)
+            ),
+          )}
           {q.isPending && <p className={s.more}>Loading values…</p>}
           {q.isError && (
             <p className={s.more} role="alert">

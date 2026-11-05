@@ -18,6 +18,8 @@ export interface DistinctValues {
   /** A Live dataset's: the list and the total are a sample's, of `sampleRows` rows. */
   approximate?: true;
   sampleRows?: number;
+  /** A Live list asked to narrow by parent picks cannot: it is the sample, whole (p6-05). */
+  narrowed?: false;
   /** What a listed value is called, `[stored value, label]` (semantic layer value labels): show the label, send the value. */
   valueLabels?: [string, string][];
 }
