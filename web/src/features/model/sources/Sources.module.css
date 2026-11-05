@@ -109,6 +109,36 @@
   gap: var(--sp-4) var(--sp-16);
 }
 
+/* ── Guide and the notes form ─────────────────────────────────────── */
+.guideBody {
+  padding: var(--sp-16) var(--sp-24);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.guideInput {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.formError {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  color: var(--error-text);
+  overflow-wrap: anywhere;
+}
+.footLeft {
+  margin-right: auto;
+}
+
 /* ── Columns ───────────────────────────────────────────────────────── */
 .tableWrap {
   overflow-x: auto;

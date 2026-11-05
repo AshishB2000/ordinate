@@ -117,6 +117,7 @@ export function SourceTablesTab({ projectId }: { projectId: string }) {
               setLoose(null);
               go(picked.conn.connId, docId);
             }}
+            onDeleted={() => go(picked.conn.connId, undefined)}
           />
         </div>
       </>

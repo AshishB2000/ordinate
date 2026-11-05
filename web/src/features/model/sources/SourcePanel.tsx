@@ -1,5 +1,5 @@
 // The picked source table's panel: its name, the connection it is on, when it was last read, and its
-// tabs (?panel=): Overview and Columns. Opening any of it reads the doc only; Read from warehouse is
+// tabs (?panel=): Overview, Columns and Guide, with Edit for its notes. Opening any of it reads the doc only; Read from warehouse is
 // the one thing that asks the warehouse, on a click. A table datasets are built from that has no doc
 // yet shows its Overview and Start its notes, which creates the empty doc and then puts its id (never
 // its name) in the address.
@@ -14,15 +14,18 @@ import { SkeletonBlock } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import { Tab, TabList, TabPanel, Tabs } from '../../../ui/Tabs';
 import { ConnLogo } from '../../connections/ConnLogo';
+import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 import { useLogos } from '../../connections/api';
 import { ago } from '../../data/format';
-import { LIST, startNotes, useReadFacts, useSourceDoc, type SourceConn, type SourceFacts, type SourceRow } from './api';
+import { GET, LIST, startNotes, useReadFacts, useSourceDoc, type SourceConn, type SourceFacts, type SourceRow } from './api';
 import { SourceColumns } from './SourceColumns';
+import { SourceDocForm } from './SourceDocForm';
+import { SourceGuide } from './SourceGuide';
 import { SourceOverview } from './SourceOverview';
 import m from '../Model.module.css';
 import x from './Sources.module.css';
 
-const PANELS = ['overview', 'columns'] as const;
+const PANELS = ['overview', 'columns', 'guide'] as const;
 type PanelId = (typeof PANELS)[number];
 /** Restated from the server's STALE_DAYS (src/app/sourceTableList.ts; the web cannot import it): the strip's "read over 30 days ago". */
 const STALE_DAYS = 30;
@@ -86,9 +89,20 @@ function Frame({ conn, table, badge, sub, desc, actions, children }: { conn: Sou
   );
 }
 
-function DocPanel({ projectId, conn, row, docId }: { projectId: string; conn: SourceConn; row: SourceRow; docId: string }) {
+interface DocProps {
+  projectId: string;
+  conn: SourceConn;
+  row: SourceRow;
+  docId: string;
+  onDeleted: () => void;
+}
+
+function DocPanel({ projectId, conn, row, docId, onDeleted, onReload }: DocProps & { onReload: () => void }) {
   const got = useSourceDoc(projectId, conn.connId, docId);
   const read = useReadFacts(projectId, conn.connId, docId);
+  // One guard for the panel's life: its base moves with this editor's own saves, so reopening the form never conflicts with itself.
+  const guard = useEditGuard({ projectId, type: 'sourceTable', id: docId }, got.data?.tag);
+  const [editing, setEditing] = useState<'' | 'all' | 'guide'>('');
   const [params, setParams] = useSearchParams();
   const asked = params.get('panel');
   const panel: PanelId = (PANELS as readonly string[]).includes(asked ?? '') ? (asked as PanelId) : 'overview';
@@ -106,10 +120,15 @@ function DocPanel({ projectId, conn, row, docId }: { projectId: string; conn: So
       {doc?.facts ? 'Read again' : 'Read from warehouse'}
     </Button>
   );
-  const actions = doc && conn.readsFacts && (
+  const actions = doc && (
     <>
-      <div className={m.panelActions}>{readButton('secondary')}</div>
-      {conn.factsWake && (
+      <div className={m.panelActions}>
+        <Button icon="pencil" onClick={() => setEditing('all')}>
+          Edit
+        </Button>
+        {conn.readsFacts && readButton('secondary')}
+      </div>
+      {conn.readsFacts && conn.factsWake && (
         <p className={x.wake}>
           <Icon name="zap" size={12} />
           <span>Reading runs on the SQL warehouse and can start it.</span>
@@ -140,6 +159,9 @@ function DocPanel({ projectId, conn, row, docId }: { projectId: string; conn: So
             <Tab value="columns" icon="columns">
               Columns
             </Tab>
+            <Tab value="guide" icon="file-text">
+              Guide
+            </Tab>
           </TabList>
           <TabPanel value="overview">
             <SourceOverview projectId={projectId} conn={conn} doc={d} datasets={got.data.datasets} />
@@ -147,7 +169,22 @@ function DocPanel({ projectId, conn, row, docId }: { projectId: string; conn: So
           <TabPanel value="columns">
             <SourceColumns conn={conn} doc={d} readButton={readButton('primary')} />
           </TabPanel>
+          <TabPanel value="guide">
+            <SourceGuide doc={d} onWrite={() => setEditing('guide')} />
+          </TabPanel>
         </Tabs>
+        {editing && (
+          <SourceDocForm
+            projectId={projectId}
+            connId={conn.connId}
+            doc={d}
+            guard={guard}
+            atGuide={editing === 'guide'}
+            onClose={() => setEditing('')}
+            onDeleted={onDeleted}
+            onReload={onReload}
+          />
+        )}
       </>
     );
   }
@@ -189,6 +226,16 @@ function UsedPanel({ projectId, conn, row, onStarted }: { projectId: string; con
   );
 }
 
-export function SourcePanel({ projectId, conn, row, onStarted }: { projectId: string; conn: SourceConn; row: SourceRow; onStarted: (docId: string) => void }) {
-  return row.docId ? <DocPanel projectId={projectId} conn={conn} row={row} docId={row.docId} /> : <UsedPanel projectId={projectId} conn={conn} row={row} onStarted={onStarted} />;
+/** Reload after a conflict reads the doc again, then mounts a new panel on it: a new guard, the new tag. */
+function DocHost(props: DocProps) {
+  const { gen, reload } = useReload([GET, props.projectId, props.conn.connId, props.docId]);
+  return <DocPanel key={gen} {...props} onReload={reload} />;
+}
+
+export function SourcePanel({ projectId, conn, row, onStarted, onDeleted }: { projectId: string; conn: SourceConn; row: SourceRow; onStarted: (docId: string) => void; onDeleted: () => void }) {
+  return row.docId ? (
+    <DocHost projectId={projectId} conn={conn} row={row} docId={row.docId} onDeleted={onDeleted} />
+  ) : (
+    <UsedPanel projectId={projectId} conn={conn} row={row} onStarted={onStarted} />
+  );
 }

@@ -15,7 +15,7 @@ import s from './ConflictBanner.module.css';
 let leavingForCopy = false;
 
 /** What the banner calls the record. */
-export type ConflictNoun = 'dashboard' | 'visual' | 'metric' | 'metric tree' | 'report' | 'story' | 'scorecard' | 'scenario';
+export type ConflictNoun = 'dashboard' | 'visual' | 'metric' | 'metric tree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'source table doc';
 
 export function ConflictBanner({
   noun,
@@ -26,8 +26,8 @@ export function ConflictBanner({
   noun: ConflictNoun;
   /** Drop the unsaved change and open the record as it is now. */
   onReload: () => void;
-  /** Create a new record from this editor's document and open it; throws its reason on a refusal. */
-  onCopy: () => Promise<void>;
+  /** Create a new record from this editor's document and open it; throws its reason on a refusal. Absent: a record with no copy (one doc per table). */
+  onCopy?: () => Promise<void>;
   /** Inside a dialog: tighter, the actions under the text. */
   compact?: boolean;
 }) {
@@ -39,6 +39,7 @@ export function ConflictBanner({
     ref.current?.scrollIntoView?.({ block: 'nearest' });
   }, []);
   const copy = async () => {
+    if (!onCopy) return;
     setCopying(true);
     setError('');
     try {
@@ -59,7 +60,9 @@ export function ConflictBanner({
       <div className={s.text}>
         <p className={s.title}>This {noun} was changed in another tab or by someone else.</p>
         <p className={s.body}>
-          Your changes since then are not saved, and saving is paused. Reload to see the latest version, or save yours as a separate copy.
+          {onCopy
+            ? 'Your changes since then are not saved, and saving is paused. Reload to see the latest version, or save yours as a separate copy.'
+            : 'Your changes since then are not saved, and saving is paused. Copy what you typed, then Reload to see the latest version.'}
         </p>
         {error && <p className={s.error}>{error}</p>}
       </div>
@@ -67,9 +70,11 @@ export function ConflictBanner({
         <Button size="sm" icon="refresh" onClick={onReload} disabled={copying}>
           Reload
         </Button>
-        <Button size="sm" variant="primary" icon="copy" onClick={() => void copy()} loading={copying}>
-          {copying ? 'Saving a copy…' : 'Save mine as a copy'}
-        </Button>
+        {onCopy && (
+          <Button size="sm" variant="primary" icon="copy" onClick={() => void copy()} loading={copying}>
+            {copying ? 'Saving a copy…' : 'Save mine as a copy'}
+          </Button>
+        )}
       </div>
     </div>
   );
