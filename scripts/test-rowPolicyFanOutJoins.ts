@@ -16,6 +16,7 @@
 //   6. A HIDDEN MANY-SIDE COLUMN (part 4, cross-part item 6): Orders hides `amount` from viewers; east's chart on
 //      Customers with a measure over it is refused `hidden` at the column gate, before any sub-question. NEGATIVE
 //      CONTROLS: the editor gets the figure; east's fan-out over Returns' refund answers, Object.is-equal to the editor's.
+//      So is east's KPI on Customers over amount (NEGATIVE CONTROLS: the editor's total; east's Customers count).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicyFanOutJoins.js
 
@@ -176,6 +177,10 @@ const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
     const REFUNDS = { category: 'segment', values: [M('id', 'count'), M('refund', 'sum', R)] };
     const [mine, theirs] = [await chart('east', REFUNDS), await chart('ed', REFUNDS)];
     ok('NEGATIVE CONTROL: east\'s fan-out over Returns\' refund answers, Object.is-equal to the editor\'s', mine.body?.ok === true && H.diff(mine.body.data, theirs.body?.data, {}) === '', show(mine));
+    // …and a KPI on Customers over it (step 07): refused hidden; the editor's is Orders' total; a Customers count answers east.
+    const hiddenKpi = await kpi('east');
+    ok('hidden on Orders: east\'s KPI on Customers over amount is refused hidden', H.refused(hiddenKpi, 'hidden'), show(hiddenKpi));
+    ok('NEGATIVE CONTROL: the editor\'s is Orders\' total, and east\'s Customers count answers', Object.is((await kpi('ed')).body?.value, total) && (await kpi('east', 'id')).body?.ok === true);
     await hideAmount(false);
 
     // ── 5. Live: a many side on a warehouse refuses, typed ─────────────
