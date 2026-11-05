@@ -393,6 +393,7 @@ export const MAIN_FILES = [
   'src/app/instructionMessages.ts',
   'src/analysis/verifiedMessages.ts',
   'src/automation/verifiedToolMessages.ts',
+  'src/ipc/assistantCheckMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
