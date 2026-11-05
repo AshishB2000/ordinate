@@ -48,6 +48,7 @@ import { metricDate } from '../analysis/metricTimeScope';
 import { statusFor, withStatus } from '../analysis/statusStore';
 import { vocabularyOrder } from '../analysis/statusNotes';
 import { statusFields } from './statusFields';
+import { hiddenColumnsFor } from '../data/rowAccess';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
@@ -105,6 +106,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
   const sqlCols = viewColumns(meta.columns);
   const table = await readableTableDoc(ctx.projectId, d.id); // the user's own notes; a restricted caller gets no key counts
   const docs = await sharePolicy.assistantColumnDocs(ctx.projectId, d.id); // value labels, as the Assistant reads them: none for a restricted caller or a marked column
+  const hidden = await hiddenColumnsFor(ctx.projectId, d.id); // marked, never left out: names are not secret (part 4)
   return {
     id: meta.id,
     name: meta.name,
@@ -118,7 +120,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     sqlName: cat ? cat.slug : null,
     sqlAlias: cat && cat.alias && cat.alias !== cat.slug ? cat.alias : null,
     queryable: cat ? cat.queryable : false,
-    columns: meta.columns.map((c, i) => ({ name: c.name, type: c.type, sqlName: sqlCols[i] ? sqlCols[i].name : c.name, ...(docs[c.name]?.values && { valueLabels: docs[c.name].values }) })),
+    columns: meta.columns.map((c, i) => ({ name: c.name, type: c.type, sqlName: sqlCols[i] ? sqlCols[i].name : c.name, ...(docs[c.name]?.values && { valueLabels: docs[c.name].values }), ...(hidden.has(c.name) && { hidden: true }) })),
     prepareSteps: Array.isArray(meta.steps) ? meta.steps.length : 0,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,

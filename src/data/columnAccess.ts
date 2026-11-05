@@ -269,3 +269,8 @@ export function withoutColumns<T extends { columns: ParsedColumn[]; rows: Cell[]
   if (keep.length === t.columns.length) return t;
   return { ...t, columns: keep.map((i) => t.columns[i]), rows: t.rows.map((r) => keep.map((i) => r[i])) };
 }
+
+/** Column entries with `hidden: true` on the hidden ones (MARK: names are not secret). The same entries when nothing is hidden. */
+export function markHidden<T extends { name: string }>(cols: T[], hidden: ReadonlySet<string>): Array<T & { hidden?: true }> {
+  return hidden.size ? cols.map((c) => (hidden.has(c.name) ? { ...c, hidden: true as const } : c)) : cols;
+}

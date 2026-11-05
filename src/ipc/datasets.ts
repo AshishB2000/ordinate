@@ -1,7 +1,8 @@
 import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
 import { pageWithoutHidden } from './columnDoors';
-import { RowPolicyError, closedToCaller, isRowPolicyError, withLockSteps } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, hiddenColumnsFor, isRowPolicyError, withLockSteps } from '../data/rowAccess';
+import { markHidden } from '../data/columnAccess';
 import { seesSourceNames } from '../data/sourceNames';
 import { distinctFor } from './distinctFor';
 import { narrowSteps } from './distinctNarrow';
@@ -402,7 +403,8 @@ export function register() {
     const meta = await datasets.getDatasetMeta(projectId, id);
     // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
     const scoped = meta && (await closedToCaller(projectId, id)) ? { scoped: true as const } : {}; // row access rules restrict the caller here
-    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}), ...scoped } : null;
+    const header = meta && headerOf(meta);
+    return header ? { ...header, columns: markHidden(header.columns, await hiddenColumnsFor(projectId, id)), ...(isLive(meta) ? { mode: 'live' as const } : {}), ...scoped } : null; // a hidden column marked (part 4)
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
