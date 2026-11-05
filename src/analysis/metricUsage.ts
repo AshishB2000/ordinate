@@ -155,6 +155,7 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
           refs.push({ kind: 'metric', name: s.name, id: s.id });
           continue;
         }
+        if (metrics.isPeriodDefinition(s.definition) && s.definition.base === metricId) refs.push({ kind: 'metric', name: s.name, id: s.id }); // built on it (part 5, D8)
         if (!isFormulaDefinition(s.definition)) continue;
         // Compiled, not string-matched: `[Revenue]` inside a quoted string or a
         // metric called "Revenue growth" are both substring hits and neither is

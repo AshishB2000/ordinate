@@ -54,3 +54,15 @@ export function sanitizePeriodDefinition(raw: unknown): MetricPeriodDefinition |
   if (compare) out.compare = compare;
   return out;
 }
+
+const VS_WORDS: Record<MetricCompare['vs'], string> = { previous_period: 'the previous period', previous_year: 'last year' };
+
+/** A period metric in words: "Revenue, year to date", "Revenue, last 7 days", "Revenue, % change on last year". `base`: its base's name. */
+export function periodWords(def: MetricPeriodDefinition, base = 'its base metric'): string {
+  const parts = [base];
+  const w = def.window;
+  if (w) parts.push('to_date' in w ? `${w.to_date} to date` : w.last === 1 ? `last ${w.unit}` : `last ${w.last} ${w.unit}s`);
+  const c = def.compare;
+  if (c) parts.push(c.show === 'prior' ? VS_WORDS[c.vs] : `${c.show === 'pct_change' ? '% change' : 'change'} on ${VS_WORDS[c.vs]}`);
+  return parts.join(', ');
+}

@@ -40,6 +40,7 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as comments from '../app/comments';
 import { resolveMetric, resolveMetricSeries, type MetricRead } from './metrics';
+import { baseName } from './periodMetric';
 import { metricDate } from '../analysis/metricTimeScope';
 import { vizDataFor } from './visuals';
 import * as reportSpec from '../analysis/reportSpec';
@@ -434,7 +435,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
   const { status, attainment } = rowStatus(value, target, def ? def.thresholds : undefined, m.direction);
   return {
     ok: true,
-    metric: { id: m.id, name: m.name, datasetId: m.datasetId, definition: m.definition, definitionText: describeDefinition(m), format: m.format, direction: m.direction },
+    metric: { id: m.id, name: m.name, datasetId: m.datasetId, definition: m.definition, definitionText: describeDefinition(m, undefined, await baseName(projectId, m.definition)), format: m.format, direction: m.direction },
     window: current ? { ...current, offset: off } : null,
     value, display: formatMetricValue(value, m.format),
     target, targetDisplay: target === null ? '' : formatMetricValue(target, m.format),

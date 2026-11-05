@@ -18,8 +18,15 @@ import type { VizEncoding, VizMeasure } from './visuals';
 type Columns = { columns: { name: string; type: string }[] } | null;
 const isDate = (meta: Columns, column: string): boolean => !!meta && meta.columns.some((c) => c.name === column && c.type === 'date');
 
-/** The date column a metric counts by, or `''` when it has none or the column is no longer a date column of its dataset. */
-export async function metricDate(projectId: string, m: Pick<Metric, 'datasetId' | 'timeColumn'>): Promise<string> {
+/**
+ * The date column a metric counts by, or `''` when it has none or the column is no longer a date column of its dataset.
+ * A period metric (part 5, D8) counts by its base's: a base on its own dataset that is not itself a period metric.
+ */
+export async function metricDate(projectId: string, m: Pick<Metric, 'datasetId' | 'timeColumn'> & { definition?: MetricDefinition }): Promise<string> {
+  if (m.definition && metrics.isPeriodDefinition(m.definition)) {
+    const base = await metrics.getMetric(projectId, m.definition.base);
+    return base && base.datasetId === m.datasetId && !metrics.isPeriodDefinition(base.definition) ? metricDate(projectId, base) : '';
+  }
   return m.timeColumn && isDate(await datasets.getDatasetMeta(projectId, m.datasetId), m.timeColumn) ? m.timeColumn : '';
 }
 
