@@ -195,6 +195,7 @@
 .panelActions {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap; /* an admin's Certify… and Retire… beside Details and Open dataset: a phone wraps them */
   align-items: center;
   gap: var(--sp-8);
 }
