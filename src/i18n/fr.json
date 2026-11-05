@@ -450,6 +450,7 @@
   "metricCheckMessages.a_period_metric_can_t_be": "Une métrique de période ne peut pas reposer sur une autre métrique de période.",
   "metricCheckMessages.a_period_metric_counts_by_its": "Une métrique de période compte selon la date de sa métrique de base.",
   "metricCheckMessages.a_snapshot_per_can_t_yet": "Un instantané par « {per} » ne peut pas encore être combiné avec une conversion de devise, un paramètre dans la préparation des données ou un filtre sur une table liée.",
+  "metricCheckMessages.a_snapshot_per_can_t_yet_2": "Un instantané par « {per} » ne peut pas encore être combiné avec un calcul de niveau de détail (FIXED, INCLUDE ou EXCLUDE) qui doit être recalculé, comme sous un filtre de contexte.",
   "metricCheckMessages.a_that_stopped_reporting_still_counts": "Un « {per} » qui ne remonte plus de données compte toujours sa dernière valeur. Choisissez une période pour ne compter que les récents.",
   "metricCheckMessages.by_needs_points_and_a_period": "{name} par {grain} demande {n} points, et une métrique de période se trace sur 24 au plus. Utilisez une date moins fine, ou tracez sa métrique de base avec {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} ne peut pas être affiché comme {calc} au fil des dates : c’est un instantané, et un instantané ne s’additionne pas dans le temps.",

@@ -450,6 +450,7 @@
   "metricCheckMessages.a_period_metric_can_t_be": "期間メトリックを別の期間メトリックの上に作ることはできません。",
   "metricCheckMessages.a_period_metric_counts_by_its": "期間メトリックは、ベースのメトリックの日付で集計します。",
   "metricCheckMessages.a_snapshot_per_can_t_yet": "「{per}」ごとのスナップショットは、まだ通貨換算、データ準備のパラメーター、関連テーブルのフィルターと組み合わせられません。",
+  "metricCheckMessages.a_snapshot_per_can_t_yet_2": "「{per}」ごとのスナップショットは、コンテキストフィルターの下など、再計算が必要な詳細レベルの計算（FIXED、INCLUDE、EXCLUDE）とはまだ組み合わせられません。",
   "metricCheckMessages.a_that_stopped_reporting_still_counts": "報告が止まった「{per}」も、最後の値で数えられます。最近のものだけを数えるには期間を選んでください。",
   "metricCheckMessages.by_needs_points_and_a_period": "{grain}ごとの{name}には{n}個のポイントが必要ですが、期間メトリックのグラフは最大24個までです。より粗い日付を使うか、ベースのメトリックを{calc}でグラフにしてください。",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure}は日付に沿って{calc}として表示できません。スナップショットであり、スナップショットは時間をまたいで合計できません。",

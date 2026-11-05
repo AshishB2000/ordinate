@@ -447,6 +447,7 @@
   "metricCheckMessages.a_period_metric_can_t_be": "A period metric can’t be built on another period metric.",
   "metricCheckMessages.a_period_metric_counts_by_its": "A period metric counts by its base metric’s date.",
   "metricCheckMessages.a_snapshot_per_can_t_yet": "A snapshot per “{per}” can't yet be combined with currency conversion, a parameter in the data's preparation, or a filter on a related table.",
+  "metricCheckMessages.a_snapshot_per_can_t_yet_2": "A snapshot per “{per}” can't yet be combined with a level of detail calculation (FIXED, INCLUDE or EXCLUDE) that has to be recomputed, such as one under a context filter.",
   "metricCheckMessages.a_that_stopped_reporting_still_counts": "A “{per}” that stopped reporting still counts its last value. Pick a period to count only recent ones.",
   "metricCheckMessages.by_needs_points_and_a_period": "{name} by {grain} needs {n} points, and a period metric charts at most 24. Use a coarser date, or chart its base with {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} can't be shown as {calc} along dates: it is a snapshot, and a snapshot can't be added up across time.",

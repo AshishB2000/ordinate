@@ -8,6 +8,8 @@
 //
 //   twin   the reference's partitions and the twin held to it
 //   doors  the KPI and chart doors: the store, the words, the notes, the cache, the refusals; old snapshots unchanged
+//   lod    a stored FIXED field under ordinary filters is its stored value: computed, twin = reference; a question the
+//          LOD pass would recompute (an LOD expression, a context filter, an INCLUDE/EXCLUDE field by a chart's dims) is refused
 //   (the row lock: scripts/test-snapshotPerRowLock.ts, on Postgres; Live: scripts/test-metricMeasures.ts section 10)
 //
 //   npm run build:ts && node scripts/test-snapshotPer.js
@@ -260,6 +262,52 @@ void (async () => {
   ok('…and on a chart', fxChart.ok === false && fxChart.error === msg.snapshotPerUnsupported('account'), show(fxChart));
   const linesUsd = await saved('Accounts (USD)', { column: 'mrr', aggregation: 'count', snapshot: S }, dsFx);
   ok('NEGATIVE CONTROL: a count is never converted, so it is computed', Object.is(await kpi(linesUsd, []), jsKpi(S, 'count', [])));
+
+  // ── lod ────────────────────────────────────────────────────────────────────
+  // `region_total` = {FIXED [region] : SUM([mrr])}, stored by Prepare (whole numbers, so sums agree exactly).
+  const FIXED_STEP = { type: 'calculated_field', name: 'region_total', expression: '{FIXED [region] : SUM([mrr])}' };
+  const dsL = (await datasets.saveDataset(pid, { name: 'MRR lod', sourceKind: 'csv', columns: COLS, rows: ROWS } as Any))!.id;
+  await datasets.updateSteps(pid, dsL, [FIXED_STEP]);
+  const TL = (await datasets.getDataset(pid, dsL))!;
+  const srcL = (await datasets.residentSource(pid, dsL))!;
+  ok('lod fixture: the stored field is there, and resident', TL.columns.some((c) => c.name === 'region_total') && !!srcL && typeof TL.rows[0][4] === 'number', show(TL.columns));
+  for (const agg of ['sum', 'max'] as const) {
+    const spec = { column: 'region_total', aggregation: agg };
+    const ref = (scope: FilterStep[]) => { const f = transforms.applyPipeline({ columns: TL.columns, rows: TL.rows }, scope); return computeMetric(f.columns, snap.snapshotRows(f.columns, f.rows, S), spec); };
+    for (const [name, scope] of [['no scope', []], ['East, 2024', [EAST, Y2024]]] as Array<[string, FilterStep[]]>) {
+      const before = ran;
+      const twinV = await twin.withSnapshotRows(srcL, scope, S, null, async (k) => { ran += 1; return residentQuery.computeMetricResident(k, spec, []); });
+      ok(`a stored FIXED field, ${agg}, ${name}: resident = JS`, ran === before + 1 && typeof twinV === 'number' && Object.is(twinV, ref(scope)), show([twinV, ref(scope)]));
+      const door = await dashboards.computeCardMetric(pid, dsL, { ...spec, snapshot: S }, scope);
+      ok(`…and the KPI door = the reference, no refusal`, Object.is(door.value, ref(scope)) && !door.notes?.includes(msg.snapshotPerLod('account')), show(door));
+    }
+  }
+  const totalM = await saved('Region total, latest', { column: 'region_total', aggregation: 'max', snapshot: S }, dsL);
+  const lc = await chart({ category: 'region', values: [M(totalM)] }, [], dsL);
+  const lw = (() => { const f = TL; return buildVizData(f.columns, snap.snapshotRows(f.columns, f.rows, S), { category: 'region', values: [{ column: 'region_total', aggregation: 'max' }] } as Any, []); })();
+  ok('…and its chart by region = the reference, cell by cell', lc.ok && sameItems(lc.data.labels, lw.data.labels) && sameItems(lc.data.series[0].values, lw.data.series[0].values), show([lc, lw.data]));
+
+  // What the LOD pass would recompute is refused, never answered from the stored values.
+  const CTX_2024 = { ...Y2024, context: true } as FilterStep;
+  const stale = jsKpiOn(TL, S, 'sum', [CTX_2024]); // what the per path computed before this guard: the field as stored over every month
+  const t2024 = transforms.applyPipeline({ columns: COLS, rows: ROWS }, [{ ...Y2024 }, FIXED_STEP as Any]);
+  const recomputed = computeMetric(t2024.columns, snap.snapshotRows(t2024.columns, t2024.rows, S), { column: 'region_total', aggregation: 'sum' });
+  ok('evidence: under a context filter the stored field is not what the LOD pass gives', typeof stale === 'number' && typeof recomputed === 'number' && stale !== recomputed, show([stale, recomputed]));
+  const ctxKpi = await dashboards.computeCardMetric(pid, dsL, { column: 'region_total', aggregation: 'sum', snapshot: S }, [CTX_2024]);
+  ok('a context filter over an LOD field is refused with its sentence', ctxKpi.value === null && ctxKpi.notes?.[0] === msg.snapshotPerLod('account'), show(ctxKpi));
+  const plain2024 = (() => { const f = transforms.applyPipeline({ columns: TL.columns, rows: TL.rows }, [Y2024]); return computeMetric(f.columns, snap.snapshotRows(f.columns, f.rows, S), { column: 'region_total', aggregation: 'sum' }); })();
+  ok('NEGATIVE CONTROL: the same filter, not a context one, is computed (the FIXED total over every month, as the plain path reads it)', Object.is((await dashboards.computeCardMetric(pid, dsL, { column: 'region_total', aggregation: 'sum', snapshot: S }, [Y2024])).value, plain2024), show(plain2024));
+  const exprKpi = await dashboards.computeCardMetric(pid, ds, { column: '{FIXED [account] : MAX([mrr])}', aggregation: 'sum', snapshot: S });
+  ok('an LOD expression as the measure is refused with its sentence, never a silent "—"', exprKpi.value === null && exprKpi.notes?.[0] === msg.snapshotPerLod('account'), show(exprKpi));
+  ok('NEGATIVE CONTROL: the plain snapshot computes that LOD expression', typeof (await dashboards.computeCardMetric(pid, ds, { column: '{FIXED [account] : MAX([mrr])}', aggregation: 'sum', snapshot: { column: 'month', take: 'last' } })).value === 'number');
+  const dsI = (await datasets.saveDataset(pid, { name: 'MRR include', sourceKind: 'csv', columns: COLS, rows: ROWS } as Any))!.id;
+  await datasets.updateSteps(pid, dsI, [{ type: 'calculated_field', name: 'acct_total', expression: '{INCLUDE [account] : SUM([mrr])}' }]);
+  const inclM = await saved('Account total, latest', { column: 'acct_total', aggregation: 'sum', snapshot: S }, dsI);
+  const ic = await chart({ category: 'region', values: [M(inclM)] }, [], dsI);
+  ok('a chart by dims an INCLUDE field is relative to is refused with its sentence', ic.ok === false && ic.error === msg.snapshotPerLod('account'), show(ic));
+  const TI = (await datasets.getDataset(pid, dsI))!;
+  const inclRef = computeMetric(TI.columns, snap.snapshotRows(TI.columns, TI.rows, S), { column: 'acct_total', aggregation: 'sum' });
+  ok('NEGATIVE CONTROL: its KPI (no dims: the stored value) is computed', typeof inclRef === 'number' && Object.is(await kpi(inclM, []), inclRef), show([await kpi(inclM, []), inclRef]));
 
   finish();
 })().catch((err) => {

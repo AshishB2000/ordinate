@@ -450,6 +450,7 @@
   "metricCheckMessages.a_period_metric_can_t_be": "Una métrica de periodo no se puede crear a partir de otra métrica de periodo.",
   "metricCheckMessages.a_period_metric_counts_by_its": "Una métrica de periodo cuenta por la fecha de su métrica base.",
   "metricCheckMessages.a_snapshot_per_can_t_yet": "Una instantánea por «{per}» todavía no se puede combinar con la conversión de moneda, un parámetro en la preparación de los datos ni un filtro en una tabla relacionada.",
+  "metricCheckMessages.a_snapshot_per_can_t_yet_2": "Una instantánea por «{per}» todavía no se puede combinar con un cálculo de nivel de detalle (FIXED, INCLUDE o EXCLUDE) que haya que volver a calcular, como uno bajo un filtro de contexto.",
   "metricCheckMessages.a_that_stopped_reporting_still_counts": "Un «{per}» que dejó de informar sigue contando su último valor. Elige un periodo para contar solo los recientes.",
   "metricCheckMessages.by_needs_points_and_a_period": "{name} por {grain} necesita {n} puntos, y una métrica de periodo se representa con 24 como máximo. Usa una fecha menos detallada o representa su métrica base con {calc}.",
   "metricCheckMessages.can_t_be_shown_as_along": "{measure} no se puede mostrar como {calc} a lo largo de fechas: es una instantánea, y una instantánea no se puede sumar a lo largo del tiempo.",

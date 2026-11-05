@@ -198,3 +198,8 @@ export function snapshotPerNotColumn(per: string): string {
 export function snapshotPerIsDate(per: string): string {
   return t('metricCheckMessages.is_the_snapshot_s_own_date', { per });
 }
+
+/** A per-entity snapshot whose question needs the LOD pass (an LOD expression, a context filter over an LOD field, or a relative LOD field by a chart's dims): the kept rows hold the stored values only. */
+export function snapshotPerLod(per: string): string {
+  return t('metricCheckMessages.a_snapshot_per_can_t_yet_2', { per });
+}

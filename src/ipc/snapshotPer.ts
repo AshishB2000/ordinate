@@ -17,6 +17,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import { buildVizData, recommendChartType } from '../analysis/vizData';
 import { dateBucket, parseDateCell } from '../analysis/categoryKey';
 import { scopeRange } from '../analysis/periodScope';
+import { needsLodPass, vizDimsOf } from '../analysis/lodQuery';
 import { stepsUseParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import * as msg from '../analysis/metricCheckMessages';
@@ -46,14 +47,16 @@ const readable = (meta: Meta, snap: PerSnapshot): boolean =>
   meta.columns.some((c) => c.name === snap.column && c.type === 'date') && meta.columns.some((c) => c.name === snap.per);
 
 /**
- * True when the question needs what the kept rows cannot carry yet: a pipeline replayed with the query's parameters,
- * a field or filter on a related table, or a converted measure. Refused with a sentence, never computed without it.
- * shortcut: per-entity snapshots read the dataset's own rows only; compose with fxRelationSql / the join relation when asked for
+ * The sentence refusing a question the kept rows cannot answer yet, or null: one the LOD pass would recompute (`lod`:
+ * analysis/lodQuery.needsLodPass, as the plain path decides it; a stored FIXED field under ordinary filters IS its
+ * stored value, so that is computed), a pipeline replayed with the query's parameters, a field or filter on a related
+ * table, or a converted measure. Never computed without it.
+ * shortcut: per-entity snapshots read the dataset's own stored rows only; compose with fxRelationSql / the join relation / the LOD pass when asked for
  */
-async function unsupported(meta: Meta, filters: FilterStep[], params: ParamValues | undefined, related: () => Promise<boolean>, fx: () => Promise<unknown>): Promise<boolean> {
-  if (params && params.size > 0 && stepsUseParams(meta.steps)) return true;
-  if (filters.some((f) => f && (f.via || f.datasetId)) || (await related())) return true;
-  return !!(await fx());
+async function refusal(meta: Meta, snap: PerSnapshot, lod: boolean, filters: FilterStep[], params: ParamValues | undefined, related: () => Promise<boolean>, fx: () => Promise<unknown>): Promise<string | null> {
+  if (lod) return msg.snapshotPerLod(snap.per);
+  if ((params && params.size > 0 && stepsUseParams(meta.steps)) || filters.some((f) => f && (f.via || f.datasetId)) || (await related()) || (await fx())) return msg.snapshotPerUnsupported(snap.per);
+  return null;
 }
 
 /** The JS partition by the axis's date bucket, when charted by the snapshot's own date. */
@@ -81,9 +84,8 @@ export async function perEntityCardMetric(
   const snap = spec.snapshot;
   if (!readable(meta, snap)) return { ok: true, value: null };
   const fx = () => (isCountLike(spec.aggregation) ? Promise.resolve(null) : fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]));
-  if (await unsupported(meta, filters, params, async () => (await metricReads(projectId, datasetId, spec.column, filters)).length > 0, fx)) {
-    return { ok: true, value: null, notes: [msg.snapshotPerUnsupported(snap.per)] };
-  }
+  const why = await refusal(meta, snap, needsLodPass(meta.steps, filters, [], spec.column), filters, params, async () => (await metricReads(projectId, datasetId, spec.column, filters)).length > 0, fx);
+  if (why) return { ok: true, value: null, notes: [why] };
   const notes = scopeRange(filters, [{ name: snap.column, type: 'date' }]) ? {} : { notes: [msg.snapshotPerStale(snap.per)] };
   const figure = { column: spec.column, aggregation: spec.aggregation };
   const run = async (): Promise<{ ok: boolean; value: number | null; notes?: string[] }> => {
@@ -120,7 +122,8 @@ export async function perEntityChart(projectId: string, datasetId: string, snap:
   if (!meta) return { ok: false, error: 'Dataset not found' };
   if (!readable(meta, snap)) return { ok: true, data: { labels: [], series: [] }, recommendedShape: recommendChartType(meta.columns, enc).shape, warnings: [] };
   const otherTable = async () => !!(enc.categoryDatasetId || enc.seriesDatasetId || enc.values.some((v) => v && v.datasetId)) || (await chartReads(projectId, datasetId, enc, filters)).length > 0;
-  if (await unsupported(meta, filters, opts.params, otherTable, () => fxVizContext(projectId, datasetId, enc, filters))) return { ok: false, error: msg.snapshotPerUnsupported(snap.per) };
+  const why = await refusal(meta, snap, needsLodPass(meta.steps, filters, vizDimsOf(enc)), filters, opts.params, otherTable, () => fxVizContext(projectId, datasetId, enc, filters)); // a leaf's LOD expression is refused by the planner
+  if (why) return { ok: false, error: why };
   const bucket = enc.category === snap.column ? enc.grain ?? null : null;
   const run = async (): Promise<VizDataReply> => {
     const src = await datasets.residentSource(projectId, datasetId);
