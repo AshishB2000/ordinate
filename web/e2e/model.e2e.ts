@@ -339,6 +339,59 @@ e2e('data model: a period metric', async ({ page, server }) => {
   }
 });
 
+e2e('data model: a snapshot per state', async ({ page, server }) => {
+  // Part 5, D11: each state's own latest day of units, summed — a state whose last order is older still counts it.
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const rpc = async (channel: string, payload: unknown) => (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as Record<string, any>; // any: each channel's reply
+  const ds = ((await rpc('dataset:list', { projectId: pid })) as unknown as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!.id;
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  await page.getByRole('button', { name: 'New metric' }).click();
+  const dlg = page.getByRole('dialog', { name: 'New metric' });
+  await dlg.getByLabel('Name').fill('Units, latest per state');
+  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await dlg.getByRole('combobox', { name: 'Column', exact: true }).click();
+  await page.getByRole('option', { name: 'units (number)' }).click();
+  assert.equal(await dlg.getByRole('combobox', { name: 'For each' }).count(), 0, 'no For each until a snapshot date is chosen');
+  await dlg.getByRole('combobox', { name: 'Snapshot' }).click();
+  await page.getByRole('option', { name: 'Latest order_date only' }).click();
+  await dlg.getByRole('combobox', { name: 'For each' }).click();
+  await page.getByRole('option', { name: 'state', exact: true }).click();
+  await dlg.getByText('Each state’s own latest row counts, even if it stopped reporting earlier. Pick a period to count only recent ones.').waitFor();
+  const preview = dlg.getByRole('complementary', { name: 'Preview' });
+  await preview.getByText('sum of units, on each state\'s latest order_date').waitFor(); // the server's words
+  const figure = (await preview.getByText(/^[\d,.]+[KM]?$/).first().textContent()) ?? '';
+  assert.match(figure, /^\d/, `a figure computed by the server, got ${figure}`);
+  await screensInPlace(page, 'model-metrics-snapshot-per-editor');
+  await dlg.getByRole('button', { name: 'Create metric' }).click();
+  const row = page.getByRole('table').getByRole('row').filter({ has: page.getByRole('button', { name: 'Units, latest per state' }) });
+  await row.getByText('sum of units, on each state\'s latest order_date').waitFor();
+  const id = ((await rpc('metric:list', { projectId: pid })).metrics as { id: string; name: string }[]).find((m) => m.name === 'Units, latest per state')!.id;
+
+  // Its tile with no period in scope says that a state that stopped reporting still counts; beside it, the same rows by region.
+  const kpi = (await rpc('metric:values', { projectId: pid, ids: [id], filters: [] })) as unknown as { value: number; display: string; notes?: string[] }[];
+  assert.ok(typeof kpi[0].value === 'number' && kpi[0].display === figure, JSON.stringify(kpi));
+  const enc = { category: 'region', values: [{ column: 'Units, latest per state', aggregation: 'sum', metricId: id }] };
+  const byRegion = await rpc('visual:data', { projectId: pid, datasetId: ds, encoding: enc, filters: [] });
+  assert.equal((byRegion.data.series[0].values as number[]).reduce((a, v) => a + v, 0), kpi[0].value, 'the region bars add up to the tile');
+  const visual = await rpc('visual:save', { projectId: pid, datasetId: ds, name: 'Units, latest per state, by region', chartType: 'column', encoding: enc });
+  const visualId = (visual.visual?.id ?? visual.id) as string;
+  const cards = [
+    { type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: ds, column: 'units', aggregation: 'sum', metricId: id, label: 'Units, latest per state' } },
+    { type: 'visual', layout: { x: 4, y: 0, w: 8, h: 7 }, visualId },
+  ];
+  const board = (await rpc('analysis:create', { projectId: pid, name: 'Latest per state', sheets: [{ name: 'Sheet 1', cards }] })).id as string;
+  await page.goto(`/analyses/${pid}/${board}`);
+  await page.getByRole('note').filter({ hasText: 'A “state” that stopped reporting still counts its last value. Pick a period to count only recent ones.' }).waitFor();
+  await page.getByText(kpi[0].display, { exact: true }).first().waitFor();
+  await page.getByRole('group', { name: 'Units, latest per state, by region card' }).getByRole('img', { name: 'Units, latest per state, by region' }).waitFor();
+  await screens(page, 'model-snapshot-per-tile');
+
+  for (const [channel, x] of [['analysis:delete', board], ['visual:delete', visualId], ['metric:delete', id]] as const) await rpc(channel, { projectId: pid, id: x });
+});
+
 e2e('data model: glossary', async ({ page, server }) => {
   const pid = server.sample.projectId;
   await page.goto(`/model/${pid}?tab=glossary`);
