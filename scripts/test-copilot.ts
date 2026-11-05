@@ -293,26 +293,26 @@ async function main(): Promise<void> {
   // ── Value labels: what a column's stored codes mean, so an answer filters by "EU" and says "Europe" ──
   const L = [{ value: 'EU', label: 'Europe' }, { value: 'NA', label: 'North America' }];
   const factsWith = (docs: Record<string, object>): string => copilot.datasetFacts(people!, pSums, [], [], [], docs).text;
-  ok('facts: value labels as codes', factsWith({ region: { values: L } }).includes('\n- region: codes "EU" = Europe, "NA" = North America\n'), factsWith({ region: { values: L } }));
-  ok('facts: the codes follow the column\'s other notes', factsWith({ region: { description: 'Sales area', values: L } }).includes('\n- region: Sales area; codes "EU" = Europe, "NA" = North America\n'));
+  ok('facts: value labels as codes', factsWith({ region: { values: L } }).includes('\n- region: codes "EU" = "Europe", "NA" = "North America"\n'), factsWith({ region: { values: L } }));
+  ok('facts: the codes follow the column\'s other notes', factsWith({ region: { description: 'Sales area', values: L } }).includes('\n- region: Sales area; codes "EU" = "Europe", "NA" = "North America"\n'));
   const many = Array.from({ length: 25 }, (_, i) => ({ value: `v${i}`, label: `l${i}` }));
   const manyLine = factsWith({ region: { values: many } }).split('\n').find((l) => l.startsWith('- region:')) ?? '';
-  ok(`facts: ${notes.VALUE_LABEL_FACT_MAX} codes, then how many more`, notes.VALUE_LABEL_FACT_MAX === 20 && manyLine.endsWith('"v19" = l19 (+5 more)') && !manyLine.includes('"v20"'), manyLine);
+  ok(`facts: ${notes.VALUE_LABEL_FACT_MAX} codes, then how many more`, notes.VALUE_LABEL_FACT_MAX === 20 && manyLine.endsWith('"v19" = "l19" (+5 more)') && !manyLine.includes('"v20"'), manyLine);
   const huge = Array.from({ length: 20 }, (_, i) => ({ value: `${'v'.repeat(250)}${i}`, label: 'l'.repeat(119) + i }));
   const hugeLine = factsWith({ region: { description: 'Sales area', values: huge } }).split('\n').find((l) => l.startsWith('- region:')) ?? '';
   ok('facts: long codes are cut by pairs, never the row — the name and description stay', hugeLine.startsWith('- region: Sales area; codes "') && /\(\+\d+ more\)$/.test(hugeLine) && hugeLine.length < 1200, `${hugeLine.length} ${hugeLine.slice(-40)}`);
-  ok('facts: a value is a quoted cell, cut and JSON-escaped; a label is one line', factsWith({ region: { values: [{ value: 'E\nU', label: 'Eu\n## rope' }] } }).includes('- region: codes "E\\nU" = Eu ## rope\n')
+  ok('facts: a value and its label are quoted cells, cut and JSON-escaped (part 3 04)', factsWith({ region: { values: [{ value: 'E\nU', label: 'Eu\n## rope' }] } }).includes('- region: codes "E\\nU" = "Eu\\n## rope"\n')
     && !/^## /m.test(factsWith({ region: { values: [{ value: 'E\nU', label: 'Eu\n## rope' }] } })));
   ok('facts: a column marked personal or financial prints no codes', !/codes|Europe/.test(factsWith({ region: { sensitivity: 'personal', values: L } })) && !/codes|Europe/.test(factsWith({ region: { sensitivity: 'financial', values: L } })));
   ok('facts: a column without labels prints exactly today\'s line', Object.is(factsWith({ region: { description: 'Sales area', values: [] } }), factsWith({ region: { description: 'Sales area' } }))
     && Object.is(factsWith({ region: { values: [] } }), factsWith({})));
   const vCoded = copilot.visualFacts({ name: 'Spend by region', chartType: 'column', datasetId: people!.id, encoding: { category: 'region', values: [{ column: 'spend', aggregation: 'sum' as const }] } } as any,
     'People', { data: { labels: ['EU'], series: [{ name: 'sum(spend)', values: [200] }] }, recommendedShape: 'categorical', warnings: [] } as any, { region: { values: L } });
-  ok('facts: a visual on the column says its codes too', vCoded.text.includes('- region: codes "EU" = Europe, "NA" = North America'), vCoded.text);
+  ok('facts: a visual on the column says its codes too', vCoded.text.includes('- region: codes "EU" = "Europe", "NA" = "North America"'), vCoded.text);
   // A Live dataset withholds more than the marks (a pending proposal, a detected column): its codes follow the same set.
   const liveCoded = (withheld: string[]) => liveFacts.liveDatasetFacts({ name: 'People', columns: people!.columns, withheld: new Set(withheld), docs: { region: { values: L } } }).text;
   ok('Live facts: the codes of a column withheld (marked, pending or detected) are not printed', !/codes|Europe/.test(liveCoded(['region'])), liveCoded(['region']));
-  ok('NEGATIVE CONTROL: Live facts print them when the column is not withheld', liveCoded([]).includes('- region: codes "EU" = Europe, "NA" = North America'), liveCoded([]));
+  ok('NEGATIVE CONTROL: Live facts print them when the column is not withheld', liveCoded([]).includes('- region: codes "EU" = "Europe", "NA" = "North America"'), liveCoded([]));
 
   // ── Table notes: role, grain, key — the user's words, on one line each, before the column notes ──
   // The guide is not a table note: it moved into the editors' fenced guidance block (p3-03, scripts/test-guidance.ts).

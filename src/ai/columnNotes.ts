@@ -21,15 +21,15 @@ export const VALUE_LABEL_FACT_MAX = 20;
 const CODES_FACT_CHARS = 1000;
 
 /**
- * `codes "EU" = Europe, "NA" = North America (+3 more)`: what the column's stored values mean, so an answer
- * filters by the value and says the label. A value is a cell (quoted, cut, escaped), a label one line. '' with none.
+ * `codes "EU" = "Europe", "NA" = "North America" (+3 more)`: what the column's stored values mean, so an answer
+ * filters by the value and says the label. Both are quoted (cut, escaped): a label names a cell (part 3 D3). '' with none.
  */
 function codesBit(list: ValueLabel[] | undefined): string {
   const all = Array.isArray(list) ? list : [];
   const out: string[] = [];
   let chars = 0;
   for (const { value, label } of all.slice(0, VALUE_LABEL_FACT_MAX)) {
-    const pair = `${quoted(String(value))} = ${oneLine(label, FIELD_FACT_MAX)}`;
+    const pair = `${quoted(String(value))} = ${quoted(label)}`;
     if (chars + pair.length > CODES_FACT_CHARS) break;
     chars += pair.length + 2;
     out.push(pair);
