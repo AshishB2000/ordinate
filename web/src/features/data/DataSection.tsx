@@ -52,8 +52,8 @@ export default function DataSection() {
       sub={SUB[tab]}
       actions={
         <>
-          {/* The project's metrics (T2.8): the desktop's Metrics tab under Data, on its own route. */}
-          <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
+          {/* The project's metrics (T2.8): the Data model's Metrics tab. */}
+          <Link className={buttonClass('ghost')} to={`/model/${projectId}?tab=metrics`}>
             <Icon name="target" />
             <span>Metrics</span>
           </Link>

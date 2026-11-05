@@ -313,6 +313,45 @@
   color: var(--muted);
 }
 
+/* ── Metrics, Glossary and Relationships tabs ──────────────────────── */
+.countsBy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.joins {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-12) var(--sp-16);
+  list-style: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.joins li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.joins li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
 @media (max-width: 900px) {
   .split {
     grid-template-columns: minmax(0, 1fr);

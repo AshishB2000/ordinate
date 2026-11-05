@@ -152,7 +152,7 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
   }
 
   return (
-    <Page back={{ to: `/data/metrics?project=${projectId}`, label: 'Metrics' }} title={name} sub="Why it moved: the parts it is made of, and how much of the change each one explains.">
+    <Page back={{ to: `/model/${projectId}?tab=metrics`, label: 'Data model' }} title={name} sub="Why it moved: the parts it is made of, and how much of the change each one explains.">
       <div className={s.toolbar} role="toolbar" aria-label="Period">
         <Select size="sm" aria-label="Period" value={period.key} options={PERIODS} onValueChange={(k) => setPeriod((p) => ({ ...p, key: k as PeriodKey }))} />
         {period.key === 'custom' && (

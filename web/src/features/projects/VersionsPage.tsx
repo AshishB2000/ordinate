@@ -27,7 +27,7 @@ const isType = (t: string | undefined): t is VersionType => !!t && Object.protot
 const RECORD: Record<VersionType, (p: string, id: string, name: string) => Back> = {
   dashboard: (p, id, name) => ({ to: `/analyses/${p}/${id}`, label: name }),
   visual: (p, id, name) => ({ to: `/visuals/${p}/${id}`, label: name }),
-  metric: (p) => ({ to: `/data/metrics?project=${p}`, label: 'Metrics' }),
+  metric: (p) => ({ to: `/model/${p}?tab=metrics`, label: 'Data model' }),
   report: (p, id, name) => ({ to: `/reports/${p}/${id}`, label: name }),
   dataset: (p, id, name) => ({ to: `/data/${p}/${id}`, label: name }),
 };
