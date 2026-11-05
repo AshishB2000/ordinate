@@ -125,7 +125,7 @@ if (!adminUrl) {
       await screens(vpage, 'row-access-viewer');
       await vpage.goto(`/data/${pid}/${did}`);
       await vpage.getByText('Rows limited to your access').waitFor();
-      assert.equal(await vpage.getByRole('tab', { name: 'Row access' }).count(), 0, 'a viewer has no Row access tab');
+      assert.equal(await vpage.getByRole('tab', { name: 'Access', exact: true }).count(), 0, 'a viewer has no Access tab');
       // Explore: the same chip, and its suggestions drawn over East's rows (they go through visual:data).
       await vpage.goto(`/explore?project=${pid}&dataset=${did}`);
       await vpage.getByRole('heading', { level: 1, name: 'Explore' }).waitFor();

@@ -4,7 +4,7 @@
 // (`dataset:rowPolicy` / `dataset:setRowPolicy`, both admin channels). The page
 // shows the tab to admins only — hidden, never disabled, for everyone else.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import type { DatasetColumns } from '../../api/datasets';
 import { Button, IconButton } from '../../ui/Button';
@@ -17,7 +17,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useDistinct } from '../analyses/editor/ValuePicker';
-import { useShareTargets } from '../projects/api';
+import { useMembers } from './MemberPicker';
 import { useRowPolicy, useSaveRowPolicy, type RowRule, type RuleState } from './rowAccessApi';
 import s from './RowAccess.module.css';
 
@@ -68,15 +68,11 @@ function ValuesField({ projectId, datasetId, column, values, onChange }: { proje
 
 export function RowAccessTab({ projectId, datasetId, header }: { projectId: string; datasetId: string; header: DatasetColumns }) {
   const q = useRowPolicy(projectId, datasetId, true);
-  const targets = useShareTargets(projectId, true);
+  const { targets, options: members } = useMembers(projectId);
   const save = useSaveRowPolicy(projectId, datasetId);
   const [editing, setEditing] = useState<{ column: string; rules: Draft[] } | null>(null);
   const [removing, setRemoving] = useState(false);
   const texts = header.columns.filter((c) => c.type === 'text').map((c) => ({ value: c.name, label: c.name }));
-  const members = useMemo(() => [
-    ...(targets.data?.teams ?? []).map((t) => ({ value: `team:${t.id}`, label: `${t.name} (team)` })),
-    ...(targets.data?.users ?? []).map((u) => ({ value: `user:${u.id}`, label: u.email })),
-  ], [targets.data]);
 
   if (q.isPending) return <SkeletonRows rows={4} label="Loading the row access rules" />;
   if (q.isError) return <ErrorState heading={3} title="The row access rules could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;

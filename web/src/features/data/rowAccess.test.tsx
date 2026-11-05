@@ -39,6 +39,7 @@ const routes = (role: string, extra: Record<string, RpcReply> = {}): Record<stri
   'dataset:rowPolicy': { body: POLICY },
   'project:shareTargets': { body: { users: [{ id: '4b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', email: 'west@acme.test' }], teams: [{ id: TEAM, name: 'East' }] } },
   'dataset:distinct': { body: { values: ['East', 'West'], total: 2 } },
+  'dataset:columnAccess': { body: { ok: true, rules: [], state: 'none', suggest: [], builtFrom: [] } },
   ...extra,
 });
 
@@ -48,14 +49,14 @@ describe('the Row access tab', () => {
       const calls = serveRpc(routes(role));
       renderApp(`/data/${P}/${D}`);
       expect(await screen.findByRole('tab', { name: 'Data' }, { timeout: LAZY })).toBeTruthy();
-      expect(screen.queryByRole('tab', { name: 'Row access' })).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Access' })).toBeNull();
       expect(calls.some((c) => c.channel === 'dataset:rowPolicy')).toBe(false);
       cleanup();
     }
     // Negative control: an admin has the tab.
     serveRpc(routes('admin'));
     renderApp(`/data/${P}/${D}`);
-    expect(await screen.findByRole('tab', { name: 'Row access' }, { timeout: LAZY })).toBeTruthy();
+    expect(await screen.findByRole('tab', { name: 'Access' }, { timeout: LAZY })).toBeTruthy();
   }, 30_000);
 
   it('shows the saved rules and who sees what, and saves an edit', async () => {

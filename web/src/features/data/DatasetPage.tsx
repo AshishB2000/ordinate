@@ -39,6 +39,7 @@ import { LiveTabs } from './LiveDataset';
 import { CacheAgePicker, LiveSwitch, RefreshNow } from './LiveSettings';
 import { RefreshUrlDialog } from './RefreshUrl';
 import { RowAccessTab } from './RowAccessTab';
+import { ColumnAccessSection } from './ColumnAccessSection';
 import { RowAccessOff, ScopedChip } from './RowAccessOff';
 import { useCan } from '../projects/api';
 
@@ -298,10 +299,10 @@ export default function DatasetPage() {
           <Tab value="snapshots" icon="history">
             Snapshots
           </Tab>
-          {/* Row access rules (docs/row-policy): a project admin's — hidden, never disabled, for everyone else. */}
+          {/* Row and column access rules (docs/row-policy, part 4): a project admin's — hidden, never disabled, for everyone else. */}
           {admin && (
             <Tab value="access" icon="lock">
-              Row access
+              Access
             </Tab>
           )}
         </TabList>
@@ -326,6 +327,7 @@ export default function DatasetPage() {
         {admin && (
           <TabPanel value="access">
             <RowAccessTab projectId={projectId} datasetId={datasetId} header={header} />
+            <ColumnAccessSection projectId={projectId} datasetId={datasetId} header={header} />
           </TabPanel>
         )}
       </Tabs>
