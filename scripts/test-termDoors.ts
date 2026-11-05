@@ -306,10 +306,11 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   const onOther = await post('analysis:tiles', { projectId: P, items: [
     { kind: 'visual', datasetId: OTHER, encoding: enc, filters: [F0, scopeT] },
     { kind: 'metric', datasetId: OTHER, column: 'sales', aggregation: 'sum', filters: [F0, scopeT] },
+    { kind: 'stats', spec: { kind: 'distribution', datasetId: OTHER, columns: ['sales'] }, filters: [F0, scopeT] },
   ] });
   const NOTE = termMsgs.termNotApplied('Extract pair', 'Other');
   ok('analysis:tiles: a scope term on an unrelated tile — the chart and the KPI answer, each with the note', onOther.value?.[0]?.ok === true && onOther.value[0].notes?.[0] === NOTE
-    && onOther.value?.[1]?.ok === true && onOther.value[1].notes?.[0] === NOTE, onOther.text.slice(0, 400));
+    && onOther.value?.[1]?.ok === true && onOther.value[1].notes?.[0] === NOTE && onOther.value?.[2]?.ok === true && onOther.value[2].notes?.[0] === NOTE, onOther.text.slice(0, 400));
   const plainTiles = await post('analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: OTHER, encoding: enc, filters: [F0] }, { kind: 'metric', datasetId: OTHER, column: 'sales', aggregation: 'sum', filters: [F0] }] });
   ok('…and draws the figures it draws without the term; NEGATIVE CONTROL: a reply with nothing left out carries no notes', sameFigure({ ...onOther, value: [onOther.value[0]] }, { ...plainTiles, value: [plainTiles.value[0]] })
     && Object.is(onOther.value[1].value, plainTiles.value[1].value) && !('notes' in plainTiles.value[0]) && !('notes' in plainTiles.value[1]));

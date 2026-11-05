@@ -282,6 +282,7 @@ export type StatsTile =
         chart: { chartType: string; data: ChartDataShape & Record<string, unknown> };
       };
       asOf?: AsOf;
+      notes?: string[]; // the dashboard's glossary terms this tile left out
     }
   | { ok: false; error: string };
 /** A what-if card's figure under its scenario, beside the baseline — `scenario:card`'s reply, every string the server's. */
