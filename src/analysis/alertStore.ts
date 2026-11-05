@@ -31,6 +31,8 @@ import * as appPaths from '../app/paths';
 import * as alerts from './alerts';
 import type { AlertEvent, AlertRule } from './alerts';
 import * as datasets from '../data/datasets';
+import { connectionDatasetIds } from '../data/sourceNames';
+import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
@@ -625,11 +627,13 @@ export async function allProjectIds(): Promise<string[]> {
  * The events a push may carry to every reader of the project: one about a
  * dataset with row access rules (or built from one) keeps its ids and time and
  * loses its figures, sentence and diagnosis (docs/row-policy, "Pushes") — the
- * inbox re-reads `alerts:list`, which redacts per caller.
+ * inbox re-reads `alerts:list`, which redacts per caller. A pipeline failure on a
+ * dataset from a connection loses the driver's error the same way (one payload
+ * for every reader, so an editor reads it in `alerts:list`).
  */
 export async function pushableEvents(projectId: string, events: AlertEvent[]): Promise<AlertEvent[]> {
   const out: AlertEvent[] = [];
-  for (const e of events) {
+  for (const e of await withoutRunError(projectId, events, connectionDatasetIds)) {
     if (!(await policyClosed(projectId, e.datasetId))) { out.push(e); continue; }
     const { diagnosis: _d, ...kept } = e;
     out.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: '' } as AlertEvent);

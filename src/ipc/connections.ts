@@ -2,7 +2,7 @@ import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as connectionRun from '../connectors/connectionRun';
 import * as datasets from '../data/datasets';
-import { closedToCaller, restrictedOn } from '../data/rowAccess';
+import { seesSourceNames, viewerConnection } from '../data/sourceNames';
 import * as configSecrets from '../app/configSecrets';
 import { connectorLogos } from '../app/icons';
 import { connectorCatalog, getConnector } from '../connectors';
@@ -250,17 +250,14 @@ export function register(): void {
   // `secretSet` says, per secret field, whether a value is stored — booleans,
   // so a form can show "set" / "replace" without a value ever leaving main.
   // `datasetCount`: the datasets imported from each, counted here, not in a client.
+  // A caller who may not see source names (a viewer) gets the card only: viewerConnection.
   ipcMain.handle('connections:list', async (_e, { projectId }: any = {}) => {
     try {
       const list = await connections.listConnections(projectId);
       const counts = new Map<string, number>();
-      const withheld = new Set<string>(); // a failed refresh's text can quote a value: not where it feeds a dataset closed to the caller (N2, NV-22)
-      const restricted = await restrictedOn(projectId);
-      for (const d of await datasets.listDatasets(projectId)) {
-        if (d.originConnId) counts.set(d.originConnId, (counts.get(d.originConnId) ?? 0) + 1);
-        if (d.originConnId && restricted && (await closedToCaller(projectId, d.id))) withheld.add(d.originConnId);
-      }
-      return await Promise.all(list.map(async (c) => ({ ...(await withSecretSet(c)), datasetCount: counts.get(c.id) ?? 0, ...(withheld.has(c.id) ? { lastError: null } : {}) })));
+      for (const d of await datasets.listDatasets(projectId)) if (d.originConnId) counts.set(d.originConnId, (counts.get(d.originConnId) ?? 0) + 1);
+      const sees = await seesSourceNames(projectId);
+      return await Promise.all(list.map(async (c) => (sees ? { ...(await withSecretSet(c)), datasetCount: counts.get(c.id) ?? 0 } : viewerConnection(c, counts.get(c.id) ?? 0))));
     } catch (_) {
       return [];
     }

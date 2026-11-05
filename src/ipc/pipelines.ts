@@ -25,6 +25,7 @@ import { describeCron, isValidTimeZone, nextCronRun, parseCron } from '../app/pi
 import { isAutoRefreshEvery, needsIncremental } from '../data/refreshCadence';
 import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
 import { closedToCaller } from '../data/rowAccess';
+import { unreadableErrorIds } from '../data/sourceNames';
 
 const fail = (err: unknown, fallback: string): { ok: false; error: string } =>
   ({ ok: false, error: err instanceof Error && err.message ? err.message : fallback });
@@ -43,11 +44,14 @@ export function preview(cron: unknown, tz: unknown, from = Date.now(), n = 3): {
 
 /**
  * A refresh or a quality run's errors and warnings can quote values from every row: blanked on the nodes of a
- * dataset the caller's row access rules restrict (round 2, #14). The status, timing and counts stay.
+ * dataset the caller's row access rules restrict (round 2, #14). A viewer's runs of a dataset copied from a connection
+ * go blank too: a driver's error quotes the relation it could not find (D13). The status, timing and counts stay.
  */
 async function quietRuns<V extends { nodes: Array<{ kind: string; ref?: { type: string; id: string }; runs: store.NodeRun[] }> }>(projectId: string, view: V): Promise<V> {
+  const fromConn = await unreadableErrorIds(projectId);
   const nodes = await Promise.all(view.nodes.map(async (n) => (
-    (n.kind === 'dataset' || n.kind === 'quality') && n.ref?.type === 'dataset' && (await closedToCaller(projectId, n.ref.id))
+    (n.kind === 'dataset' || n.kind === 'quality') && n.ref?.type === 'dataset'
+      && ((n.kind === 'dataset' && fromConn.has(n.ref.id)) || (await closedToCaller(projectId, n.ref.id)))
       ? { ...n, runs: n.runs.map((r) => ({ ...r, errors: [], warnings: [], ...(r.note ? { note: '' } : {}) })) }
       : n)));
   return { ...view, nodes };

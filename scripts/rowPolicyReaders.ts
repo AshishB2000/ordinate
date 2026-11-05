@@ -42,7 +42,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'comment:reopen': 'META',
   'comment:reply': 'META',
   'comment:resolve': 'META',
-  'connections:list': 'REDACT', // lastError where a connection feeds a dataset closed to the caller (N2)
+  'connections:list': 'REDACT', // a caller who may not see source names gets id, name, connector, status and dataset count only (N2, p2-01)
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
   'copilot:ask': 'EXPLICIT',

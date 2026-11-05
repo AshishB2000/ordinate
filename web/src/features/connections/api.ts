@@ -68,7 +68,7 @@ export interface Connection {
   queries: SavedQuery[];
   /** Per secret field: is a value stored? Never the value. */
   secretSet?: Record<string, boolean>;
-  /** Datasets imported from it (connections:list only). */
+  /** Datasets imported from it (connections:list only). A viewer's entry is the card only (id, name, connectorId, lastStatus, datasetCount): no values, table, queries or lastError. */
   datasetCount?: number;
 }
 

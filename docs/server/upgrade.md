@@ -299,6 +299,22 @@ an older release, use the same two ways through as for terms: **go through this 
 `ORDINATE_IMAGE` in Compose). An older pod shows the hidden values, and drops the rules the next time
 it saves the dataset.
 
+## Viewers no longer read source names (`p2-01`)
+
+From this release, a project viewer (someone who can read a project but not edit it) no longer sees a
+connection's host, database, user or saved queries, a dataset's warehouse table or a web import's host, or
+the error text of a failed refresh. The changelog lists the places. There is no migration. Two things to
+know when you roll it out:
+
+- **The search index rebuilds once.** The name search (⌘K) now keeps two rows for a connection: a viewer
+  finds it by the connector's name, an editor by its stored name. This release marks every search index
+  as stale, so each project rebuilds it on its first search after the upgrade, for every kind of record
+  the search covers, not only connections. That first search waits for the rebuild.
+- **During a rolling update, an old pod still answers a viewer as before.** A connection that a pod older
+  than this release saves in that window keeps a row under its stored name, which a viewer's search can
+  find. It is replaced when the connection is next saved on a pod of this release, or when the index is
+  rebuilt after the last old pod is gone.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the

@@ -207,7 +207,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('skip: summary:compute names no alert on Orders for east, through the analysis id', sumEast.body?.ok === true && !sumEast.text.includes('987,654'), sumEast.text.slice(0, 200));
     ok('NEGATIVE CONTROL: the editor\'s Summary names it', sumEd.body?.ok === true && sumEd.text.includes('987,654'), sumEd.text.slice(0, 200));
 
-    // A connection's last refresh failure can quote a value: withheld where it feeds a dataset closed to east (N2, NV-22).
+    // A connection's last refresh failure can quote a value, or a relation: east, a viewer, gets the connection's card with no failure text at all (N2, NV-22; the source-names rule widened it).
     const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
     const datasetsSave: typeof import('../src/data/datasets') = require('../src/data/datasets');
     const feed = async (name: string, lastError: string) => W.as('boss', async () => {
@@ -222,9 +222,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const connsEd = await W.call('ed', 'connections:list', { projectId: P });
     eastReplies.push(connsEast.text);
     const lastError = (r: H.Reply, id: string) => (r.body as { id: string; lastError: string | null }[]).find((c) => c.id === id)?.lastError;
-    ok('redact: connections:list withholds the failure text of a connection feeding a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === null, connsEast.text.slice(0, 200));
-    ok('…and keeps it where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === 'OPEN_FEED_ERROR');
-    ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY));
+    ok('redact: connections:list gives east no failure text, where a connection feeds a dataset closed to east', ruled.body?.ok === true && lastError(connsEast, closedFeed.conn) === undefined && (connsEast.body as { id: string }[]).some((c) => c.id === closedFeed.conn), connsEast.text.slice(0, 200));
+    ok('…and where nothing it feeds is closed to east', lastError(connsEast, openFeed.conn) === undefined && (connsEast.body as { id: string }[]).some((c) => c.id === openFeed.conn));
+    ok('NEGATIVE CONTROL: the editor reads the failure text', String(lastError(connsEd, closedFeed.conn)).includes(H.W_CANARY) && lastError(connsEd, openFeed.conn) === 'OPEN_FEED_ERROR');
     await W.call('boss', 'format:colors:assign', { projectId: P, column: 'customer', values: [`${H.W_CANARY}_1`] });
     const colors = await W.call('east', 'format:colors:get', { projectId: P });
     eastReplies.push(colors.text);
@@ -406,7 +406,6 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       f['quality:list — the last run and the rules\' args'] = ql.body?.latest != null && /"max":100/.test(ql.text);
       f['alerts:list — an alert\'s figures'] = ((await ask('alerts:list', { projectId: P })).body?.events as { id: string; value: number | null }[] | undefined ?? []).find((e) => e.id === evId)?.value === MARK.alert;
       f['summary:compute — an alert found through the analysis id'] = (await ask('summary:compute', { projectId: P, analysisId: recs[orders].dash, pages: [] })).text.includes('765,432');
-      f['connections:list — a refresh failure\'s text'] = rowOf(await ask('connections:list', { projectId: P }), feedCols.conn)?.lastError === MARK.conn;
       f['pipelines:get — a failed run\'s errors and warnings'] = ((t) => t.includes(MARK.err) && t.includes(MARK.warn))((await ask('pipelines:get', { projectId: P })).text);
       f['incremental:get — the high-water mark'] = (await ask('incremental:get', { projectId: P, datasetId: feedCols.ds })).text.includes(String(MARK.hw));
       for (const [channel, payload] of [['visual:get', { projectId: P, id: plainRec.visualId }], ['visual:thumbs', { projectId: P, ids: [plainRec.visualId] }], ['analysis:gallery', { projectId: P }],
@@ -426,7 +425,11 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const shown = await observe('east');
     for (const d of carriers) await setColumns(d, true);
     const [withheld, editorSees] = [await observe('east'), await observe('ed')];
-    ok(`…${Object.keys(shown).length} facts are observed`, Object.keys(shown).length === 17, Object.keys(shown).length);
+    ok(`…${Object.keys(shown).length} facts are observed`, Object.keys(shown).length === 16, Object.keys(shown).length);
+    // A viewer gets no refresh failure text at all since the source-names rule (the redact checks above), so it is no fact
+    // east is shown before the key; what column rules must not change is that the editor still reads it.
+    const connError = async (who: string) => rowOf(await W.call(who, 'connections:list', { projectId: P }), feedCols.conn)?.lastError;
+    ok('columns: connections:list — east gets no refresh failure text with column rules either, and the editor still does', (await connError('east')) === undefined && (await connError('ed')) === MARK.conn);
     for (const key of Object.keys(shown)) {
       ok(`columns: ${key} — east is shown it without the key (the fixture carries it)`, shown[key]);
       ok(`columns: ${key} — withheld, skipped or flagged for east with column rules`, !withheld[key]);

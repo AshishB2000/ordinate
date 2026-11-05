@@ -10,6 +10,7 @@ import * as alertStore from '../analysis/alertStore';
 import * as connections from '../connectors/connections';
 import * as history from '../app/history';
 import { isValidId } from '../app/ids';
+import { seesSourceNames, viewerName } from '../data/sourceNames';
 import { listNotebooks } from '../analysis/notebook/store';
 
 // Lineage IPC — the dependency graph around one record (src/analysis/lineage.ts
@@ -26,8 +27,11 @@ const PREFIX: Record<string, string> = {
 
 const present = <T>(list: Array<T | null>): T[] => list.filter((x): x is T => x !== null);
 
+/** The origin field that names a source to a reader: a warehouse table, a web import's URL (and so its host). */
+const NAME_FIELD: Record<string, string> = { connection: 'table', url: 'url' };
+
 export async function loadInput(projectId: string): Promise<LineageInput> {
-  const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs] = await Promise.all([
+  const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs, sees] = await Promise.all([
     datasets.listDatasets(projectId).catch(() => []),
     visuals.listVisuals(projectId).catch(() => []),
     analysis.listAnalyses(projectId).catch(() => []),
@@ -37,15 +41,21 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     connections.listConnections(projectId).catch(() => []),
     history.loadAllSummaries(projectId).catch(() => []),
     listNotebooks(projectId).catch(() => []),
+    seesSourceNames(projectId),
   ]);
+  // the one input lineage:get and pipelines:get share; a job (system admin) still sees names
+  const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T => {
+    const field = NAME_FIELD[d.origin?.kind ?? ''];
+    return !sees && field ? { ...d, origin: { ...d.origin, [field]: undefined } } : d;
+  };
   return {
-    datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))),
+    datasets: present(await Promise.all(dsList.map((d) => datasets.getDatasetMeta(projectId, d.id)))).map(unnamed),
     visuals: present(await Promise.all(visList.map((v) => visuals.getVisual(projectId, v.id)))),
     dashboards: present(await Promise.all(anList.map((a) => analysis.getAnalysis(projectId, a.id)))),
     metrics: present(await Promise.all(metList.map((m) => metrics.getMetric(projectId, m.id)))),
     reports,
     alerts: alertFile.rules || [],
-    connections: conns.map((c) => ({ id: c.id, name: c.name, kind: c.connectorId })),
+    connections: conns.map((c) => ({ id: c.id, name: sees ? c.name : viewerName(c), kind: c.connectorId })),
     captures: caps.map((c) => ({ id: String(c.id), title: c.title })),
     notebooks: nbs.map((n) => ({ id: n.id, name: n.name })),
   };

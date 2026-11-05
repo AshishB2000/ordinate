@@ -1,6 +1,7 @@
 import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
-import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, withLockSteps } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, isRowPolicyError, withLockSteps } from '../data/rowAccess';
+import { seesSourceNames } from '../data/sourceNames';
 import { distinctFor } from './distinctFor';
 import { narrowSteps } from './distinctNarrow';
 // One parser and one byte ceiling, shared with the refresh service — see
@@ -361,11 +362,16 @@ export function register() {
   // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
   ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
     const list = await datasets.listDatasets(projectId);
-    if (!(await restrictedOn(projectId))) return list;
+    if (await seesSourceNames(projectId)) return list; // the one rule "can open the connection": an editor's reply is untouched
     // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
     // refresh's text and the anomaly keys an alert last told of, which can quote a value, are not theirs to read (N2, #16).
+    // A viewer never reads a warehouse driver's refresh error either: it quotes the relation it could not find (D13).
     return Promise.all(list.map(async (d) => {
-      if (!(await closedToCaller(projectId, d.id))) return d;
+      if (!(await closedToCaller(projectId, d.id))) {
+        if (!d.originConnId) return d;
+        const { lastRefreshError: _e1, ...open } = d;
+        return open;
+      }
       const { lastRefreshError: _e2, ...rest } = d;
       const auto = rest.autoRefresh ? (({ lastAnomalyKeys: _k, ...a }) => a)(rest.autoRefresh) : undefined;
       return { ...rest, ...(auto ? { autoRefresh: auto } : {}), scoped: true as const };

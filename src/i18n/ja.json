@@ -458,6 +458,7 @@
   "refreshHookMessages.refresh_urls_need_the_server_s": null,
   "refreshHookMessages.this_connection_no_longer_exists": "この接続はもう存在しません。",
   "refreshHookMessages.this_dataset_no_longer_exists": null,
+  "refreshMessages.a_refresh_failed_ask_an_editor": "更新に失敗しました。詳細はエディターに確認してください。",
   "refreshMessages.every_5_or_15_minutes_needs": null,
   "refreshMessages.this_dataset_is_already_being_refreshed": null,
   "regexMessages.skipped_this_pattern_cannot_run_here": null,

@@ -21,6 +21,7 @@ import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
 import * as connections from '../connectors/connections';
+import { seesSourceNames, viewerName } from '../data/sourceNames';
 import * as projects from '../app/projects';
 import * as recordFs from '../app/recordFs';
 import { tagSearch, attachTags } from '../app/catalogIndex';
@@ -91,7 +92,8 @@ const one = (kind: Item['kind'], id: unknown, name: unknown, sub: string, update
 
 const fromDataset = (d: datasets.DatasetSummary): Item[] => one('dataset', d.id, d.name, `${Number(d.rowCount || 0).toLocaleString()} rows`, d.updatedAt);
 const fromVisual = (v: visuals.VisualSummary): Item[] => one('visual', v.id, v.name, String(v.chartType || 'visual'), v.updatedAt);
-const fromConnection = (c: connections.Connection): Item[] => one('connection', c.id, c.name, 'kind' in c && c.kind ? String(c.kind) : 'connection', c.updatedAt);
+/** `viewer`: a caller who may not see source names reads (and finds the connection by) viewerName, never a database, host or URL it is named after. */
+const fromConnection = (c: connections.Connection, viewer = false): Item[] => one('connection', c.id, viewer ? viewerName(c) : c.name, 'kind' in c && c.kind ? String(c.kind) : 'connection', c.updatedAt);
 const fromMetric = (m: metrics.MetricSummary): Item[] =>
   one('metric', m.id, m.name, 'formula' in m.definition ? 'Formula metric' : `${m.definition.aggregation}(${m.definition.column})`, m.updatedAt);
 const fromReport = (r: Pick<reportSpec.ReportSummary, 'id' | 'name' | 'format' | 'updatedAt'>): Item[] =>
@@ -115,7 +117,7 @@ const LISTS: Record<SourceKey, (projectId: string) => Promise<Item[]>> = {
   datasets: async (p) => (await datasets.listDatasets(p)).flatMap(fromDataset),
   visuals: async (p) => (await visuals.listVisuals(p)).flatMap(fromVisual),
   analyses: async (p) => (await analysis.listAnalyses(p)).flatMap(fromAnalysis),
-  connections: async (p) => (await connections.listConnections(p)).flatMap(fromConnection),
+  connections: async (p) => { const viewer = !(await seesSourceNames(p)); return (await connections.listConnections(p)).flatMap((c) => fromConnection(c, viewer)); },
   metrics: async (p) => (await metrics.listMetrics(p)).flatMap(fromMetric),
   reports: async (p) => (await reportSpec.listReports(p)).flatMap(fromReport),
   alerts: async (p) => fromAlerts((await alertStore.load(p)).rules),
@@ -130,7 +132,10 @@ export function describeRecord(where: RecordSource, body: string): IndexRow[] {
     switch (where.source) {
       case 'datasets': { const d = datasets.summaryOf(p, body); return d ? forAll(fromDataset(d)) : []; }
       case 'visuals': { const v = visuals.summaryOf(p, body); return v ? forAll(fromVisual(v)) : []; }
-      case 'connections': { const c = connections.connectionOf(p, where.id, body); return c ? forAll(fromConnection(c)) : []; }
+      case 'connections': {
+        const c = connections.connectionOf(p, where.id, body);
+        return c ? [...fromConnection(c).map((it): IndexRow => ({ ...it, audience: 'editor' })), ...fromConnection(c, true).map((it): IndexRow => ({ ...it, audience: 'viewer' }))] : [];
+      }
       case 'metrics': { const m = metrics.summaryOf(p, body); return m ? forAll(fromMetric(m)) : []; }
       case 'reports': { const r = reportSpec.reportOf(p, body); return r ? forAll(fromReport(r)) : []; }
       case 'alerts': return forAll(fromAlerts(alertStore.rulesOf(JSON.parse(body))));

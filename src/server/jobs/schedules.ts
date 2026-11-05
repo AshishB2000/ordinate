@@ -16,7 +16,7 @@
 // both through sse.publish, so a tab on any pod gets them. Not the whole org
 // (T6.3): an alert carries the project's figures and a refresh its dataset's
 // name, and an org member with no grant on the project must see neither. A
-// refresh error is cut like every other origin text (no URL query, no path).
+// failed refresh's push says which dataset, never why: its error can quote a value or a warehouse table.
 //
 // A SUCCESSFUL refresh is announced by refreshAsJob itself (data/refreshEvents,
 // L0.1) — for every door, the tick's included — so the tick's reporter pushes
@@ -32,14 +32,12 @@
 // model call (T2.12 routes AI keys first).
 
 import * as scheduler from '../../app/refreshScheduler';
-import { policyClosed } from '../../data/rowAccess';
-import type { TickAlerts } from '../../app/refreshScheduler';
+import type { AutoRefreshOutcome, TickAlerts } from '../../app/refreshScheduler';
 import type { AlertEvent } from '../../analysis/alerts';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
 import type { Pool } from 'pg';
-import { redactOriginText } from '../../data/datasetOrigin';
 import { readerEmails, writerEmails } from '../authz/index';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
@@ -78,6 +76,12 @@ export function pushToReaders(projectId: string, channel: string, payload: unkno
 export function pushToWriters(projectId: string, channel: string, payload: unknown): void {
   if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
   void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload, true).catch(() => undefined);
+}
+
+/** What a failed scheduled refresh tells every reader's tabs: which dataset, never why (the web reads `ok`, `projectId`, `datasetId`). A driver's error quotes the relation it could not find. */
+export function failedRefreshPayload(o: AutoRefreshOutcome): Omit<AutoRefreshOutcome, 'error'> {
+  const { error: _error, ...rest } = o;
+  return rest;
 }
 
 type Push = (projectId: string, channel: string, payload: unknown) => void;
@@ -119,8 +123,8 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
-    // A failure's text can quote a value: none from a dataset with row access rules reaches every reader (row-policy N2).
-    if (!o.ok) void policyClosed(o.projectId, o.datasetId).then((closed) => push(o.projectId, 'hub:dataset-refreshed', { ...o, error: closed ? 'Refresh failed.' : redactOriginText(o.error ?? 'Refresh failed.') })).catch(() => undefined);
+    // A failure's text can quote a value (row-policy N2) or a warehouse relation (D13): no reader's tab gets it.
+    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', failedRefreshPayload(o));
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
     const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org
