@@ -25,6 +25,11 @@ const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visu
 const fmt: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const additivity: typeof import('../src/analysis/additivity') = require('../src/analysis/additivity');
 const formula: typeof import('../src/analysis/metricFormula') = require('../src/analysis/metricFormula');
+const answerSpec: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
+const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const registry: typeof import('../src/automation/registry') = require('../src/automation/registry');
+const prompts: typeof import('../src/ai/prompts') = require('../src/ai/prompts');
+const suggested: typeof import('../src/ai/suggestedAction') = require('../src/ai/suggestedAction');
 const apiMetrics: typeof import('../src/api/metrics') = require('../src/api/metrics');
 const apiVisuals: typeof import('../src/api/visuals') = require('../src/api/visuals');
 
@@ -62,6 +67,28 @@ void (async () => {
   ok('words', fmt.describeDefinition(await metrics.getMetric(P, cust.id) as never) === 'count distinct of customer_id', fmt.describeDefinition(cust));
   const byName = new Map((await metrics.listMetrics(P)).map((m) => [m.name, m as never])) as never;
   ok('a formula over countd is not additive', !additivity.additivityOf(per, COLS, byName).categories);
+
+  // ── agents: the Assistant's spec, an answer card, MCP ─────────────────────
+  const DSX = { id: D, name: 'Orders', columns: COLS };
+  const specOf = (aggregation: string) => answerSpec.validateAnswerSpec({ dataset: D, category: 'region', measures: [{ column: 'customer_id', aggregation }] }, [DSX], {});
+  for (const said of ['countd', 'count distinct', 'distinct', 'unique', 'COUNT_DISTINCT']) {
+    const r = specOf(said);
+    ok(`"${said}" is a distinct count`, r.ok && r.spec.measures[0].aggregation === 'countd', JSON.stringify(r));
+  }
+  const plainSpec = specOf('count');
+  ok('NEGATIVE CONTROL: "count" is a count', plainSpec.ok && plainSpec.spec.measures[0].aggregation === 'count');
+  const distinctSpec = specOf('countd');
+  const card: any = distinctSpec.ok ? await answers.computeCard(P, distinctSpec.spec) : null; // any: Built | Failure, narrowed by 'card' in
+  const east = new Set(rows.filter((r) => r[3] === 'East').map((r) => r[2])).size;
+  const vals = card && card.card ? card.card.data.series[0].values : null;
+  ok('an answer card computes it', !!card && 'card' in card && vals && vals.includes(east) && !vals.includes(60), JSON.stringify(card).slice(0, 200));
+  ok('and never says the regions add up', !/in total|add up/.test(card?.factsText ?? 'x'), card?.factsText);
+  ok('NEGATIVE CONTROL: a count card says its total', plainSpec.ok && /total/i.test((await answers.computeCard(P, plainSpec.spec) as any).factsText));
+  ok('a series is named in words', /count distinct of customer_id/.test(JSON.stringify(card?.card?.data?.series ?? '')), JSON.stringify(card?.card?.data?.series));
+  const tool = registry.COMMANDS.find((c) => c.tool === 'create_visual')!;
+  ok('MCP create_visual takes it', JSON.stringify(tool).includes('"countd"'));
+  ok('the prompts that name an aggregation name countd', [prompts.SUGGEST_CHARTS_SYSTEM_PROMPT, prompts.SUGGEST_STEPS_SYSTEM_PROMPT, suggested.CHAT_SYSTEM_PROMPT].every((t) => t.includes('|countd')));
+  ok('NEGATIVE CONTROL: the Prepare pivot step is not offered it', !/"type": "pivot"[^\n]*countd/.test(prompts.SUGGEST_STEPS_SYSTEM_PROMPT));
 
   finish();
 })();

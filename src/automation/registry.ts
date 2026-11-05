@@ -29,7 +29,7 @@ import { CHART_TYPE_IDS } from '../analysis/analysisPlan';
 import { onlyEditorsPublish } from '../analysis/draftMessages';
 import * as h from './handlers';
 import { AutomationError } from './errors';
-import { PLAIN_AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS } from '../data/aggregations';
 
 export { AutomationError, EXIT } from './errors';
 export type { ErrorCode } from './errors';
@@ -134,12 +134,12 @@ const ENCODING: ArgSpec = {
     category: { type: 'string', description: 'The dimension (x axis / slices / rows).' },
     values: {
       type: 'array',
-      description: 'Measures. sum/avg/min/max need a number column; count works on any column.',
+      description: 'Measures. sum/avg/min/max need a number column; count and countd (distinct values) work on any column.',
       items: {
         type: 'object',
         properties: {
           column: { type: 'string' },
-          aggregation: { type: 'string', enum: [...PLAIN_AGGREGATIONS, 'none'] },
+          aggregation: { type: 'string', enum: [...AGGREGATIONS, 'none'] },
         },
         required: ['column', 'aggregation'],
       },

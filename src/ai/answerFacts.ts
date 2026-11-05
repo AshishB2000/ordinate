@@ -129,7 +129,7 @@ function extremes(ms: Mark[]): { hi: Mark; lo: Mark } | null {
 
 /** "sum of revenue" → "revenue" — the noun a sentence uses. */
 function noun(seriesName: string): string {
-  return seriesName.replace(/^(sum|avg|min|max|count) of /, '');
+  return seriesName.replace(/^(sum|avg|min|max|count|count distinct) of /, '');
 }
 
 /**

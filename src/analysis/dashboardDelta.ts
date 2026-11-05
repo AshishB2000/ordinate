@@ -39,7 +39,7 @@ import type { Parameter } from './params';
 import { CHART_TYPE_IDS } from './analysisPlan';
 import { fillMapRegions } from './geoHits';
 import type { PlanDataset } from './analysisPlan';
-import { NUMBER_AGGREGATIONS, isPlainAggregation } from '../data/aggregations';
+import { NUMBER_AGGREGATIONS, isAggregation } from '../data/aggregations';
 
 /** Aggregations that need a `number` column — the same set `validatePlan` uses,
  *  restated because it is private there. `count` is the only one that works on
@@ -428,7 +428,7 @@ function opAddMetric(
     return null;
   }
   const aggregation = str(raw.aggregation);
-  if (!isPlainAggregation(aggregation)) { // a model's card never counts distinct here (part 5 step 04 offers it)
+  if (!isAggregation(aggregation)) {
     dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
     return null;
   }

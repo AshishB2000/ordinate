@@ -187,9 +187,9 @@ void (async () => {
   ipcScenarios.register();
   ipcTemplates.register();
   const listed = ((await handlers.get('scenario:metrics')!(null, { projectId: P })) as Array<{ id: string }>).map((x) => x.id);
-  ok('scenarios: the picker offers no part-5 metric', [customers, funnelM, periodM, perM].every((x) => !listed.includes(x.id)) && listed.includes(plain.id), JSON.stringify(listed));
+  ok('scenarios: the picker offers no pending part-5 metric, and offers a countd one (step 04)', [funnelM, periodM, perM].every((x) => !listed.includes(x.id)) && listed.includes(plain.id) && listed.includes(customers.id), JSON.stringify(listed));
   const planned = (await planExec.loadProjectCtx(P)).metrics.map((x) => x.id);
-  ok('plans: a plan step cannot name a part-5 metric', [customers, funnelM, periodM, perM].every((x) => !planned.includes(x.id)) && planned.includes(plain.id), JSON.stringify(planned));
+  ok('plans: a plan step cannot name a pending part-5 metric, and can name a countd one (step 04)', [funnelM, periodM, perM].every((x) => !planned.includes(x.id)) && planned.includes(plain.id) && planned.includes(customers.id), JSON.stringify(planned));
   const open = { covers: async () => true } as never; // any lock that covers the dataset
   ok('embed: a KPI of a funnel metric is not allowed under a lock', (await embedLock.metricAllowed(open, P, { metricId: funnelM.id, datasetId: D, column: 'amount' })) === false);
   ok('NEGATIVE CONTROL: embed: the KPI of the plain metric is allowed', (await embedLock.metricAllowed(open, P, { metricId: plain.id, datasetId: D, column: 'amount' })) === true);

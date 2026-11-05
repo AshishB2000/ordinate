@@ -106,7 +106,7 @@ export function keyOf(cell: Cell): string {
 // single verbatim column → just the column name.
 export function measureLabel(v: VizMeasure): string {
   if (v.aggregation === 'none' || v.aggregation === 'count') return v.column;
-  return `${v.aggregation} of ${v.column}`;
+  return `${v.aggregation === 'countd' ? 'count distinct' : v.aggregation} of ${v.column}`;
 }
 
 // ── recommendChartType ───────────────────────────────────────────────────────
