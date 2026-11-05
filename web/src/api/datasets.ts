@@ -1,5 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from './client';
+import type { StatusView } from '../features/model/status/status';
 
 /**
  * What `dataset:list` returns per dataset — the fields the web reads, mirrored
@@ -8,6 +9,8 @@ import { rpc } from './client';
  */
 export interface DatasetSummary {
   id: string;
+  /** Certified, changed since, or retired (part 4). */
+  status?: StatusView;
   /** Row access rules limit what the caller sees here (docs/row-policy). */
   scoped?: true;
   name: string;
