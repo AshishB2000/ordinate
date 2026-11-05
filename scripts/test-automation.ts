@@ -188,6 +188,7 @@ async function rpc(): Promise<void> {
     },
   }, reg.inputSchema);
   const init: any = await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {} } });
+  ok('initialize: the instructions tell agents to prefer certified', init.result.instructions.includes('certified'));
   ok('initialize: echoes a supported version, tools capability, serverInfo',
     init.result.protocolVersion === '2025-03-26' && init.result.capabilities.tools && init.result.serverInfo.version === '1.2.3');
   const init2: any = await handle({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '1999-01-01' } });
