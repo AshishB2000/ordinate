@@ -513,6 +513,7 @@
   "metricTreeMessages.that_metric_no_longer_exists": "That metric no longer exists.",
   "modelFileMessages.another_file_in_the_model_has": "Another file in the model has the same id, so this one was not read.",
   "modelFileMessages.has_always_applied_filters_this_version": "“{name}” has always-applied filters this version of Ordinate can't read, so the model can't be exported. Ask your admin to finish upgrading Ordinate.",
+  "modelFileMessages.is_defined_in_another_tool_s": "“{name}” is defined in another tool’s semantic layer, so model files never carry it. It stays with that tool.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate can't read this file: a value is missing, has the wrong type or is too long.",
   "modelFileMessages.that_upload_has_expired_or_was": "That upload has expired or was already used. Choose the file again.",
   "modelFileMessages.the_model_files_hold_a_file": "The model files hold a file Ordinate does not read ({name}). They were refused as a whole.",

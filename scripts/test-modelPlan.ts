@@ -260,6 +260,14 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
   withSkip = put(withSkip, 'metrics/refund-share.json', { ...ordersMetric, id: fid(47), name: 'Refund share', definition: { formula: '[Refunds] / [Revenue]' } });
   const share = itemOf(await plan(F.P, withSkip), `metric:${fid(47)}`);
   ok('a formula naming a metric the import skips is refused as the editor refuses an unknown name', share.reason === 'invalid' && share.error === String((await post('metric:check', { projectId: F.P, datasetId: F.orders, expression: '[Refunds] / [Revenue]', name: 'Refund share' })).value.error), show(share));
+  // Release B's p7-b0 (D13): a metric another tool's layer defines is never written from a file, new or over one here.
+  const extSaid = await H.as(H.ORG_A, async () => msg.modelExternalMetric('Net revenue'));
+  const EXTERNAL = { external: 'net_revenue', layer: 'dbt' };
+  const extNew = itemOf(await plan(F.P, put(filesG, 'metrics/net-revenue.json', { ...ordersMetric, id: fid(48), name: 'Net revenue', definition: EXTERNAL })), `metric:${fid(48)}`);
+  ok('a new metric another tool\'s layer defines is skipped with the sentence, never new (D13)', extNew.status === 'skipped' && extNew.reason === 'invalid' && extNew.error === extSaid, show(extNew));
+  const extOver = itemOf(await plan(F.P, edit(filesG, 'metrics', F.revenue, (m) => { m.definition = EXTERNAL; })), `metric:${F.revenue}`);
+  ok('…and so is one turning a metric here into one', extOver.status === 'skipped' && extOver.reason === 'invalid' && extOver.error === (await H.as(H.ORG_A, async () => msg.modelExternalMetric('Revenue'))), show(extOver));
+  ok('NEGATIVE CONTROL: the same new file with a column definition is new', itemOf(await plan(F.P, put(filesG, 'metrics/net-revenue.json', { ...ordersMetric, id: fid(48), name: 'Net revenue' })), `metric:${fid(48)}`).status === 'new');
   ok('NEGATIVE CONTROL: the same files without a defect plan clean', (await plan(F.P, filesG)).items.every((i) => i.status !== 'skipped'), show(await plan(F.P, filesG)));
   // ── 8. model:importPlan ───────────────────────────────────────────────────
   const contract = api.contracts['model:importPlan'];

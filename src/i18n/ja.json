@@ -516,6 +516,7 @@
   "metricTreeMessages.that_metric_no_longer_exists": "その指標はもう存在しません。",
   "modelFileMessages.another_file_in_the_model_has": "モデル内の別のファイルが同じ ID を持っているため、このファイルは読み込まれませんでした。",
   "modelFileMessages.has_always_applied_filters_this_version": "「{name}」には、このバージョンの Ordinate では読み取れない常時適用フィルターがあるため、モデルをエクスポートできません。Ordinate の更新を完了するよう管理者に依頼してください。",
+  "modelFileMessages.is_defined_in_another_tool_s": "「{name}」は別のツールのセマンティックレイヤーで定義されているため、モデルファイルには含まれません。そのツールに残ります。",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate はこのファイルを読み込めません。値が欠けているか、型が正しくないか、長すぎます。",
   "modelFileMessages.that_upload_has_expired_or_was": "このアップロードは期限切れか、すでに使用されています。もう一度ファイルを選択してください。",
   "modelFileMessages.the_model_files_hold_a_file": "モデルファイルに Ordinate が読み込まないファイル（{name}）が含まれているため、全体を拒否しました。",

@@ -22,12 +22,12 @@ import { labelClash, type Relationship } from '../analysis/relationships';
 import { labelTaken } from '../analysis/joinMessages';
 import { termProblem } from '../analysis/terms';
 import { termNameTaken } from '../data/termMessages';
-import { isFormulaDefinition, type MetricDefinition } from '../analysis/metrics';
+import { isExternalDefinition, isFormulaDefinition, sanitizeDefinition, type MetricDefinition } from '../analysis/metrics';
 import { checkMetricFormula, type KnownMetric } from '../analysis/metricCheck';
 import { compileMetricFormula } from '../analysis/metricFormula';
 import { relatedColumnNames } from '../ipc/relationships';
 import { metricProblem, nameRefusalAmong } from '../ipc/metricSave';
-import { modelObjectUnreadable } from './modelFileMessages';
+import { modelExternalMetric, modelObjectUnreadable } from './modelFileMessages';
 import type { ModelField, ModelMetric, ModelRelationship, ModelTerm } from './modelFormat';
 
 type Columns = DatasetMeta['columns'];
@@ -120,6 +120,7 @@ async function formulaRefusal(projectId: string, m: ModelMetric, selfId: string,
  * (`metric:check`), its name against the names after the import. `pending`: it names an object this import creates.
  */
 export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean): Promise<string | null> {
+  if (isExternalDefinition(sanitizeDefinition(m.definition))) return modelExternalMetric(m.name); // D13: a layer's metric is never written from a file
   const named = nameRefusalAmong(m.name, post.metrics, post.terms, selfId);
   if (named) return named;
   const formula = await formulaRefusal(projectId, m, selfId, post);

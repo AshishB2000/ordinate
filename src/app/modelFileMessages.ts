@@ -62,3 +62,8 @@ export function modelDatasetMoved(): string {
 export function modelUploadExpired(): string {
   return t('modelFileMessages.that_upload_has_expired_or_was');
 }
+
+/** A metric file whose definition another tool's semantic layer owns (D13): mirrors stay with their layer. */
+export function modelExternalMetric(name: string): string {
+  return t('modelFileMessages.is_defined_in_another_tool_s', { name });
+}
