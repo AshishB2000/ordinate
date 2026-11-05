@@ -757,6 +757,10 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('live calcs: east reads the calc\'s name and type on the Schema tab, never its formula (a West value)', schemaEast.body?.ok === true
       && JSON.stringify(schemaEast.body.calculated.fields) === JSON.stringify([{ name: 'Flag', expression: '', type: 'number', hidden: true }]) && !H.leaks(schemaEast.text), schemaEast.text.slice(0, 300));
     ok('NEGATIVE CONTROL: the editor reads the formula, West value and all', schemaEd.body?.ok === true && schemaEd.body.calculated.fields[0].expression === flag.expression && H.leaks(schemaEd.text));
+    const [ovLiveEast, ovLiveEd] = [await W.call('east', 'model:overview', { projectId: P }), await W.call('ed', 'model:overview', { projectId: P })];
+    const liveRow = (r: { body?: { tables?: { datasetId: string }[] } }) => r.body?.tables?.find((t) => t.datasetId === liveId) as { calculated?: unknown; valuesHidden?: true } | undefined;
+    ok('live calcs: east reads the calc\'s name in model:overview, never its formula', JSON.stringify(liveRow(ovLiveEast)?.calculated) === '[{"name":"Flag","formula":""}]' && liveRow(ovLiveEast)?.valuesHidden === true && !H.leaks(JSON.stringify(liveRow(ovLiveEast))), JSON.stringify(liveRow(ovLiveEast)));
+    ok('NEGATIVE CONTROL: the editor\'s model:overview carries the formula', JSON.stringify(liveRow(ovLiveEd)?.calculated) === JSON.stringify([{ name: 'Flag', formula: flag.expression }]) && H.leaks(JSON.stringify(liveRow(ovLiveEd))));
     await W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: liveId, policy: null }); // the project-wide check below needs no other closed dataset
 
     // ── Project-wide: the colour map is withheld when ANY dataset is closed to the caller, and Orders' row rules (and the
