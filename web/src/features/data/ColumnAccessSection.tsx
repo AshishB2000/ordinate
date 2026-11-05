@@ -176,7 +176,7 @@ export function ColumnAccessSection({ projectId, datasetId, header }: { projectI
             <div className={r.actions}>{hideButton}</div>
           </>
         ) : reply.state !== 'closed' && (
-          <EmptyState compact heading={4} icon="eye" title="No hidden columns" actions={hideButton}>
+          <EmptyState heading={4} icon="eye" title="No hidden columns" actions={hideButton}>
             Every column is visible to everyone who can open this dataset.
           </EmptyState>
         )}

@@ -31,8 +31,8 @@ export function useSaveColumnAccess(projectId: string, datasetId: string) {
       (await rpc('dataset:setColumnAccess', { projectId, datasetId, columns })) as { ok: true; rules: ColumnRule[] } | { ok: false; error: string },
     onSuccess: (r) => {
       if (!r.ok) return;
+      // Only the rules change for the admin who saves them (an admin sees every column), so only they are asked again.
       void client.invalidateQueries({ queryKey: [KEY, projectId, datasetId] });
-      void client.invalidateQueries({ queryKey: ['dataset:columns', projectId, datasetId] });
     },
   });
 }
