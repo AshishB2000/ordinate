@@ -59,7 +59,7 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   for (const mid of topic.metricIds) { const m = allMetrics.get(mid); if (m && !(await metricHidden(projectId, m.id))) own.push(m); }
   if (own.length) {
     lines.push('', 'Topic metrics (the app computes their figures):');
-    for (const m of own) lines.push(`- Metric ${m.name}: ${describeDefinitionShort(m.definition)}`);
+    for (const m of own) lines.push(`- Metric ${m.name}: ${describeDefinitionShort(m.definition, metrics.isPeriodDefinition(m.definition) ? allMetrics.get(m.definition.base)?.name : undefined)}`); // a period metric: by its base's name (part 5)
   }
   const hideAll = await restrictedOn(projectId);
   const facts: FactTerm[] = [];
