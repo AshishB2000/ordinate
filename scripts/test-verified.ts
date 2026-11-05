@@ -109,6 +109,43 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
     ok('a corrupt file is skipped', (await S.listVerified(P)).length === 1);
   });
 
+  // ── § runs: worked out from metadata on each read, never repaired ─────────
+  const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+  const VS: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
+  const msg: typeof import('../src/analysis/verifiedMessages') = require('../src/analysis/verifiedMessages');
+  const reimport = (cols: typeof COLUMNS, drop?: string) => as(() => datasets.updateDatasetData(P, D, {
+    columns: cols.filter((c) => c.name !== drop), rows: ROWS.map((r) => r.filter((_, i) => cols[i].name !== drop)),
+  }));
+  const hydrates = async (fn: () => Promise<unknown>): Promise<boolean> => {
+    let n = 0;
+    const real = datasets.getDataset;
+    (datasets as any).getDataset = async (...a: unknown[]) => { n += 1; return (real as any)(...a); }; // any: the spy passes the call through
+    try { await fn(); } finally { (datasets as any).getDataset = real; } // any: as above
+    return n > 0;
+  };
+  await as(async () => {
+    const problem = async (x: typeof q) => VS.verifiedProblem(x, await VS.verifiedEnv(P));
+    ok('a working question has no problem', (await problem(q)) === null);
+    await reimport(COLUMNS, 'region');
+    ok('a dropped column: no longer runs, with the reason', (await problem(q)) === msg.verifiedColumnGone('region', 'Orders'), String(await problem(q)));
+    ok('never repaired: the stored spec still names it', (await S.getVerified(P, V))?.spec.category === 'region');
+    await reimport(COLUMNS);
+    ok('restored, it runs again', (await problem(q)) === null);
+    await reimport(COLUMNS.map((c) => (c.name === 'amount' ? { ...c, type: 'text' as const } : c)));
+    ok('a column its measure no longer fits: the validator\'s reason', (await problem(q)) === '"amount" is text, so it cannot be summed.', String(await problem(q)));
+    await reimport(COLUMNS);
+    const term = await terms.saveTerm(P, { name: 'Small business', datasetId: D, filters: [{ type: 'filter', column: 'segment', op: '=', value: 'SMB' }] });
+    if (!term) throw new Error('no term');
+    const qTerm = { ...q, id: '5f0c2d1e-2222-4222-8333-444455556666', question: 'SMB revenue by region', spec: { ...q.spec, filters: [{ term: term.id }] } };
+    ok('NEGATIVE CONTROL: with its term, it runs', (await problem(qTerm)) === null);
+    await trash.trashRecord(P, 'term', term.id);
+    ok('a deleted term: no longer runs', (await problem(qTerm)) === msg.verifiedTermGone());
+    ok('a deleted dataset: no longer runs', (await problem({ ...q, spec: { ...q.spec, datasetId: '00000000-0000-4000-8000-000000000002' } })) === msg.verifiedDatasetGone());
+    let states: Awaited<ReturnType<typeof VS.verifiedStates>> = [];
+    ok('metadata only: nothing hydrated', !(await hydrates(async () => { states = await VS.verifiedStates(P); })));
+    ok('states: each question, whether it runs, and nothing hidden from an admin', states.length === 1 && states[0].problem === null && states[0].hidden === false, JSON.stringify(states));
+  });
+
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });
   finish();
