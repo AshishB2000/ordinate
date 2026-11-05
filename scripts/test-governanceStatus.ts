@@ -54,6 +54,7 @@ const metrics: typeof import('../src/analysis/metrics') = require('../src/analys
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
 const datasetRecord: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const { stableStringify } = require('../src/engine/queryCache') as typeof import('../src/engine/queryCache');
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
@@ -272,6 +273,22 @@ async function partKinds(fx: Fixtures): Promise<void> {
   await as(() => metrics.updateMetric(P, BASE, { filters: [F0] }));
   ok("editing a period metric's base turns it to needs_review", (await as(() => store.statusFor(P)(`metric:${ytd}`)))?.state === 'needs_review');
   const LIVE = `dataset:${fx.LIVE}`;
+  // Part 8 (p8-04): a calc edited through its store (what live:setCalculated writes) moves a certified Live dataset and a
+  // metric on it; a docs edit moves neither (NEGATIVE CONTROL).
+  const LIVE_M = `metric:${await as(async () => (await metrics.saveMetric(P, { name: 'Live sales', datasetId: fx.LIVE, definition: { column: 'sales', aggregation: 'sum' } }))!.id)}`;
+  const MARGIN_CALC = { name: 'Margin', expression: '[sales] - [qty]', type: 'number' as const };
+  const certifyLive = () => as(async () => { for (const ref of [LIVE, LIVE_M]) await store.certify(P, ref, (await pinOf(P, ref))!, ''); });
+  const liveStates = async (): Promise<string> => (await as(async () => [await store.statusFor(P)(LIVE), await store.statusFor(P)(LIVE_M)])).map((x) => x?.state ?? 'none').join();
+  await as(() => liveDataset.setLiveCalcs(P, fx.LIVE, [MARGIN_CALC]));
+  await certifyLive();
+  await as(() => tableDocs.setTableDoc(P, fx.LIVE, { guide: 'Live orders, one row per line.' }));
+  ok('NEGATIVE CONTROL: a docs edit keeps a Live dataset with a calc, and a metric on it, certified', (await liveStates()) === 'certified,certified', await liveStates());
+  await as(() => liveDataset.setLiveCalcs(P, fx.LIVE, [{ ...MARGIN_CALC, expression: '[sales] + [qty]' }]));
+  ok("a calc's formula edited turns the Live dataset and its metric to needs_review", (await liveStates()) === 'needs_review,needs_review', await liveStates());
+  await certifyLive();
+  await as(() => liveDataset.setLiveCalcs(P, fx.LIVE, [{ ...MARGIN_CALC, name: 'Spread', expression: '[sales] + [qty]' }]));
+  ok('…and so does a calc renamed', (await liveStates()) === 'needs_review,needs_review', await liveStates());
+  await as(async () => { await store.clearStatus(P, LIVE_M); await liveDataset.setLiveCalcs(P, fx.LIVE, []); });
   await as(async () => store.certify(P, LIVE, (await pinOf(P, LIVE))!, ''));
   const layered = await rewritten(await as(async () => file(P, 'datasets', fx.LIVE)), (r) => { r.semantic = { backend: 'dbt' }; },
     async () => (await as(() => store.statusFor(P)(LIVE)))?.state ?? null, async () => (await as(() => datasets.getDatasetMeta(P, fx.LIVE)))?.live);
