@@ -12,11 +12,17 @@
 //               refuses another kind, itself, a gone or retired replacement and a chain; a replacement is named as it
 //               is called now and left out once gone; clear removes the entry with an event.
 //               NEGATIVE CONTROL: an item never certified reads no status.
+//   § channels  over the route: review hands back the pin certify takes and the newest version key; a stale base is
+//               409 record_changed with the current pin; a refusal is { ok:false, error, field }. A restore never
+//               certifies, and one to other content reads needs_review (control: back to what was certified reads
+//               certified); a duplicate carries no status; a bundle round trip keeps `by` and reads needs_review
+//               (ids remapped, so the pin moved). The four channels are admin and project-scoped.
 //
 //   npm run build:ts && node scripts/test-governanceStatus.js
 
 export {}; // module scope: sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -27,7 +33,10 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-govstatus-'));
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
+const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+const bundle: typeof import('../src/app/bundle') = require('../src/app/bundle');
+const { contracts } = require('../src/api/index') as typeof import('../src/api/index');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
@@ -85,6 +94,8 @@ async function tableLoop(label: string, table: Record<string, string>, f: string
 }
 
 let PROJECT = '';
+type Reply = { status: number; text: string; body: any }; // any: each channel's own reply
+let call: (channel: string, payload: unknown) => Promise<Reply> = async () => { throw new Error('no app'); };
 
 interface Fixtures { ORD: string; CUST: string; EMEA: string; LIVE: string }
 
@@ -256,12 +267,75 @@ async function partStore(fx: Fixtures): Promise<void> {
   ok('NEGATIVE CONTROL: nothing certified, nothing read', (await as(() => store.statusFor(P)(`metric:${PLAIN}`))) === null);
 }
 
+async function partChannels(fx: Fixtures): Promise<void> {
+  const P = PROJECT;
+  const saved = async (name: string): Promise<string> => (await call('metric:save', { projectId: P, input: { name, datasetId: fx.ORD, definition: { column: 'sales', aggregation: 'sum' } } })).body.metric.id;
+  const R = await saved('Reviewed');
+  const U = await saved('Untouched');
+  const REF = `metric:${R}`;
+  const keysOf = async (id: string): Promise<string[]> => (await as(() => versions.list(P, 'metric', id))).map((v) => v.key);
+  const restore = (id: string, key: string) => call('versions:restore', { projectId: P, type: 'metric', id, key });
+  const statusOf = (ref: string, project = P) => as(() => store.statusFor(project)(ref));
+
+  await call('metric:update', { projectId: P, id: U, patch: { filters: [F0] } });
+  const [, uOld] = await keysOf(U);
+  ok('restore never certifies: an uncertified metric restored has no status', (await restore(U, uOld)).body?.ok === true && (await statusOf(`metric:${U}`)) === null);
+
+  await call('metric:update', { projectId: P, id: R, patch: { filters: [F0] } });
+  const [rEdited, rFirst] = await keysOf(R);
+  const review = await call('model:review', { projectId: P, ref: REF });
+  ok('review returns the pin certify takes, no status yet, and the newest version key',
+    review.body?.ok === true && review.body.pin === (await as(() => pinOf(P, REF))) && review.body.status === null && review.body.newestKey === rEdited);
+  const certified = await call('model:certify', { projectId: P, ref: REF, base: review.body.pin, note: 'checked' });
+  ok('certify over the route', certified.body?.ok === true && certified.body.status.state === 'certified' && certified.body.status.by === EMAIL);
+  ok('…and review then carries it', (await call('model:review', { projectId: P, ref: REF })).body?.status?.state === 'certified');
+  ok('restore of a certified metric to other content reads needs_review', (await restore(R, rFirst)).body?.ok === true && (await statusOf(REF))?.state === 'needs_review');
+  const stale = await call('model:certify', { projectId: P, ref: REF, base: review.body.pin });
+  const current = await as(() => pinOf(P, REF));
+  ok('a stale base is 409 record_changed with the current pin', stale.status === 409 && stale.body?.code === 'record_changed' && stale.body.tag === current && current !== review.body.pin, stale.text);
+  ok('NEGATIVE CONTROL: restored to what was certified, it reads certified again', (await restore(R, rEdited)).body?.ok === true && (await statusOf(REF))?.state === 'certified');
+  const copy = (await call('metric:duplicate', { projectId: P, id: R })).body?.metric?.id;
+  ok('a duplicate carries no status', !!copy && (await statusOf(`metric:${copy}`)) === null);
+
+  const imported = await as(async () => {
+    const out = (await bundle.exportProject(P))!;
+    const res = await bundle.importBundle(out.bytes);
+    if (!res.ok) throw new Error('import failed');
+    const NP = res.project!.id;
+    const id = (await metrics.listMetrics(NP)).find((m) => m.name === 'Reviewed')!.id;
+    return { NP, id, remapped: id !== R };
+  });
+  const back = await statusOf(`metric:${imported.id}`, imported.NP);
+  ok('a bundle round trip keeps by but reads needs_review (ids remapped, the pin moved)', imported.remapped && back?.state === 'needs_review' && back.by === EMAIL);
+
+  const refused = await call('model:retire', { projectId: P, ref: REF, replacedBy: `term:${fx.EMEA}` });
+  ok('a refusal is { ok:false, error, field }', refused.body?.ok === false && refused.body.field === 'replacedBy' && typeof refused.body.error === 'string');
+  ok('retire over the route', (await call('model:retire', { projectId: P, ref: REF, replacedBy: `metric:${U}`, note: 'use Untouched' })).body?.status?.replacedBy?.name === 'Untouched');
+  const cleared = await call('model:clearStatus', { projectId: P, ref: REF });
+  ok('clear over the route', cleared.body?.ok === true && cleared.body.status === null && (await statusOf(REF)) === null);
+  ok('review of an item that is gone says so', (await call('model:review', { projectId: P, ref: `metric:${uuid(404)}` })).body?.ok === false);
+  ok('an input that is no status ref is refused at the contract', (await call('model:review', { projectId: P, ref: `visual:${R}` })).status === 400);
+  ok('the four channels are admin and project-scoped', ['model:review', 'model:certify', 'model:retire', 'model:clearStatus']
+    .every((c) => { const k = contracts[c as keyof typeof contracts] as { access: string; project?: unknown }; return k.access === 'admin' && typeof k.project === 'function'; }));
+}
+
 (async () => {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => ADMIN);
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => ADMIN);
+  call = async (channel, payload) => {
+    const r = await app.inject({
+      method: 'POST', url: `/api/rpc/${encodeURIComponent(channel)}`,
+      headers: withCsrf({ 'content-type': 'application/json' }), payload: wire.encode({ args: [payload] }),
+    });
+    let body: unknown = null;
+    try { body = r.statusCode === 200 ? wire.decode(r.body) : JSON.parse(r.body); } catch { body = null; }
+    return { status: r.statusCode, text: r.body, body };
+  };
   PROJECT = await as(async () => { await projects.init(); return (await projects.createProject('Governance')).id; });
-  await partStore(await partPin());
+  const fx = await partPin();
+  await partStore(fx);
+  await partChannels(fx);
 })().catch((err) => {
   console.error('FAIL harness', err);
   process.exitCode = 1;
