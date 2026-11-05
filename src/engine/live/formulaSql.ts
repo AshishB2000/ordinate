@@ -70,9 +70,10 @@ export class SqlFormulaBuilder implements FormulaBuilder<SqlTerm> {
   }
 
   /** Every built term passes here, so no formula grows past MAX_CALC_SQL. */
-  out<R extends { sql: string }>(t: R, at: number): R {
+  out<R extends { sql: string; type?: CalcValueType }>(t: R, at: number): R {
     if (t.sql.length > MAX_CALC_SQL) this.fail('tooLong', m.calcTooLong(), at);
-    return t;
+    // Always NULL, so spelled NULL: Postgres types a CASE of NULLs as text and BigQuery as INT64, then refuse to mix it.
+    return t.type === 'null' ? { ...t, sql: 'NULL' } : t;
   }
 
   /** `t` as a `type` operand; a NULL becomes that type's NULL. Anything else is refused. */

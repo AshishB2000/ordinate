@@ -161,6 +161,10 @@ for (const id of DIALECT_IDS) {
   ok(`${id}: never ROUND, LEAST or GREATEST`, !/round\(|least\(|greatest\(/i.test(compiled(id, 'round([amt], 1) + min([amt], [qty]) + max([amt], 2)')));
   ok(`${id}: a literal is bound, never in the text`, !compiled(id, "concat([cat], 'zz_secret') = 'zz_other'").includes('zz_'));
   ok(`${id}: lower is refused like every casing function`, compiled(id, 'lower([cat])') === 'REFUSED function');
+  // Step 05: Postgres types a CASE of NULLs as text and BigQuery as INT64, then refuses to mix it with a date or a number.
+  ok(`${id}: a term that is always NULL is spelled NULL, never a CASE of NULLs`, compiled(id, 'ifnull([amt], (IF [amt] > 1 THEN null END))').endsWith(', NULL) END')
+    && !compiled(id, 'if([amt] > 1, [d], ifnull(null, null)) < [d]').includes('COALESCE(NULL, NULL)'), compiled(id, 'ifnull([amt], (IF [amt] > 1 THEN null END))'));
+  ok(`${id}: NEGATIVE CONTROL — a branch with a value keeps its CASE`, compiled(id, 'ifnull([amt], (IF [amt] > 1 THEN 2 END))').includes('THEN '));
 }
 
 // Every value is a parameter of the statement it lands in, in text order.

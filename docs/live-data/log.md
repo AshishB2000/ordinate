@@ -1353,3 +1353,19 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Tests.** Vitest `valuePicker.test` (the sample line and Use on a Live reply — NEGATIVE CONTROL: an
   extract never offers Use), `controlNoList.test` (a typed value used on a `notListed` column, as a
   viewer); e2e `liveTiles.e2e` moved to the popover.
+
+## 2026-11-05 — Part 8 — calculated fields on real engines (semantic layer step 05)
+
+Step 03's expression differential and step 04's calc matrix now run on every engine a calc is sent to:
+Postgres for the Redshift dialect (CI, every PR), ClickHouse (the nightly's container), Snowflake and
+BigQuery (the nightly's accounts, over literals: 400 expressions and every 8th matrix case, since they
+bill per statement). Each runner ends its summary line with `calcs: <n> expressions, <m> matrix cases`.
+Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the engine, and the decision:
+
+- **Postgres: a formula term that is always NULL** — `(IF [x] > 1 THEN null END)`, `ifnull(null, null)` —
+  was spelled as its CASE or COALESCE of NULLs. Postgres types that as text, and refuses to mix it with a
+  date or a number in the CASE around it ("CASE types date and text cannot be matched"); BigQuery types it
+  INT64 and would refuse the same. **Fixed in the spelling, every dialect:** such a term is the keyword
+  `NULL` (`SqlFormulaBuilder.out`), which every engine coerces. Its value cannot change (it is always
+  NULL); the SQL text of a calc holding one does, so its cache key moves. Fragment: test-formulaSql
+  "a term that is always NULL is spelled NULL". 3 of 2,000 expressions.
