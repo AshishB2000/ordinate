@@ -4,8 +4,6 @@
 .stage {
   padding: var(--sp-16);
   min-height: 160px;
-  max-height: 70vh;
-  overflow-y: auto;
 }
 .thread {
   display: flex;
@@ -65,7 +63,7 @@
 /* ── Asking ────────────────────────────────────────────────────────── */
 .composer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--sp-8);
   padding: var(--sp-12) var(--sp-16);
   border-top: 1px solid var(--border-hairline);
