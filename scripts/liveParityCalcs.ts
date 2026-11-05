@@ -8,7 +8,8 @@
 // `parityKit`): labels and values under `Object.is`, sum/avg within the documented float tolerance only.
 // A disagreement is fixed in the SQL builder or becomes a named pin (./liveParityPins), never a looser check.
 //
-// Cases: every aggregation over the number calcs; the text calcs (a boolean is text on both) as categories;
+// Cases: every aggregation over the number calcs; a distinct count of every calc (part 5's countd, which counts by
+// the declared type, so a calc counts as its stored type); the text calcs (a boolean is text on both) as categories;
 // bins over a calc; a split by one; every filter op moved onto a text and a number calc; the KPI of each; all
 // of it again under a row access lock; then again under part 1 step 08's base filters (./liveParityBase BASE_P),
 // which a copy runs as Prepare steps before the calcs and Live runs innermost, below every calc layer.
@@ -89,6 +90,7 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
     { category: 'Margin', values: [M('qty', 'count')] }, { category: 'Margin', bins: 20, values: [M('amt', 'sum')] }, { category: 'R1', values: [M('Margin2', 'max')] },
     { category: 'cat', series: 'Band', values: [M('Margin', 'sum')] }, { category: 'Band', series: 'region', values: [M('R1', 'avg')] },
     { category: 'Yr', values: [M('Either', 'count')] },
+    ...[...NUMBERS, ...TEXTS].map((c) => ({ category: 'cat', values: [M(c, 'countd')] })), { category: 'Band', values: [M('Margin', 'countd'), M('amt', 'sum')] },
   ] as VizEncoding[];
   let n = 0;
   let bad = 0;
@@ -120,6 +122,7 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
   const kpis: [string, import('../src/analysis/metricValue').MetricAggregation][] = [
     ...NUMBERS.flatMap((c) => (['sum', 'avg', 'min', 'max', 'count'] as const).map((a) => [c, a] as [string, typeof a])),
     ...TEXTS.map((c) => [c, 'count'] as [string, 'count']),
+    ...[...NUMBERS, ...TEXTS].map((c) => [c, 'countd'] as [string, 'countd']),
   ];
   for (const [i, [column, aggregation]] of kpis.entries()) {
     for (const filters of [[], [LOCK], moved(mx.FILTERS[(i * 7) % mx.FILTERS.length])]) {
@@ -135,6 +138,8 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
   const wrong = withCalcs(typed, typedCalcs(typed.columns, [{ name: 'Margin', expression: '[amt] + [qty]' }, ...CALC_STEPS.slice(1)]));
   ok(label('calcs NEGATIVE CONTROL: Live with Margin as [amt] + [qty] disagrees with the copy'),
     (await kit.chartProblems({ category: 'cat', values: [M('Margin', 'sum')] }, [], wrong)).length > 0);
+  ok(label('calcs NEGATIVE CONTROL: …and so does a distinct count of it'), (await kit.chartProblems({ category: 'cat', values: [M('Margin', 'countd')] }, [], wrong)).length > 0
+    && (await kit.metricProblems({ column: 'Margin', aggregation: 'countd' }, [], wrong)).length > 0);
   ok(label('calcs NEGATIVE CONTROL: …and a wrong filter value on a calc is seen too'),
     (await kit.metricProblems({ column: 'Margin', aggregation: 'sum' }, [F('Band', '=', 'mid')], withCalcs(typed, typedCalcs(typed.columns, [
       ...CALC_STEPS.slice(0, 2), { name: 'Band', expression: "IF [amt] > 100 THEN 'high' ELSEIF [amt] > 11 THEN 'mid' ELSE 'low' END" }, ...CALC_STEPS.slice(3)])))).length > 0);
