@@ -105,6 +105,8 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'jobs:clear': 'META',
   'jobs:list': 'META',
   'key:status': 'META',
+  'lineage:column': 'META', // the records around one column, by name (part 8): no value, figure or row; a column's name is not secret
+  'lineage:fields': 'META', // what uses each field, counted from records (part 8), never from rows
   'lineage:get': 'META',
   'mentions:list': 'META',
   'mentions:prefs': 'META',
