@@ -16,7 +16,7 @@
 //
 // Two pods changing settings inside the same second: each write stores only
 // what IT changed — `storable(cfg)` diffed against the document `cfg` was loaded
-// from, per top-level key and per member inside `starredBy` (diffDoc) — applied
+// from, per top-level key and per member inside `starredBy` and `followingBy` (diffDoc) — applied
 // to the row as it is now, in one transaction (`SELECT … FOR UPDATE`). So one
 // member's star never overwrites another pod's format change. Two pods changing
 // the SAME top-level key still last-writer-wins on it. ponytail: a NOTIFY on
@@ -88,8 +88,11 @@ function sql(pool: Pool, org: string, text: string, params: unknown[] = []): Pro
 
 // ── What one write changed ──────────────────────────────────────────────────
 
-/** A write's own change: top-level keys set or gone, and `starredBy` per member (null = gone). `whole`: no base, replace. */
-export type Patch = { whole: string } | { set: Record<string, unknown>; gone: string[]; starredBy: Record<string, unknown> };
+/** The keys kept per member (an email), so one member's write never drops another's. */
+const PER_MEMBER = ['starredBy', 'followingBy'];
+
+/** A write's own change: top-level keys set or gone, and each PER_MEMBER key per member (null = gone). `whole`: no base, replace. */
+export type Patch = { whole: string } | { set: Record<string, unknown>; gone: string[]; members: Record<string, Record<string, unknown>> };
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -101,11 +104,13 @@ export function diffDoc(base: string | undefined, body: string): Patch {
   if (base === undefined) return { whole: body };
   const a = obj(JSON.parse(base));
   const b = obj(JSON.parse(body));
-  const patch = { set: dict(), gone: [] as string[], starredBy: dict() };
+  const patch = { set: dict(), gone: [] as string[], members: {} as Record<string, Record<string, unknown>> };
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
-    if (k === 'starredBy') {
+    if (PER_MEMBER.includes(k)) {
       const [x, y] = [obj(a[k]), obj(b[k])];
-      for (const m of new Set([...Object.keys(x), ...Object.keys(y)])) if (!same(x[m], y[m])) patch.starredBy[m] = Object.hasOwn(y, m) ? y[m] : null;
+      const changed = dict();
+      for (const m of new Set([...Object.keys(x), ...Object.keys(y)])) if (!same(x[m], y[m])) changed[m] = Object.hasOwn(y, m) ? y[m] : null;
+      if (Object.keys(changed).length) patch.members[k] = changed;
     } else if (!same(a[k], b[k])) {
       if (Object.hasOwn(b, k)) patch.set[k] = b[k];
       else patch.gone.push(k);
@@ -119,13 +124,13 @@ export function applyPatch(current: string, patch: Patch): string {
   if ('whole' in patch) return patch.whole;
   const next = Object.assign(dict(obj(JSON.parse(current))), patch.set);
   for (const k of patch.gone) delete next[k];
-  if (Object.keys(patch.starredBy).length) {
-    const sb = dict(obj(next.starredBy));
-    for (const [m, v] of Object.entries(patch.starredBy)) {
-      if (v === null) delete sb[m];
-      else sb[m] = v;
+  for (const [k, changed] of Object.entries(patch.members)) {
+    const per = dict(obj(next[k]));
+    for (const [m, v] of Object.entries(changed)) {
+      if (v === null) delete per[m];
+      else per[m] = v;
     }
-    next.starredBy = sb;
+    next[k] = per;
   }
   return JSON.stringify(next);
 }

@@ -1,6 +1,7 @@
 // Home — homePage.ts, homeAsk.ts and getStarted.ts, ported. ASK FIRST: after
 // the greeting comes the ask hero (a tinted panel the page's full measure —
-// asking is what Home is for) with its suggestion chips, then the Get-started
+// asking is what Home is for) with its suggestion chips, then "Your numbers"
+// (the metrics this person follows, as tiles), then the Get-started
 // card while first-run guidance lasts, then ONE column: "Starred" (the
 // caller's pins as preview cards), what the app found in the data, the open
 // comments, and the table of all recent work. Bringing data in
@@ -24,6 +25,7 @@ import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
 import { displayName, greeting, importPath, suggestPrompts, type Starter } from './homeText';
 import { StarredRow } from './StarredRow';
+import { YourNumbers } from './YourNumbers';
 import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
@@ -87,6 +89,7 @@ export default function HomePage() {
         </div>
       </header>
       <AskBar prompts={prompts} onAsk={ask} />
+      <YourNumbers projectId={projectId} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (
         <div className={s.emptyBox}>

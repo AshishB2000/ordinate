@@ -1,0 +1,253 @@
+/* Home's "Your numbers": a row of tiles, the figure the largest thing in each.
+   Tokens only, so both themes follow. The grid is the Starred row's (4, 2, 1). */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px var(--sp-8);
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menuBtn:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.grid > li {
+  min-width: 0;
+  display: flex;
+}
+.sk {
+  width: 100%;
+  height: 132px;
+  border-radius: var(--r-lg);
+}
+
+.tile {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 132px;
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.suggest {
+  border-style: dashed;
+  border-color: var(--border-2);
+  background: transparent;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+/* Unfollow shows on hover or focus, as a row's star does; opacity keeps it in the tab order. */
+.unfollow {
+  flex: none;
+  margin: -4px -8px -4px 0;
+  opacity: 0;
+}
+.tile:hover .unfollow,
+.unfollow:focus-visible {
+  opacity: 1;
+}
+.src {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-11);
+  color: var(--text-dim);
+}
+.value {
+  margin-top: var(--sp-8);
+  font-size: 26px;
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.of {
+  font-size: var(--t-13);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.err {
+  margin-top: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.change {
+  font-size: var(--t-12);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.change[data-tone='good'] {
+  color: var(--ok);
+}
+.change[data-tone='bad'] {
+  color: var(--error);
+}
+.vs {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.spark {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin-top: auto;
+  padding-top: var(--sp-8);
+  overflow: visible;
+}
+.spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.follow {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Goals: on track, at risk, off track, as a three-part bar. */
+.bar {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  margin: var(--sp-12) 0 var(--sp-8);
+}
+.bar > span {
+  border-radius: 3px;
+}
+.good {
+  background: var(--ok);
+}
+.warn {
+  background: var(--warn);
+}
+.off {
+  background: var(--error);
+}
+
+
+/* "Follow another": the room the tiles leave in the first row (data-free: empty columns of four). */
+.grid > .add {
+  grid-column: span var(--free, 1);
+}
+.add[data-free='2'] {
+  --free: 2;
+}
+.add[data-free='3'] {
+  --free: 3;
+}
+.add[data-free='4'] {
+  --free: 4;
+}
+.addTile {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  min-height: 132px;
+  padding: var(--sp-16);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.addTile:hover {
+  border-color: var(--accent-line);
+  color: var(--text-strong);
+}
+.addMark {
+  display: grid;
+  place-items: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Two columns: beside an odd tile, else a row of its own. */
+  .add[data-free='1'],
+  .add[data-free='3'] {
+    --free: 1;
+  }
+  .add[data-free='2'],
+  .add[data-free='4'] {
+    --free: 2;
+  }
+}
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grid > .add {
+    grid-column: 1 / -1;
+  }
+  .hint {
+    display: none;
+  }
+}

@@ -314,6 +314,7 @@ Handler paths are under `src/`.
 | `scorecard:compute` | `ipc/scorecards.ts:453` | figures `resolveMetric` → door; the anchor date via `vizDataFor`; `row.alert.message` (stored alert sentence, scorecards.ts:222) is dropped for a policy dataset (REDACT) |
 | `scorecard:detail` | `ipc/scorecards.ts:461` | series via the doors; `topDimension` (scorecards.ts:339) and the breakdown's `distinctValues` (metrics.ts:283) read distinct values → the locked distinct reader |
 | `metric:table` | `ipc/analysesServer.ts:157` | values via `metric:value` (door); sparkline periods via `resolveMetricSeries` → `distinctValues` (metrics.ts:283) → the locked distinct reader |
+| `numbers:get` | `ipc/numbers.ts` | Home's followed metrics and scorecards through the `metric:series`, `metric:value` and `scorecard:compute` handlers (door + the locked distinct reader, as `metric:table`) |
 | `metricTree:compute` | `ipc/metricTree.ts:404` | nodes via `compareMetric` (door), splits via `vizDataFor`; period anchor and sparklines via `resolveMetricSeries` → the locked distinct reader |
 | `home:overview` | `ipc/recent.ts:69` | sparks via `vizDataFor`; `insights.standsOut` walk SKIPS policy datasets for a restricted caller (as it skips Live), before the insights cache |
 | **LOCKED** | | |

@@ -121,6 +121,9 @@ interface Config {
   /** Server only: each user's own pins, by email. A user with no entry sees
    *  `starred` (the org's — the sample seed pins its dashboard there). */
   starredBy: Record<string, string[]>;
+  /** Server only: what each user follows on Home's "Your numbers" (ipc/numbers.ts), by email
+   *  then project id: "metric:<id>" / "scorecard:<id>" keys, at most FOLLOW_MAX a project. */
+  followingBy: Record<string, Record<string, string[]>>;
   /** Settings → Automation (src/ipc/automation.ts). The HTTP token is never stored. */
   automation: AutomationPrefs;
   /** Settings → General: the name on your comments. '' → the OS user name
@@ -137,6 +140,26 @@ interface Config {
 // A connection id is a generated UUID (see src/connections.ts). Validate the
 // SHAPE before using it as a config key — mirrors the datasets/projects guard.
 const CONN_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The most numbers one person follows in one project: one row of Home's tiles, twice. */
+export const FOLLOW_MAX = 8;
+const FOLLOW_KEY = /^(metric|scorecard):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Keeps only real users, project ids and "kind:id" keys, each list deduplicated and capped. */
+function cleanFollowing(raw: object): Record<string, Record<string, string[]>> {
+  const out: Record<string, Record<string, string[]>> = {};
+  for (const [user, byProject] of Object.entries(raw).slice(0, 10_000)) {
+    if (user.length > 320 || !byProject || typeof byProject !== 'object') continue;
+    const mine: Record<string, string[]> = {};
+    for (const [pid, keys] of Object.entries(byProject as object).slice(0, 1_000)) {
+      if (!CONN_UUID_RE.test(pid) || !Array.isArray(keys)) continue;
+      const kept = [...new Set(keys.filter((k): k is string => typeof k === 'string' && FOLLOW_KEY.test(k)))].slice(0, FOLLOW_MAX);
+      if (kept.length) mine[pid] = kept;
+    }
+    out[user] = mine;
+  }
+  return out;
+}
 function _unusedIsConnId(id: unknown): id is string {
   return typeof id === 'string' && CONN_UUID_RE.test(id);
 }
@@ -232,6 +255,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // per-record flag, no migration.
   starred: [],
   starredBy: {},
+  followingBy: {},
   // Automation (MCP) is OFF until the user turns it on; the loopback HTTP
   // transport is a second, separate opt-in.
   automation: { enabled: false, http: false, port: AUTOMATION_PORT },
@@ -382,6 +406,7 @@ function sanitize(input: any): Partial<Config> {
       Object.entries(input.starredBy).slice(0, 10_000).filter(([k]) => k.length <= 320).map(([k, v]) => [k, cleanStarred(v)]),
     );
   }
+  if (input.followingBy && typeof input.followingBy === 'object') out.followingBy = cleanFollowing(input.followingBy);
   if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   if (typeof input.displayName === 'string') out.displayName = input.displayName.replace(/\s+/g, ' ').trim().slice(0, 80);
   if (isLanguage(input.language)) out.language = input.language;

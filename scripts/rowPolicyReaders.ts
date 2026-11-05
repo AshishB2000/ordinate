@@ -102,6 +102,8 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'metric:values': 'DOOR',
   'metricTree:compute': 'DOOR+',
   'metricTree:suggest': 'META',
+  'numbers:follow': 'META', // the caller's own follow list; checks the metric or scorecard exists, returns no figure
+  'numbers:get': 'DOOR+', // metric:series / metric:value / scorecard:compute handlers, as metric:table asks them
   'onboarding:set': 'META', // the caller's own fold and hide; returns no row or figure
   'onboarding:status': 'META',
   'onboarding:visit': 'META', // ticks the caller's own tour stop; returns no row or figure

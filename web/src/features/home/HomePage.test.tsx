@@ -49,6 +49,8 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
     'starred:get': ['analysis:a1'],
     'home:overview': MINE,
     'onboarding:status': { show: true, collapsed: false, steps: TOUR, doneCount: 1, total: 4 },
+    // Your numbers (yourNumbers.test.tsx covers it): nothing to show unless a test says so.
+    'numbers:get': { ok: true, tiles: [], suggestions: [], choices: [] },
     'jobs:list': { active: [], recent: [] },
     'prefs:get': { formats: {}, branding: { accent: '' } },
     // The Assistant dock (T2.12): not set up, unless a test says otherwise.

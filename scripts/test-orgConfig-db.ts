@@ -150,6 +150,15 @@ async function inProcess(pool: Pool): Promise<void> {
   ok('patch: no base means the whole document', orgConfig.applyPatch(merged, orgConfig.diffDoc(undefined, fmt)) === fmt);
   const proto = JSON.parse(orgConfig.applyPatch(base, orgConfig.diffDoc(base, '{"starredBy":{"ann":["analysis:a"],"__proto__":["analysis:p"]}}')));
   ok('patch: a member called __proto__ is a key like any other, never a prototype', Object.getOwnPropertyNames(proto.starredBy).includes('__proto__') && Object.getPrototypeOf(proto.starredBy) === Object.prototype);
+  // Home's followed numbers merge per member too: ann and sam follow from the same base, on two pods.
+  const P1 = '11111111-1111-4111-8111-111111111111';
+  const M1 = 'metric:22222222-2222-4222-8222-222222222222';
+  const M2 = 'metric:33333333-3333-4333-8333-333333333333';
+  const annF = doc({ followingBy: { ann: { [P1]: [M1] } } });
+  const samF = doc({ followingBy: { sam: { [P1]: [M2] } } });
+  const follows = JSON.parse(orgConfig.applyPatch(orgConfig.applyPatch(base, orgConfig.diffDoc(base, annF)), orgConfig.diffDoc(base, samF))).followingBy;
+  ok('patch: two members following from the same base are both kept', follows.ann?.[P1]?.[0] === M1 && follows.sam?.[P1]?.[0] === M2, JSON.stringify(follows));
+  ok('patch CONTROL: as a plain top-level key, the second write would drop the first', !JSON.parse(samF).followingBy.ann);
 
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {
