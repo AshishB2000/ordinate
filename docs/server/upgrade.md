@@ -195,6 +195,15 @@ write. Each item says what a pod older than this release does, and what this rel
   answers every question without them. This release refuses every question, schema sync, "Make a
   copy" and "Copy the data instead" on that dataset ("Ask your admin to finish upgrading
   Ordinate").
+- **Calculated fields on a [Live dataset](live-data.md).** A later release lets a Live dataset define
+  its own calculated fields. An older pod ignores them. It skips a filter on one ("Filter skipped:
+  unknown column"), so the figure is wider than the filter says, and its "Make a copy" and "Copy the
+  data instead" make a dataset without them. This release keeps them as written and refuses every
+  question, schema sync, "Make a copy" and "Copy the data instead" on that dataset ("Ask your admin to
+  finish upgrading Ordinate"). The release that computes them needs this release (or a later one) on
+  every pod first; use the same two ways through as for terms. Once a Live dataset has a calculated
+  field, never `helm rollback` (or use an older `ORDINATE_IMAGE` in Compose) below this release.
+  This release has no way to remove one: do that on a pod of the newer release, or roll forward.
 - **Notes on a table, labels for a column's values, and warnings on a join.** An older pod drops
   them the next time it saves a project's notes (any tag or note edit does) or a join. This
   release keeps the notes and the labels. The column notes a browser reads carry no value labels,
@@ -223,10 +232,12 @@ For the data listed above, the gap is closed once every pod runs this release or
 open in two cases: an upgrade that skips this release without stopping all pods first, and a
 rollback below it. Then an older pod runs next to data it cannot read, and the list above is what it
 does. Some of that is lost data. Some of it is a wrong figure: a term or an always-applied filter
-that is ignored, a chart with `via` drawn through the wrong join, an alert that counts by a
-dashboard's date column instead of the metric's, and a snapshot metric summed over every date. If
-you roll back below this release anyway, remove the always-applied filters from your Live datasets
-first, and check the charts that use a named join afterwards.
+that is ignored, a filter on a calculated field that is skipped, a chart with `via` drawn through
+the wrong join, an alert that counts by a dashboard's date column instead of the metric's, and a
+snapshot metric summed over every date. If you roll back below this release anyway, remove the
+always-applied filters and the calculated fields from your Live datasets first (on a pod of the
+newer release; this release has no way to), and check the charts that use a named join
+afterwards.
 
 These stay open even with every pod on this release, for as long as its pods run beside the
 release that adds these features:

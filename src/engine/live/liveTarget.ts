@@ -24,6 +24,7 @@ import { loadSecrets } from '../../ipc/connectionSecrets';
 import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
 import { hasBaseFilters } from '../../data/liveBaseFilters';
+import { hasLiveCalcs } from '../../data/liveCalcs';
 import type { LiveSettings } from '../../data/liveDataset';
 import * as liveMsg from '../../data/liveMessages';
 import * as msg from '../liveQueryMessages';
@@ -82,6 +83,8 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
   // 08a: this pod stores the filters but cannot apply them yet. Every question, sync and sample would
   // answer WITHOUT them, so none is asked. Dropped when the pod learns to compile them.
   if (hasBaseFilters(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('baseFilter', meta.live.baseFilters?.[0]?.column) };
+  // 00a: the same for calculated fields (part 8): this pod can't compute them, so a question would answer wider or skip a filter on one.
+  if (hasLiveCalcs(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;
   if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
   const conn = await connections.getConnection(projectId, origin.connId);

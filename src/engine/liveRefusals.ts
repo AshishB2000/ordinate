@@ -135,3 +135,8 @@ export function liveColumnMissing(column: string): string {
 export function liveBaseFilterRefused(column: string): string {
   return t('liveRefusals.this_dataset_s_always_applied_filters', { column });
 }
+
+/** A Live dataset with calculated fields this server cannot compute: it answers nothing, never a wider figure. */
+export function liveCalculatedRefused(column: string): string {
+  return t('liveRefusals.this_dataset_s_calculated_fields_can', { column });
+}

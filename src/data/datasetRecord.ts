@@ -275,9 +275,10 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
  * (`serialized`) and the Trash keep every key anyway. The Live-only top-level keys `baseFilters` (part 1 08),
  * `calculated` (part 8) and `semantic` (part 7), all written by later releases, are deliberately NOT kept: the
  * only `persist` of a Live record is `liveRecord.toExtractRecord`, so keeping them would leave stale Live keys
- * on an extract. This release only reads `baseFilters`, and that switch and "Make a copy" refuse a dataset with
- * them (ipc/liveDatasets `baseFilterRefusal`); a later release folds base filters and calcs into Prepare steps
- * there, or refuses. Never widen this list to "every unknown key".
+ * on an extract. This release only reads `baseFilters` and `calculated`, and that switch and "Make a copy" refuse a
+ * dataset with either (ipc/liveDatasets `baseFilterRefusal`, `calcRefusal`), which is also what keeps a stale key off
+ * an extract; a later release folds base filters and calcs into Prepare steps there, or refuses. Never widen this
+ * list to "every unknown key".
  */
 export const KEPT_RECORD_KEYS = ['rowPolicy', 'columnAccess'] as const;
 export type KeptRules = Partial<Record<typeof KEPT_RECORD_KEYS[number], unknown>>;
