@@ -252,6 +252,8 @@ const CATEGORIES: Partial<VizEncoding>[] = [
 const MEASURES: VizMeasure[][] = [
   [M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('amt', 'min')], [M('qty', 'max')], [M('amt', 'none')],
   [M('d', 'count')], [M('amt', 'sum'), M('region', 'count'), M('qty', 'avg'), M('amt', 'max')],
+  // A distinct count (part 5, D2): text, number and date keys; first (it ranks and folds) and beside re-aggregated parts.
+  [M('cat', 'countd')], [M('amt', 'countd')], [M('d', 'countd')], [M('amt', 'countd'), M('amt', 'sum'), M('cat', 'countd')], [M('qty', 'avg'), M('d', 'countd')],
 ];
 const SERIES: (string | undefined)[] = [undefined, 'region', 'tier'];
 
@@ -352,7 +354,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   n += await charts(kit, ok, label('defining query'), SQL, { stride: 7 * stride });
   n += await charts(kit, ok, label('numbers stored as text'), TEXTNUM, {
     categories: [{ category: 'amt' }, { category: 'qty', bins: 20 }, { category: 'cat' }, { category: 'd', grain: 'quarter' }],
-    measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('amt', 'count')], [M('amt', 'min')], [M('qty', 'max')]],
+    measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('amt', 'count')], [M('amt', 'min')], [M('qty', 'max')], [M('amt', 'countd')]],
     stride,
   });
 
@@ -372,6 +374,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   const METRICS: [string, import('../src/analysis/metricValue').MetricAggregation][] = [
     ['amt', 'sum'], ['amt', 'avg'], ['amt', 'min'], ['amt', 'max'], ['amt', 'count'], ['qty', 'sum'], ['qty', 'avg'],
     ['cat', 'count'], ['d', 'count'], ['bigid', 'count'], ['region', 'count'], ['tier', 'max'],
+    ['cat', 'countd'], ['amt', 'countd'], ['d', 'countd'],
   ];
   let mk = 0;
   for (const env of [TYPED, TEXTNUM, SQL]) {
@@ -395,7 +398,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   ];
   let k = 0;
   for (const category of ['cat', 'many', 'region', 'qty', 'd']) {
-    for (const measures of [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('qty', 'max'), M('amt', 'sum')]]) {
+    for (const measures of [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('qty', 'max'), M('amt', 'sum')], [M('amt', 'countd')]]) {
       for (const series of [undefined, 'region']) {
         for (const top of [undefined, 3, 7]) {
           k += 1;
