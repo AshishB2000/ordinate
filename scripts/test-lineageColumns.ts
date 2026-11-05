@@ -6,6 +6,11 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-lineagecols-')); // before any store loads
+
 const { columnFlow, FLOW_RULES }: typeof import('../src/analysis/lineageFlow') = require('../src/analysis/lineageFlow');
 const { STEP_TYPES }: typeof import('../src/data/transforms') = require('../src/data/transforms');
 import type { TransformStep } from '../src/data/transforms';
@@ -188,4 +193,51 @@ ok('steps: the calc step reports what it feeds, once each', !!calcStep && calcSt
 ok('steps: the rename and the lookup are listed, a filter would not be', show(cf.steps.map((s) => s.index)) === show([0, 1, 2]) && show(cf.steps[0].produces) === show(['amount']));
 ok('fields: a Live dataset\'s calcs appear', columnFields(g, ni, LIVE).fields.Margin.usedIn.visual === 1);
 
-finish();
+// ── § channel ───────────────────────────────────────────────────────────────
+const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each channel's own reply shape
+require('../src/ipc/lineage').register();
+const post = (channel: string, payload: unknown): Promise<any> => handlers.get(channel)!({}, payload);
+
+(async () => {
+  const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
+  const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+  const metricStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const visualStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const seeded = await sample.seedSampleProject();
+  if (!seeded.seeded || !seeded.projectId) throw new Error('sample not seeded');
+  const P = seeded.projectId;
+  const sampleDs = (await datasets.listDatasets(P))[0].id;
+
+  const c = await post('lineage:column', { projectId: P, datasetId: sampleDs, column: 'Month' });
+  ok('lineage:column: focused on the calculated field, used by the chart and its dashboard', c.focus === `calc:${sampleDs}:Month` && c.usedIn.visual === 1 && c.usedIn.dashboard === 1 && typeof c.upstream === 'number', show(c && c.usedIn));
+  const fl = await post('lineage:fields', { projectId: P, datasetId: sampleDs });
+  ok('lineage:fields: Month is used by 1 chart, and its Prepare step reports what it feeds', fl.ok === true && fl.fields.Month.usedIn.visual === 1 && fl.steps.some((s: { produces: string[]; usedIn: { visual?: number } }) => s.produces.includes('Month') && s.usedIn.visual === 1), show(fl));
+  ok('lineage:column and lineage:fields agree on "Used in"', show(c.usedIn) === show(fl.fields.Month.usedIn));
+  ok('a column nobody reads, and an unknown one, answer null, not an error', (await post('lineage:column', { projectId: P, datasetId: sampleDs, column: 'nope' })) === null);
+  ok('a bad id answers null / empty', (await post('lineage:column', { projectId: 'x', datasetId: sampleDs, column: 'a' })) === null && Object.keys((await post('lineage:fields', { projectId: 'x', datasetId: sampleDs })).fields).length === 0);
+
+  // ORIGIN CANARY: a planted path, keyed URL, table and SQL reach neither reply.
+  const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+  const conn = await conns.saveConnection(P, { connectorId: 'postgres', name: 'Warehouse', values: { host: 'h.test', database: 'db' } } as never);
+  const mk = (name: string, origin: unknown) => datasets.saveDataset(P, { name, sourceKind: 'csv', columns: [{ name: 'amount', type: 'number' }, { name: 'region', type: 'text' }], rows: [[1, 'a']], origin });
+  const planted = [
+    await mk('From file', { kind: 'file', path: '/secret_dir_7q/orders.csv' }),
+    await mk('From url', { kind: 'url', url: 'https://example.test/x.csv?key=secret_7q' }),
+    await mk('From table', { kind: 'connection', connId: conn?.id ?? '00000000-0000-4000-8000-0000000000ff', table: 'secret_tbl_7q' }),
+  ];
+  for (const d of planted) {
+    await metricStore.saveMetric(P, { name: 'Sum ' + d!.name, datasetId: d!.id, definition: { column: 'amount', aggregation: 'sum' } } as never);
+    await visualStore.saveVisual(P, { name: 'Chart ' + d!.name, datasetId: d!.id, chartType: 'bar', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] } } as never);
+  }
+  const CANARY = /secret_dir_7q|key=secret_7q|secret_tbl_7q|SELECT secret_7q/;
+  const replies = [];
+  for (const d of planted) {
+    replies.push(await post('lineage:column', { projectId: P, datasetId: d!.id, column: 'amount' }), await post('lineage:fields', { projectId: P, datasetId: d!.id }));
+  }
+  replies.push(await post('lineage:get', { projectId: P, type: 'dataset', id: planted[0]!.id }));
+  ok('ORIGIN CANARY: a planted path, keyed URL and table reach neither reply (nor lineage:get)', replies.every((r) => !CANARY.test(JSON.stringify(r))), replies.map((r) => JSON.stringify(r)).find((t) => CANARY.test(t)));
+  ok('…and the column graph was not empty, so the canary check was not vacuous', replies[0] && replies[0].nodes.some((n: { kind: string }) => n.kind === 'source') && replies[0].usedIn.metric === 1, show(replies[0] && replies[0].usedIn));
+  const stored = fs.readdirSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true } as never).map(String).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(process.env.ORDINATE_LOCAL_DIR as string, f), 'utf8')).join('');
+  ok('NEGATIVE CONTROL: the canary is in the stored records', /secret_dir_7q/.test(stored) && /secret_tbl_7q/.test(stored) && /key=secret_7q/.test(stored));
+  finish();
+})().catch((err: unknown) => { console.error(err); process.exit(1); });

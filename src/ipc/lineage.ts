@@ -1,5 +1,9 @@
 import { ipcMain } from './bus';
 import { buildGraph, focus } from '../analysis/lineage';
+import { addColumnNodes, columnFields } from '../analysis/lineageNodes';
+import type { UsedIn } from '../analysis/lineageNodes';
+import * as terms from '../analysis/terms';
+import * as relationships from '../analysis/relationships';
 import type { LineageInput, FocusedLineage } from '../analysis/lineage';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
@@ -31,7 +35,7 @@ const present = <T>(list: Array<T | null>): T[] => list.filter((x): x is T => x 
 const NAME_FIELDS: Record<string, string[]> = { connection: ['table', 'readsTables'], url: ['url'] };
 
 export async function loadInput(projectId: string): Promise<LineageInput> {
-  const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs, sees] = await Promise.all([
+  const [dsList, visList, anList, metList, reports, alertFile, conns, caps, nbs, sees, termList, rels] = await Promise.all([
     datasets.listDatasets(projectId).catch(() => []),
     visuals.listVisuals(projectId).catch(() => []),
     analysis.listAnalyses(projectId).catch(() => []),
@@ -42,6 +46,8 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     history.loadAllSummaries(projectId).catch(() => []),
     listNotebooks(projectId).catch(() => []),
     seesSourceNames(projectId),
+    terms.listFullTerms(projectId).catch(() => []),
+    relationships.listRelationships(projectId).catch(() => []),
   ]);
   // the one input lineage:get and pipelines:get share; a job (system admin) still sees names
   const unnamed = <T extends { origin?: { kind?: string } }>(d: T): T => {
@@ -58,6 +64,8 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
     connections: conns.map((c) => ({ id: c.id, name: sees ? c.name : viewerName(c), kind: c.connectorId })),
     captures: caps.map((c) => ({ id: String(c.id), title: c.title })),
     notebooks: nbs.map((n) => ({ id: n.id, name: n.name })),
+    terms: termList,
+    relationships: rels,
   };
 }
 
@@ -91,7 +99,34 @@ export function redactSources(g: FocusedLineage): FocusedLineage {
   };
 }
 
+/** The graph with column and term nodes, for `lineage:column` and `lineage:fields` (never for `lineage:get`). */
+async function columnGraph(projectId: string) {
+  const input = await loadInput(projectId);
+  return { input, graph: addColumnNodes(buildGraph(input), input) };
+}
+
+/** The focus on one column (or Live/Prepare calculated field) of a dataset, or null when nothing reads it. */
+export async function lineageColumn(projectId: string, datasetId: string, column: string): Promise<(FocusedLineage & { upstream: number }) | null> {
+  if (!isValidId(projectId) || !isValidId(datasetId) || !column) return null;
+  const { graph } = await columnGraph(projectId);
+  const id = [`column:${datasetId}:${column}`, `calc:${datasetId}:${column}`].find((n) => graph.nodes.some((x) => x.id === n));
+  if (!id) return null;
+  const g = redactSources(focus(graph, id));
+  const at = g.nodes.find((n) => n.id === g.focus)?.col ?? 0;
+  return { ...g, upstream: g.nodes.filter((n) => (n.col ?? 0) < at).length };
+}
+
+export async function lineageFields(projectId: string, datasetId: string): Promise<{ ok: true; fields: Record<string, { usedIn: UsedIn }>; steps: Array<{ index: number; produces: string[]; usedIn: UsedIn }> }> {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return { ok: true, fields: Object.create(null), steps: [] };
+  const { input, graph } = await columnGraph(projectId);
+  return { ok: true, ...columnFields(graph, input, datasetId) };
+}
+
 export function register(): void {
   ipcMain.handle('lineage:get', async (_e, { projectId, type, id }: any = {}) =>
     lineageFor(String(projectId || ''), String(type || ''), String(id || '')));
+  ipcMain.handle('lineage:column', async (_e, { projectId, datasetId, column }: any = {}) =>
+    lineageColumn(String(projectId || ''), String(datasetId || ''), String(column || '')));
+  ipcMain.handle('lineage:fields', async (_e, { projectId, datasetId }: any = {}) =>
+    lineageFields(String(projectId || ''), String(datasetId || '')));
 }
