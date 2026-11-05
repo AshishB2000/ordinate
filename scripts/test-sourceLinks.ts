@@ -4,7 +4,9 @@
 // 1. perTableGraph: the pure rewrite of one node per connection into one node per (connection, table).
 // 2. linking: what `setReadsTables` writes (a label, no refresh or Live change) and how `choiceOrder` sorts.
 // 3. the channels: sourceTable:lineage, :forDataset, dataset:setSourceTables, :sourceTableChoices (records only; the
-//    choices read the warehouse once, on the call). The viewer's 403 on each is in test-sourceNamesHidden.
+//    choices read the warehouse once, on the call). The viewer's 403 on each is in test-sourceNamesHidden. A link
+//    keeps a certified dataset certified (part 4's pin strips origin.readsTables); NEGATIVE CONTROL: a base filter
+//    edit turns it to needs_review.
 //
 //   npm run build:ts && node scripts/test-sourceLinks.js
 
@@ -128,8 +130,17 @@ async function channels(): Promise<void> {
   ok('lineage: no node id holds a table name', ids.every((id) => !/wh_[ab]/.test(id)));
   ok('lineage: the table node names the table on its connection', g.nodes.find((n: Reply) => n.id === g.focus)?.name === 'wh_a' && g.nodes.find((n: Reply) => n.id === g.focus)?.sub === 'Warehouse' && typeof g.upstream === 'number');
   ok('lineage: a query with no link is not a child', !ids.includes(`dataset:${Q}`));
+  // Part 4 (cross-part check item 7): a link is a label no figure reads, so it keeps a certification.
+  const stateOfQ = async (): Promise<string | undefined> => (await post('model:review', { projectId: P, ref: `dataset:${Q}` })).value?.status?.state;
+  const certified = await post('model:certify', { projectId: P, ref: `dataset:${Q}`, base: (await post('model:review', { projectId: P, ref: `dataset:${Q}` })).value.pin });
+  ok('setup: the query dataset is certified', certified.value?.ok === true && (await stateOfQ()) === 'certified', certified.body.slice(0, 200));
   const set = await post('dataset:setSourceTables', { projectId: P, datasetId: Q, tables: ['wh_a', 'wh_b'] });
   ok('setSourceTables: ok, the tables back', set.value.ok === true && set.value.tables.join() === 'wh_a,wh_b', set.body);
+  ok('setSourceTables: linking source tables keeps a certified dataset certified', (await stateOfQ()) === 'certified');
+  await post('live:setBaseFilters', { projectId: P, datasetId: Q, filters: [{ type: 'filter', column: 'amt', op: '>', value: 0 }] });
+  ok('NEGATIVE CONTROL: a base filter (its pipeline) turns it to needs_review', (await stateOfQ()) === 'needs_review');
+  await post('live:setBaseFilters', { projectId: P, datasetId: Q, filters: [] });
+  await post('model:clearStatus', { projectId: P, ref: `dataset:${Q}` });
   ok('lineage: a linked query is a child of each table it names', (await lin()).nodes.some((n: Reply) => n.id === `dataset:${Q}`));
   ok('lineage:get is byte-identical after docs and links', (await post('lineage:get', { projectId: P, type: 'dataset', id: A })).body === before);
   ok('setSourceTables: a CSV dataset gets the sentence', (await post('dataset:setSourceTables', { projectId: P, datasetId: csv, tables: ['t'] })).value.error === 'Only a dataset built from a connection names its source tables.');
