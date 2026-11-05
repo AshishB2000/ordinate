@@ -3,8 +3,7 @@
 // *Staff* hides `salary`, `ssn` and the carrier `bonus` from `east` (a viewer); `hr` (a viewer in HR)
 // and `ed` (an editor) see them.
 //
-// 0. COVERAGE (no database needed): every `read` contract has a COLUMN_TREATMENT (scripts/columnAccessReaders.ts),
-//    and the table names no channel that is gone. NEGATIVE CONTROL: a planted contract is reported.
+// (The COLUMN_TREATMENT coverage ratchet is scripts/test-columnAccessSafetyNet.ts's, beside its canaries.)
 // 1. THE NET: Staff is closed to east for a whole-table reader, open inside a gated door, open to hr;
 //    `policyClosed` stays rows-only (NEGATIVE CONTROL).
 // 2. EVERY DOOR refuses east a question that names a hidden column (or the carrier bonus), typed `hidden`:
@@ -27,7 +26,6 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import * as C from './columnAccessHarness';
-import { COLUMN_TREATMENT } from './columnAccessReaders';
 
 import * as H from './rowPolicyHarness';
 
@@ -45,19 +43,7 @@ const parquet: typeof import('../src/engine/parquetStore') = require('../src/eng
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const { z } = require('zod') as typeof import('zod');
 
-/** Read contracts with no column class — the ratchet, as a function so its negative control can run it. */
-const unclassified = (contracts: Record<string, { access: string }>): string[] =>
-  Object.entries(contracts).filter(([, c]) => c.access === 'read').map(([ch]) => ch).filter((ch) => !Object.prototype.hasOwnProperty.call(COLUMN_TREATMENT, ch));
-
 (async () => {
-  // ── 0. Coverage ──────────────────────────────────────────────────────────
-  const contracts = api.contracts as unknown as Record<string, { access: string }>;
-  const missing = unclassified(contracts);
-  ok('coverage: every read contract has a COLUMN_TREATMENT (scripts/columnAccessReaders.ts)', missing.length === 0, missing.join(', '));
-  const stale = Object.keys(COLUMN_TREATMENT).filter((ch) => !(ch in contracts) || contracts[ch].access !== 'read');
-  ok('coverage: the table names no channel that is gone or no longer read', stale.length === 0, stale.join(', '));
-  ok('NEGATIVE CONTROL: a planted read contract is reported', JSON.stringify(unclassified({ ...contracts, 'columns:planted': { access: 'read' } })) === '["columns:planted"]');
-
   const W = await C.columnWorld('column doors');
   if (!W) return finish();
   try {
