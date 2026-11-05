@@ -126,6 +126,7 @@ th.num {
 }
 .actions {
   width: 40px;
+  white-space: nowrap; /* the status shield and the row menu sit side by side */
   text-align: right;
 }
 .srOnly {
