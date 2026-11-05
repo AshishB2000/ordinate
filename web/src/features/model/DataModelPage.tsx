@@ -1,6 +1,6 @@
 // /model and /model/:projectId — the Data model (docs/semantic-layer/00-design.md "The name and where it
 // sits"): what the project's data means, on one screen. /model goes to the current project, as /data does.
-// The tab is in the URL (?tab=); each tab is a later step's, appended to TABS.
+// The tab is in the URL (?tab=); TABS lists them in the order they are drawn (Source tables second, editors only).
 
 import { useState } from 'react';
 import { Navigate, useLocation, useParams, useSearchParams } from 'react-router';
@@ -20,7 +20,7 @@ import { TermDialog } from './terms/TermDialog';
 import { RelationshipsTab } from '../data/RelationshipsTab';
 import { DefaultJoins } from './relationships/DefaultJoins';
 
-const TABS = ['datasets', 'metrics', 'glossary', 'relationships', 'sources'] as const;
+const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships'] as const;
 type TabId = (typeof TABS)[number];
 
 const TITLE = 'Data model';
