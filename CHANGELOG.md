@@ -9,6 +9,21 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Semantic datasets
+
+- **A semantic layer's model can be a Live dataset.** An editor lists a layer connection's models
+  and adds one as a dataset (`connection:semanticModels`, `connection:addSemanticDataset`). Its
+  columns are the layer's dimensions; its metrics are the layer's own, mirrored as metric records
+  that hold the layer's name and never its math (read-only definition and filters; name, format,
+  description and direction stay editable). The connectors for Snowflake, Cube and dbt follow.
+- **Charts, KPI tiles, alerts, scorecards, answers, value lists and MCP read them from the layer**
+  through the existing Live doors, cache and limits; "Other" is a second question to the layer.
+- **What a layer cannot answer is refused with a sentence naming it**: pivots and other row-needing
+  charts, number bins, retail weeks, an automatic grain, running totals of a metric that does not
+  add up, formulas over its metrics, column measures, always-applied filters, calculated fields and
+  copies. Row-restricted and column-restricted viewers are refused on every door.
+- Needs every pod on a release that reads external metrics (p7-b0) first.
+
 ### MongoDB and Amazon Athena connectors
 
 - **MongoDB.** Collections are tables; a saved query is an aggregation pipeline in JSON

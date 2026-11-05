@@ -570,6 +570,54 @@ Prepare step on a copy. Every value a formula writes is a bound parameter, never
   - `lower` and `upper` stay refused because the engines' case maps differ from the formula engine's
     and from each other; the test records each engine's answer for `ß`, `İ` and a final `Σ`.
 
+## Semantic layers
+
+A company that already defines its metrics in a semantic layer (Snowflake semantic views, Cube,
+dbt) can keep their math there. A **semantic dataset** is a Live dataset whose questions the
+layer answers. Its record names the layer's model and holds no table and no SQL. The connectors
+that reach a layer arrive with their own releases; this one adds the dataset, the sync and the
+doors (`connection:semanticModels`, `connection:addSemanticDataset`, both for editors).
+
+- **Its columns are the layer's dimensions**, typed as the layer reports them. A dimension of a
+  type Ordinate cannot map is left out, and the schema sync names it. No rows are sampled, so
+  nothing is detected as personal or financial: **set the markings by hand** on the Schema tab.
+  The sync says so (`sensitivity: 'manual'`).
+- **Its metrics are the layer's.** Each sync writes one metric record per layer metric. The record
+  holds the layer's name for it, never its math, so pickers, KPI tiles, alerts, scorecards, the
+  Data model and MCP list it. Its definition and filters are read-only ("Defined in Cube: edit it
+  there."). Its name, format, description and direction are Ordinate's. A name already taken in
+  the project gets the connection's name after it ("Revenue · Cube prod"). A metric the layer
+  drops keeps its record, which then says it is no longer defined there; a renamed one is a new
+  record. A record you put in the Trash is not brought back by the next sync.
+- **Every figure comes from the layer**, through the same doors, cache, limits and daily count as
+  any Live question (`LIVE_MAX_CONCURRENT`, `LIVE_DAILY_QUERY_LIMIT`, `LIVE_QUERY_TIMEOUT_MS`). A
+  chart's "Other" is a second question to the layer, never a sum Ordinate adds up. A value
+  picker's list and the Assistant's spelling lookup are one question each.
+- **What a layer cannot answer is refused, in a sentence naming it**, where the figure would be:
+  - anything that needs rows: pivots, cohorts, funnels, key drivers, maps, small multiples, raw
+    points, a field from a related dataset;
+  - anything that needs Ordinate's arithmetic on the layer's figures: number bins, retail-calendar
+    periods rolled up from days, an automatic date grain (pick a grain the layer lists), a running
+    total or percent of total of a metric the layer does not call a plain sum or count, and a
+    formula over its metrics;
+  - a column measure (`sum of amount`). Measure one of the layer's metrics instead.
+- **Always-applied filters and calculated fields are not available** on a semantic dataset: set
+  the rule, or the field, in the layer.
+- **No copy.** "Make a copy" and "Copy the data instead" are refused: a layer returns totals, not
+  rows.
+- **Restricted viewers are refused.** A viewer whom row access rules restrict on the dataset, or
+  from whom a column rule hides any of its fields, gets "Your access is limited… no figure is
+  shown" on every chart, KPI, answer and value list. A layer compares values in its own collation,
+  so Ordinate cannot apply the rule exactly. A layer's connector can lift this once a byte-exact
+  comparison is pinned (Snowflake first).
+- **Nothing about the layer reaches a browser** beyond its product name: no model, view,
+  environment id or URL in a dataset reply or a refusal. The layer's own error text goes to the
+  server log, secrets removed.
+- **Certification.** A certified semantic dataset needs review again when it is pointed at another
+  model or layer; a sync that only refreshes the metrics list does not move it.
+- **Model files** never carry a layer's metrics. A file metric that names one is skipped as
+  `external`.
+
 ## Refresh URL
 
 A refresh URL lets a pipeline tell Ordinate that new data has landed. A dbt run or an Airflow DAG
