@@ -26,7 +26,7 @@ const COLUMNS: SchemaColumn[] = [
 const BAND = { name: 'Band', expression: "IF [revenue] > 10 THEN 'big' ELSE 'small' END", type: 'text' as const };
 const schema = (calculated: LiveSchema['calculated']): LiveSchema => ({
   ok: true, schemaSyncedAt: '2026-11-04T10:00:00Z', syncing: false, sampledAt: null, sampleRows: null, method: null, note: null,
-  columns: COLUMNS.map((c) => ({ ...c })), missing: [], ...(calculated ? { calculated } : {}),
+  columns: COLUMNS.map((c) => ({ ...c })), missing: [], baseFilters: [], ...(calculated ? { calculated } : {}),
 });
 const LEN_WHY = "len() can't run on a Live table: warehouses count characters differently.";
 const DOCS = [
