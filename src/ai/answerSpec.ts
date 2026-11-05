@@ -86,6 +86,8 @@ export interface SpecMetric {
   hasFilters?: boolean;
   /** The date it counts by (D9): a period the spec gives no column lands on it. */
   timeColumn?: string;
+  /** Governance (part 4): only orders the vocabulary; a retired metric still computes. */
+  status?: { state: 'certified' | 'needs_review' | 'retired' };
 }
 
 /**
