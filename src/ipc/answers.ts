@@ -69,7 +69,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
-import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
+import { pendingMeasureRefusal, unofferedMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 
@@ -292,7 +292,7 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     for (const s of await metrics.listMetrics(projectId)) {
-      if (!metrics.isSimpleDefinition(s.definition) || pendingMetric(s)) continue; // part 5's shapes: no figure on this release
+      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s)) continue; // part 5's shapes: not named by a model on this release
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,

@@ -38,6 +38,7 @@ const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engin
 const ev: typeof import('../src/engine/live/evaluate') = require('../src/engine/live/evaluate');
 const cmp: typeof import('./liveParityCompare') = require('./liveParityCompare');
 const metrics: typeof import('../src/server/metrics') = require('../src/server/metrics');
+const { isLiveFigureError }: typeof import('../src/engine/live/liveFigureError') = require('../src/engine/live/liveFigureError');
 
 const { lq, fake, queryCache, ORG_A, ORG_B } = H;
 const M = (column: string, aggregation: VizMeasure['aggregation']): VizMeasure => ({ column, aggregation });
@@ -213,6 +214,12 @@ async function failures(s: H.OrgSetup): Promise<void> {
   ok('unavailable: an extract dataset is refused, typed', !notLive.ok && notLive.code === 'live_unavailable' && notLive.error === H.msg.liveNotLive());
   const gone = await lq.liveMetric(P, '00000000-0000-4000-8000-000000000000', { column: 'amt', aggregation: 'sum' }, []);
   ok('unavailable: a missing dataset too', !gone.ok && gone.code === 'live_unavailable' && gone.error === H.msg.liveDatasetMissing());
+  // Count distinct is computed on extracts from part 5 step 02, on Live from step 03: until then the KPI door refuses it typed, never "—".
+  H.fakeMod.resetFake();
+  const countd = { column: 'cat', aggregation: 'countd' } as const;
+  const refused = await dashIpc.computeCardMetric(P, s.liveId, countd, []).then(() => null, (e: unknown) => e);
+  ok('refused: a Live countd KPI is typed (unknownAggregation), no call', isLiveFigureError(refused) && refused.failure.code === 'live_refused' && refused.failure.reason === 'unknownAggregation' && fake.calls.length === 0, show(refused));
+  ok('NEGATIVE CONTROL: the extract\'s countd KPI is a figure', typeof (await dashIpc.computeCardMetric(P, s.extractId, countd, [])).value === 'number');
 }
 
 async function twoOrgs(a: H.OrgSetup): Promise<void> {

@@ -1,6 +1,7 @@
 // The shapes part 5 writes and this release keeps but cannot compute (semantic layer part 5, step 01): a funnel or
-// period metric, a count distinct, a per-entity snapshot. Every reader asks here, so the release that computes one
-// removes its refusal in one place. KPI doors show no figure; chart and answer doors refuse with a sentence.
+// period metric, a per-entity snapshot. Every reader asks here, so the release that computes one removes its refusal
+// in one place. KPI doors show no figure; chart and answer doors refuse with a sentence. A count distinct is computed
+// from step 02 (analysis/countDistinct), but no writer is offered it before step 04 (unofferedMetric).
 
 import * as metrics from './metrics';
 import type { Metric, MetricDefinition } from './metrics';
@@ -17,26 +18,27 @@ export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | 
   return metrics.isFunnelDefinition(d) || metrics.isPeriodDefinition(d);
 }
 
-/** A funnel or period kind, a simple count distinct, or a per-entity snapshot: no figure on this release. */
+/** A funnel or period kind, or a per-entity snapshot: no figure on this release. */
 export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   const d = m.definition;
-  return isNewerKind(d) || (metrics.isSimpleDefinition(d) && (d.aggregation === 'countd' || !!d.snapshot?.per));
+  return isNewerKind(d) || (metrics.isSimpleDefinition(d) && !!d.snapshot?.per);
+}
+
+/** Not offered to a surface that writes a card or reads a metric as its column (plans, answer specs, templates): pending, or a count distinct (step 04 offers it). */
+export function unofferedMetric(m: Pick<Metric, 'definition'>): boolean {
+  return pendingMetric(m) || (metrics.isSimpleDefinition(m.definition) && m.definition.aggregation === 'countd');
 }
 
 /** Why a pending metric has no figure (pendingMetric must hold). */
 export function pendingSentence(m: Pick<Metric, 'definition' | 'name'>): string {
-  return metrics.isSimpleDefinition(m.definition) && m.definition.aggregation === 'countd' ? msg.countdPending(m.name) : msg.metricKindPending(m.name);
+  return msg.metricKindPending(m.name);
 }
 
-/**
- * The sentence refusing a chart whose drawn measure (values[0] under a split; every pivot value) counts distinct
- * values, or names a pending metric, or null. A measure's metric decides when it has one; a measure that names a
- * gone metric is drawn as stored, so its own aggregation decides then.
- */
+/** The sentence refusing a chart whose drawn measure (values[0] under a split; every pivot value) names a pending metric, or null. */
 export async function pendingMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined): Promise<string | null> {
   for (const v of snapshotDrawn(encoding)) {
     const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m ? pendingMetric(m) : v?.aggregation === 'countd') return m ? pendingSentence(m) : msg.countdPending(`countd of ${v.column}`);
+    if (m && pendingMetric(m)) return pendingSentence(m);
   }
   return null;
 }

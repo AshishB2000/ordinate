@@ -162,7 +162,7 @@ function buildAggregated(
     groupBy: [encoding.category],
     aggregations: encoding.values.map((v, i) => ({
       column: v.column,
-      fn: (v.aggregation === 'none' ? 'sum' : v.aggregation) as 'sum' | 'avg' | 'count' | 'min' | 'max',
+      fn: (v.aggregation === 'none' ? 'sum' : v.aggregation),
       as: `m${i}`,
     })),
   };
@@ -198,7 +198,7 @@ function buildPivot(
     aggregations: [
       {
         column: agg0.column,
-        fn: (agg0.aggregation === 'none' ? 'sum' : agg0.aggregation) as 'sum' | 'avg' | 'count' | 'min' | 'max',
+        fn: (agg0.aggregation === 'none' ? 'sum' : agg0.aggregation),
         as: 'm0',
       },
     ],
@@ -319,7 +319,7 @@ function capText(
       aggregations: [
         {
           column: m0.column,
-          fn: (m0.aggregation === 'none' ? 'sum' : m0.aggregation) as 'sum' | 'avg' | 'count' | 'min' | 'max',
+          fn: (m0.aggregation === 'none' ? 'sum' : m0.aggregation),
           as: 'm0',
         },
       ],

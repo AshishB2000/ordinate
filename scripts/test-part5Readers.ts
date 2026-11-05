@@ -137,27 +137,32 @@ void (async () => {
   const periodM = (await metrics.getMetric(P, kinds['Revenue YTD']))!;
   const perM = (await metrics.getMetric(P, kinds.MRR))!;
   const chartOf = (values: unknown[], more: object = {}) => viz(null, { projectId: P, datasetId: D, encoding: { category: 'day', grain: 'month', values, ...more } });
-  for (const x of [customers, funnelM, periodM, perM]) {
+  for (const x of [funnelM, periodM, perM]) {
     ok(`${x.name}: no KPI figure, never a sum`, (await ipcMetrics.resolveMetric(P, x.id))!.value === null, JSON.stringify(await ipcMetrics.resolveMetric(P, x.id)));
     const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
-    ok(`${x.name}: a chart says why`, c.ok === false && [msg.countdPending(x.name), msg.metricKindPending(x.name)].includes(c.error), JSON.stringify(c).slice(0, 300));
+    ok(`${x.name}: a chart says why`, c.ok === false && c.error === msg.metricKindPending(x.name), JSON.stringify(c).slice(0, 300));
     const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
     ok(`${x.name}: a formula over it has no KPI figure`, (await ipcMetrics.resolveMetric(P, f.id))!.value === null);
     const cf = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: f.id }]);
-    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && [msg.countdPending(x.name), msg.metricKindPending(x.name)].includes(cf.error), JSON.stringify(cf).slice(0, 300));
+    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && cf.error === msg.metricKindPending(x.name), JSON.stringify(cf).slice(0, 300));
   }
-  ok('a raw countd measure is refused', (await chartOf([{ column: 'customer_id', aggregation: 'countd' }])).error === msg.countdPending('countd of customer_id'));
+  // A count distinct is computed from step 02 (scripts/test-countDistinct.ts holds it to the reference): 7 customers, each in both months.
+  ok('Customers (countd): its KPI is the distinct count, never a sum', (await ipcMetrics.resolveMetric(P, customers.id))!.value === 7, JSON.stringify(await ipcMetrics.resolveMetric(P, customers.id)));
+  ok('Customers (countd): its chart draws the distinct count per month', JSON.stringify((await chartOf([{ column: 'amount', aggregation: 'sum', metricId: customers.id }])).data?.series?.[0]?.values) === '[7,7]');
+  const twiceC = (await metrics.saveMetric(P, { name: 'Twice Customers', datasetId: D, definition: { formula: '[Customers] * 2' } }))!;
+  ok('Customers (countd): a formula over it has its figure', (await ipcMetrics.resolveMetric(P, twiceC.id))!.value === 14, JSON.stringify(await ipcMetrics.resolveMetric(P, twiceC.id)));
+  ok('a raw countd measure draws', JSON.stringify((await chartOf([{ column: 'customer_id', aggregation: 'countd' }])).data?.series?.[0]?.values) === '[7,7]');
   const V = { column: 'amount', aggregation: 'sum' };
-  ok('a countd pivot value is refused', (await chartOf([V], { pivot: { rows: [{ column: 'day' }], columns: [], values: [{ column: 'customer_id', aggregation: 'countd' }] } })).ok === false);
+  ok('a countd pivot value draws', (await chartOf([V], { pivot: { rows: [{ column: 'day' }], columns: [], values: [{ column: 'customer_id', aggregation: 'countd' }] } })).ok === true);
   copilotIpc.register();
   const SPEC = { datasetId: D, category: 'day', measures: [V], filters: [], chartType: 'column', title: 'Orders' };
   const carded = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ column: 'customer_id', aggregation: 'countd' }] } });
-  ok('an answer card with a countd measure is refused', carded.ok === false && carded.reason === msg.countdPending('countd of customer_id'), JSON.stringify(carded).slice(0, 300));
+  ok('an answer card with a countd measure draws', carded.ok === true, JSON.stringify(carded).slice(0, 300));
   const cardedKind = await handlers.get('answer:card')!(null, { projectId: P, spec: { ...SPEC, measures: [{ ...V, metricId: funnelM.id }] } });
   ok('an answer card over a funnel metric is refused', cardedKind.ok === false && cardedKind.reason === msg.metricKindPending(funnelM.name), JSON.stringify(cardedKind).slice(0, 300));
   ok('NEGATIVE CONTROL: the same answer card with sum draws', (await handlers.get('answer:card')!(null, { projectId: P, spec: SPEC })).ok === true);
   const kpi = await dashboards.computeCardMetric(P, D, { column: 'customer_id', aggregation: 'countd' });
-  ok('the KPI door: countd has no figure', kpi.ok === true && kpi.value === null, JSON.stringify(kpi));
+  ok('the KPI door: countd is the distinct count', kpi.ok === true && kpi.value === 7, JSON.stringify(kpi));
   const kpiPer = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'customer_id' } });
   ok('the KPI door: a per-entity snapshot has no figure', kpiPer.ok === true && kpiPer.value === null, JSON.stringify(kpiPer));
   const kpiSnap = await dashboards.computeCardMetric(P, D, { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } });
@@ -207,18 +212,18 @@ void (async () => {
 
   // ── alerts: a rule this release cannot evaluate is kept, untouched by an evaluation tick ──
   const R = (over: object) => ({ id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '>', value: 0 }, metric: { column: 'amount', aggregation: 'sum' }, ...over });
+  const countdRule = R({ metric: { column: 'customer_id', aggregation: 'countd' } }); // evaluated from step 02
   const rules = [
-    R({ metric: { column: 'customer_id', aggregation: 'countd' } }),
     R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: periodM.id } }),
     R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }),
     R({ metric: { column: 'amount', aggregation: 'sum', metricId: perM.id } }),
   ];
   const plainRule = R({});
   const tag = (r: { metric: object; compare: string }): string => `${(r.metric as { aggregation: string }).aggregation}/${r.compare}/${(r.metric as { metricId?: string }).metricId ? 'a metric' : 'no metric'}`;
-  for (const r of [...rules, plainRule]) await alertStore.restoreRule(P, r);
+  for (const r of [...rules, plainRule, countdRule]) await alertStore.restoreRule(P, r);
   const before = (await alertStore.load(P)).rules;
   for (const r of rules) ok(`kept on load: ${tag(r)}`, before.some((x) => x.id === r.id));
-  ok('the target rule keeps its targetPct and its empty column', isDeepStrictEqual((before.find((x) => x.id === rules[1].id) as { targetPct?: unknown } | undefined)?.targetPct, { op: 'below', pct: 90 }) && before.find((x) => x.id === rules[1].id)?.metric.column === '');
+  ok('the target rule keeps its targetPct and its empty column', isDeepStrictEqual((before.find((x) => x.id === rules[0].id) as { targetPct?: unknown } | undefined)?.targetPct, { op: 'below', pct: 90 }) && before.find((x) => x.id === rules[0].id)?.metric.column === '');
   await alertStore.evaluateProject(P, D, Date.parse('2026-11-04T12:00:00Z'));
   const after = (await alertStore.load(P)).rules;
   for (const r of rules) {
@@ -226,6 +231,7 @@ void (async () => {
     ok(`kept, byte-identical after an evaluation tick: ${tag(r)}`, was !== undefined && JSON.stringify(after.find((x) => x.id === r.id)) === was, JSON.stringify(after.find((x) => x.id === r.id)));
   }
   ok('NEGATIVE CONTROL: the plain rule was evaluated', typeof after.find((x) => x.id === plainRule.id)?.lastEvaluatedAt === 'string');
+  ok('a countd rule is evaluated, and keeps its aggregation', typeof after.find((x) => x.id === countdRule.id)?.lastEvaluatedAt === 'string' && after.find((x) => x.id === countdRule.id)?.metric.aggregation === 'countd');
   ok('NEGATIVE CONTROL: a target rule with no targetPct is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined })) === null);
   ok('NEGATIVE CONTROL: a target rule over 1000% is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 1001 } })) === null);
   ok('NEGATIVE CONTROL: a threshold rule with no column and no metric is still not a rule', alerts.sanitizeRule(R({ metric: { column: '', aggregation: 'sum' } })) === null);
@@ -235,6 +241,8 @@ void (async () => {
     ok(`the Test button says why: ${tag(r)}`, tested.ok && !tested.fire && tested.message === msg.alertPending() && tested.value === null, JSON.stringify(tested));
   }
   ok('NEGATIVE CONTROL: the Test button evaluates the plain rule', (await alertStore.testRule(P, plainRule)).fire === true);
+  const testedC = await alertStore.testRule(P, countdRule);
+  ok('the Test button evaluates a countd rule: 7 customers', testedC.fire === true && testedC.value === 7, JSON.stringify(testedC));
 
   finish();
 })();

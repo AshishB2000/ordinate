@@ -144,7 +144,7 @@ async function testEdges(): Promise<void> {
   const ctxA: FilterStep = { type: 'filter', column: 'g', op: '=', value: 'a', context: true };
   const normA: FilterStep = { type: 'filter', column: 'g', op: '=', value: 'a' };
   const big: FilterStep = { type: 'filter', column: 'v', op: '>=', value: 0 };
-  for (const agg of ['sum', 'avg', 'min', 'max', 'count'] as MetricAggregation[]) {
+  for (const agg of ['sum', 'avg', 'min', 'max', 'count', 'countd'] as MetricAggregation[]) {
     await diffMetric('edge metric', f, '{FIXED [g] : SUM([v])}', agg, []);
     await diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [normA]);
     await diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [ctxA]);
