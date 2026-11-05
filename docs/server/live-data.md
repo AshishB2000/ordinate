@@ -508,6 +508,50 @@ the same job is a Prepare filter step.
 - **A viewer that row access rules restrict** sees each filter's column and operator on the Schema
   tab, never its values.
 
+## Calculated fields
+
+A **Live** dataset can have calculated fields: an editor adds them on its **Schema** tab, in the same
+formula language as a Prepare step. Each one is a column like any other: charts, KPIs, filters,
+dashboard controls, answers, the Assistant and MCP see it. It is computed **in the warehouse**, in the
+same statement as the question, through one derived table per calculated field the question reads
+(never `*`, only the columns still needed), and it gives the same figure as the same formula as a
+Prepare step on a copy. Every value a formula writes is a bound parameter, never SQL text.
+
+- **What a formula can use (v1):** `+ - * /` (a division by zero is empty, as in Prepare), comparisons,
+  `and or not`, `IN (…)`, `IF … THEN … ELSEIF … ELSE … END`, `CASE … WHEN`, `isnull`, `ifnull`,
+  `coalesce`, `zn`, `if`, `iif`, `abs`, `sign`, `floor`, `ceil`, `ceiling`, `round(x, n)` with `n` a
+  number from −15 to 15, `sqrt`, `square`, `min`, `max`, `trim`, `contains`, `startswith`, `endswith`
+  (with a fixed piece of text), `concat`, `year`, `month`, `day`, `quarter`, and `datediff` by day,
+  month, quarter or year. A formula gives a number or text; a true/false result is stored as the text
+  `true` / `false`, as on a copy.
+- **What it can't, and why:** functions whose last digit differs between engines (`power`, `exp`,
+  `ln`, `log`, trigonometry, `%`), functions that count characters (`len`, `left`, `mid`, `find`…:
+  warehouses count them differently), letter casing (`lower`, `upper`: `ß`, `İ` and a final `Σ`
+  differ), regular expressions, the clock (`today`, `now`), number ↔ text conversion, most date
+  functions, level-of-detail expressions and dashboard parameters. The formula editor greys these out
+  and says why; saving one is refused with the same sentence and the offending part underlined.
+- **Names** are unique ignoring case against the dataset's columns and the other calculated fields
+  (BigQuery and Databricks names ignore case), and may not start with `lv_` or `o_` (Ordinate's own
+  query aliases). A formula may use the calculated fields above it, not those below. At most 50 per
+  dataset, 200 characters a name, 4,000 a formula; a question whose fields make a query over 256 KB is
+  refused.
+- **Databricks:** calculated fields are refused there, with a sentence, until a Databricks workspace
+  joins Ordinate's real-engine tests. Make a copy to use them.
+- **No value list:** the schema sync never samples a calculated field, so its filter picker shows the
+  "not sampled" state and takes typed values. Checking a formula in the editor never asks the
+  warehouse either: there are no preview rows.
+- **When the warehouse changes:** a field whose input column was dropped stays listed with what is
+  wrong, and only the questions that read it say "column missing"; a warehouse column that now spells
+  a field's name (ignoring case) makes the questions naming either refuse. Neither is ever answered
+  without the field.
+- **Copies:** "Make a copy" and "Copy the data instead" carry the fields as Prepare steps, in the
+  copy's first write. A field is never a row access column.
+- **Who sees the formula:** a viewer whom row access rules restrict sees each field's name and type,
+  not its formula, which may name a customer.
+- **Known differences from a copy** (each held by a test, `scripts/liveParityPins.ts`): Prepare types a
+  calculated column by its values, so a text formula whose every value reads as a number (`IF [amt] >
+  10 THEN '1' ELSE '2' END`) is a number column on a copy and a text column on Live.
+
 ## Refresh URL
 
 A refresh URL lets a pipeline tell Ordinate that new data has landed. A dbt run or an Airflow DAG

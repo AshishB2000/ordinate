@@ -43,6 +43,7 @@ import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
 import type { FactTerm } from '../ai/termFacts';
+import { liveCalculated, type CalculatedView } from './liveCalcs';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -190,6 +191,8 @@ export interface LiveSchemaView {
   missing: MissingColumn[];
   /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
   baseFilters: FilterStep[];
+  /** The calculated fields (part 8 step 04, ./liveCalcs): names and types only to a caller row access restricts. */
+  calculated: CalculatedView;
 }
 
 const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
@@ -230,6 +233,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     }),
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
     baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
+    calculated: await liveCalculated(projectId, meta, closed),
   };
 }
 

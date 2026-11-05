@@ -61,3 +61,16 @@ export function declaredColumns<C extends ParsedColumn>(meta: { columns: C[]; li
 export function calcSteps(calcs: readonly LiveCalc[]): CalculatedFieldStep[] {
   return calcs.map((c) => ({ type: 'calculated_field', name: c.name, expression: c.expression }));
 }
+
+/**
+ * A Schema reply's calcs as a caller may read them: a caller whom row access rules restrict (`closed`) gets
+ * each name and type only — the formula may name a customer (semantic layer part 8 D8, part 1 D12) — and so
+ * no problem sentence, which quotes parts of it.
+ */
+export function redactCalcs<T extends { expression: string; problem?: string }>(fields: T[], closed: boolean): (T & { hidden?: true })[] {
+  if (!closed) return fields;
+  return fields.map((f) => {
+    const { problem: _p, ...rest } = f;
+    return { ...rest, expression: '', hidden: true } as T & { hidden: true };
+  });
+}

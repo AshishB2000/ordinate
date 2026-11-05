@@ -16,6 +16,9 @@
 // § copies   "Make a copy" is born with the calcs as its Prepare steps, in its first write, and its figures
 //            are Live's (Object.is); "Copy the data instead" keeps the id, takes the steps and drops the
 //            top-level `calculated` key in the same write. An unreadable list still refuses both.
+// § schema   `dataset:liveSchema.calculated`: each calc with its formula and type, a broken one with its
+//            problem; Databricks not allowed, with why; a restricted caller (redactCalcs) gets names and
+//            types only (the canary over the real route is in test-rowPolicySafetyNet).
 //
 //   npm run build:ts && node scripts/test-liveCalcs.js
 
@@ -29,6 +32,7 @@ const rec: typeof import('../src/data/datasetRecord') = require('../src/data/dat
 const sync: typeof import('../src/engine/live/schemaSync') = require('../src/engine/live/schemaSync');
 const liveCalcs: typeof import('../src/data/liveCalcs') = require('../src/data/liveCalcs');
 const rowPolicy: typeof import('../src/data/rowPolicy') = require('../src/data/rowPolicy');
+const calcIpc: typeof import('../src/ipc/liveCalcs') = require('../src/ipc/liveCalcs');
 const calcCheck: typeof import('../src/engine/live/liveCalcCheck') = require('../src/engine/live/liveCalcCheck');
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
@@ -264,6 +268,19 @@ const CALCS = [
   ok('a warehouse column spelled like a calc (ignoring case): the calc refuses, typed', clash.ok === false && clash.reason === 'calculated' && /Band/.test(clash.error), show(clash));
   ok('…and so does the warehouse column: nothing silently reads either', ((r) => r.ok === false && r.reason === 'calculated')(await chart({ category: 'band', values: [M('amt', 'sum')] }, [], L2)));
   ok('…while a statement naming neither answers', (await chart(PLAIN, [], L2)).ok);
+
+  // ── § schema ─────────────────────────────────────────────────────────────
+  const view = (await liveSchema(L2)).calculated;
+  ok('the Schema reply lists the calcs with formula and type', view.allowed === true && show(view.fields.map((f: Reply) => [f.name, f.expression, f.type]))
+    === show(saved.calculated.map((c: Reply) => [c.name, c.expression, c.type])), show(view));
+  ok('a calc whose input was dropped shows its problem, naming it', /qty/.test(view.fields[0].problem ?? ''), show(view.fields[0]));
+  ok('a calc a warehouse column now spells shows that problem', /already a column/.test(view.fields[1].problem ?? ''), show(view.fields[1]));
+  ok('NEGATIVE CONTROL: a calc that runs has no problem', ((v) => v.fields.every((f: Reply) => f.problem === undefined))((await liveSchema(L)).calculated));
+  ok('Databricks: not allowed, and why', ((v) => v.allowed === false && /Databricks/.test(v.why ?? ''))(calcIpc.calculatedView(await meta(), 'databricks', false)));
+  const closedView = calcIpc.calculatedView(await meta(L2), 'duckdb', true);
+  ok('a restricted caller gets each name and type, never the formula or its problem', show(closedView.fields.map((f) => [f.name, f.type, f.expression, f.hidden, f.problem]))
+    === show(saved.calculated.map((c: Reply) => [c.name, c.type, '', true, undefined])), show(closedView));
+  ok('redactCalcs: open is as is', show(liveCalcs.redactCalcs(saved.calculated, false)) === show(saved.calculated));
 
   // ── § copies ─────────────────────────────────────────────────────────────
   ok('the copy calcs save', (await set(INPUT)).ok === true);

@@ -8,14 +8,21 @@
 //   live:checkCalc       the formula editor's check (ipc/formula's FormulaCheck shape) against the
 //                        columns and the calcs before this one. No warehouse call and no sample rows: a
 //                        statement per keystroke would spend LIVE_DAILY_QUERY_LIMIT.
+//   dataset:liveSchema   (ipc/liveProfile) carries `liveCalculated`: each calc with its problem against the
+//                        warehouse's columns now, names and types only to a caller row access restricts.
 //
 // Both `write`: only an editor changes or drafts a calc, and neither reply carries a row.
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { isLive, setLiveCalcs } from '../data/liveDataset';
-import type { LiveCalc } from '../data/liveCalcs';
-import { declaredColumns } from '../data/liveCalcs';
+import type { DatasetMeta } from '../data/datasets';
+import type { LiveCalc, LiveCalcType } from '../data/liveCalcs';
+import { declaredColumns, redactCalcs } from '../data/liveCalcs';
+import * as connections from '../connectors/connections';
+import { getConnector } from '../connectors';
+import type { CompileDialectId } from '../engine/live/dialect';
+import { liveCalcBroken, liveCalcDialectRefused } from '../engine/liveRefusals';
 import { announceRefreshed } from '../data/refreshEvents';
 import * as msg from '../data/liveMessages';
 import { compile, type SourceSpan } from '../formula/formula';
@@ -25,7 +32,7 @@ import type { CalcValueType } from '../engine/live/formulaSql';
 import { checkCalc } from '../engine/live/formulaSql';
 import { calcsRefusedOn, validateLiveCalcs } from '../engine/live/liveCalcCheck';
 import type { LiveTarget } from '../engine/live/liveTarget';
-import { liveTarget } from '../engine/live/liveTarget';
+import { liveTarget, typedColumns } from '../engine/live/liveTarget';
 import type { LiveColumn } from '../engine/live/liveSpec';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import * as queryCache from '../engine/queryCache';
@@ -98,6 +105,33 @@ export async function checkLiveCalc(p: Record<string, unknown>): Promise<Formula
   const v = checkCalc(src, found.declared, earlier, stored.slice(before + 1));
   if (!v.ok) return failedCheck(tokens, v.error, v.at, refs, unknownRefs);
   return { tokens, ok: true, refs, unknownRefs, resultType: RESULT[v.result], sample: { columns: [], rows: [], note: msg.liveCalcNoPreviewMessage() } };
+}
+
+/** One calc on the Schema tab: `problem` is why it no longer runs on the warehouse's columns now. */
+export interface CalcField { name: string; expression: string; type: LiveCalcType; problem?: string; hidden?: true }
+/** `allowed`: false where calcs are refused (Databricks), with `why`. */
+export interface CalculatedView { allowed: boolean; why?: string; fields: CalcField[] }
+
+/** The Schema reply's calcs, against the declared columns: each checked as a statement would compile it (./calcLayers). PURE. */
+export function calculatedView(meta: Pick<DatasetMeta, 'columns' | 'live'>, dialect: CompileDialectId | null, closed: boolean): CalculatedView {
+  const calcs = meta.live?.calculated ?? [];
+  const declared = declaredColumns({ columns: typedColumns(meta), live: meta.live });
+  const clash = new Set(declared.map((c) => c.name.toLowerCase()));
+  const fields: CalcField[] = calcs.map((c, i) => {
+    const v = checkCalc(c.expression, declared, calcs.slice(0, i), calcs.slice(i + 1));
+    const problem = clash.has(c.name.toLowerCase()) ? msg.liveCalcNameIsColumnMessage(c.name) : !v.ok ? v.error : v.type !== c.type ? liveCalcBroken(c.name) : undefined;
+    return problem ? { ...c, problem } : { ...c };
+  });
+  const refused = dialect !== null && calcsRefusedOn(dialect);
+  return { allowed: !refused, ...(refused ? { why: liveCalcDialectRefused() } : {}), fields: redactCalcs(fields, closed) };
+}
+
+/** `calculatedView` for a stored Live dataset: its connection's dialect (none when the connection is gone). */
+export async function liveCalculated(projectId: string, meta: DatasetMeta, closed: boolean): Promise<CalculatedView> {
+  const o = meta.origin;
+  const conn = o?.kind === 'connection' ? await connections.getConnection(projectId, o.connId) : null;
+  const dialect = (conn && getConnector(conn.connectorId)?.live?.dialect) ?? null;
+  return calculatedView(meta, dialect, closed);
 }
 
 export function register(): void {

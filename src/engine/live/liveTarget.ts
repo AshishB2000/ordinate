@@ -79,6 +79,18 @@ export function liveSourceOf(origin: { sql?: unknown; table?: unknown }, def: Co
 }
 
 /**
+ * The record's columns with the warehouse's own type names, where a schema sync recorded them (L2.5): the
+ * dialects that cannot safe-cast a typed value (Snowflake, Redshift) read them. A calc has none.
+ */
+export function typedColumns(meta: { columns: { name: string; type: LiveColumn['type'] }[]; live?: Pick<LiveSettings, 'profile'> }): LiveColumn[] {
+  const sourceTypes = new Map((meta.live?.profile?.columns ?? []).map((p) => [p.name, p.sourceType]));
+  return meta.columns.map((c) => {
+    const sourceType = sourceTypes.get(c.name);
+    return sourceType ? { name: c.name, type: c.type, sourceType } : { name: c.name, type: c.type };
+  });
+}
+
+/**
  * Everything one Live question needs, or why it cannot be asked. The dataset's base filters are
  * adapted here, once, into `env.base` — a step that cannot be applied refuses the question
  * (`baseFilter`), never skips. `base: 'skip'` leaves them to the caller: the schema sync adapts them
@@ -106,13 +118,7 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   if (!found) return { ok: false, kind: 'refused', refusal: refuse('badSource'), dialect };
   // The calcs travel with the source, so they are in every cache key; none: today's source, today's key.
   const source: LiveSource = meta.live.calculated?.length ? { ...found, calcs: meta.live.calculated } : found;
-  // The warehouse's own type names, where a schema sync recorded them (L2.5): the
-  // dialects that cannot safe-cast a typed value (Snowflake, Redshift) read them.
-  const sourceTypes = new Map((meta.live.profile?.columns ?? []).map((p) => [p.name, p.sourceType]));
-  const columns: LiveColumn[] = meta.columns.map((c) => {
-    const sourceType = sourceTypes.get(c.name);
-    return sourceType ? { name: c.name, type: c.type, sourceType } : { name: c.name, type: c.type };
-  });
+  const columns = typedColumns(meta);
   const env: CompileEnv = { dialect, source, columns };
   if (opts.base !== 'skip') {
     const b = baseOfLive(meta.live, columns);
