@@ -8,7 +8,8 @@
 // 1. THE NET: Staff is closed to east for a whole-table reader, open inside a gated door, open to hr;
 //    `policyClosed` stays rows-only (NEGATIVE CONTROL).
 // 2. EVERY DOOR refuses east a question that names a hidden column (or the carrier bonus), typed `hidden`:
-//    every encoding role, a filter, an LOD, a formula metric's re-entry, a term, a KPI, a metric value, an
+//    every encoding role, a filter, an LOD, a formula metric's re-entry, a term, a KPI, a metric value (and
+//    a distinct count, part 5), an
 //    answer card, a join to Staff's column, the grid's sort and search, distinct, profile. hr gets each one
 //    (NEGATIVE CONTROL). A question naming none is Object.is-equal to the editor's; a join THROUGH a hidden
 //    key runs, grouping by it is refused (D20).
@@ -37,6 +38,7 @@ const connections: typeof import('../src/connectors/connections') = require('../
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
 const doors: typeof import('../src/ipc/columnDoors') = require('../src/ipc/columnDoors');
 const api: typeof import('../src/api/index') = require('../src/api/index');
+const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const contractMod: typeof import('../src/api/contract') = require('../src/api/contract');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const parquet: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
@@ -80,6 +82,8 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const PAYROLL = await saveMetric('Payroll', { column: 'salary', aggregation: 'sum' });
     const PAYROLL_PER_HEAD = await saveMetric('Payroll per head', { formula: 'sum(salary) / count(employee_id)' });
     const HEADCOUNT = await saveMetric('Headcount', { column: 'employee_id', aggregation: 'count' });
+    // A distinct count (part 5): metric:save offers none before p5-04, so it is stored as that release stores it.
+    const DISTINCT_SALARY = (await W.as('boss', () => metricsMod.saveMetric(P, { name: 'Distinct salaries', datasetId: staff, definition: { column: 'salary', aggregation: 'countd' } })))!.id;
     const term = await W.call('boss', 'term:save', { projectId: P, input: { name: 'High earners', aliases: [], description: '', datasetId: staff, filters: [{ type: 'filter', column: 'salary', op: '>', value: 1200 }] } });
     const HIGH_EARNERS: string = term.body?.term?.id;
     ok('setup: three metrics and a term on Staff', !!HIGH_EARNERS, term.text.slice(0, 200));
@@ -108,6 +112,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ['a term on salary', 'visual:data', viz(BY_DEPT, [{ type: 'term', term: HIGH_EARNERS }])],
       ['KPI', 'dashboard:metric', kpi('salary', 'sum')],
       ['metric values', 'metric:values', { projectId: P, ids: [PAYROLL] }],
+      ['a distinct count of salary (part 5)', 'metric:values', { projectId: P, ids: [DISTINCT_SALARY] }],
       ['answer card', 'answer:card', { projectId: P, spec: spec({ measures: [{ column: 'salary', aggregation: 'sum' }] }) }],
       ['joined: Plain by Staff.salary', 'visual:data', vizOn(W.plain, { category: 'salary', categoryDatasetId: staff, values: [{ column: 'sales', aggregation: 'sum' }] })],
       ['grid sort', 'dataset:page', page({ sortColumn: 'salary' })],
