@@ -1,0 +1,195 @@
+// A metric's target under a scope (semantic layer part 5, D12–D14) — MAIN PROCESS. The plan is another metric over a
+// plan dataset (or a fixed figure); the arithmetic of periods is analysis/targetMath. The server decides the target,
+// the attainment and the status, and says in a sentence why there is none: React prints what it is sent.
+//
+//   - Additive across time: Σ over periods of target × days covered ÷ days in the period (whole periods resolved
+//     together, at most three plan resolutions). Any other metric: the plan over the covered range widened to whole
+//     periods, never pro-rated; a fixed figure holds at any scope.
+//   - Every scope filter but the date bounds must apply to the plan the way a filter already applies (its own column,
+//     or a related table's), else NO target — never the unfiltered plan, which the engine would give silently.
+//   - Row rules must restrict the actuals and the plan, or neither.
+
+import * as metrics from '../analysis/metrics';
+import type { Metric } from '../analysis/metrics';
+import { metricsByName } from '../analysis/metrics';
+import type { MetricTargetSpec } from '../analysis/metricTarget';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
+import { additivityOf } from '../analysis/additivity';
+import { formatMetricValue } from '../analysis/metricFormat';
+import { defaultThresholds, rowStatus } from '../analysis/scorecardModel';
+import type { RowStatus } from '../analysis/scorecardModel';
+import { fixedTarget, periodParts, planAsks, widened } from '../analysis/targetMath';
+import * as msg from '../analysis/targetMessages';
+import { scopeRange } from '../analysis/periodScope';
+import { getCalendar, todayIso } from '../analysis/dateIntel';
+import { resolveColumnOwner } from '../analysis/joinPlan';
+import { listRelationships } from '../analysis/relationships';
+import { expandTerms } from '../analysis/termExpand';
+import { formatNumber } from '../app/format';
+import * as datasets from '../data/datasets';
+import type { FilterStep } from '../data/transforms';
+import { isRowPolicyError, rowLockFor } from '../data/rowAccess';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { TermNotExpandedError } from '../data/termStep';
+import { infoFor } from './relationships';
+import * as ipcMetrics from './metrics';
+
+export interface TargetResult {
+  value: number | null;
+  display: string;
+  attainment: number | null;
+  attainmentDisplay: string;
+  status: RowStatus;
+  /** How the target was worked out ("1.2M for Nov 2024, pro-rated to Nov 20"). */
+  how?: string;
+  /** Why there is no target. */
+  none?: string;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dayLabel = (iso: string): string => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
+const BOUNDS = new Set(['>=', '>', '<=', '<']);
+
+const noTarget = (none: string): TargetResult => ({ value: null, display: '', attainment: null, attainmentDisplay: '', status: 'none', none });
+
+/** The date bounds of the metric's own date column: the dates the plan is matched on, so not filters the plan must apply. */
+const isDateBound = (s: FilterStep, dateCol: string): boolean => !!dateCol && s.column === dateCol && (s.op === 'period' || BOUNDS.has(s.op));
+
+/** The scope's other filters, as the plan applies them, or the sentence naming what it lacks. */
+async function planFilters(projectId: string, planDs: string, scope: FilterStep[], dateCol: string): Promise<FilterStep[] | string> {
+  let steps: FilterStep[];
+  try {
+    const x = await expandTerms(projectId, planDs, scope);
+    if (x.notes.length) return msg.targetPlanTerm();
+    steps = x.steps;
+  } catch (err) {
+    if (err instanceof TermNotExpandedError) return msg.targetPlanTerm();
+    throw err;
+  }
+  const own = new Set(((await datasets.getDatasetMeta(projectId, planDs))?.columns ?? []).map((c) => c.name));
+  const rels = await listRelationships(projectId);
+  const ids = new Set([planDs]);
+  for (const r of rels) { ids.add(r.from.datasetId); ids.add(r.to.datasetId); }
+  const infos = new Map<string, NonNullable<Awaited<ReturnType<typeof infoFor>>>>();
+  for (const id of ids) { const i = await infoFor(projectId, id); if (i) infos.set(id, i); }
+  const out: FilterStep[] = [];
+  for (const s of steps) {
+    if (isDateBound(s, dateCol)) continue;
+    const applies = !s.via && !s.datasetId && (own.has(s.column) || resolveColumnOwner(planDs, s.column, rels, infos) !== null);
+    if (!applies) return msg.targetPlanLacks(s.column);
+    out.push(s);
+  }
+  return out;
+}
+
+const bounds = (column: string, r: { from?: string; to?: string }): FilterStep[] => [
+  ...(r.from ? [{ type: 'filter', column, op: '>=', value: r.from } as FilterStep] : []),
+  ...(r.to ? [{ type: 'filter', column, op: '<=', value: r.to } as FilterStep] : []),
+];
+
+/** True when the caller's row rules treat the actuals' dataset and the plan's alike (both locked, or neither). Throws RowPolicyError. */
+async function rulesAgree(projectId: string, a: string, b: string): Promise<boolean> {
+  return (await rowLockFor(projectId, a) === null) === (await rowLockFor(projectId, b) === null);
+}
+
+async function targetFigure(projectId: string, m: Metric, spec: MetricTargetSpec, scope: FilterStep[]): Promise<{ value: number | null; how?: string } | string> {
+  const s = await metricScope(projectId, m, scope);
+  if (!s.ok) return s.error;
+  const dateCol = await metricDate(projectId, m);
+  const byName = await metricsByName(projectId);
+  const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
+  const adds = additivityOf(m, columns, byName).time;
+  if (adds && !spec.per) return msg.targetNeedsPer();
+  if (!adds && 'value' in spec.source) return { value: spec.source.value }; // a fixed figure holds at any scope
+  const cal = getCalendar();
+  const found = dateCol ? scopeRange(s.filters, [{ name: dateCol, type: 'date' }])?.range : undefined;
+  const today = todayIso();
+  const range = found ? { from: found.from, to: found.to && found.to < today ? found.to : today } : undefined;
+  const closed = range && range.from && range.to && range.from <= range.to ? { from: range.from, to: range.to } : null;
+  if (adds && !closed) return msg.targetPickPeriod();
+  const parts = closed && spec.per ? periodParts(closed, spec.per, cal) : [];
+  if (adds && !parts.length) return msg.targetPickPeriod();
+  if ('value' in spec.source) return { value: fixedTarget(spec.source.value, parts), ...howOf(m, spec.source.value, parts) };
+
+  const plan = await metrics.getMetric(projectId, spec.source.metricId);
+  if (!plan) return msg.targetPlanGone();
+  const planDate = await metricDate(projectId, plan);
+  if (!planDate && (adds || range)) return msg.targetPlanNoDate(plan.name);
+  if (!(await rulesAgree(projectId, m.datasetId, plan.datasetId))) return msg.targetRowRules();
+  const filters = await planFilters(projectId, plan.datasetId, s.filters, dateCol);
+  if (typeof filters === 'string') return filters;
+  const ask = async (r: { from?: string; to?: string }): Promise<number | null> =>
+    (await ipcMetrics.resolveMetric(projectId, plan.id, { filters: [...filters, ...bounds(planDate, r)] }))?.value ?? null;
+  if (!adds) return { value: await ask(parts.length ? widened(parts) : (range ?? {})) }; // widened to whole periods, never pro-rated
+  let total: number | null = null;
+  let single: number | null = null;
+  const asks = planAsks(parts);
+  for (const a of asks) {
+    const v = await ask(a);
+    if (v !== null) total = (total ?? 0) + v * a.fraction;
+    single = v;
+  }
+  return { value: total, ...(asks.length === 1 && single !== null ? howOf(m, single, parts) : {}) };
+}
+
+/** "1.2M for Nov 2024, pro-rated to Nov 20": one period only (a span has no single full figure). */
+function howOf(m: Metric, full: number, parts: ReturnType<typeof periodParts>): { how?: string } {
+  if (parts.length !== 1) return {};
+  const [p] = parts;
+  const shown = formatMetricValue(full, m.format);
+  return { how: p.covered === p.days ? msg.targetHowWhole(shown, p.label) : msg.targetHowProRated(shown, p.label, dayLabel(isoEnd(p))) };
+}
+
+/** The last day the range covers of a part (its first day plus the covered days). */
+function isoEnd(p: { from: string; covered: number }): string {
+  const d = new Date(`${p.from}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + p.covered - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The target of `m` under `scope`, with the attainment and status of `value` against it; null when `m` has none. A
+ * target the row rules or the scope make unanswerable is `none` + the sentence, never a thrown tile.
+ */
+export async function metricTarget(projectId: string, m: Metric, scope: FilterStep[], value: number | null): Promise<TargetResult | null> {
+  const spec = m.target;
+  if (!spec) return null;
+  let fig: Awaited<ReturnType<typeof targetFigure>>;
+  try {
+    fig = await targetFigure(projectId, m, spec, scope);
+  } catch (err) {
+    if (isRowPolicyError(err)) return noTarget(msg.targetRowRules());
+    if (isLiveFigureError(err)) return noTarget(err.message);
+    throw err;
+  }
+  if (typeof fig === 'string') return noTarget(fig);
+  const target = fig.value;
+  const { status, attainment } = rowStatus(value, target, spec.thresholds ?? defaultThresholds(m.direction), m.direction);
+  return {
+    value: target,
+    display: target === null ? '' : formatMetricValue(target, m.format),
+    attainment,
+    attainmentDisplay: attainment === null ? '' : `${formatNumber(Math.round(attainment), { decimals: 0 })}%`,
+    status,
+    ...(fig.how ? { how: fig.how } : {}),
+  };
+}
+
+/** Why a target may not be saved on `m`, beside the Target box, or null. */
+export async function checkTarget(projectId: string, m: Pick<Metric, 'id' | 'name' | 'datasetId' | 'definition' | 'timeColumn'>, t: unknown): Promise<{ error: string; field: 'target' } | null> {
+  const spec = t && typeof t === 'object' ? (t as MetricTargetSpec) : null;
+  if (!spec) return null;
+  const refuse = (error: string): { error: string; field: 'target' } => ({ error, field: 'target' });
+  const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
+  // shortcut: the metric's own filters don't change whether it adds up, so none are passed; read them in if one ever does
+  const adds = additivityOf({ ...m, filters: [] }, columns, await metricsByName(projectId)).time;
+  if (adds && !spec.per) return refuse(msg.targetNeedsPer());
+  if (spec.per && !(await metricDate(projectId, m))) return refuse(msg.targetNeedsDate());
+  if ('metricId' in spec.source) {
+    const plan = await metrics.getMetric(projectId, spec.source.metricId);
+    if (!plan) return refuse(msg.targetPlanGone());
+    if (plan.id === m.id) return refuse(msg.targetOwnPlan());
+    if (!(await metricDate(projectId, plan))) return refuse(msg.targetPlanNoDate(plan.name));
+  }
+  return null;
+}

@@ -23,6 +23,12 @@ const Definition = z.union([
   z.strictObject({ base: Uuid, window: Window.optional(), compare: Compare.optional() }).refine((d) => !!d.window || !!d.compare),
   z.strictObject({ funnel: Funnel, show: z.enum(['rate', 'converted', 'entered']) }),
 ]);
+// A target (part 5, D12): a figure, or a metric over a plan dataset, for the period one figure covers. null clears it on update.
+const Target = z.strictObject({
+  source: z.union([z.strictObject({ value: z.number() }), z.strictObject({ metricId: Uuid })]),
+  per: z.enum(['week', 'month', 'quarter', 'year']).optional(),
+  thresholds: z.strictObject({ good: z.number(), warn: z.number() }).optional(),
+});
 const Format = z.strictObject({
   kind: z.enum(['number', 'currency', 'percent', 'duration']),
   decimals: z.number().int().min(0).max(10).optional(),
@@ -39,6 +45,7 @@ const Fields = {
   description: z.string().max(2_000).optional(),
   direction: z.enum(['', 'up_good', 'down_good']).optional(),
   timeColumn: z.string().max(512).optional(), // the date column it counts by; '' clears (semantic D9)
+  target: Target.optional(),
 };
 const ParamPayload = z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50);
 const ById = z.strictObject({ projectId: Uuid, id: Uuid });
@@ -63,7 +70,7 @@ export const metrics = {
       id: Uuid,
       base: Base.optional(), // the editor's tag (contract.ts Base)
       // No datasetId: the store would ignore it, so the contract refuses it.
-      patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction, timeColumn: Fields.timeColumn }),
+      patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction, timeColumn: Fields.timeColumn, target: Target.nullable().optional() }),
     }),
     project: byProjectId,
   }),

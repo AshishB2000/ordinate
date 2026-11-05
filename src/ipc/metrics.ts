@@ -35,6 +35,7 @@ import { withStatus } from '../analysis/statusStore';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
 import { isNewerKind } from '../analysis/pendingKinds';
+import { checkTarget } from './targetResolve';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -548,6 +549,7 @@ export function register() {
       if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = await settleOnSave(projectId, raw);
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
+      const tg = await checkTarget(projectId, { ...raw, id: '', name: String(raw.name), definition: metrics.sanitizeDefinition(raw.definition), ...when }, raw.target); if (tg) return { ok: false, ...tg };
       const m = await metrics.saveMetric(projectId, {
         ...raw,
         filters: sanitizeDashboardFilters(raw.filters),
@@ -574,6 +576,7 @@ export function register() {
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const next = { ...raw, ...when };
+      const tg = before && raw.target ? await checkTarget(projectId, { ...before, ...next, definition: next.definition !== undefined ? metrics.sanitizeDefinition(next.definition) : before.definition }, raw.target) : null; if (tg) return { ok: false, ...tg };
       if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const m = await metrics.updateMetric(projectId, id, next, base);
       if (!m) return { ok: false, error: 'Metric not found' };

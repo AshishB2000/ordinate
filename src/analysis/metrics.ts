@@ -390,6 +390,8 @@ export interface MetricInput {
   /** null clears it. */
   tree?: unknown;
   timeColumn?: unknown;
+  /** null clears it. */
+  target?: unknown;
 }
 
 /**
@@ -461,6 +463,7 @@ export async function updateMetric(
       if (c) updated.timeColumn = c;
       else delete updated.timeColumn;
     }
+    if (patch.target !== undefined) { const g = sanitizeTarget(patch.target); if (g) updated.target = g; else delete updated.target; } // null clears; absent keeps
     if (patch.tree !== undefined) {
       const tree = sanitizeTree(patch.tree, id);
       if (tree) updated.tree = tree;
