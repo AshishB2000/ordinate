@@ -149,10 +149,13 @@ export async function expandedOrRefusal(projectId: string, datasetId: string, fi
   }
 }
 
-/** An `ok` reply with the notes of the dashboard terms its figure left out (termExpand); every other reply as it is, the same object. */
+/**
+ * An `ok` reply with the notes of the dashboard terms its figure left out (termExpand), after the reply's own (a
+ * fan-out's, ./vizFanOut and ./metricFanOut), each once; every other reply, or no term note, as it is, the same object.
+ */
 export function withNotes<R>(reply: R, notes: readonly string[]): R {
   const ok = !!reply && typeof reply === 'object' && (reply as { ok?: unknown }).ok !== false;
-  return ok && notes.length ? { ...reply, notes: [...notes] } : reply;
+  return ok && notes.length ? { ...reply, notes: Array.from(new Set([...((reply as { notes?: string[] }).notes ?? []), ...notes])) } : reply;
 }
 
 /** `vizDataFor` under the rules: the body as before, or locked, or a typed refusal reply. */

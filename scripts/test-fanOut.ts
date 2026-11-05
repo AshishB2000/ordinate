@@ -28,6 +28,8 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
+const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
 const jp: typeof import('../src/analysis/joinPlan') = require('../src/analysis/joinPlan');
 const js: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
 const jr: typeof import('../src/engine/joinResident') = require('../src/engine/joinResident');
@@ -296,6 +298,11 @@ async function answers(): Promise<void> {
   const want = await viaAsk(CASES[2], residentAsk);
   ok('the door: visual:data answers the same reply, with the notes', door.ok && sameReply(door, want)
     && show(door.ok && door.notes) === show([msg.fanOutOwnRows('“sum of amount”, “sum of refund”'), msg.fanOutNarrows('order_date', '“sum of amount”')]), show([door, want]));
+  // A dashboard term on Orders (a many side: no safe hop from Customers) is left out, with its note (part 1 05b): beside the fan-out's own, never instead.
+  const paid = (await terms.saveTerm(P, { name: 'Paid', datasetId: swap(O), filters: [F('amount', '>', 0)] }))!;
+  const scoped = await post(CASES[2].enc, [...CASES[2].filters, { type: 'term', term: paid.id, fromControl: true } as unknown as FilterStep]);
+  ok('the door: a dashboard term the chart leaves out keeps the fan-out\'s notes and adds its own', scoped.ok && door.ok && sameReply({ ...scoped, notes: door.notes }, want)
+    && show(scoped.notes) === show([...(door.notes ?? []), termMsg.termNotApplied('Paid', 'Customers')]), show(scoped));
   const fwd: VizEncoding = { category: 'zone', categoryDatasetId: G, values: [M('id', 'count')] };
   const today = await post(fwd, []);
   ok('NEGATIVE CONTROL: a chart with no many-side measure is today\'s answer, with no notes', sameReply(today, await jsAsk(C, fwd, [])) && today.ok && today.notes === undefined, show(today));
