@@ -178,6 +178,68 @@ describe('Prepare', () => {
     expect(await screen.findByText('Prepare · 5,000 rows · 3 columns')).toBeTruthy();
   });
 
+  describe('removing a step that something reads', () => {
+    const MARGIN = { type: 'calculated_field', name: 'Margin', expression: '[units] * 2' };
+    const REMOVED = { ok: true, dataset: { ...STATE, steps: [], updatedAt: '2026-10-03T10:01:00Z' }, preview: { columns: COLS, rowCount: 5000, warnings: [], stepCounts: [] } };
+    const fields = (steps: unknown[]) => ({ body: { ok: true, fields: {}, steps } });
+    const withSteps = (steps: unknown[], lineage: Reply, more: Record<string, Reply> = {}) =>
+      base({ 'prepare:get': { body: { ...STATE, steps, stepCounts: steps.map(() => ({ before: 5, after: 5 })) } }, 'lineage:fields': lineage, 'dataset:removeStep': { body: REMOVED }, ...more });
+    // The page asks lineage:fields once; a click before its reply lands removes at once, so wait for the reply.
+    const settled = async (calls: { channel: string }[]) => {
+      await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
+      await new Promise((r) => setTimeout(r, 50));
+    };
+    const removes = (calls: { channel: string }[]) => calls.filter((c) => c.channel === 'dataset:removeStep');
+
+    it('asks first, names what it feeds, and removes only on Delete', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], fields([{ index: 1, produces: ['Margin'], usedIn: { metric: 1, visual: 3 } }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 2' });
+      await settled(calls);
+      fireEvent.click(btn);
+      const d = await screen.findByRole('dialog');
+      expect(within(d).getByText('Delete “Margin”?')).toBeTruthy();
+      expect(within(d).getByText(/It feeds 1 metric, 3 charts\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
+      fireEvent.click(within(d).getByRole('button', { name: 'Keep it' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(removes(calls)).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove step 2' }));
+      fireEvent.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+    });
+
+    it('a rename step that feeds something asks too', async () => {
+      const calls = serve(withSteps([{ type: 'rename_column', from: 'amt', to: 'amount' }], fields([{ index: 0, produces: ['amount'], usedIn: { dashboard: 2 } }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 1' });
+      await settled(calls);
+      fireEvent.click(btn);
+      expect(await screen.findByText(/It feeds 2 dashboards\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
+    });
+
+    it('NEGATIVE CONTROL: a step that makes nothing, or feeds nothing, is removed at once', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], fields([{ index: 1, produces: ['Margin'], usedIn: {} }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 1' });
+      await settled(calls);
+      fireEvent.click(btn);
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('NEGATIVE CONTROL: with lineage:fields a 404, every remove is immediate', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], { status: 404, body: { error: 'nope' } }));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 2' });
+      await settled(calls);
+      fireEvent.click(btn);
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
   it('a step the form cannot build yet is refused here, without a call', async () => {
     const calls = serve(base());
     renderApp(`${URL_}?add=group_aggregate`);
