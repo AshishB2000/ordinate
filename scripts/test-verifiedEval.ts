@@ -2,17 +2,26 @@
 // its prose — against a verified question, by spec first and, on a copy, by the engine's figures.
 //
 //   §1 judgeSpec over the seeded sample (and a Live dataset: specs only, no warehouse query)
+//   §2 CI replay: each recorded reply in ./verified-eval-cases.ts through the real path — `splitAction`, the
+//      validator, the judge — against the sample's verified questions; and leave-one-out holds
 //
 //   npm run build:ts && node scripts/test-verifiedEval.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import * as H from './liveQueryHarness';
+import { EVAL_CASES } from './verified-eval-cases';
 
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
 const verified: typeof import('../src/ipc/verified') = require('../src/ipc/verified');
 const store: typeof import('../src/analysis/verifiedQuestions') = require('../src/analysis/verifiedQuestions');
 const J: typeof import('../src/ipc/verifiedJudge') = require('../src/ipc/verifiedJudge');
+const { splitAction }: typeof import('../src/ai/suggestedAction') = require('../src/ai/suggestedAction');
+const { askGuidance }: typeof import('../src/ipc/guidance') = require('../src/ipc/guidance');
+const { exactHit }: typeof import('../src/ai/verifiedPick') = require('../src/ai/verifiedPick');
+const { verifiedStates }: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
+const { SAMPLE_VERIFIED }: typeof import('../src/app/sampleGuidance') = require('../src/app/sampleGuidance');
+const trash: typeof import('../src/app/trash') = require('../src/app/trash');
 type VerifiedQuestion = import('../src/analysis/verifiedRules').VerifiedQuestion;
 type Spec = import('../src/ai/answerSpec').AnswerSpec;
 
@@ -56,6 +65,25 @@ async function main(): Promise<void> {
     ok('an unknown column is refused, with the reason', unknown.outcome === 'refused' && /nope/.test(unknown.reason ?? ''), JSON.stringify(unknown));
     ok('no spec at all is refused', (await J.judgeSpec(P, q, undefined)).outcome === 'refused');
     ok('specOnly: a different spec differs without drawing', (await J.judgeSpec(P, westEq, { ...RAW_WEST, filters: [{ column: 'region', op: 'in', values: ['West'] }] }, { specOnly: true })).outcome === 'differs');
+    await trash.trashRecord(P, 'verified', westEq.id); // the sample's own set again, for §2 and §3
+
+    // ── §2 CI replay ────────────────────────────────────────────────────────
+    for (const c of EVAL_CASES) {
+      const { action } = splitAction(c.line);
+      const got = action.kind === 'answer' ? (await J.judgeSpec(P, await verifiedNamed(c.verified), action.spec)).outcome : 'refused';
+      ok(`${c.recorded ? '[recorded] ' : '[written] '}${c.name}`, got === c.expect, `expected ${c.expect}, got ${got}`);
+    }
+    ok('the corpus is a corpus', EVAL_CASES.length >= 12, String(EVAL_CASES.length));
+    const SAMPLE_QUESTIONS = SAMPLE_VERIFIED.map((v) => v.question);
+    ok('every sample question is covered', SAMPLE_QUESTIONS.every((sq) => EVAL_CASES.some((c) => c.verified === sq && c.expect === 'match')));
+    ok('every case is scored against a sample question', EVAL_CASES.every((c) => SAMPLE_QUESTIONS.includes(c.verified)));
+    const own = (await verifiedNamed('Revenue by region')).id;
+    const g = await askGuidance(P, { kind: '' }, 'project', 'Revenue by region', { exclude: own });
+    ok('leave-one-out: its own entry is no example', !g.text.includes('"Revenue by region" →') && g.used.examples.length > 0 && !g.used.examples.includes(own), g.text);
+    ok('NEGATIVE CONTROL: without exclude it is one', (await askGuidance(P, { kind: '' }, 'project', 'Revenue by region')).text.includes('"Revenue by region" →'));
+    const states = await verifiedStates(P);
+    ok('leave-one-out: and no exact hit', exactHit(states, 'Revenue by region', own) === null);
+    ok('NEGATIVE CONTROL: without exclude it is the exact hit', exactHit(states, 'Revenue by region')?.id === own);
 
     // ── Live: compared on specs only, and the warehouse is never asked ─────
     const P2 = live.projectId;
