@@ -1,8 +1,13 @@
 // The Share policy judges every figure by the column it is drawn from, on the table that OWNS that column
-// (src/app/sharePolicy.ts `applyToChart`): a chart on Assignments totalling Employees.salary (a forward-joined
-// measure) leaves exactly as the chart drawn on Employees does — hidden under drop on a /p/ page (publishHosted's
-// own build, `buildPages` with the publish hook), in a dashboard's HTML export and in an export-shaped
-// `visual:data`; under mask its figures pass, as every aggregate's do. A point map's size and small multiples too.
+// (src/app/sharePolicy.ts `applyToChart`, src/publish/kpiPolicy.ts):
+//
+//   1. a chart on Assignments totalling Employees.salary (a forward-joined measure) leaves exactly as the
+//      chart drawn on Employees does — hidden under drop on a /p/ page (publishHosted's own build, `buildPages`
+//      with the publish hook), in a dashboard's HTML export and in an export-shaped `visual:data`;
+//   2. a KPI over a marked column — on its own table, through a forward join, or through a saved metric
+//      (plain, a formula over a related column, a formula naming another table's metric) — publishes no
+//      figure under drop, the tile saying so in the house wording, as a chart over that column does; under
+//      mask its figure passes, as every aggregate's does.
 //
 // Negative controls: a column nobody marked publishes its figures on the same page; the editor in the app
 // still sees every figure; with salary unmarked, the pages are the ones this release pinned (sha256), so a
@@ -50,9 +55,10 @@ const pin = (html: string): string => {
   return crypto.createHash('sha256').update(JSON.stringify(d).replace(UUIDS, 'U'), 'utf8').digest('hex');
 };
 
-// Salaries 91357 / 82469 / 70913: payroll 244739, on its own table and through the join alike (a one side's row
-// is counted once). Hours 1213 / 719 / 3037 / 547 nobody marks.
+// Salaries 91357 / 82469 / 70913: payroll 244739 (244.7K), on its own table and through the join alike (a one
+// side's row is counted once). Over 5516 hours, 44.3689… an hour. Hours 1213 / 719 / 3037 / 547 nobody marks.
 const SALARY = ['91357', '82469', '70913'];
+const PAYROLL = ['244739', '244.7K', '244,739', '44.3689', '44.369'];
 const HOURS = ['1213', '3037', '5516'];
 
 async function main(): Promise<void> {
@@ -129,7 +135,8 @@ async function main(): Promise<void> {
   for (const [where, html] of [['/p/ page', drop.page], ['HTML export', drop.exported]] as const) {
     ok(`drop, ${where}, control: the chart over salary on Employees is hidden`, hidden(html, 'Salary by person'), show(tile(html, 'Salary by person')));
     ok(`drop, ${where}: the chart on Assignments totalling Employees.salary is hidden, as that chart is`, hidden(html, 'Salary per assignment'), show(tile(html, 'Salary per assignment')));
-    ok(`drop, ${where}: no employee's salary is anywhere on it`, leaks(html, SALARY).length === 0, show(leaks(html, SALARY)));
+    for (const t of MARKED_KPIS) ok(`drop, ${where}: the KPI "${t}" publishes no figure, only the house wording`, hidden(html, t), show(tile(html, t)));
+    ok(`drop, ${where}: no salary and no payroll figure is anywhere on it`, leaks(html, [...SALARY, ...PAYROLL]).length === 0, show(leaks(html, [...SALARY, ...PAYROLL])));
     ok(`NEGATIVE CONTROL (drop, ${where}): the hours chart and both hours KPIs publish their figures`, !hidden(html, 'Hours per assignment') && figure(html, 'Hours').value === 5516
       && typeof figure(html, 'Hours per assignment (metric)').value === 'number' && leaks(html, HOURS).length === HOURS.length, show([tile(html, 'Hours per assignment'), figure(html, 'Hours')]));
   }
@@ -149,17 +156,22 @@ async function main(): Promise<void> {
   ok('mask: a point map sized by a forward join\'s salary is hidden (a size is a row\'s own cell)', ((await point('sum')) as { hiddenByPolicy?: boolean }).hiddenByPolicy === true);
   ok('NEGATIVE CONTROL (mask): sized by a count, it is not', (await point('count')).ok === true);
   for (const [where, html] of [['/p/ page', mask.page], ['HTML export', mask.exported]] as const) {
-    ok(`mask, ${where}: the forward measure's figures pass, as every aggregate's do`, !hidden(html, 'Salary per assignment') && leaks(html, SALARY).length === SALARY.length, show(tile(html, 'Salary per assignment')));
+    const same = (t: string): boolean => { const a = figure(html, t), b = figure(before.page, t); return !!a && Object.is(a.value, b.value) && a.display === b.display; };
+    ok(`mask, ${where}: every KPI over salary publishes its figure, as a chart's aggregate does`, MARKED_KPIS.every(same), show(MARKED_KPIS.map((t) => figure(html, t))));
+    ok(`mask, ${where}: the forward measure's figures pass too`, !hidden(html, 'Salary per assignment') && leaks(html, SALARY).length === SALARY.length, show(tile(html, 'Salary per assignment')));
+    ok(`mask, ${where}: the KPI through the join names no marked column, as the KPI on Employees names none`, !figure(html, 'Payroll over assignments').subtitle && !figure(html, 'Payroll').subtitle,
+      show([figure(html, 'Payroll over assignments'), figure(html, 'Payroll')]));
   }
+  ok('NEGATIVE CONTROL: with salary unmarked, a KPI says what it measures, so the subtitle check above can see one', figure(before.page, 'Payroll over assignments').subtitle === 'Sum of salary', show(figure(before.page, 'Payroll over assignments')));
 
   // ── include: everything passes ──
   const incl = await leave('include');
-  ok('NEGATIVE CONTROL (include): every salary is on the page, so the drop grep can see them', leaks(incl.page, SALARY).length === SALARY.length, show(leaks(incl.page, SALARY)));
+  ok('NEGATIVE CONTROL (include): every figure is on the page, so the drop greps can see them', leaks(incl.page, [...SALARY, ...PAYROLL]).length === SALARY.length + PAYROLL.length, show(leaks(incl.page, [...SALARY, ...PAYROLL])));
 
   // ── a column nobody marked: drop leaves it alone, and the page is the old one again ──
   await catalog.setColumn(P, E, 'salary', { sensitivity: 'none' });
   const after = await leave('drop');
-  ok('NEGATIVE CONTROL: with salary unmarked again, drop publishes the forward measure', !hidden(after.page, 'Salary per assignment'));
+  ok('NEGATIVE CONTROL: with salary unmarked again, drop publishes the forward measure and every KPI', !hidden(after.page, 'Salary per assignment') && MARKED_KPIS.every((t) => !hidden(after.page, t)));
   ok('PIN: …and the page and the export are byte for byte the ones before salary was marked', pin(after.page) === pin(before.page) && pin(after.exported) === pin(before.exported));
 }
 

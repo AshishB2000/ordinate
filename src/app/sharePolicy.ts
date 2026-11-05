@@ -10,7 +10,8 @@
 //            drawn from the column are masked; the figures are aggregates and
 //            pass through.
 //   drop     the column is removed from a table; a chart that USES it in any
-//            role is replaced by a "Hidden by the share policy" result.
+//            role is replaced by a "Hidden by the share policy" result, and so
+//            is a published KPI totalled from it (publish/kpiPolicy.ts).
 //   include  passes through. The renderer asks for an explicit confirmation
 //            before it lets an export run under this action.
 //
