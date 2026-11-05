@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     { missing: [...plan.CHART_TYPE_IDS].filter((t) => !listed.has(t)), extra: [...listed].filter((t) => !plan.CHART_TYPE_IDS.has(t)) });
   ok('negative control: a list missing one type is caught', !sameSet(new Set([...listed].slice(1)), plan.CHART_TYPE_IDS));
 
-  await sample.seedSampleProject();
+  const seeded = await sample.seedSampleProject();
   const example = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(build)![1]!);
   const built = await call('create_dashboard', { plan: example });
   ok('build-dashboard: the example plan builds with nothing dropped', built.dropped.length === 0, built.dropped);
@@ -123,6 +123,14 @@ async function main(): Promise<void> {
   ok('answer-data-questions: it names the three tools, and checks the team\'s answers before aggregate',
     ['get_instructions', 'list_verified_questions', 'answer_verified_question'].every((t) => answer.includes(`\`${t}\``))
     && answer.indexOf('Check what the team signed off first') > 0 && answer.indexOf('Check what the team signed off first') < answer.indexOf('## An ambiguous question'));
+  // The topics row: the tools it names exist and do what it says (a topic narrows lists, never `query_sql`).
+  const topicsMod: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const sampleDs = (await call('list_datasets', {}))[0];
+  await topicsMod.saveTopic(seeded.projectId!, { name: 'Sales', datasets: [{ id: sampleDs.id, fields: ['region'] }], metricIds: [], termIds: [] });
+  ok('answer-data-questions: the topics row names list_topics and list_datasets with topic, and says query_sql reads every dataset',
+    /`list_topics`, then `list_datasets` with `topic`/.test(answer) && /`query_sql` still reads every dataset/.test(answer)
+    && (await call('list_topics', {}))[0].name === 'Sales' && (await call('list_datasets', { topic: 'Sales' })).length === 1, { skill: answer.length });
+  ok('answer-data-questions: …and the SQL above still answers whatever the topic lists', (await call('query_sql', { sql })).rows.length > 0);
 }
 
 main()

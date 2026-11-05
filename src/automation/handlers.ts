@@ -40,6 +40,9 @@ import { kpiHidden } from '../publish/kpiPolicy';
 import { insightsForDataset } from '../ipc/insights';
 import { evaluateAndDeliver } from '../ipc/alerts';
 import { AutomationError } from './errors';
+import { inTopicOrder, resolveTopicRef } from './topicRef';
+import { listTopics, topicsForReaders } from '../analysis/topics';
+import * as termsStore from '../analysis/terms';
 import { defaultProject, pick, resolveProject, runJob, termSteps } from './resolve';
 import { listForCaller as termList } from '../ipc/terms';
 import type { Ctx } from './registry';
@@ -77,8 +80,10 @@ export async function projectsList(ctx?: Ctx): Promise<unknown> {
   }));
 }
 
-export async function datasetsList(ctx: Ctx): Promise<unknown> {
-  return vocabularyOrder(await withStatus(ctx.projectId, 'dataset', await datasets.listDatasets(ctx.projectId)), () => true).map((d) => ({
+export async function datasetsList(ctx: Ctx, topic?: string): Promise<unknown> {
+  const all = await datasets.listDatasets(ctx.projectId);
+  const shown = topic ? inTopicOrder(all, (await resolveTopicRef(ctx.projectId, topic)).datasets.map((t) => t.id)) : all;
+  return vocabularyOrder(await withStatus(ctx.projectId, 'dataset', shown), () => true).map((d) => ({
     ...statusFields(d.status),
     id: d.id,
     name: d.name,
@@ -101,8 +106,9 @@ export async function datasetsList(ctx: Ctx): Promise<unknown> {
  * the path, URL, connection id or query behind it is withheld — a tool that
  * wants to know where data came from is told what sort of source it is.
  */
-export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> {
+export async function datasetsDescribe(ctx: Ctx, ref: string, topic?: string): Promise<unknown> {
   const d = await datasetFor(ctx, ref);
+  const fields = topic ? (await resolveTopicRef(ctx.projectId, topic)).datasets.find((t) => t.id === d.id)?.fields : undefined;
   const meta = await datasets.getDatasetMeta(ctx.projectId, d.id);
   if (!meta) throw new AutomationError('not_found', `Dataset "${ref}" could not be read.`);
   const cat = (await sqlDatasets.projectCatalog(ctx.projectId)).find((e) => e.id === d.id);
@@ -123,7 +129,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     sqlName: cat ? cat.slug : null,
     sqlAlias: cat && cat.alias && cat.alias !== cat.slug ? cat.alias : null,
     queryable: cat ? cat.queryable : false,
-    columns: meta.columns.map((c, i) => ({ name: c.name, type: c.type, sqlName: sqlCols[i] ? sqlCols[i].name : c.name, ...(docs[c.name]?.values && { valueLabels: docs[c.name].values }), ...(hidden.has(c.name) && { hidden: true }) })),
+    columns: ordered(meta.columns.map((c, i) => ({ name: c.name, type: c.type, sqlName: sqlCols[i] ? sqlCols[i].name : c.name, ...(topic && { inTopic: !fields || fields.includes(c.name) }), ...(docs[c.name]?.values && { valueLabels: docs[c.name].values }), ...(hidden.has(c.name) && { hidden: true }) })), topic ? fields : undefined),
     prepareSteps: Array.isArray(meta.steps) ? meta.steps.length : 0,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
@@ -131,6 +137,11 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     lastRefreshStatus: meta.lastRefreshStatus || null,
     table: { role: table.role, key: table.key, grain: table.grain, guide: table.guide, ...(table.keyCheck && { keyCheck: table.keyCheck }), ...(table.hierarchies && { hierarchies: navHierarchies(table.hierarchies, meta.columns).map(({ name, levels, missing }) => ({ name, levels, ...(missing && { missing }) })) }) },
   };
+}
+
+/** With a topic's fields: those first, in its order, every other column after (nothing is left out). */
+function ordered<T extends { name: string }>(cols: T[], fields?: string[]): T[] {
+  return fields ? [...fields.flatMap((f) => cols.filter((c) => c.name === f)), ...cols.filter((c) => !fields.includes(c.name))] : cols;
 }
 
 /** The same three calls the composer's file import makes: parse, save, check. */
@@ -204,12 +215,13 @@ export async function query(ctx: Ctx, sql: string, limit: number): Promise<unkno
   };
 }
 
-export async function metricsList(ctx: Ctx): Promise<unknown> {
+export async function metricsList(ctx: Ctx, topic?: string): Promise<unknown> {
   const names = new Map((await datasets.listDatasets(ctx.projectId)).map((d) => [d.id, d.name]));
   const byName = await metrics.metricsByName(ctx.projectId);
   const status = statusFor(ctx.projectId);
+  const all = await metrics.listMetrics(ctx.projectId);
   const shown = [];
-  for (const m of await metrics.listMetrics(ctx.projectId)) if (!(await metricHidden(ctx.projectId, m.id))) shown.push(m); // one reading a hidden column is left out (part 4, D19)
+  for (const m of topic ? inTopicOrder(all, (await resolveTopicRef(ctx.projectId, topic)).metricIds) : all) if (!(await metricHidden(ctx.projectId, m.id))) shown.push(m); // one reading a hidden column is left out (part 4, D19)
   const rows = await Promise.all(shown.map(async (m) => ({ row: await metricRow(ctx, m, names, byName), status: (await status(`metric:${m.id}`)) ?? undefined })));
   return vocabularyOrder(rows, () => true).map(({ row, status: s }) => ({ ...row, ...statusFields(s) })); // certified first; a retired one names its replacement
 }
@@ -243,11 +255,23 @@ export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promi
 }
 
 /** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */
-export async function termsList(ctx: Ctx): Promise<unknown> {
-  const listed = (await termList(ctx.projectId)).filter((t) => !t.hidden); // one on a hidden column is left out (part 4, D19)
+export async function termsList(ctx: Ctx, topic?: string): Promise<unknown> {
+  const all = (await termList(ctx.projectId)).filter((t) => !t.hidden); // one on a hidden column is left out (part 4, D19)
+  const listed = topic ? inTopicOrder(all, (await resolveTopicRef(ctx.projectId, topic)).termIds) : all;
   return vocabularyOrder(await withStatus(ctx.projectId, 'term', listed), () => true).map((t) => ({
     ...statusFields(t.status),
     id: t.id, name: t.name, aliases: t.aliases, description: t.description || '', dataset: t.datasetName, definition: t.definition,
+  }));
+}
+
+/** The project's topics, each with its datasets (and field subsets), metrics and terms by name; stale members dropped. */
+export async function topicsList(ctx: Ctx): Promise<unknown> {
+  const [kept, sets, mets, terms] = [await topicsForReaders(ctx.projectId, await listTopics(ctx.projectId)), await datasets.listDatasets(ctx.projectId), await metrics.listMetrics(ctx.projectId), await termsStore.listTerms(ctx.projectId)];
+  const name = (list: readonly { id: string; name: string }[], ids: readonly string[]): string[] => inTopicOrder(list, ids).map((x) => x.name);
+  return kept.map(({ topic: t }) => ({
+    id: t.id, name: t.name, description: t.description || '',
+    datasets: t.datasets.flatMap((d) => name(sets, [d.id]).map((n) => ({ name: n, fields: d.fields ?? null }))),
+    metrics: name(mets, t.metricIds), terms: name(terms, t.termIds),
   }));
 }
 
