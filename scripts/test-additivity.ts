@@ -51,7 +51,7 @@ const DS = 'ds-1';
 
 // ── rules ────────────────────────────────────────────────────────────────────────────────────────────────────────
 const same = (a: Additivity, c: boolean, t: boolean) => Object.is(a.categories, c) && Object.is(a.time, t);
-for (const [agg, want] of [['sum', true], ['count', true], ['none', true], ['avg', false], ['min', false], ['max', false]] as const)
+for (const [agg, want] of [['sum', true], ['count', true], ['none', true], ['avg', false], ['min', false], ['max', false], ['countd', false]] as const)
   ok(`aggregation ${agg}`, same(A.aggregationAdditivity(agg), want, want));
 const COLS = [{ name: 'revenue', type: 'number' }, { name: 'cost', type: 'number' }, { name: 'day', type: 'date' }, { name: 'units', type: 'number' }] as never as import('../src/data/parse').ParsedColumn[];
 const M = (name: string, definition: object) => ({ id: name, name, datasetId: DS, definition, filters: [] }) as never as Metric;
@@ -275,6 +275,19 @@ async function main(): Promise<void> {
   const saved = savedScope(withK2).params;
   ok('the dashboard facts: a parameter formula is read with its saved values', lineOf(onDashboard, 'Ratio k').includes("Can't be added up") && lineOf(onDashboard, 'Scaled') !== '' && !lineOf(onDashboard, 'Scaled').includes('added up'), lineOf(onDashboard, 'Ratio k'));
   ok('the dashboard\'s saved values make the unmarked formula a known additive one, not an unknown', same((await A.metricAdditivity(pid, scaled.id, byNames, saved))!, true, true) && same((await A.metricAdditivity(pid, ratioK.id, byNames, saved))!, false, false));
+
+  // ── countd (part 5, D3): a distinct count adds across neither, so no calculation and no caption adds it up ───────
+  const CD = { column: 'region', aggregation: 'countd' };
+  const regions = await metric('Regions', CD);
+  ok('a countd metric adds across neither', same(A.additivityOf((await metrics.getMetric(pid, regions.id))!, meta.columns, await metrics.metricsByName(pid)), false, false));
+  ok('running total over countd → refused', (await chart({ category: 'day', grain: 'month', values: [{ ...CD, calc: RT }] })).code === 'calc_not_additive');
+  ok('share of total over countd → refused', (await chart({ category: 'region', values: [{ ...CD, calc: { kind: 'pct_of_total', along: 'across' } }] })).code === 'calc_not_additive');
+  ok('moving sum over a countd metric → refused, named', (await chart({ category: 'day', grain: 'month', values: [{ ...CD, metricId: regions.id, calc: { kind: 'moving_sum', along: 'across', window: 3 } }] })).error === msg.calcNotAdditive('Regions', 'a moving sum'));
+  ok('NEGATIVE CONTROL: the same running total over count runs', (await chart({ category: 'day', grain: 'month', values: [{ column: 'region', aggregation: 'count', calc: RT }] })).ok === true);
+  ok('a diff over countd is not adding', (await chart({ category: 'region', values: [{ ...CD, calc: { kind: 'diff', along: 'across' } }] })).ok === true);
+  const overCd = await chart({ category: 'day', grain: 'month', overlay: 'previous_year', values: [CD] }, { filters: FEB_2024 });
+  ok('overlay over countd: the series, no caption', overCd.ok && overCd.data.series.some((x: Any) => x.role === 'overlay') && overCd.overlay?.caption === undefined && overCd.overlay?.pct === undefined, show(overCd));
+  ok('NEGATIVE CONTROL: the same overlay over count keeps its caption', captioned(await chart({ category: 'day', grain: 'month', overlay: 'previous_year', values: [{ column: 'region', aggregation: 'count' }] }, { filters: FEB_2024 })));
 }
 
 main()
