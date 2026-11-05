@@ -340,6 +340,31 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('redact: east\'s dataset facts name the term, without its value', factsEast.includes('"Plain pair"') && factsEast.includes('customer in …') && !factsEast.includes(H.W_CANARY), factsEast.slice(-400));
     ok('NEGATIVE CONTROL: the editor\'s facts word it with its value', (await factsOf('ed')).text.includes(`${H.W_CANARY}_7`));
 
+    // A term reaches the table it filters (semantic D11): a chart on a dataset without rules, filtered by a term on
+    // Orders (rules), reads Orders through the join — east is refused `related`; by a term on an open table, answered.
+    const relsMod: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+    const dsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const openId = await W.as('boss', async () => (await dsMod.saveDataset(P, { name: 'Open buyers', sourceKind: 'csv', columns: [{ name: 'customer', type: 'text' }, { name: 'region', type: 'text' }], rows: [['c1', 'East'], ['c2', 'North']] }))!.id);
+    const relIds = await W.as('boss', async () => {
+      const ids: string[] = []; // one at a time: each save rewrites the project's one relationships file
+      for (const [from, to] of [[W.plain, orders], [W.plain, openId], [orders, openId]]) ids.push((await relsMod.saveRelationship(P, { from: { datasetId: from, column: 'customer' }, to: { datasetId: to, column: 'customer' }, cardinality: 'many_to_one' }))!.id);
+      return ids;
+    });
+    const termOn = async (d: string, name: string) => String((await W.call('boss', 'term:save', { projectId: P, input: { name, datasetId: d, filters: [{ type: 'filter', column: 'region', op: '=', value: 'East' }] } })).body?.term?.id ?? '');
+    const [closedTerm, openTerm] = [await termOn(orders, 'Orders east'), await termOn(openId, 'Open east')];
+    const chartWith = (who: string, term: string) => W.call(who, 'visual:data', { projectId: P, datasetId: W.plain, encoding: enc, filters: [{ type: 'term', term }] });
+    const closedEast = await chartWith('east', closedTerm);
+    eastReplies.push(closedEast.text);
+    ok('related: east\'s chart whose term reaches Orders (rules) is refused, typed', H.refused(closedEast, 'related'), closedEast.text.slice(0, 200));
+    const openEast = await chartWith('east', openTerm);
+    eastReplies.push(openEast.text);
+    ok('NEGATIVE CONTROL: the same chart by a term on an open table answers east', openEast.body?.ok === true, openEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s chart by the Orders term answers', (await chartWith('ed', closedTerm)).body?.ok === true);
+    const lockedEast = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: [{ type: 'term', term: openTerm }] });
+    ok('related: under a lock (east on Orders), another table\'s term is refused, even an open one\'s', H.refused(lockedEast, 'related'), lockedEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s Orders chart by that term answers', (await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: [{ type: 'term', term: openTerm }] })).body?.ok === true);
+    await W.as('boss', async () => { for (const id of relIds) await relsMod.deleteRelationship(P, id); });
+
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {
       ok(`admin only: ${who} gets 403 from dataset:rowPolicy and dataset:setRowPolicy`,

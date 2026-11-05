@@ -16,6 +16,12 @@
 //   § lock      the refusal comes before the row lock: the lock is never asked for (a spy on it)
 //   § route     a thrown refusal is 409 with its code, reason and sentence; one a handler caught is
 //               typed by the route; the request fold (applyPipelineAsync) rejects a term
+//   § assistant (05b) an answer card by a real term equals the inline filter, keeps the reference in its
+//               steps, spec and chips, saves it on a visual; another dataset's term is refused; the facts name it
+//   § real terms (05b) at every door a term equals its filter inline (and filters something); an edit changes
+//               the next figure, cached or not (an unedited ask is a hit); a deleted one is refused with its name;
+//               a term of another dataset on a Live chart is refused; a dashboard term a tile cannot use is a
+//               note on the chart and the KPI, the tile's own is refused; a metric's own term equals inline
 //
 //   npm run build:ts && node scripts/test-termDoors.js
 
@@ -210,7 +216,13 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   // ── § assistant: the Assistant reads and filters by a real term (05b) ────────
   /** Two replies' figures agree, number by number with Object.is (a chart's data, a KPI's value, an answer card's data). */
   const sameFigure = (a: Reply, b: Reply): boolean => {
-    const fig = (r: Reply): unknown => { const v = Array.isArray(r.value) ? r.value[0] : r.value; return v && v.ok !== false ? (v.data ?? v.value) : undefined; };
+    // A reply's figures: a chart's data, a KPI's value, else the whole reply without what names how it was asked (its echo, its token, its time).
+    const ASKED = new Set(['asOf', 'token', 'filters', 'spec', 'steps', 'filterLabels', 'chips', 'title', 'notes']);
+    const fig = (r: Reply): unknown => {
+      const v = Array.isArray(r.value) ? r.value[0] : r.value;
+      if (!v || v.ok === false) return undefined;
+      return v.data ?? ('value' in v ? v.value : Object.fromEntries(Object.entries(v).filter(([k]) => !ASKED.has(k))));
+    };
     const same = (x: unknown, y: unknown): boolean => (Array.isArray(x) && Array.isArray(y) ? x.length === y.length && x.every((v, i) => same(v, y[i]))
       : x && y && typeof x === 'object' && typeof y === 'object' ? Object.keys({ ...x, ...y }).every((k) => same((x as Record<string, unknown>)[k], (y as Record<string, unknown>)[k])) : Object.is(x, y));
     return fig(a) !== undefined && same(fig(a), fig(b));
@@ -240,6 +252,77 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   const facts = await context.runInContext(ADMIN, 'facts', () => copilotIpc.buildFacts(P, { kind: 'dataset', id: EXTRACT.id }));
   ok('the dataset facts name its terms and how to filter by one', facts.text.includes('{"term":"<name>"}') && facts.text.includes('"Pair extract"') && facts.text.includes('region in r1, r2')
     && !facts.text.includes('"Live pair"'), facts.text.slice(-600));
+
+  // ── § real terms: every door expands a term exactly as its filter written inline (05b) ──
+  const queryCache: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
+  let runs = 0; // a cache miss runs its body; a hit does not
+  const realThrough = queryCache.through;
+  (queryCache as { through: unknown }).through = (op: string, key: string, deps: string[], run: () => Promise<unknown>, keep: (r: unknown) => boolean) =>
+    realThrough(op as never, key, deps, () => { runs++; return run(); }, keep as never);
+  const OTHER = await context.runInContext(ADMIN, 'other', async () => (await datasets.saveDataset(P, { name: 'Other', sourceKind: 'csv', columns: COLUMNS, rows: ROWS }))!.id);
+  const NARROW = { type: 'filter', column: 'region', op: '=', value: 'r1' };
+  const flt = (mode: 'term' | 'inline' | 'none', T: string): unknown[] => (mode === 'term' ? [F0, { type: 'term', term: T }] : mode === 'inline' ? [F0, R12] : [F0]);
+  const answerFlt = (mode: 'term' | 'inline' | 'none', T: string): unknown[] => (mode === 'term' ? [ANSWER_F0, { term: T }] : mode === 'inline' ? [ANSWER_F0, { column: 'region', op: 'in', values: ['r1', 'r2'] }] : [ANSWER_F0]);
+  for (const ds of [EXTRACT, LIVE]) {
+    const T = await termOn(ds, `Doors ${ds.mode}`);
+    // The rows behind a mark: the mark is r2 (in the term, out of its narrowed edit), or r3 (out of it) for the control.
+    const ask = (label: string, ch: string, body: (d: Ds, t: boolean) => object, mode: 'term' | 'inline' | 'none', mark = 'r2') => {
+      const raw = JSON.stringify(body(ds, true)).split('"mark":{"category":"r1"}').join(`"mark":{"category":"${mark}"}`);
+      const swapped = raw.split(JSON.stringify(fl(true))).join(JSON.stringify(flt(mode, T))).split(JSON.stringify([ANSWER_F0, { term: U }])).join(JSON.stringify(answerFlt(mode, T)));
+      return post(ch, JSON.parse(swapped));
+    };
+    const before: Record<string, Reply> = {};
+    for (const [label, ch, body, liveToo] of ENTRIES) {
+      if (!liveToo && ds.mode === 'live') continue;
+      const t = await ask(label, ch, body, 'term');
+      before[label] = t;
+      ok(`${label} (${ds.mode}): a term equals its filter written inline`, sameFigure(t, await ask(label, ch, body, 'inline')), `${t.text.slice(0, 240)}`);
+      const control = label === 'visual:rows' ? [await ask(label, ch, body, 'term', 'r3'), await ask(label, ch, body, 'none', 'r3')] : [t, await ask(label, ch, body, 'none')];
+      ok(`NEGATIVE CONTROL: ${label} (${ds.mode}): the term filters something`, !sameFigure(control[0], control[1]));
+    }
+    await post('term:update', { projectId: P, id: T, patch: { filters: [NARROW] } });
+    for (const [label, ch, body, liveToo] of ENTRIES) {
+      if (!liveToo && ds.mode === 'live') continue;
+      const after = await ask(label, ch, body, 'term');
+      ok(`${label} (${ds.mode}): editing the term changes the figure, cached or not`, hasFigure(after) && !sameFigure(after, before[label]), after.text.slice(0, 240));
+    }
+    const runs0 = runs;
+    await ask('visual:data', 'visual:data', ENTRIES[0][2], 'term');
+    ok(`NEGATIVE CONTROL: visual:data (${ds.mode}) asked again unedited is a cache hit`, ds.mode === 'live' || runs === runs0, `${runs0} → ${runs}`);
+    await post('term:delete', { projectId: P, id: T });
+    for (const [label, ch, body, liveToo] of ENTRIES) {
+      if (!liveToo && ds.mode === 'live') continue;
+      const r = await ask(label, ch, body, 'term');
+      ok(`${label} (${ds.mode}): a deleted term is refused with its sentence`, refusedTerm(r) && r.text.includes(termMsgs.termDeleted(`Doors ${ds.mode}`)) && !hasFigure(r), r.text.slice(0, 240));
+    }
+  }
+  (queryCache as { through: unknown }).through = realThrough;
+  // A term on the extract dataset on a Live chart: Live joins nothing, so it is refused.
+  const extractT = await termOn(EXTRACT, 'Extract pair');
+  const onLive = await post('visual:data', { projectId: P, datasetId: LIVE.id, encoding: enc, filters: [F0, { type: 'term', term: extractT }] });
+  ok('a term of another dataset on a Live chart is refused, unreachable', refusedTerm(onLive) && onLive.value?.reason === 'unreachable', onLive.text.slice(0, 240));
+  // The dashboard scope: a term a tile cannot use is a NOTE on the tile; the tile's own is refused.
+  const scopeT = { type: 'term', term: extractT, fromControl: true };
+  const onOther = await post('analysis:tiles', { projectId: P, items: [
+    { kind: 'visual', datasetId: OTHER, encoding: enc, filters: [F0, scopeT] },
+    { kind: 'metric', datasetId: OTHER, column: 'sales', aggregation: 'sum', filters: [F0, scopeT] },
+  ] });
+  const NOTE = termMsgs.termNotApplied('Extract pair', 'Other');
+  ok('analysis:tiles: a scope term on an unrelated tile — the chart and the KPI answer, each with the note', onOther.value?.[0]?.ok === true && onOther.value[0].notes?.[0] === NOTE
+    && onOther.value?.[1]?.ok === true && onOther.value[1].notes?.[0] === NOTE, onOther.text.slice(0, 400));
+  const plainTiles = await post('analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: OTHER, encoding: enc, filters: [F0] }, { kind: 'metric', datasetId: OTHER, column: 'sales', aggregation: 'sum', filters: [F0] }] });
+  ok('…and draws the figures it draws without the term; NEGATIVE CONTROL: a reply with nothing left out carries no notes', sameFigure({ ...onOther, value: [onOther.value[0]] }, { ...plainTiles, value: [plainTiles.value[0]] })
+    && Object.is(onOther.value[1].value, plainTiles.value[1].value) && !('notes' in plainTiles.value[0]) && !('notes' in plainTiles.value[1]));
+  const own = await post('analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: OTHER, encoding: enc, filters: [F0, { type: 'term', term: extractT }] }] });
+  ok('the same term as the tile\'s own filter is refused, unreachable', own.value?.[0]?.ok === false && own.value[0].code === 'term' && own.value[0].reason === 'unreachable', own.text.slice(0, 240));
+  // A metric whose own filters hold a term: metric:value equals the inline metric.
+  const metricWith = async (filters: unknown[]): Promise<string> => String((await post('metric:save', { projectId: P, input: { name: `Sales ${JSON.stringify(filters).length}`, datasetId: EXTRACT.id, definition: { column: 'sales', aggregation: 'sum' }, filters } })).value?.metric?.id ?? '');
+  const pairT = await termOn(EXTRACT, 'Metric pair');
+  const mT = await metricWith([{ type: 'term', term: pairT }]);
+  const mInline = await metricWith([R12, F0]);
+  const mv = (id: string) => post('analysis:tiles', tile({ kind: 'metric', datasetId: EXTRACT.id, column: '', aggregation: 'sum', metricId: id, filters: [F0] }));
+  const [a, b] = [await mv(mT), await mv(mInline)];
+  ok('metric:value of a metric whose filters hold a term equals the inline metric', a.value?.[0]?.ok === true && Object.is(a.value[0].value, b.value?.[0]?.value), `${a.text.slice(0, 200)} | ${b.text.slice(0, 200)}`);
 
   // ── § lock: the refusal is before the lock, so a kept step never reaches withLockSteps ──
   const rowDoors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');

@@ -97,6 +97,12 @@ interface ResolveCtx {
   /** D9: the scope as it came (a date control's period still marked) and the dataset `scope` was settled for, so a part on another dataset counts by its own date; unset when nothing was marked. */
   marked?: { filters: FilterStep[]; on: string };
   refused?: string; // why there is no figure: a part's dates disagree under a date control
+  notes?: string[]; // the dashboard's glossary terms an operand left out (analysis/termExpand), once each
+}
+
+/** A figure's notes: each operand's, once. */
+function noteOf(ctx: ResolveCtx, notes: string[] | undefined): void {
+  for (const n of notes ?? []) if (!(ctx.notes ??= []).includes(n)) ctx.notes.push(n);
 }
 
 /** One total a metric's figure was drawn from: a column (its own dataset's or a related one's) and its aggregation. */
@@ -149,6 +155,7 @@ async function resolveDefinition(
     const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
     ctx.fx = mergeFx(ctx.fx, res.fx);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
+    noteOf(ctx, res.notes);
     return res.ok ? res.value : null;
   }
 
@@ -176,6 +183,7 @@ async function resolveDefinition(
     );
     ctx.fx = mergeFx(ctx.fx, res.fx);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
+    noteOf(ctx, res.notes);
     values.set(agg.ref, res.ok ? res.value : null);
   }
 
@@ -243,6 +251,7 @@ export interface ResolvedMetric {
   /** D9: the date a dashboard date control's period was moved onto (the tile's caption); why there is no figure when dates disagree under one. */
   periodOn?: string;
   refused?: string;
+  notes?: string[]; // the dashboard's glossary terms the figure left out
 }
 
 /**
@@ -283,6 +292,7 @@ export async function resolveMetric(
   if (ctx.fx) out.fx = ctx.fx;
   if (ctx.asOf) out.asOf = ctx.asOf;
   if (s.ok && s.periodOn) out.periodOn = s.periodOn;
+  if (ctx.notes) out.notes = ctx.notes;
   const refused = s.ok ? ctx.refused : s.error;
   if (refused) out.refused = refused;
   return out;
