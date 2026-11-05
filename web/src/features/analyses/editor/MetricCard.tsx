@@ -11,7 +11,8 @@ import { Drawer } from '../../../ui/Dialog';
 import { Skeleton } from '../../../ui/Skeleton';
 import { DriversView } from '../../analytics/drivers/DriversView';
 import { Icon } from '../../../ui/icons/Icon';
-import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
+import { AGG_LABEL, useTile, type Card, type MetricTile, type TargetReply } from '../api';
+import { Dot } from '../../reports/scorecards/Dot';
 import { DrillPanel, type DrillTarget } from '../../visuals/drill/DrillPanel';
 import { PointMenu } from '../../analytics/explain/PointMenu';
 import { useEditor, type EditorApi } from './context';
@@ -52,6 +53,21 @@ export function kpiDrillTarget(ed: Pick<EditorApi, 'projectId' | 'filters' | 'pa
     params: ed.params,
     ...(m.metricId ? { metricId: m.metricId } : {}),
   };
+}
+
+/** The server's target for the figure (part 5, D14): attainment beside a status dot, the figure, and how it was worked out; or only why there is none. */
+function TargetLine({ target }: { target: TargetReply }) {
+  if (!target.attainmentDisplay && !target.display) return target.none ? <p className={s.periodOn} data-target>{target.none}</p> : null;
+  return (
+    <div className={s.target} data-target>
+      <div className={s.targetRow}>
+        {target.attainmentDisplay && <Dot status={target.status} />}
+        {target.attainmentDisplay && <span className={`${s.targetValue} ${s.tnum}`}>{target.attainmentDisplay} of target</span>}
+        {target.display && <span className={`${s.targetFigure} ${s.tnum}`}>{target.attainmentDisplay ? `of ${target.display}` : `Target ${target.display}`}</span>}
+      </div>
+      {target.how && <p className={s.periodOn}>{target.how}</p>}
+    </div>
+  );
 }
 
 export function MetricBody({ card }: { card: Card }) {
@@ -209,6 +225,7 @@ export function MetricBody({ card }: { card: Card }) {
           }
         />
       )}
+      {t.target && <TargetLine target={t.target} />}
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
       {t.periodRange && <p className={s.periodOn}>{periodRangeText(t.periodRange)}</p> /* a period metric's days, the server's */}

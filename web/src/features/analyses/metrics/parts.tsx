@@ -10,7 +10,7 @@ import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
 import { failure } from '../api';
-import type { Definition, Metric, MetricFormat } from './api';
+import type { Definition, Metric, MetricFormat, Target } from './api';
 import s from './Metrics.module.css';
 
 const KINDS = [
@@ -66,10 +66,12 @@ export interface MetricFields {
   direction: Direction;
   /** The date it counts by, `''` none. Left out of an edit, the server keeps it (a formula re-takes its parts' date). */
   timeColumn?: string;
+  /** null clears it on update; left out, the server keeps it (a new metric with none sends no key). */
+  target?: Target | null;
 }
 
 /** A refusal's field: the sentence goes beside it. */
-export type SaveField = 'name' | 'timeColumn' | 'snapshot' | 'definition';
+export type SaveField = 'name' | 'timeColumn' | 'snapshot' | 'definition' | 'target';
 /** `changed`: another tab or person saved the metric first — nothing was saved; the editor's banner says so. */
 export type SaveResult = { metric: Metric } | { error: string; field?: SaveField } | { changed: true };
 type Reply = { ok: boolean; metric?: Metric; error?: string; field?: SaveField; tag?: string };
@@ -79,11 +81,12 @@ type Reply = { ok: boolean; metric?: Metric; error?: string; field?: SaveField; 
  * which sends the tag the editor opened with. Never throws: a refusal comes back as its sentence.
  */
 export async function saveMetric(projectId: string, editingId: string, datasetId: string, fields: MetricFields, guard?: EditGuard): Promise<SaveResult> {
+  const { target, ...rest } = fields;
   try {
     const update = (base?: string) => rpc('metric:update', { projectId, id: editingId, ...(base ? { base } : {}), patch: fields }) as Promise<Reply>;
     const r = editingId
       ? await (guard ? guard.save(update) : update())
-      : ((await rpc('metric:save', { projectId, input: { ...fields, datasetId } })) as Reply);
+      : ((await rpc('metric:save', { projectId, input: { ...rest, datasetId, ...(target ? { target } : {}) } })) as Reply); // a new metric has no target to clear
     if (r === null) return { changed: true };
     if (r.ok && r.metric) return { metric: r.metric };
     return { error: r.error || 'Could not save the metric.', field: r.field };

@@ -37,6 +37,12 @@ export interface FunnelDefinition {
   funnel: { entity: string; event: string; time: string; steps: string[]; window: { n: number; unit: 'hours' | 'days' } };
   show: 'rate' | 'converted' | 'entered';
 }
+/** A metric's target (semantic part 5, D12): a figure, or a metric over a plan dataset, for the period one figure covers. */
+export interface Target {
+  source: { value: number } | { metricId: string };
+  per?: 'week' | 'month' | 'quarter' | 'year';
+  thresholds?: { good: number; warn: number };
+}
 export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition | FunnelDefinition;
 
 /** `metric:list`'s decorated summary. */
@@ -54,6 +60,7 @@ export interface MetricSummary {
   timeColumn?: string;
   /** It has a metric tree (./tree). */
   hasTree?: true;
+  target?: Target;
   updatedAt: string;
   /** Certified, changed since, or retired (part 4): the server's word, drawn as it came. */
   status?: StatusView;
