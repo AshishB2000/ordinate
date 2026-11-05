@@ -599,7 +599,7 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/onboarding', '../ipc/prefs', '../ipc/numbers']) (require(mod) as { register: () => void }).register();
   (require('../ipc/jobs') as typeof import('../ipc/jobs')).registerServer();
   // Import, composer, captures and input tables (T2.4).
-  for (const mod of ['../ipc/datasetCompose', '../ipc/input', '../ipc/captureDataset']) {
+  for (const mod of ['../ipc/datasetCompose', '../ipc/input', '../ipc/captureDataset', '../ipc/semanticDatasets']) {
     (require(mod) as { register: () => void }).register();
   }
   // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill

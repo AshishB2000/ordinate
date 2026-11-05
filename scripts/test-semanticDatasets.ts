@@ -6,6 +6,8 @@
 //               an unreadable one refuses every door; the target carries the layer's env, or is unavailable
 //   § sync      the dimensions and the layer's metrics, read with describeModel (no row sample, markings by hand); one
 //               mirror metric per layer metric, holding a name and never math, idempotent, name clashes, Trash, drops
+//   § add       connection:semanticModels lists the layer's models; connection:addSemanticDataset saves a Live record
+//               (no table, no SQL) and queues the sync that writes its mirrors; editors only; no origin in a reply
 //
 //   npm run build:ts && node scripts/test-semanticDatasets.js
 
@@ -26,6 +28,11 @@ const metrics: typeof import('../src/analysis/metrics') = require('../src/analys
 const ext: typeof import('../src/analysis/externalMetric') = require('../src/analysis/externalMetric');
 const versions: typeof import('../src/app/versions') = require('../src/app/versions');
 const mirrorsMod: typeof import('../src/engine/live/semantic/mirrors') = require('../src/engine/live/semantic/mirrors');
+const api: typeof import('../src/api/index') = require('../src/api/index');
+const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
+const secretsIpc: typeof import('../src/ipc/connectionSecrets') = require('../src/ipc/connectionSecrets');
+const smsg: typeof import('../src/engine/semanticMessages') = require('../src/engine/semanticMessages');
+const catalogMod: typeof import('../src/connectors/index') = require('../src/connectors/index');
 
 const { ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
@@ -160,6 +167,63 @@ void (async () => {
   const failed = await sync(D);
   ok('a describe failure changes nothing and says so in a sentence', failed.ok === false && !/exploded|canary/.test(JSON.stringify(failed)) && (await mirrorsOf(D)).length === ms.length, show(failed));
   fake.resetLayerFake();
+
+  // ── § add ──
+  const MODEL = 'mdl_planted_7f3';
+  const ENV_ID = 'env-planted-4412';
+  const TOKEN = 'tok-canary-9e1d';
+  const LC = await as(async () => (await H.connections.saveConnection(P, { name: 'Layer staging', connectorId: fake.SEMANTIC_FAKE_ID, values: { environment: ENV_ID } }))!.id);
+  await as(() => secretsIpc.storeSecrets(LC, { token: TOKEN }));
+  fake.layerFake.list = async () => ({ ok: true, models: [{ name: MODEL, label: 'Sales', description: 'Orders by day' }] });
+  const listed = (await post('connection:semanticModels', { projectId: P, connId: LC })).value;
+  ok('the listing returns the layer\'s models', listed.ok === true && isDeepStrictEqual(listed.models, [{ name: MODEL, label: 'Sales', description: 'Orders by day' }]), show(listed));
+  const noLayer = (await post('connection:semanticModels', { projectId: P, connId: s.connId })).value;
+  ok('a connection without the semantic capability: a sentence', noLayer.ok === false && noLayer.error === (await as(async () => smsg.noLayer())), show(noLayer));
+  const noLayerAdd = (await post('connection:addSemanticDataset', { projectId: P, connId: s.connId, model: MODEL })).value;
+  ok('…and nothing is added from it', noLayerAdd.ok === false && noLayerAdd.error === (await as(async () => smsg.noLayer())), show(noLayerAdd));
+  ok('the catalog says which connectors have a layer', catalogMod.connectorCatalog().every((e) => typeof e.semantic === 'boolean') && !catalogMod.connectorCatalog().some((e) => e.semantic));
+
+  const before = (await as(() => H.datasets.listDatasets(P))).length;
+  const added = await post('connection:addSemanticDataset', { projectId: P, connId: LC, model: MODEL, name: 'Sales' });
+  const A = added.value.dataset?.id as string;
+  ok('adding saves a Live dataset', added.value.ok === true && added.value.dataset.mode === 'live' && added.value.dataset.name === 'Sales' && (await as(() => H.datasets.listDatasets(P))).length === before + 1, added.body.slice(0, 300));
+  const ra = await raw(A);
+  ok('…with no table or SQL, and the layer\'s block', isDeepStrictEqual(ra.origin, { kind: 'connection', connId: LC }) && ra.semantic.model === MODEL && ra.semantic.backend === 'fake' && ra.semantic.metrics.length === 4, show(ra));
+  let landed = false;
+  for (let i = 0; i < 300 && !landed; i += 1) {
+    landed = (await mirrorsOf(A)).length === 4;
+    if (!landed) await new Promise((r) => setTimeout(r, 10));
+  }
+  ok('…its mirrors land after the queued sync', landed);
+  const contract = api.contracts['connection:addSemanticDataset'];
+  const input = { projectId: P, connId: LC, model: MODEL };
+  const grants = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) }) as unknown as import('pg').Pool;
+  const VIEWER = { user: { email: 'vic@acme.test', role: 'viewer' as const }, org: { id: 'acme' } };
+  const EDITOR = { user: { email: 'eve@acme.test', role: 'editor' as const }, org: { id: 'acme' } };
+  for (const ch of ['connection:semanticModels', 'connection:addSemanticDataset'] as const) {
+    const c = api.contracts[ch];
+    ok(`${ch}: write, project-scoped, strict`, c.access === 'write' && 'project' in c && c.project(input) === P && c.input.safeParse(ch === 'connection:semanticModels' ? { projectId: P, connId: LC } : input).success && !c.input.safeParse({ ...input, table: 'x' }).success);
+    ok(`${ch}: a viewer is refused (403 before the handler)`, !(await H.as(VIEWER, () => authz.authorize(c, input, VIEWER, grants(1)))).ok);
+    ok(`NEGATIVE CONTROL: ${ch}: an editor may`, (await H.as(EDITOR, () => authz.authorize(c, input, EDITOR, grants(2)))).ok);
+  }
+  ok('the contract caps the model name', !contract.input.safeParse({ ...input, model: 'm'.repeat(513) }).success && !contract.input.safeParse({ ...input, model: '' }).success);
+
+  // Leaks: the model name, the connection's environment id and a layer error carrying the token.
+  fake.layerFake.describe = async () => ({ ok: false, error: `denied: ${TOKEN} in ${ENV_ID} for ${MODEL}` });
+  const logged = await H.capturingWarn(async () => ({
+    add: await post('connection:addSemanticDataset', { projectId: P, connId: LC, model: MODEL }),
+    sync: await post('dataset:syncLiveSchema', { projectId: P, datasetId: A }),
+  }));
+  fake.layerFake.describe = null;
+  const replies = [added.body, logged.value.add.body, logged.value.sync.body, (await post('dataset:list', { projectId: P })).body, (await post('dataset:columns', { projectId: P, id: A })).body,
+    (await post('dataset:liveSchema', { projectId: P, datasetId: A })).body, (await post('dataset:source', { projectId: P, id: A })).body];
+  const all = replies.join('\n');
+  ok('a failed add or sync answers a sentence', logged.value.add.value.ok === false && logged.value.sync.value.ok === false, show([logged.value.add.value, logged.value.sync.value]));
+  ok('no model name, environment id or layer text in any dataset reply', !all.includes(MODEL) && !all.includes(ENV_ID) && !all.includes('denied:'), all.slice(0, 600));
+  ok('…the token in none', !all.includes(TOKEN));
+  const log = logged.lines.join('\n');
+  ok('the layer\'s words go to the log, the token redacted', log.includes('denied:') && log.includes(ENV_ID) && !log.includes(TOKEN), log.slice(0, 400));
+  ok('CANARY: the grep finds the dataset\'s own name', all.includes('Sales'));
 
   await close();
   finish();

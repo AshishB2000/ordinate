@@ -232,6 +232,8 @@ export interface CatalogEntry {
    *  Live is offered for it (plan D8 — PostgreSQL's "This is a read replica or
    *  a warehouse"). Absent: every connection of this connector may be Live. */
   liveOptIn?: string;
+  /** True when the connector reaches a semantic layer (part 7, D14): its models can be added as datasets. The flag only. */
+  semantic: boolean;
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -275,6 +277,7 @@ export function connectorCatalog(): CatalogEntry[] {
       browsable: typeof d.describeTable === 'function',
       estimates: typeof d.live?.estimate === 'function',
       live: isLiveCapable(d),
+      semantic: !!d.semantic, // a semantic layer's models can be added (part 7 b2)
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
     if (Array.isArray(d.hosts)) entry.hosts = d.hosts.filter((h) => typeof h === 'string');

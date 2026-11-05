@@ -97,3 +97,13 @@ export function layerFilter(dataset: string, layer: string, column: string): str
 export function layerNotSampled(layer: string): string {
   return t('semanticMessages.computes_this_dataset_s_figures_so', { layer });
 }
+
+/** Listing or adding a layer's models from a connection whose connector has no semantic layer. */
+export function noLayer(): string {
+  return t('semanticMessages.this_connection_has_no_semantic_layer');
+}
+
+/** The layer did not answer a listing or a describe: its own words are in the server log. */
+export function layerReadFailed(layer: string): string {
+  return t('semanticMessages.didn_t_answer_so_nothing_changed', { layer });
+}
