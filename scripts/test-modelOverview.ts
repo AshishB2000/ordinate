@@ -100,6 +100,22 @@ const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = requir
   ok('metadata only: nothing hydrated, no warehouse statement', !hx.hydrated && !hl.hydrated && H.fake.calls.length === calls0, `${hx.hydrated} ${hl.hydrated} ${H.fake.calls.length - calls0}`);
   ok('NEGATIVE CONTROL: todoOf with everything filled in', JSON.stringify(todoOf([{ datasetId: X, role: 'fact', key: 'k', repeatedKeys: 0, hasGuide: true, description: 'd' }])) === '{"todo":[],"more":0}');
   ok('NEGATIVE CONTROL: todoOf with an unchecked key asks for nothing about it', JSON.stringify(todoOf([{ datasetId: X, role: 'fact', key: 'k', repeatedKeys: null, hasGuide: true, description: 'd' }])) === '{"todo":[],"more":0}');
+
+  // ── 5. Verified questions that no longer run (part 3 D7) ─────────────────
+  const saved = await post('verified:save', { projectId: P, input: { question: 'Double by region', spec: { datasetId: X, category: 'region', measures: [{ column: 'double', aggregation: 'sum' }], filters: [] } } });
+  ok('setup: a verified question on the calculated field', saved.value.ok === true, saved.body.slice(0, 200));
+  ok('a question that runs is not in the strip', !(await ov()).todo.some((i: Reply) => i.kind === 'verified_broken'));
+  const steps = (await H.as(H.ORG_A, () => H.datasets.getDatasetMeta(P, X)))!.steps!.filter((s) => s.type !== 'calculated_field');
+  await post('dataset:setSteps', { projectId: P, datasetId: X, steps });
+  const hv = await hydrates(X, ov);
+  const broken = hv.value.todo.findIndex((i: Reply) => i.kind === 'verified_broken');
+  ok('a broken verified question is in the strip, after a repeating key, with how many', broken === 1 && hv.value.todo[0].kind === 'key_repeats'
+    && JSON.stringify(hv.value.todo[1]) === '{"datasetId":"","kind":"verified_broken","count":1}', JSON.stringify(hv.value.todo));
+  ok('…still from metadata only', !hv.hydrated);
+  const row0 = { datasetId: X, role: 'fact' as const, key: 'k', repeatedKeys: 3, hasGuide: true, description: 'd' };
+  ok('todoOf: the item ranks after the repeating keys and before the rest', JSON.stringify(todoOf([row0, { ...row0, datasetId: L, key: '' }], 2).todo.map((i) => i.kind)) === '["key_repeats","verified_broken","no_key"]');
+  ok('NEGATIVE CONTROL: todoOf with none broken adds none', !todoOf([row0], 0).todo.some((i) => i.kind === 'verified_broken'));
+
   const bad = await post('model:overview', { projectId: 'not-a-project' });
   ok('a bad project id is refused by the contract', bad.status === 400, `${bad.status} ${bad.body.slice(0, 120)}`);
 

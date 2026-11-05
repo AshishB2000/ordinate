@@ -44,8 +44,8 @@ const EXTRA = '*suggested';
 export function TodoStrip({ todo, review = [], more, nameOf, onOpen, onReview, extra }: { todo: TodoItem[]; review?: ReviewItem[]; more: number; nameOf: (id: string) => string | undefined; onOpen: (item: TodoItem) => void; onReview?: (item: ReviewItem) => void; extra?: { text: string; onPick: () => void } }) {
   const key = (item: TodoItem) => `${item.datasetId}:${item.kind}`;
   const items = todo.flatMap((item): StripItem[] => {
-    const name = nameOf(item.datasetId);
-    return name === undefined ? [] : [{ id: key(item), text: todoText(item, name), warn: item.kind === 'key_repeats' }]; // gone from the list since the server ranked it
+    const name = item.kind === 'verified_broken' ? '' : nameOf(item.datasetId); // the project's, not a dataset's
+    return name === undefined ? [] : [{ id: key(item), text: todoText(item, name), warn: item.kind === 'key_repeats' || item.kind === 'verified_broken' }]; // gone from the list since the server ranked it
   });
   for (const item of review) items.push({ id: `review:${item.ref}`, text: reviewText(item), warn: item.kind === 'needs_review', icon: item.kind === 'needs_review' ? 'alert' : 'archive' });
   if (extra) items.push({ id: EXTRA, text: extra.text });

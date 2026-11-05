@@ -14,10 +14,13 @@ import { redactBaseFilters } from '../data/liveBaseFilters';
 import { reviewItems, type ReviewItem } from '../analysis/statusReview';
 import type { TableRole } from '../app/tableDocs';
 import type { FilterStep, TransformStep } from '../data/transforms';
+import { listVerified } from '../analysis/verifiedQuestions';
+import { verifiedEnv, verifiedProblem } from './verifiedState';
 
 /** A gap, and its rank: the first kind listed comes first in the strip. */
-export type TodoKind = 'key_repeats' | 'no_key' | 'no_guide' | 'no_description' | 'no_role';
-export interface TodoItem { datasetId: string; kind: TodoKind; repeats?: number } // repeats = keyCheck.repeatedKeys
+export type TodoKind = 'key_repeats' | 'verified_broken' | 'no_key' | 'no_guide' | 'no_description' | 'no_role';
+// repeats = keyCheck.repeatedKeys; count = the verified questions that no longer run (one item, datasetId '': part 3 D7)
+export interface TodoItem { datasetId: string; kind: TodoKind; repeats?: number; count?: number }
 
 export interface ModelTable {
   datasetId: string;
@@ -40,7 +43,7 @@ export type OverviewReply = { ok: true; tables: ModelTable[]; todo: TodoItem[]; 
 
 export const TODO_SHOWN = 4;
 
-const GAPS: readonly [TodoKind, (r: TodoRow) => boolean][] = [
+const GAPS: readonly [Exclude<TodoKind, 'verified_broken'>, (r: TodoRow) => boolean][] = [
   ['key_repeats', (r) => !!r.key && (r.repeatedKeys ?? 0) > 0],
   ['no_key', (r) => !r.key],
   ['no_guide', (r) => !r.hasGuide],
@@ -48,16 +51,25 @@ const GAPS: readonly [TodoKind, (r: TodoRow) => boolean][] = [
   ['no_role', (r) => !r.role],
 ];
 
-/** Every row's gaps, by rank and then row order; the first TODO_SHOWN, and how many more. */
-export function todoOf(rows: TodoRow[]): { todo: TodoItem[]; more: number } {
+/** Every row's gaps, by rank and then row order; the first TODO_SHOWN, and how many more. `brokenVerified` ranks after the repeating keys. */
+export function todoOf(rows: TodoRow[], brokenVerified = 0): { todo: TodoItem[]; more: number } {
   const all: TodoItem[] = [];
   for (const [kind, gap] of GAPS) {
     for (const r of rows) if (gap(r)) all.push(kind === 'key_repeats' ? { datasetId: r.datasetId, kind, repeats: r.repeatedKeys as number } : { datasetId: r.datasetId, kind });
+    if (kind === 'key_repeats' && brokenVerified > 0) all.push({ datasetId: '', kind: 'verified_broken', count: brokenVerified });
   }
   return { todo: all.slice(0, TODO_SHOWN), more: Math.max(0, all.length - TODO_SHOWN) };
 }
 
 const isFilter = (s: TransformStep): s is FilterStep => s.type === 'filter';
+
+/** How many verified questions no longer run (./verifiedState): metadata only, and no read at all without one. */
+async function brokenVerified(projectId: string): Promise<number> {
+  const list = await listVerified(projectId);
+  if (!list.length) return 0;
+  const env = await verifiedEnv(projectId);
+  return list.filter((q) => verifiedProblem(q, env) !== null).length;
+}
 
 export async function modelOverview(projectId: string): Promise<{ tables: ModelTable[]; todo: TodoItem[]; more: number; review?: ReviewItem[] }> {
   // A catalog that cannot be read fails the read: it must not pass for "nothing written yet".
@@ -89,7 +101,7 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
   const order = new Map(list.map((d, i) => [d.id, i]));
   rows.sort((a, b) => (order.get(a.datasetId) ?? 0) - (order.get(b.datasetId) ?? 0));
   const review = await reviewItems(projectId);
-  return { tables, ...todoOf(rows), ...(review.length && { review }) };
+  return { tables, ...todoOf(rows, await brokenVerified(projectId)), ...(review.length && { review }) };
 }
 
 export function register(): void {
