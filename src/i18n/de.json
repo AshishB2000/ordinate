@@ -659,6 +659,7 @@
   "semanticMessages.can_t_be_added_up_so": "{metric} lässt sich nicht addieren, daher kann diese Tabellenberechnung nicht darauf angewendet werden: {layer} berechnet sie, und ihre Werte lassen sich hier nicht kombinieren.",
   "semanticMessages.can_t_be_grouped_into_number": "{column} kann in {dataset} nicht in Zahlenbereiche gruppiert werden: {layer} berechnet die Summen, und sie lassen sich hier nicht in Bereiche aufteilen. Verwenden Sie ein Text- oder Datumsfeld für die Achse.",
   "semanticMessages.choose_a_grain_that_lists_for": "Wählen Sie eine Granularität, die {layer} für {column} anbietet: Ein Diagramm aus {dataset} kann keine selbst wählen oder aus einer anderen zusammenfassen.",
+  "semanticMessages.computes_this_dataset_s_figures_so": null,
   "semanticMessages.is_a_field_of_not_a": "{column} ist ein Feld von {dataset}, keine Kennzahl: {layer} berechnet die Werte, messen Sie also stattdessen eine seiner Kennzahlen.",
   "semanticMessages.is_a_metric_from_a_semantic": "{metric} ist eine Kennzahl aus einer semantischen Schicht und kann daher nicht in diesem Datensatz gemessen werden.",
   "semanticMessages.is_no_longer_defined_in": "{metric} ist in {layer} nicht mehr definiert.",

@@ -659,6 +659,7 @@
   "semanticMessages.can_t_be_added_up_so": "{metric} no se puede sumar, así que este cálculo de tabla no puede aplicarse: {layer} la calcula y sus cifras no se pueden combinar aquí.",
   "semanticMessages.can_t_be_grouped_into_number": "{column} no se puede agrupar en rangos numéricos en {dataset}: {layer} calcula los totales y aquí no se pueden dividir en rangos. Use un campo de texto o de fecha para el eje.",
   "semanticMessages.choose_a_grain_that_lists_for": "Elija una granularidad que {layer} ofrezca para {column}: un gráfico de {dataset} no puede elegirla por sí mismo ni agregarla a partir de otra.",
+  "semanticMessages.computes_this_dataset_s_figures_so": null,
   "semanticMessages.is_a_field_of_not_a": "{column} es un campo de {dataset}, no una métrica: {layer} calcula las cifras, así que mida una de sus métricas.",
   "semanticMessages.is_a_metric_from_a_semantic": "{metric} es una métrica de una capa semántica, así que no se puede medir en este conjunto de datos.",
   "semanticMessages.is_no_longer_defined_in": "{metric} ya no está definida en {layer}.",

@@ -90,3 +90,10 @@ export function layerLookup(dataset: string, layer: string): string {
 export function layerFilter(dataset: string, layer: string, column: string): string {
   return t('semanticMessages.can_t_apply_this_filter_on', { layer, column, dataset });
 }
+
+// ── A semantic dataset (b2) ──────────────────────────────────────────────────
+
+/** A schema sync's sample, skipped on a semantic dataset: no rows, so nothing is detected. */
+export function layerNotSampled(layer: string): string {
+  return t('semanticMessages.computes_this_dataset_s_figures_so', { layer });
+}

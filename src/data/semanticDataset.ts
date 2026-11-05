@@ -28,23 +28,24 @@ const MAX_DESCRIPTION = 2000;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const BACKEND = /^[a-z][a-z0-9-]{0,31}$/; // externalMetric's LAYER_ID
 
-const isName = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= MAX_NAME && !CONTROL.test(v);
+/** A layer member's name as a block stores it: 1–512 characters, no control character. */
+export const isLayerName = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= MAX_NAME && !CONTROL.test(v);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** The block when every part of `raw` reads, else null (the caller marks it unreadable). Idempotent. */
 export function sanitizeSemantic(raw: unknown): SemanticSettings | null {
-  if (!isObj(raw) || typeof raw.backend !== 'string' || !BACKEND.test(raw.backend) || !isName(raw.model)) return null;
+  if (!isObj(raw) || typeof raw.backend !== 'string' || !BACKEND.test(raw.backend) || !isLayerName(raw.model)) return null;
   if (typeof raw.syncedAt !== 'string' || !Number.isFinite(Date.parse(raw.syncedAt))) return null;
   if (!Array.isArray(raw.metrics) || raw.metrics.length > MAX_SEMANTIC_METRICS || !Array.isArray(raw.grains) || raw.grains.length > MAX_SEMANTIC_METRICS) return null;
   const metrics: SemanticSettings['metrics'] = [];
   for (const m of raw.metrics) {
-    if (!isObj(m) || !isName(m.name) || typeof m.additive !== 'boolean') return null;
+    if (!isObj(m) || !isLayerName(m.name) || typeof m.additive !== 'boolean') return null;
     if (m.description !== undefined && (typeof m.description !== 'string' || m.description.length > MAX_DESCRIPTION)) return null;
     metrics.push(m.description === undefined ? { name: m.name, additive: m.additive } : { name: m.name, additive: m.additive, description: m.description });
   }
   const grains: SemanticSettings['grains'] = [];
   for (const g of raw.grains) {
-    if (!isObj(g) || !isName(g.column) || !Array.isArray(g.grains) || !g.grains.every((x) => (DATE_GRAINS as readonly unknown[]).includes(x))) return null;
+    if (!isObj(g) || !isLayerName(g.column) || !Array.isArray(g.grains) || !g.grains.every((x) => (DATE_GRAINS as readonly unknown[]).includes(x))) return null;
     grains.push({ column: g.column, grains: g.grains.slice() as DateGrain[] });
   }
   return { backend: raw.backend, model: raw.model, metrics, grains, syncedAt: raw.syncedAt };

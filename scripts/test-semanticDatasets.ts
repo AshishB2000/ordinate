@@ -4,6 +4,8 @@
 //
 //   § record    the block is stored at the record's top level, read into `live.semantic`, kept by every Live writer;
 //               an unreadable one refuses every door; the target carries the layer's env, or is unavailable
+//   § sync      the dimensions and the layer's metrics, read with describeModel (no row sample, markings by hand); one
+//               mirror metric per layer metric, holding a name and never math, idempotent, name clashes, Trash, drops
 //
 //   npm run build:ts && node scripts/test-semanticDatasets.js
 
@@ -20,6 +22,10 @@ const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data
 const lt: typeof import('../src/engine/live/liveTarget') = require('../src/engine/live/liveTarget');
 const ck: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 const fake: typeof import('./semanticFake') = require('./semanticFake');
+const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const ext: typeof import('../src/analysis/externalMetric') = require('../src/analysis/externalMetric');
+const versions: typeof import('../src/app/versions') = require('../src/app/versions');
+const mirrorsMod: typeof import('../src/engine/live/semantic/mirrors') = require('../src/engine/live/semantic/mirrors');
 
 const { ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
@@ -99,6 +105,61 @@ void (async () => {
     ok(`${ch}: an unreadable block refuses, typed, with no layer call`, r.ok === false && r.code === 'live_refused' && fake.layerFake.calls.length === 0, show(r));
   }
   ok('…and its block is kept as stored', (await raw(broken!.id as string)).semantic.metrics.length === 5);
+
+  // ── § sync ──
+  fake.resetLayerFake();
+  const bare = (pid: string, connId: string, name = 'Orders layer'): Promise<string> => as(async () => (await liveRecord.saveSemanticRecord(pid, {
+    name, connId, columns: [], semantic: { backend: 'fake', model: 'live_typed', metrics: [], grains: [], syncedAt: SYNCED },
+  }))!.id);
+  const sync = async (d: string, pid = P): Promise<Reply> => (await post('dataset:syncLiveSchema', { projectId: pid, datasetId: d })).value;
+  const mirrorsOf = async (d: string, pid = P): Promise<Reply[]> => (await as(() => metrics.listMetrics(pid))).filter((m) => m.datasetId === d) as unknown as Reply[];
+  const named = (ms: Reply[], n: string): Reply | undefined => ms.find((m) => m.name === n);
+  const warehouseCalls = H.fake.calls.length;
+  const D = await bare(P, CONN);
+  const first = await sync(D);
+  ok('the sync answers in the usual shape: no sample (semantic), markings by hand', first.ok === true && first.status === 'synced' && first.sample?.ok === false && first.sample?.reason === 'semantic'
+    && first.sensitivity === 'manual' && first.columns === H.fx.COLUMNS.length, show(first));
+  ok('…its dimensions are the columns, typed as the layer reports, its grains and metrics in the block', isDeepStrictEqual((await meta(D)).columns, H.fx.COLUMNS.map((c) => ({ name: c.name, type: c.type })))
+    && isDeepStrictEqual((await meta(D)).live.semantic.grains, [{ column: 'd', grains: [...ck.DATE_GRAINS] }]) && (await meta(D)).live.semantic.metrics.length === 4);
+  ok('…described once by model, through the layer\'s catalog, never a question or a row sample', isDeepStrictEqual(fake.layerFake.described, ['live_typed']) && fake.layerFake.calls.length === 0 && H.fake.calls.length === warehouseCalls);
+  let ms = await mirrorsOf(D);
+  ok('one mirror per layer metric, holding a name, not math', ms.length === 4 && ms.every((m) => ext.isExternalDefinition(m.definition) && !('column' in m.definition) && m.definition.layer === 'fake'
+    && isDeepStrictEqual(m.filters ?? [], [])), show(ms));
+  ok('additive comes from the layer', named(ms, 'revenue')?.definition.additive === true && named(ms, 'avg_amount')?.definition.additive === undefined);
+  const block = (await meta(D)).live.semantic;
+  const again = await as(() => mirrorsMod.syncMirrors(P, D, block, 'Layer prod'));
+  const v0 = await as(() => versions.list(P, 'metric', named(ms, 'revenue')!.id as string));
+  ok('a second sync writes nothing new', again.created.length === 0 && again.updated.length === 0 && (await sync(D)).ok === true && (await mirrorsOf(D)).length === 4 && v0.length === 1, show({ again, v: v0.length }));
+
+  const P2 = await as(async () => (await H.projects.createProject('Clash')).id);
+  const C2 = await as(async () => (await H.connections.saveConnection(P2, { name: 'Layer prod', connectorId: fake.SEMANTIC_FAKE_ID, values: {} }))!.id);
+  const X2 = await as(async () => (await H.datasets.saveDataset(P2, { name: 'Copy', sourceKind: 'csv', columns: [{ name: 'amt', type: 'number' }], rows: [[1]] }))!.id);
+  await as(() => metrics.saveMetric(P2, { name: 'Orders', datasetId: X2, definition: { column: 'amt', aggregation: 'count' } }));
+  const D2 = await bare(P2, C2);
+  await sync(D2, P2);
+  const names2 = (await as(() => metrics.listMetrics(P2))).map((m) => m.name);
+  ok('a name clash (case-blind) takes the connection\'s name', names2.includes('orders · Layer prod') && names2.includes('Orders') && !names2.includes('orders'), show(names2));
+
+  ok('trash a mirror', (await post('metric:delete', { projectId: P, id: named(ms, 'revenue')!.id })).value.ok === true);
+  await sync(D);
+  ok('a trashed mirror is not recreated', !(await mirrorsOf(D)).some((m) => m.name === 'revenue'), show((await mirrorsOf(D)).map((m) => m.name)));
+
+  fake.layerFake.describe = async () => {
+    const m = fake.fixtureModel();
+    return { ...m, dimensions: [...m.dimensions, { name: 'geo', type: 'geography' as never }], metrics: m.metrics.filter((x) => x.name !== 'max_amount').map((x) => (x.name === 'avg_amount' ? { ...x, additive: true, description: 'Now a sum' } : x)) };
+  };
+  const dropped = await sync(D);
+  ms = await mirrorsOf(D);
+  ok('a dropped layer metric keeps its mirror (missing, never deleted or remapped)', !!named(ms, 'max_amount') && ext.isExternalDefinition(named(ms, 'max_amount')!.definition) && !(await meta(D)).live.semantic.metrics.some((m: Reply) => m.name === 'max_amount'));
+  ok('a layer that now says plain sum updates its mirror\'s definition; the description stays Ordinate\'s', named(ms, 'avg_amount')?.definition.additive === true && named(ms, 'avg_amount')?.description === undefined, show(named(ms, 'avg_amount')));
+  ok('a dimension of a type we cannot map is left out and named in the report', dropped.ok === true && isDeepStrictEqual(dropped.unmapped, ['geo']) && !(await meta(D)).columns.some((c: Reply) => c.name === 'geo'), show(dropped));
+  fake.resetLayerFake();
+  const kept = (await post('metric:update', { projectId: P, id: named(ms, 'orders')!.id, patch: { format: { kind: 'currency' } } })).value;
+  ok('b0 still keeps every mirror through a format save', ext.isExternalDefinition(kept.metric?.definition ?? kept.definition) && (kept.metric?.format ?? kept.format)?.kind === 'currency', show(kept));
+  fake.layerFake.describe = async () => ({ ok: false, error: 'layer exploded at tok-canary-1' });
+  const failed = await sync(D);
+  ok('a describe failure changes nothing and says so in a sentence', failed.ok === false && !/exploded|canary/.test(JSON.stringify(failed)) && (await mirrorsOf(D)).length === ms.length, show(failed));
+  fake.resetLayerFake();
 
   await close();
   finish();

@@ -659,6 +659,7 @@
   "semanticMessages.can_t_be_added_up_so": "{metric}は合算できないため、この表計算は適用できません。{layer}が計算しており、その数値をここで組み合わせることはできません。",
   "semanticMessages.can_t_be_grouped_into_number": "{dataset}では{column}を数値の範囲にまとめられません。合計は{layer}が計算しており、ここで範囲に分割することはできません。軸にはテキストか日付のフィールドを使ってください。",
   "semanticMessages.choose_a_grain_that_lists_for": "{layer}が{column}に用意している粒度を選んでください。{dataset}のチャートは粒度を自分で選んだり、別の粒度から集計したりできません。",
+  "semanticMessages.computes_this_dataset_s_figures_so": null,
   "semanticMessages.is_a_field_of_not_a": "{column}は{dataset}のフィールドで、指標ではありません。数値は{layer}が計算するため、その指標のいずれかを測定してください。",
   "semanticMessages.is_a_metric_from_a_semantic": "{metric}はセマンティックレイヤーの指標のため、このデータセットでは測定できません。",
   "semanticMessages.is_no_longer_defined_in": "{metric}は{layer}で定義されなくなりました。",

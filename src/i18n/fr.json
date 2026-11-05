@@ -659,6 +659,7 @@
   "semanticMessages.can_t_be_added_up_so": "{metric} ne peut pas être additionnée, donc ce calcul de tableau ne peut pas s’y appliquer : {layer} la calcule, et ses chiffres ne peuvent pas être combinés ici.",
   "semanticMessages.can_t_be_grouped_into_number": "{column} ne peut pas être regroupé en tranches numériques dans {dataset} : {layer} calcule les totaux, et ils ne peuvent pas être répartis en tranches ici. Utilisez un champ texte ou date pour l’axe.",
   "semanticMessages.choose_a_grain_that_lists_for": "Choisissez une granularité que {layer} propose pour {column} : un graphique de {dataset} ne peut pas en choisir une lui-même ni l’agréger à partir d’une autre.",
+  "semanticMessages.computes_this_dataset_s_figures_so": null,
   "semanticMessages.is_a_field_of_not_a": "{column} est un champ de {dataset}, pas une métrique : {layer} calcule les chiffres, mesurez donc plutôt l’une de ses métriques.",
   "semanticMessages.is_a_metric_from_a_semantic": "{metric} est une métrique d’une couche sémantique, elle ne peut donc pas être mesurée sur ce jeu de données.",
   "semanticMessages.is_no_longer_defined_in": "{metric} n’est plus définie dans {layer}.",

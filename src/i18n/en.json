@@ -656,6 +656,7 @@
   "semanticMessages.can_t_be_added_up_so": "{metric} can't be added up, so this table calculation can't run on it: {layer} computes it, and its figures can't be combined here.",
   "semanticMessages.can_t_be_grouped_into_number": "{column} can't be grouped into number ranges on {dataset}: {layer} computes the totals, and they can't be split into ranges here. Use a text or date field for the axis.",
   "semanticMessages.choose_a_grain_that_lists_for": "Choose a grain that {layer} lists for {column}: a chart from {dataset} can't pick one itself or roll one up from another.",
+  "semanticMessages.computes_this_dataset_s_figures_so": "{layer} computes this dataset's figures, so no rows are sampled: mark its personal and financial fields by hand.",
   "semanticMessages.is_a_field_of_not_a": "{column} is a field of {dataset}, not a metric: {layer} computes the figures, so measure one of its metrics instead.",
   "semanticMessages.is_a_metric_from_a_semantic": "{metric} is a metric from a semantic layer, so it can't be measured on this dataset.",
   "semanticMessages.is_no_longer_defined_in": "{metric} is no longer defined in {layer}.",
