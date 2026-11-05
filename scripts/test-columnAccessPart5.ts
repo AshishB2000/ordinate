@@ -7,6 +7,9 @@
 // metric over a base on dept answers east Object.is-equal to the editor.
 // PERIOD CHARTS (p5-06): its chart by month (each point a resolution of the base) and by dept give east no figure;
 // NEGATIVE CONTROLS: the editor's has every point, and the dept one draws east's Object.is-equal to the editor's.
+// SNAPSHOT PER (p5-07): a count of dept on each employee's latest day gives east no figure (KPI, tile, chart) when
+// the entity is ssn or the snapshot's date is a hidden one, and is listed hidden; NEGATIVE CONTROLS: the editor's
+// figures, and the same count per employee_id answering east Object.is-equal to the editor.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -52,7 +55,7 @@ void (async () => {
     ok('NEGATIVE CONTROL: period: a year to date of dept answers east, Object.is-equal to the editor\'s', typeof valueOf(eastRows) === 'number' && Object.is(valueOf(eastRows), valueOf(edRows)), `${show(eastRows)} | ${show(edRows)}`);
     const tile = (who: string, id: string) => W.call(who, 'analysis:tiles', { projectId: P, items: [{ kind: 'metric', datasetId: log, column: '', aggregation: 'sum', metricId: id }] });
     const eastTile = await tile('east', PAY_YTD);
-    ok('period: east\'s KPI tile on it has no figure (analysis:tiles)', eastTile.body?.[0]?.ok === false && !('value' in eastTile.body[0]) && !C.leaksHidden(eastTile.text), show(eastTile));
+    ok('period: east\'s KPI tile on it has no figure and says why, never "deleted" (analysis:tiles)', C.refusedAs({ ...eastTile, body: eastTile.body?.[0] }, 'hidden') && !('value' in eastTile.body[0]) && !C.leaksHidden(eastTile.text), show(eastTile));
     const edTile = await tile('ed', PAY_YTD);
     ok('NEGATIVE CONTROL: period: the editor\'s tile has the figure', edTile.body?.[0]?.ok === true && Object.is(edTile.body[0].value, valueOf(edPay)), show(edTile));
     const preview = (who: string, base: string) => W.call(who, 'metric:preview', { projectId: P, datasetId: log, definition: { base, window: { to_date: 'year' } } });
@@ -76,6 +79,33 @@ void (async () => {
       const d = H.diff(pointsOf(eastRowsChart), pointsOf(edRowsChart), {});
       ok(`NEGATIVE CONTROL: period chart ${label}: the year to date of dept draws east's Object.is-equal to the editor's`, Array.isArray(pointsOf(eastRowsChart)) && d === '', `${d} | ${show(eastRowsChart)}`);
     }
+
+    // ── Snapshot per entity (p5-07) ──────────────────────────────────────────
+    // `hired` copies `day` and is hidden from east too: a snapshot's own date in a hidden column.
+    must('hired', await W.call('boss', 'dataset:addStep', { projectId: P, datasetId: log, step: { type: 'calculated_field', name: 'hired', expression: '[day]' } }));
+    await W.plant(log, [...W.rules, { column: 'hired', visibleTo: [{ teamId: W.hrTeam }] }]);
+    const perOf = (per: string, column = 'day') => ({ column: 'dept', aggregation: 'count', snapshot: { column, take: 'last', per } });
+    const [PER_SSN, PER_HIRED, PER_ID] = [await save('Latest per ssn', perOf('ssn')), await save('Latest per hire date', perOf('employee_id', 'hired')), await save('Latest per employee', perOf('employee_id'))];
+    const perChart = (who: string, id: string) => W.call(who, 'visual:data', { projectId: P, datasetId: log, encoding: { category: 'dept', values: [{ column: 'dept', aggregation: 'count', metricId: id }] } });
+    const perTile = (who: string, id: string) => W.call(who, 'analysis:tiles', { projectId: P, items: [{ kind: 'metric', datasetId: log, column: 'dept', aggregation: 'count', metricId: id }] });
+    const tileOf = (r: H.Reply): unknown => (r.body?.[0]?.ok === true ? r.body[0].value : 'refused');
+    for (const [label, id] of [['per ssn', PER_SSN], ['on a hidden date', PER_HIRED]] as const) {
+      const [kpi, tl, ch] = [await values('east', id), await perTile('east', id), await perChart('east', id)];
+      ok(`snapshot ${label}: east gets no figure, the tile never its stored column's (metric:values, analysis:tiles, visual:data)`, valueOf(kpi) === 'refused' && C.refusedAs({ ...tl, body: tl.body?.[0] }, 'hidden') && C.refusedAs(ch, 'hidden')
+        && ![kpi, tl, ch].some((r) => C.leaksHidden(r.text)), `${show(kpi)} | ${show(tl)} | ${show(ch)}`);
+      const [edKpi, edTile, edChart] = [await values('ed', id), await perTile('ed', id), await perChart('ed', id)];
+      ok(`NEGATIVE CONTROL: snapshot ${label}: the editor gets each figure`, typeof valueOf(edKpi) === 'number' && Object.is(tileOf(edTile), valueOf(edKpi)) && Array.isArray(pointsOf(edChart)), `${show(edKpi)} | ${show(edChart)}`);
+    }
+    const [eastId, edId] = [await values('east', PER_ID), await values('ed', PER_ID)];
+    const PLAIN_HIRED = await save('Latest on a hire date', { column: 'dept', aggregation: 'count', snapshot: { column: 'hired', take: 'last' } });
+    const plainHired = await values('east', PLAIN_HIRED);
+    ok('snapshot (part 1\'s) on a hidden date: east\'s KPI has no figure either', valueOf(plainHired) === 'refused', show(plainHired));
+    ok('NEGATIVE CONTROL: …the editor\'s has', typeof valueOf(await values('ed', PLAIN_HIRED)) === 'number');
+    ok('NEGATIVE CONTROL: snapshot per employee_id answers east, Object.is-equal to the editor\'s', typeof valueOf(eastId) === 'number' && Object.is(valueOf(eastId), valueOf(edId)), `${show(eastId)} | ${show(edId)}`);
+    const dIdChart = H.diff(pointsOf(await perChart('east', PER_ID)), pointsOf(await perChart('ed', PER_ID)), {});
+    ok('NEGATIVE CONTROL: …and so does its chart', dIdChart === '', dIdChart);
+    const eastSnapList = await listed('east');
+    ok('snapshot: east\'s metric list marks the ssn and hidden-date ones hidden, not the employee_id one', eastSnapList[PER_SSN] && eastSnapList[PER_HIRED] && !eastSnapList[PER_ID], JSON.stringify(eastSnapList));
   } finally {
     await W.close();
   }

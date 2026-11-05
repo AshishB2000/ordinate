@@ -31,6 +31,7 @@ import * as queryCache from '../engine/queryCache';
 import { computeMetricResident } from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { withSnapshotRows } from '../engine/snapshotResident';
+import { gateColumnsReply } from './columnDoors';
 import { fxContext, fxVizContext } from './fxQuery';
 import { chartReads, metricReads } from './relationships';
 import type { VizDataReply } from './visuals';
@@ -117,6 +118,9 @@ export async function perEntityCardMetric(
  * `enc` is by the snapshot's date, its grain already pinned by ./snapshotDoors), under the chart door's filters.
  */
 export async function perEntityChart(projectId: string, datasetId: string, snap: PerSnapshot, enc: VizEncoding, filters: FilterStep[], opts: PerAt['opts']): Promise<VizDataReply> {
+  // Not asked through the chart door, so its column gate (part 4) is here: a hidden column in any role refuses first.
+  const hidden = await gateColumnsReply(projectId, datasetId, async () => [], [enc, filters, snap], async () => null);
+  if (hidden) return hidden;
   await ensureFresh(projectId, [datasetId]);
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, error: 'Dataset not found' };
