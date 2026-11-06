@@ -613,13 +613,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__region') }} = 'EU'"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -635,13 +629,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__region') }} = 'EU'"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null
@@ -669,13 +657,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__status') }} = 'refunded'"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -691,13 +673,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__status') }} = 'refunded'"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null
@@ -725,13 +701,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__status') }} != 'refunded'"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -747,13 +717,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__status') }} != 'refunded'"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null
@@ -781,13 +745,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__region') }} IN ('EU', 'US')"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -803,13 +761,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__region') }} IN ('EU', 'US')"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null
@@ -837,16 +789,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__units') }} >= 5"
-              },
-              {
-                "where_sql_template": "{{ Dimension('order__status') }} = 'paid'"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -862,16 +805,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__units') }} >= 5"
-                },
-                {
-                  "where_sql_template": "{{ Dimension('order__status') }} = 'paid'"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null
@@ -1354,13 +1288,7 @@
       "type_params": {
         "measure": {
           "name": "order_total",
-          "filter": {
-            "where_filters": [
-              {
-                "where_sql_template": "{{ Dimension('order__region') }} = 'EU' OR {{ Dimension('order__status') }} = 'paid'"
-              }
-            ]
-          },
+          "filter": null,
           "alias": null,
           "join_to_timespine": false,
           "fill_nulls_with": null
@@ -1376,13 +1304,7 @@
         "input_measures": [
           {
             "name": "order_total",
-            "filter": {
-              "where_filters": [
-                {
-                  "where_sql_template": "{{ Dimension('order__region') }} = 'EU' OR {{ Dimension('order__status') }} = 'paid'"
-                }
-              ]
-            },
+            "filter": null,
             "alias": null,
             "join_to_timespine": false,
             "fill_nulls_with": null

@@ -32,6 +32,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/analysis/scenarioResolve.ts': { count: 1, how: 'keeps' },
   'src/analysis/storyModel.ts': { count: 5, how: 'keeps' },
   'src/analysis/visuals.ts': { count: 5, how: 'keeps' },
+  // a dbt import's translated filter steps, through the metric store's own sanitizer (it makes no term step)
+  'src/app/dbtImport.ts': { count: 1, how: 'keeps' },
   'src/automation/creators.ts': { count: 2, how: 'keeps' },
   'src/data/filterList.ts': { count: 4, how: 'keeps' },
   // the one-step helper under sanitizeFilterList and sanitizeSteps

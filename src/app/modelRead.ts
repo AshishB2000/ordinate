@@ -16,6 +16,7 @@ import { countJsonValuesAsync, MAX_JSON_VALUES } from './jsonBudget';
 import { isValidId } from './ids';
 import { MAX_GUIDE } from './tableDocs';
 import { MAX_RELATIONSHIPS } from '../analysis/relationships';
+import type { DbtSource } from './dbtImport';
 import * as bundleMsg from './bundleMessages';
 import * as msg from './modelFileMessages';
 import {
@@ -33,6 +34,8 @@ export interface ParsedModel {
   relationships: ModelRelationship[];
   /** `id`: the object's, when the file named a valid one. */
   invalid: Array<{ path: string; error: string; id?: string }>;
+  /** Set when the model is a dbt translation (./dbtImport.ts), never by this reader. */
+  dbt?: DbtSource;
 }
 
 export type ModelRead = ParsedModel | { refused: string };

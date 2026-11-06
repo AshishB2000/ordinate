@@ -22,6 +22,7 @@ import type { MetricDefinition, MetricFormat } from '../analysis/metrics';
 import type { MetricTargetSpec } from '../analysis/metricTarget';
 import type { Cardinality } from '../analysis/relationships';
 import type { CalendarPrefs } from '../analysis/dateIntel';
+import type { MetricImportedFrom } from '../analysis/externalMetric';
 
 export const MODEL_FORMAT = 'ordinate-model';
 export const MODEL_VERSION = 1;
@@ -63,6 +64,8 @@ export interface ModelMetric {
   direction?: 'up_good' | 'down_good';
   timeColumn?: string;
   target?: MetricTargetSpec;
+  /** A dbt import's tag (f1, ./dbtImport.ts): never in a model file, and read from the store only when the files carry it. */
+  importedFrom?: MetricImportedFrom;
 }
 
 export interface ModelTerm {
