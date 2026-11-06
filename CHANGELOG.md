@@ -23,6 +23,12 @@ All notable changes to Ordinate are documented here. Format based on
   add up, formulas over its metrics, column measures, always-applied filters, calculated fields and
   copies. Row-restricted and column-restricted viewers are refused on every door.
 - Needs every pod on a release that reads external metrics (p7-b0) first.
+- **Snowflake semantic views** are the first layer: a Snowflake connection lists its semantic views
+  and adds one as a dataset, with no new connection fields. Each question is one
+  `SELECT … FROM SEMANTIC_VIEW(…)` statement with bound values, at any date grain; only a plain
+  `SUM` or `COUNT` metric counts as adding up. Restricted viewers stay refused. Built from
+  Snowflake's documentation: the warehouse nightly checks it against a real view once one is set
+  up (`SNOWFLAKE_SEMANTIC_VIEW`, docs/live-data/snowflake-semantic-views.md).
 
 ### MongoDB and Amazon Athena connectors
 

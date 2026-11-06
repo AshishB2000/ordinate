@@ -13,7 +13,9 @@
 //
 //   Snowflake  SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE, and
 //              SNOWFLAKE_PRIVATE_KEY (PEM, + SNOWFLAKE_PRIVATE_KEY_PASSPHRASE) or SNOWFLAKE_PAT;
-//              SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA optional (the database needs one table)
+//              SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA optional (the database needs one table);
+//              SNOWFLAKE_SEMANTIC_VIEW optional — DATABASE.SCHEMA.VIEW of the semantic view
+//              scripts/fixtures/snowflake-semantic-view.sql made once (semantic layer part 7, c1)
 //   BigQuery   BIGQUERY_KEY_JSON; BIGQUERY_PROJECT, BIGQUERY_DATASET, BIGQUERY_LOCATION optional;
 //              BIGQUERY_SCRATCH_DATASET optional — a dataset the account may write, for the
 //              spike's CREATE TABLE probe
@@ -33,7 +35,9 @@
 // gate, and the scope spike (warehouseLiveBigquery.ts). Then each warehouse
 // runs the live-parity matrix (L2.8, warehouseLiveParity.ts): the compiled
 // statements through its runBound against the extract path, over a fixture
-// held in literals — the accounts are never written.
+// held in literals — the accounts are never written. With SNOWFLAKE_SEMANTIC_VIEW,
+// Snowflake then runs the semantic parity matrix against that view
+// (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip.
 //
 //   npm run build:ts && node scripts/test-warehouseLive.js      (with the variables above)
 
@@ -54,18 +58,25 @@ const envOf = (vars: Record<string, string | undefined>): Env => (name) => (vars
 /** A PEM pasted with literal \n escapes (a one-line secret store) is turned back into lines. */
 const pem = (v: string): string => (v && !v.includes('\n') && v.includes('\\n') ? v.replace(/\\n/g, '\n') : v);
 
+/** The semantic view's name: three plain identifiers (the encoder quotes each part, and refuses anything else). */
+const SEMANTIC_VIEW_RE = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+
 type Plan<T> = { run: true; config: T } | { run: false; why: string; missing?: string[] };
 
 function snowflakePlan(env: Env): Plan<SnowflakeConfig> {
   const names = ['SNOWFLAKE_ACCOUNT', 'SNOWFLAKE_USER', 'SNOWFLAKE_WAREHOUSE', 'SNOWFLAKE_ROLE', 'SNOWFLAKE_PRIVATE_KEY', 'SNOWFLAKE_PRIVATE_KEY_PASSPHRASE',
-    'SNOWFLAKE_PAT', 'SNOWFLAKE_DATABASE', 'SNOWFLAKE_SCHEMA'];
+    'SNOWFLAKE_PAT', 'SNOWFLAKE_DATABASE', 'SNOWFLAKE_SCHEMA', 'SNOWFLAKE_SEMANTIC_VIEW'];
   if (!names.some(env)) return { run: false, why: 'no SNOWFLAKE_* variable is set' };
   const missing = ['SNOWFLAKE_ACCOUNT', 'SNOWFLAKE_USER', 'SNOWFLAKE_WAREHOUSE', 'SNOWFLAKE_ROLE'].filter((n) => !env(n));
   if (!env('SNOWFLAKE_PRIVATE_KEY') && !env('SNOWFLAKE_PAT')) missing.push('SNOWFLAKE_PRIVATE_KEY or SNOWFLAKE_PAT');
   if (missing.length) return { run: false, why: 'only some SNOWFLAKE_* variables are set', missing };
+  if (env('SNOWFLAKE_SEMANTIC_VIEW') && !SEMANTIC_VIEW_RE.test(env('SNOWFLAKE_SEMANTIC_VIEW'))) {
+    return { run: false, why: 'SNOWFLAKE_SEMANTIC_VIEW must be DATABASE.SCHEMA.VIEW, plain identifiers', missing: ['a valid SNOWFLAKE_SEMANTIC_VIEW'] };
+  }
   const config: SnowflakeConfig = { account: env('SNOWFLAKE_ACCOUNT'), user: env('SNOWFLAKE_USER'), warehouse: env('SNOWFLAKE_WAREHOUSE'), role: env('SNOWFLAKE_ROLE') };
   if (env('SNOWFLAKE_DATABASE')) config.database = env('SNOWFLAKE_DATABASE');
   if (env('SNOWFLAKE_SCHEMA')) config.schema = env('SNOWFLAKE_SCHEMA');
+  if (env('SNOWFLAKE_SEMANTIC_VIEW')) config.semanticView = env('SNOWFLAKE_SEMANTIC_VIEW');
   if (env('SNOWFLAKE_PRIVATE_KEY')) {
     config.key = pem(env('SNOWFLAKE_PRIVATE_KEY'));
     if (env('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE')) config.passphrase = env('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE');
@@ -100,6 +111,13 @@ function planControls(): void {
   ok('plan: a full set runs, a one-line PEM gets its line breaks back, a PAT is the other way in',
     runs.run && runs.config.key === '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----' && !runs.config.pat
     && (() => { const p = snowflakePlan(envOf({ ...full, SNOWFLAKE_PRIVATE_KEY: '', SNOWFLAKE_PAT: 'pat' })); return p.run && p.config.pat === 'pat' && !p.config.key; })());
+  const VIEW = 'NIGHTLY.PUBLIC.ORDINATE_SEMANTIC_PARITY_SV';
+  const semAlone = snowflakePlan(envOf({ SNOWFLAKE_SEMANTIC_VIEW: VIEW }));
+  const semBad = snowflakePlan(envOf({ ...full, SNOWFLAKE_SEMANTIC_VIEW: 'PUBLIC."x"' }));
+  const semRuns = snowflakePlan(envOf({ ...full, SNOWFLAKE_SEMANTIC_VIEW: VIEW }));
+  ok('plan: SNOWFLAKE_SEMANTIC_VIEW without the rest of Snowflake\'s variables, or not DATABASE.SCHEMA.VIEW, is refused (negative control: not a skip)',
+    !semAlone.run && !!semAlone.missing?.includes('SNOWFLAKE_ACCOUNT') && !semBad.run && !!semBad.missing, JSON.stringify([semAlone, semBad]));
+  ok('plan: with the full set it runs the semantic view; without it, the semantic part is skipped', semRuns.run && semRuns.config.semanticView === VIEW && runs.run && runs.config.semanticView === undefined);
 }
 
 async function main(): Promise<void> {
@@ -141,6 +159,13 @@ async function main(): Promise<void> {
       const parity = require('./warehouseLiveParity') as typeof import('./warehouseLiveParity');
       if (sf.run) await runOne('Snowflake', () => (require('./warehouseLiveSnowflake') as typeof import('./warehouseLiveSnowflake')).runSnowflake(sf.config, nonce));
       if (sf.run) await runOne('Snowflake live parity', () => parity.runSnowflakeParity(sf.config));
+      if (sf.run && sf.config.semanticView) {
+        const semantic = require('./warehouseLiveSnowflakeSemantic') as typeof import('./warehouseLiveSnowflakeSemantic');
+        await runOne('Snowflake semantic view', () => semantic.runSnowflakeSemantic(sf.config));
+      } else if (sf.run) {
+        console.log('skip Snowflake semantic view checks: SNOWFLAKE_SEMANTIC_VIEW is not set (docs/server/live-data.md, "Testing against a real account")');
+        summary('- Snowflake semantic view: skipped — SNOWFLAKE_SEMANTIC_VIEW is not set');
+      }
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
       if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
     });

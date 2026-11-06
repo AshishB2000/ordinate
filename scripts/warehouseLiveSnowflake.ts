@@ -31,6 +31,8 @@ export interface SnowflakeConfig {
   passphrase?: string;
   /** … a programmatic access token. */
   pat?: string;
+  /** DATABASE.SCHEMA.VIEW of the semantic view scripts/fixtures/snowflake-semantic-view.sql made (c1). */
+  semanticView?: string;
 }
 
 interface Seen {

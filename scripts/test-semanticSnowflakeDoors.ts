@@ -11,6 +11,7 @@
 //   § refusals  each D16 code at its door with "Snowflake" in the sentence and no statement sent; a row lock refused
 //               (`binaryCompare` is false until the nightly pins TO_BINARY), asking nothing
 //   § secrets   Snowflake's error text carrying the PAT reaches the log redacted and no reply
+//   § nightly   scripts/warehouseLiveSnowflakeSemantic.ts end to end against the in-process view (its checks count here)
 //
 // This proves our encoder and the connector's plumbing against our engine; that Snowflake itself answers the same
 // is the warehouse nightly's (scripts/warehouseLiveSnowflakeSemantic.ts).
@@ -175,6 +176,13 @@ void (async () => {
     logs.lines.filter((l) => l.includes('Insufficient privileges')).length >= 2 && !logs.lines.some((l) => l.includes(PAT)), show(logs.lines.slice(-3)));
   ok('…and the describe that failed changed nothing: a sentence, the dataset as it was', redescribe.value.ok === false && redescribe.value.code === 'live_failed' && /server log/.test(String(redescribe.value.error)), show(redescribe.value));
   ok('NEGATIVE CONTROL: the reply Snowflake sent did carry the token', sfFake.sqlApiFailure(`x ${PAT}`).body.includes(PAT));
+
+  // ── § nightly ── the warehouse nightly's semantic run, here against the in-process view, so it cannot rot unseen
+  // before (or between) real-account runs: its catalog checks, probes, the whole parity matrix and its control.
+  const NIGHTLY = 'NIGHTLY.PUBLIC.ORDINATE_SEMANTIC_PARITY_SV';
+  fake.answer = sfFake.semanticAnswer([{ ...VIEW, name: NIGHTLY }]);
+  const nightly: typeof import('./warehouseLiveSnowflakeSemantic') = require('./warehouseLiveSnowflakeSemantic');
+  await as(() => nightly.runSnowflakeSemantic({ account: 'myorg-acct', user: 'ORDINATE', warehouse: 'WH', role: 'ORDINATE_READER', pat: PAT, semanticView: NIGHTLY }));
 
   sf.setTransport(null);
   await close();

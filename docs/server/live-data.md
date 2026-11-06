@@ -413,6 +413,7 @@ in [configuration.md](configuration.md).
 | `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE` | yes | As in the connection form. Use the read-only role above. |
 | `SNOWFLAKE_DATABASE` | no | A database with **at least one table** the role can read. Without it, the account's first visible table is described, and the query-tag check is skipped. |
 | `SNOWFLAKE_SCHEMA` | no | The schema whose table is described first. |
+| `SNOWFLAKE_SEMANTIC_VIEW` | no | `DATABASE.SCHEMA.VIEW` of the semantic view made by `scripts/fixtures/snowflake-semantic-view.sql` (below). Without it, the semantic-view checks are skipped. Set without the other Snowflake variables, or not in that form, it is a failure. |
 | `BIGQUERY_KEY_JSON` | yes | The service-account key file, whole. |
 | `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
 | `BIGQUERY_DATASET` | no | The default dataset, listed first. |
@@ -428,6 +429,17 @@ SNOWFLAKE_ROLE=ORDINATE_READER SNOWFLAKE_DATABASE=SALES SNOWFLAKE_PRIVATE_KEY="$
 SNOWFLAKE_PRIVATE_KEY_PASSPHRASE=… BIGQUERY_KEY_JSON="$(cat ordinate-key.json)" \
 node scripts/test-warehouseLive.js
 ```
+
+**The semantic view.** The read-only role cannot make one, so an administrator runs
+`scripts/fixtures/snowflake-semantic-view.sql` **once**, in a database and schema of their choice,
+with a role that may create a table and a semantic view. It holds the same rows as the live-parity
+fixture. Then grant the nightly role `SELECT` on `ORDINATE_SEMANTIC_PARITY_SV` (and `USAGE` on its
+database and schema), and set `SNOWFLAKE_SEMANTIC_VIEW` to `DATABASE.SCHEMA.ORDINATE_SEMANTIC_PARITY_SV`.
+The run then lists and describes the view, probes what Snowflake's documentation leaves open (a bound
+value inside `SEMANTIC_VIEW`, `DATE_TRUNC` in `DIMENSIONS`, a dimensions-only question, and
+`TO_BINARY`, recorded only), and asks it the whole semantic parity matrix against a copy of the same
+rows. The script is generated (`scripts/snowflakeSemanticFixture.ts`); a pull request that changes the
+fixture without regenerating it fails.
 
 **Nightly.** `.github/workflows/warehouse-nightly.yml` runs it every night and on demand
 (**Actions → Warehouse nightly → Run workflow**). It reads repository secrets with the same names;
@@ -617,6 +629,44 @@ doors (`connection:semanticModels`, `connection:addSemanticDataset`, both for ed
   model or layer; a sync that only refreshes the metrics list does not move it.
 - **Model files** never carry a layer's metrics. A file metric that names one is skipped as
   `external`.
+
+### Snowflake semantic views
+
+A Snowflake connection lists its **semantic views** above its SQL editor, under Connections. **Add
+as dataset** makes a semantic dataset of one: its dimensions are the view's dimensions, its metrics
+the view's metrics. It uses the connection as it is: the same account, user, role, warehouse and key
+or token, with nothing new to fill in.
+
+- **What the role needs.** `SELECT` on the semantic view, to ask it questions. To list and describe
+  it, any privilege on the view and one on its database and schema (`USAGE`). It does **not** need
+  `SELECT` on the view's tables. With a database on the connection, the list is that database's
+  views; without one, every view the role can see.
+
+  ```sql
+  GRANT USAGE ON DATABASE SALES TO ROLE ORDINATE_READER;
+  GRANT USAGE ON SCHEMA SALES.PUBLIC TO ROLE ORDINATE_READER;
+  GRANT SELECT ON SEMANTIC VIEW SALES.PUBLIC.ORDERS_SV TO ROLE ORDINATE_READER;
+  ```
+
+- **One statement per question**, `SELECT … FROM SEMANTIC_VIEW(…)`, with every value bound, never
+  written into the SQL. It goes through the same row limit, timeout, cancel and daily count as any
+  Live statement, and is tagged `ordinate:<org>:live` in `QUERY_HISTORY`. Snowflake computes every
+  figure, "Other" included.
+- **Dates at every grain.** A date or timestamp dimension is offered by day, week (ISO, Monday),
+  month, quarter and year; Snowflake groups each bucket itself.
+- **Can it be added up?** Only a metric that is one `SUM(…)` or `COUNT(…)` (not `COUNT(DISTINCT …)`)
+  is marked so. An average, a ratio or a derived metric is not, so a running total of it is
+  refused rather than summed.
+- **Names.** Dimensions and metrics keep the view's names. A name two of its tables share is shown
+  with its table (`ORDERS.NAME`). A view, dimension or metric whose name needs quoting (a space, a
+  dot) is left out. Private metrics are left out.
+- **Restricted viewers are refused** on these datasets, as on every semantic layer, until a byte-exact
+  comparison inside `SEMANTIC_VIEW` is proven against a real account.
+- **If the view cannot be described** (the role lost its grant), the dataset says Snowflake could not
+  be read, and changes nothing. Snowflake's own message is in the server log.
+
+What the adapter relies on, and which parts only a real account can prove, is in
+[snowflake-semantic-views.md](../live-data/snowflake-semantic-views.md).
 
 ## Refresh URL
 
