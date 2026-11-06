@@ -21,3 +21,8 @@ export function externalNoDuplicate(name: string): string {
 export function externalNoSplit(): string {
   return t('externalMetricMessages.it_is_defined_in_another_tool');
 }
+
+/** A path that never asks a layer (key drivers, a scenario, the rows behind a figure, a tree's split, a pivot) of a metric a known layer computes. */
+export function externalOnLayer(name: string, layer: string): string {
+  return t('externalMetricMessages.is_computed_by_which_returns_totals', { name, layer });
+}

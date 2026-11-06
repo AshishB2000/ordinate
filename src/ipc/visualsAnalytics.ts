@@ -38,7 +38,7 @@ async function overlayMetrics(
         continue;
       }
       const r = await resolveMetric(projectId, src.metricId, { filters: scoped.filters, params }).catch(() => null);
-      out.set(src.metricId, r ? { name: r.name, value: r.value } : { name: 'Missing metric', value: null });
+      out.set(src.metricId, r ? { name: r.name, value: r.value } : { name: m && metricStore.isExternalDefinition(m.definition) ? m.name : 'Missing metric', value: null }); // a layer's metric keeps its name (b3)
     }
   }
   return out;

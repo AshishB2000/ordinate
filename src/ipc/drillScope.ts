@@ -38,7 +38,7 @@ import { planMetricMeasures } from '../analysis/metricMeasures';
 import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution, VizDataReply } from './visuals';
-import { externalPending } from '../analysis/externalMetricMessages';
+import { noRowsError } from '../analysis/externalMetric';
 
 export interface DrillRequest {
   encoding: unknown;
@@ -65,7 +65,7 @@ export async function drillInputs(projectId: string, datasetId: string, meta: { 
   if (typeof req.metricId === 'string' && req.metricId) {
     const metric = await metrics.getMetric(projectId, req.metricId);
     if (!metric || metric.datasetId !== datasetId) return { ok: false, reason: 'That metric no longer exists.' };
-    if (metrics.isExternalDefinition(metric.definition)) return { ok: false, reason: externalPending(metric.name) }; // only its layer has its rows
+    if (metrics.isExternalDefinition(metric.definition)) return { ok: false, reason: noRowsError(metric).message }; // only its layer has its rows
     if ('formula' in metric.definition) {
       // ponytail: every formula is refused; one whose operands share their filters could list those rows — add when asked for.
       return { ok: false, reason: `"${metric.name}" is calculated from other metrics, so no one set of rows adds up to it. Open a metric it is built from to see its rows.` };

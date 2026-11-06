@@ -275,6 +275,7 @@
   "embedMessages.this_site_is_not_allowed_to": "Ce site n’est pas autorisé à afficher ce tableau de bord.",
   "embedMessages.too_many_views_of_this_dashboard": "Trop de vues de ce tableau de bord en ce moment. Réessayez dans une minute.",
   "externalMetricMessages.defined_in_another_tool": "Définie dans un autre outil",
+  "externalMetricMessages.is_computed_by_which_returns_totals": "« {name} » est calculée par {layer}, qui renvoie des totaux, pas les lignes dont ceci a besoin.",
   "externalMetricMessages.is_defined_in_another_tool_s": "« {name} » est définie dans la couche sémantique d’un autre outil, que ce serveur ne peut pas encore interroger. Terminez la mise à niveau, puis réessayez.",
   "externalMetricMessages.is_defined_in_another_tool_s_2": "« {name} » est définie dans la couche sémantique d’un autre outil ; elle ne peut donc pas être dupliquée ici.",
   "externalMetricMessages.it_is_defined_in_another_tool": "Elle est définie dans la couche sémantique d’un autre outil ; ce serveur ne peut donc pas la répartir en membres.",

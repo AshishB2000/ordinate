@@ -21,7 +21,7 @@ import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 import { isTermNotExpandedError, tagTermRefusals, termRaised, termRefusal, TERM_CODE } from '../data/termStep';
-import { EXTERNAL_CODE, externalRaised, externalRefusal, isExternalMetricError, tagExternalRefusals } from '../analysis/externalMetric';
+import { EXTERNAL_CODE, externalRaised, externalRefusal, isExternalMetricError, layerRowWords, tagExternalRefusals } from '../analysis/externalMetric';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 import type { Card } from '../analysis/dashboards';
@@ -236,6 +236,7 @@ export function register(): void {
         series: series && series.ok !== false && series.series ? series.series.values : null,
         usage,
         additivity,
+        ...layerRowWords(m.definition, value), // a layer's metric: its layer, and why it has no figure (part 7 b3)
       };
     }));
     return { ok: true, metrics: listed.metrics, rows };

@@ -272,6 +272,7 @@
   "embedMessages.this_site_is_not_allowed_to": "This site is not allowed to show this dashboard.",
   "embedMessages.too_many_views_of_this_dashboard": "Too many views of this dashboard right now. Try again in a minute.",
   "externalMetricMessages.defined_in_another_tool": "Defined in another tool",
+  "externalMetricMessages.is_computed_by_which_returns_totals": "“{name}” is computed by {layer}, which returns totals, not the rows this needs.",
   "externalMetricMessages.is_defined_in_another_tool_s": "“{name}” is defined in another tool's semantic layer, which this server can't ask yet. Finish the upgrade, then try again.",
   "externalMetricMessages.is_defined_in_another_tool_s_2": "“{name}” is defined in another tool's semantic layer, so it can't be duplicated here.",
   "externalMetricMessages.it_is_defined_in_another_tool": "It is defined in another tool's semantic layer, so this server can't split it into members.",

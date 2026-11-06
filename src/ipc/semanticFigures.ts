@@ -11,7 +11,7 @@
 import * as metrics from '../analysis/metrics';
 import type { Metric } from '../analysis/metrics';
 import type { MetricExternalDefinition } from '../analysis/externalMetric';
-import { ExternalMetricError, isExternalDefinition } from '../analysis/externalMetric';
+import { ExternalMetricError, externalRefusal, isExternalDefinition } from '../analysis/externalMetric';
 import type { ParamValues } from '../analysis/params';
 import type { VizEncoding } from '../analysis/visuals';
 import type { ChartData } from '../analysis/vizData';
@@ -77,4 +77,19 @@ export async function layerFigure(projectId: string, datasetId: string, definiti
   if (!meta?.live?.semantic) throw new ExternalMetricError('pending', name ?? definition.external);
   if (depth > 0) throw new LiveFigureError(layerFailure(meta, 'formulaOverLayer', { metric: name ?? definition.external }));
   return computeCardMetric(projectId, datasetId, { metric: definition.external }, filters, params);
+}
+
+/**
+ * A story's metric block over a layer's metrics (b3): each is asked through the KPI door, as a dashboard's KPI is; the
+ * block's typed refusal when one is not answered (b0's where no layer is here to ask), else null and the block draws.
+ */
+export async function layerBlockRefusal(projectId: string, ids: string[], ask: (id: string) => Promise<Record<string, unknown> | null>): Promise<Record<string, unknown> | null> {
+  for (const id of ids) {
+    const m = await metrics.getMetric(projectId, id);
+    if (!m || !isExternalDefinition(m.definition)) continue;
+    if (!(await datasets.getDatasetMeta(projectId, m.datasetId))?.live?.semantic) return externalRefusal(new ExternalMetricError('pending', m.name));
+    const r = await ask(id);
+    if (r && r.ok === false) return { ok: false, code: r.code, ...(r.reason ? { reason: r.reason } : {}), error: r.error };
+  }
+  return null;
 }
