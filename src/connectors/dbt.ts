@@ -269,7 +269,7 @@ export const CONNECTORS: ConnectorDef[] = [
     fields: [
       {
         key: 'region', label: 'Region', type: 'select', required: true, default: 'north-america',
-        options: Object.entries(DBT_REGIONS).map(([value, r]) => ({ value, label: `${r.label} (${r.host})` })),
+        options: Object.entries(DBT_REGIONS).map(([value, r]) => ({ value, label: r.label })), // the form lists the hosts (`hosts`)
         help: 'Your dbt Cloud account\'s multi-tenant region. Single-tenant and cell-based accounts are not supported in the beta.',
       },
       { key: 'environmentId', label: 'Environment ID', type: 'text', required: true, placeholder: '123456', help: 'The deployment environment whose Semantic Layer to ask (dbt Cloud → Deploy → Environments).' },

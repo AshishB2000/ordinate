@@ -292,7 +292,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
       <div className={[s.body, !browsable && s.noTree, !details && s.noDetails].filter(Boolean).join(' ')}>
         {browsable && <SchemaTree tables={tables} family={family} selected={selected} keyOf={keyOf} describe={describe} onSelect={selectTable} />}
         <div className={`${s.pane} ${s.main}`}>
-          {semantic && <SemanticModels projectId={projectId} connId={conn.id} views={family === 'snowflake'} fill={layerOnly} />}
+          {semantic && <SemanticModels projectId={projectId} connId={conn.id} views={family === 'snowflake'} savedQueries={family === 'dbt'} fill={layerOnly} />}
           {!layerOnly && (
             <>
           <SqlEditor
