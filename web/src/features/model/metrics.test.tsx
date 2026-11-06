@@ -98,6 +98,28 @@ describe('The Data model: metrics', () => {
     expect(within(old).queryByText('No')).toBeNull();
   });
 
+  it('a layer\'s metrics (part 7) say where they are defined, never a definition, and which one the layer dropped', async () => {
+    const ext = (id: string, name: string) => metric(id, name, { definition: { external: name, layer: 'fake' }, definitionText: 'Defined in Fake layer' });
+    const dropped = 'max_amount is no longer defined in Fake layer.';
+    serve({ 'metric:table': { body: { ok: true, metrics: [...METRICS, ext('m8', 'revenue'), ext('m9', 'max_amount')], rows: {
+      ...ROWS, m8: { ...row({ categories: true, time: true }), layer: 'Fake layer' },
+      m9: { display: null, series: null, usage: null, additivity: { categories: false, time: false }, layer: 'Fake layer', refused: { code: 'live_refused', reason: 'metricMissing', error: dropped } },
+    } } } });
+    renderApp(`/model/${P}?tab=metrics`);
+    const rev = await rowOf('revenue');
+    expect(within(rev).getByText('Defined in Fake layer').closest('[title]')?.getAttribute('title')).toBe('Defined in Fake layer: edit it there.');
+    expect(within(rev).queryByText('Missing in Fake layer')).toBeNull();
+    const gone = await rowOf('max_amount');
+    expect(within(gone).getByText('Missing in Fake layer').closest('[title]')?.getAttribute('title')).toBe(dropped);
+    expect(within(gone).getAllByRole('cell')[6].textContent).toBe('—');
+    fireEvent.keyDown(within(rev).getByRole('button', { name: 'Actions for revenue' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).toBeNull(); // a second copy of a layer's definition is refused
+    // NEGATIVE CONTROL: a metric of ours keeps its definition in words, and no layer badge
+    expect(within(await rowOf('Revenue')).getByText('sum of Revenue')).toBeTruthy();
+    expect(within(await rowOf('Revenue')).queryByText(/Defined in/)).toBeNull();
+  });
+
   it('with no metrics: one New metric (the header\'s) and Suggest metrics from my columns', async () => {
     serve({ 'metric:table': { body: { ok: true, metrics: [], rows: {} } } });
     renderApp(`/model/${P}?tab=metrics`);

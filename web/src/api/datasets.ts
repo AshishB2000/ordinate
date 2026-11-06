@@ -45,10 +45,12 @@ export interface DatasetSummary {
 export type AutoRefreshEvery = '5min' | '15min' | 'hourly' | 'daily' | 'weekly';
 
 /** The project's saved datasets; idle until a project is chosen. */
-export function useDatasets(projectId: string | undefined) {
+export function useDatasets(projectId: string | undefined, opts: { cachedOnly?: boolean } = {}) {
   return useQuery({
     queryKey: ['dataset:list', projectId],
     queryFn: projectId === undefined ? skipToken : async () => (await rpc('dataset:list', { projectId })) as DatasetSummary[],
+    // `cachedOnly`: the list the screen around it already holds, never asked for here (a gate inside a tile at its request budget).
+    enabled: !opts.cachedOnly,
   });
 }
 

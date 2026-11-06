@@ -239,6 +239,9 @@ void (async () => {
   const plainSchema = (await post('dataset:liveSchema', { projectId: P, datasetId: s.liveId })).value;
   ok('NEGATIVE CONTROL: an extract and a plain Live dataset carry no semantic key and no grains', !('semantic' in entry(s.extractId)!) && !('semantic' in entry(s.liveId)!)
     && !('semantic' in (await cols(s.extractId))) && !('semantic' in (await cols(s.liveId))) && plainSchema.ok === true && !('grains' in plainSchema), show([entry(s.liveId), plainSchema.grains]));
+  const conns = (await post('connections:list', { projectId: P })).value as unknown as Reply[];
+  ok('connections:list: a layer\'s connection says so, so its page lists models', conns.find((c) => c.id === LC)?.semantic === true, show(conns.map((c) => [c.connectorId, c.semantic])));
+  ok('NEGATIVE CONTROL: a warehouse connection carries no semantic key', !('semantic' in conns.find((c) => c.id === s.connId)!));
   const replies2 = [JSON.stringify(entry(A)), JSON.stringify(await cols(A)), (await post('dataset:liveSchema', { projectId: P, datasetId: A })).body].join('\n');
   ok('…and no model name or environment id in them', !replies2.includes(MODEL) && !replies2.includes(ENV_ID), replies2.slice(0, 300));
 

@@ -23,7 +23,7 @@ import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../../data/tags';
 import { useCanEdit } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { failure } from '../../analyses/api';
-import { formatBadge, isFunnel, isPeriod, type Metric, type MetricSummary, type Usage } from '../../analyses/metrics/api';
+import { formatBadge, isExternal, isFunnel, isPeriod, type Metric, type MetricSummary, type Usage } from '../../analyses/metrics/api';
 import { MetricEditor, type MetricDraft } from '../../analyses/metrics/MetricEditor';
 import { Sparkline } from '../../analyses/metrics/Sparkline';
 import { StatusActions } from '../status/StatusActions';
@@ -41,6 +41,9 @@ interface Row {
   usage: Usage | null;
   /** The server's rule (Task 3); absent from an older pod, null when unknown. */
   additivity?: Additivity | null;
+  /** A layer's metric (part 7): its layer by name, and the door's sentence when it has no figure. */
+  layer?: string;
+  refused?: { code: string; reason?: string; error: string };
 }
 type Table = { ok: true; metrics: MetricSummary[]; rows: Record<string, Row> } | { ok: false; error: string };
 
@@ -202,6 +205,7 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
             <tbody>
               {shown.map((m) => {
                 const row = rows[m.id];
+                const mirror = !!m.definition && isExternal(m.definition); // its definition is its layer's: a badge, never math
                 return (
                   <tr key={m.id}>
                     <td>
@@ -227,9 +231,24 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                       )}
                     </td>
                     <td className={s.dim}>{m.datasetName ?? '(missing dataset)'}</td>
-                    <td className={s.def} title={m.definitionText}>
-                      {m.definitionText}
-                    </td>
+                    {mirror ? (
+                      <td className={s.def}>
+                        <span title={`${m.definitionText}: edit it there.`}>
+                          <Badge tone="accent" icon="layers">
+                            {m.definitionText}
+                          </Badge>
+                        </span>
+                        {row?.refused?.reason === 'metricMissing' && (
+                          <span className={s.status} title={row.refused.error}>
+                            <Badge tone="warn" icon="alert">{`Missing in ${row.layer ?? 'its layer'}`}</Badge>
+                          </span>
+                        )}
+                      </td>
+                    ) : (
+                      <td className={s.def} title={m.definitionText}>
+                        {m.definitionText}
+                      </td>
+                    )}
                     <td>
                       <CountsBy m={m} list={q.data.metrics} />
                     </td>
@@ -239,7 +258,9 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                     <td>
                       <span className={s.badge}>{formatBadge(m.format)}</span>
                     </td>
-                    <td className={s.num}>{row?.display ?? '—'}</td>
+                    <td className={s.num} title={row?.refused?.error}>
+                      {row?.display ?? '—'}
+                    </td>
                     <td className={s.trend}>{row?.series && <Sparkline values={row.series} label={`${m.name} trend`} />}</td>
                     <td className={row?.usage?.total ? s.dim : s.unused}>
                       {row?.usage ? (row.usage.total ? row.usage.summary : 'Not used yet') : '—'}
@@ -257,7 +278,7 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                               ? [
                                   { label: 'Edit', icon: 'pencil', onSelect: () => void open(m) },
                                   { label: m.hasTree ? 'Open tree' : 'Break it down…', icon: 'lineage', onSelect: () => tree(m) },
-                                  { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(m) },
+                                  ...(mirror ? [] : [{ label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicate(m) }]), // a layer's definition has one home
                                   { kind: 'separator' },
                                   { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(m) },
                                 ]

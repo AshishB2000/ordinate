@@ -116,6 +116,11 @@ export const LIVE_OFF_LIST: readonly string[] = [
   'Snapshots',
 ];
 
+/** Why a semantic dataset (part 7) has no rows to copy or read: its layer computes every figure. */
+export function layerWhy(dataset: string, layer: string): string {
+  return `${dataset} comes from ${layer}, which returns totals, not rows.`;
+}
+
 /** Chart types a Live dataset cannot draw in v1: the grid engines, recomputed from the rows (L2.4 refuses them too). */
 export const LIVE_OFF_CHARTS: ReadonlySet<string> = new Set(['pivot', 'cohort', 'event_funnel']);
 

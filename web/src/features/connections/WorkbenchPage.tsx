@@ -38,6 +38,7 @@ import { ConnLogo } from './ConnLogo';
 import { DetailsRail, type TestState } from './DetailsRail';
 import { Results, type ResultState, type Shown } from './Results';
 import { describeKey, SchemaTree } from './SchemaTree';
+import { SemanticModels } from './SemanticModels';
 import { SqlEditor } from './SqlEditor';
 import { SavedQueries, type QueryDialog } from './SavedQueries';
 import { where } from './SavedConnections';
@@ -112,7 +113,10 @@ function Opened() {
 function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Connection; def: Connector | null; logo?: Logo }) {
   const navigate = useNavigate();
   const refreshLists = useRefreshLists(projectId);
-  const browsable = def?.browsable !== false;
+  // A semantic layer (part 7): Snowflake's semantic views sit beside its tables; a layer with no SQL (Cube, dbt) is its models only.
+  const semantic = !!conn.semantic || def?.semantic === true;
+  const layerOnly = semantic && def?.browsable !== true;
+  const browsable = def?.browsable !== false && !layerOnly;
   const family = def?.family ?? '';
   const [testAsked, setTestAsked] = useState(false);
   const tables = useTables(projectId, conn.id, browsable || testAsked);
@@ -288,6 +292,9 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
       <div className={[s.body, !browsable && s.noTree, !details && s.noDetails].filter(Boolean).join(' ')}>
         {browsable && <SchemaTree tables={tables} family={family} selected={selected} keyOf={keyOf} describe={describe} onSelect={selectTable} />}
         <div className={`${s.pane} ${s.main}`}>
+          {semantic && <SemanticModels projectId={projectId} connId={conn.id} views={family === 'snowflake'} fill={layerOnly} />}
+          {!layerOnly && (
+            <>
           <SqlEditor
             sql={sql}
             onSql={setSql}
@@ -330,6 +337,8 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onMessage={(text, error) => setMessage({ text, error })}
           />
           <Results state={result} saving={saving} live={liveOffered(def, conn)} onSave={(n, m) => void saveAsDataset(n, m)} documentTo={{ projectId, connId: conn.id }} />
+            </>
+          )}
         </div>
         {details && (
           <DetailsRail

@@ -10,8 +10,8 @@ import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
-import { MakeCopyButton } from '../live/LiveOff';
-import { LIVE_OFF_LIST } from '../live/offFeatures';
+import { MakeCopyButton, useLayerOf } from '../live/LiveOff';
+import { LIVE_OFF_LIST, layerWhy } from '../live/offFeatures';
 import { useCanEdit } from '../projects/api';
 import { useWrite } from './api';
 import { formatNumber, rowsText } from './format';
@@ -104,6 +104,25 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
   const cache = cacheText(maxCacheAgeSec);
   // Both copies save a dataset: an editor's. A viewer reads what works here and what needs a copy.
   const canEdit = useCanEdit(projectId);
+  // A semantic dataset (part 7): its layer returns totals, so there is no copy of either kind, and it says so.
+  const layer = useLayerOf(projectId, datasetId);
+  if (layer) {
+    return (
+      <div className={l.notice}>
+        <EmptyState icon="layers" title={`Live: ${layer.label} computes these figures`}>
+          {`${layerWhy(layer.dataset, layer.label)} Charts and KPI tiles ask it each time${cache ? ` (${cache})` : ''}; what reads rows is off for it.`}
+        </EmptyState>
+        <section className={l.offList} aria-label="Off for this dataset">
+          <h3 className={l.offHead}>Off for this dataset</h3>
+          <ul>
+            {LIVE_OFF_LIST.map((what) => (
+              <li key={what}>{what}</li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className={l.notice}>
       <EmptyState

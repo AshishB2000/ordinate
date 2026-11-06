@@ -43,6 +43,8 @@ export interface Connector {
   /** With `live`: the checkbox a connection must have ticked before Live is offered for it (L3.2, D8 —
    *  PostgreSQL's "This is a read replica or a warehouse"). Absent: every connection may be Live. */
   liveOptIn?: string;
+  /** It has a semantic layer whose models can be added as datasets (part 7). */
+  semantic?: boolean;
 }
 
 export type Logo = { path: string; color: string; title: string } | { src: string; title: string };
@@ -70,6 +72,8 @@ export interface Connection {
   secretSet?: Record<string, boolean>;
   /** Datasets imported from it (connections:list only). A viewer's entry is the card only (id, name, connectorId, lastStatus, datasetCount): no values, table, queries or lastError. */
   datasetCount?: number;
+  /** Its connector has a semantic layer: its page lists the models to add (part 7). An editor's entry only. */
+  semantic?: true;
 }
 
 /** What `dataset:list` returns that this area reads (src/data/datasetSummary.ts). */
