@@ -8,7 +8,8 @@
 //   snapshot-per  each team's latest salary, summed: its KPI, its chart by team and an alert on it (p5-07)
 //   funnel   a funnel metric keyed by a marked user column: its KPI, its chart and an alert watched through it (p5-08)
 //   target   a metric's target from a plan totalled from a marked column: the tile keeps its own figure and says the
-//            house wording for its target; the scorecard row is withheld, as a row with a target metric is (p5-09)
+//            house wording for its target; the scorecard row is withheld, as a row with a target metric is (p5-09);
+//            a report's chart draws no target line from it, and an alert on a share of it posts no figure (p5-10)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -204,6 +205,35 @@ async function target(env: H.Env): Promise<void> {
   ok('NEGATIVE CONTROL (target): with salary unmarked again, drop publishes every surface byte for byte as before', H.pin(await H.leave(env, fx, 'drop')) === H.pin(before));
 }
 
+/** A report tile's target line: 'shown' (a target series), 'off' (the chart, no line), or 'absent'. */
+function lineOn(o: H.Out, title: string): string {
+  const t = (o.report || []).flatMap((p: any) => p.tiles || []).find((x: any) => x.title === title); // any: a report tile
+  return !t?.chart ? 'absent' : t.chart.data.series.some((x: any) => x.target === true) ? 'shown' : 'off'; // any: a series
+}
+
+async function targetLine(env: H.Env): Promise<void> {
+  const { P, S } = await H.project(env, 'Part 5 target line');
+  const avgPay = await H.saveMetric(env, P, S, 'Avg pay', { column: 'salary', aggregation: 'avg' }, { timeColumn: 'day' });
+  const budget = await H.saveMetric(env, P, S, 'Hours budget', { column: 'hours', aggregation: 'max' }, { timeColumn: 'day' });
+  const vsPay = await H.saveMetric(env, P, S, 'Avg hours', { column: 'hours', aggregation: 'avg' }, { timeColumn: 'day', target: { source: { metricId: avgPay.id } } });
+  const vsBudget = await H.saveMetric(env, P, S, 'Avg hours vs budget', { column: 'hours', aggregation: 'avg' }, { timeColumn: 'day', target: { source: { metricId: budget.id } } });
+  const byMonth = (m: { id: string }) => ({ datasetId: S, chartType: 'line', encoding: { category: 'day', grain: 'month', values: [{ column: 'hours', aggregation: 'avg', metricId: m.id }] } });
+  const rule = (name: string, m: { id: string; name: string }) => ({ name, datasetId: S, metric: { column: 'hours', aggregation: 'avg', metricId: m.id, label: m.name }, compare: 'target', targetPct: { op: 'below', pct: 200 } });
+  const fx = await H.publishable(env, P, [{ title: 'Avg hours by month', visual: byMonth(vsPay) }, { title: 'Avg hours vs budget by month', visual: byMonth(vsBudget) }], [],
+    [rule('Avg hours under twice its target', vsPay), rule('Avg hours vs budget under twice its target', vsBudget)], []);
+  const say = (o: H.Out) => [lineOn(o, 'Avg hours by month'), lineOn(o, 'Avg hours vs budget by month'), H.figureOn(o, 'posts', 'Avg hours under twice its target'), H.figureOn(o, 'posts', 'Avg hours vs budget under twice its target')];
+  const before = await H.leave(env, fx, 'drop');
+  ok('target line PIN: with nothing marked, every surface is the one this branch published', H.pin(before) === '546aa84118b395c79dd5421eeb0acdcecf92de44f8ddff8a7b0aadfd8700b302', `target line: ${H.pin(before)}`);
+  ok('target line fixture: with nothing marked, both report charts draw their target line and both target alerts post their figures', H.show(say(before)) === H.show(['shown', 'shown', 'shown', 'shown']), H.show(say(before)));
+  await H.mark(env, P, S, 'salary', true);
+  const d = say(await H.leave(env, fx, 'drop'));
+  ok('target line, drop: the report draws the hours chart with no line from Avg pay, and its target alert posts the house wording', d[0] === 'off' && d[2] === 'hidden', H.show(d));
+  ok('NEGATIVE CONTROL (target line, drop): the line from the hours budget is drawn and its alert posts its figure', d[1] === 'shown' && d[3] === 'shown', H.show(d));
+  ok('target line, mask: every surface publishes every line and post, as before', H.pin(noSub(await H.leave(env, fx, 'mask'))) === H.pin(noSub(before)));
+  await H.mark(env, P, S, 'salary', false);
+  ok('NEGATIVE CONTROL (target line): with salary unmarked again, drop publishes every surface byte for byte as before', H.pin(await H.leave(env, fx, 'drop')) === H.pin(before));
+}
+
 (async () => {
   const env = await H.start();
   try {
@@ -213,6 +243,7 @@ async function target(env: H.Env): Promise<void> {
     await snapshotPer(env);
     await funnel(env);
     await target(env);
+    await targetLine(env);
   } finally {
     await env.close();
   }
