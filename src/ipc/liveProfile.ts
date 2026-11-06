@@ -195,6 +195,8 @@ export interface LiveSchemaView {
   baseFilters: FilterStep[];
   /** The calculated fields (part 8 step 04, ./liveCalcs): names and types only to a caller row access restricts. */
   calculated: CalculatedView;
+  /** A semantic dataset's grains per date dimension, as its layer lists them (part 7). */
+  grains?: Array<{ column: string; grains: string[] }>;
 }
 
 const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
@@ -236,6 +238,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
     baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
     calculated: await liveCalculated(projectId, meta, closed),
+    ...(meta.live.semantic ? { grains: meta.live.semantic.grains } : {}),
   };
 }
 

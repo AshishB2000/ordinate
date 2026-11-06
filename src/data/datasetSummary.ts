@@ -12,6 +12,7 @@ import { redactOriginText } from './datasetOrigin';
 import { serverDataDir } from '../server/context';
 import { behindSchedule } from './refreshCadence';
 import { nextRunIsFull } from './freshOnAskRule';
+import { layerLabel } from '../engine/live/semantic/semanticRefusals';
 
 export interface DatasetSummary {
   id: string;
@@ -69,6 +70,14 @@ export interface DatasetSummary {
   // the new rows first — never the pull's own stamp. `fullDue`: the next refresh
   // must be a full one, so asks wait for the scheduled or manual refresh to run it.
   freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
+  // A semantic dataset (semantic layer part 7): its layer by backend id and product name — never its model.
+  semantic?: { layer: string; label: string };
+}
+
+/** The `semantic` key a reply about a semantic dataset carries; `grains` for the header a chart builder reads. */
+export function semanticKey(live: Dataset['live'], grains = false): { semantic?: { layer: string; label: string; grains?: Array<{ column: string; grains: string[] }> } } {
+  const s = live?.semantic;
+  return s ? { semantic: { layer: s.backend, label: layerLabel(s.backend), ...(grains ? { grains: s.grains } : {}) } } : {};
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -118,6 +127,7 @@ export function summarize(ds: Dataset): DatasetSummary {
     summary.maxCacheAgeSec = ds.live.maxCacheAgeSec;
     summary.schemaSyncedAt = ds.live.schemaSyncedAt;
     if (ds.live.syncAttemptAt) summary.schemaSyncAttemptAt = ds.live.syncAttemptAt;
+    Object.assign(summary, semanticKey(ds.live));
   }
   return summary;
 }
