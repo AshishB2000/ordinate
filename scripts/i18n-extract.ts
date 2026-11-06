@@ -401,6 +401,7 @@ export const MAIN_FILES = [
   'src/data/columnAccessMessages.ts',
   'src/analysis/targetMessages.ts',
   'src/app/modelFileMessages.ts',
+  'src/app/ossieMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
