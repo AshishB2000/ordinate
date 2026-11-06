@@ -1,0 +1,15 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "The page's end status FAILED with its error field; the message is illustrative.",
+  "reply": {
+    "data": {
+      "query": {
+        "status": "FAILED",
+        "error": "Unable to compile the query",
+        "totalPages": null,
+        "jsonResult": null
+      }
+    }
+  }
+}

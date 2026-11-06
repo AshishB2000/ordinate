@@ -1,0 +1,52 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "Built from the page's savedQuery example query (name description label queryParams { metrics { name } groupBy { name grain datePart } where { whereSqlTemplate } }). A group-by with a datePart and one that is an entity (customer) are there to be left out.",
+  "reply": {
+    "data": {
+      "savedQuery": {
+        "name": "new_customer_orders",
+        "label": "New customer orders",
+        "description": "Orders from new customers, by day",
+        "queryParams": {
+          "metrics": [
+            {
+              "name": "order_total"
+            },
+            {
+              "name": "food_order_amount"
+            },
+            {
+              "name": "order_gross_profit"
+            }
+          ],
+          "groupBy": [
+            {
+              "name": "metric_time",
+              "grain": "DAY",
+              "datePart": null
+            },
+            {
+              "name": "customer__customer_type",
+              "grain": null,
+              "datePart": null
+            },
+            {
+              "name": "order_id__ordered_at",
+              "grain": null,
+              "datePart": "DOW"
+            },
+            {
+              "name": "customer",
+              "grain": null,
+              "datePart": null
+            }
+          ],
+          "where": {
+            "whereSqlTemplate": "{{ Dimension('customer__customer_type') }} = 'new'"
+          }
+        }
+      }
+    }
+  }
+}

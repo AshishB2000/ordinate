@@ -1,0 +1,17 @@
+{
+  "source": "https://github.com/dbt-labs/semantic-layer-sdk-python (main, dbtsl/models and dbtsl/api/graphql)",
+  "read": "2026-11-05",
+  "note": "NOT on the API page: the SDK's getMeasures document (measures(environmentId, metrics)) and its Measure model (name, aggTimeDimension, agg: AggregationType, expr), for metrics: [{ name: \"order_total\" }].",
+  "reply": {
+    "data": {
+      "measures": [
+        {
+          "name": "order_total",
+          "agg": "SUM",
+          "aggTimeDimension": "ordered_at",
+          "expr": "order_total"
+        }
+      ]
+    }
+  }
+}
