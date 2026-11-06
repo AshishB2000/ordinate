@@ -22,6 +22,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const store: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');
 const scorecards: typeof import('../src/analysis/scorecards') = require('../src/analysis/scorecards');
@@ -91,13 +92,19 @@ export interface Fx {
   mcp: string[];
 }
 
-export interface Card { title: string; metric: Record<string, unknown> }
-/** A dashboard of KPI tiles, a story and a scorecard of `metricIds`, a report on the dashboard, and alert `rules`. */
+/** A KPI tile (`metric`), or a chart (`visual`: a saved visual of that name on `datasetId`). */
+export interface Card { title: string; metric?: Record<string, unknown>; visual?: { datasetId: string; encoding: Record<string, unknown>; chartType?: string } }
+/** A dashboard of tiles, a story and a scorecard of `metricIds`, a report on the dashboard, and alert `rules`. */
 export async function publishable(env: Env, P: string, cards: Card[], metricIds: string[], rules: Array<Record<string, unknown>>, mcp: string[]): Promise<Fx> {
   const out = await env.inApp(async () => {
-    const board = (await analysis.saveAnalysis(P, { name: 'Board', sheets: [{ id: U(90), name: 'Main', cards: cards.map((c, i) => ({
-      id: U(i + 1), type: 'metric', layout: { x: (i % 4) * 3, y: Math.floor(i / 4) * 3, w: 3, h: 3 }, metric: { ...c.metric, label: c.title },
-    })) }] } as never))!;
+    const tiles = [];
+    for (const [i, c] of cards.entries()) {
+      const layout = { x: (i % 4) * 3, y: Math.floor(i / 4) * 3, w: 3, h: 3 };
+      if (!c.visual) { tiles.push({ id: U(i + 1), type: 'metric', layout, metric: { ...c.metric, label: c.title } }); continue; }
+      const v = (await visuals.saveVisual(P, { datasetId: c.visual.datasetId, name: c.title, chartType: c.visual.chartType ?? 'column', encoding: c.visual.encoding } as never))!;
+      tiles.push({ id: U(i + 1), type: 'visual', layout, visualId: v.id });
+    }
+    const board = (await analysis.saveAnalysis(P, { name: 'Board', sheets: [{ id: U(90), name: 'Main', cards: tiles }] } as never))!;
     const story = (await stories.saveStory(P, { name: 'Story', blocks: metricIds.map((id, i) => ({ id: U(10 + i), kind: 'metric', metricId: id, filters: [] })) } as never))!;
     const sc = (await scorecards.saveScorecard(P, { name: 'Card', period: 'month', rows: metricIds.map((metricId) => ({ metricId })) } as never))!;
     const report = (await reportSpec.saveReport(P, { name: 'Report', analysisId: board.id, pages: [{ kind: 'sheet', sheetIdx: 0, include: true, layout: 'full' }] } as never))!;
@@ -160,19 +167,21 @@ export type Out = Awaited<ReturnType<typeof leave>>;
 const tile = (block: any, title: string): any => block?.dashboard?.sheets[0].cards.find((c: any) => c.title === title); // any: a page's JSON
 const named = (rows: any[], name: string): any => rows.find((r: any) => (r.label ?? r.name) === name); // any: a KPI-ish entry
 /** The figure a surface shows for `name` (a tile title, a metric name, a rule name): 'hidden', 'shown', or 'absent'. */
-export function figureOn(o: Out, where: keyof Out | 'reportKpi' | 'exportKpi' | 'sendKpi' | 'storyMetric' | 'scoreRow', name: string): 'hidden' | 'shown' | 'absent' {
+export function figureOn(o: Out, where: keyof Out | 'reportKpi' | 'exportKpi' | 'sendKpi' | 'storyMetric' | 'scoreRow' | 'reportTile' | 'sendChart', name: string): 'hidden' | 'shown' | 'absent' {
   const v = (x: unknown): 'hidden' | 'shown' | 'absent' => x === undefined ? 'absent' : x === HIDDEN ? 'hidden' : 'shown';
   switch (where) {
     case 'dashboard': case 'embed': case 'exported': {
       const t = tile(o[where], name);
       if (!t || !t.payloads.length) return 'absent';
-      return t.payloads.every((p: any) => p.hidden === HIDDEN) ? 'hidden' : t.payloads.some((p: any) => typeof p.value === 'number') ? 'shown' : 'absent'; // any: a payload
+      return t.payloads.every((p: any) => p.hidden === HIDDEN) ? 'hidden' : t.payloads.some((p: any) => typeof p.value === 'number' || p.labels?.length > 0) ? 'shown' : 'absent'; // any: a payload
     }
     case 'storyMetric': { const m = named((o.story?.story?.blocks || []).flatMap((b: any) => b.metrics || []), name); return m ? (m.display === HIDDEN && m.value === null ? 'hidden' : typeof m.value === 'number' ? 'shown' : 'absent') : 'absent'; } // any: as above
     case 'scoreRow': { const r = (o.scorecard?.scorecard?.rows || []).find((x: any) => x.name === name); return r ? (r.display === HIDDEN && r.spark.length === 0 ? 'hidden' : /\d/.test(r.display) ? 'shown' : 'absent') : 'absent'; } // any: a published row (its display, no raw value)
     case 'reportKpi': { const ks = (o.report || []).flatMap((p: any) => p.kpis || []).filter((k: any) => k.label === name); return ks.length ? (ks.every((k: any) => k.value === HIDDEN) ? 'hidden' : 'shown') : 'absent'; } // any: a report page
     case 'exportKpi': return v(named((o.storyExport || []).flatMap((p: any) => p.kpis || []), name)?.value); // any: as above
     case 'sendKpi': return v(named(o.send?.kpis ?? [], name)?.value);
+    case 'reportTile': { const ts = (o.report || []).flatMap((p: any) => p.tiles || []).filter((x: any) => x.title === name); return ts.length ? (ts.every((x: any) => x.note === HIDDEN && !x.chart) ? 'hidden' : ts.some((x: any) => x.chart) ? 'shown' : 'absent') : 'absent'; } // any: a report tile
+    case 'sendChart': { const c = (o.send?.sections ?? []).find((x: any) => x.title === name); return c ? (c.note === HIDDEN && !c.rows.length ? 'hidden' : c.rows.length ? 'shown' : 'absent') : 'absent'; } // any: a message section
     case 'posts': { const ps = o.posts[name] ?? []; return ps.length ? (ps.every((b) => b.includes(HIDDEN)) ? 'hidden' : 'shown') : 'absent'; }
     case 'mcp': { const r = o.mcp[name] as { refused?: string; message?: string; value?: unknown } | undefined; return !r ? 'absent' : r.refused === 'runtime' && /share policy/i.test(r.message ?? '') ? 'hidden' : typeof r.value === 'number' ? 'shown' : 'absent'; }
     default: return 'absent';
