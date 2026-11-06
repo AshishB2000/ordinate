@@ -203,7 +203,7 @@ e2e('data model: lineage, used by, and the ask before removing what feeds a metr
   for (const l of s.rpc.loads) assert.ok(l.rpcs <= 25, `${l.url} made ${l.rpcs} calls`);
 });
 
-e2e('data model: import', async ({ page, server }) => {
+e2e('data model: import', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
   await page.goto(`/model/${pid}`);
   await settled(page);
@@ -237,13 +237,20 @@ e2e('data model: import', async ({ page, server }) => {
   await dialog.getByRole('heading', { name: '1 updated' }).waitFor();
   await dialog.getByText('Shipments', { exact: true }).waitFor();
   await screensInPlace(page, 'model-import-preview');
+  const [load, sent] = [rpc.loads.length, rpc.loads.at(-1)?.rpcs ?? 0];
   await dialog.getByRole('button', { name: 'Apply 1 change' }).click();
   await dialog.getByRole('heading', { name: 'Applied 1 change.' }).waitFor();
+  await page.waitForLoadState('networkidle');
+  // The apply, then only the reads one table doc changes (catalog:getTable and the Data model's summary): a refetch of
+  // every query on the page was 13 more, and the load went over its budget of 25.
+  const applied = (rpc.loads.at(-1)?.rpcs ?? 0) - sent;
+  assert.ok(rpc.loads.length === load && applied <= 5, `the apply and its refetches made ${applied} calls`);
   await dialog.getByRole('button', { name: 'Download the model as it was before' }).waitFor();
   await screensInPlace(page, 'model-import-done');
   await dialog.getByRole('button', { name: 'Close' }).last().click();
   await page.getByRole('link', { name: 'Shipments', exact: true }).click();
   await page.getByRole('region', { name: 'About Shipments' }).getByText('Every parcel we sent, from the model files').waitFor();
+  for (const l of rpc.loads) assert.ok(l.rpcs <= 25, `${l.url} made ${l.rpcs} calls`);
 });
 
 e2e('data model: metrics', async ({ page, server }) => {

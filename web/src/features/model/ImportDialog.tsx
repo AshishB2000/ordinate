@@ -12,7 +12,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { Skeleton } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { applyModelImport, notCarriedText, planModelImport, type ImportPlan, type PlanStatus } from './api';
+import { applyModelImport, importRefresh, notCarriedText, planModelImport, type ImportPlan, type PlanStatus } from './api';
 import { applyLabel, changesToApply, planSections } from './importPlanText';
 import { formatNumber } from '../data/format';
 import s from './ImportDialog.module.css';
@@ -159,7 +159,7 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
         return;
       }
       setStep({ at: 'done', file, plan, applied: r });
-      void client.invalidateQueries(); // an import touches every part of the model
+      for (const key of importRefresh(plan, r.written)) void client.invalidateQueries({ queryKey: [key] }); // what it wrote, not every screen
     } catch (err) {
       setStep({ at: 'plan', file, plan, stale: why(err) });
     }

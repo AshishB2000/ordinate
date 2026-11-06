@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { startDownload } from '../../api/files';
+import { importRefresh, type ImportPlan } from './api';
 
 vi.mock('../../api/files', () => ({ startDownload: vi.fn() }));
 
@@ -117,6 +118,20 @@ describe('The Data model: Import…', () => {
     expect(startDownload).toHaveBeenCalledWith('before-1');
   });
 
+  it('after Apply only the reads the written kinds change are fetched again, never the whole page', async () => {
+    const calls = serve({ 'model:importApply': { body: { ok: true, written: ['table:o2'], failed: [] } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick());
+    await waitFor(() => expect(calls.some((c) => c.channel === 'model:overview')).toBe(true));
+    const before = calls.length;
+    await act(async () => fireEvent.click(d.getByRole('button', { name: 'Apply 6 changes' })));
+    expect(await d.findByText(/^Applied 1 change/)).toBeTruthy();
+    await waitFor(() => expect(calls.slice(before).some((c) => c.channel === 'model:overview')).toBe(true)); // the summary the description is counted in
+    const again = calls.slice(before).map((c) => c.channel).filter((c) => c !== 'model:importApply');
+    // NEGATIVE CONTROL: invalidating every query refetched these too (the project list, the roles, the datasets).
+    for (const untouched of ['projects:overview', 'projects:roles', 'dataset:list']) expect(again).not.toContain(untouched);
+  }, 15_000);
+
   it('a plan_changed reply shows its sentence with Check again, which runs the dry run again', async () => {
     const calls = serve({ 'model:importApply': { body: { ok: false, code: 'plan_changed', error: STALE } } });
     renderApp(`/model/${P}`);
@@ -154,5 +169,19 @@ describe('The Data model: Import…', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Data model' }, LAZY)).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('tab', { name: /Datasets/ })).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Import…' })).toBeNull();
+  });
+});
+
+describe('importRefresh', () => {
+  const plan = PLAN as unknown as ImportPlan;
+  it('names the reads of each kind written, and the Data model summary, once each', () => {
+    const keys = importRefresh(plan, ['table:o2', 'metric:r', 'metric:g']);
+    expect(keys).toEqual(expect.arrayContaining(['catalog:getTable', 'metric:list', 'metric:table', 'model:overview', 'model:navigation']));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).not.toContain('term:list'); // no term was written
+  });
+  it('nothing written, nothing refetched; a key the plan does not hold is no kind', () => {
+    expect(importRefresh(plan, [])).toEqual([]);
+    expect(importRefresh(plan, ['metric:nope'])).toEqual([]);
   });
 });
