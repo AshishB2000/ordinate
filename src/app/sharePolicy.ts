@@ -298,7 +298,7 @@ export async function applyToChart<R extends ChartReplyLike>(
   const geoS = (await Promise.all(geoCols.map((c) => sens(datasetId, typeof c === 'string' ? c : undefined)))).some(Boolean)
     || (await sens(encoding.values?.[0]?.datasetId, size));
   const labelUse = catS || serS || rowDims.some(Boolean) || colDims.some(Boolean);
-  // A measure is judged on ITS dataset: a forward join's column is that table's, marked there.
+  // A measure is judged on ITS dataset: a forward join's or a many side's column is that table's, marked there.
   const valueUse = (await Promise.all([
     ...(encoding.values || []).map((m) => sens(m.datasetId, m.column)),
     ...(encoding.pivot ? encoding.pivot.values.map((v) => sens(datasetId, v.column)) : []),
