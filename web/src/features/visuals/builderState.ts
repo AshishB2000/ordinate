@@ -61,9 +61,9 @@ function useSettled<T>(value: T, ms: number): T {
   return v;
 }
 
-/** What goes to the server: the grain and the overlay belong to a date category only; empty measures drop. */
-function effective(enc: Encoding, isDate: boolean): Encoding {
-  const e: Encoding = { ...enc, values: enc.values.filter((v) => v.column) };
+/** What goes to the server: the grain and the overlay belong to a date category only; empty measures drop (a layer's metric has no column, part 7). */
+export function effective(enc: Encoding, isDate: boolean): Encoding {
+  const e: Encoding = { ...enc, values: enc.values.filter((v) => v.column || v.metricId) };
   if (!isDate) {
     delete e.grain;
     delete e.overlay;

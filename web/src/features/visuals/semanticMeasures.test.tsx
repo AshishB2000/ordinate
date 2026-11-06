@@ -12,6 +12,7 @@ import type { Encoding } from './api';
 import { EncodingForm } from './EncodingForm';
 import { fitEncoding, type Column } from './model';
 import { semanticEncoding } from './SemanticMeasures';
+import { effective } from './builderState';
 
 afterEach(() => {
   cleanup();
@@ -116,6 +117,8 @@ describe('the builder on a semantic dataset', () => {
     expect(semanticEncoding(COLS, MIRRORS, SEMANTIC.grains)).toEqual({ category: 'region', values: [{ column: '', aggregation: 'sum', metricId: REV }] });
     expect(semanticEncoding([{ name: 'd', type: 'date' }], MIRRORS, SEMANTIC.grains)).toEqual({ category: 'd', grain: 'month', values: [{ column: '', aggregation: 'sum', metricId: REV }] });
     expect(fitEncoding(ON_REV, COLS, [])).toEqual(ON_REV);
+    expect(effective(ON_REV, false).values).toEqual(ON_REV.values); // and is asked for: a mirror is no empty slot
+    expect(effective({ category: 'region', values: [{ column: '', aggregation: 'sum' }] }, false).values).toEqual([]); // NEGATIVE CONTROL: an empty slot drops
     // NEGATIVE CONTROL: a column measure the dataset lacks still falls back, as before
     expect(fitEncoding({ category: 'region', values: [{ column: 'gone', aggregation: 'sum' }] }, COLS, []).values).toEqual([{ column: 'amt', aggregation: 'sum' }]);
   });

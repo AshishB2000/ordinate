@@ -5,8 +5,8 @@
 // door refuses anything else. A pick writes what that door reads, `{ column: '', aggregation: 'sum', metricId }`.
 // Its date grains are the layer's too (./EncodingForm reads them through `layerGrains`).
 
-import { Badge } from '../../ui/Badge';
 import { Button, IconButton } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
 import { Select, type SelectOption } from '../../ui/Select';
 import { Skeleton } from '../../ui/Skeleton';
 import { isExternal, useMetricList, type MetricSummary } from '../analyses/metrics/api';
@@ -86,10 +86,9 @@ export function SemanticMeasures({ projectId, datasetId, semantic, values, onVal
               {/* A column measure from an older tab names no metric: the chart shows the layer's refusal until one is picked. */}
               <Select aria-label="Measure" size="sm" placeholder="Choose a metric" value={m.metricId ?? null} options={options} onValueChange={(id) => onValues(values.map((x, j) => (j === i ? mirrorMeasure(id) : x)))} />
             </div>
-            <span className={s.metric} title={defined}>
-              <Badge tone="accent" icon="layers">
-                {semantic.label}
-              </Badge>
+            {/* The layer's mark, not its name: the measure's own name needs the room (the open list is headed by the layer). */}
+            <span className={s.layerMark} title={defined} role="img" aria-label={defined}>
+              <Icon name="layers" size={16} />
             </span>
             <IconButton icon="x" size="sm" label="Remove measure" disabled={values.length <= 1} onClick={() => onValues(values.filter((_, j) => j !== i))} />
           </div>

@@ -233,14 +233,16 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                     <td className={s.dim}>{m.datasetName ?? '(missing dataset)'}</td>
                     {mirror ? (
                       <td className={s.def}>
-                        <span title={`${m.definitionText}: edit it there.`}>
-                          <Badge tone="accent" icon="layers">
-                            {m.definitionText}
-                          </Badge>
-                        </span>
-                        {row?.refused?.reason === 'metricMissing' && (
-                          <span className={s.status} title={row.refused.error}>
+                        {/* One badge: where it is defined, or that the layer no longer defines it (the sync kept it). */}
+                        {row?.refused?.reason === 'metricMissing' ? (
+                          <span title={row.refused.error}>
                             <Badge tone="warn" icon="alert">{`Missing in ${row.layer ?? 'its layer'}`}</Badge>
+                          </span>
+                        ) : (
+                          <span title={`${m.definitionText}: edit it there.`}>
+                            <Badge tone="accent" icon="layers">
+                              {m.definitionText}
+                            </Badge>
                           </span>
                         )}
                       </td>

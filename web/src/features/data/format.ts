@@ -72,8 +72,8 @@ export const everyWord = (every: string): string => EVERY_WORD[every as AutoRefr
  * "Data as of …": the last refresh, else the last update — and a schedule is
  * stated as a promise ("Refreshes daily · last 08:00"), as dsList.ts does.
  */
-export function freshness(d: Pick<DatasetSummary, 'lastRefreshedAt' | 'updatedAt' | 'autoRefresh' | 'originKind' | 'sourceKind' | 'mode'>): string {
-  if (d.mode === 'live') return 'Live · asked at the warehouse';
+export function freshness(d: Pick<DatasetSummary, 'lastRefreshedAt' | 'updatedAt' | 'autoRefresh' | 'originKind' | 'sourceKind' | 'mode' | 'semantic'>): string {
+  if (d.mode === 'live') return d.semantic ? `Live · asked of ${d.semantic.label}` : 'Live · asked at the warehouse';
   const when = stamp(d.lastRefreshedAt || d.updatedAt);
   if (d.autoRefresh?.every) return `Refreshes ${everyWord(d.autoRefresh.every)} · last ${when}`;
   if (d.originKind) return `Data as of ${when}`;

@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { serveRpc } from '../../test-utils';
 import { LiveNotice } from '../data/LiveMode';
+import { freshness } from '../data/format';
 import { LiveBanner, LiveOff, LiveRefusal } from './LiveOff';
 
 afterEach(() => {
@@ -67,6 +68,11 @@ describe('off screens on a semantic dataset', () => {
     mount(<>{refusal(LIVE)}{refusal(SEM)}</>);
     expect(await screen.findAllByText(/A pivot table can’t be drawn from Orders layer/)).toHaveLength(2);
     expect(await screen.findAllByRole('button', { name: 'Make a copy' })).toHaveLength(1); // NEGATIVE CONTROL: the plain Live one's
+  });
+
+  it('the Data list says who is asked', () => {
+    expect(freshness({ ...LIST[0], mode: 'live' })).toBe('Live · asked of Fake layer');
+    expect(freshness({ ...LIST[1], mode: 'live' })).toBe('Live · asked at the warehouse'); // NEGATIVE CONTROL
   });
 
   it('the gate never asks for the list itself', async () => {
