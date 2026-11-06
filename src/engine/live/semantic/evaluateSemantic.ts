@@ -34,8 +34,11 @@ import { alignRows, answerColumns } from './semanticQuery';
 
 export type SemanticStep = LiveStep | 'other' | 'seriesRanks';
 
-/** Asks the layer one question. A refusal (the reply's shape, from the one door) comes back as a value; a layer error throws. */
-export type SemanticRunner = (q: SemanticQuery, step: SemanticStep) => Promise<SemanticAnswer | LiveRefusal>;
+/**
+ * Asks the layer one question. A refusal (the reply's shape, from the one door) comes back as a value; a layer error
+ * throws. `check`, where the backend has one, says before anything is asked whether it could express the question.
+ */
+export type SemanticRunner = ((q: SemanticQuery, step: SemanticStep) => Promise<SemanticAnswer | LiveRefusal>) & { check?: (q: SemanticQuery) => LiveRefusal | null };
 
 type Rows = unknown[][];
 
@@ -188,6 +191,8 @@ export async function evaluateSemantic(ir: LiveIR, env: SemanticEnv, run: Semant
   const asIfResolved = { ...ir, filters: ir.filters.filter((f) => f.kind !== 'latest') };
   const pre = ir.kind === 'metric' ? planMetric(asIfResolved, env) : planChart(asIfResolved, env);
   if (isRefusal(pre)) return pre;
+  const unsaid = run.check?.('query' in pre ? pre.query : pre.ranks); // a filter the backend cannot express (e1)
+  if (unsaid) return unsaid;
   const lp = planLatest(ir, env);
   if (isRefusal(lp)) return lp;
   if (lp.queries.length) {
