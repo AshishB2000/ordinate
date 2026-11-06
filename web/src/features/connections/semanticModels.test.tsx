@@ -74,6 +74,14 @@ describe('a semantic layer under Connections', () => {
     expect(screen.getByRole('button', { name: /^Run/ })).toBeTruthy();
   });
 
+  it('says how many views are listed, so a scrolled panel shows there are more (c1: a real Snowflake lists many)', async () => {
+    const views = Array.from({ length: 6 }, (_v, i) => ({ name: `SALES.PUBLIC.V${i}_SV`, label: `V${i}_SV` }));
+    serve({ 'connections:list': { body: [{ ...CONN, connectorId: 'snowflake' }] }, 'connection:semanticModels': { body: { ok: true, models: views } } });
+    renderApp(`/connections/${PID}/${CID}`);
+    const region = await screen.findByRole('region', { name: 'Semantic views' }, LAZY);
+    expect(await within(region).findByText('6 listed')).toBeTruthy();
+  });
+
   it('a listing that fails says why and retries', async () => {
     let fail = true;
     serve({ 'connection:semanticModels': () => ({ body: fail ? { ok: false, error: 'Fake layer didn’t answer, so nothing changed. The details are in the server log.' } : MODELS }) });

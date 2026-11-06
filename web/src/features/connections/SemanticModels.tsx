@@ -76,9 +76,13 @@ export function SemanticModels({ projectId, connId, views, fill }: {
   return (
     <section className={[s.panel, fill && s.fill].filter(Boolean).join(' ')} aria-labelledby={`models-${connId}`}>
       <header className={s.head}>
-        <h2 className={s.title} id={`models-${connId}`}>
-          {noun}
-        </h2>
+        <div className={s.titleRow}>
+          <h2 className={s.title} id={`models-${connId}`}>
+            {noun}
+          </h2>
+          {/* The panel scrolls above the SQL editor: the count says when more are listed than show. */}
+          {!!q.data?.length && <span className={s.count}>{`${q.data.length} listed`}</span>}
+        </div>
         <p className={s.lead}>Each becomes a Live dataset: its fields are the dimensions, its measures the layer’s own metrics, computed there on every question.</p>
       </header>
       {body}

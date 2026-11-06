@@ -217,11 +217,13 @@ async function listingSection(): Promise<void> {
     ] },
     { name: 'SALES.PUBLIC.CUSTOMERS_SV', table: 't', columns: [], metrics: {} },
     { name: 'SALES.PUBLIC.bad name', table: 't', columns: [], metrics: {} },
+    { name: 'SALES.DEV.ORDERS_SV', table: 't', columns: [], metrics: {} },
   ];
   fake.answer = semAnswer(views);
   const listed = await layer.listModels(CTX());
-  ok('SHOW SEMANTIC VIEWS IN DATABASE (the session\'s: no name interpolated) lists DATABASE.SCHEMA.VIEW names, labelled by the view',
-    listed.ok && show(listed.models) === show([{ name: 'SALES.PUBLIC.ORDERS_SV', label: 'ORDERS_SV', description: 'Every order' }, { name: 'SALES.PUBLIC.CUSTOMERS_SV', label: 'CUSTOMERS_SV' }])
+  ok('SHOW SEMANTIC VIEWS IN DATABASE (the session\'s: no name interpolated) lists DATABASE.SCHEMA.VIEW names, labelled by the view (with its schema where two share a name)',
+    listed.ok && show(listed.models) === show([{ name: 'SALES.PUBLIC.ORDERS_SV', label: 'PUBLIC.ORDERS_SV', description: 'Every order' }, { name: 'SALES.PUBLIC.CUSTOMERS_SV', label: 'CUSTOMERS_SV' },
+      { name: 'SALES.DEV.ORDERS_SV', label: 'DEV.ORDERS_SV' }])
       && fake.statements().at(-1) === 'SHOW SEMANTIC VIEWS IN DATABASE LIMIT 1000', show([listed, fake.statements()]));
   ok('…a view whose name is not plain identifiers is not listed (it could not be quoted safely)', listed.ok && !listed.models.some((m) => m.name.includes('bad')));
   await layer.listModels(CTX({ database: '' }));

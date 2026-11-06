@@ -63,9 +63,14 @@ function records(r: ConnectorRows): Array<Record<string, string>> {
 async function listModels(io: SnowflakeIo, ctx: ConnectorContext): Promise<Awaited<ReturnType<ConnectorSemantic['listModels']>>> {
   const r = await io.catalog(ctx, `SHOW SEMANTIC VIEWS IN ${str(ctx, 'database') ? 'DATABASE' : 'ACCOUNT'} LIMIT 1000`);
   if (!r.ok) return r;
-  const models = records(r)
-    .filter((v) => [v.database_name, v.schema_name, v.name].every((p) => IDENT_RE.test(p)))
-    .map((v) => ({ name: `${v.database_name}.${v.schema_name}.${v.name}`, label: v.name, ...(v.comment ? { description: v.comment } : {}) }));
+  const views = records(r).filter((v) => [v.database_name, v.schema_name, v.name].every((p) => IDENT_RE.test(p)));
+  const parts = views.map((v) => [v.database_name, v.schema_name, v.name]);
+  // The view's name, or as much of SCHEMA.VIEW / DATABASE.SCHEMA.VIEW as tells two of the same name apart.
+  const label = (p: string[]): string => {
+    for (let n = 1; n < 3; n++) if (parts.filter((q) => q.slice(-n).join('.') === p.slice(-n).join('.')).length === 1) return p.slice(-n).join('.');
+    return p.join('.');
+  };
+  const models = views.map((v, i) => ({ name: parts[i].join('.'), label: label(parts[i]), ...(v.comment ? { description: v.comment } : {}) }));
   return { ok: true, models };
 }
 
