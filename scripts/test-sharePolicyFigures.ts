@@ -39,7 +39,6 @@ const pub: typeof import('../src/publish/publish') = require('../src/publish/pub
 const embedPage: typeof import('../src/publish/embedPage') = require('../src/publish/embedPage');
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const format: typeof import('../src/app/format') = require('../src/app/format');
-const { todayIso }: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 const HIDDEN: string = require('../src/app/sharePolicy').HIDDEN_BY_POLICY;
 
 const DEV: B.Identity = { user: { email: 'dev@local', role: 'admin' }, org: { id: 'default' } };
@@ -48,12 +47,16 @@ function dataBlock(html: string): any { // any: the page's JSON, read field by f
   const m = /<script type="application\/json" id="ordinate-page">([\s\S]*?)<\/script>/.exec(html);
   return m ? JSON.parse(m[1]) : null;
 }
-/** What differs run to run — ids, times, today's date — taken out, then hashed. */
+/**
+ * What differs run to run — ids, times, the day — taken out, then hashed. A send is dated with the day it is
+ * composed (subscription:preview's subtitle), so any "Nov 6, 2026" goes: two renders either side of midnight are
+ * the same message. (Matching only the day the pin runs on failed when the renders straddled midnight.)
+ */
 const pin = (v: unknown): string => crypto.createHash('sha256').update(JSON.stringify(v)
   .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'U')
   .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'T')
   .replace(/[A-Z][a-z]{2} \d{1,2}, \d{4},? \d{1,2}:\d{2} [AP]M UTC/g, 'A')
-  .split(todayIso()).join('D').split(format.formatDate(todayIso())).join('D'), 'utf8').digest('hex');
+  .replace(/[A-Z][a-z]{2} \d{1,2}, \d{4}/g, 'D'), 'utf8').digest('hex');
 
 // Ops and Lab, January to June 2025. Salaries 9xx37 (Ops) and 9xx89 (Lab): a month's payroll is 18xx26, nobody else's
 // figure has those digits. Hours 12x3 nobody marks.
