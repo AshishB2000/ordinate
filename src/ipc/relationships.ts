@@ -166,11 +166,6 @@ async function metricJoin(projectId: string, datasetId: string, column: string, 
   return planned ? { infos, planned } : null;
 }
 
-/** The dataset a metric's bare column is read from, as joinedMetricFor reads it (planMetricJoin's owner): its own, else the nearest related one that has it. */
-export async function metricColumnOwner(projectId: string, datasetId: string, column: string): Promise<string> {
-  return (await columnOwner(projectId, datasetId, column)) || datasetId;
-}
-
 /** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
 export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
   const fanned = await fanOutMetricReads(projectId, datasetId, column, filters); // a many-side column: its table's KPI (./metricFanOut)

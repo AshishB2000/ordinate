@@ -17,7 +17,7 @@ import { projectModel } from '../ipc/relationships';
 import { kpiMeasure } from './publishMessages';
 
 /** The table a KPI's bare column is on, as its door reads it (ipc/metricFanOut): its own, a forward join's, its one many side's; null when two many sides have it. */
-async function tableOf(projectId: string, datasetId: string, column: string): Promise<string | null> {
+export async function tableOf(projectId: string, datasetId: string, column: string): Promise<string | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || meta.columns.some((c) => c.name === column)) return datasetId;
   const { rels, infos } = await projectModel(projectId, datasetId);
