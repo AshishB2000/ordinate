@@ -42,12 +42,13 @@ export const show = (v: unknown): string => String(JSON.stringify(v)).slice(0, 4
 /** A fixed id, so the pins hold run to run. */
 export const U = (i: number): string => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
 
-/** What differs run to run — ids, times, today's date — taken out, then hashed. */
-export const pin = (v: unknown): string => crypto.createHash('sha256').update(JSON.stringify(v)
+/** The day the bench started: a send is dated the day it is composed, so a render before midnight and its twin after it pin the same. */
+const DAY0 = todayIso();
+/** What differs run to run — ids, times, the day (the bench's first and today's) — taken out, then hashed. */
+export const pin = (v: unknown): string => crypto.createHash('sha256').update([DAY0, todayIso()].reduce((s, day) => s.split(day).join('D').split(format.formatDate(day)).join('D'), JSON.stringify(v)
   .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'U')
   .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'T')
-  .replace(/[A-Z][a-z]{2} \d{1,2}, \d{4},? \d{1,2}:\d{2} [AP]M UTC/g, 'A')
-  .split(todayIso()).join('D').split(format.formatDate(todayIso())).join('D'), 'utf8').digest('hex');
+  .replace(/[A-Z][a-z]{2} \d{1,2}, \d{4},? \d{1,2}:\d{2} [AP]M UTC/g, 'A')), 'utf8').digest('hex');
 
 function dataBlock(html: string): any { // any: the page's JSON, read field by field
   const m = /<script type="application\/json" id="ordinate-page">([\s\S]*?)<\/script>/.exec(html);
