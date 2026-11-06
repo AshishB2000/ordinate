@@ -1,18 +1,19 @@
 // The dbt import of part 5's shapes (semantic layer part 7, f2; docs/semantic-layer/07-portability.md D10,
 // 05-metrics-depth.md D8–D9), over scripts/fixtures/dbt-part5/ (README.md says what MetricFlow does, from dbt's docs).
 //
-// § cumulative  cumulativeWindow and translateDbt: a rolling window in days or weeks becomes `last N days`, a month,
-//               quarter or year to date becomes `to_date` while the calendar is dbt's, over the unfiltered simple
-//               metric on the same measure; every other cumulative shape is skipped with its reason, and so are
-//               conversions, time offsets and window groupings.
-// § route       model:importPlan and model:importApply: the windows are new, the plan carries the notes, the editor's own
-//               save takes every one; a calendar changed between the dry run and the apply is refused, and under a
-//               fiscal year from April a year to date is skipped while a 7-day window is not.
-// § figures     every imported window over the seed, at every day and every week, month, quarter and year ended by
-//               today (2024-07-01), equals expected.json (Object.is). A period whose last window holds no row has no
-//               figure here, where MetricFlow repeats its last day with one (README): held to null, and shown to happen.
-// § controls    NEGATIVE CONTROLS, each skip load-bearing: period_agg first, a 1-month window, a year compare and a funnel
-//               each give another figure than MetricFlow's.
+// § cumulative  cumulativeWindow reads dbt's window as the Ordinate window that sums the same rows each day (N days or
+//               weeks as `last N days`, a month, quarter or year to date on dbt's calendar). translateDbt still imports
+//               no cumulative metric: none matches dbt at every period. `period_agg: last` reads a period at its last day
+//               whose window holds rows, Ordinate at the period's last day (no figure when that window is empty), so it
+//               is skipped `period_agg_last`; `first` and `average` read it otherwise (`period_agg`). Every other shape
+//               is skipped for its own reason, and so are conversions, time offsets and window groupings.
+// § route       model:importPlan and model:importApply: each one listed with its reason, the bases imported, a re-import
+//               writes nothing; the calendar picks the reason and so moves the hash, and a stale apply is refused.
+// § figures     NEGATIVE CONTROL for period_agg_last: the period metric the import would write for each window equals
+//               expected.json on every day (Object.is), and at every ended week, month, quarter and year except exactly
+//               the 14 whose last window holds no row, where it has no figure and MetricFlow an earlier day's.
+// § controls    NEGATIVE CONTROLS, each skip load-bearing: period_agg first and average, a 1-month window, a count's
+//               window, a year compare and a funnel each give another figure than MetricFlow's.
 // § old imports f1's translation is byte-identical outside the four kinds (its golden, sha256-pinned).
 //
 //   npm run build:ts && node scripts/test-dbtPart5.js
@@ -68,31 +69,20 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('under April and 4-4-5, month to date (April) and last 7 days still map', 'window' in W(ctp({ grain_to_date: 'month' }), APR) && 'window' in W(ctp({ window: { count: 7, granularity: 'day' } }), R445));
   ok('a Sunday week and an explicit Gregorian calendar change nothing else', 'window' in W(ctp({ grain_to_date: 'year' }), SUN) && 'window' in W(ctp({ grain_to_date: 'year' }), { ...DEFAULT_CALENDAR, calendarType: 'gregorian' }));
 
-  const { model, skipped, notes } = translateDbt(P5, P5_DATASETS, {}, DEFAULT_CALENDAR);
+  const { model, skipped } = translateDbt(P5, P5_DATASETS, {}, DEFAULT_CALENDAR);
   const m = (n: string): ModelMetric => metricNamed(model, n);
-  ok('a window over the simple metric on its measure', isDeepStrictEqual(m('revenue_7d')?.definition, { base: m('revenue')?.id, window: { last: 7, unit: 'day' } }), show(m('revenue_7d')));
-  ok('… on the base\'s dataset', !!m('revenue_7d') && m('revenue_7d').dataset === m('revenue').dataset);
-  ok('weeks become days', isDeepStrictEqual(m('revenue_2w')?.definition, { base: m('revenue')?.id, window: { last: 14, unit: 'day' } }));
-  ok('to date', ['month', 'quarter', 'year'].every((g) => isDeepStrictEqual(m(`revenue_${g[0]}td`)?.definition, { base: m('revenue')?.id, window: { to_date: g } })));
-  ok('a period metric stores no timeColumn and takes its base\'s format', !!m('revenue_7d') && m('revenue_7d').timeColumn === undefined && isDeepStrictEqual(m('revenue_7d').format, m('revenue').format));
-  ok('its own filter becomes its filters, over the unfiltered base', isDeepStrictEqual(m('eu_revenue_7d')?.filters, [{ type: 'filter', column: 'region', op: '=', value: 'EU' }]) && (m('eu_revenue_7d')?.definition as { base: string })?.base === m('revenue')?.id, show(m('eu_revenue_7d')));
-  ok('an unfiltered window carries no filters key', !!m('revenue_7d') && !('filters' in m('revenue_7d')));
-  ok('importedFrom carries the dbt name', isDeepStrictEqual(m('revenue_ytd')?.importedFrom, { kind: 'dbt', name: 'revenue_ytd' }));
-  ok('a derived metric over two windows becomes f1\'s formula, counting by their base\'s date (as the editor\'s save gives it)', (m('eu_share_7d')?.definition as { formula?: string })?.formula === '([eu_revenue_7d] / [revenue_7d])' && m('eu_share_7d')?.timeColumn === 'order_date', show(m('eu_share_7d')));
+  const WINDOWS = ['revenue_7d', 'revenue_2w', 'revenue_mtd', 'revenue_qtd', 'revenue_ytd', 'eu_revenue_7d'];
   const SKIPS: Array<[string, string]> = [
-    ['revenue_wtd', 'calendar_differs'], ['revenue_7d_first', 'period_agg'], ['revenue_all_time', 'all_time'], ['revenue_rolling_month', 'window_unit'],
-    ['revenue_7d_filled', 'fill_nulls'], ['refunds_7d', 'no_base_metric'], ['mrr_7d', 'cumulative'], ['orders_7d', 'count_window'], ['aov_7d', 'count_window'], ['visit_to_buy', 'conversion'], ['revenue_ly', 'time_offset'],
+    ...WINDOWS.map((n): [string, string] => [n, 'period_agg_last']), ['eu_share_7d', 'period_agg_last'],
+    ['revenue_wtd', 'calendar_differs'], ['revenue_7d_first', 'period_agg'], ['revenue_7d_average', 'period_agg'], ['revenue_all_time', 'all_time'], ['revenue_rolling_month', 'window_unit'],
+    ['revenue_7d_filled', 'fill_nulls'], ['refunds_7d', 'no_base_metric'], ['mrr_7d', 'cumulative'], ['orders_7d', 'count_window'], ['aov_7d', 'period_agg_last'], ['visit_to_buy', 'conversion'], ['revenue_ly', 'time_offset'],
     ['revenue_yoy_change', 'time_offset'], ['revenue_yoy_growth', 'time_offset'], ['mrr', 'window_groupings'], ['mrr_two', 'window_groupings'], ['mrr_first', 'window_groupings'],
   ];
   for (const [name, why] of SKIPS) ok(`${name}: skipped, ${why} (RF 1, 2, 5)`, skipped.some((s) => s.name === name && s.kind === 'metric' && s.reason === why) && !m(name), show(skipped.filter((s) => s.name === name)));
   ok('every metric is translated or named, never both', allMetricNames(P5).every((n) => !!m(n) !== skipped.some((s) => s.name === n && s.kind === 'metric')));
-  ok('six windows, a formula and three bases', model.metrics.length === 10, show(model.metrics.map((x) => x.name)));
-  ok('a formula over a count window falls with it', skipped.some((s) => s.name === 'aov_7d' && s.because === 'orders_7d'));
-  ok('notes', isDeepStrictEqual(notes, ['follows_calendar', 'in_progress']), show(notes));
-  ok('… on the model\'s dbt source too, for the plan', isDeepStrictEqual(model.dbt?.notes, ['follows_calendar', 'in_progress']));
-  ok('windows only, no to-date: no follows_calendar', isDeepStrictEqual(translateDbt(P5, P5_DATASETS, {}, { ...DEFAULT_CALENDAR, calendarType: '445' }).notes, ['in_progress']));
-  const noWindow = translateDbt(dropFourKinds(F1_MANIFEST), F1_DATASETS, {}, DEFAULT_CALENDAR);
-  ok('no window metric, no notes, and no notes key on the source', noWindow.notes.length === 0 && !!noWindow.model.dbt && !('notes' in noWindow.model.dbt));
+  ok('no cumulative metric is imported: only the three bases', isDeepStrictEqual(model.metrics.map((x) => x.name).sort(), ['orders', 'refunds_card', 'revenue']), show(model.metrics.map((x) => x.name)));
+  ok('a formula over windows falls with its first input', skipped.some((s) => s.name === 'eu_share_7d' && s.because === 'eu_revenue_7d') && skipped.some((s) => s.name === 'aov_7d' && s.because === 'revenue_7d'));
+  ok('under 4-4-5, every to-date is calendar_differs and a 7-day window still period_agg_last', ['revenue_mtd', 'revenue_qtd', 'revenue_ytd'].every((n) => translateDbt(P5, P5_DATASETS, {}, R445).skipped.some((s) => s.name === n && s.reason === 'calendar_differs')) && translateDbt(P5, P5_DATASETS, {}, R445).skipped.some((s) => s.name === 'revenue_7d' && s.reason === 'period_agg_last'));
   const noBase = JSON.parse(JSON.stringify(P5));
   noBase.metrics = noBase.metrics.filter((x: { name: string }) => x.name !== 'revenue');
   ok('with its base gone, a window is no_base_metric', translateDbt(noBase, P5_DATASETS, {}, DEFAULT_CALENDAR).skipped.some((s) => s.name === 'revenue_7d' && s.reason === 'no_base_metric'));
@@ -107,7 +97,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const noMeasure = JSON.parse(JSON.stringify(P5));
   noMeasure.metrics.find((x: { name: string }) => x.name === 'revenue_7d').type_params.measure = null; // dbt's newer spec names input_metric; its manifest is not in the docs
   ok('no measure input (the newer spec): unreadable', translateDbt(noMeasure, P5_DATASETS, {}, DEFAULT_CALENDAR).skipped.some((s) => s.name === 'revenue_7d' && s.reason === 'unreadable'));
-  ok('translating twice is the same', JSON.stringify(translateDbt(P5, P5_DATASETS, {}, DEFAULT_CALENDAR)) === JSON.stringify({ model, skipped, notes }));
+  ok('translating twice is the same', JSON.stringify(translateDbt(P5, P5_DATASETS, {}, DEFAULT_CALENDAR)) === JSON.stringify({ model, skipped }));
 
   // ── § route ────────────────────────────────────────────────────────────────
   const seedProject = async (name: string, only?: Array<keyof typeof P5_COLUMNS>): Promise<{ P: string; ds: Record<string, string> }> => H.as(H.ORG_A, async () => {
@@ -125,6 +115,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const applyOf = async (P: string, planHash: string): Promise<Reply> => (await post('model:importApply', { projectId: P, fileToken: await uploadJson(P5), planHash })).value;
   const fileId = (dbt: string): string | undefined => model.metrics.find((x) => x.importedFrom?.name === dbt)?.id;
   const itemFor = (plan: Reply, dbt: string): Reply | undefined => plan.plan?.items.find((i: Reply) => i.key === `metric:${fileId(dbt)}` || i.key === `metric:dbt:${dbt}`);
+  const BECAUSE: Record<string, string> = { eu_share_7d: 'eu_revenue_7d', aov_7d: 'revenue_7d' }; // a formula falls with its input, listed under it
   const stored = async (P: string) => H.as(H.ORG_A, async () => {
     const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
     return Promise.all((await metricsMod.listMetrics(P)).map((x) => metricsMod.getMetric(P, x.id)));
@@ -133,18 +124,17 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const S = await seedProject('dbt part 5');
   const plan = await planOf(S.P);
   ok('the dry run answers', plan.ok === true, show(plan));
-  ok('every window and formula is new (the editor\'s own checks passed)', model.metrics.every((x) => itemFor(plan, x.importedFrom?.name as string)?.status === 'new'), show(plan.plan?.items.filter((i: Reply) => i.kind === 'metric' && i.status !== 'new' && i.status !== 'skipped')));
-  ok('the notes are on the plan', isDeepStrictEqual(plan.plan?.source?.notes, ['follows_calendar', 'in_progress']), show(plan.plan?.source));
-  const planReason = (n: string, why: string): string => (n === 'aov_7d' ? 'depends_on_skipped' : why); // it falls with orders_7d, listed under it
+  ok('the bases are new (the editor\'s own checks passed)', model.metrics.every((x) => itemFor(plan, x.importedFrom?.name as string)?.status === 'new'), show(plan.plan?.items.filter((i: Reply) => i.kind === 'metric' && i.status !== 'new' && i.status !== 'skipped')));
+  const planReason = (n: string, why: string): string => (BECAUSE[n] ? 'depends_on_skipped' : why);
   ok('each skip is listed with its reason', SKIPS.every(([n, why]) => itemFor(plan, n)?.status === 'skipped' && itemFor(plan, n)?.reason === planReason(n, why)), show(SKIPS.map(([n]) => itemFor(plan, n)).filter((i) => i?.status !== 'skipped' || i.reason !== planReason(i.name, SKIPS.find(([x]) => x === i.name)?.[1] ?? ''))));
-  ok('… a formula over a count window under that window', itemFor(plan, 'aov_7d')?.because === 'metric:dbt:orders_7d');
+  ok('… a formula over a window under that window', Object.entries(BECAUSE).every(([n, input]) => itemFor(plan, n)?.because === `metric:dbt:${input}`));
   const done = await applyOf(S.P, plan.plan.hash);
   ok('the apply writes every one and fails none', done.ok === true && done.failed.length === 0 && done.written.length === plan.plan.counts.new + plan.plan.counts.updated, show(done));
   const again = await planOf(S.P);
   ok('a re-import writes nothing', again.plan.counts.new + again.plan.counts.updated + again.plan.counts.renamed + again.plan.counts.conflict === 0, show(again.plan.items.filter((i: Reply) => i.status !== 'unchanged' && i.status !== 'skipped')));
   const after = await stored(S.P);
   const idOf = (name: string): string => (after.find((x) => x?.name === name) as { id: string }).id;
-  ok('a window is stored on its base, with dbt\'s name', isDeepStrictEqual(after.find((x) => x?.name === 'revenue_7d')?.definition, { base: idOf('revenue'), window: { last: 7, unit: 'day' } }) && after.find((x) => x?.name === 'revenue_7d')?.importedFrom?.name === 'revenue_7d');
+  ok('no window is stored', !after.some((x) => x?.importedFrom && WINDOWS.includes(x.importedFrom.name)));
 
   // The calendar decides, and moves the hash (RF 3).
   const S2 = await seedProject('dbt part 5, calendar', ['orders']);
@@ -154,20 +144,31 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const late = await applyOf(S2.P, before.plan.hash);
   ok('a calendar change between the dry run and the apply is refused', late.ok === false && late.error === modelPlanChanged(), show(late));
   const fiscal = await planOf(S2.P);
-  ok('under April, a year or quarter to date is skipped, and a month to date and a 7-day window are not', ['revenue_ytd', 'revenue_qtd'].every((n) => itemFor(fiscal, n)?.reason === 'calendar_differs') && ['revenue_mtd', 'revenue_7d'].every((n) => itemFor(fiscal, n)?.status === 'new'), show(['revenue_ytd', 'revenue_mtd'].map((n) => itemFor(fiscal, n))));
+  ok('under April, a year or quarter to date is calendar_differs, a month to date and a 7-day window period_agg_last', ['revenue_ytd', 'revenue_qtd'].every((n) => itemFor(fiscal, n)?.reason === 'calendar_differs') && ['revenue_mtd', 'revenue_7d'].every((n) => itemFor(fiscal, n)?.reason === 'period_agg_last'), show(['revenue_ytd', 'revenue_mtd'].map((n) => itemFor(fiscal, n))));
   await setFy(1);
-  ok('NEGATIVE CONTROL: back on January, the year to date is new again', itemFor(await planOf(S2.P), 'revenue_ytd')?.status === 'new');
+  ok('NEGATIVE CONTROL: back on January, the year to date is period_agg_last again', itemFor(await planOf(S2.P), 'revenue_ytd')?.reason === 'period_agg_last');
 
-  // ── § figures ──────────────────────────────────────────────────────────────
-  const EXPECTED: { byDay: Record<string, Record<string, number>>; byPeriod: Array<[string, string, string, number]>; controls: { revenue_7d_first: Record<string, number>; revenue_rolling_month: Record<string, number>; revenue_ly: Record<string, number>; visit_to_buy: number } } = JSON.parse(fs.readFileSync(path.join(P5_DIR, 'expected.json'), 'utf8'));
+  // ── § figures: the period metric the import would write, held to MetricFlow (period_agg_last's control) ──
+  const EXPECTED: { byDay: Record<string, Record<string, number>>; byPeriod: Array<[string, string, string, number]>; controls: { revenue_7d_first: Record<string, number>; revenue_7d_average: Record<string, number>; revenue_rolling_month: Record<string, number>; revenue_ly: Record<string, number>; visit_to_buy: number } } = JSON.parse(fs.readFileSync(path.join(P5_DIR, 'expected.json'), 'utf8'));
   const PINNED = new Set<string>(); // float differences in the last bits, each by name: none on this seed (whole-unit amounts)
-  const HELD = ['revenue_7d', 'revenue_2w', 'revenue_mtd', 'revenue_qtd', 'revenue_ytd', 'eu_revenue_7d', 'eu_share_7d'];
-  ok('every imported window and formula is held to a figure', model.metrics.filter((x) => x.importedFrom && !['revenue', 'orders', 'refunds_card'].includes(x.name)).every((x) => HELD.includes(x.name) && !!EXPECTED.byDay[x.name]));
+  const hand = async (name: string, definition: object, datasetId = S.ds.orders, filters?: unknown[]): Promise<string> => {
+    const r = (await post('metric:save', { projectId: S.P, input: { name, datasetId, definition, ...(filters && { filters }) } })).value;
+    if (r.ok !== true) throw new Error(`${name}: ${show(r)}`);
+    return r.metric.id as string;
+  };
+  const handIds = new Map<string, string>();
+  for (const n of WINDOWS) {
+    const dbt = (P5.metrics as Array<{ name: string; type_params: unknown }>).find((x) => x.name === n) as { type_params: unknown };
+    const w = cumulativeWindow(dbt.type_params, DEFAULT_CALENDAR);
+    if (!('window' in w)) throw new Error(`${n}: ${show(w)}`);
+    handIds.set(n, await hand(`${n} by hand`, { base: idOf('revenue'), window: w.window }, S.ds.orders, n === 'eu_revenue_7d' ? [{ type: 'filter', column: 'region', op: '=', value: 'EU' }] : undefined));
+  }
+  const HELD = WINDOWS;
   const DAY = 86_400_000;
   const iso = (t: number): string => new Date(t).toISOString().slice(0, 10);
   const at = (d: string): number => Date.parse(`${d}T00:00:00Z`);
   const tiles = async (names: string[], from: string, to: string): Promise<Map<string, number | null>> => {
-    const r = await post('metric:values', { projectId: S.P, ids: names.map(idOf), filters: [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from, to } }] });
+    const r = await post('metric:values', { projectId: S.P, ids: names.map((n) => handIds.get(n) as string), filters: [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from, to } }] });
     const list = r.value as unknown as Reply[];
     if (!Array.isArray(list) || list.some((x) => x.ok !== true)) throw new Error(`metric:values ${from}..${to}: ${show(r.value)}`);
     return new Map(names.map((n, i) => [n, (list[i].value ?? null) as number | null]));
@@ -182,7 +183,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
       if (!Object.is(got.get(n), EXPECTED.byDay[n][d] ?? null) && !PINNED.has(`${n}:${d}`)) dayMiss.push(`${n} ${d}: ${got.get(n)} vs ${EXPECTED.byDay[n][d] ?? null}`);
     }
   }
-  ok(`every window on every day equals MetricFlow, a day it leaves out has no figure (${days} figures)`, dayMiss.length === 0 && days === HELD.length * 547, show(dayMiss.slice(0, 12)));
+  ok(`each window, by day, sums dbt's rows: equal to MetricFlow on every day, no figure on a day it leaves out (${days} figures)`, dayMiss.length === 0 && days === HELD.length * 547, show(dayMiss.slice(0, 12)));
 
   const periodsOf = (grain: string): Array<[string, string]> => {
     const out: Array<[string, string]> = [];
@@ -197,7 +198,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   };
   const mfPeriod = new Map(EXPECTED.byPeriod.map(([n, g, s0, v]) => [`${n}:${g}:${s0}`, v]));
   const periodMiss: string[] = [];
-  let empty = 0;
+  const parted: string[] = [];
   let periods = 0;
   for (const grain of ['week', 'month', 'quarter', 'year']) {
     for (const [from, to] of periodsOf(grain)) {
@@ -205,15 +206,15 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
       for (const n of HELD) {
         periods += 1;
         const mf = mfPeriod.get(`${n}:${grain}:${from}`) ?? null;
+        if (Object.is(got.get(n), mf) || PINNED.has(`${n}:${grain}:${from}`)) continue;
         const lastEmpty = EXPECTED.byDay[n][to] === undefined; // the window ending on the period's last day holds no row
-        if (lastEmpty && mf !== null) empty += 1;
-        const fine = lastEmpty ? got.get(n) === null : Object.is(got.get(n), mf) || PINNED.has(`${n}:${grain}:${from}`);
-        if (!fine) periodMiss.push(`${n} ${grain} ${from}: ${got.get(n)} vs ${mf}`);
+        if (lastEmpty && got.get(n) === null && mf !== null) parted.push(`${n} ${grain} ${from}`);
+        else periodMiss.push(`${n} ${grain} ${from}: ${got.get(n)} vs ${mf}`);
       }
     }
   }
-  ok(`every window at every ended week, month, quarter and year equals MetricFlow, or has no figure where its last window holds no row (${periods} figures)`, periodMiss.length === 0 && periods > 600, show(periodMiss.slice(0, 12)));
-  ok('NEGATIVE CONTROL: the seed has periods whose last window holds no row while MetricFlow repeats an earlier day (the note is load-bearing)', empty === 20, String(empty));
+  ok(`at every ended week, month, quarter and year it equals MetricFlow but where its last window holds no row (${periods} figures)`, periodMiss.length === 0 && periods > 500, show(periodMiss.slice(0, 12)));
+  ok('NEGATIVE CONTROL: there it has no figure and MetricFlow an earlier day\'s, at 14 periods: period_agg_last is load-bearing', parted.length === 14, show(parted));
 
   // ── § controls: each skip is load-bearing ──────────────────────────────────
   const someDiffers = async (pairs: Record<string, number>, get: (k: string) => Promise<number | null>): Promise<boolean> => {
@@ -224,14 +225,10 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
     return false;
   };
   const monthRange = (mo: string): [string, string] => { const s0 = `${mo}-01`; const x = new Date(at(s0)); x.setUTCMonth(x.getUTCMonth() + 1); return [s0, iso(x.getTime() - DAY)]; };
-  const hand = async (name: string, definition: object, datasetId = S.ds.orders): Promise<string> => {
-    const r = (await post('metric:save', { projectId: S.P, input: { name, datasetId, definition } })).value;
-    if (r.ok !== true) throw new Error(`${name}: ${show(r)}`);
-    return r.metric.id as string;
-  };
   const tile = async (id: string, from: string, to: string, column = 'order_date'): Promise<number | null> =>
     ((await post('metric:values', { projectId: S.P, ids: [id], filters: [{ type: 'filter', column, op: 'period', period: { preset: 'custom', from, to } }] })).value as unknown as Reply[])[0]?.value ?? null;
-  ok('period_agg first: Ordinate\'s end-of-month window differs from dbt\'s first day (RF 1)', await someDiffers(EXPECTED.controls.revenue_7d_first, (mo) => tile(idOf('revenue_7d'), ...monthRange(mo))));
+  ok('period_agg first: Ordinate\'s end-of-month window differs from dbt\'s first day (RF 1)', await someDiffers(EXPECTED.controls.revenue_7d_first, (mo) => tile(handIds.get('revenue_7d') as string, ...monthRange(mo))));
+  ok('period_agg average: and from dbt\'s average of the days', await someDiffers(EXPECTED.controls.revenue_7d_average, (mo) => tile(handIds.get('revenue_7d') as string, ...monthRange(mo))));
   const lastMonth = await hand('last 1 month', { base: idOf('revenue'), window: { last: 1, unit: 'month' } });
   ok('a 1-month window differs from dbt\'s rolling month (RF 2)', await someDiffers(EXPECTED.controls.revenue_rolling_month, (d) => tile(lastMonth, d, d)));
   const prior = await hand('LY prior', { base: idOf('revenue'), compare: { vs: 'previous_year', show: 'prior' } });

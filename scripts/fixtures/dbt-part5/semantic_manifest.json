@@ -1013,6 +1013,51 @@
       "time_granularity": null
     },
     {
+      "name": "revenue_7d_average",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "average"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
       "name": "revenue_all_time",
       "description": null,
       "type": "cumulative",

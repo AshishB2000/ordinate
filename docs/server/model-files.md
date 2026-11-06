@@ -137,19 +137,13 @@ semantic model is. Datasets are never created.
 | `non_additive_dimension` with no `window_groupings` | a snapshot: the last day for `max`, the first for `min` |
 | Filters: `{{ Dimension('<entity>__<dimension>') }}` with `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`, `IS [NOT] NULL`, joined by `AND` | filter steps; `!=` and `NOT IN` also leave out an empty cell, as SQL leaves out NULL |
 | Ratio; derived (`+ − × ÷`, brackets, numbers) over metrics on one semantic model | a formula metric (`[Revenue] / [Orders]`) |
-| Cumulative, `window: N days` (N ≤ 366) or `N weeks` (N ≤ 52), `period_agg: last` | a period metric, `last N days` (weeks as 7N days, never calendar weeks), over the unfiltered simple metric on the same measure; its filters become the period metric's |
-| Cumulative, `grain_to_date: month`, `quarter` or `year`, `period_agg: last` | `month`, `quarter` or `year` to date, while the workspace's calendar is dbt's: Gregorian, and for a quarter or year the year from January |
 
 A metric's name is its `label`, else its dbt name. Each carries where it came from, so importing the file again
 updates it, even after a rename here (the dry run shows the rename back). An import changes only what dbt says:
 a table's role, grain, description and guide, a field's other names and value labels, and a metric's format,
 direction and target stay this project's.
 
-**Skipped, each named with why**, never approximated: a cumulative metric that is not one of the two rows above (no
-window and no grain; `period_agg` `first`, dbt's default, or `average`; a window in months, quarters, years or
-hours, or a custom grain; a week to date, as dbt's week is its warehouse's; a to-date on another calendar;
-`fill_nulls_with`; no unfiltered simple metric with a date on its measure; over a balance; over a count, which is 0
-here where dbt has no figure); conversion metrics (dbt pairs each conversion with the closest base event and counts
+**Skipped, each named with why**, never approximated: every cumulative metric (below); conversion metrics (dbt pairs each conversion with the closest base event and counts
 conversions, Ordinate's funnel counts people from their first); a derived input with `offset_window` or
 `offset_to_grain` (dbt shifts each day, then adds the days up); inputs on more than one semantic model;
 `window_groupings` (how dbt groups it by other fields is not documented); `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
@@ -160,12 +154,16 @@ ratio or derived metric whose input was skipped, listed under that input. Foreig
 upload reads at most 500 semantic models and 2,000 metrics. dbt import is in the app only: MCP's `import_model`
 takes model files.
 
-**Imported windows and dbt.** A window metric matches dbt on every day, and on every week, month, quarter and
-year that has ended with rows in its last window. dbt reads a period at its last day whose window holds rows, so
-where a period's last window holds none (orders that stopped mid-month, a Sunday with no order), Ordinate shows no
-figure and dbt repeats its last day with rows. For the period in progress Ordinate counts up to today, and a "last N
-days" window up to yesterday. A to-date follows the workspace's calendar from the import on: change the calendar
-and it moves away from dbt, as every period metric moves. The dry run says both under Datasets.
+**Cumulative metrics.** A day's window in dbt (`N days`, `N weeks` as 7N days, or a month, quarter or year to
+date) sums the same rows as Ordinate's "last N days" or "to date" ending that day. But dbt reads a week, month,
+quarter or year through `period_agg`, and none of its three readings is Ordinate's: `last` takes the period's last
+day whose window holds rows, where Ordinate takes the period's last day and shows no figure when that window is
+empty (orders that stopped mid-month, a Sunday with no order); `first`, the default, and `average` read the period
+otherwise. So none is imported, and each is named with the first thing in the way: no window and no grain; a window
+in months, quarters, years or hours, or a custom grain; a week to date (dbt's week is its warehouse's) or a to-date
+on a calendar unlike dbt's; `period_agg` `first` or `average`; `fill_nulls_with`; over a balance; no unfiltered
+simple metric with a date on its measure; over a count (0 here where dbt has no figure); a filter of another shape;
+else `period_agg: last`. A ratio or derived metric over one falls with it.
 
 The translation is held, figure by figure, to dbt's on checked-in projects (`scripts/fixtures/dbt/` with
 `scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`; each README says how the

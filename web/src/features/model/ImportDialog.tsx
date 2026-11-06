@@ -16,7 +16,7 @@ import { Skeleton } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { useDatasets } from '../../api/datasets';
 import { applyModelImport, importRefresh, notCarriedText, planModelImport, type DatasetMap, type ImportPlan, type PlanStatus } from './api';
-import { applyLabel, changesToApply, dbtModels, dbtNotes, planSections } from './importPlanText';
+import { applyLabel, changesToApply, dbtModels, planSections } from './importPlanText';
 import { formatNumber } from '../data/format';
 import s from './ImportDialog.module.css';
 
@@ -53,7 +53,7 @@ function Planning() {
   );
 }
 
-/** A dbt file's semantic models, each with the project's dataset it is (a select), the copy notice and what its windows match dbt on. */
+/** A dbt file's semantic models, each with the project's dataset it is (a select), and the copy notice. */
 function DbtDatasets({ projectId, plan, onPick, busy }: { projectId: string; plan: ImportPlan; onPick: (model: string, datasetId: string) => void; busy: boolean }) {
   const list = useDatasets(projectId);
   const options = (list.data ?? []).map((d) => ({ value: d.id, label: d.name }));
@@ -65,9 +65,6 @@ function DbtDatasets({ projectId, plan, onPick, busy }: { projectId: string; pla
       <h3 className={s.title}>Datasets</h3>
       <div className={s.body}>
         <p className={s.note}>A copy: dbt stays the source of truth only through a live dbt connection.</p>
-        {dbtNotes(plan).map((n) => (
-          <p key={n} className={s.note}>{n}</p>
-        ))}
         <ul className={s.lines}>
           {dbtModels(plan).map((m) => (
             <li key={m.key} className={s.line}>

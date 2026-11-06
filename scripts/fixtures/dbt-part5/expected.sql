@@ -52,6 +52,9 @@ CREATE TABLE c_first AS
 SELECT DISTINCT CAST(date_trunc('month', d) AS DATE) AS start,
   first_value(v) OVER (PARTITION BY date_trunc('month', d) ORDER BY d ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS v
 FROM daily WHERE metric = 'revenue_7d' AND d < DATE '2024-07-01';
+-- period_agg average by month: the average over the month's days the join kept (docs: "average" in place of first_value).
+CREATE TABLE c_average AS
+SELECT CAST(date_trunc('month', d) AS DATE) AS start, avg(v) AS v FROM daily WHERE metric = 'revenue_7d' AND d < DATE '2024-07-01' GROUP BY 1;
 -- revenue_rolling_month: window 1 month by day (calendar-month arithmetic on each day).
 CREATE TABLE c_month AS
 SELECT s.d, CAST(sum(o.amount) AS DOUBLE) AS v FROM spine s JOIN orders o ON o.order_date <= s.d AND o.order_date > s.d - INTERVAL 1 MONTH WHERE s.d <= DATE '2024-06-30' GROUP BY s.d;
@@ -74,6 +77,7 @@ SELECT json_object(
   'byPeriod', (SELECT to_json(list(json_array(metric, grain, strftime(start, '%Y-%m-%d'), v) ORDER BY metric, grain, start)) FROM by_period),
   'controls', json_object(
     'revenue_7d_first', (SELECT to_json(map_from_entries(list({'k': strftime(start, '%Y-%m'), 'v': v} ORDER BY start))) FROM c_first),
+    'revenue_7d_average', (SELECT to_json(map_from_entries(list({'k': strftime(start, '%Y-%m'), 'v': v} ORDER BY start))) FROM c_average),
     'revenue_rolling_month', (SELECT to_json(map_from_entries(list({'k': strftime(d, '%Y-%m-%d'), 'v': v} ORDER BY d))) FROM c_month),
     'revenue_ly', (SELECT to_json(map_from_entries(list({'k': strftime(start, '%Y-%m'), 'v': v} ORDER BY start))) FROM c_ly),
     'visit_to_buy', (SELECT v FROM c_conv)

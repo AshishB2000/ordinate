@@ -198,9 +198,7 @@ export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skip
 export type DbtSkip =
   | 'cumulative' | 'conversion' | 'time_offset' | 'cross_model' | 'window_groupings' | 'unknown_aggregation'
   | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset'
-  | 'all_time' | 'period_agg' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
-/** src/app/dbtCumulative.ts DbtNote: what the dry run says about the windows a dbt file imports (f2). */
-export type DbtNote = 'in_progress' | 'follows_calendar';
+  | 'all_time' | 'period_agg' | 'period_agg_last' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
 
 export interface PlanItem {
   key: string;
@@ -223,7 +221,7 @@ export interface ImportPlan {
   items: PlanItem[];
   counts: Record<PlanStatus, number>;
   /** `kind: 'dbt'`: a dbt semantic manifest, translated (a copy). */
-  source: { appVersion: string; project: string; kind?: 'dbt'; notes?: DbtNote[] };
+  source: { appVersion: string; project: string; kind?: 'dbt' };
   notCarried: string[];
 }
 

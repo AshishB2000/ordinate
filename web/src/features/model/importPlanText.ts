@@ -3,7 +3,7 @@
 // datasets aside: they are said under Datasets); this only words it.
 
 import { formatNumber } from '../data/format';
-import type { DbtNote, ImportPlan, PlanItem, PlanKind, PlanStatus } from './api';
+import type { ImportPlan, PlanItem, PlanKind, PlanStatus } from './api';
 
 export interface PlanLine {
   key: string;
@@ -76,20 +76,14 @@ const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
   unreadable: "a metric type or definition Ordinate doesn't read",
   no_dataset: 'its semantic model has no dataset here',
   all_time: 'a running total since the first day: Ordinate\'s windows are "to date" or "last N days"',
-  period_agg: 'dbt reads it at the start of each week or month (period_agg: first, its default); Ordinate at the end. Set period_agg: last in dbt to import it',
+  period_agg: 'dbt reads each week or month at its first day (period_agg: first, its default) or averages its days; Ordinate reads a period at its last day',
+  period_agg_last: "dbt reads each period at its last day whose window holds rows (period_agg: last); Ordinate at the period's last day, which has no figure when that window is empty, so the figures part there",
   window_unit: "a window in months, quarters, years or hours, or a custom grain: Ordinate's rolling windows count whole days, up to 366",
   calendar_differs: "a week to date, or a to-date on a calendar unlike dbt's: dbt's weeks are its warehouse's, and its quarters and years start in January",
-  no_base_metric: 'no unfiltered simple metric on its measure to build on: add one in dbt and import again',
+  no_base_metric: 'no unfiltered simple metric with a date on its measure to build a window on',
   count_window: 'a count over a window: with no rows in it, Ordinate counts 0 where dbt shows no figure',
 };
 
-const NOTE_WORDS: Record<DbtNote, string> = {
-  in_progress: 'Window metrics match dbt for every day, and for every period that has ended with rows in its last window; where that window has none, Ordinate shows no figure and dbt repeats its last day with rows. For the period in progress Ordinate counts up to today, and a "last N days" window up to yesterday.',
-  follows_calendar: "To-date metrics follow this workspace's calendar: they match dbt while the year starts in January.",
-};
-
-/** What a dbt file's windows match dbt on, in words (f2); none for a plan without notes. */
-export const dbtNotes = (plan: ImportPlan): string[] => (plan.source.notes ?? []).map((n) => NOTE_WORDS[n]).filter(Boolean);
 
 function skippedLine(i: PlanItem, under: PlanItem[]): PlanLine {
   const more = under.length ? `and ${dependents(under)} on it` : undefined;

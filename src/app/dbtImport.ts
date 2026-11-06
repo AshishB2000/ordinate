@@ -23,7 +23,7 @@ import { formatFor } from '../analysis/metricAuto';
 import { DEFAULT_CALENDAR, type CalendarPrefs } from '../analysis/dateIntel';
 import { clip } from './clip';
 import { parseDbtWhere } from './dbtFilter';
-import { cumulativeNotes, translateCumulative, type DbtNote, type SimpleTranslation } from './dbtCumulative';
+import { cumulativeSkip, type SimpleTranslation } from './dbtCumulative';
 import type { ModelDataset, ModelField, ModelMetric } from './modelFormat';
 import type { ParsedModel } from './modelRead';
 
@@ -32,7 +32,7 @@ export type DbtSkip =
   | 'cumulative' | 'conversion' | 'time_offset' | 'cross_model' | 'window_groupings' | 'unknown_aggregation'
   | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset'
   // f2 (./dbtCumulative.ts): why a cumulative metric is not a period metric
-  | 'all_time' | 'period_agg' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
+  | 'all_time' | 'period_agg' | 'period_agg_last' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
 export type DbtKind = 'metric' | 'dimension' | 'entity' | 'semanticModel';
 
 export interface DbtSkipped {
@@ -50,7 +50,7 @@ export interface DbtSkipped {
 
 /** Which dataset a semantic model landed on, and how; no `datasetId`: none here. */
 export interface DbtModelMatch { name: string; datasetId?: string; how?: 'map' | 'exact' | 'name' }
-export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[]; notes?: DbtNote[] }
+export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[] }
 export interface DbtDataset { id: string; name: string; columns: ParsedColumn[]; live?: boolean }
 
 type Obj = Record<string, unknown>;
@@ -132,8 +132,8 @@ function matchModels(sms: Obj[], datasets: readonly DbtDataset[], datasetMap: Re
   return out;
 }
 
-/** `calendar`: the workspace's, which decides whether a dbt to-date is exact here (f2). */
-export function translateDbt(json: unknown, datasets: readonly DbtDataset[], datasetMap: Readonly<Record<string, string>>, calendar: CalendarPrefs): { model: ParsedModel; skipped: DbtSkipped[]; notes: DbtNote[] } {
+/** `calendar`: the workspace's, which names why a dbt to-date is skipped (f2). */
+export function translateDbt(json: unknown, datasets: readonly DbtDataset[], datasetMap: Readonly<Record<string, string>>, calendar: CalendarPrefs): { model: ParsedModel; skipped: DbtSkipped[] } {
   const skipped: DbtSkipped[] = [];
   const seenModel = new Set<string>();
   const sms = nodes(own(json, 'semantic_models')).filter((s): s is Obj => {
@@ -263,14 +263,6 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     };
   };
 
-  /** The date a translated metric counts by: its own, or a period metric's base's (f2), as the editor's save reads it. */
-  const countsBy = (x: ModelMetric): string | undefined => {
-    const base = (x.definition as { base?: string }).base;
-    if (!base) return x.timeColumn;
-    for (const r of done.values()) if ('metric' in r && r.metric.id === base) return r.metric.timeColumn;
-    return undefined;
-  };
-
   /** A ratio's or derived metric's inputs: each one's translation, by its alias (else its name). */
   const formula = (n: string, m: Obj, inputs: Obj[], body: (refs: Map<string, ModelMetric>) => string | null): Result => {
     if (!inputs.length) return { skip: 'unreadable' };
@@ -293,13 +285,12 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
       refs.set(key, metric);
     }
     const metrics = [...refs.values()];
-    if (metrics.some((x) => /[[\]]/.test(x.name)) || new Set(metrics.map((x) => countsBy(x) ?? '')).size > 1) return { skip: 'unreadable', model };
+    if (metrics.some((x) => /[[\]]/.test(x.name)) || new Set(metrics.map((x) => x.timeColumn ?? '')).size > 1) return { skip: 'unreadable', model };
     const f = body(refs);
     if (!f || f.length > MAX_FORMULA) return { skip: 'unreadable', model };
     const ds = models.get(model as string)?.ds as DbtDataset;
     const definition: MetricDefinition = sanitizeDefinition({ formula: f });
-    const date = countsBy(metrics[0]);
-    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(date && { timeColumn: date }) }, model: model as string };
+    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string };
   };
 
   function translate(n: string): Result {
@@ -327,12 +318,11 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
         break;
       }
       case 'cumulative':
-        r = translateCumulative(m, {
+        r = cumulativeSkip(m, {
           input,
           measure: (k) => { const f = measures.get(k); return f && { model: f.model.name, hasDataset: !!f.model.ds, nonAdditive: given(own(f.measure, 'non_additive_dimension')) }; },
           simple: simpleTranslations,
           filters: (inp, metric, model) => { const t = [whereTexts(own(inp, 'filter')), whereTexts(own(metric, 'filter'))]; const mo = models.get(model); return t[0] && t[1] && mo ? where([...new Set([...t[0], ...t[1]])], mo) : null; },
-          shell: (id) => shell(n, m, datasets.find((d) => d.id === id) as DbtDataset),
           calendar,
         });
         break;
@@ -365,7 +355,6 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
   }
 
-  const notes = cumulativeNotes(metrics);
   const model: ParsedModel = {
     manifest: { format: 'dbt', formatVersion: 1, appVersion: '', project: { name: '' }, calendar: DEFAULT_CALENDAR },
     datasets: files,
@@ -374,9 +363,9 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     terms: [],
     relationships: [],
     invalid: [],
-    dbt: { models: [...matches.values()], skipped, ...(notes.length && { notes }) },
+    dbt: { models: [...matches.values()], skipped },
   };
-  return { model, skipped, notes };
+  return { model, skipped };
 }
 
 const TOKEN = /\s*(?:([A-Za-z_][A-Za-z0-9_]*)|(\d+(?:\.\d+)?)(?![\w.])|([-+*/()]))/y;

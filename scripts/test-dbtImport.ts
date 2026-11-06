@@ -47,7 +47,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
 
 (async () => {
   // ── § translate ────────────────────────────────────────────────────────────
-  const { model, skipped, notes } = translateDbt(MANIFEST, DATASETS, {});
+  const { model, skipped } = translateDbt(MANIFEST, DATASETS, {});
   const m = (n: string): ModelMetric => metricNamed(model, n);
   ok('a simple sum', isDeepStrictEqual(m('Revenue')?.definition, { column: 'amount', aggregation: 'sum' }), show(m('Revenue')));
   ok('count, min and max', m('Orders')?.definition && isDeepStrictEqual(m('Orders').definition, { column: 'id', aggregation: 'count' })
@@ -89,7 +89,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('a dimension with nothing to say is no field doc', !orders?.fields?.some((f) => f.name === 'units'));
   ok('a dimension whose expr is SQL is skipped, not_a_column', skipped.some((s) => s.kind === 'dimension' && s.dbt === 'orders.order_month' && s.reason === 'not_a_column'));
   ok('the dataset carries only what dbt says: no role, grain, description or guide', !!orders && !('role' in orders) && !('grain' in orders) && !('description' in orders) && model.guides.size === 0);
-  ok('ids are UUIDs, the same on every run', model.metrics.every((x) => isValidId(x.id)) && stableStringify(translateDbt(MANIFEST, DATASETS, {})) === stableStringify({ model, skipped, notes }));
+  ok('ids are UUIDs, the same on every run', model.metrics.every((x) => isValidId(x.id)) && stableStringify(translateDbt(MANIFEST, DATASETS, {})) === stableStringify({ model, skipped }));
   ok('no terms, relationships or invalid files', model.terms.length === 0 && model.relationships.length === 0 && model.invalid.length === 0);
 
   // Variants: one edit each, against the fixture.
@@ -122,7 +122,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const eu = twice.metrics.find((x: Json) => x.name === 'eu_revenue');
   eu.type_params.measure.filter = eu.filter;
   ok('one condition on both the measure input and the metric is read once', isDeepStrictEqual(metricNamed(translateDbt(twice, DATASETS, {}).model, 'EU revenue')?.filters, [eq('region', 'EU')]));
-  ok('a manifest.json keys its nodes by unique id: the same translation', stableStringify(translateDbt(asDict, DATASETS, {})) === stableStringify({ model, skipped, notes }));
+  ok('a manifest.json keys its nodes by unique id: the same translation', stableStringify(translateDbt(asDict, DATASETS, {})) === stableStringify({ model, skipped }));
 
   // ── § filters ──────────────────────────────────────────────────────────────
   const cols = new Map<string, ParsedColumn>([['region', { name: 'region', type: 'text' }], ['units', { name: 'units', type: 'number' }], ['day', { name: 'day', type: 'date' }]]);
@@ -151,7 +151,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
 
   // ── § datasets ─────────────────────────────────────────────────────────────
   const how = (t: ReturnType<typeof translateDbt>, name: string) => t.model.dbt?.models.find((x) => x.name === name);
-  ok('a case- and underscore-blind name is marked for checking; an exact one is not', isDeepStrictEqual(how({ model, skipped, notes }, 'orders'), { name: 'orders', datasetId: ORDERS, how: 'name' }) && isDeepStrictEqual(how({ model, skipped, notes }, 'visits'), { name: 'visits', datasetId: VISITS, how: 'exact' }), show(model.dbt));
+  ok('a case- and underscore-blind name is marked for checking; an exact one is not', isDeepStrictEqual(how({ model, skipped }, 'orders'), { name: 'orders', datasetId: ORDERS, how: 'name' }) && isDeepStrictEqual(how({ model, skipped }, 'visits'), { name: 'visits', datasetId: VISITS, how: 'exact' }), show(model.dbt));
   const mapped = translateDbt(MANIFEST, DATASETS, { orders: OTHER });
   ok('datasetMap points a semantic model at another dataset', isDeepStrictEqual(how(mapped, 'orders'), { name: 'orders', datasetId: OTHER, how: 'map' }) && metricNamed(mapped.model, 'Revenue')?.dataset === OTHER);
   const gone = translateDbt(MANIFEST, DATASETS, { orders: '0d000000-0000-4000-8000-0000000000ff' });
