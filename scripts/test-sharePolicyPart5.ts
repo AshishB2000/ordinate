@@ -5,6 +5,7 @@
 //   countd   a distinct count over a marked column (p5-04)
 //   period   a year-to-date metric over a base totalled from it, and an alert watched through it (p5-05);
 //            its chart by month (p5-06)
+//   snapshot-per  each team's latest salary, summed: its KPI, its chart by team and an alert on it (p5-07)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -109,12 +110,33 @@ async function periodChart(env: H.Env): Promise<void> {
     (on) => H.mark(env, P, S, 'salary', on), 'ff21cfbb539a01853d22c817e7e6aeaa636ac59c35d9f2bc140e65aefd550d09');
 }
 
+async function snapshotPer(env: H.Env): Promise<void> {
+  const { P, S } = await H.project(env, 'Part 5 snapshot per');
+  const latest = (column: string) => ({ column, aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'team' } });
+  const pay = await H.saveMetric(env, P, S, 'Current payroll', latest('salary'));
+  const hrs = await H.saveMetric(env, P, S, 'Current hours', latest('hours'));
+  const kpi = (m: { id: string }, column: string) => ({ datasetId: S, column, aggregation: 'sum', metricId: m.id });
+  const byTeam = (m: { id: string }, column: string) => ({ datasetId: S, encoding: { category: 'team', values: [{ column, aggregation: 'sum', metricId: m.id }] } });
+  const fx = await H.publishable(env, P, [
+    { title: 'Current payroll KPI', metric: kpi(pay, 'salary') }, { title: 'Current hours KPI', metric: kpi(hrs, 'hours') },
+    { title: 'Current payroll by team', visual: byTeam(pay, 'salary') }, { title: 'Current hours by team', visual: byTeam(hrs, 'hours') },
+  ], [pay.id, hrs.id], [ // a rule made from a snapshot KPI stores its column and reads the metric's snapshot (alertStore.metricFor)
+    { name: 'Current payroll above 1000', datasetId: S, metric: { ...kpi(pay, 'salary'), label: 'Current payroll' }, compare: 'threshold', threshold: { op: '>', value: 1000 } },
+    { name: 'Current hours above 10', datasetId: S, metric: { ...kpi(hrs, 'hours'), label: 'Current hours' }, compare: 'threshold', threshold: { op: '>', value: 10 } },
+  ], ['Current payroll', 'Current hours']);
+  await judged(env, 'snapshot-per', fx,
+    { tiles: ['Current payroll KPI'], metrics: ['Current payroll'], rules: ['Current payroll above 1000'], mcp: ['Current payroll'], charts: ['Current payroll by team'] },
+    { tiles: ['Current hours KPI'], metrics: ['Current hours'], rules: ['Current hours above 10'], mcp: ['Current hours'], charts: ['Current hours by team'] },
+    (on) => H.mark(env, P, S, 'salary', on), '96585e47b2e787f70404b49d5c5cbb5dc450a109a7d3da0d171c232453eec04c');
+}
+
 (async () => {
   const env = await H.start();
   try {
     await countd(env);
     await period(env);
     await periodChart(env);
+    await snapshotPer(env);
   } finally {
     await env.close();
   }
