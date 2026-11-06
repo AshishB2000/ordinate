@@ -590,6 +590,15 @@ go through this release, or stop every pod before you start the new ones (Compos
 Helm and ECS steps are there). **Never roll back below this release once a layer is connected**
 (`helm rollback`, or an older `ORDINATE_IMAGE` in Compose).
 
+## Importing dbt definitions (`p7-f1`)
+
+**Import…** on the Data model now takes dbt's `semantic_manifest.json` ([Model files: From dbt](model-files.md#from-dbt)).
+Each metric it imports carries where it came from (`importedFrom`), the field
+[`p7-b0`](#definitions-from-another-semantic-layer-are-kept-p7-b0) reads. **This release needs `p7-b0` rolled out
+on every pod first**: a pod older than that drops the tag the next time anyone saves the metric, and the next
+import then finds the metric only by its exact name, or adds a second one if it was renamed. No migration; the
+model files' export and import of a project with no dbt import are unchanged.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the

@@ -1,5 +1,7 @@
 // Import… on the Data model (semantic layer part 7, a3; docs/semantic-layer/07-portability.md "What you will see"):
 // pick a model zip, read its dry run (`model:importPlan`), pick a side for each conflict, apply (`model:importApply`).
+// Or dbt's semantic_manifest.json (f1, D10): each semantic model's dataset is confirmed under Datasets, and a change
+// there plans again with `datasetMap`, which the apply sends too.
 // The picked File is kept and uploaded again for the apply and for each "Check again": an upload is used once.
 // Every count and sentence is the server's; this words the plan (./importPlanText.ts) and nothing more.
 
@@ -12,8 +14,9 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { Skeleton } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { applyModelImport, importRefresh, notCarriedText, planModelImport, type ImportPlan, type PlanStatus } from './api';
-import { applyLabel, changesToApply, planSections } from './importPlanText';
+import { useDatasets } from '../../api/datasets';
+import { applyModelImport, importRefresh, notCarriedText, planModelImport, type DatasetMap, type ImportPlan, type PlanStatus } from './api';
+import { applyLabel, changesToApply, dbtModels, planSections } from './importPlanText';
 import { formatNumber } from '../data/format';
 import s from './ImportDialog.module.css';
 
@@ -50,10 +53,48 @@ function Planning() {
   );
 }
 
-function PlanRows({ plan, choices, onChoice, busy }: { plan: ImportPlan; choices: Record<string, Choice>; onChoice: (key: string, c: Choice) => void; busy: boolean }) {
+/** A dbt file's semantic models, each with the project's dataset it is (a select), and the copy notice. */
+function DbtDatasets({ projectId, plan, onPick, busy }: { projectId: string; plan: ImportPlan; onPick: (model: string, datasetId: string) => void; busy: boolean }) {
+  const list = useDatasets(projectId);
+  const options = (list.data ?? []).map((d) => ({ value: d.id, label: d.name }));
+  return (
+    <section className={s.row} data-status="datasets" aria-label="Datasets">
+      <span className={s.mark} aria-hidden="true">
+        <Icon name="database" size={12} />
+      </span>
+      <h3 className={s.title}>Datasets</h3>
+      <div className={s.body}>
+        <p className={s.note}>A copy: dbt stays the source of truth only through a live dbt connection.</p>
+        <ul className={s.lines}>
+          {dbtModels(plan).map((m) => (
+            <li key={m.key} className={s.line}>
+              <span className={s.text}>
+                <span className={s.name}>{m.model}</span>
+                {(m.loose || !m.datasetId) && <span className={s.detail}>{m.datasetId ? 'matched by name: check it' : 'no dataset here: pick one to import it'}</span>}
+              </span>
+              <Select
+                size="sm"
+                aria-label={`Dataset for ${m.model}`}
+                className={s.side}
+                value={m.datasetId ?? ''}
+                placeholder="Not in this project"
+                onValueChange={(v) => onPick(m.model, v)}
+                options={options}
+                disabled={busy || list.isPending}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function PlanRows({ plan, choices, onChoice, busy, datasets }: { plan: ImportPlan; choices: Record<string, Choice>; onChoice: (key: string, c: Choice) => void; busy: boolean; datasets?: ReactNode }) {
   const carried = notCarriedText(plan.notCarried);
   return (
     <div className={s.rows}>
+      {datasets}
       {planSections(plan).map((sec) => (
         <section key={sec.status} className={s.row} data-status={sec.status} aria-label={sec.title}>
           <span className={s.mark} aria-hidden="true">
@@ -136,14 +177,15 @@ function Done({ plan, applied, asked }: { plan: ImportPlan; applied: Applied; as
 export function ImportDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const [step, setStep] = useState<Step>({ at: 'pick' });
   const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const [map, setMap] = useState<DatasetMap>({});
   const picker = useRef<HTMLInputElement>(null);
   const client = useQueryClient();
 
-  const check = async (file: File) => {
+  const check = async (file: File, datasetMap: DatasetMap = map) => {
     setStep({ at: 'planning', file });
     setChoices({});
     try {
-      const r = await planModelImport(projectId, file);
+      const r = await planModelImport(projectId, file, datasetMap);
       setStep(r.ok ? { at: 'plan', file, plan: r.plan } : { at: 'refused', file, error: r.error });
     } catch (err) {
       setStep({ at: 'refused', file, error: why(err) });
@@ -153,7 +195,7 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
   const apply = async (file: File, plan: ImportPlan) => {
     setStep({ at: 'plan', file, plan, applying: true });
     try {
-      const r = await applyModelImport(projectId, file, plan.hash, choices);
+      const r = await applyModelImport(projectId, file, plan.hash, choices, map);
       if (!r.ok) {
         setStep({ at: 'plan', file, plan, stale: r.error });
         return;
@@ -168,7 +210,15 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
   const chosen = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (file) void check(file);
+    if (file) {
+      setMap({});
+      void check(file, {});
+    }
+  };
+  const pickDataset = (file: File, model: string, datasetId: string) => {
+    const next = { ...map, [model]: datasetId };
+    setMap(next);
+    void check(file, next);
   };
   const choose = (
     <Button variant={step.at === 'pick' ? 'primary' : 'ghost'} size={step.at === 'pick' ? 'md' : 'sm'} icon="upload" onClick={() => picker.current?.click()}>
@@ -186,7 +236,7 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
   if (step.at === 'pick') {
     body = (
       <EmptyState icon="upload" title="Choose model files" heading={3} actions={choose}>
-        A .zip of model files exported from a Data model. You see everything it would change before anything is written.
+        A .zip of model files exported from a Data model, or dbt's target/semantic_manifest.json. You see everything it would change before anything is written.
       </EmptyState>
     );
     footer = cancel;
@@ -210,7 +260,13 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
             </Button>
           </div>
         )}
-        <PlanRows plan={plan} choices={choices} onChoice={(key, c) => setChoices((prev) => ({ ...prev, [key]: c }))} busy={!!step.applying} />
+        <PlanRows
+          plan={plan}
+          choices={choices}
+          onChoice={(key, c) => setChoices((prev) => ({ ...prev, [key]: c }))}
+          busy={!!step.applying}
+          datasets={plan.source.kind === 'dbt' && <DbtDatasets projectId={projectId} plan={plan} onPick={(model, id) => pickDataset(file, model, id)} busy={!!step.applying} />}
+        />
       </>
     );
     footer = (
@@ -248,7 +304,7 @@ export function ImportDialog({ projectId, onClose }: { projectId: string; onClos
       size="lg"
       footer={footer}
     >
-      <input ref={picker} type="file" accept=".zip,application/zip" aria-label="Model files" hidden onChange={chosen} />
+      <input ref={picker} type="file" accept=".zip,application/zip,.json,application/json" aria-label="Model files" hidden onChange={chosen} />
       {step.at !== 'pick' && (
         <div className={s.fileBar}>
           <span className={s.file}>

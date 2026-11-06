@@ -44,6 +44,17 @@ All notable changes to Ordinate are documented here. Format based on
   **Beta: not yet checked against a live dbt Cloud account**; the warehouse nightly runs the parity
   matrix once one is set up (`DBT_SL_*`, docs/live-data/dbt-semantic-layer.md).
 
+### Import dbt definitions
+
+- **Import… takes dbt's `target/semantic_manifest.json`.** Its simple, ratio and derived metrics on one semantic
+  model become Ordinate metrics (`count_distinct` as a distinct count), with their filters, dates and balances
+  (snapshots); primary entities become table keys and dimensions field docs. You confirm each semantic model's
+  dataset in the dry run; a near-match by name is marked for checking. It is a copy, and a second import updates
+  what the first made, even after a rename here.
+- **Nothing is approximated.** Every dbt metric Ordinate cannot compute exactly (cumulative, conversion, time
+  offsets, cross-model, window groupings, other aggregations, SQL expressions, other filter shapes,
+  `fill_nulls_with`) is listed as skipped with why. Needs `p7-b0` on every pod first (upgrade notes).
+
 ### MongoDB and Amazon Athena connectors
 
 - **MongoDB.** Collections are tables; a saved query is an aggregation pipeline in JSON
