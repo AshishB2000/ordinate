@@ -36,6 +36,13 @@ All notable changes to Ordinate are documented here. Format based on
   A self-hosted Cube on a private address needs `SSRF_ALLOW`. Built from Cube's documentation and
   source: the warehouse nightly runs the parity matrix against a Cube container
   (docs/live-data/cube.md).
+- **dbt Semantic Layer (beta)** is a connection under **Semantic layers**: an environment's saved
+  queries are added as datasets, each question a plain GraphQL `createQuery` polled until dbt
+  answers, the saved query's own filter sent with it, results as JSON. Filter values reach dbt's
+  template text only through a closed encoder that refuses what it cannot write exactly. The
+  service token stays in the secrets store; only dbt's three multi-tenant hosts are contacted.
+  **Beta: not yet checked against a live dbt Cloud account**; the warehouse nightly runs the parity
+  matrix once one is set up (`DBT_SL_*`, docs/live-data/dbt-semantic-layer.md).
 
 ### MongoDB and Amazon Athena connectors
 

@@ -138,6 +138,9 @@ function encodeSection(): void {
   ok('a member asked twice, a date with no grain, an order by what is not asked, a limit past the cap: each refused',
     throwsWith(() => encode({ ...q, metrics: ['revenue', 'revenue'] }), /twice/) && throwsWith(() => encode({ ...q, dimensions: [{ name: 'd' }] }), /grain/)
       && throwsWith(() => encode({ ...q, order: [{ by: 'tier', desc: false }] }), /not asked/) && throwsWith(() => encode({ ...q, limit: 100_001 }), /limit/));
+  const files = (require('./dbtFixture') as typeof import('./dbtFixture')).fixtureFiles();
+  ok('the nightly\'s dbt project files are what scripts/dbtFixture.ts writes (scripts/fixtures/dbt-sl/project)',
+    Object.entries(files).every(([f, text]) => fs.readFileSync(path.join(__dirname, 'fixtures', 'dbt-sl', 'project', f), 'utf8') === text));
   ok('the dbt encoder is a shipped backend', adapters.adapterFor('dbt') === dbt.dbtAdapter);
   ok('…so no test may register another for it', throwsWith(() => adapters.registerTestSemanticAdapter('dbt', dbt.dbtAdapter), /shipped/));
 }

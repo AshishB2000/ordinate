@@ -14,6 +14,7 @@
 //               (`layerRowPolicy`), asking nothing; NEGATIVE CONTROL the same question unrestricted answers
 //   § secrets   connections:list carries the has-secret flag only; dbt's error text carrying the token reaches the log
 //               redacted and no reply
+//   § nightly   scripts/semanticDbtLive.ts end to end against the fake API (its checks count here)
 //
 //   npm run build:ts && node scripts/test-semanticDbtDoors.js
 
@@ -211,6 +212,19 @@ void (async () => {
   ok('…dbt\'s words are in the server log for the question and the describe, the token redacted',
     logs.lines.filter((l) => l.includes('not authorized')).length >= 2 && !logs.lines.some((l) => l.includes(TOKEN)), show(logs.lines.slice(-3)));
   ok('…and the describe that failed changed nothing: a sentence, the dataset as it was', resync.value.ok === false && resync.value.code === 'live_failed' && /server log/.test(String(resync.value.error)), show(resync.value));
+
+  // ── § nightly ── the nightly's run (scripts/semanticDbtLive.ts) here against the fake API, so it cannot rot unseen
+  // before the first real run: its catalog checks, probes, the whole parity matrix by dbt's qualified names, its control.
+  const nightly: typeof import('./semanticDbtLive') = require('./semanticDbtLive');
+  const project: typeof import('./dbtFixture') = require('./dbtFixture');
+  const PREFIXED = H.fx.COLUMNS.map((c) => ({ ...c, name: `${project.PREFIX}${c.name}` }));
+  const amtAt = H.fx.COLUMNS.findIndex((c) => c.name === 'amt'); // the fake's metrics read `amt` itself
+  await as(() => H.fx.loadWarehouse('dbt_parity_prefixed', [...PREFIXED, { name: 'amt', type: 'number' }], H.fx.fixtureRows().map((r) => [...r, r[amtAt]])));
+  const night = fakeDbt.startFakeDbt({ token: TOKEN, environmentId: ENV, models: [{ name: project.SAVED_QUERY, label: 'Ordinate parity', table: 'dbt_parity_prefixed', columns: fakeDbt.asDbtTypes(PREFIXED) }] });
+  dbtConn.setTransport(night.transport);
+  const ran = await as(() => nightly.runDbtLive({ region: 'north-america', environmentId: String(ENV), token: TOKEN }, ok, () => undefined));
+  ok('§ nightly: every question of the run reached the fake dbt, by its qualified names', ran.queries > 50 && night.ops('createQuery') >= ran.queries
+    && night.requests.filter((r) => r.op === 'createQuery').every((r) => (r.variables.groupBy as Array<{ name: string }>).every((g) => g.name.startsWith(project.PREFIX))), `${ran.queries}`);
 
   dbtConn.setTransport(null);
   await close();
