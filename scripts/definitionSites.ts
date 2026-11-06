@@ -49,6 +49,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/app/modelPlan.ts': { count: 1, how: 'refuses' }, // a file's external metric is skipped as `external` (b2), with modelGates' sentence
   'src/ipc/metricSave.ts': { count: 4, how: 'refuses' }, // b2: a mirror's definition and filters are refused (externalReadOnly), a column or funnel metric on a layer's dataset too (columnOnLayer)
   'src/app/modelExport.ts': { count: 1, how: 'refuses' }, // never in the model files, only listed as not carried (D13)
+  'src/app/ossieExport.ts': { count: 1, how: 'refuses' }, // reads the model files, which never carry one (D13); a metric that is not a plain column total is reported unmapped, never written as one (g1)
   'src/ipc/targetSeries.ts': { count: 1, how: 'refuses' }, // a plan as a chart measure: an external plan is refused by the chart door, so no line
   'src/publish/embedLock.ts': { count: 3, how: 'refuses' }, // never allowed under a lock
   // keeps
