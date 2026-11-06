@@ -16,6 +16,7 @@ import { Button } from '../../ui/Button';
 import { useRelated, useVisual, type Encoding, type FilterStep } from './api';
 import { Editor, type Initial } from './Editor';
 import { defaultEncoding, fitEncoding, type Column } from './model';
+import { semanticEncoding, useMirrors, type SemanticInfo } from './SemanticMeasures';
 import { switchEncoding } from '../analytics/grids/gridEncoding';
 import { useReload } from '../editConflicts/useEditGuard';
 
@@ -44,6 +45,7 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
   const datasetId = visualId ? saved.data?.datasetId : (datasetParam ?? datasets.data?.[0]?.id);
   const cols = useDatasetColumns(projectId, datasetId);
   const related = useRelated(projectId, datasetId);
+  const { list: metrics, mirrors } = useMirrors(projectId, datasetId ?? ''); // the form reads the same list: no second request
   const { gen, reload } = useReload(['visual:get', projectId, visualId ?? '']);
   const back = () => void navigate(`/visuals/${projectId}`);
 
@@ -85,7 +87,8 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
       </Page>
     );
   }
-  if (cols.isPending || related.isPending) return <PageSkeleton />;
+  const layer = cols.data?.semantic;
+  if (cols.isPending || related.isPending || (layer && metrics.isPending)) return <PageSkeleton />;
   if (cols.isError || !cols.data) {
     return (
       <Page title="Visual">
@@ -100,17 +103,21 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
   const suggested = location.state as { encoding?: Encoding; chartType?: string; filters?: FilterStep[] } | null;
   const v = saved.data ?? null;
   const preset = v ? v.encoding : suggested?.encoding;
+  const semantic: SemanticInfo | undefined = layer && { ...layer, dataset: cols.data.name };
+  // A new chart on a layer starts from its first metric; a saved one keeps what it has (an old column measure is refused, said on the stage).
+  const start = preset ? fitEncoding(preset, columns, rel) : semantic ? semanticEncoding(columns, mirrors, semantic.grains) : defaultEncoding(columns);
   const initial: Initial = {
     visualId: v?.id,
     name: v?.name ?? '',
     datasetId,
     // A grid type opened from a door (/analytics) starts with its own shelves filled (T2.11).
-    encoding: switchEncoding(preset ? fitEncoding(preset, columns, rel) : defaultEncoding(columns), 'column', v?.chartType ?? suggested?.chartType ?? '', columns),
+    encoding: switchEncoding(start, 'column', v?.chartType ?? suggested?.chartType ?? '', columns),
     chartType: v?.chartType ?? suggested?.chartType ?? '',
     overrides: v?.overrides ?? {},
     filters: v?.filters ?? (Array.isArray(suggested?.filters) ? suggested.filters : []),
     analytics: v?.analytics ?? [],
     live: cols.data.mode === 'live',
+    semantic,
     tag: v?.tag,
   };
   return <Editor key={gen} projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} onReload={reload} />;

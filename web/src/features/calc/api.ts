@@ -7,7 +7,7 @@
 
 import { rpc } from '../../api/client';
 import type { MetricFormat, MetricSummary } from '../analyses/metrics/api';
-import { isFormula, isFunnel, isPeriod } from '../analyses/metrics/api';
+import { isExternal, isFormula, isFunnel, isPeriod } from '../analyses/metrics/api';
 import type { FunctionDoc, Tok } from '../prepare/api';
 import type { Measure } from '../visuals/api';
 
@@ -76,7 +76,8 @@ export function templateText(id: TemplateId, a: Operand, b: Operand, measure: bo
  */
 export function metricMeasure(m: Pick<MetricSummary, 'id' | 'name' | 'definition'>, prev?: Measure): Measure {
   const d = m.definition;
-  const out: Measure = isFormula(d) || isPeriod(d) ? { column: m.name, aggregation: 'count', metricId: m.id } : isFunnel(d) ? { column: d.funnel.entity, aggregation: 'countd', metricId: m.id } : { column: d.column, aggregation: d.aggregation, metricId: m.id };
+  // A layer's metric (part 7) has no column of ours: the measure names it alone, as the layer's door reads it.
+  const out: Measure = isExternal(d) ? { column: '', aggregation: 'sum', metricId: m.id } : isFormula(d) || isPeriod(d) ? { column: m.name, aggregation: 'count', metricId: m.id } : isFunnel(d) ? { column: d.funnel.entity, aggregation: 'countd', metricId: m.id } : { column: d.column, aggregation: d.aggregation, metricId: m.id };
   if (prev?.calc) out.calc = prev.calc;
   return out;
 }

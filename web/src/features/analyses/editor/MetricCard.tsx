@@ -31,7 +31,8 @@ export function kpiPct(pct: number): string {
 }
 
 export function metricLabel(m: NonNullable<Card['metric']>, name?: string): string {
-  return m.label || name || `${AGG_LABEL[m.aggregation] ?? m.aggregation} of ${m.column}`;
+  // A metric with no column of ours (a layer's, part 7) is named by the server's reply, never "Sum of ".
+  return m.label || name || (m.column ? `${AGG_LABEL[m.aggregation] ?? m.aggregation} of ${m.column}` : 'Metric');
 }
 
 /**

@@ -402,3 +402,10 @@
   flex: 0 0 auto;
   margin-bottom: var(--sp-12);
 }
+
+/* A semantic dataset's measures while its layer's metrics load (./SemanticMeasures). */
+.skMeasure {
+  display: block;
+  width: 100%;
+  height: 32px;
+}

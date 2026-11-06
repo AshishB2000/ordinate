@@ -37,6 +37,8 @@ export interface DatasetSummary {
   maxCacheAgeSec?: number;
   /** Fresh on ask (L3.1): pull the new rows when a figure asks a copy older than this; `fullDue` — it waits for a full refresh first. */
   freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
+  /** A semantic dataset (part 7): its layer by backend id and by name ("Snowflake"). Never its model. */
+  semantic?: { layer: string; label: string };
 }
 
 /** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */
@@ -61,6 +63,14 @@ export interface DatasetColumns {
   mode?: 'live';
   /** Row access rules limit what the caller sees here (docs/row-policy): nothing else about them is sent. */
   scoped?: true;
+  /** A semantic dataset (part 7): its layer, and the grains it lists per date field — a chart picks one of those. */
+  semantic?: SemanticHeader;
+}
+
+export interface SemanticHeader {
+  layer: string;
+  label: string;
+  grains: { column: string; grains: string[] }[];
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */

@@ -43,7 +43,15 @@ export interface Target {
   per?: 'week' | 'month' | 'quarter' | 'year';
   thresholds?: { good: number; warn: number };
 }
-export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition | FunnelDefinition;
+/** A metric a semantic layer computes (part 7): its name there, never math. `additive`: the layer says plain sum or count. Read-only here. */
+export interface ExternalDefinition {
+  external: string;
+  additive?: true;
+  layer?: string;
+}
+export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition | FunnelDefinition | ExternalDefinition;
+/** What an editor may send: a layer's definition is its layer's to change. */
+export type EditableDefinition = Exclude<Definition, ExternalDefinition>;
 
 /** `metric:list`'s decorated summary. */
 export interface MetricSummary {
@@ -92,6 +100,7 @@ export function formatBadge(format: MetricFormat | undefined): string {
 export const isFormula = (d: Definition): d is { formula: string } => typeof (d as { formula?: unknown }).formula === 'string';
 export const isPeriod = (d: Definition): d is PeriodDefinition => typeof (d as { base?: unknown }).base === 'string';
 export const isFunnel = (d: Definition): d is FunnelDefinition => !!(d as { funnel?: unknown }).funnel && typeof (d as { funnel?: unknown }).funnel === 'object';
+export const isExternal = (d: Definition): d is ExternalDefinition => typeof (d as { external?: unknown }).external === 'string';
 
 const RANGE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const utc = (iso: string): number => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));

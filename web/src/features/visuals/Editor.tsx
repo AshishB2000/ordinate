@@ -145,11 +145,12 @@ export function Editor({ projectId, datasets, columns, related, initial, onReloa
               info={b.reply?.category}
               live={b.liveDataset}
               canEdit={b.canEdit}
+              semantic={initial.semantic}
               onChange={b.setEnc}
               onFormat={b.formatAs}
             />
           )}
-          {!engine && (
+          {!engine && !initial.semantic && ( // small multiples need rows a layer does not return
             <FacetShelf
               cols={columns}
               facet={b.enc.facet as Facet | undefined}

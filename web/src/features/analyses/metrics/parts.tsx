@@ -10,7 +10,7 @@ import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
 import { failure } from '../api';
-import type { Definition, Metric, MetricFormat, Target } from './api';
+import type { EditableDefinition, Metric, MetricFormat, Target } from './api';
 import s from './Metrics.module.css';
 
 const KINDS = [
@@ -58,7 +58,8 @@ export function DirectionSelect({ value, onChange, size, bare }: { value: Direct
 
 export interface MetricFields {
   name: string;
-  definition: Definition;
+  /** Never a layer's (part 7): its editor sends no definition (./MirrorEditor). */
+  definition: EditableDefinition;
   /** Left out, an edit keeps the metric's own filters. */
   filters?: Metric['filters'];
   format: MetricFormat;
