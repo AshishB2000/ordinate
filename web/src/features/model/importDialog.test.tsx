@@ -236,7 +236,7 @@ describe('The Data model: Import… a dbt semantic manifest', () => {
     expect(d.getByText('link to dbt, date')).toBeTruthy();
     expect(d.getByText('Dimension orders · order_month')).toBeTruthy();
     expect(d.getByText('Primary entity orders · order')).toBeTruthy();
-    expect(d.getByText('a conversion metric: reach it through a live dbt connection')).toBeTruthy();
+    expect(d.getByText(/dbt pairs each conversion with the closest base event before it/)).toBeTruthy();
     expect(d.getByText('its inputs are on more than one semantic model')).toBeTruthy();
     expect(d.getByText('dbt shows a value where there are no rows (fill_nulls_with); Ordinate shows no figure')).toBeTruthy();
     expect(d.getAllByText('its expr is SQL, not one column of the dataset, or a column of another type')).toHaveLength(2);
@@ -256,6 +256,49 @@ describe('The Data model: Import… a dbt semantic manifest', () => {
     expect(uploads).toEqual(['semantic_manifest.json', 'semantic_manifest.json']);
     await act(async () => fireEvent.click(await d.findByRole('button', { name: 'Apply 6 changes' })));
     expect(calls.filter((c) => c.channel === 'model:importApply').map((c) => c.payload)).toEqual([{ projectId: P, fileToken: TOKEN, planHash: 'd1', choices: {}, datasetMap: { orders: A } }]);
+  });
+
+  // f2: part 5's shapes. Each reason's words, and the notes under the copy notice.
+  const F2_WORDS: Array<[string, string]> = [
+    ['all_time', 'a running total since the first day: Ordinate\'s windows are "to date" or "last N days"'],
+    ['period_agg', 'dbt reads it at the start of each week or month (period_agg: first, its default); Ordinate at the end. Set period_agg: last in dbt to import it'],
+    ['window_unit', 'a window in months, quarters, years or hours, or a custom grain: Ordinate\'s rolling windows count whole days, up to 366'],
+    ['calendar_differs', 'a week to date, or a to-date on a calendar unlike dbt\'s: dbt\'s weeks are its warehouse\'s, and its quarters and years start in January'],
+    ['no_base_metric', 'no unfiltered simple metric on its measure to build on: add one in dbt and import again'],
+    ['count_window', 'a count over a window: with no rows in it, Ordinate counts 0 where dbt shows no figure'],
+    ['conversion', 'dbt pairs each conversion with the closest base event before it and counts conversions; Ordinate\'s funnel counts people from their first, so the figures differ'],
+    ['time_offset', 'dbt shifts each day and then adds the days up, so its periods don\'t line up with Ordinate\'s "same period last year". Make it here as a change on last year'],
+    ['cumulative', 'not a window over a plain metric: over a balance, or with both a window and a grain'],
+    ['window_groupings', 'a balance kept per entity (window_groupings): how dbt groups it by other fields isn\'t documented, so Ordinate can\'t match it yet'],
+  ];
+  const NOTES = [
+    'Window metrics match dbt for every day, and for every period that has ended with rows in its last window; where that window has none, Ordinate shows no figure and dbt repeats its last day with rows. For the period in progress Ordinate counts up to today, and a "last N days" window up to yesterday.',
+    'To-date metrics follow this workspace\'s calendar: they match dbt while the year starts in January.',
+  ];
+  const F2_PLAN = {
+    ...DBT_PLAN,
+    counts: { ...DBT_PLAN.counts, skipped: F2_WORDS.length },
+    source: { ...DBT_PLAN.source, notes: ['follows_calendar', 'in_progress'] },
+    items: [...DBT_PLAN.items.filter((i) => i.status !== 'skipped'), ...F2_WORDS.map(([reason]) => ({ key: `metric:dbt:${reason}`, kind: 'metric', name: `m_${reason}`, status: 'skipped', reason }))],
+  };
+
+  it('says each part 5 shape\'s reason in words, and the notes under the copy notice', async () => {
+    serve({ 'model:importPlan': { body: { ok: true, plan: F2_PLAN } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    expect(await d.findByText('A copy: dbt stays the source of truth only through a live dbt connection.')).toBeTruthy();
+    for (const [, words] of F2_WORDS) expect(d.getByText(words)).toBeTruthy();
+    const datasets = d.getByRole('region', { name: 'Datasets' });
+    for (const n of NOTES) expect(within(datasets).getByText(n)).toBeTruthy();
+  });
+
+  it('a dbt plan without notes shows neither note', async () => {
+    serve({ 'model:importPlan': { body: { ok: true, plan: DBT_PLAN } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    expect(await d.findByText('A copy: dbt stays the source of truth only through a live dbt connection.')).toBeTruthy();
+    expect(d.queryByText(/Window metrics match dbt/)).toBeNull();
+    expect(d.queryByText(/To-date metrics follow/)).toBeNull();
   });
 
   it('a model zip shows no Datasets section and no copy notice', async () => {

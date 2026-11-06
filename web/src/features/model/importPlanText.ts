@@ -3,7 +3,7 @@
 // datasets aside: they are said under Datasets); this only words it.
 
 import { formatNumber } from '../data/format';
-import type { ImportPlan, PlanItem, PlanKind, PlanStatus } from './api';
+import type { DbtNote, ImportPlan, PlanItem, PlanKind, PlanStatus } from './api';
 
 export interface PlanLine {
   key: string;
@@ -63,11 +63,11 @@ function dependents(list: PlanItem[]): string {
 
 /** Why a dbt object was not imported, in words (f1): the shapes the translator does not read exactly. */
 const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
-  cumulative: 'a running total (cumulative): reach it through a live dbt connection',
-  conversion: 'a conversion metric: reach it through a live dbt connection',
-  time_offset: 'compares with an earlier period (offset_window or offset_to_grain)',
+  cumulative: 'not a window over a plain metric: over a balance, or with both a window and a grain',
+  conversion: "dbt pairs each conversion with the closest base event before it and counts conversions; Ordinate's funnel counts people from their first, so the figures differ",
+  time_offset: 'dbt shifts each day and then adds the days up, so its periods don\'t line up with Ordinate\'s "same period last year". Make it here as a change on last year',
   cross_model: 'its inputs are on more than one semantic model',
-  window_groupings: 'a balance kept per entity (window_groupings)',
+  window_groupings: "a balance kept per entity (window_groupings): how dbt groups it by other fields isn't documented, so Ordinate can't match it yet",
   unknown_aggregation: "an aggregation Ordinate doesn't compute exactly (median, percentile, sum_boolean)",
   not_a_column: 'its expr is SQL, not one column of the dataset, or a column of another type',
   filter_shape: "its filter is not one Ordinate reads exactly: comparisons joined by AND, on a simple metric's own dimensions",
@@ -75,7 +75,21 @@ const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
   live_refused: "a balance can't be computed on a Live dataset yet",
   unreadable: "a metric type or definition Ordinate doesn't read",
   no_dataset: 'its semantic model has no dataset here',
+  all_time: 'a running total since the first day: Ordinate\'s windows are "to date" or "last N days"',
+  period_agg: 'dbt reads it at the start of each week or month (period_agg: first, its default); Ordinate at the end. Set period_agg: last in dbt to import it',
+  window_unit: "a window in months, quarters, years or hours, or a custom grain: Ordinate's rolling windows count whole days, up to 366",
+  calendar_differs: "a week to date, or a to-date on a calendar unlike dbt's: dbt's weeks are its warehouse's, and its quarters and years start in January",
+  no_base_metric: 'no unfiltered simple metric on its measure to build on: add one in dbt and import again',
+  count_window: 'a count over a window: with no rows in it, Ordinate counts 0 where dbt shows no figure',
 };
+
+const NOTE_WORDS: Record<DbtNote, string> = {
+  in_progress: 'Window metrics match dbt for every day, and for every period that has ended with rows in its last window; where that window has none, Ordinate shows no figure and dbt repeats its last day with rows. For the period in progress Ordinate counts up to today, and a "last N days" window up to yesterday.',
+  follows_calendar: "To-date metrics follow this workspace's calendar: they match dbt while the year starts in January.",
+};
+
+/** What a dbt file's windows match dbt on, in words (f2); none for a plan without notes. */
+export const dbtNotes = (plan: ImportPlan): string[] => (plan.source.notes ?? []).map((n) => NOTE_WORDS[n]).filter(Boolean);
 
 function skippedLine(i: PlanItem, under: PlanItem[]): PlanLine {
   const more = under.length ? `and ${dependents(under)} on it` : undefined;

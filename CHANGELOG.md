@@ -54,6 +54,10 @@ All notable changes to Ordinate are documented here. Format based on
 - **Nothing is approximated.** Every dbt metric Ordinate cannot compute exactly (cumulative, conversion, time
   offsets, cross-model, window groupings, other aggregations, SQL expressions, other filter shapes,
   `fill_nulls_with`) is listed as skipped with why. Needs `p7-b0` on every pod first (upgrade notes).
+- **dbt cumulative metrics import as period metrics** when their figures are dbt's: a rolling window in days or
+  weeks becomes "last N days", a month, quarter or year to date becomes "to date" (while the workspace calendar is
+  dbt's), with `period_agg: last`. Every other cumulative, conversion, time-offset and window-grouping metric stays
+  skipped, now with why; the dry run says where an imported window's figures and dbt's part.
 
 ### MongoDB and Amazon Athena connectors
 
