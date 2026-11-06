@@ -26,7 +26,13 @@ import { ok, failureCount } from './selfcheck';
 const mapped = icons.CONNECTOR_SI || {};
 const logos = icons.connectorLogos || {};
 const catalogIds = connectorCatalog().map((d) => d.id);
+// Connectors that show a text badge on purpose: no logo with a licence assets/connectors/SOURCES.md
+// can name was available. To give one a mark, add the file and its SOURCES.md entry, then delete it here.
+const BADGE_ONLY: Record<string, string> = {
+  cube: 'Cube: no licensed mark available; the card shows the "CU" badge',
+};
 const missing = catalogIds.filter((id) => {
+  if (id in BADGE_ONLY) return false;
   const logo = logos[id];
   return !(typeof logo?.path === 'string' && logo.path.length > 20) &&
     !(typeof logo?.src === 'string' && logo.src.startsWith('data:image/'));
@@ -38,13 +44,18 @@ ok('mapped PostgreSQL resolves to a bundled path',
 ok('Amazon Redshift resolves to the supplied local PNG',
   typeof logos['amazon-redshift']?.src === 'string' &&
   logos['amazon-redshift'].src.startsWith('data:image/png;base64,'));
-// 41 until the desktop's three local-file sources went with it (T8.1); 40 with Snowflake (L1.2) and BigQuery (L1.3); 42 with MongoDB and Athena.
-ok('catalog exposes exactly 42 unique connector ids',
-  catalogIds.length === 42 && new Set(catalogIds).size === 42,
+// 41 until the desktop's three local-file sources went with it (T8.1); 40 with Snowflake (L1.2) and BigQuery (L1.3); 42 with MongoDB and Athena; 43 with Cube (badge-only).
+ok('catalog exposes exactly 43 unique connector ids',
+  catalogIds.length === 43 && new Set(catalogIds).size === 43,
   JSON.stringify(catalogIds));
-ok('all 42 catalog connectors resolve to real marks',
+ok('every catalog connector but the badge-only ones resolves to a real mark',
   missing.length === 0,
   JSON.stringify(missing));
+ok('badge-only connectors are in the catalog and have no mark (drop an entry once it gets one)',
+  Object.keys(BADGE_ONLY).every((id) => catalogIds.includes(id) && !logos[id]));
+// Negative control: the same filter still flags a connector off the list with no mark.
+ok('a connector not on the badge-only list with no mark is still flagged',
+  ['cube', 'no-such-mark'].filter((id) => !(id in BADGE_ONLY) && !logos[id]).join() === 'no-such-mark');
 ok('connector logos are structured-clone safe', (() => {
   try { structuredClone(logos); return true; } catch (_) { return false; }
 })());
