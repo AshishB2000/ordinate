@@ -90,8 +90,8 @@ What each operator means in SQL is from Cube's `BaseFilter` (source):
 | `set` / `notSet` | `x IS NOT NULL` / `x IS NULL` |
 | `contains` | `x ILIKE '%a%'`: **case-insensitive** (documented) |
 | `gt`, `gte`, `lt`, `lte` | `x > a` …, for **measures and `number` dimensions only** (documented) |
-| `afterOrOnDate [d]`, `beforeDate [d]` | `x >= d 00:00:00.000`, `x < d 00:00:00.000` (the value through `formatFromDate`) |
-| `inDateRange [a, b]`, `notInDateRange [a, b]` | `x >= a 00:00:00.000 AND x <= b 23:59:59.999` and its negation |
+| `afterOrOnDate [d]`, `beforeDate [d]` | `x >= d 00:00:00.000`, `x < d 00:00:00.000` (the value through `formatFromDate`): the only date operators Ordinate sends, exact for a DATE and a TIMESTAMP alike |
+| `inDateRange [a, b]` | `x >= a 00:00:00.000 AND x <= b 23:59:59.999`: not sent (its end misses the last sub-millisecond of a day) |
 | `and`, `or` groups | documented |
 
 Ordinate's filters mean what they mean on an extract (`compileFilter` is the reference: a NULL compares as `''`, a
@@ -99,10 +99,10 @@ date as its ISO day). **The encoding,** exact for every row, or refused `layerFi
 
 | Ordinate | Text dimension | Number dimension | Date dimension |
 |---|---|---|---|
-| `= v` | `equals [v]`; `v` = `''`: `or [equals [''], notSet]` | `equals [v]`; not a finite number: nothing matches | `inDateRange [v, v]` |
-| `≠ v` | `notEquals [v]`; `v` = `''`: `and [notEquals [''], set]` | `and [notEquals [v], set]` | `or [notInDateRange [v, v], notSet]` |
-| `>`, `≥` | refused (no text order in Cube) | `gt`, `gte` | `afterOrOnDate [v + 1 day]`, `inDateRange [v, 9999-12-31]` |
-| `<`, `≤` | refused | `lt`, `lte` | `or [beforeDate [v], notSet]`, `or [inDateRange [0001-01-01, v], notSet]` |
+| `= v` | `equals [v]`; `v` = `''`: `or [equals [''], notSet]` | `equals [v]`; not a finite number: nothing matches | `and [afterOrOnDate [v], beforeDate [v + 1 day]]` |
+| `≠ v` | `notEquals [v]`; `v` = `''`: `and [notEquals [''], set]` | `and [notEquals [v], set]` | `or [beforeDate [v], afterOrOnDate [v + 1 day], notSet]` |
+| `>`, `≥` | refused (no text order in Cube) | `gt`, `gte` | `afterOrOnDate [v + 1 day]`, `afterOrOnDate [v]` |
+| `<`, `≤` | refused | `lt`, `lte` | `or [beforeDate [v], notSet]`, `or [beforeDate [v + 1 day], notSet]` |
 | in list (a blank or a NULL in it matches both) | `equals [...]`, with `or […, notSet]` when a blank is in the list | `equals [...]` of its finite numbers | refused |
 | not in list | `notEquals [...]`, with `and […, set]` when a blank is in the list | `notEquals [...]` | refused |
 | contains | refused (Cube's is case-insensitive) | refused (as on any Live dataset) | refused |
