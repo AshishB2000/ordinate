@@ -87,3 +87,12 @@ export function dbtItems(file: ParsedModel, datasetName: (id: string) => string)
   }
   return items;
 }
+
+/**
+ * The metric names a translated formula refers to (`[Revenue] / [Orders]`), lower-cased. A dbt formula's date is its
+ * inputs' and the import writes them too, so its save is judged after theirs (the plan's gate and the apply's order).
+ */
+export function formulaNames(m: { definition: unknown }): string[] {
+  const f = (m.definition as { formula?: unknown } | null)?.formula;
+  return typeof f === 'string' ? [...f.matchAll(/\[([^\]]+)\]/g)].map((x) => x[1].toLowerCase()) : [];
+}

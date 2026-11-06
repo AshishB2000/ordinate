@@ -260,12 +260,16 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   await post('catalog:setColumn', { projectId: K.P, datasetId: K.orders, column: 'region', patch: { aliases: ['area'] } });
   const own = (await post('metric:save', { projectId: K.P, input: { name: 'Revenue', datasetId: K.orders, definition: { column: 'amount', aggregation: 'sum' }, format: { kind: 'currency', decimals: 0, compact: true }, direction: 'up_good', timeColumn: 'order_date' } })).value;
   ok('(setup) the project\'s own Revenue', own.ok === true, show(own));
+  const ownOrders = (await post('metric:save', { projectId: K.P, input: { name: 'Orders', datasetId: K.orders, definition: { column: 'id', aggregation: 'count' } } })).value;
+  ok('(setup) the project\'s own Orders, with no date of its own', ownOrders.ok === true && !ownOrders.metric?.timeColumn, show(ownOrders));
   const kPlan = await planOf(K.P);
+  ok('a ratio over a metric this import gives its date is not refused for the date it has now', itemFor(kPlan, 'aov')?.status === 'new' && itemFor(kPlan, 'orders')?.status === 'updated', show([itemFor(kPlan, 'aov'), itemFor(kPlan, 'orders')]));
   const kRev = itemFor(kPlan, 'revenue');
   ok('an exact name on the same dataset is an update, of what dbt says only', kRev?.status === 'updated' && kRev?.targetId === own.metric?.id && isDeepStrictEqual(kRev?.changes?.map((c: Reply) => c.field), ['description', 'importedFrom']), show(kRev));
   ok('(setup) the table doc and the field\'s other name were saved', kPlan.ok === true);
   ok('… and the table doc changes only its key', isDeepStrictEqual(kPlan.plan.items.find((i: Reply) => i.kind === 'table')?.changes?.map((c: Reply) => c.field), ['key']));
-  await applyOf(K.P, kPlan.plan.hash);
+  const kDone = await applyOf(K.P, kPlan.plan.hash);
+  ok('… and the apply writes the input first, then the ratio with dbt\'s date', kDone.failed?.length === 0 && (await stored(K.P)).find((x) => x?.name === 'AOV')?.timeColumn === 'order_date' && (await stored(K.P)).find((x) => x?.name === 'Orders')?.timeColumn === 'order_date', show(kDone));
   const kRevNow = (await stored(K.P)).find((x) => x?.id === own.metric?.id);
   ok('the update tags it and keeps its format and direction', kRevNow?.importedFrom?.name === 'revenue' && kRevNow?.direction === 'up_good' && kRevNow?.format.kind === 'currency', show(kRevNow));
   const docReply = (await post('catalog:getTable', { projectId: K.P, datasetId: K.orders })).value;

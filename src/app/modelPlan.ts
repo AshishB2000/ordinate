@@ -31,7 +31,7 @@ import { baseFilterRefusal, fieldRefusal, metricRefusal, relationshipRefusal, ta
 import type { Relationship } from '../analysis/relationships';
 import type { DatasetMeta } from '../data/datasets';
 import { modelDatasetMoved } from './modelFileMessages';
-import { dbtItems, keepHere, withImportTags } from './dbtPlan';
+import { dbtItems, formulaNames, keepHere, withImportTags } from './dbtPlan';
 import type { DbtSkip } from './dbtImport';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
@@ -302,12 +302,15 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
   };
   for (let pass = 0; pass <= items.length; pass++) {
     const post = postNames();
+    // A dbt formula naming a metric this import writes is judged by its save after that one's (the apply's order).
+    const written = new Set(file.dbt ? items.filter((i) => i.kind === 'metric' && writes(i)).map((i) => String((fileOf.get(i.key) as Mapped).value.name).toLowerCase()) : []);
     let fell = false;
     for (const item of items) {
       if ((item.kind !== 'term' && item.kind !== 'metric') || !writes(item)) continue;
       const r = fileOf.get(item.key) as Mapped;
       const self = item.targetId ?? r.value.id;
-      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, r.refs.some(created));
+      const pending = r.refs.some(created) || formulaNames(r.value).some((n) => written.has(n));
+      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending);
       if (refusal) {
         // A layer's metric is never written from a file (D13): skipped as `external`, with the sentence.
         refuse(item, refusal, item.kind === 'metric' && isExternalDefinition(sanitizeDefinition((r.value as { definition?: unknown }).definition)) ? 'external' : 'invalid');

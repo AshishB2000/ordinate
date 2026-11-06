@@ -26,6 +26,7 @@ import { fieldOf, relationshipOf, tableDocOf } from './modelExport';
 import { objectBase, type ModelDataset, type ModelMetric, type ModelRelationship, type ModelTerm } from './modelFormat';
 import { mapRefs, type ModelMatch } from './modelMatch';
 import { planDetailed, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
+import { formulaNames } from './dbtPlan';
 import type { ParsedModel } from './modelRead';
 import { modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
 import { saveMetricChecked, updateMetricChecked } from '../ipc/metricSave';
@@ -208,7 +209,9 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
 
   // A new metric another new one names is written first; a cycle goes in plan order, and its save says why.
   const pending = of('metric');
-  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId));
+  const nameOf = (p: PlanItem): string => String((formOf(p).value as ModelMetric).name).toLowerCase();
+  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId))
+    || (!!file.dbt && formulaNames(formOf(item).value).some((n) => pending.some((p) => p !== item && nameOf(p) === n))); // a dbt formula after its inputs (their date)
   while (pending.length) {
     const at = pending.findIndex((p) => !waits(p));
     const [item] = pending.splice(at < 0 ? 0 : at, 1);
