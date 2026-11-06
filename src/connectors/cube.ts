@@ -149,8 +149,10 @@ async function describeModel(ctx: ConnectorContext, model: string): Promise<Awai
     return [type === 'date' ? { name, type, grains: DATE_GRAINS.slice() } : { name, type }];
   });
   const metrics = members('measures').map((x) => {
-    // Only a plain sum or count adds up (D16); a rolling window, a distinct count, a formula never.
-    const additive = ['sum', 'count'].includes(asString(prop(x, 'aggType'))) && prop(x, 'cumulative') !== true && prop(x, 'cumulativeTotal') !== true;
+    // Only a plain sum or count adds up (D16); a rolling window, a distinct count, a formula never. `aggType` is Cube's
+    // own measure type, not one of Ordinate's aggregations (data/aggregations), so it is compared, not listed.
+    const aggType = asString(prop(x, 'aggType'));
+    const additive = (aggType === 'sum' || aggType === 'count') && prop(x, 'cumulative') !== true && prop(x, 'cumulativeTotal') !== true;
     const name = shortName(asString(prop(x, 'name')));
     const description = titled(prop(x, 'description'), name);
     return { name, additive, ...(description ? { description } : {}) };
