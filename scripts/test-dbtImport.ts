@@ -19,16 +19,16 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import { H, close, post, upload, type Reply } from './liveRouteHarness';
+import { H, close, post, type Reply } from './liveRouteHarness';
 import type { ParsedColumn } from '../src/data/parse';
 import type { ModelMetric } from '../src/app/modelFormat';
-import type { ParsedModel } from '../src/app/modelRead';
+import { F1_MANIFEST, F1_DATASETS, F1_DIR as DIR, ORDERS_COLUMNS, VISITS_COLUMNS, ORDERS, VISITS, OTHER, copyOf, metricNamed, allMetricNames, uploadJson, type Json } from './dbtHarness';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { isDeepStrictEqual }: typeof import('util') = require('util');
-const { translateDbt }: typeof import('../src/app/dbtImport') = require('../src/app/dbtImport');
+const { translateDbt: translate }: typeof import('../src/app/dbtImport') = require('../src/app/dbtImport');
 const { parseDbtWhere }: typeof import('../src/app/dbtFilter') = require('../src/app/dbtFilter');
 const { readDbtUpload }: typeof import('../src/app/dbtRead') = require('../src/app/dbtRead');
 const { stableStringify }: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
@@ -36,34 +36,18 @@ const { isValidId }: typeof import('../src/app/ids') = require('../src/app/ids')
 const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
 const { formatFor }: typeof import('../src/analysis/metricAuto') = require('../src/analysis/metricAuto');
 
-type Json = Record<string, any>; // any: a dbt manifest, edited as a test would edit one
+const { DEFAULT_CALENDAR }: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
+const MANIFEST = F1_MANIFEST;
+const DATASETS = F1_DATASETS;
+const copy = (): Json => copyOf(MANIFEST);
+const translateDbt = (json: unknown, datasets: Parameters<typeof translate>[1], map: Parameters<typeof translate>[2]) => translate(json, datasets, map, DEFAULT_CALENDAR);
 
-const DIR = path.join(__dirname, 'fixtures', 'dbt');
-const MANIFEST: Json = JSON.parse(fs.readFileSync(path.join(DIR, 'semantic_manifest.json'), 'utf8'));
-const copy = (): Json => JSON.parse(JSON.stringify(MANIFEST));
-
-const ORDERS_COLUMNS: ParsedColumn[] = [
-  { name: 'id', type: 'text' }, { name: 'customer_id', type: 'text' }, { name: 'region', type: 'text' }, { name: 'amount', type: 'number' },
-  { name: 'status', type: 'text' }, { name: 'order_date', type: 'date' }, { name: 'stock_date', type: 'date' }, { name: 'units', type: 'number' },
-];
-const VISITS_COLUMNS: ParsedColumn[] = [{ name: 'visit_id', type: 'text' }, { name: 'customer_id', type: 'text' }, { name: 'visit_date', type: 'date' }];
-const ORDERS = '0d000000-0000-4000-8000-000000000001';
-const VISITS = '0d000000-0000-4000-8000-000000000002';
-const OTHER = '0d000000-0000-4000-8000-000000000003';
-const DATASETS = [
-  { id: ORDERS, name: 'Orders', columns: ORDERS_COLUMNS },
-  { id: VISITS, name: 'visits', columns: VISITS_COLUMNS },
-  { id: OTHER, name: 'Orders archive', columns: ORDERS_COLUMNS },
-];
-
-const metricNamed = (model: ParsedModel, name: string): ModelMetric => model.metrics.find((m) => m.name === name) as ModelMetric;
-const allMetricNames = (manifest: Json): string[] => (manifest.metrics as Json[]).map((m) => m.label ?? m.name);
 const eq = (column: string, value: unknown) => ({ type: 'filter', column, op: '=', value });
 const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(v);
 
 (async () => {
   // ── § translate ────────────────────────────────────────────────────────────
-  const { model, skipped } = translateDbt(MANIFEST, DATASETS, {});
+  const { model, skipped, notes } = translateDbt(MANIFEST, DATASETS, {});
   const m = (n: string): ModelMetric => metricNamed(model, n);
   ok('a simple sum', isDeepStrictEqual(m('Revenue')?.definition, { column: 'amount', aggregation: 'sum' }), show(m('Revenue')));
   ok('count, min and max', m('Orders')?.definition && isDeepStrictEqual(m('Orders').definition, { column: 'id', aggregation: 'count' })
@@ -86,7 +70,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('the format is the editor\'s default for its column (formatFor), a formula\'s two decimals', isDeepStrictEqual(m('Orders')?.format, formatFor('id', 'count')) && isDeepStrictEqual(m('Avg order')?.format, formatFor('amount', 'avg')) && isDeepStrictEqual(m('AOV')?.format, { kind: 'number', decimals: 2, compact: false }), show([m('Orders')?.format, m('Avg order')?.format]));
 
   const SKIPS: Array<[string, string, string?]> = [
-    ['Stock by customer', 'window_groupings'], ['Cumulative revenue', 'cumulative'], ['Visit to buy', 'conversion'],
+    ['Stock by customer', 'window_groupings'], ['Cumulative revenue', 'window_unit'], ['Visit to buy', 'conversion'], // f2: Cumulative revenue's window is 1 month
     ['Revenue vs last year', 'time_offset'], ['Revenue per visit', 'cross_model'], ['Median order', 'unknown_aggregation'],
     ['Doubled revenue', 'not_a_column'], ['Revenue (filled)', 'fill_nulls'], ['EU or paid revenue', 'filter_shape'],
     ['Median gap', 'unknown_aggregation', 'median_order'],
@@ -105,7 +89,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('a dimension with nothing to say is no field doc', !orders?.fields?.some((f) => f.name === 'units'));
   ok('a dimension whose expr is SQL is skipped, not_a_column', skipped.some((s) => s.kind === 'dimension' && s.dbt === 'orders.order_month' && s.reason === 'not_a_column'));
   ok('the dataset carries only what dbt says: no role, grain, description or guide', !!orders && !('role' in orders) && !('grain' in orders) && !('description' in orders) && model.guides.size === 0);
-  ok('ids are UUIDs, the same on every run', model.metrics.every((x) => isValidId(x.id)) && stableStringify(translateDbt(MANIFEST, DATASETS, {})) === stableStringify({ model, skipped }));
+  ok('ids are UUIDs, the same on every run', model.metrics.every((x) => isValidId(x.id)) && stableStringify(translateDbt(MANIFEST, DATASETS, {})) === stableStringify({ model, skipped, notes }));
   ok('no terms, relationships or invalid files', model.terms.length === 0 && model.relationships.length === 0 && model.invalid.length === 0);
 
   // Variants: one edit each, against the fixture.
@@ -138,7 +122,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const eu = twice.metrics.find((x: Json) => x.name === 'eu_revenue');
   eu.type_params.measure.filter = eu.filter;
   ok('one condition on both the measure input and the metric is read once', isDeepStrictEqual(metricNamed(translateDbt(twice, DATASETS, {}).model, 'EU revenue')?.filters, [eq('region', 'EU')]));
-  ok('a manifest.json keys its nodes by unique id: the same translation', stableStringify(translateDbt(asDict, DATASETS, {})) === stableStringify({ model, skipped }));
+  ok('a manifest.json keys its nodes by unique id: the same translation', stableStringify(translateDbt(asDict, DATASETS, {})) === stableStringify({ model, skipped, notes }));
 
   // ── § filters ──────────────────────────────────────────────────────────────
   const cols = new Map<string, ParsedColumn>([['region', { name: 'region', type: 'text' }], ['units', { name: 'units', type: 'number' }], ['day', { name: 'day', type: 'date' }]]);
@@ -167,7 +151,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
 
   // ── § datasets ─────────────────────────────────────────────────────────────
   const how = (t: ReturnType<typeof translateDbt>, name: string) => t.model.dbt?.models.find((x) => x.name === name);
-  ok('a case- and underscore-blind name is marked for checking; an exact one is not', isDeepStrictEqual(how({ model, skipped }, 'orders'), { name: 'orders', datasetId: ORDERS, how: 'name' }) && isDeepStrictEqual(how({ model, skipped }, 'visits'), { name: 'visits', datasetId: VISITS, how: 'exact' }), show(model.dbt));
+  ok('a case- and underscore-blind name is marked for checking; an exact one is not', isDeepStrictEqual(how({ model, skipped, notes }, 'orders'), { name: 'orders', datasetId: ORDERS, how: 'name' }) && isDeepStrictEqual(how({ model, skipped, notes }, 'visits'), { name: 'visits', datasetId: VISITS, how: 'exact' }), show(model.dbt));
   const mapped = translateDbt(MANIFEST, DATASETS, { orders: OTHER });
   ok('datasetMap points a semantic model at another dataset', isDeepStrictEqual(how(mapped, 'orders'), { name: 'orders', datasetId: OTHER, how: 'map' }) && metricNamed(mapped.model, 'Revenue')?.dataset === OTHER);
   const gone = translateDbt(MANIFEST, DATASETS, { orders: '0d000000-0000-4000-8000-0000000000ff' });
@@ -207,7 +191,6 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
     };
     return { P, orders: await save('Orders', 'seed.csv', ORDERS_COLUMNS), visits: await save('visits', 'visits.csv', VISITS_COLUMNS), other: await save('Orders archive', 'seed.csv', ORDERS_COLUMNS) };
   });
-  const uploadJson = async (json: unknown): Promise<string> => (await upload(Buffer.from(JSON.stringify(json)), 'semantic_manifest.json')).fileToken;
   const planOf = async (P: string, json: unknown = MANIFEST, datasetMap?: Record<string, string>): Promise<Reply> =>
     (await post('model:importPlan', { projectId: P, fileToken: await uploadJson(json), ...(datasetMap && { datasetMap }) })).value;
   const applyOf = async (P: string, planHash: string, json: unknown = MANIFEST, datasetMap?: Record<string, string>): Promise<Reply> =>
