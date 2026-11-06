@@ -1,12 +1,12 @@
-// RS256 JSON Web Tokens with node:crypto — shared by the Snowflake key-pair
-// sign-in and the BigQuery service-account token exchange. No dependency: a JWT
-// is two base64url JSON objects and one RSA-SHA256 signature.
+// JSON Web Tokens with node:crypto — RS256 for the Snowflake key-pair sign-in and
+// the BigQuery service-account token exchange, HS256 for Cube's API secret. No
+// dependency: a JWT is two base64url JSON objects and one signature.
 //
 // MAIN PROCESS ONLY. The private key is a secret: it is parsed here, never
 // logged, and a parse failure is reported WITHOUT the key text (node's own
 // errors carry none, and the message below is fixed).
 
-import { createHash, createPrivateKey, createPublicKey, sign, type KeyObject } from 'node:crypto';
+import { createHash, createHmac, createPrivateKey, createPublicKey, sign, type KeyObject } from 'node:crypto';
 
 export function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
@@ -41,4 +41,10 @@ export function signJwtRs256(claims: Record<string, unknown>, key: KeyObject, he
   const input = `${head}.${body}`;
   const sig = sign('sha256', Buffer.from(input), key);
   return `${input}.${base64url(sig)}`;
+}
+
+/** Sign `claims` as a compact HS256 JWT with a shared secret (Cube's API secret). */
+export function signJwtHs256(claims: Record<string, unknown>, secret: string): string {
+  const input = `${base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))}.${base64url(JSON.stringify(claims))}`;
+  return `${input}.${createHmac('sha256', secret).update(input).digest('base64url')}`;
 }

@@ -99,6 +99,44 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
   return new Promise((resolve) => child.on('exit', (code) => resolve({ code, out })));
 }
 
+// ── Cube (semantic layer part 7, e1): the API secret, a token, and every token signed from the secret ──────
+// A Cube that echoes the Authorization header and the secret into its errors (the worst case): no error any way out
+// of the connector, no app log line and no connection view carries one of them.
+async function cubeCanary(): Promise<void> {
+  const fakeCube: typeof import('./semanticFakeCube') = require('./semanticFakeCube');
+  const registry: typeof import('../src/connectors') = require('../src/connectors');
+  const connRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+  const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+  const enc: typeof import('../src/engine/live/semantic/cube') = require('../src/engine/live/semantic/cube');
+  const stub = await fakeCube.startFakeCube({ models: [], secret: CANARY });
+  const echoed: string[] = [];
+  stub.hook = () => {
+    echoed.push(`Error: no access for ${stub.auths.at(-1)} (API secret ${CANARY})`);
+    return { status: 400, json: { error: echoed.at(-1) } };
+  };
+  const cube = registry.getConnector('cube')!;
+  const req = enc.cubeAdapter.encode({ dimensions: [], metrics: ['revenue'], where: [], order: [] }, 'orders', []);
+  const said: string[] = [];
+  for (const auth of ['secret', 'token']) {
+    const ctx = { values: { url: stub.url, auth }, secrets: { token: CANARY }, rowLimit: 10, timeoutMs: 3_000 };
+    const out = [await cube.semantic!.listModels(ctx), await cube.semantic!.describeModel(ctx, 'orders'), await cube.semantic!.run(ctx, 'body' in req ? req.body : null),
+      await cube.listTables(ctx), await connRun.listTables('cube', ctx.values, ctx.secrets, { timeoutMs: 3_000 })];
+    for (const r of out) if (!r.ok) said.push(r.error);
+  }
+  const signed = stub.auths.filter((a) => a !== CANARY);
+  const needles = { canary: NEEDLES.canary, 'a signed token': signed.flatMap((t) => spellings(t)) };
+  ok('cube: the secret signed tokens, and the token went as is (the canaries are real)', signed.length >= 4 && signed.every((t) => !!fakeCube.verifyHs256(t, CANARY)) && stub.auths.includes(CANARY));
+  ok(`cube: ${said.length} errors (listing, describing, asking, the connection test) carry neither the secret nor a signed token`,
+    said.length === 10 && said.every((e) => /HTTP 400/.test(e)) && leaks(said.join('\n'), needles).length === 0, leaks(said.join('\n'), needles).join());
+  for (const e of said) app.log.error({ err: new Error(e) }, 'cube failure');
+  ok('cube: …and the app log of them neither', leaks(appLog, needles).length === 0, leaks(appLog, needles).join());
+  const view = conns.publicConnection({ id: randomUUID(), name: 'Cube prod', connectorId: 'cube', values: { url: stub.url, auth: 'secret', token: CANARY }, schemaVersion: 2 } as unknown as import('../src/connectors/connections').Connection);
+  ok('cube: a connection\'s view carries no secret (even one a stale record held)', !!view && leaks(JSON.stringify(view), needles).length === 0);
+  ok('cube: NEGATIVE CONTROL the replies Cube sent did carry both', leaks(echoed.join('\n'), needles).length === 2, leaks(echoed.join('\n'), needles).join());
+  ok('cube: everything this test printed so far carries neither', leaks(captured, needles).length === 0);
+  await stub.close();
+}
+
 (async () => {
   // ── The grep itself (negative control: it must SEE each spelling) ─────────
   const b = Buffer.from(CANARY);
@@ -170,6 +208,8 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
     const text = JSON.stringify(v) + inspect(v, { depth: null, showHidden: true });
     ok(`config: ${name}() carries the canary in no spelling`, leaks(text).length === 0, leaks(text).join());
   }
+
+  await cubeCanary();
 
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {

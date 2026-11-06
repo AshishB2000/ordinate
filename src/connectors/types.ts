@@ -226,7 +226,7 @@ export interface ConnectorDef {
    *  'duckdb'. Sources sharing a wire protocol share an implementation. */
   family: string;
   /** Grouping in the picker UI. */
-  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local' | 'Apps & SaaS';
+  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local' | 'Apps & SaaS' | 'Semantic layers';
   /** Always true. See rule 1 above. */
   readOnly: true;
   /** One factual line for the picker tile. */
