@@ -392,6 +392,7 @@ export interface MetricInput {
   timeColumn?: unknown;
   /** null clears it. */
   target?: unknown;
+  importedFrom?: unknown; // a dbt import's tag (part 7 f1): only its apply writes one, no contract carries it
 }
 
 /**
@@ -464,6 +465,7 @@ export async function updateMetric(
       else delete updated.timeColumn;
     }
     if (patch.target !== undefined) { const g = sanitizeTarget(patch.target); if (g) updated.target = g; else delete updated.target; } // null clears; absent keeps
+    if (patch.importedFrom !== undefined) { const f = sanitizeImportedFrom(patch.importedFrom); if (f) updated.importedFrom = f; } // only an import sets one; nothing clears it
     if (patch.tree !== undefined) {
       const tree = sanitizeTree(patch.tree, id);
       if (tree) updated.tree = tree;

@@ -33,7 +33,7 @@ export type DbtSkip =
 export type DbtKind = 'metric' | 'dimension' | 'entity' | 'semanticModel';
 
 export interface DbtSkipped {
-  /** As Ordinate would name it: a metric's label, else its dbt name; a dimension or entity as `model.name`. */
+  /** As Ordinate would name it: a metric's label, else its dbt name; a dimension or entity as `model · name`. */
   name: string;
   kind: DbtKind;
   reason: DbtSkip;
@@ -165,7 +165,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (primary) {
       const col = columnOf(ds.columns, String(name(own(primary, 'expr')) ?? own(primary, 'name')));
       if (col) file.key = col.name;
-      else skipped.push({ name: `${model.name}.${own(primary, 'name')}`, kind: 'entity', reason: 'not_a_column', dbt: `${model.name}.${own(primary, 'name')}`, model: model.name });
+      else skipped.push({ name: `${model.name} · ${own(primary, 'name')}`, kind: 'entity', reason: 'not_a_column', dbt: `${model.name}.${own(primary, 'name')}`, model: model.name });
     }
     const fields = new Map<string, ModelField>();
     for (const d of nodes(own(sm, 'dimensions'))) {
@@ -177,7 +177,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
       const column = found && (!time || found.type === 'date') ? found : null;
       model.dims.set(n, { column, time });
       if (!column) {
-        skipped.push({ name: `${model.name}.${n}`, kind: 'dimension', reason: 'not_a_column', dbt: `${model.name}.${n}`, model: model.name });
+        skipped.push({ name: `${model.name} · ${n}`, kind: 'dimension', reason: 'not_a_column', dbt: `${model.name}.${n}`, model: model.name });
         continue;
       }
       const description = text(own(d, 'description'), 2_000);

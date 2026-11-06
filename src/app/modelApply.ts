@@ -145,8 +145,8 @@ async function writeCatalog(projectId: string, file: ParsedModel, items: PlanIte
   }
 }
 
-export async function applyImport(projectId: string, file: ParsedModel, planHash: string, choices: Readonly<Record<string, ApplyChoice>>, io: ApplyIo): Promise<ApplyReply> {
-  const { plan, forms, match } = await planDetailed(projectId, file);
+export async function applyImport(projectId: string, upload: ParsedModel, planHash: string, choices: Readonly<Record<string, ApplyChoice>>, io: ApplyIo): Promise<ApplyReply> {
+  const { plan, forms, match, file } = await planDetailed(projectId, upload); // `file`: as planned (a dbt copy keeps this project's other keys)
   if (plan.hash !== planHash) return { ok: false, code: 'plan_changed', error: modelPlanChanged() };
   const todo = plan.items.filter((i) => LANDS.has(i.status) || (i.status === 'conflict' && choices[i.key] === 'file'));
   if (!todo.length) return { ok: true, written: [], failed: [] };
@@ -220,7 +220,7 @@ export async function applyImport(projectId: string, file: ParsedModel, planHash
       }
       const reply = await saveMetricChecked(projectId, {
         name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
-        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target,
+        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
       });
       if (!('metric' in reply) || !reply.metric) return String(reply.error);
       fresh.metrics.set(m.id, reply.metric.id);

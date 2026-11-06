@@ -1,7 +1,7 @@
 // Which project object each model file object is (semantic layer part 7, a2; docs/semantic-layer/07-portability.md
 // D4) — PURE, over two ParsedModels: the upload and the project's own export (./modelExport.ts read back).
 //
-// Datasets, terms and metrics: by id, then by EXACT name (case counts). A term or a metric matched by name must sit on
+// Datasets, terms and metrics: by id, then by EXACT name (case counts); a metric a dbt import tagged, by its tag first. A term or a metric matched by name must sit on
 // the same dataset: an import never moves a definition between datasets, so one on another dataset is new (and its name
 // is then refused as taken). Relationships: by id, then the same two columns in either direction (`sameEdge`). A project
 // object is matched at most once, and an id match is claimed before any name match. Datasets are never created: a file
@@ -30,15 +30,24 @@ export interface ModelMatch {
 const byId = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 function matchKind<T extends { id: string }>(
-  kind: RefKind, file: readonly T[], here: readonly T[], how: ModelMatch['how'], same: (f: T, h: T) => boolean,
+  kind: RefKind, file: readonly T[], here: readonly T[], how: ModelMatch['how'], same: (f: T, h: T) => boolean, tagged?: (f: T, h: T) => boolean,
 ): Map<string, string | null> {
   const out = new Map<string, string | null>();
   const ids = new Set(here.map((h) => h.id));
   const claimed = new Set<string>();
   for (const f of file) if (ids.has(f.id)) claimed.add(f.id);
+  // An import tag names its object as an id does (f1: a dbt metric found again after a rename here), before any name.
+  const byTag = new Map<string, string>();
+  for (const f of tagged ? [...file].sort(byId) : []) {
+    const h = ids.has(f.id) ? undefined : here.find((x) => !claimed.has(x.id) && (tagged as (f: T, h: T) => boolean)(f, x));
+    if (h) {
+      claimed.add(h.id);
+      byTag.set(f.id, h.id);
+    }
+  }
   for (const f of [...file].sort(byId)) {
-    if (ids.has(f.id)) {
-      out.set(f.id, f.id);
+    if (ids.has(f.id) || byTag.has(f.id)) {
+      out.set(f.id, byTag.get(f.id) ?? f.id);
       how.set(`${kind}:${f.id}`, 'id');
       continue;
     }
@@ -65,7 +74,8 @@ export function matchModel(file: ParsedModel, here: ParsedModel): ModelMatch {
   const m: ModelMatch = {
     datasets,
     terms: matchKind('term', file.terms, here.terms, how, onDataset),
-    metrics: matchKind('metric', file.metrics, here.metrics, how, onDataset),
+    metrics: matchKind('metric', file.metrics, here.metrics, how, onDataset, (f, h) =>
+      !!f.importedFrom && f.importedFrom.kind === h.importedFrom?.kind && f.importedFrom.name === h.importedFrom.name && datasets.get(f.dataset) === h.dataset),
     relationships: new Map(),
     how,
     here: set,

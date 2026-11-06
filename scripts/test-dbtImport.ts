@@ -8,11 +8,18 @@
 // § datasets   a semantic model's dataset: the person's map, then the exact name, then a case- and underscore-blind
 //              one (marked); none is ever made up.
 // § upload     readDbtUpload: a file over the value budget or 32 MiB is refused with the sentence; content decides.
+// § route      model:importPlan and model:importApply over a JSON upload, through a2's plan and a3's apply: the skips with
+//              their reasons, a loose match marked, `datasetMap` in the hash, `importedFrom` written, a re-import that
+//              writes nothing, a rename here matched by `importedFrom`, and what Ordinate owns (format, direction, a
+//              table's role, grain and guide, a field's other names) never cleared by a copy.
+// § figures    every imported metric over the seed, by total, region and month, equals expected.json (Object.is), and a
+//              group with no figure there has none here. NEGATIVE CONTROL: `!=` without its `not_empty` step differs.
 //
 //   npm run build:ts && node scripts/test-dbtImport.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { H, close, post, upload, type Reply } from './liveRouteHarness';
 import type { ParsedColumn } from '../src/data/parse';
 import type { ModelMetric } from '../src/app/modelFormat';
 import type { ParsedModel } from '../src/app/modelRead';
@@ -187,6 +194,129 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('more metrics than one import takes is refused', isDeepStrictEqual(await readDbtUpload(at('many.json', JSON.stringify(many))), { error: msg.dbtTooMany() }));
   fs.rmSync(tmp, { recursive: true, force: true });
 
+  // ── § route ────────────────────────────────────────────────────────────────
+  const csv = (file: string, columns: ParsedColumn[]): (string | number | null)[][] =>
+    fs.readFileSync(path.join(DIR, file), 'utf8').trim().split('\n').slice(1).map((line) => line.split(',').map((cell, i) => (cell === '' ? null : columns[i].type === 'number' ? Number(cell) : cell)));
+  const seedProject = async (name: string): Promise<{ P: string; orders: string; visits: string; other: string }> => H.as(H.ORG_A, async () => {
+    await H.projects.init();
+    const P = (await H.projects.createProject(name)).id;
+    const save = async (n: string, file: string, columns: ParsedColumn[]): Promise<string> => {
+      const d = await H.datasets.saveDataset(P, { name: n, sourceKind: 'csv', columns, rows: csv(file, columns) });
+      if (!d) throw new Error(`dataset ${n} not saved`);
+      return d.id;
+    };
+    return { P, orders: await save('Orders', 'seed.csv', ORDERS_COLUMNS), visits: await save('visits', 'visits.csv', VISITS_COLUMNS), other: await save('Orders archive', 'seed.csv', ORDERS_COLUMNS) };
+  });
+  const uploadJson = async (json: unknown): Promise<string> => (await upload(Buffer.from(JSON.stringify(json)), 'semantic_manifest.json')).fileToken;
+  const planOf = async (P: string, json: unknown = MANIFEST, datasetMap?: Record<string, string>): Promise<Reply> =>
+    (await post('model:importPlan', { projectId: P, fileToken: await uploadJson(json), ...(datasetMap && { datasetMap }) })).value;
+  const applyOf = async (P: string, planHash: string, json: unknown = MANIFEST, datasetMap?: Record<string, string>): Promise<Reply> =>
+    (await post('model:importApply', { projectId: P, fileToken: await uploadJson(json), planHash, ...(datasetMap && { datasetMap }) })).value;
+  const fileId = (dbt: string): string => (model.metrics.find((x) => x.importedFrom?.name === dbt) as ModelMetric).id;
+  const itemFor = (plan: Reply, dbt: string): Reply => plan.plan.items.find((i: Reply) => i.key === `metric:${fileId(dbt)}`);
+  const stored = async (P: string) => H.as(H.ORG_A, async () => {
+    const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+    return Promise.all((await metricsMod.listMetrics(P)).map((x) => metricsMod.getMetric(P, x.id)));
+  });
+  const idOf = async (P: string, name: string): Promise<string> => ((await stored(P)).find((x) => x?.name === name) as { id: string }).id;
+
+  const S = await seedProject('dbt import');
+  const plan = await planOf(S.P);
+  ok('the dry run answers', plan.ok === true, show(plan));
+  const items: Reply[] = plan.plan?.items ?? [];
+  const translatorSkips = skipped.filter((x) => x.kind !== 'semanticModel').length;
+  ok('the dry run lists every skipped dbt object with its reason', items.filter((i) => i.status === 'skipped').length === translatorSkips, show(items.filter((i) => i.status === 'skipped')));
+  ok('… a skipped metric under its own reason', items.some((i) => i.kind === 'metric' && i.name === 'Visit to buy' && i.status === 'skipped' && i.reason === 'conversion'));
+  ok('… one that needs a skipped input, under it', items.some((i) => i.name === 'Median gap' && i.reason === 'depends_on_skipped' && i.because === 'metric:dbt:median_order') && items.some((i) => i.key === 'metric:dbt:median_order' && i.reason === 'unknown_aggregation'));
+  ok('… a dimension whose expr is SQL', items.some((i) => i.kind === 'field' && i.status === 'skipped' && i.reason === 'not_a_column' && i.name === 'orders · order_month'));
+  ok('a semantic model matched loosely is marked for checking', isDeepStrictEqual(items.find((i) => i.kind === 'dataset' && i.name === 'orders')?.changes?.[0], { field: 'matchedByName', here: 'Orders' }), show(items.filter((i) => i.kind === 'dataset')));
+  ok('… one matched exactly is not', items.some((i) => i.kind === 'dataset' && i.name === 'visits' && i.targetId === S.visits && !i.changes));
+  ok('every translated metric is new', model.metrics.every((x) => itemFor(plan, x.importedFrom?.name as string)?.status === 'new'), show(items.filter((i) => i.kind === 'metric' && i.status !== 'skipped' && i.status !== 'new')));
+  ok('the key and the field docs are updates', items.some((i) => i.kind === 'table' && i.status === 'updated' && i.changes?.[0]?.field === 'key') && items.some((i) => i.kind === 'field' && i.name === 'Orders · region' && i.status === 'updated'));
+  ok('the source says dbt; nothing only here a dbt file never names', plan.plan?.source?.kind === 'dbt' && !items.some((i) => i.status === 'onlyHere'));
+  ok('the reply names no path or token', !/staging|fileToken|semantic_manifest/.test(JSON.stringify(plan)));
+
+  const done = await applyOf(S.P, plan.plan.hash);
+  ok('the apply writes every new object and fails none', done.ok === true && done.failed.length === 0 && done.written.length === plan.plan.counts.new + plan.plan.counts.updated, show(done));
+  const after = await stored(S.P);
+  ok('importedFrom is written', after.find((x) => x?.name === 'Revenue')?.importedFrom?.name === 'revenue' && after.filter((x) => x?.importedFrom).length === model.metrics.length);
+  const again = await planOf(S.P);
+  ok('a re-import writes nothing', again.plan.counts.updated + again.plan.counts.new + again.plan.counts.renamed + again.plan.counts.conflict === 0, show(again.plan.items.filter((i: Reply) => i.status !== 'unchanged' && i.status !== 'skipped')));
+
+  await post('metric:update', { projectId: S.P, id: await idOf(S.P, 'Revenue'), patch: { name: 'Revenue (net)' } });
+  const renamed = await planOf(S.P);
+  ok('a re-import matches by importedFrom after a rename', itemFor(renamed, 'revenue')?.targetId === await idOf(S.P, 'Revenue (net)') && itemFor(renamed, 'revenue')?.status === 'renamed', show(itemFor(renamed, 'revenue')));
+  const back = await applyOf(S.P, renamed.plan.hash);
+  ok('applying it renames it back to dbt\'s name, the same record', back.ok === true && back.written.length === 1 && (await stored(S.P)).some((x) => x?.name === 'Revenue' && x.importedFrom?.name === 'revenue'), show(back));
+  const otherPlan = await planOf(S.P, MANIFEST, { orders: S.other });
+  ok('datasetMap points a model at another dataset, and moves the hash', otherPlan.ok === true && otherPlan.plan.hash !== renamed.plan.hash && items.length > 0 && otherPlan.plan.items.some((i: Reply) => i.kind === 'dataset' && i.name === 'orders' && i.targetId === S.other));
+  ok('… and the apply takes it too: the dry run\'s hash without the map is refused', (await applyOf(S.P, otherPlan.plan.hash)).code === 'plan_changed');
+  ok('a map to a dataset of no project here is refused by the contract', (await post('model:importPlan', { projectId: S.P, fileToken: await uploadJson(MANIFEST), datasetMap: { orders: 'nope' } })).status === 400);
+  ok('JSON that is not a manifest is refused with the sentence', (await planOf(S.P, { nodes: {} })).error === msg.dbtNotAManifest());
+
+  // A project with its own Revenue and docs: the copy updates what dbt says and keeps what Ordinate owns.
+  const K = await seedProject('dbt over a model');
+  await post('catalog:setTable', { projectId: K.P, datasetId: K.orders, patch: { role: 'fact', grain: 'One row per order', guide: 'Read me first.' } });
+  await post('catalog:setColumn', { projectId: K.P, datasetId: K.orders, column: 'region', patch: { aliases: ['area'] } });
+  const own = (await post('metric:save', { projectId: K.P, input: { name: 'Revenue', datasetId: K.orders, definition: { column: 'amount', aggregation: 'sum' }, format: { kind: 'currency', decimals: 0, compact: true }, direction: 'up_good', timeColumn: 'order_date' } })).value;
+  ok('(setup) the project\'s own Revenue', own.ok === true, show(own));
+  const kPlan = await planOf(K.P);
+  const kRev = itemFor(kPlan, 'revenue');
+  ok('an exact name on the same dataset is an update, of what dbt says only', kRev?.status === 'updated' && kRev?.targetId === own.metric?.id && isDeepStrictEqual(kRev?.changes?.map((c: Reply) => c.field), ['description', 'importedFrom']), show(kRev));
+  ok('(setup) the table doc and the field\'s other name were saved', kPlan.ok === true);
+  ok('… and the table doc changes only its key', isDeepStrictEqual(kPlan.plan.items.find((i: Reply) => i.kind === 'table')?.changes?.map((c: Reply) => c.field), ['key']));
+  await applyOf(K.P, kPlan.plan.hash);
+  const kRevNow = (await stored(K.P)).find((x) => x?.id === own.metric?.id);
+  ok('the update tags it and keeps its format and direction', kRevNow?.importedFrom?.name === 'revenue' && kRevNow?.direction === 'up_good' && kRevNow?.format.kind === 'currency', show(kRevNow));
+  const docReply = (await post('catalog:getTable', { projectId: K.P, datasetId: K.orders })).value;
+  const doc = docReply?.table ?? docReply;
+  ok('the table keeps its role, grain and guide, and gains the key', doc?.role === 'fact' && doc?.grain === 'One row per order' && doc?.guide === 'Read me first.' && doc?.key === 'id', show(docReply));
+  const colsReply = (await post('catalog:columns', { projectId: K.P, datasetId: K.orders })).value;
+  const region = (colsReply?.columns ?? colsReply)?.region;
+  ok('the field keeps its other names and gains dbt\'s words', isDeepStrictEqual(region?.aliases, ['area']) && region?.description === 'Where the order was placed' && region?.displayName === 'Region', show(region));
+  ok('… and then a re-import is unchanged', (await planOf(K.P)).plan.counts.updated === 0);
+
+  // ── § figures ──────────────────────────────────────────────────────────────
+  const EXPECTED: Array<[string, string, string, number | null]> = JSON.parse(fs.readFileSync(path.join(DIR, 'expected.json'), 'utf8')).figures;
+  const PINNED = new Set<string>(); // float differences in the last bits, each by name: none on this seed
+  const byName = new Map((await stored(S.P)).map((x) => [x?.name as string, x]));
+  const figures = new Map<string, Map<string, number | null>>(); // metric:group → key → value
+  const figureOf = async (metric: string, group: string): Promise<Map<string, number | null>> => {
+    const k = `${metric}:${group}`;
+    if (figures.has(k)) return figures.get(k) as Map<string, number | null>;
+    const x = byName.get(metric) as NonNullable<Awaited<ReturnType<typeof stored>>[number]>;
+    const out = new Map<string, number | null>();
+    if (!group) out.set('', ((await post('metric:values', { projectId: S.P, ids: [x.id] })).value as unknown as Reply[])[0]?.value ?? null);
+    else {
+      const def = x.definition as { column?: string; aggregation?: string };
+      // As the chart picker writes a metric measure: a formula's name with `count` (web/src/features/visuals).
+      const measure = def.column ? { column: def.column, aggregation: def.aggregation, metricId: x.id } : { column: x.name, aggregation: 'count', metricId: x.id };
+      const encoding = { category: group === 'region' ? 'region' : x.timeColumn, ...(group === 'month' && { grain: 'month' }), values: [measure] };
+      const c = (await post('visual:data', { projectId: S.P, datasetId: x.datasetId, encoding })).value;
+      if (c.ok !== true) throw new Error(`${metric} by ${group}: ${show(c)}`);
+      (c.data.labels as string[]).forEach((label, i) => out.set(group === 'month' ? monthKey(label) : label, c.data.series[0].values[i]));
+    }
+    figures.set(k, out);
+    return out;
+  };
+  const MONTHS: Record<string, string> = { Jan: '01', Feb: '02', Mar: '03', Apr: '04' };
+  const monthKey = (label: string): string => (/^\d{4}-\d{2}/.test(label) ? label.slice(0, 7) : `${label.slice(-4)}-${MONTHS[label.slice(0, 3)] ?? '??'}`);
+  for (const [metric, group, key, want] of EXPECTED) {
+    const got = (await figureOf(metric, group)).get(key);
+    ok(`${metric} by ${group || 'total'}${key ? ` ${key}` : ''}: equals MetricFlow (Object.is)`, Object.is(got ?? null, want) || PINNED.has(`${metric}:${group}:${key}`), show([got, want]));
+  }
+  for (const [k, got] of figures) {
+    const [metric, group] = k.split(':');
+    for (const [key, value] of got) {
+      if (!EXPECTED.some((e) => e[0] === metric && e[1] === group && e[2] === key)) ok(`${metric} by ${group} ${key}: no figure where MetricFlow has none`, value === null, show(value));
+    }
+  }
+  ok('every imported metric is held to a figure', model.metrics.every((x) => EXPECTED.some((e) => e[0] === x.name)));
+  const bare = (await post('metric:save', { projectId: S.P, input: { name: 'Bare !=', datasetId: S.orders, definition: { column: 'amount', aggregation: 'sum' }, filters: [{ type: 'filter', column: 'status', op: '!=', value: 'refunded' }] } })).value;
+  const bareTotal = ((await post('metric:values', { projectId: S.P, ids: [bare.metric?.id] })).value as unknown as Reply[])[0]?.value;
+  ok('NEGATIVE CONTROL: != without its not_empty step is a different figure from MetricFlow\'s', !Object.is(bareTotal, EXPECTED.find((e) => e[0] === 'Not refunded' && e[1] === '')?.[3]), show(bareTotal));
+
+  await close();
   finish();
 })().catch((err) => {
   console.error(err);

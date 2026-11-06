@@ -8,6 +8,9 @@
 //
 // `model:importApply` (a3): the same zip again, planned again and applied if its hash is the dry run's
 // (src/app/modelApply.ts). Before the first write it offers the model as it was, as a download.
+//
+// Both take dbt's semantic manifest too (f1): an upload whose content opens a JSON object is read as one
+// (src/app/dbtRead.ts) and translated (src/app/dbtImport.ts) over `datasetMap`, then planned and applied the same way.
 
 import * as path from 'path';
 import { createHash, randomUUID } from 'crypto';
@@ -19,7 +22,9 @@ import { writeZipAsync } from '../app/bundle';
 import { exportModel, ModelExportRefused, type ModelCounts, type NotCarried } from '../app/modelExport';
 import { MODEL_ZIP_TIME, modelJson, type ModelFiles } from '../app/modelFormat';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
-import { readModelZip, type ParsedModel } from '../app/modelRead';
+import { readModelZip, type ModelRead, type ParsedModel } from '../app/modelRead';
+import { looksLikeJson, readDbtUpload } from '../app/dbtRead';
+import { dbtModel } from '../app/dbtPlan';
 import { applyImport, type ApplyChoice, type ApplyReply } from '../app/modelApply';
 import { planImport, type ImportPlan } from '../app/modelPlan';
 import { modelUploadExpired } from '../app/modelFileMessages';
@@ -77,7 +82,15 @@ export async function beforeImportZip(projectId: string): Promise<string> {
  * One run over an uploaded model zip: a caller row access rules restrict is refused before the upload is read (D7), a
  * spent token is said in a sentence, and the upload is deleted before the reply, whatever happens (any pod).
  */
-async function withModelUpload<T>(projectId: unknown, fileToken: unknown, run: (projectId: string, read: ParsedModel) => Promise<T>): Promise<T | { ok: false; error: string }> {
+/** A model zip, or a dbt semantic manifest translated over this project's datasets: told by its content, never its name. */
+async function readUpload(projectId: string, file: string, datasetMap: unknown): Promise<ModelRead> {
+  if (!(await looksLikeJson(file))) return readModelZip(file);
+  const read = await readDbtUpload(file);
+  if ('error' in read) return { refused: read.error };
+  return dbtModel(projectId, read.json, (datasetMap && typeof datasetMap === 'object' ? datasetMap : {}) as Record<string, string>);
+}
+
+async function withModelUpload<T>(projectId: unknown, fileToken: unknown, datasetMap: unknown, run: (projectId: string, read: ParsedModel) => Promise<T>): Promise<T | { ok: false; error: string }> {
   const p = typeof projectId === 'string' ? projectId : '';
   const refusal = await modelRefusal(p);
   if (refusal) return { ok: false, error: refusal };
@@ -89,7 +102,7 @@ async function withModelUpload<T>(projectId: unknown, fileToken: unknown, run: (
     throw err;
   }
   try {
-    const read = await readModelZip(upload.path);
+    const read = await readUpload(p, upload.path, datasetMap);
     if ('refused' in read) return { ok: false, error: read.refused };
     return await run(p, read);
   } catch (err) {
@@ -110,9 +123,9 @@ export function register(): void {
     }
   });
 
-  ipcMain.handle('model:importPlan', async (_e, { projectId, fileToken }: { projectId?: unknown; fileToken?: unknown } = {}): Promise<ModelPlanReply> =>
-    withModelUpload(projectId, fileToken, async (p, read) => ({ ok: true as const, plan: await planImport(p, read) })));
+  ipcMain.handle('model:importPlan', async (_e, { projectId, fileToken, datasetMap }: { projectId?: unknown; fileToken?: unknown; datasetMap?: unknown } = {}): Promise<ModelPlanReply> =>
+    withModelUpload(projectId, fileToken, datasetMap, async (p, read) => ({ ok: true as const, plan: await planImport(p, read) })));
 
-  ipcMain.handle('model:importApply', async (_e, { projectId, fileToken, planHash, choices }: { projectId?: unknown; fileToken?: unknown; planHash?: unknown; choices?: unknown } = {}): Promise<ModelApplyReply> =>
-    withModelUpload(projectId, fileToken, (p, read) => applyImport(p, read, typeof planHash === 'string' ? planHash : '', (choices && typeof choices === 'object' ? choices : {}) as Record<string, ApplyChoice>, { before: () => beforeImportZip(p) })));
+  ipcMain.handle('model:importApply', async (_e, { projectId, fileToken, planHash, choices, datasetMap }: { projectId?: unknown; fileToken?: unknown; planHash?: unknown; choices?: unknown; datasetMap?: unknown } = {}): Promise<ModelApplyReply> =>
+    withModelUpload(projectId, fileToken, datasetMap, (p, read) => applyImport(p, read, typeof planHash === 'string' ? planHash : '', (choices && typeof choices === 'object' ? choices : {}) as Record<string, ApplyChoice>, { before: () => beforeImportZip(p) })));
 }

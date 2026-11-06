@@ -31,10 +31,12 @@ import { baseFilterRefusal, fieldRefusal, metricRefusal, relationshipRefusal, ta
 import type { Relationship } from '../analysis/relationships';
 import type { DatasetMeta } from '../data/datasets';
 import { modelDatasetMoved } from './modelFileMessages';
+import { dbtItems, keepHere, withImportTags } from './dbtPlan';
+import type { DbtSkip } from './dbtImport';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
 export const PLAN_STATUSES: readonly PlanStatus[] = ['unchanged', 'updated', 'renamed', 'new', 'conflict', 'skipped', 'onlyHere'];
-export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skipped' | 'sensitivity_lowered' | 'not_live' | 'invalid' | 'external';
+export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skipped' | 'sensitivity_lowered' | 'not_live' | 'invalid' | 'external' | DbtSkip;
 export type PlanKind = 'dataset' | 'table' | 'field' | 'baseFilters' | 'relationship' | 'term' | 'metric';
 
 /** One key that differs, as this project has it and as the files have it (absent: none). Definitions only. */
@@ -64,8 +66,8 @@ export interface ImportPlan {
   hash: string;
   items: PlanItem[];
   counts: Record<PlanStatus, number>;
-  /** What the files say about themselves (their own text). */
-  source: { appVersion: string; project: string };
+  /** What the files say about themselves (their own text); `kind: 'dbt'` for a dbt translation (f1), a copy. */
+  source: { appVersion: string; project: string; kind?: 'dbt' };
   /** Kinds this project holds that model files never carry: an import leaves them as they are. */
   notCarried: NotCarried[];
 }
@@ -127,10 +129,16 @@ export async function planImport(projectId: string, file: ParsedModel): Promise<
   return (await planDetailed(projectId, file)).plan;
 }
 
-/** The plan, and what the apply writes from: each relationship, term and metric item's file form (references mapped) by key, and the match. */
-export async function planDetailed(projectId: string, file: ParsedModel): Promise<{ plan: ImportPlan; forms: ReadonlyMap<string, Mapped>; match: ModelMatch }> {
-  const { here, notCarried } = await hereOf(projectId);
-  const m: ModelMatch = matchModel(file, here);
+/**
+ * The plan, and what the apply writes from: each relationship, term and metric item's file form (references mapped) by
+ * key, the match, and the files as planned (a dbt translation with this project's keys it does not carry: ./dbtPlan.ts).
+ */
+export async function planDetailed(projectId: string, upload: ParsedModel): Promise<{ plan: ImportPlan; forms: ReadonlyMap<string, Mapped>; match: ModelMatch; file: ParsedModel }> {
+  const exported = await hereOf(projectId);
+  const { notCarried } = exported;
+  const here = upload.dbt ? await withImportTags(projectId, exported.here) : exported.here;
+  const m: ModelMatch = matchModel(upload, here);
+  const file = upload.dbt ? keepHere(upload, here, m) : upload;
   const items: PlanItem[] = [];
   /** `kind:fileId` of each file object that will not exist after the import: whatever names it is skipped too. */
   const gone = new Set<string>();
@@ -331,7 +339,9 @@ export async function planDetailed(projectId: string, file: ParsedModel): Promis
     items.push(skip({ key, kind, name: bad.path, fileHash: objectBase({ path: bad.path, error: bad.error }), hereHash: '' }, 'invalid', { error: bad.error }));
   }
 
-  // ── Only here: listed, never deleted ──
+  items.push(...dbtItems(file, (id) => hereName.get(id) ?? ''));
+
+  // ── Only here: listed, never deleted (for a dbt file, only metrics: it names no term, relationship or other dataset) ──
   const inFile = new Set(file.invalid.map((b) => b.id).filter((id): id is string => !!id));
   const claimed = (map: Map<string, string | null>): Set<string> => new Set([...map.values()].filter((v): v is string => !!v));
   const only = async (kind: PlanKind, list: readonly { id: string; base: string; name?: string; label?: string }[], map: Map<string, string | null>, tag?: (id: string) => Promise<string>): Promise<void> => {
@@ -341,13 +351,16 @@ export async function planDetailed(projectId: string, file: ParsedModel): Promis
       items.push({ key: `${kind}:here:${o.id}`, kind, name: o.name ?? o.label ?? '', status: 'onlyHere', targetId: o.id, fileHash: '', hereHash: tag ? await tag(o.id) : o.base });
     }
   };
-  await only('dataset', here.datasets, m.datasets);
-  await only('relationship', here.relationships.map((r) => ({ ...r, name: r.label ?? `${hereName.get(r.from.dataset) ?? '?'}.${r.from.column} → ${hereName.get(r.to.dataset) ?? '?'}.${r.to.column}` })), m.relationships);
-  await only('term', here.terms, m.terms, async (id) => (await readTerm(projectId, id))?.tag ?? '');
+  if (!file.dbt) {
+    await only('dataset', here.datasets, m.datasets);
+    await only('relationship', here.relationships.map((r) => ({ ...r, name: r.label ?? `${hereName.get(r.from.dataset) ?? '?'}.${r.from.column} → ${hereName.get(r.to.dataset) ?? '?'}.${r.to.column}` })), m.relationships);
+    await only('term', here.terms, m.terms, async (id) => (await readTerm(projectId, id))?.tag ?? '');
+  }
   await only('metric', here.metrics, m.metrics, async (id) => (await readMetric(projectId, id))?.tag ?? '');
 
   items.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const counts = Object.fromEntries(PLAN_STATUSES.map((s) => [s, items.filter((i) => i.status === s).length])) as Record<PlanStatus, number>;
   const hash = createHash('sha256').update(stableStringify({ v: 1, items: items.map((i) => [i.key, i.status, i.fileHash, i.hereHash]) })).digest('base64url');
-  return { plan: { hash, items, counts, source: { appVersion: file.manifest.appVersion, project: file.manifest.project.name }, notCarried }, forms: fileOf, match: m };
+  const source = { appVersion: file.manifest.appVersion, project: file.manifest.project.name, ...(file.dbt && { kind: 'dbt' as const }) };
+  return { plan: { hash, items, counts, source, notCarried }, forms: fileOf, match: m, file };
 }
