@@ -8,7 +8,7 @@ import { daysFromCivil } from './civilDays';
 import { isoFromDays, periodDay } from './dateIntel';
 import type { DateRange } from './dateIntel';
 import type { FilterStep } from '../data/transforms';
-import { resolveMetric } from '../ipc/metrics';
+import { resolveMetric, type MetricRead } from '../ipc/metrics';
 
 /**
  * A recent period's key (alertStore.recentPeriods: a day's cell by `=`, or a month `YYYY-MM` by `contains`) as the
@@ -25,7 +25,8 @@ function keyRange(key: string, op: '=' | 'contains'): DateRange | null {
   return { from: isoFromDays(daysFromCivil(y, mo, 1)), to: isoFromDays(daysFromCivil(mo === 12 ? y + 1 : y, mo === 12 ? 1 : mo + 1, 1) - 1) };
 }
 
-export type MetricWatch = (period?: { column: string; key: string; op: '=' | 'contains' }) => Promise<number | null>;
+/** `reads`: collects every column the figure is totalled from (ipc/metrics resolveMetric). */
+export type MetricWatch = (period?: { column: string; key: string; op: '=' | 'contains' }, reads?: MetricRead[]) => Promise<number | null>;
 
 /** The figure of a rule watched through its metric (optionally in one recent period), `'gone'` when that metric is deleted, null for a rule its copy answers. */
 export async function metricWatch(projectId: string, rule: AlertRule): Promise<MetricWatch | 'gone' | null> {
@@ -35,10 +36,23 @@ export async function metricWatch(projectId: string, rule: AlertRule): Promise<M
   if (!m) return rule.metric.column ? null : 'gone';
   if (rule.metric.column && !isPeriodDefinition(m.definition) && !isFunnelDefinition(m.definition)) return null;
   const stored = (rule.metric.filters || []) as FilterStep[];
-  return async (period) => {
+  return async (period, reads) => {
     const range = period ? keyRange(period.key, period.op) : null;
     if (period && !range) return null;
     const extra: FilterStep[] = range ? [{ type: 'filter', column: period!.column, op: 'period', period: { preset: 'custom', ...range } } as FilterStep] : [];
-    return (await resolveMetric(projectId, id, { filters: stored.concat(extra) }))?.value ?? null;
+    return (await resolveMetric(projectId, id, { filters: stored.concat(extra), ...(reads ? { reads } : {}) }))?.value ?? null;
   };
+}
+
+/**
+ * Every column a rule's figure is totalled from, as its post is judged (server/subscriptions/alertPosts →
+ * publish/kpiPolicy): a rule watched through its metric reads what the metric's figure reads — the resolver's own
+ * `reads`, so the metric is resolved once more — and any other its stored column.
+ */
+export async function ruleReads(projectId: string, rule: AlertRule): Promise<MetricRead[]> {
+  const watch = await metricWatch(projectId, rule);
+  if (typeof watch !== 'function') return [{ datasetId: rule.datasetId, column: rule.metric.column, aggregation: rule.metric.aggregation }];
+  const reads: MetricRead[] = [];
+  await watch(undefined, reads);
+  return reads;
 }

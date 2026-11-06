@@ -38,6 +38,7 @@ import { deliver, type DatasetsMemo } from './deliver';
 import { subscriptionDb } from './run';
 import { inOrg, orgDb } from '../db/inOrg';
 import { kpiHidden } from '../../publish/kpiPolicy';
+import { ruleReads } from '../../analysis/alertMetric';
 
 /** The message one fired event stands for. Pure given the rule, the event and `withheld` (the Share policy's words, or ''). */
 export function alertMessageModel(projectId: string, rule: AlertRule, event: AlertEvent, withheld = '') {
@@ -91,8 +92,8 @@ async function post(projectId: string, events: AlertEvent[]): Promise<number> {
       if (!rule || !channelIds || !channelIds.length) continue;
       const who = ctx();
       const trail = (ok: boolean) => audit(subscriptionDb(), { org: who.org.id, actor: who.user.email, action: 'rpc', channel: 'alerts:post', projectId, targets: [rule.id, ...channelIds], outcome: ok ? 'ok' : 'error', requestId: who.requestId }).catch(() => undefined);
-      // Judged before the claim, so a policy that cannot be read leaves the event unclaimed for the next path. The figure is computeCardMetric's over the rule's own column (alertStore.metricFor), so that column is what is judged.
-      const withheld = await kpiHidden(projectId, [{ datasetId: rule.datasetId, column: rule.metric.column, aggregation: rule.metric.aggregation }], 'report');
+      // Judged before the claim, so a policy that cannot be read leaves the event unclaimed for the next path. The figure is computeCardMetric's over the rule's own column (alertStore.metricFor), or its metric's when the rule is watched through it (a period or funnel metric, part 5): those columns are what is judged.
+      const withheld = await kpiHidden(projectId, await ruleReads(projectId, rule), 'report');
       let first: boolean;
       try {
         first = await claim(projectId, event.id);

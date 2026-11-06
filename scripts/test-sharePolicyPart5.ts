@@ -3,6 +3,7 @@
 // story export, a send, an alert post and MCP's metric_value (scripts/sharePolicyPart5Harness.ts reads each).
 //
 //   countd   a distinct count over a marked column (p5-04)
+//   period   a year-to-date metric over a base totalled from it, and an alert watched through it (p5-05)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -69,10 +70,32 @@ async function countd(env: H.Env): Promise<void> {
     (on) => H.mark(env, P, S, 'salary', on), 'd2604e31e39603c141539f7e03a69a88b5e35cc0009051fd091cff5e9cf51dab');
 }
 
+const TO_JUNE = [{ type: 'filter', column: 'day', op: '<=', value: '2025-06-30' }]; // the window's end, so the year to date is the fixture's half year on any day
+
+async function period(env: H.Env): Promise<void> {
+  const { P, S } = await H.project(env, 'Part 5 period');
+  const pay = await H.saveMetric(env, P, S, 'Payroll', { column: 'salary', aggregation: 'sum' }, { timeColumn: 'day' });
+  const hrs = await H.saveMetric(env, P, S, 'Hours', { column: 'hours', aggregation: 'sum' }, { timeColumn: 'day' });
+  const ytdPay = await H.saveMetric(env, P, S, 'Payroll YTD', { base: pay.id, window: { to_date: 'year' } }, { filters: TO_JUNE });
+  const ytdHrs = await H.saveMetric(env, P, S, 'Hours YTD', { base: hrs.id, window: { to_date: 'year' } }, { filters: TO_JUNE });
+  const fx = await H.publishable(env, P, [
+    { title: 'Payroll YTD KPI', metric: { datasetId: S, column: '', aggregation: 'sum', metricId: ytdPay.id } },
+    { title: 'Hours YTD KPI', metric: { datasetId: S, column: '', aggregation: 'sum', metricId: ytdHrs.id } },
+  ], [ytdPay.id, ytdHrs.id], [ // a period metric's rule has no column of its own: it is watched through the metric (alertMetric)
+    { name: 'Payroll YTD above 1000', datasetId: S, metric: { column: '', aggregation: 'sum', metricId: ytdPay.id, label: 'Payroll YTD' }, compare: 'threshold', threshold: { op: '>', value: 1000 } },
+    { name: 'Hours YTD above 10', datasetId: S, metric: { column: '', aggregation: 'sum', metricId: ytdHrs.id, label: 'Hours YTD' }, compare: 'threshold', threshold: { op: '>', value: 10 } },
+  ], ['Payroll YTD', 'Hours YTD']);
+  await judged(env, 'period', fx,
+    { tiles: ['Payroll YTD KPI'], metrics: ['Payroll YTD'], rules: ['Payroll YTD above 1000'], mcp: ['Payroll YTD'] },
+    { tiles: ['Hours YTD KPI'], metrics: ['Hours YTD'], rules: ['Hours YTD above 10'], mcp: ['Hours YTD'] },
+    (on) => H.mark(env, P, S, 'salary', on), '15c00e0e7e5dd5dfe1ed507db5e820f621e402fbc6ca97b7f16c3d4574b3af52');
+}
+
 (async () => {
   const env = await H.start();
   try {
     await countd(env);
+    await period(env);
   } finally {
     await env.close();
   }

@@ -33,6 +33,7 @@ async function baseOf(projectId: string, datasetId: string, def: MetricPeriodDef
 /** The base under `scope`, in its own context; its money, warehouse time and glossary notes join the caller's. */
 async function baseValue(ctx: ResolveCtx, base: Metric, scope: FilterStep[], depth: number): Promise<number | null> {
   const inner = newCtx(ctx.projectId, scope, ctx.params);
+  inner.reads = ctx.reads; // the columns its figure is totalled from are the base's: what a Share policy judges (publish/kpiPolicy)
   inner.stack.add(base.name.toLowerCase()); // a base formula naming itself has no value, as at the top
   const value = await resolveDefinition(inner, base.datasetId, base.definition, base.filters, depth + 1);
   ctx.fx = mergeFx(ctx.fx, inner.fx);
