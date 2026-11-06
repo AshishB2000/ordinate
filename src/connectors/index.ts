@@ -35,6 +35,7 @@ const FAMILY_MODULES: readonly string[] = [
   './mongodb',  // MongoDB (the official driver; aggregation pipelines)
   './athena',   // Amazon Athena (REST, SigV4-signed)
   './cube',     // Cube (REST, a semantic layer: its models are added as Live datasets)
+  './dbt',      // dbt Semantic Layer, beta (GraphQL, a semantic layer: its saved queries are added as Live datasets)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —

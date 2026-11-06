@@ -33,6 +33,8 @@ const FAKE: Record<string, string[]> = {
   'v6meta.ssrf.test': ['fd00:ec2::254'],
   'cgnat.ssrf.test': ['100.100.100.200'],
   'pinned.ssrf.test': ['127.0.0.1'],
+  // dbt's declared host, answered with a private address (a poisoned resolver): the per-request check still refuses it.
+  'semantic-layer.cloud.getdbt.com': ['10.9.8.7'],
 };
 // A DNS-rebinding attacker: 127.0.0.1 on the first lookup, 10.255.255.1 after.
 // rebind.ssrf.test counts across a redirect; once.ssrf.test is reset per driver.
@@ -195,6 +197,11 @@ async function main(): Promise<void> {
     ok(`server: Cube URL ${u} refused`, !res.ok && /^Refused/.test(res.error) && /SSRF_ALLOW/.test(res.error), JSON.stringify(res));
   }
   ok('server: no refused Cube URL reached a socket', ch.hits.length === 0);
+  // § dbt (semantic layer part 7, d1): fixed hosts; the region picks one, and every request is still resolved and checked.
+  const dbtRes = await run.listTables('dbt-semantic-layer', { region: 'north-america', environmentId: '42' }, { token: 't0ken-canary' }, QUICK);
+  ok('server: dbt\'s declared host resolving to a private address is refused by the guard', !dbtRes.ok && /^Refused/.test(dbtRes.error) && !dbtRes.error.includes('t0ken-canary'), JSON.stringify(dbtRes));
+  const dbtOff = await run.listTables('dbt-semantic-layer', { region: 'http://169.254.169.254', environmentId: '42' }, { token: 't0ken-canary' }, QUICK);
+  ok('server: a dbt region off the list is refused before any request', !dbtOff.ok && /Unknown dbt region/.test(dbtOff.error), JSON.stringify(dbtOff));
   for (const u of ['https://169.254.169.254/latest/meta-data/', 'https://2130706433/', 'https://[::ffff:10.0.0.1]/', 'https://internal.ssrf.test/x.json']) {
     const res = await run.runConnection('url', { url: u }, {}, {}, QUICK);
     ok(`server: URL source ${u} refused (the refresh path runs the same call)`, !res.ok && /^Refused/.test(res.error), JSON.stringify(res));

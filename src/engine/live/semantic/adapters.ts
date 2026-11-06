@@ -14,6 +14,7 @@ import type { LiveTarget } from '../liveTarget';
 import type { LiveRefusal } from '../liveSpec';
 import { warehouse } from '../liveWarehouse';
 import { cubeAdapter } from './cube';
+import { dbtAdapter } from './dbt';
 import type { SemanticRunner } from './evaluateSemantic';
 import type { SemanticQuery } from './semanticQuery';
 import { snowflakeAdapter } from './snowflake';
@@ -28,7 +29,7 @@ export interface SemanticAdapter {
 }
 
 /** The shipped backends' encoders (c1 Snowflake; e1 and d1 add theirs): a semantic dataset of an unknown backend is unavailable. */
-export const ADAPTERS: Partial<Record<SemanticBackendId, SemanticAdapter>> = { snowflake: snowflakeAdapter, cube: cubeAdapter };
+export const ADAPTERS: Partial<Record<SemanticBackendId, SemanticAdapter>> = { snowflake: snowflakeAdapter, cube: cubeAdapter, dbt: dbtAdapter };
 
 const TEST_ONLY = new Map<SemanticBackendId, SemanticAdapter>();
 

@@ -53,6 +53,8 @@ export interface Bench {
   ask: (log: Log) => SemanticRunner;
   /** Filters this backend cannot express exactly (`show` of the steps → the code each case must refuse with): a refusal, never a figure (e1 Cube). */
   refused?: ReadonlyMap<string, string>;
+  /** Chart cases this backend refuses whole (name → code): a value it cannot write exactly (d1 dbt: a kept category holding a tab). */
+  refusedCases?: ReadonlyMap<string, string>;
 }
 
 export const layerIr = (ir: LiveIR, metrics: string[]): LiveIR => ({ ...ir, measures: metrics.map((metric): LiveMeasure => ({ metric })) });
@@ -156,6 +158,11 @@ export const FILTERS: FilterStep[][] = [
 export async function matrix(b: Bench, ok: (label: string, cond: boolean, extra?: unknown) => void): Promise<void> {
   for (const c of MATRIX) {
     const r = await chartCase(b, c);
+    const code = b.refusedCases?.get(c.name);
+    if (code) {
+      ok(`${c.name}: refused ${code}, a value in it the backend cannot write exactly`, !r.sem.ok && r.sem.code === code, show(r.sem));
+      continue;
+    }
     ok(`${c.name}: labels, every cell (Object.is; sum/avg within ${PINS.relTol}), the Other note and the SQL path's order agree`, r.problems.length === 0, r.problems.join(' | '));
   }
   let bad = 0;
