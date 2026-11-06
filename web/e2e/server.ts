@@ -54,8 +54,12 @@ export async function startServer(extraEnv: Record<string, string> = {}, seedOpt
     cwd: REPO,
     // DATABASE_URL is NOT inherited: a spec that wants Postgres creates its own scratch database
     // and passes it in extraEnv. Inheriting it pointed every spec at one shared database.
+    // The RPC rate limits are lifted, as the server suites lift them: every test of a spec file is dev@local on this one
+    // server, so a fast run of a long spec spent the per-user 1,200 a minute and whichever test came next met 429s (the
+    // model spec's last test). fixtures.ts' per-load RPC budget is the chattiness check; a spec testing a limit sets it in extraEnv.
     env: {
       ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info',
+      RATE_LIMIT_RPC_PER_MINUTE: '100000', RATE_LIMIT_RPC_IP_PER_MINUTE: '100000',
       ...(seedOpts.live ? { ORDINATE_TEST_LIVE_FAKE: '1' } : {}), ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
