@@ -13,6 +13,7 @@
 //               NEGATIVE CONTROL the same question without the lock answers
 //   § secrets   connections:list carries the has-secret flag only; Cube's error text carrying the API secret and the
 //               signed token reaches the log redacted and no reply
+//   § nightly   scripts/semanticCubeLive.ts end to end against the in-process Cube (its checks count here)
 //
 // This proves our encoder and the connector's plumbing against our engine; that Cube itself answers the same is the
 // nightly's (scripts/test-semanticCubeLive.ts).
@@ -206,6 +207,12 @@ void (async () => {
   ok('…Cube\'s words are in the server log for the question and the describe, the secret and tokens redacted',
     logs.lines.filter((l) => l.includes('no access')).length >= 2 && !logs.lines.some((l) => l.includes(SECRET) || tokens.some((t) => l.includes(t))), show(logs.lines.slice(-3)));
   ok('…and the describe that failed changed nothing: a sentence, the dataset as it was', resync.value.ok === false && resync.value.code === 'live_failed' && /server log/.test(String(resync.value.error)), show(resync.value));
+
+  // ── § nightly ── the nightly's run (scripts/semanticCubeLive.ts), here against the in-process Cube, so it cannot rot
+  // unseen before (or between) real runs: its catalog checks, probes, the whole parity matrix and its control.
+  const nightly: typeof import('./semanticCubeLive') = require('./semanticCubeLive');
+  const ran = await as(() => nightly.runCubeLive({ url: cube.url, secret: SECRET }, ok, () => undefined));
+  ok('§ nightly: every question of the run reached the fake Cube', ran.loads > 50 && cube.loads > ran.loads, `${ran.loads}`);
 
   await cube.close();
   await close();

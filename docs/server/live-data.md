@@ -398,6 +398,18 @@ pull request and against a ClickHouse container every night. Each run also check
 fields: 400 formulas against the formula engine, row by row (2,000 on PostgreSQL and ClickHouse), and
 the matrix's calculated-field charts and KPIs.
 
+The **semantic parity matrix** runs the same way against Cube every night: a Cube server over
+PostgreSQL seeded with the fixture, both in containers (`scripts/fixtures/cube/compose.yml`, the
+image pinned by digest), asked by `scripts/test-semanticCubeLive.ts` with `CUBE_URL` and
+`CUBE_API_SECRET` set (the compose file's own fixture secret). It needs no repository secret, and
+runs locally the same way:
+
+```bash
+docker compose -f scripts/fixtures/cube/compose.yml up -d
+CUBE_URL=http://127.0.0.1:4000 CUBE_API_SECRET=ordinate-cube-parity-not-a-secret node scripts/test-semanticCubeLive.js
+docker compose -f scripts/fixtures/cube/compose.yml down -v
+```
+
 It runs only when a warehouse's variables are set. Without them it prints that it skipped and
 passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
 These are inputs to the test, **not server settings**: the server never reads them, so they are not
@@ -667,6 +679,55 @@ or token, with nothing new to fill in.
 
 What the adapter relies on, and which parts only a real account can prove, is in
 [snowflake-semantic-views.md](../live-data/snowflake-semantic-views.md).
+
+### Cube
+
+**Cube** is a connection of its own, under **Semantic layers** in the source picker. It lists the
+deployment's cubes and views, and **Add as dataset** makes a semantic dataset of one: its dimensions
+are the model's dimensions, its metrics the model's measures.
+
+- **The form.** The **Cube URL** is the deployment (`https://cube.example.com`) or its REST API URL
+  as Cube Cloud shows it (`https://….cubecloud.dev/cubejs-api/v1`); a bare address gets
+  `/cubejs-api/v1`. **Sign-in** is either the deployment's **API secret** (`CUBEJS_API_SECRET`):
+  Ordinate signs a fresh HS256 token with it for every request, valid five minutes; or an **API
+  token** the deployment accepts, sent as is (use this when the deployment verifies tokens with
+  `CUBEJS_JWT_KEY` or a JWKS). Either is kept in the secrets store, never in a reply or a log; the
+  connection says only that one is set. The token carries no user, so Cube's own access rules see
+  the same caller for every Ordinate user: give the connection a model that every editor may see.
+- **A deployment inside your network.** The server refuses private addresses unless an
+  administrator allows the range with `SSRF_ALLOW` ([configuration.md](configuration.md)); a
+  self-hosted Cube on `10.20.0.7` needs `SSRF_ALLOW=10.20.0.7/32`. Plain `http://` is accepted
+  only for an address `SSRF_ALLOW` admits; anything else must be `https://`. Every request is
+  checked and pinned to the address that was checked, and a redirect is never followed.
+- **One request per question**, `POST /v1/load` with Cube's JSON query: every filter value is a
+  string in a `values` array, never part of a member name. While Cube answers "Continue wait",
+  Ordinate asks again (every 200 ms) until `LIVE_QUERY_TIMEOUT_MS`, and stops when the viewer
+  leaves; however many polls it takes, it counts as one question. Every question has an explicit
+  row limit: the top 51 for a chart's categories, otherwise 50,000 (Cube's default
+  `CUBEJS_DB_QUERY_LIMIT`); a chart past 50,000 groups is refused.
+- **Dates at every grain.** A `time` dimension is offered by day, week, month, quarter and year,
+  in UTC. A week must start on Monday (it does on PostgreSQL); a bucket that does not is refused,
+  never relabelled.
+- **Can it be added up?** Only a measure of type `sum` or `count`, and not a rolling window. A
+  `count_distinct`, an `avg`, a `min`, a `max` or a `number` measure is not, so a running total of
+  it is refused.
+- **Filters Cube cannot apply exactly are refused**, naming Cube: comparing text with `<` or `>`
+  (Cube compares only numbers and dates), "contains" (Cube's is case-insensitive), "is empty" on a
+  text field (Cube cannot tell a field of spaces from text), and a list of dates. Value pickers
+  still work: their blanks are dropped by Ordinate from the list Cube returns.
+- **Blanks.** Ordinate shows one blank group where a dimension holds both `''` and NULL; Cube
+  groups them apart, and joining Cube's two figures would be Ordinate's arithmetic. So a dimension
+  that answers both is refused (the server log says which); declare it `sql: NULLIF(col, '')` in
+  the model to make them one.
+- **Names.** Models, dimensions and measures keep Cube's names. A member that is not public (or
+  not visible) is left out, and so is one whose name is not a plain identifier, and `boolean` and
+  `geo` dimensions.
+- **Restricted viewers are refused** on Cube datasets, as on every semantic layer: Cube compares
+  values in the warehouse's collation, never byte for byte.
+- **No copy.** A Cube connection has no tables to copy: "Copy the data" is refused.
+
+What the connector relies on, and which parts only a real deployment proves, is in
+[cube.md](../live-data/cube.md).
 
 ## Refresh URL
 

@@ -272,7 +272,7 @@ async function matrixSection(): Promise<void> {
     log.push({ q, step, rows: rows.length });
     return { columns: req.columns.slice(), rows };
   };
-  const refused = new Map([[show([mx.F('cat', 'is_empty')]), 'layerFilter'], [show([mx.F('cat', 'not_empty')]), 'layerFilter'], [show([mx.F('cat', 'contains', 'a')]), 'layerFilter']]);
+  const refused = (require('./semanticCubeLive') as typeof import('./semanticCubeLive')).cubeRefusedFilters(); // the nightly's own pins
   const b: import('./semanticParityMatrix').Bench = { x, env, typed: fx.env(source, columns), kit: mx.parityKit(x, fx.runDuck), ask, refused };
   await pm.matrix(b, (label, cond, extra) => ok(`Cube: ${label}`, cond, extra));
   ok(`…every question went to the fake Cube as its query object (${posts} posts)`, posts > 50);
