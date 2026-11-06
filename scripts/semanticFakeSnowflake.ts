@@ -173,3 +173,124 @@ export function decodeSnowflake(sql: string, params: LiveParam[], columns: LiveC
   if (limit) q.limit = Number(limit[1]);
   return { model: `${view[1]}.${view[2]}.${view[3]}`, query: q };
 }
+
+// ── The fake as Snowflake's SQL API (c1 Tasks 3 and 4) ──────────────────────
+//
+// An answer for ./snowflakeFake `FakeSnowflake.answer`: the real `snowflake` connector (its execute, binds, row-cap
+// wrapper and shaping) talks to it through `setTransport`. It answers SHOW SEMANTIC VIEWS and DESCRIBE SEMANTIC VIEW
+// from the views it holds, and the encoder's statements by decoding them and asking ./semanticFake's runFake —
+// DuckDB over a table the test loaded. Every value goes back as a string under its rowType, as Snowflake sends it.
+
+import type { SfHttpRequest, SfHttpResponse } from '../src/connectors/snowflakeHttp';
+
+/** A semantic view the fake holds: its dimensions (a table's columns, read by runFake) and its metrics' expressions. */
+export interface FakeView {
+  /** DATABASE.SCHEMA.VIEW */
+  name: string;
+  comment?: string;
+  /** The DuckDB table runFake answers from. */
+  table: string;
+  columns: LiveColumn[];
+  /** Metric name → its EXPRESSION, as DESCRIBE shows it. runFake must know the name (./semanticFake FAKE_METRICS). */
+  metrics: Record<string, string>;
+  /** DESCRIBE's rows instead of the ones built from `columns` and `metrics`: [kind, name, parent, property, value]. */
+  describe?: Array<[string, string, string | null, string, string]>;
+}
+
+const sfType: Record<string, string> = { text: 'VARCHAR(16777216)', number: 'FLOAT', date: 'DATE' };
+const HANDLE = '01b0e8a5-0002-3c8a-0000-0001234a5b6e';
+
+/** One finished statement's response (HTTP 200, jsonv2), every value a string or null. */
+export function sqlApiResult(cols: Array<[string, string]>, data: Array<Array<string | null>>): SfHttpResponse {
+  const body = {
+    resultSetMetaData: {
+      numRows: data.length, format: 'jsonv2', partitionInfo: [{ rowCount: data.length, uncompressedSize: 1024 }],
+      rowType: cols.map(([name, type]) => ({ name, type, nullable: true, scale: type === 'fixed' ? 0 : null, precision: type === 'fixed' ? 38 : null })),
+    },
+    data, code: '090001', sqlState: '00000', statementHandle: HANDLE, message: 'Statement executed successfully.',
+  };
+  return { status: 200, body: JSON.stringify(body), truncated: false };
+}
+
+/** A failed statement (HTTP 422) saying `message`. */
+export function sqlApiFailure(message: string): SfHttpResponse {
+  return { status: 422, body: JSON.stringify({ code: '002003', sqlState: '02000', message, statementHandle: HANDLE }), truncated: false };
+}
+
+function describeRows(v: FakeView): Array<Array<string | null>> {
+  if (v.describe) return v.describe;
+  const out: Array<Array<string | null>> = [['TABLE', 'PARITY', null, 'BASE_TABLE_NAME', v.table]];
+  for (const c of v.columns) {
+    out.push(['DIMENSION', c.name, 'PARITY', 'TABLE', 'PARITY'], ['DIMENSION', c.name, 'PARITY', 'EXPRESSION', `parity."${c.name}"`],
+      ['DIMENSION', c.name, 'PARITY', 'DATA_TYPE', sfType[c.type]], ['DIMENSION', c.name, 'PARITY', 'ACCESS_MODIFIER', 'PUBLIC']);
+  }
+  for (const [m, expr] of Object.entries(v.metrics)) {
+    out.push(['METRIC', m, 'PARITY', 'TABLE', 'PARITY'], ['METRIC', m, 'PARITY', 'EXPRESSION', expr],
+      ['METRIC', m, 'PARITY', 'DATA_TYPE', 'NUMBER(38,6)'], ['METRIC', m, 'PARITY', 'ACCESS_MODIFIER', 'PUBLIC']);
+  }
+  return out;
+}
+
+/** The SQL API's bindings back to the encoder's parameters. */
+export function paramsOf(bindings: unknown): LiveParam[] {
+  const b = (bindings ?? {}) as Record<string, { type: string; value: string | null }>;
+  return Object.keys(b).sort((x, y) => Number(x) - Number(y)).map((k, i) => {
+    const { type, value } = b[k];
+    const v = value ?? '';
+    if (type === 'TEXT') return { name: `p${i}`, type: 'text', value: v };
+    if (type === 'FIXED' || type === 'REAL') return { name: `p${i}`, type: 'number', value: Number(v) };
+    if (type === 'DATE') return { name: `p${i}`, type: 'date', value: new Date(Number(v)).toISOString().slice(0, 10) };
+    return bad(`a ${type} binding`);
+  });
+}
+
+const CAPPED = /^select \* from \(\n([\s\S]*)\n\) limit (\d+)$/;
+const epochDay = (iso: string): string => String(Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000));
+
+/** Every statement `FakeSnowflake` saw that asked a view a question, decoded: the view and the question. */
+export const asked: Array<{ model: string; query: SemanticQuery }> = [];
+
+/**
+ * The answer function: the views' catalog, and their questions answered by runFake. `hook` may answer a statement
+ * first (a failure, a planted error) — return undefined to let the fake answer.
+ */
+export function semanticAnswer(views: FakeView[], hook?: (statement: string) => SfHttpResponse | undefined): (req: SfHttpRequest, kind: string) => Promise<SfHttpResponse> {
+  return async (req, kind) => {
+    if (kind === 'cancel') return sqlApiResult([], []);
+    const json = JSON.parse(req.body ?? '{}') as { statement?: string; bindings?: unknown };
+    const statement = String(json.statement ?? '');
+    const held = hook?.(statement);
+    if (held) return held;
+    if (/^SHOW SEMANTIC VIEWS IN (DATABASE|ACCOUNT) LIMIT 1000$/.test(statement)) {
+      const cols: Array<[string, string]> = [['created_on', 'timestamp_ltz'], ['name', 'text'], ['database_name', 'text'], ['schema_name', 'text'], ['comment', 'text'], ['owner', 'text']];
+      return sqlApiResult(cols, views.map((v) => {
+        const [db, schema, name] = v.name.split('.');
+        return ['1700000000.000000000', name, db, schema, v.comment ?? '', 'SYSADMIN'];
+      }));
+    }
+    const d = /^DESCRIBE SEMANTIC VIEW "([^"]+)"\."([^"]+)"\."([^"]+)"$/.exec(statement);
+    if (d) {
+      const v = views.find((x) => x.name === `${d[1]}.${d[2]}.${d[3]}`);
+      if (!v) return sqlApiFailure(`Semantic view '${d[3]}' does not exist or not authorized.`);
+      return sqlApiResult([['object_kind', 'text'], ['object_name', 'text'], ['parent_entity', 'text'], ['property', 'text'], ['property_value', 'text']], describeRows(v));
+    }
+    const capped = CAPPED.exec(statement) ?? bad('a statement that is not capped');
+    const { model, query } = (() => {
+      const v0 = views.find((x) => capped[1].includes(`"${x.name.split('.').join('"."')}"`));
+      if (!v0) return bad('a view the fake does not hold');
+      return decodeSnowflake(capped[1], paramsOf(json.bindings), v0.columns);
+    })();
+    const view = views.find((x) => x.name === model)!;
+    asked.push({ model, query });
+    const fake: typeof import('./semanticFake') = require('./semanticFake');
+    const a = await fake.runFake(view.table, view.columns, query);
+    const kinds = [...query.dimensions.map((x) => view.columns.find((c) => c.name === x.name)!.type), ...query.metrics.map(() => 'number' as const)];
+    const cols = a.columns.map((name, i): [string, string] => [name, kinds[i] === 'text' ? 'text' : kinds[i] === 'date' ? 'date' : 'real']);
+    const data = a.rows.slice(0, Number(capped[2])).map((r) => r.map((v, i) => {
+      if (v === null || v === undefined) return null;
+      if (kinds[i] === 'date') return epochDay(String(v));
+      return Object.is(v, -0) ? '-0' : String(v);
+    }));
+    return sqlApiResult(cols, data);
+  };
+}
