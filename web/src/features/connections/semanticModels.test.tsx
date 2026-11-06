@@ -93,6 +93,25 @@ describe('a semantic layer under Connections', () => {
     expect(await within(models).findByText('Orders')).toBeTruthy();
   });
 
+  it('a Cube connection\'s rail names its sign-in by the option\'s label and says its datasets are asked of Cube (e1)', async () => {
+    const CUBE = {
+      id: 'cube', label: 'Cube', family: 'cube', category: 'Semantic layers', browsable: false, live: false, semantic: true, fields: [
+        { key: 'url', label: 'Cube URL', type: 'text', required: true, secret: false },
+        { key: 'auth', label: 'Sign-in', type: 'select', required: true, secret: false, options: [{ value: 'secret', label: 'API secret' }, { value: 'token', label: 'API token' }] },
+        { key: 'token', label: 'API secret or token', type: 'password', required: true, secret: true },
+      ],
+    };
+    const conn = { ...CONN, connectorId: 'cube', values: { url: 'https://cube.example.com', auth: 'secret' }, secretSet: { token: true } };
+    const live = { id: DSID, name: 'Orders (Cube)', rowCount: 0, updatedAt: '', originConnId: CID, mode: 'live', semantic: { layer: 'cube', label: 'Cube' } };
+    serve({ 'connectors:catalog': { body: [CUBE] }, 'connections:list': { body: [conn] }, 'dataset:list': { body: [live, { ...live, id: 'x', name: 'Plain live', semantic: undefined }] } });
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' }, LAZY);
+    expect(await within(rail).findByText('API secret')).toBeTruthy();
+    expect(within(rail).queryByText('secret')).toBeNull();
+    expect(await within(rail).findByText('Live · asked of Cube')).toBeTruthy();
+    expect(within(rail).getByText('Live · asked at the warehouse')).toBeTruthy(); // NEGATIVE CONTROL: a plain Live dataset
+  }, 30_000);
+
   it('NEGATIVE CONTROL: a plain connection lists no models and asks for none', async () => {
     const calls = serve({ 'connections:list': { body: [{ ...CONN, connectorId: 'snowflake', semantic: undefined }] }, 'connectors:catalog': { body: [{ ...SNOWFLAKE, semantic: false }] } });
     renderApp(`/connections/${PID}/${CID}`);
