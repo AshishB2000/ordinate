@@ -32,7 +32,7 @@ export type DbtSkip =
   | 'cumulative' | 'conversion' | 'time_offset' | 'cross_model' | 'window_groupings' | 'unknown_aggregation'
   | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset'
   // f2 (./dbtCumulative.ts): why a cumulative metric is not a period metric
-  | 'all_time' | 'period_agg' | 'window_unit' | 'calendar_differs' | 'no_base_metric';
+  | 'all_time' | 'period_agg' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
 export type DbtKind = 'metric' | 'dimension' | 'entity' | 'semanticModel';
 
 export interface DbtSkipped {
@@ -263,6 +263,14 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     };
   };
 
+  /** The date a translated metric counts by: its own, or a period metric's base's (f2), as the editor's save reads it. */
+  const countsBy = (x: ModelMetric): string | undefined => {
+    const base = (x.definition as { base?: string }).base;
+    if (!base) return x.timeColumn;
+    for (const r of done.values()) if ('metric' in r && r.metric.id === base) return r.metric.timeColumn;
+    return undefined;
+  };
+
   /** A ratio's or derived metric's inputs: each one's translation, by its alias (else its name). */
   const formula = (n: string, m: Obj, inputs: Obj[], body: (refs: Map<string, ModelMetric>) => string | null): Result => {
     if (!inputs.length) return { skip: 'unreadable' };
@@ -285,12 +293,13 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
       refs.set(key, metric);
     }
     const metrics = [...refs.values()];
-    if (metrics.some((x) => /[[\]]/.test(x.name)) || new Set(metrics.map((x) => x.timeColumn ?? '')).size > 1) return { skip: 'unreadable', model };
+    if (metrics.some((x) => /[[\]]/.test(x.name)) || new Set(metrics.map((x) => countsBy(x) ?? '')).size > 1) return { skip: 'unreadable', model };
     const f = body(refs);
     if (!f || f.length > MAX_FORMULA) return { skip: 'unreadable', model };
     const ds = models.get(model as string)?.ds as DbtDataset;
     const definition: MetricDefinition = sanitizeDefinition({ formula: f });
-    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string };
+    const date = countsBy(metrics[0]);
+    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(date && { timeColumn: date }) }, model: model as string };
   };
 
   function translate(n: string): Result {

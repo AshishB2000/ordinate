@@ -33,6 +33,7 @@ import type { DatasetMeta } from '../data/datasets';
 import { modelDatasetMoved } from './modelFileMessages';
 import { dbtItems, formulaNames, keepHere, withImportTags } from './dbtPlan';
 import type { DbtSkip } from './dbtImport';
+import type { DbtNote } from './dbtCumulative';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
 export const PLAN_STATUSES: readonly PlanStatus[] = ['unchanged', 'updated', 'renamed', 'new', 'conflict', 'skipped', 'onlyHere'];
@@ -67,7 +68,7 @@ export interface ImportPlan {
   items: PlanItem[];
   counts: Record<PlanStatus, number>;
   /** What the files say about themselves (their own text); `kind: 'dbt'` for a dbt translation (f1), a copy. */
-  source: { appVersion: string; project: string; kind?: 'dbt' };
+  source: { appVersion: string; project: string; kind?: 'dbt'; notes?: DbtNote[] };
   /** Kinds this project holds that model files never carry: an import leaves them as they are. */
   notCarried: NotCarried[];
 }
@@ -364,6 +365,7 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
   items.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const counts = Object.fromEntries(PLAN_STATUSES.map((s) => [s, items.filter((i) => i.status === s).length])) as Record<PlanStatus, number>;
   const hash = createHash('sha256').update(stableStringify({ v: 1, items: items.map((i) => [i.key, i.status, i.fileHash, i.hereHash]) })).digest('base64url');
-  const source = { appVersion: file.manifest.appVersion, project: file.manifest.project.name, ...(file.dbt && { kind: 'dbt' as const }) };
+  // The notes are not hashed: they follow from the items, and the calendar that decides them already moves those (f2).
+  const source = { appVersion: file.manifest.appVersion, project: file.manifest.project.name, ...(file.dbt && { kind: 'dbt' as const }), ...(file.dbt?.notes?.length && { notes: file.dbt.notes }) };
   return { plan: { hash, items, counts, source, notCarried }, forms: fileOf, match: m, file };
 }

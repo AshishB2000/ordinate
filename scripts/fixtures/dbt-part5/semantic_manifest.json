@@ -1274,6 +1274,45 @@
       "time_granularity": null
     },
     {
+      "name": "eu_share_7d",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "eu_revenue_7d / revenue_7d",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "eu_revenue_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          },
+          {
+            "name": "revenue_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
       "name": "revenue_ly",
       "description": null,
       "type": "derived",

@@ -9,7 +9,8 @@
 //   never a week to date (MetricFlow's week is its warehouse's date_trunc, which dbt's docs leave open);
 // - and only `period_agg: last`: dbt's default, `first`, reads a month at its first day, Ordinate at its last.
 // The base is the unfiltered simple metric f1 translated on the same measure, never one made up; the metric's own
-// filters (its input's, then its own) become the period metric's filters.
+// filters (its input's, then its own) become the period metric's filters. Never a count: a window with no row in it
+// counts 0 here, where MetricFlow's join leaves that day out.
 
 import type { FilterStep } from '../data/transforms';
 import type { CalendarPrefs } from '../analysis/dateIntel';
@@ -47,6 +48,7 @@ const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON
 const UNIT_DAYS: Readonly<Record<string, number>> = { day: 1, days: 1, week: 7, weeks: 7 }; // singular or plural: dbt's docs do not say which the manifest writes
 const MAX_DAYS = 366;
 const TO_DATE: ReadonlySet<string> = new Set(['week', 'month', 'quarter', 'year']);
+const COUNTS: ReadonlySet<string> = new Set(['count', 'countd']);
 
 /** The calendar a to-date at `grain` matches MetricFlow's on (Gregorian months; quarters and years from January). */
 const dbtCalendar = (grain: string, cal: CalendarPrefs): boolean => grain !== 'week' && (!cal.calendarType || cal.calendarType === 'gregorian') && (grain === 'month' || cal.fiscalYearStart === 1);
@@ -91,6 +93,7 @@ export function translateCumulative(m: Obj, ctx: CumulativeCtx): { metric: Model
   if ('skip' in w) return { skip: w.skip, ...at };
   const base = [...ctx.simple().values()].find((s) => s.measure === own(inp, 'name') && !s.filtered && !(s.metric.definition as { snapshot?: unknown }).snapshot && !!s.metric.timeColumn);
   if (!base) return { skip: 'no_base_metric', ...at };
+  if (COUNTS.has(String((base.metric.definition as { aggregation?: unknown }).aggregation))) return { skip: 'count_window', ...at }; // no row in the window: 0 here, no figure in dbt
   const filters = ctx.filters(inp, m, measure.model);
   if (!filters) return { skip: 'filter_shape', ...at };
   const definition = sanitizeDefinition({ base: base.metric.id, window: w.window });

@@ -35,6 +35,7 @@ about a mapping: remove that mapping (its metric goes back to a skip reason) and
 | A day whose window holds no row | No figure (the INNER JOIN drops it). Ordinate shows none either. | as above |
 | What `period_agg: last` gives for an ended month | `last_value(…) over (partition by the month order by metric_time__day)` over the days the join kept: **the figure on the month's last day whose window holds a row**. Ordinate's is the window ending on the month's last day. They are the same figure whenever that window holds a row. When it holds none Ordinate shows no figure, where dbt repeats an earlier day's (20 periods here, below). | [cumulative](https://docs.getdbt.com/docs/build/cumulative), the `period_agg` SQL |
 | A window in weeks | `N weeks` is 7N days (date arithmetic). Ordinate's "last N weeks" is whole calendar weeks, so it maps to `last 7N days`. | as above |
+| A count's window with no row | MetricFlow has no figure (the join leaves the day out); Ordinate counts it 0. Found by the suite (`orders_7d` on 2023-08-16): a window over a count or a distinct count is skipped `count_window`, and so is a formula over one. | the suite |
 | MetricFlow's week start | **Not in the docs**: `date_trunc('week')`, which is the warehouse's. A week to-date stays skipped (`calendar_differs`). | [dimensions](https://docs.getdbt.com/docs/build/dimensions) |
 | Quarters and years | Calendar (`date_trunc`), so a quarter or year to-date maps only while the workspace's year starts in January on the Gregorian calendar; a month to-date while the calendar is Gregorian. | as above |
 | `input_metric` (dbt's newer spec) | The docs' newer YAML names `input_metric`; its manifest is not documented, so a cumulative metric with no `type_params.measure` is `unreadable`. | [cumulative](https://docs.getdbt.com/docs/build/cumulative) |
@@ -45,11 +46,12 @@ about a mapping: remove that mapping (its metric goes back to a skip reason) and
 
 ### The periods whose last window holds no row (Ordinate: no figure)
 
-Every one equals MetricFlow's figure on an earlier day: `revenue_7d`, `revenue_2w`, `eu_revenue_7d`, `orders_7d` and
-`aov_7d` in March 2024 and Q1 2024 (the data ends on 15 March), and in the week of 18 March 2024 (`revenue_2w`: of 25
-March); `eu_revenue_7d` in the weeks of 6 March 2023, 14 August 2023 and 4 March 2024; `revenue_mtd` and `revenue_qtd`
-in the week of 25 September 2023 (1 October 2023, a Sunday, has no order). The suite holds Ordinate to no figure at
-each, and to MetricFlow's figure at every other day and period.
+MetricFlow's figure at each is an earlier day's: `revenue_7d`, `revenue_2w`, `eu_revenue_7d` and `eu_share_7d` in
+March 2024 and Q1 2024 (the data ends on 15 March), and in the week of 18 March 2024 (`revenue_2w`: of 25 March);
+`eu_revenue_7d` and `eu_share_7d` in the weeks of 6 March 2023, 14 August 2023 and 4 March 2024 (`eu_share_7d` then
+divides an earlier day's EU figure by the last day's total); `revenue_mtd` and `revenue_qtd` in the week of 25 September
+2023 (1 October 2023, a Sunday, has no order). 20 in all. The suite holds Ordinate to no figure at each, and to
+MetricFlow's figure at every other day and period. Ordinate never shows a figure there that differs from dbt's.
 
 ## The dbt project (outside the repo)
 
@@ -125,6 +127,7 @@ metrics:
   - { name: refunds_7d, type: cumulative, type_params: { measure: refund_total, cumulative_type_params: { window: 7 days, period_agg: last } } }
   - { name: mrr_7d, type: cumulative, type_params: { measure: mrr_by_account, cumulative_type_params: { window: 7 days, period_agg: last } } }
   - { name: aov_7d, type: derived, type_params: { expr: revenue_7d / orders_7d, metrics: [revenue_7d, orders_7d] } }
+  - { name: eu_share_7d, type: derived, type_params: { expr: eu_revenue_7d / revenue_7d, metrics: [eu_revenue_7d, revenue_7d] } }
   - { name: revenue_ly, type: derived, type_params: { expr: revenue_ly, metrics: [{ name: revenue, alias: revenue_ly, offset_window: 1 year }] } }
   - { name: revenue_yoy_change, type: derived, type_params: { expr: revenue - revenue_ly, metrics: [revenue, { name: revenue, alias: revenue_ly, offset_window: 1 year }] } }
   - { name: revenue_yoy_growth, type: derived, type_params: { expr: (revenue - revenue_ly) / revenue_ly, metrics: [revenue, { name: revenue, alias: revenue_ly, offset_window: 1 year }] } }
@@ -136,7 +139,7 @@ metrics:
 ## The figures
 
 ```sh
-C=revenue_7d,revenue_2w,revenue_mtd,revenue_qtd,revenue_ytd,eu_revenue_7d,orders_7d,aov_7d
+C=revenue_7d,revenue_2w,revenue_mtd,revenue_qtd,revenue_ytd,eu_revenue_7d,eu_share_7d,orders_7d,aov_7d
 for g in day week month quarter year; do mf query --metrics $C --group-by metric_time__$g --end-time 2024-06-30 --csv $g.csv; done
 mf query --metrics revenue_7d_first --group-by metric_time__month --csv first.csv
 mf query --metrics revenue_rolling_month --group-by metric_time__day --end-time 2024-06-30 --csv rolling_month.csv
@@ -158,10 +161,12 @@ column; if it counts A07 in both regions it cannot, and it stays skipped.
 |---|---|---|
 | revenue, orders | sum, count (f1) | the bases |
 | refunds_card | sum, filtered (f1) | the refunds measure's only simple metric is filtered |
-| revenue_7d, eu_revenue_7d, orders_7d | `{ base, window: { last: 7, unit: 'day' } }` | a rolling window; its own filter becomes its filters over the unfiltered base |
+| revenue_7d, eu_revenue_7d | `{ base, window: { last: 7, unit: 'day' } }` | a rolling window; its own filter becomes its filters over the unfiltered base |
 | revenue_2w | `last: 14, unit: 'day'` | weeks become days, never calendar weeks |
 | revenue_mtd, revenue_qtd, revenue_ytd | `{ to_date: month \| quarter \| year }` | to date, while the calendar is dbt's |
-| aov_7d | `[revenue_7d] / [orders_7d]` | a derived metric over two windows: f1's formula |
+| eu_share_7d | `([eu_revenue_7d] / [revenue_7d])`, by `order_date` | a derived metric over two windows: f1's formula, on its bases' date |
+| orders_7d | skipped `count_window` | a count over a window with no row is 0 here, no figure in dbt (`orders_7d`'s figures stay, for that control) |
+| aov_7d | skipped, falls with orders_7d | a formula over a count window |
 | revenue_wtd | skipped `calendar_differs` | dbt's week is its warehouse's |
 | revenue_7d_first | skipped `period_agg` | an older YAML, top-level window, `period_agg` left to `first` |
 | revenue_all_time | skipped `all_time` | no window and no grain |

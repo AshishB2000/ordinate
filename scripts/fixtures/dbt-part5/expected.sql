@@ -25,19 +25,26 @@ CREATE TABLE periods AS
 SELECT DISTINCT metric, grain, CAST(date_trunc(grain, d) AS DATE) AS start,
   last_value(v) OVER (PARTITION BY metric, grain, date_trunc(grain, d) ORDER BY d ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS v
 FROM daily, grains;
--- aov_7d = revenue_7d / orders_7d: each input on its own at the group, FULL OUTER JOINed on it, then divided.
-CREATE TABLE aov AS
-SELECT coalesce(a.d, b.d) AS d, a.v / b.v AS v FROM (SELECT * FROM daily WHERE metric = 'revenue_7d') a FULL OUTER JOIN (SELECT * FROM daily WHERE metric = 'orders_7d') b ON a.d = b.d;
-CREATE TABLE aov_periods AS
-SELECT coalesce(a.grain, b.grain) AS grain, coalesce(a.start, b.start) AS start, a.v / b.v AS v
-FROM (SELECT * FROM periods WHERE metric = 'revenue_7d') a FULL OUTER JOIN (SELECT * FROM periods WHERE metric = 'orders_7d') b ON a.grain = b.grain AND a.start = b.start;
+-- A derived metric over two windows: each input on its own at the group, FULL OUTER JOINed on it, then divided.
+--   aov_7d = revenue_7d / orders_7d (a NEGATIVE CONTROL: orders_7d is a count), eu_share_7d = eu_revenue_7d / revenue_7d.
+CREATE TABLE pairs AS SELECT * FROM (VALUES ('aov_7d', 'revenue_7d', 'orders_7d'), ('eu_share_7d', 'eu_revenue_7d', 'revenue_7d')) p(metric, num, den);
+CREATE TABLE ratio AS
+SELECT p.metric, k.d, a.v / b.v AS v
+FROM pairs p CROSS JOIN (SELECT DISTINCT d FROM daily) k
+LEFT JOIN daily a ON a.metric = p.num AND a.d = k.d LEFT JOIN daily b ON b.metric = p.den AND b.d = k.d
+WHERE a.v IS NOT NULL OR b.v IS NOT NULL;
+CREATE TABLE ratio_periods AS
+SELECT p.metric, k.grain, k.start, a.v / b.v AS v
+FROM pairs p CROSS JOIN (SELECT DISTINCT grain, start FROM periods) k
+LEFT JOIN periods a ON a.metric = p.num AND a.grain = k.grain AND a.start = k.start LEFT JOIN periods b ON b.metric = p.den AND b.grain = k.grain AND b.start = k.start
+WHERE a.v IS NOT NULL OR b.v IS NOT NULL;
 
 -- Every day and every period that has ended by 2024-06-30 (the suite's today is 2024-07-01).
 CREATE TABLE by_day AS
-SELECT metric, d, v FROM daily WHERE d <= DATE '2024-06-30' UNION ALL SELECT 'aov_7d', d, v FROM aov WHERE d <= DATE '2024-06-30' AND v IS NOT NULL;
+SELECT metric, d, v FROM daily WHERE d <= DATE '2024-06-30' UNION ALL SELECT metric, d, v FROM ratio WHERE d <= DATE '2024-06-30' AND v IS NOT NULL;
 CREATE TABLE by_period AS
 SELECT metric, grain, start, v FROM periods WHERE start + CAST('1 ' || grain AS INTERVAL) <= DATE '2024-07-01'
-UNION ALL SELECT 'aov_7d', grain, start, v FROM aov_periods WHERE start + CAST('1 ' || grain AS INTERVAL) <= DATE '2024-07-01' AND v IS NOT NULL;
+UNION ALL SELECT metric, grain, start, v FROM ratio_periods WHERE start + CAST('1 ' || grain AS INTERVAL) <= DATE '2024-07-01' AND v IS NOT NULL;
 
 -- Controls: the shapes that stay skipped, each figure a hand-made Ordinate metric is shown to differ from.
 -- revenue_7d_first: period_agg first (dbt's default) by month.
