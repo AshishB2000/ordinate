@@ -83,6 +83,25 @@ rule withholds.
 Within one release the export is byte-identical while nothing changes: the same project exports the same
 bytes, in the app or over MCP.
 
+## Ossie
+
+Export ▾ → Ossie (`model:exportOssie`) writes the same definitions as one Ossie document (Apache Ossie, the Open
+Semantic Interchange spec), **pinned to `0.2.0.dev0`**, the draft read on 2026-11-05 (the only release, 0.1.1, uses
+another shape). It is JSON with sorted keys, byte-identical while nothing changes, built from the model files
+above, so it carries no rows, origins, secrets or access rules. Export only: nothing is imported from Ossie.
+The mapping, with the spec's names, is `docs/semantic-layer/ossie-mapping.md`.
+
+Maps: dataset (name, description and grain, key, guide as AI context), every column as a field (documented fields add
+description, synonyms, example, and a time dimension for a metric's date column), simple metrics (sum, average,
+count, min, max, distinct count), relationships. A Live dataset over a table names that table as its `source` when
+the caller can open the connection; every other dataset has no table, so its `source` holds its own name.
+
+Does not map, and is listed after the download by object and reason: terms, value labels, always-applied filters,
+dataset roles, sensitivity, number formats, direction, targets, a non-default calendar, metrics with filters, and
+formula, period, funnel and snapshot metrics (Ossie metrics cannot refer to other metrics and have no filters or
+semi-additive measures). What Ossie cannot hold is also in the file under one `ordinate` extension. The same caller
+who may export the model files may export Ossie; a restricted caller is refused.
+
 ## How an import merges
 
 An import is always a **dry run first**: a plan that says, per object, `unchanged`, `updated`, `renamed`,

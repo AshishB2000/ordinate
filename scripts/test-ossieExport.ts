@@ -11,7 +11,8 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
-import { H, close } from './liveRouteHarness';
+import type { Identity } from '../src/server/context';
+import { H, close, post } from './liveRouteHarness';
 import { liveRecord } from './liveQueryHarness';
 import { ossieShape } from './ossieShape';
 import { modelJson } from '../src/app/modelFormat';
@@ -46,7 +47,7 @@ void (async () => {
   ok('a metric with a filter is reported, not exported without it', rep('metric', 'Revenue') && !ms.some((m) => m.name === 'Revenue'));
   ok('a snapshot, a period and a formula metric are reported', rep('metric', 'Stock on hand') && rep('metric', 'Revenue MTD') && rep('metric', 'Avg basket'));
   ok('terms and value labels are reported', rep('term', 'EMEA') && rep('valueLabels', 'region'));
-  ok('role, calendar and sensitivity are reported', rep('role', 'Orders') && rep('calendar', 'Calendar') && rep('sensitivity', 'amount'));
+  ok('role and sensitivity are reported; a default calendar is not', rep('role', 'Orders') && rep('sensitivity', 'amount') && !rep('calendar', 'Calendar'));
   ok('every unmapped definition is kept in the ordinate extension', doc.custom_extensions[0].vendor_name === 'ordinate' && /EMEA/.test(doc.custom_extensions[0].data));
 
   const { exportModel }: typeof import('../src/app/modelExport') = require('../src/app/modelExport');
@@ -74,6 +75,28 @@ void (async () => {
   const golden = (text: string) => goldenOf(new Map([['x', text]])).get('x');
   ok('the document matches the golden', golden(out.text) === fs.readFileSync(path.join(GOLDEN, 'ossie.json'), 'utf8'));
   ok('the report matches the golden', golden(modelJson(out.report)) === fs.readFileSync(path.join(GOLDEN, 'report.json'), 'utf8'));
+
+  // ── 5. model:exportOssie: who, and what the reply holds ──
+  const api: typeof import('../src/api/index') = require('../src/api/index');
+  const authz: typeof import('../src/server/authz/index') = require('../src/server/authz/index');
+  const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
+  const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
+  const VIEWER: Identity = { user: { email: 'vic@acme.test', role: 'viewer' }, org: { id: 'acme' } };
+  const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org: { id: 'acme' } };
+  const contract = api.contracts['model:exportOssie'];
+  const input = { projectId: F.P };
+  ok('contract: write, project-scoped, a strict input', !!contract && contract.access === 'write' && contract.project(input) === F.P && !contract.input.safeParse({ ...input, path: '/x' }).success && contract.input.safeParse(input).success);
+  const grants = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) }) as unknown as import('pg').Pool;
+  const decide = (who: Identity, rank: number) => H.as(who, () => authz.authorize(contract, input, who, grants(rank)));
+  ok('a viewer is refused (403 before the handler)', !(await decide(VIEWER, 1)).ok);
+  ok('NEGATIVE CONTROL: a project editor may export', (await decide(EDITOR, 2)).ok);
+  const asViewer = (await H.as(VIEWER, async () => rpc.handlers.get('model:exportOssie')?.(undefined, input))) as { ok?: boolean; error?: string; downloadToken?: string };
+  ok('a restricted caller reaching the handler gets the same refusal as the model export', asViewer?.ok === false && asViewer.error === (await H.as(VIEWER, async () => msg.modelRestricted())) && !('downloadToken' in asViewer), JSON.stringify(asViewer));
+  const r = (await post('model:exportOssie', input)).value;
+  ok('NEGATIVE CONTROL: an editor gets a token and the report, and no path', r.ok === true && typeof r.downloadToken === 'string' && JSON.stringify(r.report) === JSON.stringify(out.report) && r.version === OSSIE_SPEC_VERSION && !/\.json|temp/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 200));
+  const { ossieBytes }: typeof import('../src/ipc/modelFiles') = require('../src/ipc/modelFiles');
+  const sent = await H.as(H.ORG_A, () => ossieBytes(F.P));
+  ok('the file the route offers is the export, named for the project', sent.bytes.toString('utf8') === out.text && sent.name === 'Retail model-ossie.json', sent.name);
 
   await close();
   finish();

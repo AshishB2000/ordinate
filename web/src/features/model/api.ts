@@ -138,6 +138,34 @@ export type ModelExportReply =
 
 export const exportModel = async (projectId: string) => (await rpc('model:export', { projectId })) as ModelExportReply;
 
+/** `model:exportOssie` (src/ipc/modelFiles.ts): a download token, the spec version it is pinned to, and what did not map. */
+export interface OssieReport { notMapped: { kind: string; name: string; reason: string }[]; noSource: string[] }
+export type OssieExportReply = { ok: true; downloadToken: string; version: string; report: OssieReport } | { ok: false; error: string };
+
+export const exportOssie = async (projectId: string) => (await rpc('model:exportOssie', { projectId })) as OssieExportReply;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const OSSIE_KINDS: Record<string, (n: number) => string> = {
+  term: (n) => plural(n, 'term', 'terms'),
+  valueLabels: (n) => `Value labels on ${plural(n, 'field', 'fields')}`,
+  metric: (n) => plural(n, 'metric', 'metrics'),
+  metricDate: (n) => `Counting dates on ${plural(n, 'metric', 'metrics')}`,
+  metricSettings: (n) => `Formats or targets on ${plural(n, 'metric', 'metrics')}`,
+  baseFilters: (n) => `Always-applied filters on ${plural(n, 'dataset', 'datasets')}`,
+  role: (n) => `Roles on ${plural(n, 'dataset', 'datasets')}`,
+  sensitivity: (n) => `Sensitivity on ${plural(n, 'field', 'fields')}`,
+  relationship: (n) => plural(n, 'relationship', 'relationships'),
+  cardinality: (n) => `One-to-one on ${plural(n, 'relationship', 'relationships')}`,
+  calendar: () => 'Calendar settings',
+};
+
+/** What did not map, one group per kind: a heading ("2 terms"), the server's reason, and the names. */
+export function ossieGroups(report: OssieReport): { kind: string; title: string; reason: string; names: string[] }[] {
+  const by = new Map<string, OssieReport['notMapped']>();
+  for (const n of report.notMapped) by.set(n.kind, [...(by.get(n.kind) ?? []), n]);
+  return [...by].map(([kind, items]) => ({ kind, title: (OSSIE_KINDS[kind] ?? ((n: number) => `${n} × ${kind}`))(items.length), reason: items[0].reason, names: items.map((i) => i.name) }));
+}
+
 /** src/app/modelExport.ts NOT_CARRIED, in words. */
 const NOT_CARRIED_WORDS: Record<string, string> = {
   metricTrees: 'metric trees',

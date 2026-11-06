@@ -6,6 +6,8 @@ import { slugsFor, modelJson, type ModelDataset, type ModelField, type ModelMani
 import { exportModel } from './modelExport';
 import { ossieInputs, type OssieInputs } from './ossieSources';
 import { ossieWhy } from './ossieMessages';
+import { sanitizeCalendar } from '../analysis/dateIntel';
+import { stableStringify } from '../engine/queryCache';
 import { isSimpleDefinition } from '../analysis/metrics';
 
 export const OSSIE_SPEC_VERSION = '0.2.0.dev0';
@@ -105,8 +107,8 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     if (r.cardinality === 'one_to_one') miss('cardinality', name, ossieWhy.cardinality());
     relationships.push({ name, from: slugOf(r.from.dataset), to: slugOf(r.to.dataset), from_columns: [r.from.column], to_columns: [r.to.column], ai_context: r.label ? { synonyms: [r.label] } : undefined });
   }
-  miss('calendar', 'Calendar', ossieWhy.calendar());
-  ext.calendar = manifest.calendar;
+  // A calendar the project never changed says nothing worth reporting.
+  if (stableStringify(manifest.calendar) !== stableStringify(sanitizeCalendar({}))) { miss('calendar', 'Calendar', ossieWhy.calendar()); ext.calendar = manifest.calendar; }
   report.notMapped.sort((a, b) => (a.kind + a.name < b.kind + b.name ? -1 : a.kind + a.name > b.kind + b.name ? 1 : 0));
 
   const doc = {

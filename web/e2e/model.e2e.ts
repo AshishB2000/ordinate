@@ -143,6 +143,18 @@ e2e('data model: datasets', async (s) => {
   await page.getByText(/^Exported the model files\./).waitFor();
   await screensInPlace(page, 'model-export-done');
 
+  // Export ▾ → Ossie (part 7, g1): one JSON document, then the report of what did not map.
+  await page.getByRole('button', { name: 'Export' }).click();
+  await screensInPlace(page, 'model-export-ossie-menu');
+  const ossieDownload = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Ossie' }).click();
+  assert.match((await ossieDownload).suggestedFilename(), /-ossie\.json$/);
+  const ossieDialog = page.getByRole('dialog', { name: 'Exported for Ossie' });
+  await ossieDialog.waitFor();
+  await screensInPlace(page, 'model-export-ossie-report');
+  await ossieDialog.getByRole('button', { name: 'Close' }).first().click();
+  await ossieDialog.waitFor({ state: 'detached' });
+
   // At phone width the list stacks over the panel, and nothing scrolls sideways.
   await page.getByRole('tab', { name: 'Overview' }).click();
   await page.getByRole('tabpanel', { name: 'Overview' }).waitFor();

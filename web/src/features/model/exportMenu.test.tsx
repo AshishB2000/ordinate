@@ -32,6 +32,19 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
   });
 }
 
+const OSSIE = {
+  ok: true, downloadToken: 'tok-2', version: '0.2.0.dev0',
+  report: {
+    noSource: ['Customers', 'Orders'],
+    notMapped: [
+      { kind: 'term', name: 'EMEA', reason: 'Ossie has no named filters; the term is kept in the ordinate extension.' },
+      { kind: 'term', name: 'Big orders', reason: 'Ossie has no named filters; the term is kept in the ordinate extension.' },
+      { kind: 'valueLabels', name: 'region', reason: 'Ossie has no value labels; they are kept in the ordinate extension.' },
+      { kind: 'metric', name: 'Avg basket', reason: 'Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported.' },
+    ],
+  },
+};
+
 const openExport = async () => {
   fireEvent.pointerDown(await screen.findByRole('button', { name: 'Export' }, LAZY), { button: 0, pointerType: 'mouse' });
   return screen.findByRole('menuitem', { name: 'Model files' });
@@ -77,5 +90,39 @@ describe('The Data model: Export ▾', () => {
     const exp = await screen.findByRole('button', { name: 'Export' }, LAZY);
     expect([...document.querySelectorAll(PRIMARY_SELECTOR)].map((b) => b.textContent?.trim())).toEqual(['New metric']);
     expect(exp.matches(PRIMARY_SELECTOR)).toBe(false);
+  });
+
+  it('Ossie downloads the file and lists what did not map, by kind, in a dialog', async () => {
+    const calls = serve({ 'model:exportOssie': { body: OSSIE } });
+    renderApp(`/model/${P}`);
+    await openExport();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ossie' }));
+    await waitFor(() => expect(startDownload).toHaveBeenCalledWith('tok-2'));
+    expect(calls.filter((c) => c.channel === 'model:exportOssie').map((c) => c.payload)).toEqual([{ projectId: P }]);
+    const dialog = await screen.findByRole('dialog', { name: 'Exported for Ossie' });
+    expect(dialog.textContent).toContain('0.2.0.dev0');
+    expect(dialog.textContent).toContain('2 terms');
+    expect(dialog.textContent).toContain('EMEA, Big orders');
+    expect(dialog.textContent).toContain('Value labels on 1 field');
+    expect(dialog.textContent).toContain('1 metric');
+    expect(dialog.textContent).toContain('Customers, Orders');
+    expect(dialog.textContent).not.toContain('Everything mapped.');
+  });
+
+  it('a project where everything mapped says so', async () => {
+    serve({ 'model:exportOssie': { body: { ...OSSIE, report: { noSource: [], notMapped: [] } } } });
+    renderApp(`/model/${P}`);
+    await openExport();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ossie' }));
+    expect(await screen.findByText('Everything mapped.')).toBeTruthy();
+  });
+
+  it('an ok:false Ossie reply shows the sentence and starts no download', async () => {
+    serve({ 'model:exportOssie': { body: { ok: false, error: 'Not allowed.' } } });
+    renderApp(`/model/${P}`);
+    await openExport();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ossie' }));
+    expect(await screen.findByText('Not allowed.')).toBeTruthy();
+    expect(startDownload).not.toHaveBeenCalled();
   });
 });

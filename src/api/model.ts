@@ -14,6 +14,9 @@ export const model = {
   // invoke('model:export', { projectId }) — the definitions as a zip of model files (src/ipc/modelFiles.ts): a download
   // token, never a row, origin or secret. An editor's: a caller row access rules restrict is refused (part 7 D7).
   'model:export': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // invoke('model:exportOssie', { projectId }) — the definitions as one Ossie document (src/app/ossieExport.ts), pinned to the spec version
+  // it was tested against: a download token and the report of everything that did not map. Never a row, origin or secret. As model:export.
+  'model:exportOssie': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   // invoke('model:importPlan', { projectId, fileToken }) — the dry run of importing an uploaded model zip (src/ipc/modelFiles.ts): each
   // object unchanged, updated, renamed, new, in conflict, skipped with why, or only here, and the plan's hash. Writes nothing. An editor's:
   // the plan shows term values and value labels, so a caller row access rules restrict is refused (part 7 D7).

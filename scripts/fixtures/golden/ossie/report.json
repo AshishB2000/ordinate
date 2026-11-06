@@ -11,11 +11,6 @@
       "reason": "Ossie has no always-applied filters; they are kept in the ordinate extension."
     },
     {
-      "kind": "calendar",
-      "name": "Calendar",
-      "reason": "Ossie has no calendar settings."
-    },
-    {
       "kind": "metric",
       "name": "Avg basket",
       "reason": "Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported."
