@@ -9,7 +9,7 @@
 // over LOD fields (the entry would read the stored values, not the context's).
 
 import type { MetricFunnelDefinition, FunnelShow } from '../analysis/funnelMetric';
-import { funnelNeeds, windowMs } from '../analysis/funnelEvents';
+import { funnelColumns, funnelNeeds, windowMs } from '../analysis/funnelEvents';
 import { needsLodPass } from '../analysis/lodQuery';
 import { rewriteControlPeriods } from '../analysis/metricTime';
 import { expandTerms } from '../analysis/termExpand';
@@ -80,6 +80,8 @@ export async function funnelMetricValue(ctx: ResolveCtx, datasetId: string, def:
   const note = (n: string): void => {
     if (depth === 0 && !(ctx.notes ??= []).includes(n)) ctx.notes.push(n);
   };
+  // Its funnel's columns, as its chart shows them to a Share policy (analysis/metricMeasures withLeafMeasures): the figure is drawn from them.
+  ctx.reads?.push(...funnelColumns(def.funnel).map((column) => ({ datasetId, column, aggregation: 'count' as const })));
   const own = resolveFilterParams(ownFilters, ctx.params).steps;
   const expanded = await expandTerms(ctx.projectId, datasetId, ctx.scope); // a term it can't use THROWS typed, as at the KPI door
   for (const n of expanded.notes) if (!(ctx.notes ??= []).includes(n)) ctx.notes.push(n);
