@@ -29,6 +29,8 @@ export interface Ctx {
   d: SqlDialect;
   b: ParamSink;
   columns: LiveColumn[];
+  /** How a column is named, when not `lv_src."<name>"` (a Snowflake semantic view's dimension, part 7 c1). */
+  ref?: (col: LiveColumn) => string;
 }
 
 const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
@@ -39,7 +41,7 @@ export function nullsLast(x: string): string {
 }
 
 export function colRef(c: Ctx, col: LiveColumn): string {
-  return `${SRC}.${c.d.ident(col.name)}`;
+  return c.ref ? c.ref(col) : `${SRC}.${c.d.ident(col.name)}`;
 }
 
 function storedAsText(col: LiveColumn): boolean {
