@@ -35,7 +35,7 @@ import { withStatus } from '../analysis/statusStore';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
 import { isNewerKind } from '../analysis/pendingKinds';
-import { checkTarget, targetField } from './targetResolve';
+import { checkTarget, targetField, targetHidden } from './targetResolve';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -615,7 +615,7 @@ export function register() {
       if (hidden) return { ok: false, error: hidden, hiddenByPolicy: true, name: res.name };
       // Dated by the metric's dataset (L0.2, data/figureAsOf), inside the as-of scope.
       const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
-      if (!res.refused) Object.assign(dated, await targetField(projectId, id, bound.steps, res.value)); // part 5, D14: the server's, graded
+      if (!res.refused) Object.assign(dated, await targetField(projectId, id, bound.steps, res.value, leaving ? await targetHidden(projectId, id, share) : '')); // part 5, D14: the server's, graded; leaving, judged on its plan's columns
       return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;
     } catch (err: any) {
       if (isRowPolicyError(err)) return rowPolicyRefusal(err.reason); // typed, so a tile never shows its stored column instead

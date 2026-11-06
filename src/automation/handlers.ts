@@ -30,7 +30,7 @@ import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
 import { describeDefinitionShort } from '../analysis/metricFormat';
 import { metricAdditivity } from '../analysis/additivity';
-import { targetField } from '../ipc/targetResolve';
+import { targetField, targetHidden } from '../ipc/targetResolve';
 import * as analysis from '../analysis/analysis';
 import * as drafts from '../analysis/publishDashboard';
 import { dashboardGone } from '../analysis/savedViewMessages';
@@ -254,7 +254,7 @@ export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promi
   // (./creators): one totalled from a column the policy drops is refused, typed; under mask it passes, as a total does.
   const hidden = await kpiHidden(ctx.projectId, reads, 'export');
   if (hidden) throw new AutomationError('runtime', `${hidden}: a column this metric reads is marked sensitive.`);
-  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText, ...statusFields(await statusFor(ctx.projectId)(`metric:${r.id}`)), ...(await targetField(ctx.projectId, m.id, scope, r.value)) }; // part 5, D14: no scope argument, so an additive metric's target is "Pick a period"
+  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText, ...statusFields(await statusFor(ctx.projectId)(`metric:${r.id}`)), ...(await targetField(ctx.projectId, m.id, scope, r.value, await targetHidden(ctx.projectId, m.id, 'export'))) }; // part 5, D14: no scope argument, so an additive metric's target is "Pick a period"; its plan judged on the export path
 }
 
 /** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */

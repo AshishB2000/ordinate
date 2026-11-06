@@ -33,6 +33,10 @@ import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { TermNotExpandedError } from '../data/termStep';
 import { infoFor } from './relationships';
 import * as ipcMetrics from './metrics';
+import type { MetricRead } from './metrics';
+import { kpiHidden } from '../publish/kpiPolicy';
+import type { Outgoing } from '../publish/dashboardData';
+import type { SharePath } from '../app/privacyStore';
 
 export interface TargetResult {
   value: number | null;
@@ -182,9 +186,31 @@ export async function targetFor(projectId: string, metricId: string, scope: Filt
 }
 
 /** `{ target }` to spread into a reply, or nothing: a metric with no target adds no key. */
-export async function targetField(projectId: string, metricId: string, scope: FilterStep[], value: number | null): Promise<{ target?: TargetResult }> {
+export async function targetField(projectId: string, metricId: string, scope: FilterStep[], value: number | null, hidden = ''): Promise<{ target?: TargetResult }> {
+  if (hidden) return { target: noTarget(hidden) }; // `hidden`: targetHidden's words, on a way out
   const target = await targetFor(projectId, metricId, scope, value);
   return target ? { target } : {};
+}
+
+/** Every column the plan behind `m`'s target is totalled from (the resolver's own `reads`); none for a fixed figure. */
+export async function planReads(projectId: string, m: Pick<Metric, 'target'>): Promise<MetricRead[]> {
+  const source = m.target?.source;
+  if (!source || !('metricId' in source)) return [];
+  const reads: MetricRead[] = [];
+  // Resolved for its columns alone. A plan that cannot be resolved gives no target either; the columns it reached are still collected.
+  await ipcMetrics.resolveMetric(projectId, source.metricId, { reads }).catch(() => undefined);
+  return reads;
+}
+
+/**
+ * On a way out (publish/kpiPolicy): the Share policy's words when `metricId`'s target is drawn from a column the policy
+ * drops, else ''. Every target that leaves — a tile's, a scorecard row's, metric_value's, a chart's line, an alert's
+ * post — is judged on its plan's columns here, as a KPI totalled from them is.
+ */
+export async function targetHidden(projectId: string, metricId: string, via: Outgoing | SharePath | undefined): Promise<string> {
+  if (!via) return '';
+  const m = await metrics.getMetric(projectId, metricId);
+  return m?.target ? kpiHidden(projectId, await planReads(projectId, m), via) : '';
 }
 
 /** Why a target may not be saved on `m`, beside the Target box, or null. */
