@@ -18,7 +18,7 @@
 
 import { DATE_GRAINS } from '../analysis/categoryKey';
 import type { ColumnType } from '../data/parse';
-import { CUBE_NAME_RE, isCubeBody, loadRows, metaCubes, shortName, type CubeBody } from './cubeWire';
+import { CUBE_NAME_RE, CUBE_ROW_LIMIT, isCubeBody, loadRows, metaCubes, shortName, type CubeBody } from './cubeWire';
 import { CANCELLED, asArray, asString, budgetMs, httpRequest, prop, secret, str, timeoutError } from './httpShared';
 import { signJwtHs256 } from './jwt';
 import { allowListed, checkHost, guardOn } from './ssrf';
@@ -171,6 +171,7 @@ const semantic: ConnectorSemantic = {
   backend: 'cube',
   // Lookups: a query with dimensions alone lists their values. No byte-exact compare: restricted viewers refused (D17).
   caps: { lookups: true, binaryCompare: false },
+  rowLimit: CUBE_ROW_LIMIT,
   listModels,
   describeModel,
   run,

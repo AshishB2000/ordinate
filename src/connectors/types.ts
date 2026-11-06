@@ -207,6 +207,8 @@ export interface ConnectorSemantic {
   backend: SemanticBackendId;
   /** `lookups`: it answers a dimension's distinct values (the latest date, stored spellings). `binaryCompare`: it compares a row lock's values exactly (D17). */
   caps: { lookups: boolean; binaryCompare: boolean };
+  /** The most rows the layer answers one question with, when it caps below LIVE_ROW_LIMIT (Cube: 50,000): the too-many-groups sentence names it. */
+  rowLimit?: number;
   listModels(ctx: ConnectorContext): Promise<{ ok: true; models: Array<{ name: string; label?: string; description?: string }> } | ConnectorError>;
   describeModel(ctx: ConnectorContext, model: string): Promise<{
     ok: true;

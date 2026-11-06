@@ -177,6 +177,14 @@ void (async () => {
   await refusedAt('columnOnLayer', () => chart(SEM, [], { values: [{ column: 'amt', aggregation: 'sum' }] }));
   await refusedAt('map', () => chart(SEM, ['revenue'], { geo: { level: 'country' } }));
   await refusedAt('layerFilter', () => chart(SEM, ['revenue'], {}, [{ type: 'filter', column: 'cat', op: 'contains', value: 'a' }, ...SIX_MONTHS]));
+  // A reply that fills Cube's row limit is refused as too many groups, in a sentence naming Cube's limit, not Live SQL's.
+  cube.hook = (p) => (p.endsWith('/load') ? { status: 200, json: { data: Array.from({ length: 50_000 }, (_v, i) => ({ 'orders.d.day': `d${i}`, 'orders.d': `d${i}`, 'orders.revenue': '1' })), annotation: {} } } : undefined);
+  H.queryCache.clear();
+  const tooMany = await chart(SEM, ['revenue'], { category: 'd', grain: 'day' });
+  cube.hook = null;
+  ok('a Cube answer at its 50,000-row limit is refused (tooManyGroups), naming 50,000: Cube\'s limit, not Live SQL\'s 100,000',
+    tooMany.ok === false && tooMany.reason === 'tooManyGroups' && String(tooMany.error).includes('50,000') && !String(tooMany.error).includes('100,000'), show(tooMany));
+  const n1 = posted();
   const found = await as(() => liveTarget.liveTarget(P, SEM));
   const target = found.ok ? found.target : null;
   const env = target?.semantic?.env ?? null;
@@ -184,9 +192,9 @@ void (async () => {
   const lockRun = target ? adapters.semanticRunner(target, new AbortController().signal, () => undefined) : null;
   const r1 = env && lockRun ? await as(() => es.evaluateSemantic({ ...locked, filters: [{ kind: 'in', column: 'region', values: ['East'], negate: false, binary: true }] }, env, lockRun)) : null;
   ok('a row lock on a Cube dataset is refused (layerRowPolicy, naming Cube), asking nothing: Cube compares in the warehouse\'s collation',
-    !!env && env.caps.binaryCompare === false && !!r1 && !r1.ok && r1.code === 'layerRowPolicy' && /Cube/.test(r1.message) && posted() === n0, show(r1));
+    !!env && env.caps.binaryCompare === false && !!r1 && !r1.ok && r1.code === 'layerRowPolicy' && /Cube/.test(r1.message) && posted() === n1, show(r1));
   const r2 = env && lockRun ? await as(() => es.evaluateSemantic({ ...locked, filters: [{ kind: 'in', column: 'region', values: ['East'], negate: false }] }, env, lockRun)) : null;
-  ok('NEGATIVE CONTROL: the same question unrestricted is answered by Cube', !!r2 && r2.ok && posted() === n0 + 1, show(r2));
+  ok('NEGATIVE CONTROL: the same question unrestricted is answered by Cube', !!r2 && r2.ok && posted() === n1 + 1, show(r2));
 
   // ── § secrets ──
   const conns = (await post('connections:list', { projectId: P })).value;

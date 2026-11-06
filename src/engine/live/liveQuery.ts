@@ -224,7 +224,8 @@ function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal 
   }
   if (e.kind === 'tooLarge') {
     trace.recordLive(op, 'refused');
-    return fail('live_refused', msg.liveTooManyGroups(LIVE_ROW_LIMIT.toLocaleString('en-US')), 'tooManyGroups');
+    const cap = Math.min(LIVE_ROW_LIMIT, (t.semantic && t.def.semantic?.rowLimit) || LIVE_ROW_LIMIT); // a layer's own, lower limit (Cube)
+    return fail('live_refused', msg.liveTooManyGroups(cap.toLocaleString('en-US')), 'tooManyGroups');
   }
   const stale = queryCache.peek<Answered>(key);
   if (stale) {
