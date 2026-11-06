@@ -83,7 +83,7 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     const source = inputs.sources.get(d.id);
     if (!source) report.noSource.push(d.name);
     const guide = files.get(`datasets/${(fileSlugs.get(d.id) as string)}.md`);
-    const syn = slugOf(d.id) === d.name ? [] : [d.name];
+    const syn = slugOf(d.id) === d.name.toLowerCase() ? [] : [d.name];
     const ai: Json = { instructions: guide, synonyms: some(syn) };
     datasets.push({
       name: slugOf(d.id), source: source ?? slugOf(d.id),
@@ -106,7 +106,7 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     relationships.push({ name, from: slugOf(r.from.dataset), to: slugOf(r.to.dataset), from_columns: [r.from.column], to_columns: [r.to.column], ai_context: r.label ? { synonyms: [r.label] } : undefined });
   }
   miss('calendar', 'Calendar', ossieWhy.calendar());
-  keep('calendar', manifest.calendar);
+  ext.calendar = manifest.calendar;
   report.notMapped.sort((a, b) => (a.kind + a.name < b.kind + b.name ? -1 : a.kind + a.name > b.kind + b.name ? 1 : 0));
 
   const doc = {

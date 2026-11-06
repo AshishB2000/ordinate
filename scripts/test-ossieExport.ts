@@ -13,8 +13,13 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { H, close } from './liveRouteHarness';
 import { liveRecord } from './liveQueryHarness';
-import { buildModelFixture, SOURCE_TABLE, POLICY_CANARY } from './modelFixture';
+import { ossieShape } from './ossieShape';
+import { modelJson } from '../src/app/modelFormat';
+import { buildModelFixture, goldenOf, SOURCE_TABLE, POLICY_CANARY } from './modelFixture';
 
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
+const GOLDEN = path.join(__dirname, 'fixtures', 'golden', 'ossie');
 const { ossieExport, OSSIE_SPEC_VERSION }: typeof import('../src/app/ossieExport') = require('../src/app/ossieExport');
 
 void (async () => {
@@ -58,6 +63,17 @@ void (async () => {
   // ── 3. Stable ──
   const again = await H.as(H.ORG_A, () => ossieExport(F.P));
   ok('byte-stable', again.text === out.text && JSON.stringify(again.report) === JSON.stringify(out.report));
+
+  // ── 4. The spec's required shape ──
+  ok('the emitted document satisfies the spec\'s required keys and types', ossieShape(out.text).length === 0, ossieShape(out.text).join('; '));
+  const without = (k: string) => JSON.stringify(Object.fromEntries(Object.entries(doc).filter(([key]) => key !== k)));
+  ok('NEGATIVE CONTROL: a document without datasets, or with a bad datatype, fails', ossieShape(without('datasets')).length > 0 && ossieShape(without('version')).length > 0
+    && ossieShape(JSON.stringify({ ...doc, datasets: [{ name: 'a', source: 'a', fields: [{ name: 'f', expression: { sql: 'f' }, datatype: 'Number' }] }] })).length === 1);
+
+  // ── 3b. The golden ──
+  const golden = (text: string) => goldenOf(new Map([['x', text]])).get('x');
+  ok('the document matches the golden', golden(out.text) === fs.readFileSync(path.join(GOLDEN, 'ossie.json'), 'utf8'));
+  ok('the report matches the golden', golden(modelJson(out.report)) === fs.readFileSync(path.join(GOLDEN, 'report.json'), 'utf8'));
 
   await close();
   finish();

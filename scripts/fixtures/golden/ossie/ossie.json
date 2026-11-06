@@ -1,0 +1,162 @@
+{
+  "custom_extensions": [
+    {
+      "data": "{\"baseFilters\":[{\"dataset\":\"Live\",\"filters\":[{\"column\":\"region\",\"op\":\"=\",\"type\":\"filter\",\"value\":\"EU\"}]}],\"calendar\":{\"calendarType\":\"gregorian\",\"fiscalYearStart\":1,\"weekStart\":1,\"yearEnd\":\"nearest\"},\"metrics\":[{\"dataset\":\"Orders\",\"definition\":{\"formula\":\"[Revenue] / [Orders]\"},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Avg basket\",\"timeColumn\":\"day\"},{\"dataset\":\"Orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"amount\"},\"description\":\"Net revenue in EMEA\",\"direction\":\"up_good\",\"filters\":[{\"term\":\"00000000-0000-4000-8000-000000000001\",\"type\":\"term\"}],\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"currency\",\"prefix\":\"$\"},\"name\":\"Revenue\",\"target\":{\"per\":\"month\",\"source\":{\"value\":1200}},\"timeColumn\":\"day\"},{\"dataset\":\"Orders\",\"definition\":{\"base\":\"00000000-0000-4000-8000-000000000002\",\"window\":{\"to_date\":\"month\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Revenue MTD\"},{\"dataset\":\"Orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"units\",\"snapshot\":{\"column\":\"day\",\"per\":\"region\",\"take\":\"last\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Stock on hand\"}],\"terms\":[{\"aliases\":[\"Europe and ME\"],\"dataset\":\"Orders\",\"description\":\"Europe and the Middle East\",\"filters\":[{\"column\":\"region\",\"op\":\"in\",\"type\":\"filter\",\"values\":[\"EU\",\"ME\"]}],\"name\":\"EMEA\"}],\"valueLabels\":[{\"dataset\":\"Orders\",\"field\":\"region\",\"values\":[{\"label\":\"Europe\",\"value\":\"EU\"},{\"label\":\"Middle East\",\"value\":\"ME\"}]}]}",
+      "vendor_name": "ordinate"
+    }
+  ],
+  "datasets": [
+    {
+      "fields": [
+        {
+          "datatype": "String",
+          "expression": {
+            "sql": "id"
+          },
+          "name": "id"
+        },
+        {
+          "datatype": "String",
+          "expression": {
+            "sql": "name"
+          },
+          "name": "name"
+        }
+      ],
+      "name": "customers",
+      "source": "customers"
+    },
+    {
+      "fields": [
+        {
+          "datatype": "String",
+          "expression": {
+            "sql": "region"
+          },
+          "name": "region"
+        },
+        {
+          "expression": {
+            "sql": "amount"
+          },
+          "name": "amount"
+        }
+      ],
+      "name": "live",
+      "source": "live_fake_orders"
+    },
+    {
+      "ai_context": {
+        "instructions": "# Orders\n\nOne row per order line, net of refunds. GUIDE_CANARY_3b81"
+      },
+      "description": "Every order line. One row per order line",
+      "fields": [
+        {
+          "datatype": "String",
+          "expression": {
+            "sql": "order_id"
+          },
+          "name": "order_id"
+        },
+        {
+          "datatype": "String",
+          "expression": {
+            "sql": "customer_id"
+          },
+          "name": "customer_id"
+        },
+        {
+          "ai_context": {
+            "examples": [
+              "EU"
+            ]
+          },
+          "datatype": "String",
+          "expression": {
+            "sql": "region"
+          },
+          "name": "region"
+        },
+        {
+          "ai_context": {
+            "synonyms": [
+              "Amount",
+              "net"
+            ]
+          },
+          "description": "Net amount",
+          "expression": {
+            "sql": "amount"
+          },
+          "name": "amount"
+        },
+        {
+          "datatype": "Date",
+          "dimension": {
+            "is_time": true
+          },
+          "expression": {
+            "sql": "day"
+          },
+          "name": "day"
+        },
+        {
+          "expression": {
+            "sql": "units"
+          },
+          "name": "units"
+        }
+      ],
+      "metrics": [
+        {
+          "expression": {
+            "sql": "COUNT(DISTINCT order_id)"
+          },
+          "name": "Orders"
+        }
+      ],
+      "name": "orders",
+      "primary_key": [
+        "order_id"
+      ],
+      "source": "orders"
+    },
+    {
+      "ai_context": {
+        "synonyms": [
+          "Sales (SQL)"
+        ]
+      },
+      "fields": [
+        {
+          "expression": {
+            "sql": "x"
+          },
+          "name": "x"
+        }
+      ],
+      "name": "sales_sql",
+      "source": "sales_sql"
+    }
+  ],
+  "name": "Retail model",
+  "relationships": [
+    {
+      "ai_context": {
+        "synonyms": [
+          "Customer"
+        ]
+      },
+      "from": "orders",
+      "from_columns": [
+        "customer_id"
+      ],
+      "name": "customer",
+      "to": "customers",
+      "to_columns": [
+        "id"
+      ]
+    }
+  ],
+  "version": "0.2.0.dev0"
+}

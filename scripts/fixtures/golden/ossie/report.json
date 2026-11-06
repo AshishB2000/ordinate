@@ -1,0 +1,64 @@
+{
+  "noSource": [
+    "Customers",
+    "Orders",
+    "Sales (SQL)"
+  ],
+  "notMapped": [
+    {
+      "kind": "baseFilters",
+      "name": "Live",
+      "reason": "Ossie has no always-applied filters; they are kept in the ordinate extension."
+    },
+    {
+      "kind": "calendar",
+      "name": "Calendar",
+      "reason": "Ossie has no calendar settings."
+    },
+    {
+      "kind": "metric",
+      "name": "Avg basket",
+      "reason": "Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported."
+    },
+    {
+      "kind": "metricDate",
+      "name": "Orders",
+      "reason": "Ossie does not say which date a metric counts by; the date field is marked as time."
+    },
+    {
+      "kind": "metric",
+      "name": "Revenue",
+      "reason": "Ossie metrics have no filters, and the metric without them would be another number."
+    },
+    {
+      "kind": "metric",
+      "name": "Revenue MTD",
+      "reason": "Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported."
+    },
+    {
+      "kind": "metric",
+      "name": "Stock on hand",
+      "reason": "Ossie has no semi-additive measure, so a snapshot metric is not exported."
+    },
+    {
+      "kind": "role",
+      "name": "Orders",
+      "reason": "Ossie has no fact or dimension role."
+    },
+    {
+      "kind": "sensitivity",
+      "name": "amount",
+      "reason": "Sensitivity marks are never exported."
+    },
+    {
+      "kind": "term",
+      "name": "EMEA",
+      "reason": "Ossie has no named filters; the term is kept in the ordinate extension."
+    },
+    {
+      "kind": "valueLabels",
+      "name": "region",
+      "reason": "Ossie has no value labels; they are kept in the ordinate extension."
+    }
+  ]
+}
