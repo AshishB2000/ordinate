@@ -95,7 +95,7 @@ describe('the formula editor’s pure halves', () => {
 
 // ── The page, against a stubbed server ─────────────────────────────────────
 
-type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
+type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>);
 function serve(routes: Record<string, Reply>) {
   const calls: { channel: string; payload: unknown }[] = [];
   vi.stubGlobal(
@@ -106,7 +106,7 @@ function serve(routes: Record<string, Reply>) {
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
       const r = routes[channel] ?? { body: [] };
-      const out = typeof r === 'function' ? r(payload) : r;
+      const out = typeof r === 'function' ? await r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),
   );
@@ -172,7 +172,9 @@ describe('Prepare', () => {
       }),
     );
     renderApp(URL_);
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove step 1' }));
+    const btn = (await screen.findByRole('button', { name: 'Remove step 1' })) as HTMLButtonElement;
+    await waitFor(() => expect(btn.disabled).toBe(false)); // the step actions wait for lineage:fields
+    fireEvent.click(btn);
     expect(await screen.findByText('Filter skipped: nothing to do')).toBeTruthy();
     expect(calls.find((c) => c.channel === 'dataset:removeStep')?.payload).toEqual({ projectId: PID, datasetId: DID, index: 0 });
     expect(await screen.findByText('Prepare · 5,000 rows · 3 columns')).toBeTruthy();
@@ -184,10 +186,10 @@ describe('Prepare', () => {
     const fields = (steps: unknown[]) => ({ body: { ok: true, fields: {}, steps } });
     const withSteps = (steps: unknown[], lineage: Reply, more: Record<string, Reply> = {}) =>
       base({ 'prepare:get': { body: { ...STATE, steps, stepCounts: steps.map(() => ({ before: 5, after: 5 })) } }, 'lineage:fields': lineage, 'dataset:removeStep': { body: REMOVED }, ...more });
-    // The page asks lineage:fields once; a click before its reply lands removes at once, so wait for the reply.
+    // The page asks lineage:fields once, and its step actions are off until it answers (or fails).
     const settled = async (calls: { channel: string }[]) => {
       await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => expect(screen.getAllByRole('button', { name: /^Remove step / }).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true));
     };
     const removes = (calls: { channel: string }[]) => calls.filter((c) => c.channel === 'dataset:removeStep');
 
@@ -207,6 +209,23 @@ describe('Prepare', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove step 2' }));
       fireEvent.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(removes(calls)).toHaveLength(1));
+    });
+
+    it('Remove waits for lineage:fields: off until it answers, then it asks, never a remove on a guess', async () => {
+      let answer = (): void => {};
+      const held = new Promise<void>((r) => { answer = r; });
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], async () => { await held; return fields([{ index: 1, produces: ['Margin'], usedIn: { metric: 1 } }]); }));
+      renderApp(URL_);
+      const btn = (await screen.findByRole('button', { name: 'Remove step 2' })) as HTMLButtonElement;
+      await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
+      expect(btn.disabled).toBe(true);
+      fireEvent.click(btn);
+      expect(removes(calls)).toHaveLength(0);
+      answer();
+      await waitFor(() => expect(btn.disabled).toBe(false));
+      fireEvent.click(btn);
+      expect(await screen.findByText(/It feeds 1 metric\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
     });
 
     it('a rename step that feeds something asks too', async () => {
