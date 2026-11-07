@@ -19,7 +19,7 @@ import * as connections from '../../connectors/connections';
 import { getConnector } from '../../connectors';
 import { quotedTable } from '../../connectors/connectionRun';
 import { parseTablePath } from '../../connectors/bigqueryShape';
-import type { ConnectorDef, LiveDialectId } from '../../connectors/types';
+import type { ConnectorDef, LiveDialectId, SemanticBackendId } from '../../connectors/types';
 import { loadSecrets } from '../../ipc/connectionSecrets';
 import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
@@ -33,6 +33,10 @@ import type { LiveColumn, LiveRefusal } from './liveSpec';
 import { refuse } from './liveSpec';
 import { baseOfLive } from './liveBase';
 import { declaredColumns } from '../../data/liveCalcs';
+import type { DatasetMeta } from '../../data/datasets';
+import type { SemanticSettings } from '../../data/semanticDataset';
+import type { SemanticEnv } from './semantic/semanticQuery';
+import { layerLabel } from './semantic/semanticRefusals';
 
 export interface LiveTarget {
   projectId: string;
@@ -53,6 +57,11 @@ export interface LiveTarget {
   values: Record<string, unknown>;
   /** The connection's secrets, loaded once, on the first warehouse call. */
   secrets(): Promise<Record<string, string>>;
+  /**
+   * A semantic dataset's layer (part 7 b2): its questions go to ./semantic/evaluateSemantic, never the compiler, so
+   * `source` is inert (`{ kind: 'table', parts: [] }`) and `dialect`/`env` are placeholders nothing compiles.
+   */
+  semantic?: { backend: SemanticBackendId; model: string; env: SemanticEnv };
 }
 
 /** Why there is nothing to ask: no such (Live) dataset, no connection, or a source live cannot name. */
@@ -101,8 +110,9 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, kind: 'unavailable', error: msg.liveDatasetMissing() };
   if (!isLive(meta) || !meta.live) return { ok: false, kind: 'unavailable', error: msg.liveNotLive() };
-  // b0: a dataset that asks another tool's semantic layer (part 7) has no table or SQL here: refused first, before base filters and calcs.
-  if (meta.live.semanticPending) return { ok: false, kind: 'refused', refusal: refuse('semanticPending') };
+  // A layer block this pod cannot read in full (a newer release's): refused first, before base filters and calcs.
+  if (meta.live.semanticUnreadable) return { ok: false, kind: 'refused', refusal: refuse('semanticPending') };
+  if (meta.live.semantic) return semanticTarget(projectId, meta, meta.live.semantic, opts);
   // 00a: a stored list of calculated fields this pod cannot read in full answers nothing: a calc it dropped would read as an unknown column.
   if (meta.live.calculatedUnreadable) return { ok: false, kind: 'refused', refusal: refuse('calculatedUnreadable', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;
@@ -144,6 +154,46 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
       def,
       values: conn.values,
       secrets: () => (secrets ??= loadSecrets(conn.id, def)),
+    },
+  };
+}
+
+/**
+ * A semantic dataset's target (part 7 b2): its connection's layer, if that connector still has one for the block's
+ * backend. The env the plan reads is the synced block: the dimensions as declared (no calc), the layer's metrics and
+ * grains, its caps, and the base filters adapted as for any Live dataset (b1 ANDs them into every question).
+ */
+async function semanticTarget(projectId: string, meta: DatasetMeta, block: SemanticSettings, opts: { base?: 'skip' }): Promise<{ ok: true; target: LiveTarget } | TargetProblem> {
+  const live = meta.live!;
+  const origin = meta.origin;
+  if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
+  const conn = await connections.getConnection(projectId, origin.connId);
+  if (!conn) return { ok: false, kind: 'unavailable', error: liveMsg.liveConnectionGoneMessage() };
+  const def = getConnector(conn.connectorId);
+  if (!def || !def.semantic || def.semantic.backend !== block.backend) return { ok: false, kind: 'unavailable', error: liveMsg.liveNotOfferedMessage() };
+  const columns = declaredColumns({ columns: typedColumns(meta), live });
+  const env: SemanticEnv = {
+    dataset: meta.name,
+    layer: layerLabel(block.backend),
+    columns,
+    metrics: new Map(block.metrics.map((m) => [m.name, { additive: m.additive }])),
+    grains: new Map(block.grains.map((g) => [g.column, g.grains])),
+    caps: { lookups: def.semantic.caps.lookups === true, binaryCompare: def.semantic.caps.binaryCompare === true },
+  };
+  if (opts.base !== 'skip') {
+    const b = baseOfLive(live, columns);
+    if (!b.ok) return { ok: false, kind: 'refused', refusal: b };
+    if (b.base.length) env.base = b.base;
+  }
+  const source: LiveSource = { kind: 'table', parts: [] };
+  let secrets: Promise<Record<string, string>> | null = null;
+  return {
+    ok: true,
+    target: {
+      projectId, datasetId: meta.id, org: ctx().org.id, connectionId: conn.id, live, columns,
+      dialect: 'duckdb', source, env: { dialect: 'duckdb', source, columns }, baseFilters: live.baseFilters ?? [],
+      def, values: conn.values, secrets: () => (secrets ??= loadSecrets(conn.id, def)),
+      semantic: { backend: block.backend, model: block.model, env },
     },
   };
 }

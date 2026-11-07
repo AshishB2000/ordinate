@@ -95,10 +95,28 @@ export interface LayerCall {
   pinned: string | undefined;
 }
 
+type Described = Awaited<ReturnType<NonNullable<ConnectorDef['semantic']>['describeModel']>>;
+type Listed = Awaited<ReturnType<NonNullable<ConnectorDef['semantic']>['listModels']>>;
+
 export const layerFake: {
   calls: LayerCall[];
   hook: ((call: LayerCall, ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError | undefined>) | null;
-} = { calls: [], hook: null };
+  /** b2: what describeModel / listModels answer instead of the fixture's (a dropped metric, a planted model name, a layer error). */
+  describe: ((model: string, ctx: ConnectorContext) => Promise<Described>) | null;
+  list: ((ctx: ConnectorContext) => Promise<Listed>) | null;
+  /** The models describeModel was asked for. */
+  described: string[];
+} = { calls: [], hook: null, describe: null, list: null, described: [] };
+
+/** The fixture as the layer describes it: its columns as dimensions (a date at every grain), FAKE_METRICS as metrics. */
+export function fixtureModel(): Extract<Described, { ok: true }> {
+  const grains: import('../src/analysis/categoryKey').DateGrain[] = ['day', 'week', 'month', 'quarter', 'year'];
+  return {
+    ok: true,
+    dimensions: fx.COLUMNS.map((c) => (c.type === 'date' ? { name: c.name, type: c.type, grains: grains.slice() } : { name: c.name, type: c.type })),
+    metrics: Object.keys(FAKE_METRICS).map((name) => ({ name, additive: FAKE_ADDITIVE.has(name) })),
+  };
+}
 
 async function layerRun(ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError> {
   const b = body as LayerCall['body'];
@@ -128,8 +146,11 @@ function layerDef(id: string, withHost: boolean): ConnectorDef {
     semantic: {
       backend: 'fake',
       caps: { lookups: true, binaryCompare: false },
-      listModels: async () => ({ ok: true, models: [{ name: 'fixture' }] }),
-      describeModel: async () => ({ ok: true, dimensions: fx.COLUMNS.map((c) => ({ name: c.name, type: c.type })), metrics: Object.keys(FAKE_METRICS).map((name) => ({ name, additive: FAKE_ADDITIVE.has(name) })) }),
+      listModels: async (ctx) => (layerFake.list ? layerFake.list(ctx) : { ok: true, models: [{ name: 'fixture' }] }),
+      describeModel: async (ctx, model) => {
+        layerFake.described.push(model);
+        return layerFake.describe ? layerFake.describe(model, ctx) : fixtureModel();
+      },
       run: layerRun,
     },
   };
@@ -151,4 +172,7 @@ export function registerSemanticFake(): void {
 export function resetLayerFake(): void {
   layerFake.calls.length = 0;
   layerFake.hook = null;
+  layerFake.describe = null;
+  layerFake.list = null;
+  layerFake.described.length = 0;
 }

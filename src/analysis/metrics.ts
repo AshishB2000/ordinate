@@ -440,8 +440,8 @@ export async function updateMetric(
     const updated: Metric = {
       ...existing,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-      // An external one is read-only (D13): an editor that knows no such kind sends {column, aggregation} with every save.
-      definition: patch.definition !== undefined && !isExternalDefinition(existing.definition) ? sanitizeDefinition(patch.definition, (existing.definition as { snapshot?: unknown }).snapshot) : existing.definition,
+      // An external one is read-only (D13): an editor that knows no such kind sends {column, aggregation} with every save; only another external one (the layer sync's, part 7 b2) replaces it.
+      definition: patch.definition !== undefined && (!isExternalDefinition(existing.definition) || isExternalDefinition(patch.definition)) ? sanitizeDefinition(patch.definition, (existing.definition as { snapshot?: unknown }).snapshot) : existing.definition,
       filters: patch.filters !== undefined ? sanitizeMetricFilters(patch.filters) : existing.filters,
       format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
       updatedAt: new Date().toISOString(),

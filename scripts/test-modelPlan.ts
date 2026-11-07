@@ -21,6 +21,7 @@ import type { Identity } from '../src/server/context';
 const { exportModel }: typeof import('../src/app/modelExport') = require('../src/app/modelExport');
 const { readModelFiles }: typeof import('../src/app/modelRead') = require('../src/app/modelRead');
 const { planImport }: typeof import('../src/app/modelPlan') = require('../src/app/modelPlan');
+const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const { modelJson }: typeof import('../src/app/modelFormat') = require('../src/app/modelFormat');
 const { modelZip }: typeof import('../src/ipc/modelFiles') = require('../src/ipc/modelFiles');
 const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
@@ -264,11 +265,16 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
   const extSaid = await H.as(H.ORG_A, async () => msg.modelExternalMetric('Net revenue'));
   const EXTERNAL = { external: 'net_revenue', layer: 'dbt' };
   const extNew = itemOf(await plan(F.P, put(filesG, 'metrics/net-revenue.json', { ...ordersMetric, id: fid(48), name: 'Net revenue', definition: EXTERNAL })), `metric:${fid(48)}`);
-  ok('a new metric another tool\'s layer defines is skipped with the sentence, never new (D13)', extNew.status === 'skipped' && extNew.reason === 'invalid' && extNew.error === extSaid, show(extNew));
+  ok('a new metric another tool\'s layer defines is skipped (external) with the sentence, never new (D13)', extNew.status === 'skipped' && extNew.reason === 'external' && extNew.error === extSaid, show(extNew));
   const extOver = itemOf(await plan(F.P, edit(filesG, 'metrics', F.revenue, (m) => { m.definition = EXTERNAL; })), `metric:${F.revenue}`);
-  ok('…and so is one turning a metric here into one', extOver.status === 'skipped' && extOver.reason === 'invalid' && extOver.error === (await H.as(H.ORG_A, async () => msg.modelExternalMetric('Revenue'))), show(extOver));
+  ok('…and so is one turning a metric here into one', extOver.status === 'skipped' && extOver.reason === 'external' && extOver.error === (await H.as(H.ORG_A, async () => msg.modelExternalMetric('Revenue'))), show(extOver));
   ok('NEGATIVE CONTROL: the same new file with a column definition is new', itemOf(await plan(F.P, put(filesG, 'metrics/net-revenue.json', { ...ordersMetric, id: fid(48), name: 'Net revenue' })), `metric:${fid(48)}`).status === 'new');
   ok('NEGATIVE CONTROL: the same files without a defect plan clean', (await plan(F.P, filesG)).items.every((i) => i.status !== 'skipped'), show(await plan(F.P, filesG)));
+  // part 7 b2: a mirror (a layer's metric here) stays with its layer: never in the files, so never "only here" either.
+  const mirror = await H.as(H.ORG_A, async () => (await metricsStore.saveMetric(F.P, { name: 'Layer revenue', datasetId: F.orders, definition: EXTERNAL } as never))!.id);
+  const withMirror = await plan(F.P, filesG);
+  ok('a mirror is never "only here"', !withMirror.items.some((i) => i.targetId === mirror || i.name === 'Layer revenue'), JSON.stringify(withMirror.items.filter((i) => i.status === 'onlyHere')));
+  await H.as(H.ORG_A, () => metricsStore.deleteMetric(F.P, mirror));
   // ── 8. model:importPlan ───────────────────────────────────────────────────
   const contract = api.contracts['model:importPlan'];
   const { bytes } = await H.as(H.ORG_A, () => modelZip(F.P));

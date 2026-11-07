@@ -44,6 +44,7 @@ import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
 import type { FactTerm } from '../ai/termFacts';
 import { liveCalculated, type CalculatedView } from './liveCalcs';
+import { semanticDistinct } from './semanticValues';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -122,9 +123,10 @@ const UNLISTED: Record<UnlistedReason, () => string> = {
 };
 
 /** `dataset:distinct` for a Live dataset: its sample's values, or why there is no list. Null for an extract (the caller's own path decides). */
-export async function liveDistinct(projectId: string, datasetId: string, column: string, req: { limit?: number; search?: string }): Promise<ProfileDistinct | LiveValuesRefusal | null> {
+export async function liveDistinct(projectId: string, datasetId: string, column: string, req: { limit?: number; search?: string; filters?: FilterStep[] }): Promise<ProfileDistinct | LiveValuesRefusal | Awaited<ReturnType<typeof semanticDistinct>> | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !isLive(meta)) return null;
+  if (meta.live?.semantic) return semanticDistinct(projectId, datasetId, column, req); // no sample: one question to the layer (part 7 b2)
   await gateRows(projectId, datasetId); // the sample is of every row: never to a restricted caller, never fanned out (row-policy D9)
   const r = profileDistinct(meta, column, req);
   return typeof r === 'string' ? { ok: false, code: 'live_refused', reason: r, error: UNLISTED[r]() } : r;

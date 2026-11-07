@@ -17,6 +17,9 @@ import { snapshotProblem } from '../analysis/snapshotGuards';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { checkPeriodDefinition } from './periodMetric';
 import { checkFunnelDefinition } from './funnelMetric';
+import * as datasets from '../data/datasets';
+import { externalReadOnly } from '../engine/semanticMessages';
+import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
 
 /** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
 export function nameTakenMessage(name: unknown): string {
@@ -68,6 +71,8 @@ export async function metricProblem(
   // `field`: which box of the editor the sentence belongs beside.
   const taken = await named(raw.name);
   if (taken) return { problem: { error: taken, field: 'name' } };
+  const onLayer = await layerFieldMetric(projectId, raw.datasetId, raw.definition); // part 7 b2: a layer's dataset measures its own metrics only
+  if (onLayer) return { problem: { error: onLayer, field: 'definition' } };
   const per = (await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, raw.datasetId, raw.definition)); if (per) return { problem: per };
   const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
   if (snap) return { problem: { error: snap, field: 'snapshot' } };
@@ -75,6 +80,23 @@ export async function metricProblem(
   if ('error' in when) return { problem: { error: when.error, field: 'timeColumn' } };
   const tg = await checkTarget(projectId, { ...raw, id: '', name: String(raw.name), definition: metrics.sanitizeDefinition(raw.definition), ...when }, raw.target); if (tg) return { problem: tg };
   return { when };
+}
+
+/** A column (or funnel) metric on a semantic dataset: refused `columnOnLayer` — aggregating a dimension here goes around the layer. */
+async function layerFieldMetric(projectId: string, datasetId: unknown, definition: unknown): Promise<string | null> {
+  const meta = typeof datasetId === 'string' ? await datasets.getDatasetMeta(projectId, datasetId) : null;
+  const sem = meta?.live?.semantic;
+  const def = sem ? metrics.sanitizeDefinition(definition) : null;
+  if (!meta || !sem || !def || !(metrics.isSimpleDefinition(def) || metrics.isFunnelDefinition(def))) return null;
+  return refuseLayer('columnOnLayer', { dataset: meta.name, layer: layerLabel(sem.backend), column: metrics.isSimpleDefinition(def) ? def.column : def.funnel.event }).message;
+}
+
+/** An edit of a mirror's definition, or a filter on it, on its semantic dataset: refused, the layer's to change. Format, name, description and direction save. */
+async function mirrorReadOnly(projectId: string, m: metrics.Metric, raw: { definition?: unknown; filters?: unknown }): Promise<MetricRefusal | null> {
+  if (!metrics.isExternalDefinition(m.definition) || !(await datasets.getDatasetMeta(projectId, m.datasetId))?.live?.semantic) return null;
+  const filtered = raw.filters !== undefined && sanitizeDashboardFilters(raw.filters).length > 0;
+  if (raw.definition === undefined && !filtered) return null;
+  return { error: externalReadOnly(layerLabel(m.definition.layer ?? '')), field: raw.definition !== undefined ? 'definition' : 'filters' };
 }
 
 /** `metric:save`'s body: the reply. */
@@ -104,6 +126,8 @@ export async function updateMetricChecked(projectId: string, id: string, patch: 
     const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
     if (taken) return { ok: false, error: taken, field: 'name' };
     const before = await metrics.getMetric(projectId, id);
+    const readOnly = before ? await mirrorReadOnly(projectId, before, raw) : null; // a mirror's definition and filters are its layer's (D13)
+    if (readOnly) return { ok: false, ...readOnly };
     const per = before && (raw.definition !== undefined || raw.timeColumn !== undefined) ? (await checkPeriodDefinition(projectId, before.datasetId, raw.definition ?? before.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, before.datasetId, raw.definition ?? before.definition)) : null; if (per) return { ok: false, ...per };
     const snap = before ? await snapshotProblem(projectId, before.datasetId, raw.definition) : null;
     if (snap) return { ok: false, error: snap, field: 'snapshot' };

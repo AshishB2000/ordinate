@@ -36,6 +36,7 @@ import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
+import { mirrorSpec } from '../ipc/semanticFigures';
 import { snapshotMetric } from './snapshotGuards';
 import { alertSkipped } from './pendingKinds';
 import { metricWatch } from './alertMetric';
@@ -334,12 +335,13 @@ export async function metricFor(
   const stored = (rule.metric.filters || []) as FilterStep[];
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   const named = typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
-  if (named) refuseExternal(named); // a layer's metric: refused, never its stored column's total (part 7 b0)
+  const layer = named ? await mirrorSpec(projectId, named) : null; // a mirror on its semantic dataset: asked of its layer (part 7 b2)
+  if (named && !layer) refuseExternal(named); // any other layer's metric: refused, never its stored column's total (b0)
   const watch = await metricWatch(projectId, rule); // part 5 (D14): a period or funnel metric is watched through the metric, never a copy
   if (watch === 'gone') return { value: null, previous: null, skip: true }; // its metric is deleted: left as it is
   // A rule made from a snapshot metric's KPI stores only its column and total: it reads its metric's snapshot (D8), never the plain sum.
   const snap = (await snapshotMetric(projectId, rule.metric.metricId))?.definition as { snapshot?: MetricSnapshot } | undefined;
-  const spec = { column: rule.metric.column, aggregation: rule.metric.aggregation, ...(snap?.snapshot ? { snapshot: snap.snapshot } : {}) };
+  const spec = layer ?? { column: rule.metric.column, aggregation: rule.metric.aggregation, ...(snap?.snapshot ? { snapshot: snap.snapshot } : {}) };
   // D9: one saved from a KPI under a date control keeps the mark, so it counts by its metric's date, as the KPI did (no mark: no read).
   const m = rewriteControlPeriods(stored, '') !== stored && typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
   const scoped = m ? await metricScope(projectId, m, stored) : { ok: true as const, filters: stored };

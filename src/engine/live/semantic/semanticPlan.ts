@@ -153,3 +153,24 @@ export function planLatest(ir: LiveIR, env: SemanticEnv): { ok: true; queries: A
   }
   return { ok: true, queries };
 }
+
+/**
+ * One dimension's values (b2: a value picker's list, the Assistant's stored spellings, a scorecard's latest day): the
+ * dimension alone, no metric, not empty, by its own value (a date at the day grain). A backend without lookups, or a
+ * date the layer lists no day grain for, refuses `layerLookup`; a row lock reaches it as any question's (D17).
+ */
+export function planValues(column: string, filters: readonly LiveFilter[], env: SemanticEnv, opts: { limit?: number; desc?: boolean } = {}): SemanticQuery | LiveRefusal {
+  if (!env.caps.lookups) return refuseLayer('layerLookup', namesOf(env));
+  const col = columnOf(env.columns, column);
+  if (!col) return refuse('unknownColumn', column);
+  if (col.type === 'date' && !(env.grains.get(col.name) ?? []).includes('day')) return refuseLayer('layerLookup', namesOf(env));
+  const where = whereOf(filters, env);
+  if (isRefusal(where)) return where;
+  return {
+    dimensions: [col.type === 'date' ? { name: col.name, grain: 'day' } : { name: col.name }],
+    metrics: [],
+    where: [...where, { kind: 'empty', column: col.name, negate: true }],
+    order: [{ by: col.name, desc: opts.desc === true }],
+    ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+  };
+}

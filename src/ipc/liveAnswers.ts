@@ -33,6 +33,8 @@ import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
 import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import { liveWithheld } from './liveProfile';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
+import { externalsOf, mirrorsOf, relabelled } from './semanticFigures';
+import { semanticSpellings } from './semanticValues';
 import type { LiveFailure } from '../engine/live/liveQuery';
 import { adaptFilter, isRefusal, refuse } from '../engine/live/liveSpec';
 import type { LiveFilter } from '../engine/live/liveSpec';
@@ -92,8 +94,13 @@ export async function liveCaseFix(
   if (!asked.size) return { ok: true, filters, held: new Map(), said: filters, matched: [] };
   const stored = new Map<string, Map<string, string>>();
   for (const [column, keys] of asked) {
+    let layer = false;
     // Under a row access lock the stored spellings come from the caller's rows only (row-policy D13).
     const r = await liveLookup(projectId, datasetId, (t) => {
+      if (t.semantic) { // a layer's every value, matched below (part 7 b2)
+        layer = true;
+        return semanticSpellings(t, column, lock);
+      }
       const locked: LiveFilter[] = [];
       for (const s of lock) {
         const f = adaptFilter(s, t.columns, {}, []);
@@ -106,7 +113,7 @@ export async function liveCaseFix(
     const byKey = new Map<string, string>();
     for (const row of r.rows) {
       const v = row[0];
-      if (typeof v === 'string' && !byKey.has(caseKey(v))) byKey.set(caseKey(v), v);
+      if (typeof v === 'string' && !byKey.has(caseKey(v)) && (!layer || keys.has(caseKey(v)))) byKey.set(caseKey(v), v);
     }
     stored.set(column, byKey);
   }
@@ -186,15 +193,18 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   if (gone) return { ok: false, reason: gone.message, code: 'live_refused' };
   // computeCard's own first check, with its own words.
   const has = (n: string): boolean => meta.columns.some((c) => c.name === n);
-  const used = [spec.category, ...spec.measures.map((m) => m.column), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))].concat(spec.series ? [spec.series] : []);
+  const sem = meta.live?.semantic; // a semantic dataset's measures are its mirror metrics, by id (part 7 b2)
+  const used = [spec.category, ...(sem ? [] : spec.measures.map((m) => m.column)), ...spec.filters.flatMap((f) => ('column' in f ? [f.column] : []))].concat(spec.series ? [spec.series] : []);
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${meta.name}.` };
 
   const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters, lock, labels);
   if (!fixed.ok) return fail(fixed);
   if (fixed.matched.length) spec = { ...spec, filters: fixed.said, matched: [...(spec.matched ?? []), ...fixed.matched].slice(0, MAX_MATCHED) }; // as the extract's matchValues: a reload draws the same chart
-  const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock });
+  const mirrors = sem ? await mirrorsOf(projectId, meta.id, spec.measures.map((m) => m.metricId)) : null;
+  const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock, ...(mirrors ? { mirrors: externalsOf(mirrors) } : {}) });
   if (!r.ok) return fail(r);
+  if (mirrors) r.data = relabelled(r.data, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, mirrors);
 
   const catCol = meta.columns.find((c) => c.name === spec.category);
   const isDate = !!catCol && catCol.type === 'date';
@@ -203,7 +213,8 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const data: ChartData = withChartFigures({ labels: r.data.labels, series: r.data.series }, figureAsk(chartType));
   const names = await displayNames(projectId, meta.id).catch(() => ({}));
   const caption = tileCaption({ chartType, data, names });
-  const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
+  const additive = sem && mirrors ? spec.measures.every((m) => sem.metrics.find((x) => x.name === mirrors.get(m.metricId ?? '')?.external)?.additive === true)
+    : spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const filterLabels = [...cardLabels(spec, meta.columns, r.filterLabels), ...termLabels];
   // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
   // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.

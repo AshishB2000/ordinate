@@ -22,6 +22,8 @@ import { isExternalDefinition, isFormulaDefinition, isFunnelDefinition, isPeriod
 import { definedElsewhere } from './externalMetricMessages';
 import { periodWords } from './periodMetric';
 import { funnelWords } from './funnelMetric';
+import { definedIn } from '../engine/semanticMessages';
+import { layerLabel } from '../engine/live/semantic/semanticRefusals';
 
 /**
  * The ONE rendering of a metric's number — now `app/format.formatMetric`, the
@@ -94,7 +96,7 @@ export function describeDefinitionShort(definition: MetricDefinition, base?: str
   if (isFormulaDefinition(definition)) return definition.formula;
   if (isPeriodDefinition(definition)) return periodWords(definition, base);
   if (isFunnelDefinition(definition)) return funnelWords(definition);
-  if (isExternalDefinition(definition)) return definedElsewhere(); // b2 names the layer
+  if (isExternalDefinition(definition)) return definition.layer ? definedIn(layerLabel(definition.layer)) : definedElsewhere(); // b2: the layer by name
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
   const head = definition.column ? `${agg} of ${definition.column}` : agg;
   const snap = definition.snapshot; // semantic D8: only the rows on that day; part 5's `per`: each entity's own

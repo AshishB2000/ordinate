@@ -504,7 +504,7 @@ export function register() {
       // Else under the caller's row access lock (./distinctFor): only values that exist in their rows. Then value labels.
       const read = async (r: DistinctRequest) => {
         const live = await liveDistinct(projectId, datasetId, col, r);
-        if (live) return parents.length && !('ok' in live) ? { ...live, narrowed: false as const } : live; // a sample is not narrowed: say so (p6-05a)
+        if (live) return parents.length && 'approximate' in live ? { ...live, narrowed: false as const } : live; // a sample is not narrowed: say so (p6-05a); a layer's list is
         return distinctFor(projectId, datasetId, col, r, 'datasetDistinct');
       };
       return (await distinctWithLabels(projectId, datasetId, col, req, read)) ?? { values: [], total: 0 };

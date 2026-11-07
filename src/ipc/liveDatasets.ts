@@ -49,6 +49,8 @@ import { baseOfLive } from '../engine/live/liveBase';
 import type { LiveRefusalCode } from '../engine/live/liveSpec';
 import type { FilterStep } from '../data/transforms';
 import { safeError } from '../connectors/types';
+import { semanticNoCopy } from '../engine/semanticMessages';
+import { layerLabel } from '../engine/live/semantic/semanticRefusals';
 import { logger } from '../app/logger';
 
 type Fail = { ok: false; error: string; code?: string };
@@ -167,7 +169,7 @@ async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ o
   return ran.ok ? { ok: true, result: ran.result } : { ok: false, error: ran.error, source: true };
 }
 
-type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; error: string };
+type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode | 'semanticNoCopy'; error: string };
 
 /**
  * The base filters a copy keeps as its Prepare steps (D13), or why it cannot be made: a list this pod
@@ -176,7 +178,9 @@ type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; e
  * another tool's semantic layer (part 7 b0) has no rows to copy: refused first.
  */
 function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
-  if (meta.live?.semanticPending) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
+  if (meta.live?.semanticUnreadable) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
+  // A layer returns totals, never rows: there is nothing to copy (part 7 b2).
+  if (meta.live?.semantic) return { ok: false, code: 'live_refused', reason: 'semanticNoCopy', error: semanticNoCopy(meta.name, layerLabel(meta.live.semantic.backend)) };
   const b = meta.live ? baseOfLive(meta.live, declaredColumns(meta)) : null;
   if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
   return { ok: true, steps: meta.live?.baseFilters ?? [] };

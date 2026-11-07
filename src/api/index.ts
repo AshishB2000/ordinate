@@ -53,6 +53,7 @@ import { sourceTables } from './sourceTables';
 import { verified } from './verified';
 import { topics } from './topics';
 import { columnAccess } from './columnAccess';
+import { semantic } from './semantic';
 
 export const contracts = {
   ...projects,
@@ -107,6 +108,7 @@ export const contracts = {
   ...verified,
   ...topics,
   ...columnAccess,
+  ...semantic,
 } as const;
 
 export type Channel = keyof typeof contracts;

@@ -307,7 +307,7 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
     if (!v || typeof v !== 'object') continue;
     const vo = v as Record<string, unknown>;
     const column = typeof vo.column === 'string' ? vo.column : '';
-    if (!column) continue;
+    if (!column && !(typeof vo.metricId === 'string' && UUID_RE.test(vo.metricId))) continue; // no column: a mirror metric, by id (part 7 b2)
     const aggregation: VizAggregation =
       typeof vo.aggregation === 'string' && AGG_FNS.has(vo.aggregation) ? (vo.aggregation as VizAggregation) : 'sum';
     const measure: VizMeasure = { column, aggregation };

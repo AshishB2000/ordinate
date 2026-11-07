@@ -45,6 +45,7 @@ import { relatedColumnNames } from './relationships';
 import { fxContext, fxVizContext } from './fxQuery';
 import type { VizDataReply } from './visuals';
 import { isCountLike } from '../data/aggregations';
+import { externalsOf, layerFailure, mirrorsOf, relabelled } from './semanticFigures';
 
 /** The dataset's metadata when it is Live, else null — one metadata read, no rows. */
 export async function liveMetaOf(projectId: string, datasetId: string): Promise<DatasetMeta | null> {
@@ -89,22 +90,25 @@ export async function liveChart(projectId: string, meta: DatasetMeta, encoding: 
   const names = [enc.category, enc.series, ...(enc.values || []).map((v) => v && v.column), ...(filters || []).map((f) => f && f.column)];
   const pre = await preRefusal(projectId, meta, names.filter((n): n is string => typeof n === 'string'),
     async () => !!(await fxVizContext(projectId, meta.id, encoding, filters)));
-  if (pre) return pre;
-  const r = await liveVizData(projectId, meta.id, encoding, filters);
+  if (pre) return meta.live?.semantic && pre.reason === 'related' ? layerFailure(meta, 'related') : pre;
+  // A semantic dataset's measures name its mirror metrics (part 7 b2): each asked by its layer name, its series by its own.
+  const mirrors = meta.live?.semantic ? await mirrorsOf(projectId, meta.id, (enc.values || []).map((v) => v && v.metricId)) : null;
+  const r = await liveVizData(projectId, meta.id, encoding, filters, mirrors ? { mirrors: externalsOf(mirrors) } : {});
   if (!r.ok) return r;
-  return { ok: true, data: r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category, asOf: r.asOf };
+  return { ok: true, data: mirrors ? relabelled(r.data, enc, mirrors) : r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category, asOf: r.asOf };
 }
 
 /** `computeCardMetric`'s number on a Live dataset, dated. Throws `LiveFigureError` when there is none to give. */
 export async function liveCardMetric(
   projectId: string,
   meta: DatasetMeta,
-  spec: { column: string; aggregation: MetricAggregation },
+  spec: { column: string; aggregation: MetricAggregation } | { metric: string },
   filters: FilterStep[],
 ): Promise<{ ok: true; value: number | null; asOf: AsOf }> {
-  const touched = [spec.column, ...(filters || []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string');
+  const touched = ['column' in spec ? spec.column : undefined, ...(filters || []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string');
+  // A layer's metric is the layer's figure, never converted here.
   const pre = await preRefusal(projectId, meta, touched,
-    async () => !isCountLike(spec.aggregation) && !!(await fxContext(projectId, meta.id, [spec.column], touched)));
+    async () => 'column' in spec && !isCountLike(spec.aggregation) && !!(await fxContext(projectId, meta.id, [spec.column], touched)));
   if (pre) throw new LiveFigureError(pre);
   const r = await liveMetric(projectId, meta.id, spec, filters);
   if (!r.ok) throw new LiveFigureError(r);

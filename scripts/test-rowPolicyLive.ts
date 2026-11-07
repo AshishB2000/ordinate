@@ -8,6 +8,10 @@
 // the latest date (a relative period's anchor) and the stored spelling of a
 // typed value. A filter that is NOT a lock compiles exactly as before.
 //
+// § semantic (part 7 b2, D17): on a semantic dataset the lock reaches the layer's plan as binary filters and is
+// refused `layerRowPolicy` at every question (a chart, a KPI, an answer, a value list, the spellings) unless the
+// backend declares `binaryCompare`, which plans it (the hook c1 uses). Over the real route: test-semanticRowPolicy.
+//
 //   npm run build:ts && node scripts/test-rowPolicyLive.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -16,6 +20,7 @@ import { ok, finish } from './selfcheck';
 type LiveColumn = import('../src/engine/live/liveSpec').LiveColumn;
 type CompileDialectId = import('../src/engine/live/dialect').CompileDialectId;
 type FilterStep = import('../src/data/transforms').FilterStep;
+type LiveFilter = import('../src/engine/live/liveSpec').LiveFilter;
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const comp: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
@@ -94,6 +99,28 @@ const metricSql = (id: CompileDialectId, filters: FilterStep[]) => {
   const lockF = spec.adaptFilter(lockIn, COLS, {}, []);
   const fix = comp.compileCaseMatches('region', ['east'], env('duckdb'), lockF && !('code' in lockF) ? [lockF] : []);
   ok('the stored-spelling lookup is limited to the locked rows', fix.ok && /encode\(/.test(fix.query.sql) && fix.query.params.some((p) => p.value === SECRET[1]), fix.ok ? fix.query.sql : '');
+
+  // ── § semantic ──
+  const ss: typeof import('../src/engine/live/semantic/semanticSpec') = require('../src/engine/live/semantic/semanticSpec');
+  const sp: typeof import('../src/engine/live/semantic/semanticPlan') = require('../src/engine/live/semantic/semanticPlan');
+  const senv = (binaryCompare: boolean) => ({ dataset: 'Orders', layer: 'Snowflake', columns: COLS, metrics: new Map([['revenue', { additive: true }]]), grains: new Map([['day', ['day', 'month'] as const]]) as never, caps: { lookups: true, binaryCompare } });
+  const mirrors = new Map([['m1', 'revenue']]);
+  const chartIr = (b: boolean) => ss.fromSemanticViz({ category: 'region', values: [{ column: '', aggregation: 'sum', metricId: 'm1' }] }, [lockIn], COLS, senv(b), { mirrors, weekCal: null });
+  const kpiIr = (b: boolean) => ss.fromSemanticMetric({ metric: 'revenue' }, [lockIn], COLS, senv(b));
+  const ansIr = (b: boolean) => ss.fromSemanticAnswer({ datasetId: 'x', category: 'region', measures: [{ column: '', aggregation: 'sum', metricId: 'm1' }], filters: [] } as never, COLS, senv(b), { lock: [lockIn], mirrors });
+  const lockedF = (): LiveFilter[] => { const f = spec.adaptFilter(lockIn, COLS, {}, []); return f && !('code' in f) ? [f] : []; };
+  const plans: Array<[string, (b: boolean) => unknown]> = [
+    ['a chart', (b) => { const a = chartIr(b); return a.ok ? sp.planChart(a.ir, senv(b)) : a; }],
+    ['a KPI', (b) => { const a = kpiIr(b); return a.ok ? sp.planMetric(a.ir, senv(b)) : a; }],
+    ['an answer', (b) => { const a = ansIr(b); return a.ok ? sp.planChart(a.ir, senv(b)) : a; }],
+    ['a value list (and the spellings)', (b) => sp.planValues('region', lockedF(), senv(b), { limit: 201 })],
+  ];
+  for (const [what, plan] of plans) {
+    const r = plan(false) as { ok?: boolean; code?: string; message?: string };
+    ok(`semantic: ${what} under a lock is refused layerRowPolicy, naming the layer`, r.ok === false && r.code === 'layerRowPolicy' && /Snowflake/.test(String(r.message)), JSON.stringify(r));
+    const b = JSON.stringify(plan(true));
+    ok(`semantic: NEGATIVE CONTROL — with binaryCompare ${what} is planned, the lock kept as a binary filter`, !b.includes('layerRowPolicy') && b.includes('"binary":true') && SECRET.every((v) => b.includes(JSON.stringify(v).slice(1, -1))), b.slice(0, 300));
+  }
   finish();
 })().catch((err: unknown) => {
   console.error(err);

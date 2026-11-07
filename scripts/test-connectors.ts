@@ -128,7 +128,7 @@ async function main(): Promise<void> {
   // tenth: true where a dataset from it CAN be Live (docs/live-data L2.1).
   // `liveOptIn` is the eleventh, optional: the checkbox a connection must have
   // ticked before Live is offered for it (L3.2 — PostgreSQL's read-replica box).
-  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'estimates', 'live', 'liveOptIn']);
+  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'estimates', 'live', 'liveOptIn', 'semantic']); // semantic: part 7 b2, a boolean
   const FIELD_KEYS = new Set(['key', 'label', 'type', 'required', 'placeholder', 'default', 'options', 'secret', 'help']);
   let extraKeys: string[] = [];
   let functionsFound: string[] = [];
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
   }
   scanForFunctions(catalog, 'catalog');
 
-  ok('connectorCatalog() exposes ONLY the eleven documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  ok('connectorCatalog() exposes ONLY the twelve documented keys', extraKeys.length === 0, extraKeys.join(', '));
   const badEstimates = catalog.filter((e: any) => typeof e.estimates !== 'boolean').map((e: any) => e.id);
   ok('every catalog entry reports `estimates` as a boolean', badEstimates.length === 0, badEstimates.join(', '));
   ok('…true only where the connector has a live estimate (BigQuery), false for the SQL families',

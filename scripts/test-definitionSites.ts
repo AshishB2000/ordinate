@@ -61,7 +61,7 @@ ok(`scanned ${found.size} files with a site`, found.size > 20);
 const failing = mismatches(found);
 for (const r of failing) ok(`${r.file}: ${r.n} site(s), classified ${r.classified}`, false);
 ok(`every site is classified (${Object.keys(DEFINITION_SITES).length} files)`, failing.length === 0);
-ok('the doors are the KPI resolver and the chart planner', Object.entries(DEFINITION_SITES).filter(([, e]) => e.how === 'door').map(([f]) => f).sort().join() === 'src/analysis/metricMeasures.ts,src/ipc/metrics.ts');
+ok('the answers are the KPI resolver, the chart planner and the semantic doors (b2)', Object.entries(DEFINITION_SITES).filter(([, e]) => e.how === 'answers').map(([f]) => f).sort().join() === 'src/analysis/metricMeasures.ts,src/analysis/semanticMeasures.ts,src/ipc/metrics.ts,src/ipc/semanticFigures.ts');
 
 // § negative control: the same scan over a temp tree that mirrors the table, then one planted site
 const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'definition-sites-'));

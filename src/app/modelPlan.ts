@@ -20,7 +20,7 @@
 import { createHash } from 'crypto';
 import * as datasets from '../data/datasets';
 import { isLive } from '../data/liveDataset';
-import { readMetric } from '../analysis/metrics';
+import { isExternalDefinition, readMetric, sanitizeDefinition } from '../analysis/metrics';
 import { readTerm } from '../analysis/terms';
 import { stableStringify } from '../engine/queryCache';
 import { exportModel, type NotCarried } from './modelExport';
@@ -119,7 +119,7 @@ async function hereOf(projectId: string): Promise<{ here: ParsedModel; notCarrie
 const WRITES: ReadonlySet<PlanStatus> = new Set<PlanStatus>(['updated', 'renamed', 'new', 'conflict']);
 const writes = (i: PlanItem): boolean => WRITES.has(i.status);
 /** The editor refused it: kept with its diff, so the person sees what was refused. */
-const refuse = (i: PlanItem, error: string): void => void Object.assign(i, { status: 'skipped', reason: 'invalid', error });
+const refuse = (i: PlanItem, error: string, reason: SkipReason = 'invalid'): void => void Object.assign(i, { status: 'skipped', reason, error });
 
 export type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
 
@@ -301,7 +301,8 @@ export async function planDetailed(projectId: string, file: ParsedModel): Promis
       const self = item.targetId ?? r.value.id;
       const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, r.refs.some(created));
       if (refusal) {
-        refuse(item, refusal);
+        // A layer's metric is never written from a file (D13): skipped as `external`, with the sentence.
+        refuse(item, refusal, item.kind === 'metric' && isExternalDefinition(sanitizeDefinition((r.value as { definition?: unknown }).definition)) ? 'external' : 'invalid');
         if (!item.targetId) gone.add(item.key);
         fell = true;
       }

@@ -24,11 +24,15 @@ export async function snapshotMetric(projectId: string, metricId: unknown): Prom
  * so without this a simple snapshot metric would be drawn as the plain total over every date. With a split only the
  * first measure is drawn (vizData.buildPivot), so only it is checked. A measure with no `metricId` reads nothing.
  */
-export async function snapshotMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined): Promise<string | null> {
+export async function snapshotMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined, datasetId?: string): Promise<string | null> {
   for (const v of snapshotDrawn(encoding)) {
     const m = typeof v?.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
     if (!m) continue;
-    if (metrics.isExternalDefinition(m.definition)) return new ExternalMetricError('pending', m.name).message; // nor a layer's metric (b0): raised, so the route types it
+    // A layer's metric: the answer door asks its layer on its own semantic dataset (part 7 b2), else b0's refusal, raised so the route types it.
+    if (metrics.isExternalDefinition(m.definition)) {
+      if (m.datasetId === datasetId && (await datasets.getDatasetMeta(projectId, datasetId))?.live?.semantic) continue;
+      return new ExternalMetricError('pending', m.name).message;
+    }
     if (metrics.isSimpleDefinition(m.definition) && m.definition.snapshot) return msg.snapshotInAnswer(m.name);
   }
   return null;

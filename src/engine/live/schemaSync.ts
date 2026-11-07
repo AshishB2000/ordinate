@@ -61,6 +61,7 @@ import { compileProfile, compileSamplingKeyProbe, profiledColumns, samplePercent
 import type { LiveFilter } from './liveSpec';
 import { baseOfLive } from './liveBase';
 import { logger } from '../../app/logger';
+import { syncSemantic } from './semantic/semanticSync';
 
 /** Why the sample was not read — typed as a live question's failure is. `error` is a catalog sentence. */
 export interface SampleFailure {
@@ -86,6 +87,10 @@ export interface SyncReport {
   /** Columns gone from the warehouse that something still names. */
   missing: string[];
   sample: SampleOutcome;
+  /** A semantic dataset (part 7 b2, ./semantic/semanticSync): no row is sampled, so its markings are set by hand. */
+  sensitivity?: 'manual';
+  /** A semantic dataset's dimensions of a type no column can take: left out. */
+  unmapped?: string[];
 }
 
 export type SyncReply = SyncReport | { ok: false; code: string; error: string; reason?: string };
@@ -308,6 +313,8 @@ const baseKey = (live: LiveTarget['live']): string => JSON.stringify([live.baseF
  * running), it reads once more under the new ones — its own figures were not stored (`sampledUnder`).
  */
 export async function syncLiveSchema(projectId: string, datasetId: string, signal: AbortSignal = new AbortController().signal, again = true): Promise<SyncReply> {
+  // A semantic dataset (part 7 b2) asks its layer for its dimensions and metrics: no table, no sample.
+  if ((await datasets.getDatasetMeta(projectId, datasetId))?.live?.semantic) return syncSemantic(projectId, datasetId, signal);
   const found = await liveTarget(projectId, datasetId, { base: 'skip' }); // adapted below, against the columns the sync reads
   if (!found.ok) {
     return found.kind === 'unavailable'

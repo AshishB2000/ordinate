@@ -55,6 +55,19 @@ export async function runLiveBound(
   return boundCall(def, values, secrets, opts, (ctx) => live.runBound(ctx, sql, params));
 }
 
+/** The per-call context every Live call takes: costTag 'live', the Live row cap, the byte ceiling, the timeout and signal. */
+export function liveContext(values: Record<string, unknown>, secrets: Record<string, string>, opts: LiveRunOpts): ConnectorContext {
+  return {
+    values: values && typeof values === 'object' ? values : {},
+    secrets: secrets && typeof secrets === 'object' ? secrets : {},
+    rowLimit: LIVE_ROW_LIMIT,
+    timeoutMs: opts.timeoutMs,
+    costTag: 'live',
+    maxBytes: maxBytesBilled(process.env.LIVE_MAX_BYTES_BILLED),
+    signal: opts.signal,
+  };
+}
+
 /**
  * The per-call context, the SSRF guard, the row cap and the redaction every Live call shares: a statement's
  * (`runLiveBound`) and a semantic layer's question (./semanticRun `runSemanticBound`).
@@ -66,15 +79,7 @@ export async function boundCall(
   opts: LiveRunOpts,
   call: (ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError>,
 ): Promise<ConnectorRows | ConnectorError> {
-  const ctx = {
-    values: values && typeof values === 'object' ? values : {},
-    secrets: secrets && typeof secrets === 'object' ? secrets : {},
-    rowLimit: LIVE_ROW_LIMIT,
-    timeoutMs: opts.timeoutMs,
-    costTag: 'live' as const,
-    maxBytes: maxBytesBilled(process.env.LIVE_MAX_BYTES_BILLED),
-    signal: opts.signal,
-  };
+  const ctx = liveContext(values, secrets, opts);
   const refused = await guardHost(def, ctx);
   if (refused) return { ok: false, error: refused };
   try {

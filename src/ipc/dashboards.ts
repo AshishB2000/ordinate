@@ -157,7 +157,7 @@ async function loadMetricTarget(projectId: string, datasetId: string): Promise<M
 export function computeCardMetric(
   projectId: string,
   datasetId: string,
-  spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot },
+  spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot } | { metric: string }, // { metric }: a semantic dataset's layer metric (part 7 b2)
   filters: FilterStep[] = [],
   params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf; notes?: string[] }> {
@@ -168,14 +168,15 @@ export function computeCardMetric(
 async function computeCardMetricUnlocked(
   projectId: string,
   datasetId: string,
-  spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot },
+  spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot } | { metric: string },
   filters: FilterStep[],
   params: ParamValues | undefined,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf; notes?: string[] }> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
   const live = await liveMetaOf(projectId, datasetId);
-  if (live && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
+  if (live && 'snapshot' in spec && spec.snapshot) throw new LiveFigureError({ ok: false, code: 'live_refused', reason: 'snapshot', error: liveSnapshotRefused() }); // D8: not compiled yet
   if (live) return liveCardMetric(projectId, live, spec, filters);
+  if ('metric' in spec) return { ok: false, value: null }; // a layer's metric where no layer is: the dataset is gone or no longer Live
   // A snapshot (D8): this same body over the rows on its latest (or earliest) day (./snapshotDoors). The day is in the filters, so in the cache key. Per entity: its own path and key.
   if (spec.snapshot) return snapshotCardMetric(projectId, datasetId, { ...spec, snapshot: spec.snapshot }, filters, params, (s, f) => computeCardMetricUnlocked(projectId, datasetId, s, f, params));
   const fanned = await fanOutMetricFor(projectId, datasetId, spec, filters, params, computeCardMetric); // a many-side column: that table's own KPI (./metricFanOut), before this cache

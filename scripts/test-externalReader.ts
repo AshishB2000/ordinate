@@ -36,6 +36,7 @@ const analysisStore: typeof import('../src/analysis/analysis') = require('../src
 const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const refusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
+const smsg: typeof import('../src/engine/semanticMessages') = require('../src/engine/semanticMessages');
 
 const { ORG_A, fake } = H;
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
@@ -86,7 +87,7 @@ void (async () => {
   ok('a read keeps the definition and importedFrom', isDeepStrictEqual(read.definition, EXT) && isDeepStrictEqual(read.importedFrom, FROM), show(read));
   const listed = (await post('metric:list', { projectId: P })).value;
   const row = (listed.metrics as Reply[]).find((m) => m.id === id);
-  ok('metric:list lists it, its definition verbatim, worded "Defined in another tool"', !!row && isDeepStrictEqual(row.definition, EXT) && row.definitionText === msg.definedElsewhere(), show(row));
+  ok('metric:list lists it, its definition verbatim, worded "Defined in dbt" (b2 names the layer)', !!row && isDeepStrictEqual(row.definition, EXT) && row.definitionText === smsg.definedIn('dbt'), show(row));
 
   // The editor of this release sends every field on every save, its definition as {column, aggregation} (MetricEditor.tsx).
   const upd = (await post('metric:update', { projectId: P, id, patch: { name: NAME, format: { kind: 'currency', decimals: 0 }, definition: { column: '', aggregation: 'sum' }, filters: [], description: 'From dbt', direction: 'up_good' } })).value;
@@ -194,7 +195,7 @@ void (async () => {
   const said = refusals.liveSemanticPending();
   ok('the sentence says why and what to do', /semantic layer/.test(said) && /finish upgrading Ordinate/.test(said), said);
   const meta = (d: string): Promise<Reply> => as(() => H.datasets.getDatasetMeta(P, d)) as Promise<Reply>;
-  ok('the key is read into the Live block, in memory only', (await meta(L)).live.semanticPending === true && !('semanticPending' in (await rawRecord(L)).live));
+  ok('the key is read into the Live block, in memory only (b2: a block it cannot read)', (await meta(L)).live.semanticUnreadable === true && !('semanticUnreadable' in (await rawRecord(L)).live));
   H.queryCache.clear();
   const n0 = await count();
   for (const [ch, call] of DOORS) {
@@ -209,7 +210,7 @@ void (async () => {
   ok('a Refresh keeps the key', isDeepStrictEqual((await rawRecord(L)).semantic, { backend: 'cube', model: 'orders' }), show(await rawRecord(L)));
   for (const v of [null, 'x', {}]) {
     await as(() => rec.serialized(rec.datasetFilePath(P, L), (r) => { r.semantic = v; }));
-    ok(`a \`semantic\` key of any value (${JSON.stringify(v)}) is pending`, (await meta(L)).live.semanticPending === true);
+    ok(`a \`semantic\` key of any value b2 cannot read (${JSON.stringify(v)}) is refused`, (await meta(L)).live.semanticUnreadable === true);
   }
   const fresh = await as(async () => {
     const p2 = (await H.projects.createProject('Only a layer')).id;

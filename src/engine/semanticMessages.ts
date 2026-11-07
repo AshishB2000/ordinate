@@ -90,3 +90,40 @@ export function layerLookup(dataset: string, layer: string): string {
 export function layerFilter(dataset: string, layer: string, column: string): string {
   return t('semanticMessages.can_t_apply_this_filter_on', { layer, column, dataset });
 }
+
+// ── A semantic dataset (b2) ──────────────────────────────────────────────────
+
+/** A schema sync's sample, skipped on a semantic dataset: no rows, so nothing is detected. */
+export function layerNotSampled(layer: string): string {
+  return t('semanticMessages.computes_this_dataset_s_figures_so', { layer });
+}
+
+/** Listing or adding a layer's models from a connection whose connector has no semantic layer. */
+export function noLayer(): string {
+  return t('semanticMessages.this_connection_has_no_semantic_layer');
+}
+
+/** The layer did not answer a listing or a describe: its own words are in the server log. */
+export function layerReadFailed(layer: string): string {
+  return t('semanticMessages.didn_t_answer_so_nothing_changed', { layer });
+}
+
+/** `live:setBaseFilters` on a semantic dataset (cross-part check 14). */
+export function layerBaseFilter(layer: string): string {
+  return t('semanticMessages.always_applied_filters_are_not_available', { layer });
+}
+
+/** A mirror metric's definition in a picker, the Metrics table and a model's facts. */
+export function definedIn(layer: string): string {
+  return t('semanticMessages.defined_in', { layer });
+}
+
+/** An edit of a mirror metric's definition or filters: the layer's to change. */
+export function externalReadOnly(layer: string): string {
+  return t('semanticMessages.defined_in_edit_it_there', { layer });
+}
+
+/** "Make a copy" or "Copy the data instead" of a semantic dataset. */
+export function semanticNoCopy(dataset: string, layer: string): string {
+  return t('semanticMessages.a_copy_can_t_be_made', { dataset, layer });
+}

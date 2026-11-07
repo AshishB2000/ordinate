@@ -33,7 +33,9 @@ import { sanitizeOrigin } from './datasetOrigin';
 import { datasetFilePath, datasetsDir, parquetPath, serialized, sourceParquetPath, writeJsonAtomic } from './datasetRecord';
 import { removeAll as removeSnapshots } from './snapshots';
 import { removeIndex } from '../engine/dataSearchResident';
-import { isLive, liveColumnsOf, newLiveSettings } from './liveDataset';
+import { isLive, liveColumnsOf, newLiveSettings, sanitizeLive } from './liveDataset';
+import type { SemanticSettings } from './semanticDataset';
+import { sanitizeSemantic } from './semanticDataset';
 import { applyPipelineAsync } from './regexOffThread';
 import type { TableData, TransformStep } from './transforms';
 
@@ -41,10 +43,13 @@ import type { TableData, TransformStep } from './transforms';
 export async function saveLiveRecord(
   projectId: string,
   input: { name: string; columns: ParsedColumn[]; origin: unknown; maxCacheAgeSec?: number },
+  semantic?: SemanticSettings,
 ): Promise<Dataset | null> {
   if (!isValidId(projectId) || !(await projects.getProject(projectId))) return null;
   const origin = sanitizeOrigin(input.origin);
   if (!origin || origin.kind !== 'connection') return null;
+  const block = semantic === undefined ? undefined : sanitizeSemantic(semantic);
+  if (block === null) return null;
   const now = new Date().toISOString();
   const record: Dataset = {
     id: randomUUID(),
@@ -62,11 +67,55 @@ export async function saveLiveRecord(
     mode: 'live',
     live: newLiveSettings(input.maxCacheAgeSec, now),
   };
-  const stored: Record<string, unknown> = { ...record };
+  const stored: Record<string, unknown> = { ...record, ...(block ? { semantic: block } : {}) };
   delete stored.rows; // schema only: a `rows` key would read as an inline (v2) table
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await writeJsonAtomic(datasetFilePath(projectId, record.id), stored);
+  if (block) record.live = { ...record.live!, semantic: block };
   return record;
+}
+
+/**
+ * Create a semantic dataset (part 7 b2): a Live record whose origin names only its connection — no table, no SQL — and
+ * whose top-level `semantic` block names the layer's model. Its columns are the layer's dimensions. Null when the
+ * project, the connection id or the block is not usable.
+ */
+export function saveSemanticRecord(
+  projectId: string,
+  input: { name: string; connId: string; semantic: SemanticSettings; columns: ParsedColumn[]; maxCacheAgeSec?: number },
+): Promise<Dataset | null> {
+  return saveLiveRecord(projectId, { name: input.name, columns: input.columns, origin: { kind: 'connection', connId: input.connId }, maxCacheAgeSec: input.maxCacheAgeSec }, input.semantic);
+}
+
+/** What a semantic sync writes (src/engine/live/semantic/semanticSync.ts). */
+export interface SemanticSyncWrite {
+  columns: ParsedColumn[];
+  semantic: SemanticSettings;
+  missingColumns: string[];
+  syncedAt: string;
+  /** The dimensions changed: the dataset's `updatedAt` moves too. */
+  changed: boolean;
+}
+
+/**
+ * Land a semantic sync: the dimensions, the block and `schemaSyncedAt` (in every cache key) in ONE read-modify-write.
+ * False when the record is missing, no longer Live, or holds no readable block (a newer release's: left as stored).
+ */
+export function writeSemanticSync(projectId: string, id: string, w: SemanticSyncWrite): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const live = sanitizeLive(raw);
+    const block = sanitizeSemantic(w.semantic);
+    if (!live || !block || !sanitizeSemantic(raw.semantic)) return false;
+    const next = { ...live, schemaSyncedAt: w.syncedAt };
+    if (w.missingColumns.length) next.missingColumns = w.missingColumns;
+    else delete next.missingColumns;
+    raw.columns = liveColumnsOf(w.columns);
+    raw.semantic = block;
+    raw.live = next;
+    if (w.changed) raw.updatedAt = w.syncedAt;
+    return true;
+  }).then((r) => r === true);
 }
 
 /**
