@@ -211,7 +211,8 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
   const steps = expanded.steps;
   const reads = once(() => metricReads(projectId, datasetId, spec.column, steps));
-  return gateColumns(projectId, datasetId, reads, [spec.column, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
+  const snapshot = (spec as { snapshot?: unknown }).snapshot; // its date and entity are read too (part 1 D8, part 5 D11)
+  return gateColumns(projectId, datasetId, reads, [spec.column, snapshot, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
     const lock = await rowLockFor(projectId, datasetId);
     if (!lock) {
       const why = await relatedClosed(projectId, datasetId, reads);
