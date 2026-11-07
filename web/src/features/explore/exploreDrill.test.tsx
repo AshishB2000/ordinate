@@ -78,6 +78,13 @@ describe('Explore drill: the click', () => {
     expect(sent.encoding.category).toBe('region');
     expect(onChange).toHaveBeenCalledWith({ chartType: 'column', encoding: DRILLED.encoding, filters: [EAST] });
   });
+  it('hands the server\'s crumb label on with the column and the value it names', async () => {
+    serve({ body: { ...DRILLED, crumb: { ...DRILLED.crumb, label: 'Eastern region' } } });
+    const onLabel = vi.fn();
+    render(<Probe onLabel={onLabel} />);
+    fireEvent.click(screen.getByRole('button', { name: 'mark' }));
+    await waitFor(() => expect(onLabel).toHaveBeenCalledWith('region', 'East', 'Eastern region'));
+  });
   it('keeps the question\'s own steps (a kept one too) before the reply\'s', async () => {
     serve({ body: DRILLED });
     const onChange = vi.fn();
