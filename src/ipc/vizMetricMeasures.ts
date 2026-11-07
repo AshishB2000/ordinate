@@ -108,7 +108,7 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
     return { ok: false, error: msg.measureNeedsOneAxis(Array.from(plan.formulas.values())[0].name) };
   }
 
-  // The axis: every label any reply drew, in first-seen order (./lineUp).
+  // The axis: every label any reply drew, in first-seen order, a date's in time order (./lineUp).
   const { labels, keys, cell } = lineUp(replies);
 
   let series: Series[];
