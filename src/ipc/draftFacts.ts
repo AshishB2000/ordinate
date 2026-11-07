@@ -24,6 +24,8 @@ import { describeDefinition, describeDefinitionShort } from '../analysis/metricF
 // carried across a later rename, so a marked column stays marked under its new name.
 import { assistantColumnDocs } from '../app/sharePolicy';
 import { tableFacts } from '../app/tableDocs';
+import { tableWithout } from '../ai/hiddenFacts';
+import { hiddenColumnsFor } from '../data/rowAccess';
 import { load as loadCatalog } from '../app/catalog';
 
 /** The most metrics a draft is told about, first by name: about what fills the
@@ -45,7 +47,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
     const tables: NonNullable<PlanFactExtras['tables']> = {};
     for (const d of ctx.datasets) {
       columnDocs[d.id] = await assistantColumnDocs(projectId, d.id);
-      const table = await tableFacts(projectId, d.id);
+      const table = tableWithout(await tableFacts(projectId, d.id), await hiddenColumnsFor(projectId, d.id)); // no hidden key or hierarchy level (part 4, D21)
       if (table) tables[d.id] = table;
     }
 

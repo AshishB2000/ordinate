@@ -287,7 +287,7 @@ export async function buildFacts(
       for (const rid of [v.encoding.categoryDatasetId, v.encoding.seriesDatasetId]) {
         if (rid && rid !== v.datasetId && !relatedDocs[rid]) relatedDocs[rid] = await catalogColumns(projectId, rid);
       }
-      return copilot.visualFacts({ ...v, encoding: drawn }, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId), await followedMeasureTexts(projectId, v.datasetId, drawn, columnDocs));
+      return copilot.visualFacts({ ...v, encoding: drawn }, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, tableWithout(await tableFacts(projectId, v.datasetId), await hiddenColumnsFor(projectId, v.datasetId)), await followedMeasureTexts(projectId, v.datasetId, drawn, columnDocs));
     }
   }
 
