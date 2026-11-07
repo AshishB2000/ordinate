@@ -5,11 +5,13 @@
 // its formula's literals — `email = ana@acme.test` — and a published page, a
 // public link, an HTML export and a signed embed reach readers no Share policy
 // shapes words for. So a formula metric says nothing here, and neither does a
-// measure column the Share policy marks (withheldColumns: masked or not).
+// measure column the Share policy marks (withheldColumns: masked or not) on the
+// table the KPI totals it from — a forward join's, not only the card's.
 
 import * as metrics from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
 import { withheldColumns } from '../app/sharePolicy';
+import { metricColumnOwner } from '../ipc/relationships';
 import { kpiMeasure } from './publishMessages';
 
 /**
@@ -30,7 +32,7 @@ export async function kpiSubtitle(
     datasetId = metric.datasetId;
     ({ column, aggregation } = metric.definition);
   }
-  if (!column || (await withheldColumns(projectId, datasetId)).has(column)) return '';
+  if (!column || (await withheldColumns(projectId, await metricColumnOwner(projectId, datasetId, column))).has(column)) return '';
   const sub = kpiMeasure(aggregation, column);
   return sub.toLowerCase() === title.trim().toLowerCase() ? '' : sub;
 }

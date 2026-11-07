@@ -7,8 +7,9 @@
 // counted (docs/live-data: `analysis:tiles` → computeCardMetric, `visual:data`
 // → vizDataFor). `getDataset` is never called from this file.
 //
-//   KPI card      `analysis:tiles` — the figure, its display string, and the
-//                 card's Compare when it has one
+//   KPI card      `analysis:tiles` ON THE SHARE PATH 'report' — the figure, its
+//                 display string, and the card's Compare when it has one; a KPI
+//                 totalled from a column the policy drops says so instead
 //   visual card   `visual:data` ON THE SHARE PATH 'report': what leaves the app
 //                 is shaped by the project's Share policy, and a tile the
 //                 policy hides says so instead of sending its rows
@@ -98,6 +99,7 @@ export async function resolveFigures(projectId: string, a: Analysis, cardIds: st
   const tiles: any[] = metricCards.length // any: analysis:tiles' reply per item
     ? await call('analysis:tiles', {
       projectId,
+      share: 'report',
       params: scope.params,
       items: metricCards.map((c) => {
         const m = c.metric!;

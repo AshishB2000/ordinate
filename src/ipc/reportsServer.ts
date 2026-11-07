@@ -35,6 +35,7 @@ import { todayIso } from '../analysis/dateIntel';
 import { viewScope } from '../analysis/savedViews';
 import { buildReportPages, storyReportPages, storyVisual, type PageAnalysis, type PageDeps, type VisualRec } from '../analysis/reportPages';
 import { scorecardSnapshot } from './scorecards';
+import { kpiHidden } from '../publish/kpiPolicy';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
 import { figureAsk } from '../analysis/figureAsk';
@@ -76,14 +77,17 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
         ...figureAsk(v.chartType, v.overrides), // what the page draws it as: its figures, and its caption's
       });
     },
+    // A KPI leaves by the same path, judged on the columns it is totalled from: hidden, it says so instead of its figure.
     metric: async (m, filters, params) => {
       const item = { kind: 'metric', datasetId: m.datasetId, column: m.column, aggregation: m.aggregation, filters, ...(m.metricId ? { metricId: m.metricId } : {}) };
-      const out = await call(event, 'analysis:tiles', { projectId, params, items: [item] });
+      const out = await call(event, 'analysis:tiles', { projectId, params, items: [item], ...(share ? { share: 'report' } : {}) });
       const r = Array.isArray(out) ? out[0] : null;
+      if (r && r.hiddenByPolicy) return { value: null, display: String(r.error), ...(r.name ? { name: r.name } : {}) };
       return r && r.ok ? { value: typeof r.value === 'number' ? r.value : null, display: r.display, name: r.name } : { value: null };
     },
     metricValue: async (id, filters) => {
-      const r = await call(event, 'metric:value', { projectId, id, filters });
+      const r = await call(event, 'metric:value', { projectId, id, filters, ...(share ? { share: 'report' } : {}) });
+      if (r && r.hiddenByPolicy) return { name: String(r.name ?? ''), display: String(r.error), value: null };
       return r && r.ok !== false && r.name ? { name: String(r.name), display: String(r.display ?? '—'), value: typeof r.value === 'number' ? r.value : null } : null;
     },
     caption: async (input) => {
@@ -118,7 +122,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       })());
       return narratives.get(key) as Promise<string>;
     },
-    scorecard: (id) => scorecardSnapshot(projectId, id),
+    scorecard: (id) => scorecardSnapshot(projectId, id, 0, share ? (reads) => kpiHidden(projectId, reads, 'report') : undefined),
     // A report leaves the app, so its discussion is what a viewer could read: no thread on a dashboard's draft, and
     // each card named as the published copy names it (analysis.asAudience).
     comments: () => analysis.asAudience(async () => {

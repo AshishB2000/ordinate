@@ -35,7 +35,7 @@ import { computeCardMetric } from '../ipc/dashboards';
 import { liveDistinct } from '../ipc/liveProfile';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
-import { resolveMetric } from '../ipc/metrics';
+import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
 import { statsTitle } from '../analysis/stats/present';
@@ -50,6 +50,7 @@ import { embedTileLocked } from '../server/embedMessages';
 import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
+import { kpiHidden } from './kpiPolicy';
 
 export interface PublishedControl {
   id: string;
@@ -479,6 +480,8 @@ export async function buildDashboard(
           continue;
         }
         let subtitle: string | undefined;
+        const reads: MetricRead[] = []; // every column a figure on this tile is totalled from, in any combination
+        const payloads: unknown[] = [];
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
@@ -486,7 +489,7 @@ export async function buildDashboard(
           let viaMetric = false;
           try {
             if (m.metricId) {
-              const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params });
+              const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params, reads });
               if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
                 payload = { value: r.value, display: r.display };
@@ -494,6 +497,7 @@ export async function buildDashboard(
               }
             }
             if (!payload) {
+              reads.push({ datasetId: m.datasetId, column: m.column, aggregation: m.aggregation });
               const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, bound.steps, scope.params);
               payload = r.ok
                 ? { value: r.value, display: r.value == null ? '—' : formatValue(r.value, m.format || 'auto') }
@@ -512,10 +516,13 @@ export async function buildDashboard(
             if (subtitle === undefined) subtitle = await kpiSubtitle(projectId, m, title, viaMetric); // the same for every combination
             if (subtitle) payload.subtitle = subtitle;
           }
-          base.variants.push(intern(store, payload));
+          payloads.push(payload);
           done++;
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
+        // Shaped as a chart over the same columns is (./kpiPolicy): a column the policy drops leaves no figure, in any combination.
+        const hidden = await kpiHidden(projectId, reads, outgoing);
+        for (const p of payloads) base.variants.push(intern(store, hidden ? { hidden } : p));
         cards.push({ ...base, kind: 'metric', title });
         continue;
       }
@@ -556,7 +563,7 @@ export async function buildDashboard(
         }
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
-          base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params)));
+          base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params, outgoing)));
           done++;
         }
         cards.push({ ...base, kind: 'chart', title: 'Metric tree', chartType: 'table' });

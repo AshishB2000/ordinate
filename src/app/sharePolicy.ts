@@ -10,7 +10,8 @@
 //            drawn from the column are masked; the figures are aggregates and
 //            pass through.
 //   drop     the column is removed from a table; a chart that USES it in any
-//            role is replaced by a "Hidden by the share policy" result.
+//            role is replaced by a "Hidden by the share policy" result, and so
+//            is a published KPI totalled from it (publish/kpiPolicy.ts).
 //   include  passes through. The renderer asks for an explicit confirmation
 //            before it lets an export run under this action.
 //
@@ -265,7 +266,7 @@ export async function applyToChart<R extends ChartReplyLike>(
   // filter steps and the flattened series names — hide rather than half-mask.
   if (encoding.facet && reply.data.facets) {
     const labelish = await Promise.all([encoding.facet.rows, encoding.facet.cols, encoding.category, encoding.series].map((c) => sens(datasetId, c)));
-    const valueish = await Promise.all((encoding.values || []).map((m) => sens(datasetId, m.column)));
+    const valueish = await Promise.all((encoding.values || []).map((m) => sens(m.datasetId, m.column)));
     const hide = labelish.some(Boolean) || (action === 'drop' && valueish.some(Boolean));
     return hide ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
   }
@@ -281,11 +282,13 @@ export async function applyToChart<R extends ChartReplyLike>(
   const g = encoding.geo;
   const drew = (reply.data.geo || {}) as { lat?: unknown; lon?: unknown };
   const size = g && g.level === 'point' && encoding.values?.[0]?.aggregation !== 'count' ? encoding.values?.[0]?.column : undefined;
-  const geoCols = g ? [g.lat, g.lon, g.lat2, g.lon2, g.from, g.to, g.color, drew.lat, drew.lon, size] : [];
-  const geoS = (await Promise.all(geoCols.map((c) => sens(datasetId, typeof c === 'string' ? c : undefined)))).some(Boolean);
+  const geoCols = g ? [g.lat, g.lon, g.lat2, g.lon2, g.from, g.to, g.color, drew.lat, drew.lon] : [];
+  const geoS = (await Promise.all(geoCols.map((c) => sens(datasetId, typeof c === 'string' ? c : undefined)))).some(Boolean)
+    || (await sens(encoding.values?.[0]?.datasetId, size));
   const labelUse = catS || serS || rowDims.some(Boolean) || colDims.some(Boolean);
+  // A measure is judged on ITS dataset: a forward join's column is that table's, marked there.
   const valueUse = (await Promise.all([
-    ...(encoding.values || []).map((m) => sens(datasetId, m.column)),
+    ...(encoding.values || []).map((m) => sens(m.datasetId, m.column)),
     ...(encoding.pivot ? encoding.pivot.values.map((v) => sens(datasetId, v.column)) : []),
   ])).some(Boolean);
   if (!labelUse && !valueUse && !geoS) return reply;

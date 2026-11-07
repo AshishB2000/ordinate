@@ -272,6 +272,37 @@ async function main(): Promise<void> {
     await catalog.setColumn(pid, ds.id, text.name, { sensitivity: 'none' } as any); // any: a ColumnPatch literal
   }
 
+  // ── metric_value on the Share policy's EXPORT path, as aggregate: refused, typed, under drop ──
+  {
+    const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+    const privacy: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+    const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+    const crypto: typeof import('crypto') = require('crypto');
+    const [marked, open] = meta.columns.filter((c) => c.type === 'number').map((c) => c.name);
+    const save = async (name: string, definition: object) => (await metricsStore.saveMetric(pid, { name, datasetId: ds.id, definition } as any))!; // any: a record literal the saver sanitizes
+    const plainM = await save('Policy marked total', { column: marked, aggregation: 'sum' });
+    const formulaM = await save('Policy marked half', { formula: '[Policy marked total] / 2' });
+    const openM = await save('Policy open total', { column: open, aggregation: 'sum' });
+    const value = (metric: string) => call('metric_value', { metric });
+    const unmarked = [await value(plainM.name), await value(formulaM.name), await value(openM.name)];
+    const sha = crypto.createHash('sha256').update(JSON.stringify(unmarked).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'U')).digest('hex');
+    ok('policy PIN: with nothing marked, metric_value answers what it answered before this change', sha === 'fcf0c0cda9efb583c84d944b729b4bf757f9e69aea00f48c3344d8c54b00a44e', sha); // the replies develop 98176da9 gave
+    await catalog.setColumn(pid, ds.id, marked, { sensitivity: 'financial' } as any); // any: a ColumnPatch literal
+    await privacy.setPolicy(pid, { export: 'drop' });
+    for (const m of [plainM, formulaM]) {
+      const r = await refusal('metric_value', { metric: m.name });
+      ok(`policy: under drop metric_value "${m.name}" over the marked column is refused, typed, as aggregate is`,
+        r.code === 'runtime' && /share policy/i.test(r.message) && !r.message.includes(String(Math.round(unmarked[0].value))), JSON.stringify(r));
+    }
+    ok('policy NEGATIVE CONTROL: under drop, a metric over a column nobody marked still answers', JSON.stringify(await value(openM.name)) === JSON.stringify(unmarked[2]));
+    await privacy.setPolicy(pid, { export: 'mask' });
+    ok('policy: under mask metric_value answers the figure, as aggregate passes an aggregate', JSON.stringify([await value(plainM.name), await value(formulaM.name)]) === JSON.stringify(unmarked.slice(0, 2)));
+    await catalog.setColumn(pid, ds.id, marked, { sensitivity: 'none' } as any); // any: a ColumnPatch literal
+    await privacy.setPolicy(pid, { export: 'drop' });
+    ok('policy NEGATIVE CONTROL: unmarked again, drop answers as before', JSON.stringify(await value(plainM.name)) === JSON.stringify(unmarked[0]));
+    await privacy.setPolicy(pid, { export: 'mask' });
+  }
+
   // ── The CLI end to end, real registry ──────────────────────────────────────
   const run = async (argv: string[]): Promise<{ code: number; out: string }> => {
     let out = '';

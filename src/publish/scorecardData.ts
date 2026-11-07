@@ -5,12 +5,14 @@
 // figure is the display string the app already formatted, plus the raw numbers
 // a sparkline and an attainment bar need. A scorecard has no filter bar, so it
 // is one answer, like a story. Like a story's metric blocks, its figures are
-// metric resolutions — aggregates, never a row — so no column-level share
-// policy applies to them.
+// metric resolutions — aggregates, never a row — so they leave as a KPI does
+// (./kpiPolicy): a row totalled from a column the Share policy drops publishes
+// its name and the house wording, never its figures.
 
 import * as scorecards from '../analysis/scorecards';
 import { computeScorecard } from '../ipc/scorecards';
-import type { BuildProgress } from './dashboardData';
+import type { BuildProgress, Outgoing } from './dashboardData';
+import { kpiHidden } from './kpiPolicy';
 
 export interface PublishedScoreRow {
   name: string;
@@ -39,12 +41,12 @@ export interface PublishedScorecard {
   boundaryIds: string[];
 }
 
-export async function buildScorecard(projectId: string, id: string, ctx: BuildProgress = {}): Promise<PublishedScorecard | null> {
+export async function buildScorecard(projectId: string, id: string, ctx: BuildProgress = {}, outgoing?: Outgoing): Promise<PublishedScorecard | null> {
   const sc = await scorecards.getScorecard(projectId, id);
   if (!sc) return null;
   if (ctx.checkCancelled) ctx.checkCancelled();
   if (ctx.progress) ctx.progress(0.1, 'Scoring ' + sc.name);
-  const res = await computeScorecard(projectId, sc, 0);
+  const res = await computeScorecard(projectId, sc, 0, outgoing ? (reads) => kpiHidden(projectId, reads, outgoing) : undefined);
   if (ctx.progress) ctx.progress(1);
   return {
     id: sc.id,

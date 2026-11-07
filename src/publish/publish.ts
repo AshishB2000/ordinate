@@ -278,7 +278,7 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
     pages.push({ kind: 'story', id, name: st.name, combos: 1, mode: 'all', bytes, dropped: [] });
   }
   for (const id of config.scorecardIds || []) {
-    const sc = await buildScorecard(config.projectId, id);
+    const sc = await buildScorecard(config.projectId, id, {}, outgoing);
     if (!sc) continue;
     pages.push({ kind: 'scorecard', id, name: sc.name, combos: 1, mode: 'all', bytes: fixed + Buffer.byteLength(JSON.stringify(sc)), dropped: [] });
   }
@@ -323,7 +323,7 @@ export async function buildPages(config: PublishConfig, ctx: PublishProgress, ou
     const data = t.kind === 'dashboard'
       ? await recordFs.withReadMemo(() => buildDashboard(config.projectId, t.id, config.options.maxCombos || DEFAULT_MAX_COMBOS, sub, outgoing))
       : t.kind === 'story' ? await buildStory(config.projectId, t.id, sub, outgoing)
-        : await buildScorecard(config.projectId, t.id, sub);
+        : await buildScorecard(config.projectId, t.id, sub, outgoing);
     if (!data) continue; // deleted since it was picked: publish the rest
     built.push({ kind: t.kind, id: t.id, name: data.name, file: slugFor(data.name, taken), data });
   }

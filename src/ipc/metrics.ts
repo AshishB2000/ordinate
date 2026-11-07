@@ -39,6 +39,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { computeCardMetric } from './dashboards';
 import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
+import type { MetricAggregation } from '../analysis/metricValue';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
 import { periodPlan } from '../analysis/insightsAgg';
@@ -57,6 +58,8 @@ import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { contentTag, isRecordChanged } from '../app/editConflict';
+import { isSharePath } from '../app/privacyStore';
+import { kpiHidden } from '../publish/kpiPolicy';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -87,7 +90,12 @@ interface ResolveCtx {
   fx?: FxInfo;
   /** The oldest warehouse time of any LIVE operand (L2.4) — the figure's `asOf`. */
   asOf?: AsOf;
+  /** When the caller asks: every column a figure was totalled from — what a Share policy judges (publish/kpiPolicy). */
+  reads?: MetricRead[];
 }
+
+/** One total a metric's figure was drawn from: a column (its own dataset's or a related one's) and its aggregation. */
+export interface MetricRead { datasetId: string; column: string; aggregation: MetricAggregation }
 
 /** The older of two live times: a figure is as old as its oldest operand. */
 function olderAsOf(a: AsOf | undefined, b: AsOf | undefined): AsOf | undefined {
@@ -132,6 +140,7 @@ async function resolveDefinition(
 
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
+    ctx.reads?.push({ datasetId, column: definition.column, aggregation: definition.aggregation });
     const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
     ctx.fx = mergeFx(ctx.fx, res.fx);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
@@ -152,6 +161,7 @@ async function resolveDefinition(
 
   // Aggregations over this metric's own dataset — `sum(revenue)`.
   for (const agg of compiled.program.aggregates) {
+    ctx.reads?.push({ datasetId, column: agg.column, aggregation: agg.aggregation });
     const res = await computeCardMetric(
       ctx.projectId,
       datasetId,
@@ -229,11 +239,12 @@ export interface ResolvedMetric {
 export async function resolveMetric(
   projectId: string,
   metricId: string,
-  scope: { filters?: FilterStep[]; params?: ParamValues } = {},
+  scope: { filters?: FilterStep[]; params?: ParamValues; reads?: MetricRead[] } = {},
 ): Promise<ResolvedMetric | null> {
   const metric = await metrics.getMetric(projectId, metricId);
   if (!metric) return null;
   const ctx = newCtx(projectId, Array.isArray(scope.filters) ? scope.filters : [], scope.params);
+  ctx.reads = scope.reads;
   // Seeded so a self-reference inside this metric's own formula is caught by the
   // same guard that catches a loop between two of them.
   ctx.stack.add(metric.name.toLowerCase());
@@ -513,12 +524,18 @@ export function register() {
   });
 
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  // `share` (server-side callers only — a report, a send; the contract has no such field): the figure is about to
+  // LEAVE the app, so the Share policy judges the columns it was totalled from (publish/kpiPolicy), as visual:data's does.
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       const values = paramValues(params);
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
-      const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values });
+      const leaving = isSharePath(share) && share !== 'bundle';
+      const reads: MetricRead[] = [];
+      const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values, ...(leaving ? { reads } : {}) });
       if (!res) return { ok: false, error: 'Metric not found' };
+      const hidden = leaving ? await kpiHidden(projectId, reads, share) : '';
+      if (hidden) return { ok: false, error: hidden, hiddenByPolicy: true, name: res.name };
       // Dated by the metric's dataset (L0.2, data/figureAsOf), inside the as-of scope.
       const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
       return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;

@@ -36,7 +36,7 @@ import type { TreeNode, TreeRelation } from '../analysis/metricTree';
 import { contributions, leadIndex, residualOf, shareOf } from '../analysis/metricTreeMath';
 import * as msg from '../analysis/metricTreeMessages';
 import { compareMetric } from './periods';
-import { resolveMetricSeries } from './metrics';
+import { resolveMetricSeries, type MetricRead } from './metrics';
 import { liveCodeOf } from './liveRoute';
 import { splitSegments, OTHER_KEY, SPLIT_MAX_VALUES } from './metricTreeSplit';
 import { computeColumnSummariesResident } from '../engine/statsResident';
@@ -160,6 +160,7 @@ interface Ctx {
   compare: { mode: string; from?: string; to?: string };
   rawParams: unknown;
   byId: Map<string, Metric | null>;
+  reads?: MetricRead[];
 }
 
 async function metricOf(ctx: Ctx, id: string): Promise<Metric | null> {
@@ -210,7 +211,7 @@ async function metricNode(ctx: Ctx, spec: TreeNode, path: string): Promise<TreeN
   if (!m) return blank(key, '—', msg.partGone());
   if (m.datasetId !== ctx.root.datasetId) return { ...blank(key, m.name, msg.otherDataset(m.name)), metricId: m.id };
   const [r, spark] = await Promise.all([
-    compareMetric(ctx.projectId, { metricId: m.id }, ctx.current, ctx.compare, ctx.rawParams),
+    compareMetric(ctx.projectId, { metricId: m.id }, ctx.current, ctx.compare, ctx.rawParams, ctx.reads),
     sparkOf(ctx, m.id),
   ]);
   const cur = fin(r.value) ? r.value : null;
@@ -302,6 +303,8 @@ export interface ComputeInput {
   params?: unknown;
   /** An unsaved tree to preview (the editor): sanitized exactly as a save would. */
   tree?: unknown;
+  /** Server-side callers only: every column a node's figure is totalled from (publish/kpiPolicy judges them). */
+  reads?: MetricRead[];
 }
 
 /** `tag`: the stored tag of the tree this answer was computed from — the tree editor's base (src/app/editConflict.ts). */
@@ -329,7 +332,7 @@ async function computeFor(projectId: string, root: Metric, input: ComputeInput):
   if (!dateColumn) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
   const ctx: Ctx = {
     projectId, root, columns: meta.columns, dateColumn, current: [], previous: [], undated: withoutDateBounds(filters, dateColumn),
-    compare, rawParams: input.params, byId: new Map([[root.id, root]]),
+    compare, rawParams: input.params, byId: new Map([[root.id, root]]), reads: input.reads,
   };
 
   const asked = typeof input.period?.key === 'string' ? (input.period.key as PeriodKey) : null;
