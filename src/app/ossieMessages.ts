@@ -34,6 +34,14 @@ export function ossieWhy_metricCountText(): string {
   return t('ossieMessages.ordinate_counts_only_text_that_is');
 }
 
+export function ossieWhy_metricCountdDate(): string {
+  return t('ossieMessages.ordinate_counts_the_distinct_days_of');
+}
+
+export function ossieWhy_metricNotNumber(): string {
+  return t('ossieMessages.ordinate_totals_averages_and_takes_a');
+}
+
 export function ossieWhy_metricFormula(): string {
   return (t('ossieMessages.ossie_metrics_cannot_refer_to_other'));
 }
@@ -75,6 +83,8 @@ export const ossieWhy = {
   metricFilters: ossieWhy_metricFilters,
   metricBaseFilters: ossieWhy_metricBaseFilters,
   metricCountText: ossieWhy_metricCountText,
+  metricCountdDate: ossieWhy_metricCountdDate,
+  metricNotNumber: ossieWhy_metricNotNumber,
   metricFormula: ossieWhy_metricFormula,
   metricSnapshot: ossieWhy_metricSnapshot,
   metricDate: ossieWhy_metricDate,

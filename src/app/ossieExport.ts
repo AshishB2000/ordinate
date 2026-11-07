@@ -9,6 +9,7 @@ import { ossieWhy } from './ossieMessages';
 import { sanitizeCalendar } from '../analysis/dateIntel';
 import { stableStringify } from '../engine/queryCache';
 import { isSimpleDefinition } from '../analysis/metrics';
+import { isCountLike } from '../data/aggregations';
 
 export const OSSIE_SPEC_VERSION = '0.2.0.dev0';
 
@@ -81,7 +82,11 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
         : d.baseFilters?.length ? ossieWhy.metricBaseFilters() // `source` is the whole table: the figure would be another number
         : !col ? ossieWhy.calculated() // a Live calculated field: the source table has no such column
         // COUNT(x) counts '' and '  '; NULLIF(TRIM(x), '') is no fix, as TRIM's whitespace set varies by dialect.
-        : (def.aggregation === 'count' || def.aggregation === 'countd') && col.type === 'text' ? ossieWhy.metricCountText()
+        : isCountLike(def.aggregation) && col.type === 'text' ? ossieWhy.metricCountText()
+        // Ordinate's distinct key of a date is its day (dateOf); COUNT(DISTINCT ts) counts each timestamp.
+        : def.aggregation === 'countd' && col.type === 'date' ? ossieWhy.metricCountdDate()
+        // Ordinate gives SUM/AVG/MIN/MAX of a text or date field no figure (Live refuses, an extract shows none).
+        : !isCountLike(def.aggregation) && col.type !== 'number' ? ossieWhy.metricNotNumber()
         : undefined;
       if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: slugOf(d.id) }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields
