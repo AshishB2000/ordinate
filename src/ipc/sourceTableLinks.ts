@@ -76,7 +76,8 @@ export function register(): void {
       if (!conn) return { ok: false, error: connectionGone() };
       const res = await connectionRun.listTables(conn.connectorId, conn.values, await loadSecrets(conn.id, getConnector(conn.connectorId)));
       if (!res.ok) return { ok: false, error: res.error };
-      return { ok: true, tables: choiceOrder(res.tables.map((t) => t.name), origin.sql ?? ''), linked: sourceTablesOf(origin, conn) };
+      // schema.name, as a doc, a table import and the web's `qualify` name it, so a link meets its doc
+      return { ok: true, tables: choiceOrder(res.tables.map((t) => (t.schema ? `${t.schema}.${t.name}` : t.name)), origin.sql ?? ''), linked: sourceTablesOf(origin, conn) };
     } catch {
       return { ok: false, error: connectionGone() };
     }
