@@ -17,7 +17,7 @@
 // when it was published, and only a re-publish changes them.
 
 import * as fs from 'fs';
-import { anyPolicyClosedRecently, assertFanOutAllowed, fanOutScope, policyClosed } from '../data/rowAccess';
+import { anyPolicyClosedRecently, assertFanOutAllowed, fanOutScope, governed } from '../data/rowAccess';
 import { datasetsOfRoot } from '../server/subscriptions/figureDatasets';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -100,7 +100,7 @@ export async function servable(site: HostedSite): Promise<boolean> {
   try {
     const ids = Array.isArray(site.datasetIds) ? site.datasetIds : await backfillDatasets(site);
     if (ids === null) return !(await anyPolicyClosedRecently(site.projectId));
-    for (const id of ids) if (await policyClosed(site.projectId, id)) return false;
+    for (const id of ids) if (await governed(site.projectId, id)) return false; // row or column rules (part 4 step 06 narrows columns by date)
     return true;
   } catch {
     return false; // rules that cannot be read: not served

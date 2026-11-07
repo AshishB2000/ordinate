@@ -4,9 +4,10 @@
 // `vizDataFor`, `computeCardMetric` and `computeCard` (and the grid's `pageFor`)
 // wrap their unchanged bodies with these. First, for EVERY caller, a filter step
 // this pod cannot apply (a glossary term, a newer release's step) refuses, typed
-// `term` (../analysis/termExpand): the lock below would otherwise drop it. Then,
-// for a caller nothing restricts on the dataset, the body runs as it always did.
-// For a restricted caller:
+// `term` (../analysis/termExpand): the lock below would otherwise drop it. Then
+// the column gate (./columnDoors): a question naming a column hidden from the
+// caller refuses. Then, for a caller nothing restricts on the dataset, the body
+// runs as it always did. For a restricted caller:
 //
 //   - the refusals (data/rowAccess.rowLockFor: fan-out, export, as-of, derived,
 //     column, pipeline, no entitlement), and here: a question that reaches a
@@ -38,6 +39,7 @@ import { chartReads, metricReads, relatedColumnNames } from './relationships';
 import { expandTerms } from '../analysis/termExpand';
 import type { TermExpansion } from '../analysis/termExpand';
 import { isTermNotExpandedError, termRefusal } from '../data/termStep';
+import { gateColumns, gateColumnsReply, once } from './columnDoors';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -161,17 +163,21 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   const expanded = await expandedOrRefusal(projectId, datasetId, asked);
   if (!('steps' in expanded)) return expanded;
   const filters = expanded.steps; // its notes are the caller's: vizDataFor expands first, so none are left here
-  const lock = await lockOrRefusal(projectId, datasetId);
-  if (isRefusal(lock)) return lock;
-  if (!lock) {
-    const why = await relatedClosed(projectId, datasetId, chartReadsOf(projectId, datasetId, encoding, filters));
-    if (why) return rowPolicyRefusal(why);
-    return body(projectId, datasetId, encoding, filters, opts);
-  }
-  if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
-  if (await reachesOther(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
-  // The builder's sample is drawn over the whole table and reports its size: never under a lock.
-  return withRowLock(datasetId, () => body(projectId, datasetId, encoding, withLockSteps(lock, filters), { ...opts, sample: false }));
+  const reads = once(chartReadsOf(projectId, datasetId, encoding, filters));
+  // A hidden column FIRST: before the lock, the related gate, the Live split and the answer cache (./columnDoors).
+  return gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async () => {
+    const lock = await lockOrRefusal(projectId, datasetId);
+    if (isRefusal(lock)) return lock;
+    if (!lock) {
+      const why = await relatedClosed(projectId, datasetId, reads);
+      if (why) return rowPolicyRefusal(why);
+      return body(projectId, datasetId, encoding, filters, opts);
+    }
+    if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
+    if (await reachesOther(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
+    // The builder's sample is drawn over the whole table and reports its size: never under a lock.
+    return withRowLock(datasetId, () => body(projectId, datasetId, encoding, withLockSteps(lock, filters), { ...opts, sample: false }));
+  });
 }
 
 /** `computeCardMetric` under the rules: a refusal THROWS, as a Live KPI's failure does (an ok:false reads as "dataset gone"). */
@@ -184,21 +190,30 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
   const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
-  filters = expanded.steps;
-  const lock = await rowLockFor(projectId, datasetId);
-  if (!lock) {
-    const why = await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters));
-    if (why) throw new RowPolicyError(why);
-    return withNotes(await body(projectId, datasetId, spec, filters, params), expanded.notes);
-  }
-  if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
-  return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, filters), params)), expanded.notes);
+  const steps = expanded.steps;
+  const reads = once(() => metricReads(projectId, datasetId, spec.column, steps));
+  return gateColumns(projectId, datasetId, reads, [spec.column, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
+    const lock = await rowLockFor(projectId, datasetId);
+    if (!lock) {
+      const why = await relatedClosed(projectId, datasetId, reads);
+      if (why) throw new RowPolicyError(why);
+      return withNotes(await body(projectId, datasetId, spec, steps, params), expanded.notes);
+    }
+    if (await reachesOther(projectId, datasetId, null, [spec.column, steps])) throw new RowPolicyError('related');
+    return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, steps), params)), expanded.notes);
+  });
 }
 
-/** Any door whose body takes the lock itself (an answer card, the grid page): the lock, in its scope. */
-export async function withLockOf<R>(projectId: string, datasetId: string, body: (lock: Lock | null) => Promise<R>): Promise<R> {
-  const lock = await rowLockFor(projectId, datasetId);
-  return lock ? withRowLock(datasetId, () => body(lock)) : body(null);
+/**
+ * Any door whose body takes the lock itself (an answer card, the grid page, distinct, profile): the column gate
+ * on `question` first (./columnDoors; a refusal throws), then the lock, in its scope. `hidden`: the columns of
+ * `datasetId` hidden from the caller, which the body must not hand over (a row reader nulls or drops them).
+ */
+export async function withLockOf<R>(projectId: string, datasetId: string, body: (lock: Lock | null, hidden: ReadonlySet<string>) => Promise<R>, question: unknown = []): Promise<R> {
+  return gateColumns(projectId, datasetId, async () => [], question, async (hidden) => {
+    const lock = await rowLockFor(projectId, datasetId);
+    return lock ? withRowLock(datasetId, () => body(lock, hidden)) : body(null, hidden);
+  });
 }
 
 /** A hydrated table folded through the lock FIRST, so every helper after it sees entitled rows only. */

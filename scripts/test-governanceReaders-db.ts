@@ -1,8 +1,9 @@
-// Governance readers over the real route (semantic layer part 4, release A), as real users in a scratch
-// Postgres (scripts/rowPolicyHarness.ts): a dataset carrying `columnAccess` (written by a newer release)
-// has column rules this pod cannot apply, so it is CLOSED, reason `columns`, to every project viewer, whether
-// or not its row rules name them, and to every fan-out (publish, embed, subscription, alert); a dataset built
-// from it is closed too (`derived`). Editors and admins read it as before.
+// Governance readers over the real route (semantic layer part 4), as real users in a scratch Postgres
+// (scripts/rowPolicyHarness.ts): a dataset carrying `columnAccess` whose rules no longer hold (a stale
+// `readersHash`, as a record from another release can carry) is CLOSED, reason `columns`, to every project
+// viewer it hides a column from, whether or not its row rules name them, and to every fan-out build (publish,
+// embed, subscription, alert: its least-entitled audience); a dataset built from it is closed too (`columns`).
+// The send check stays rows-only (`policyClosed`): the build refuses instead. Editors and admins read it as before.
 // NEGATIVE CONTROLS: the editor reads it; with the key removed, the viewer is answered and the publish planned.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-governanceReaders-db.js
@@ -61,10 +62,10 @@ const answered = (r: H.Reply): boolean => r.status === 200 && r.body?.ok !== fal
     ok('…its grid and its stats (the net)', H.refused(grid, 'columns') && H.refused(net, 'columns'), `${show(grid)} | ${show(net)}`);
     ok('…and every other viewer, named in no rule, is refused too', H.refused(await chart('nobody', plain), 'columns') && H.refused(await chart('west', plain), 'columns'));
     const built = await W.call('east', 'dataset:page', page(builtFromPlain));
-    ok('a dataset built from it is closed to east too', H.refused(built, 'derived'), show(built));
+    ok('a dataset built from it is closed to east too', H.refused(built, 'columns'), show(built));
     const planned = await W.call('boss', 'publish:plan', plan);
-    ok('a publish reading it refuses for everyone (an admin too)', H.refused(planned, 'fanout'), show(planned));
-    ok('…and so does the send check every subscription, alert and /p/ page makes', (await sendsAllowed(plain)) === false);
+    ok('a publish reading it refuses for everyone (an admin too)', H.refused(planned, 'columns'), show(planned));
+    ok('…while the send check every subscription, alert and /p/ page makes is rows-only (its build refuses)', (await sendsAllowed(plain)) === true);
     const edChart = await chart('ed', plain);
     ok('NEGATIVE CONTROL: the editor reads it as before', edChart.body?.ok === true, show(edChart));
     ok('NEGATIVE CONTROL: …its grid and its stats too', answered(await W.call('ed', 'dataset:page', page(plain))) && answered(await W.call('ed', 'dataset:stats', stats(plain))));

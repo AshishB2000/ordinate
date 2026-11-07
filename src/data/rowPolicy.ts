@@ -109,11 +109,12 @@ export function entitlement(policy: RowPolicy | null, userId: string | null, tea
 }
 
 /** Steps that may READ the rule column but never write it. */
-const NON_WRITERS: ReadonlySet<string> = new Set(['filter', 'dedupe', 'dedupe_key']);
+export const NON_WRITERS: ReadonlySet<string> = new Set(['filter', 'dedupe', 'dedupe_key']);
 /** Steps that can write columns they do not name (`<col>_1`, a union's rows, a pivot's headers, a lookup's columns). */
-const UNNAMED_WRITERS: ReadonlySet<string> = new Set(['union', 'unpivot', 'pivot', 'split_column', 'lookup_join', 'text_terms', 'spatial_join', 'group_aggregate']);
+export const UNNAMED_WRITERS: ReadonlySet<string> = new Set(['union', 'unpivot', 'pivot', 'split_column', 'lookup_join', 'text_terms', 'spatial_join', 'group_aggregate']);
 
-function mentions(v: unknown, column: string): boolean {
+/** Does any string in `v` (a step, deeply) equal `column`? */
+export function mentions(v: unknown, column: string): boolean {
   if (v === column) return true;
   if (Array.isArray(v)) return v.some((x) => mentions(x, column));
   if (v && typeof v === 'object') return Object.values(v as Record<string, unknown>).some((x) => mentions(x, column));

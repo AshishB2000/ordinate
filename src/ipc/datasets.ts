@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
+import { pageWithoutHidden } from './columnDoors';
 import { RowPolicyError, closedToCaller, isRowPolicyError, withLockSteps } from '../data/rowAccess';
 import { seesSourceNames } from '../data/sourceNames';
 import { distinctFor } from './distinctFor';
@@ -182,7 +183,7 @@ async function residentPromptFacts(
 
 /** The reply shape of `dataset:page`, shared with the drill-down panel. */
 export type PageReply =
-  | { ok: true; rows: Cell[][]; total: number; offset: number }
+  | { ok: true; rows: Cell[][]; total: number; offset: number; hidden?: string[] }
   | { ok: false; error: string };
 
 /**
@@ -207,11 +208,12 @@ export async function pageFor(projectId: string, datasetId: string, asked: PageR
   const req = { ...asked, filters: (await expandTerms(projectId, datasetId, asked.filters)).steps }; // a step it cannot apply THROWS, before the lock
   // Row access rules (docs/row-policy D7): the caller's lock first in `filters`, which both paths below honour.
   // A quality rule's row filter is computed over the whole table (and another dataset): never under a lock.
-  return withLockOf(projectId, datasetId, (lock) => {
+  // Hidden columns (./columnDoors): a question naming one refuses; their cells come back null, named in `hidden`.
+  return withLockOf(projectId, datasetId, (lock, hidden) => pageWithoutHidden(projectId, datasetId, req.search, hidden, () => {
     if (!lock) return pageForUnlocked(projectId, datasetId, req, op);
     if (req.rowFilter) throw new RowPolicyError('reader');
     return pageForUnlocked(projectId, datasetId, { ...req, filters: withLockSteps(lock, req.filters) }, op);
-  });
+  }), { filters: req.filters, sortColumn: req.sortColumn, rowFilter: req.rowFilter });
 }
 
 async function pageForUnlocked(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {

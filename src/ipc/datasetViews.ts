@@ -134,7 +134,7 @@ export function register(): void {
         const series = viz.ok ? viz.data.series[0] : undefined;
         const counts = viz.ok && series ? { labels: viz.data.labels, values: series.values } : null;
         return { ok: true, profile: columnProfile({ name, type: col.type }, figures.rows ?? meta.rowCount, figures.summary, figures, counts) };
-      });
+      }, [name]); // a hidden column's profile is its values
     } catch (err: unknown) {
       return { ok: false, error: (err as Error)?.message || 'Could not profile the column' };
     }
