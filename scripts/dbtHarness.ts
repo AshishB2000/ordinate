@@ -50,11 +50,15 @@ export const csvRows = (file: string, columns: ParsedColumn[]): (string | number
 const FOUR: ReadonlySet<string> = new Set(['cumulative', 'conversion', 'time_offset', 'window_groupings']);
 type Translation = { model: ParsedModel; skipped: Array<{ dbt: string; reason: string }> };
 
-/** `t` without the skipped entries `golden` skipped for one of the four kinds (whatever `t` says of them now). */
+/**
+ * `t` without the skipped entries `golden` skipped for one of the four kinds (whatever `t` says of them now), and
+ * without `dbt.inputs`: the golden predates it (a formula's inputs, read as references since the review pass).
+ */
 export function withoutFourKinds<T extends Translation>(t: T, golden: Translation): T {
   const gone = new Set(golden.skipped.filter((s) => FOUR.has(s.reason)).map((s) => s.dbt));
   const keep = <S extends { dbt: string }>(list: S[]): S[] => list.filter((s) => !gone.has(s.dbt));
-  const dbt = t.model.dbt ? { ...t.model.dbt, skipped: keep(t.model.dbt.skipped) } : undefined;
+  const { inputs: _inputs, ...src } = t.model.dbt ?? ({} as Partial<NonNullable<ParsedModel['dbt']>>);
+  const dbt = t.model.dbt ? { ...src, skipped: keep(t.model.dbt.skipped) } : undefined;
   return { ...t, skipped: keep(t.skipped), model: { ...t.model, ...(dbt && { dbt }) } };
 }
 
