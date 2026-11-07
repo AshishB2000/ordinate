@@ -231,6 +231,20 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   ok('broken (its measure no longer fits): the card draws, unmarked', drawn?.ok === true && drawn.verified === undefined, JSON.stringify(drawn).slice(0, 200));
   await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
   ok('NEGATIVE CONTROL: restored, the mark is back', (await card(SEG))?.verified?.id === VQ);
+  // A verified chip reruns the question's own spec: drawn as stored, never moved to a near value under its ✓.
+  const WSPEC = { ...SPEC, filters: [{ column: 'region', op: '=', value: 'West' }] };
+  const wq = await call('verified:save', { projectId: P, input: { question: 'Revenue in the West', spec: WSPEC } });
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS.map((r) => (r[0] === 'West' ? ['Wests', ...r.slice(1)] : r)) }));
+  const rerunSpec = async (spec: object) => {
+    const turns = (await call('answer:rerun', { projectId: P, spec })).body?.turns ?? [];
+    return turns[turns.length - 1]?.answer ?? null;
+  };
+  const chipSpec = await rerunSpec(WSPEC);
+  ok('a verified question\'s own spec reruns as stored: no near value', chipSpec?.filters?.[0]?.value === 'West' && !chipSpec.matched, JSON.stringify(chipSpec));
+  const nearSpec = await rerunSpec({ ...WSPEC, category: 'segment' });
+  ok('NEGATIVE CONTROL: any other spec still finds the near value', nearSpec?.filters?.[0]?.value === 'Wests', JSON.stringify(nearSpec));
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
+  await call('verified:delete', { projectId: P, id: wq.body?.question?.id });
 
   // ── § retired (part 4; cross-part check item 8): a verified question on a retired metric keeps running ──
   const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');

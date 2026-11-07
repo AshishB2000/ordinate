@@ -559,7 +559,7 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
-      const built = await computeCard(projectId, s, true);
+      const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
       const n = await narrate(projectId, built,
