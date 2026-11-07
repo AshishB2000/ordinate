@@ -13,7 +13,10 @@
 //   Payroll keep its name and the sentence; Headcount's and hr's have their figures (CONTROL).
 // - verified:list (part 3) leaves out, for east, a verified question whose spec names a hidden column, with no value
 //   filter; People by dept stays (CONTROL); hr lists both (CONTROL).
-// - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL).
+// - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL). A
+//   reason on a Plain question whose reply was on Staff is struck too; a run's error reaches the owner only (CONTROL).
+// - a verified question with a value filter on dept (visible): east gets its spec and its mark; one filtered on ssn is
+//   left out (CONTROL).
 // - explore:suggest names, for east, the columns hidden from east (Explore's chip); none for hr (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
@@ -193,6 +196,27 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     ok('verified:checkResult: east reads the outcome of a Staff question, without its reason', crEast.body?.run?.results?.[0]?.outcome === 'refused' && !('reason' in crEast.body.run.results[0])
       && !crEast.text.includes(C.SSN_CANARY), crEast.text.slice(0, 300));
     ok('NEGATIVE CONTROL: hr reads the reason', (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true);
+    // A reason is struck by the reply's dataset too (the model may answer on Staff for a question on Plain); a run's error is no restricted caller's.
+    must('verified Plain', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Sales by region', spec: { datasetId: W.plain, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'x' } } }));
+    const PLAIN_Q: string = (await W.call('boss', 'verified:list', { projectId: P })).body?.questions?.find((q: { question: string }) => q.question === 'Sales by region')?.id ?? '';
+    await W.as('boss', () => recordFs.writeFile(path.join(recordKinds.projectDir(P), 'assistant-check.json'), JSON.stringify({ ...run, state: 'error', error: `ERR_${C.SSN_CANARY}`,
+      results: [{ id: PLAIN_Q, outcome: 'differs', reason: `"${C.SSN_CANARY}_7" is not a value of ssn.`, datasetId: staff }] }), 'utf8'));
+    const cr2 = await W.call('east', 'verified:checkResult', { projectId: P });
+    ok('verified:checkResult: no reason for east when the reply was on Staff, no error, and no dataset id sent', cr2.body?.run?.results?.[0]?.outcome === 'differs'
+      && !('reason' in cr2.body.run.results[0]) && !('datasetId' in cr2.body.run.results[0]) && !('error' in cr2.body.run) && !cr2.text.includes(C.SSN_CANARY), cr2.text.slice(0, 300));
+    const cr2Hr = (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run;
+    ok('NEGATIVE CONTROL: hr reads that reason; the owner reads the error', cr2Hr?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true
+      && (await W.call('boss', 'verified:checkResult', { projectId: P })).body?.run?.error === `ERR_${C.SSN_CANARY}`, JSON.stringify(cr2Hr));
+    // ── a value filter on a column east reads: hidden (D5) is row rules only, so east gets the spec and the mark ──
+    const OPS = { datasetId: staff, category: 'dept', measures: [{ column: 'employee_id', aggregation: 'count' }], filters: [{ column: 'dept', op: '=', value: 'Ops' }], chartType: 'column', title: 'Ops headcount' };
+    must('verified Ops', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Ops headcount', spec: OPS } }));
+    must('verified ssn', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'One person by dept', spec: { ...OPS, filters: [{ column: 'ssn', op: '=', value: `${C.SSN_CANARY}_1` }] } } }));
+    const vOps = await W.call('east', 'verified:list', { projectId: P });
+    const opsRow = vOps.body?.questions?.find((q: { question: string }) => q.question === 'Ops headcount');
+    const opsCard = (await W.call('east', 'answer:card', { projectId: P, spec: OPS })).body;
+    ok('a dept value question on Staff: east gets its spec, its filter in words and its mark', opsRow?.spec?.filters?.[0]?.value === 'Ops' && opsRow.filters[0] === 'dept = Ops'
+      && opsCard?.verified?.question === 'Ops headcount', `${JSON.stringify(opsRow).slice(0, 300)} ${JSON.stringify(opsCard?.verified)}`);
+    ok('NEGATIVE CONTROL: a question filtered on ssn is still left out for east', !vOps.text.includes(C.SSN_CANARY) && !vOps.body.questions.some((q: { question: string }) => q.question === 'One person by dept'), vOps.text.slice(0, 300));
 
     // ── explore:suggest (p4-07's chip): east's names the columns hidden from east, so Explore says its columns are limited ──
     const suggestOf = async (who: string) => (await W.call(who, 'explore:suggest', { projectId: P, datasetId: staff })).body;

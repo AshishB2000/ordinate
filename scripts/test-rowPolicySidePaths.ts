@@ -15,7 +15,10 @@
 //    nowhere opens for east; its thumbnail is kept.
 // 3. THE LIVE SCHEMA TAB: its sample is of every row, so east gets no figure of it (sample rows, filled,
 //    distinct), only the columns. NEGATIVE CONTROL: the editor gets them.
-// 4. NOTHING LEAKS: no reply to east carries a West value.
+// 4. THE DOCK'S EXACT MATCH (semantic part 3 D8): a verified question with no value filter, asked word for word
+//    by east, is drawn under east's lock: its figures are the editor's of the same question on East's rows, by
+//    Object.is. NEGATIVE CONTROL: the editor's on Orders differ.
+// 5. NOTHING LEAKS: no reply to east carries a West value.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicySidePaths.js
 
@@ -159,7 +162,20 @@ const history: typeof import('../src/app/history') = require('../src/app/history
     const schemaEd = await W.call('ed', 'dataset:liveSchema', { projectId: P, datasetId: liveId });
     ok('NEGATIVE CONTROL: the editor gets the sample\'s figures', schemaEd.body?.sampleRows === 4013 && schemaEd.body.columns[0].filled === 3917 && schemaEd.body.columns[0].distinct === 4, JSON.stringify(figures(schemaEd)));
 
-    // ── 4. Nothing leaks ────────────────────────────────────────────────
+    // ── 4. The dock's exact match (semantic part 3 D8) is drawn under east's lock ──
+    const SPEC = (d: string) => ({ datasetId: d, category: 'customer', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'x' });
+    const saveQ = async (question: string, d: string) => (await W.call('boss', 'verified:save', { projectId: P, input: { question, spec: SPEC(d) } })).body?.ok === true;
+    ok('setup: one verified question with no value filter on Orders, and one on East', (await saveQ('Sales by customer', orders)) && (await saveQ('Sales by customer, East copy', W.east)));
+    const askQ = (who: string, question: string) => W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question });
+    const mine = await east('copilot:ask', { projectId: P, context: { kind: '' }, question: 'Sales by customer' });
+    const [truth, whole] = [await askQ('ed', 'Sales by customer, East copy'), await askQ('ed', 'Sales by customer')];
+    const swap = { 'Sales by customer, East copy': 'Sales by customer', [W.east]: orders };
+    const gap = H.diff(mine.body?.ledger, truth.body?.ledger, swap);
+    ok("dock exact match: east's figures on Orders ≡ the editor's on East's rows (Object.is)", !!mine.body?.guidance?.verifiedId && mine.body.ledger?.length > 0 && gap === '',
+      `${gap} | ${mine.text.slice(0, 200)}`);
+    ok("NEGATIVE CONTROL: the editor's exact match on Orders sees more", H.diff(whole.body?.ledger, truth.body?.ledger, swap) !== '', whole.text.slice(0, 200));
+
+    // ── 5. Nothing leaks ────────────────────────────────────────────────
     const leaked = eastReplies.filter(H.leaks);
     ok(`nothing of West's in any of east's ${eastReplies.length} replies`, leaked.length === 0, leaked.map((t) => t.slice(0, 120)).join(' | '));
   } finally {

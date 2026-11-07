@@ -279,12 +279,13 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 }
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
-export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
-  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT };
+/** `asked`: a model was called (one was ready), whether or not its words were kept. */
+export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit; asked: boolean }> {
+  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT, asked: false };
   const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
   const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
-  if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT };
-  return guard(res.text, built.ledger.concat(g.ledger));
+  if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT, asked: true };
+  return { ...guard(res.text, built.ledger.concat(g.ledger)), asked: true };
 }
 
 // ── The three entry points ───────────────────────────────────────────────────
@@ -559,7 +560,7 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
-      const built = await computeCard(projectId, s, true);
+      const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
       const n = await narrate(projectId, built,
