@@ -1,7 +1,7 @@
 // "Alert me…" (legacy alerts.ts openAlertDialog): a rule that watches ONE
 // number — a KPI card's — under the filters the reader has on. It opens on the
 // figure itself (the server's dashboard:metric, so the dialog is provably about
-// the number on screen), then Threshold / Change / Anomaly. "Test" asks the
+// the number on screen), then Threshold / Change / Anomaly, and Target when the metric has one. "Test" asks the
 // server whether the rule would fire now; Save stores it. Whether a rule fires
 // is always decided by the server (src/analysis/alerts.ts).
 
@@ -46,6 +46,10 @@ const OPS = [
   { value: '>', label: 'rises above' },
   { value: '>=', label: 'is at or above' },
 ];
+const TARGET_OPS = [
+  { value: 'below', label: 'falls below' },
+  { value: 'above', label: 'rises above' },
+];
 const DIRS = [
   { value: 'down', label: 'falls by' },
   { value: 'up', label: 'rises by' },
@@ -80,6 +84,15 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
   // The previous period's date: the rule's own, else the date the metric counts by (D9), suggested — a pick replaces it.
   const [picked, setPeriod] = useState<string | null>(existing?.change?.periodColumn ?? null);
   const suggested = (useMetricList(projectId).data ?? []).find((x) => x.id === subject.metricId)?.timeColumn;
+  // The list's summary carries no target; the record does (metric:get).
+  const hasTarget = useQuery({
+    queryKey: ['metric:get', projectId, subject.metricId],
+    enabled: !!subject.metricId,
+    queryFn: async () => !!((await rpc('metric:get', { projectId, id: subject.metricId ?? '' })) as { ok: boolean; metric?: { target?: unknown } }).metric?.target,
+  }).data;
+  // A share of the metric's target (D14): the server works out the target and the rule's edge; this only asks for the share.
+  const [tOp, setTOp] = useState<string>(existing?.targetPct?.op ?? 'below');
+  const [tPct, setTPct] = useState(existing?.targetPct ? String(existing.targetPct.pct) : '80');
   const period = picked ?? (suggested && dates.some((d) => d.name === suggested) ? suggested : '');
   const [name, setName] = useState(existing?.name ?? '');
   const [touched, setTouched] = useState(!!existing);
@@ -90,7 +103,9 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
   const auto =
     mode === 'threshold'
       ? `${label} ${OPS.find((o) => o.value === op)?.label ?? ''} ${value || '…'}`
-      : mode === 'change'
+      : mode === 'target'
+        ? `${label} ${tOp} ${tPct || '…'}% of target`
+        : mode === 'change'
         ? `${label} ${DIRS.find((d) => d.value === dir)?.label ?? ''} ${pct || '…'}%`
         : `Unusual values in ${label}`;
   const draft = (): AlertRule => ({
@@ -107,11 +122,14 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
     compare: mode,
     enabled: existing?.enabled !== false,
     ...(mode === 'threshold' ? { threshold: { op: op as '<', value: Number(value) } } : {}),
+    ...(mode === 'target' ? { targetPct: { op: tOp as 'below', pct: Number(tPct) } } : {}),
     ...(mode === 'change' ? { change: { pct: Number(pct), direction: dir as 'down', vs: vs as 'previous_refresh', ...(vs === 'previous_period' ? { periodColumn: period } : {}) } } : {}),
     ...(subject.analysisId ? { createdFrom: { analysisId: subject.analysisId, cardId: subject.cardId ?? '' } } : {}),
     ...(channelIds.length ? { channelIds } : {}),
   });
-  const complete = mode === 'anomaly' || (mode === 'threshold' ? value.trim() !== '' && Number.isFinite(Number(value)) : Number(pct) > 0 && (vs !== 'previous_period' || !!period));
+  const complete =
+    mode === 'anomaly' ||
+    (mode === 'target' ? Number(tPct) > 0 && Number(tPct) <= 1000 : mode === 'threshold' ? value.trim() !== '' && Number.isFinite(Number(value)) : Number(pct) > 0 && (vs !== 'previous_period' || !!period));
 
   const runTest = async () => {
     setTest({ busy: true, text: 'Checking…' });
@@ -163,6 +181,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
           <Tab value="threshold">Threshold</Tab>
           <Tab value="change">Change</Tab>
           <Tab value="anomaly">Anomaly</Tab>
+          {(hasTarget || mode === 'target') && <Tab value="target">Target</Tab>}
         </TabList>
         <TabPanel value="threshold">
           <div className={s.alRow}>
@@ -188,6 +207,13 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
             {vs === 'previous_period' && <Select label="Date column" value={period || null} onValueChange={setPeriod} options={dates.map((d) => ({ value: d.name, label: d.name }))} />}
           </div>
           {!dates.length && <p className={s.note}>This dataset has no date column, so only the previous refresh can be compared.</p>}
+        </TabPanel>
+        <TabPanel value="target">
+          <div className={s.alRow}>
+            <Select label="When it" value={tOp} onValueChange={setTOp} options={TARGET_OPS} />
+            <Input label="Percent of target" inputMode="decimal" value={tPct} onChange={(e) => setTPct(e.target.value)} />
+          </div>
+          <p className={s.note}>The target is the metric’s own, for the period the figure covers. Fires once when it crosses, and again after it has recovered.</p>
         </TabPanel>
         <TabPanel value="anomaly">
           <p className={s.note}>Fires when a refresh brings values the app’s anomaly detector flags as unusual for this column. No number to choose.</p>

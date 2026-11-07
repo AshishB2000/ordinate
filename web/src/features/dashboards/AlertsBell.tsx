@@ -56,6 +56,7 @@ function Spark({ values }: { values: number[] | undefined }) {
 const condition = (r: AlertRule): string => {
   if (r.compare === 'anomaly') return 'Unusual values';
   if (r.compare === 'change' && r.change) return `${r.change.direction === 'up' ? 'Rises' : r.change.direction === 'down' ? 'Falls' : 'Moves'} ${r.change.pct}% vs ${r.change.vs === 'previous_period' ? 'previous period' : 'previous refresh'}`;
+  if (r.targetPct) return `${r.targetPct.op === 'below' ? 'Below' : 'Above'} ${r.targetPct.pct}% of target`;
   if (r.threshold) return `${{ '<': 'Below', '<=': 'At or below', '>': 'Above', '>=': 'At or above' }[r.threshold.op]} ${r.threshold.value}`;
   return '';
 };
@@ -125,8 +126,11 @@ function RulesDialog({ projectId, readOnly, onClose }: { projectId: string; read
                   <td>
                     <input type="checkbox" role="switch" className={s.switchCell} aria-label={`Enable ${r.name}`} disabled={readOnly} checked={r.enabled} onChange={(e) => patch(r.id, { enabled: e.target.checked })} />
                   </td>
-                  <td className={s.ruleName}>{r.name}</td>
-                  <td>{r.metric.column ? `${r.metric.aggregation}(${r.metric.column})` : 'whole dataset'}</td>
+                  <td className={s.ruleName}>
+                    {r.name}
+                    {r.metricGone && <div className={s.gone}>Its metric was deleted, so this alert is not checked.</div>}
+                  </td>
+                  <td>{r.metric.column ? `${r.metric.aggregation}(${r.metric.column})` : r.metric.metricId ? (r.metric.label ?? 'A saved metric') : 'whole dataset'}</td>
                   <td>{condition(r)}</td>
                   <td className={s.tnum}>{r.lastValue ?? '—'}</td>
                   <td>{r.lastFiredAt ? ago(r.lastFiredAt) : 'never'}</td>

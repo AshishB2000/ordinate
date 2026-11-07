@@ -91,4 +91,17 @@ describe('the alert bell', () => {
     expect(within(rules).getByRole('switch', { name: 'Enable Revenue drop' }).hasAttribute('disabled')).toBe(false);
     cleanup();
   }, 30_000);
+
+  it('a target rule reads as a share of its target, and one whose metric was deleted says it is not checked', async () => {
+    const target = { id: '3b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', name: 'Revenue off plan', datasetId: D, metric: { column: '', aggregation: 'sum', metricId: 'm1' }, compare: 'target', enabled: true, targetPct: { op: 'below', pct: 90 }, metricGone: true };
+    serveRpc(routes('editor', { 'alerts:list': { body: { ...ALERTS, rules: [...ALERTS.rules, target] } } }));
+    renderApp('/no-such-page');
+    fireEvent.click(await within(await openBell()).findByRole('button', { name: 'Manage rules' }));
+    const rules = await screen.findByRole('dialog', { name: 'Alert rules' });
+    const row = within(rules).getByText('Revenue off plan').closest('tr')!;
+    expect(within(row).getByText('Below 90% of target')).toBeTruthy();
+    expect(within(row).getByText('Its metric was deleted, so this alert is not checked.')).toBeTruthy();
+    // NEGATIVE CONTROL: a rule whose metric is there says nothing of the kind.
+    expect(within(within(rules).getByText('Revenue drop').closest('tr')!).queryByText(/was deleted/)).toBeNull();
+  }, 30_000);
 });

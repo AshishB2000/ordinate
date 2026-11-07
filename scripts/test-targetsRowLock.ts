@@ -45,11 +45,36 @@ void (async () => {
       const t = await target('east');
       ok(`east, row rules ${who}: ${shown ? 'shown' : 'not shown'}`, shown ? t?.none === undefined && t?.value !== null : t?.none === tm.targetRowRules() && t?.value === null, JSON.stringify(t));
     }
+    // An alert reaches every reader (fan-out): a target rule that reads a dataset with row rules, actuals or plan, is refused whole.
+    const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+    const rule = { id: '6b1c2f00-0000-4000-8000-000000000001', name: 'Rev off plan', datasetId: S, enabled: true, compare: 'target', targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: rev!.id, filters: NOV } };
+    const refused = (): Promise<boolean> => W.as('boss', () => alertStore.testRule(P, rule)).then(() => false, () => true);
+    await setRules(S, false);
+    await setRules(PD, false);
+    ok('NEGATIVE CONTROL: with no row rules the target rule would fire', (await W.as('boss', () => alertStore.testRule(P, rule))).fire === true);
+    await W.as('boss', () => alertStore.restoreRule(P, rule));
+    await setRules(PD, true);
+    ok('a plan with row rules: the target rule is refused, not compared with a slice', await refused());
+    ok('…and a tick fires nothing and leaves the rule as it was', (await W.as('boss', () => alertStore.evaluateProject(P, S))).length === 0 && (await W.as('boss', () => alertStore.load(P))).rules.find((r) => r.id === rule.id)?.lastEvaluatedAt === undefined);
+    await setRules(PD, false);
+    await setRules(S, true);
+    ok('a dataset with row rules: the target rule is refused', await refused());
     await setRules(S, true);
     await setRules(PD, true);
     const east = await target('east');
     const boss = await target('boss');
     ok('both restricted: the plan is East\'s alone (600000 × 20/30), computed inside the lock', Object.is(east?.value, 600_000 * (20 / 30)), JSON.stringify(east));
+    const chartOf = async (who: string) => (await W.call(who, 'visual:data', { projectId: P, datasetId: S, encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum', metricId: rev!.id }] }, filters: NOV })).body;
+    const hasTarget = (r: { data?: { series?: { target?: boolean }[] } }): boolean => !!r?.data?.series?.some((x) => x.target);
+    // A metric chart is refused outright under a row lock (the door), so a restricted viewer never gets a target series beside it.
+    const eastChart = await chartOf('east');
+    ok('east, both restricted: the chart is the door\'s own refusal, with no target and no West', eastChart?.ok === false && eastChart.code === 'row_policy' && !hasTarget(eastChart) && !JSON.stringify(eastChart).includes('West'), JSON.stringify(eastChart).slice(0, 300));
+    const bossChart = await chartOf('boss');
+    ok('NEGATIVE CONTROL: the boss\'s chart carries both regions\' plans', bossChart.data.series.find((x: { target?: boolean }) => x.target)?.values.every((v: number) => Object.is(v, 600_000 * (20 / 30))), JSON.stringify(bossChart).slice(0, 300));
+    await setRules(S, false);
+    const planOnly = await chartOf('east');
+    ok('east, plan restricted only: the chart is drawn without a target, and says the rules treat them differently', planOnly.ok === true && !hasTarget(planOnly) && planOnly.notes?.includes(tm.targetRowRules()), JSON.stringify(planOnly).slice(0, 300));
+    await setRules(S, true);
     ok('NEGATIVE CONTROL: the boss\'s target is the whole plan', Object.is(boss?.value, 1_200_000 * (20 / 30)), JSON.stringify(boss));
   } finally {
     await W.close();

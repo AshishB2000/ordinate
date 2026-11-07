@@ -334,3 +334,56 @@ e2e('a metric’s target: set in the editor, shown on the dashboard KPI with att
   await rpc('metric:update', { projectId: pid, id: aov.id, patch: { target: null } });
   await rpc('metric:update', { projectId: pid, id: units.id, patch: { target: null } });
 });
+
+e2e('a metric’s target: drawn on its chart as a stepped line, and an alert on how far from it (part 5, step 10)', async ({ page, server }) => {
+  // Units gets a monthly target set so 2024 lands at 50% of it. The chart's target series and the alert's sentence are the
+  // server's; the screens show the dashed step line over the columns and the rule "Below 80% of target".
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const rpc = async (channel: string, payload: unknown) => (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as Record<string, any>; // any: each channel's reply
+  const units = ((await rpc('metric:list', { projectId: pid })).metrics as { id: string; name: string; datasetId: string; definition: { column: string; aggregation: string } }[]).find((m) => m.name === 'Units')!;
+  const year = [{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2024-01-01', to: '2024-12-31' } }];
+  const figure = ((await rpc('metric:values', { projectId: pid, ids: [units.id], filters: year })) as unknown as { value: number }[])[0].value;
+  assert.ok(figure > 0, `Units has a figure for 2024, got ${figure}`);
+  const perMonth = Math.round(figure / 6); // twelve of them: the year's target is twice the figure
+  const set = await rpc('metric:update', { projectId: pid, id: units.id, patch: { timeColumn: 'order_date', target: { source: { value: perMonth }, per: 'month' } } });
+  assert.equal(set.ok, true, JSON.stringify(set));
+
+  const encoding = { category: 'order_date', grain: 'month', values: [{ column: units.definition.column, aggregation: units.definition.aggregation, metricId: units.id }] };
+  const drawn = await rpc('visual:data', { projectId: pid, datasetId: units.datasetId, encoding, filters: year });
+  const target = drawn.data.series.find((s: { target?: boolean }) => s.target);
+  assert.equal(drawn.data.labels.length, 12);
+  assert.ok(target && target.role === 'overlay' && target.values.length === 12 && target.values.every((v: number) => v === perMonth), `a whole month is the whole monthly target: ${JSON.stringify(target)}`);
+  const visual = await rpc('visual:save', { projectId: pid, datasetId: units.datasetId, name: 'Units by month', chartType: 'column', encoding });
+  const kpi = { type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: units.datasetId, column: units.definition.column, aggregation: units.definition.aggregation, metricId: units.id, label: 'Units' } };
+  const chart = { type: 'visual', layout: { x: 0, y: 3, w: 12, h: 8 }, visualId: (visual.visual?.id ?? visual.id) as string };
+  const board = (await rpc('analysis:create', { projectId: pid, name: 'Target chart', filters: year, sheets: [{ name: 'Sheet 1', cards: [kpi, chart] }] })).id as string;
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/analyses/${pid}/${board}`);
+  await settled(page);
+  await page.getByRole('group', { name: 'Units by month card' }).getByRole('img', { name: 'Units by month' }).waitFor();
+  await page.waitForTimeout(900); // the columns finish animating in
+  await screensInPlace(page, 'analyses-target-chart');
+
+  await page.getByRole('button', { name: 'Units card actions' }).click();
+  await page.getByRole('menuitem', { name: 'Alert me…' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Alert me…' });
+  const tab = dlg.getByRole('tab', { name: 'Target' });
+  await tab.click();
+  await dlg.getByRole('textbox', { name: 'Percent of target' }).fill('80');
+  await dlg.getByRole('button', { name: 'Test' }).click();
+  await dlg.getByText(/Would fire: .* is .*, \d+(\.\d)?% of its target of /).waitFor();
+  await screensInPlace(page, 'analyses-target-alert');
+  await dlg.getByRole('button', { name: 'Save' }).click();
+  await dlg.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Notifications', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage rules' }).click();
+  const rules = page.getByRole('dialog', { name: 'Alert rules' });
+  await rules.getByRole('cell', { name: 'Below 80% of target', exact: true }).waitFor();
+  await screensInPlace(page, 'analyses-target-rules');
+  await rules.getByRole('button', { name: 'Done' }).click();
+
+  await rpc('metric:update', { projectId: pid, id: units.id, patch: { target: null } });
+  await rpc('analysis:delete', { projectId: pid, id: board });
+});

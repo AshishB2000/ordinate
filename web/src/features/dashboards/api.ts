@@ -171,8 +171,12 @@ export interface AlertRule {
   name: string;
   datasetId: string;
   metric: { column: string; aggregation: string; filters?: unknown[]; label?: string; metricId?: string };
-  compare: 'threshold' | 'change' | 'anomaly';
+  compare: 'threshold' | 'change' | 'anomaly' | 'target';
   enabled: boolean;
+  /** Fires when the metric is below or above this share of its target (D14). */
+  targetPct?: { op: 'below' | 'above'; pct: number };
+  /** Reply only: the rule's metric was deleted, so the rule is not checked. */
+  metricGone?: true;
   threshold?: { op: '<' | '<=' | '>' | '>='; value: number };
   change?: { pct: number; direction: 'up' | 'down' | 'either'; vs: 'previous_refresh' | 'previous_period'; periodColumn?: string };
   createdFrom?: { analysisId: string; cardId: string };

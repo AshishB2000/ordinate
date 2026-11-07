@@ -162,3 +162,5 @@ export async function withCompareSeries(
     return reply;
   }
 }
+
+export { withTargetSeries } from './targetSeries';

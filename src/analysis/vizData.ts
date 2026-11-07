@@ -36,7 +36,7 @@ import type { ValueLabelPairs } from './valueLabels';
 export interface ChartData {
   labels: (string | number)[];
   /** `role: 'overlay'` marks a comparison series (a prior period) — drawn muted. */
-  series: { name: string; values: (number | null)[]; role?: 'overlay' }[];
+  series: { name: string; values: (number | null)[]; role?: 'overlay'; target?: true }[];
 }
 
 export interface VizDataResult {

@@ -26,6 +26,7 @@ import * as store from '../analysis/alertStore';
 import { withoutRunError } from '../analysis/pipelineAlerts';
 import { unreadableErrorIds } from '../data/sourceNames';
 import * as alerts from '../analysis/alerts';
+import { metricGoneIds } from '../analysis/alertTarget';
 import type { AlertEvent, AlertRule } from '../analysis/alerts';
 import * as copilot from '../ai/copilot';
 import * as execConfig from '../app/execConfig';
@@ -154,9 +155,10 @@ export function register(): void {
       const file = await redactAlerts(projectId, await store.load(projectId));
       const seen = await seenView(projectId);
       const events = file.events.map((ev) => ({ ...ev, seen: seen(ev) }));
+      const gone = await metricGoneIds(projectId, file.rules);
       return {
         ok: true,
-        rules: file.rules,
+        rules: gone.size ? file.rules.map((r) => (gone.has(r.id) ? { ...r, metricGone: true } : r)) : file.rules, // reply only, never stored
         events,
         digest: file.digest,
         unseen: events.filter((ev) => !ev.seen).length,

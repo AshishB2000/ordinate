@@ -9,6 +9,7 @@ import { isoFromDays, periodDay } from './dateIntel';
 import type { DateRange } from './dateIntel';
 import type { FilterStep } from '../data/transforms';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
+import { planReads } from '../ipc/targetResolve';
 
 /**
  * A recent period's key (alertStore.recentPeriods: a day's cell by `=`, or a month `YYYY-MM` by `contains`) as the
@@ -47,12 +48,15 @@ export async function metricWatch(projectId: string, rule: AlertRule): Promise<M
 /**
  * Every column a rule's figure is totalled from, as its post is judged (server/subscriptions/alertPosts →
  * publish/kpiPolicy): a rule watched through its metric reads what the metric's figure reads — the resolver's own
- * `reads`, so the metric is resolved once more — and any other its stored column.
+ * `reads`, so the metric is resolved once more — and any other its stored column. A target rule's sentence quotes its
+ * target too, so its plan's columns join them (ipc/targetResolve planReads).
  */
 export async function ruleReads(projectId: string, rule: AlertRule): Promise<MetricRead[]> {
   const watch = await metricWatch(projectId, rule);
-  if (typeof watch !== 'function') return [{ datasetId: rule.datasetId, column: rule.metric.column, aggregation: rule.metric.aggregation }];
   const reads: MetricRead[] = [];
-  await watch(undefined, reads);
+  if (typeof watch !== 'function') reads.push({ datasetId: rule.datasetId, column: rule.metric.column, aggregation: rule.metric.aggregation });
+  else await watch(undefined, reads);
+  const m = rule.compare === 'target' && rule.metric.metricId ? await getMetric(projectId, rule.metric.metricId) : null;
+  if (m) reads.push(...(await planReads(projectId, m)));
   return reads;
 }
