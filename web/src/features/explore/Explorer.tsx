@@ -16,7 +16,8 @@ import { Sheet } from '../../ui/Sheet';
 import { Skeleton, SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { useCanEdit } from '../projects/api';
-import { navFor, useNavigation } from '../model/navigation';
+import { navFor, useNavigation, type NavTopic } from '../model/navigation';
+import { write as rememberTopic } from '../model/topics/rememberTopic';
 import { dateLadder } from '../../../../src/analysis/drillLevels.ts';
 import { ScopedChip } from '../data/RowAccessOff';
 import { Answer } from './Answer';
@@ -30,8 +31,21 @@ import { useExploreSpec } from './useExploreSpec';
 import s from './Explore.module.css';
 import cards from './Start.module.css';
 
-export function Explorer({ projectId, datasets, dataset }: { projectId: string; datasets: readonly DatasetSummary[]; dataset: DatasetSummary }) {
-  const fields = useExploreFields(projectId, dataset.id);
+export function Explorer({
+  projectId,
+  datasets,
+  dataset,
+  topics = [],
+  topic,
+}: {
+  projectId: string;
+  datasets: readonly DatasetSummary[];
+  dataset: DatasetSummary;
+  /** The project's topics (`model:navigation`), and the one narrowing this page: it only orders and narrows lists (D15). */
+  topics?: readonly NavTopic[];
+  topic?: NavTopic;
+}) {
+  const fields = useExploreFields(projectId, dataset.id, topic?.id);
   const { question, setQuestion } = useExploreSpec();
   const [, setParams] = useSearchParams();
   const canEdit = useCanEdit(projectId);
@@ -51,17 +65,39 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
       n.delete('q');
       return n;
     });
+  // The topic's datasets in its order, then the open one if it is outside; everything else stays one click away ("All datasets").
+  const listed = topic ? topic.datasets.flatMap((t) => datasets.filter((d) => d.id === t.id)) : datasets;
+  const options = listed.some((d) => d.id === dataset.id) ? listed : [...listed, dataset];
+  const topicFields = topic?.datasets.find((t) => t.id === dataset.id)?.fields;
+  const pickTopic = (id: string) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      rememberTopic(projectId, id || null);
+      if (id) n.set('topic', id);
+      else n.delete('topic');
+      return n;
+    }, { replace: true });
   const take = (sg: Suggestion) => setQuestion({ chartType: sg.chartType, encoding: sg.encoding, filters: [] });
 
   const rail = (
     <>
-      <Select label="Dataset" size="sm" value={dataset.id} options={datasets.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))} onValueChange={pickDataset} />
+      {topics.length > 0 && (
+        <div className={s.topicBar}>
+          <Select label="Topic" size="sm" value={topic?.id ?? ''} options={[{ value: '', label: 'All' }, ...topics.map((t) => ({ value: t.id, label: t.name }))]} onValueChange={pickTopic} />
+          {topic && (
+            <button type="button" className={s.allDatasets} onClick={() => pickTopic('')}>
+              All datasets
+            </button>
+          )}
+        </div>
+      )}
+      <Select label="Dataset" size="sm" value={dataset.id} options={options.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))} onValueChange={pickDataset} />
       {fields.isPending ? (
         <SkeletonRows rows={9} label="Loading the fields" />
       ) : fields.isError ? (
         <ErrorState compact heading={3} title="The fields could not be read" message={fields.error.message} onRetry={() => void fields.refetch()} />
       ) : (
-        <FieldList fields={list} hierarchies={navFor(nav.data, dataset.id)} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
+        <FieldList fields={list} hierarchies={navFor(nav.data, dataset.id)} topicFields={topicFields} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
       )}
     </>
   );
@@ -87,7 +123,7 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
           </p>
         }
       />
-      <AskBox projectId={projectId} />
+      <AskBox projectId={projectId} topic={topic} />
       <div className={s.bench}>
         <aside className={s.rail} aria-label="Fields">
           {rail}

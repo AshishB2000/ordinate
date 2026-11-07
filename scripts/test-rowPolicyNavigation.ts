@@ -4,7 +4,9 @@
 //
 // - model:navigation (META): level names and the calendar's ladder, never a value; east's reply is the editor's.
 // - topic:get and model:navigation's topics (META): a topic listing a term that quotes a West value hands east no
-//   value; topic:save is an editor's (east 403).
+//   value; topic:save is an editor's (east 403). The Assistant's facts in that topic's context (step 08) hold no value
+//   and no value label for east; the editor's word the term with its value (NEGATIVE CONTROL). So do MCP's list_topics
+//   and the topic-narrowed lists.
 // - visual:drillDown (DOOR): east's drilled chart is east's own visual:data for the same question, cell by cell;
 //   the editor's differs (NEGATIVE CONTROL).
 // - Nothing east was given carries a West value.
@@ -14,6 +16,9 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import * as H from './rowPolicyHarness';
+
+const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const mcpHandlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
 
 (async () => {
   const W = await H.world('row policy navigation');
@@ -44,6 +49,21 @@ import * as H from './rowPolicyHarness';
       tgEast.body?.ok === true && !H.leaks(tgEast.text) && !H.leaks(tnEast.text) && tgEast.body.topic.termIds[0] === westTerm && tnEast.body?.topics?.[0]?.name === 'Sales', `${tgEast.text.slice(0, 200)} | ${tnEast.text.slice(0, 200)}`);
     ok('NEGATIVE CONTROL: …the term itself holds the value (the editor reads it), and east\'s topic replies are the editor\'s',
       H.leaks((await W.call('ed', 'term:get', { projectId: P, id: westTerm })).text) && tgEast.text === tgEd.text && tnEast.text === tnEd.text, tgEd.text.slice(0, 200));
+    // The Assistant in the topic's context (part 6 step 08): the same topic, asked as east. It narrows and never widens: the
+    // term's value, and the value labels of Orders' column notes, stay out of east's facts; the editor's facts carry the value.
+    const labelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'customer', patch: { values: [{ value: `${H.W_CANARY}_3`, label: 'West three' }, { value: 'c1', label: 'Customer one' }] } });
+    ok('setup: boss labels two of Orders\' customers', labelled.body?.ok === true, labelled.text.slice(0, 160));
+    const topicFactsOf = (who: string) => W.as(who, () => copilotIpc.buildFacts(P, { kind: 'topic', id: topicId }));
+    const [tfEast, tfEd] = [(await topicFactsOf('east')).text, (await topicFactsOf('ed')).text];
+    replies.push(tfEast);
+    ok('redact: east\'s topic facts name the topic\'s term and hold no value and no value label', tfEast.includes('"Top west"') && !H.leaks(tfEast) && !/Customer one|West three/.test(tfEast), tfEast.slice(-500));
+    ok('NEGATIVE CONTROL: the editor\'s topic facts word the same term with its value', tfEd.includes('"Top west"') && tfEd.includes(H.W_CANARY), tfEd.slice(-500));
+    // MCP over the same topic: list_topics and list_terms with the topic name hold no value for east; the editor's term line does.
+    const mcpTopic = async (who: string) => JSON.stringify(await W.as(who, async () => [await mcpHandlers.topicsList({ projectId: P } as never), await mcpHandlers.termsList({ projectId: P } as never, 'Sales'), await mcpHandlers.datasetsList({ projectId: P } as never, 'Sales')]));
+    const [mtEast, mtEd] = [await mcpTopic('east'), await mcpTopic('ed')];
+    replies.push(mtEast);
+    ok('redact: MCP list_topics and the topic-narrowed lists name the term and hold no value, for east', mtEast.includes('"Top west"') && !H.leaks(mtEast), mtEast.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor\'s narrowed term list holds the value', mtEd.includes(H.W_CANARY));
     // visual:drillDown (DOOR): east drills Orders' customer c3 down to region; the drilled chart is east's own visual:data for it.
     const byCustomer = { category: 'customer', values: [{ column: 'sales', aggregation: 'sum' }] };
     const drilledBy = async (who: string): Promise<{ d: H.Reply; chart: H.Reply | null }> => {

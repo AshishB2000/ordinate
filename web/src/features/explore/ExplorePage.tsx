@@ -12,6 +12,8 @@ import { ErrorState, Page } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Skeleton } from '../../ui/Skeleton';
+import { useNavigation } from '../model/navigation';
+import { read as rememberedTopic } from '../model/topics/rememberTopic';
 import { importPath } from '../home/homeText';
 import { useRoles } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
@@ -49,27 +51,39 @@ function ProjectExplore({ projectId }: { projectId: string }) {
   const [params, setParams] = useSearchParams();
   const asked = params.get('dataset');
   const list = datasets.data ?? [];
-  const dataset = list.find((d) => d.id === asked) ?? list[0];
+  // The topic narrows lists only (D15): `?topic=`, else (with no question in the URL) the pick remembered in this browser.
+  // One that `model:navigation` does not list (deleted, another project's) draws as All, with no error.
+  const nav = useNavigation(projectId);
+  const urlTopic = params.get('topic');
+  const remembered = urlTopic || params.get('q') ? null : rememberedTopic(projectId);
+  const topics = nav.data?.topics ?? [];
+  const topic = topics.find((t) => t.id === (urlTopic ?? remembered));
+  const first = topic?.datasets.map((t) => list.find((d) => d.id === t.id)).find(Boolean);
+  const dataset = list.find((d) => d.id === asked) ?? first ?? list[0];
 
   // The URL names the project and the dataset on screen, so a copied link opens them. A question
   // asked of another dataset (or of one that is gone) does not survive the switch: its fields differ.
-  const id = dataset?.id;
+  // A remembered pick waits for the topic list, so the page does not open on one dataset and jump to another.
+  const waiting = datasets.isPending || (nav.isPending && !!(urlTopic || remembered));
+  const id = waiting ? undefined : dataset?.id;
   const named = params.get('project');
+  const adopt = !urlTopic && topic ? topic.id : null; // a remembered pick joins the URL, by replace
   useEffect(() => {
-    if (!id || (named === projectId && asked === id)) return;
+    if (!id || (named === projectId && asked === id && !adopt)) return;
     setParams(
       (p) => {
         const n = new URLSearchParams(p);
         n.set('project', projectId);
         n.set('dataset', id);
         if (asked && asked !== id) n.delete('q');
+        if (adopt) n.set('topic', adopt);
         return n;
       },
       { replace: true },
     );
-  }, [id, named, asked, projectId, setParams]);
+  }, [id, named, asked, adopt, projectId, setParams]);
 
-  if (datasets.isPending) return <ExploreSkeleton />;
+  if (waiting) return <ExploreSkeleton />;
   if (datasets.isError) {
     return (
       <Page title={TITLE}>
@@ -78,7 +92,7 @@ function ProjectExplore({ projectId }: { projectId: string }) {
     );
   }
   if (!dataset) return <NoData projectId={projectId} />;
-  return <Explorer key={dataset.id} projectId={projectId} datasets={list} dataset={dataset} />;
+  return <Explorer key={dataset.id} projectId={projectId} datasets={list} dataset={dataset} topics={topics} topic={topic} />;
 }
 
 /** No dataset yet: what Explore will do, and — for an editor — the doors that bring data in. */

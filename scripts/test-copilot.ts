@@ -429,6 +429,36 @@ async function main(): Promise<void> {
   const pFacts = copilot.projectFacts('Copilot project', { datasets: ['Cities'], visuals: [], dashboards: [] });
   ok('projectFacts lists the inventory', pFacts.text.includes('Cities') && pFacts.provenance.kind === 'project');
 
+  // ── A topic as the Assistant's context (semantic part 6, step 08) ───────────
+  // Its datasets in ITS order, each with the topic's fields, then its metrics and terms; a topic that is gone is the inventory.
+  const topicsMod: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const termsMod: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+  const tp = await projects.createProject('Topic project');
+  const mk = async (name: string, cols: string[]) => (await datasets.saveDataset(tp.id, { name, sourceKind: 'csv', columns: cols.map((c) => ({ name: c, type: (c === 'revenue' ? 'number' : 'text') as 'text' | 'number' })), rows: [cols.map((c) => (c === 'revenue' ? 1 : 'x'))] }))!;
+  const dRegions = await mk('Regions', ['region', 'manager']);
+  const dOrders = await mk('Orders', ['region', 'revenue', 'status', 'channel']);
+  const extras: Awaited<ReturnType<typeof mk>>[] = [];
+  for (let i = 1; i <= 12; i += 1) extras.push(await mk('Extra ' + i, ['a' + i, 'b' + i]));
+  const rev = await metricsMod.saveMetric(tp.id, { name: 'Revenue', datasetId: dOrders.id, definition: { column: 'revenue', aggregation: 'sum' } } as never);
+  await metricsMod.saveMetric(tp.id, { name: 'Elsewhere', datasetId: dRegions.id, definition: { column: 'manager', aggregation: 'count' } } as never);
+  const east = await termsMod.saveTerm(tp.id, { name: 'East side', aliases: [], datasetId: dOrders.id, filters: [{ type: 'filter', column: 'region', op: '=', value: 'East' }] } as never);
+  const topic = await topicsMod.saveTopic(tp.id, { name: 'Sales', datasets: [{ id: dOrders.id, fields: ['region', 'revenue'] }, { id: dRegions.id }], metricIds: [rev!.id], termIds: [east!.id] });
+  const tf = (await ipcCopilot.buildFacts(tp.id, { kind: 'topic', id: topic!.id })).text;
+  const at = (x: string) => tf.indexOf(x);
+  ok('topic facts: the schema blocks name Orders then Regions (topic order), and no other dataset', at('- Orders: ') > 0 && at('- Orders: ') < at('- Regions: ') && !tf.includes('Extra 1'), tf);
+  ok('topic facts: Orders lists region and revenue only', /- Orders: region \(text\), revenue \(number\)\n/.test(tf) && !/- Orders:[^\n]*status \(/.test(tf), tf);
+  ok('topic facts: the "outside this topic" line names the other columns', tf.includes('- Orders also has, outside this topic: status, channel'), tf);
+  ok('topic facts: the topic\'s metric and term are present, another metric is not', tf.includes('- Metric Revenue: sum of revenue') && tf.includes('"East side"') && !tf.includes('Elsewhere'), tf);
+  const inv = (await ipcCopilot.buildFacts(tp.id, {})).text;
+  const beyond = [dRegions, dOrders, ...extras].filter((d) => !inv.includes(`- ${d.name}: `)); // what the inventory's first 12 leave out
+  const big = await topicsMod.saveTopic(tp.id, { name: 'Tail', datasets: beyond.map((d) => ({ id: d.id })), metricIds: [], termIds: [] });
+  const bt = (await ipcCopilot.buildFacts(tp.id, { kind: 'topic', id: big!.id })).text;
+  ok('setup: the inventory leaves datasets out (14 datasets, first 12 read)', beyond.length === 2, String(beyond.length));
+  ok('topic facts: a topic over the datasets the inventory\'s first 12 miss carries their columns', beyond.every((d) => bt.includes(`- ${d.name}: `)), bt);
+  const gone = await ipcCopilot.buildFacts(tp.id, { kind: 'topic', id: '00000000-0000-4000-8000-000000000000' });
+  ok('a topic that is gone: the inventory facts, byte for byte', Object.is(gone.text, inv));
+
   // ── askCopilot not_ready path (no model configured → soft error, no network) ─
   const notReady = await analyze.askCopilot([], dFacts.text, 'What stands out?');
   ok('askCopilot returns a soft not_ready when no model is configured',

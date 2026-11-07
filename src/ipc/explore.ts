@@ -12,11 +12,17 @@ import * as datasets from '../data/datasets';
 import { exploreSuggest } from '../analysis/exploreSuggest';
 // The catalog's "This dataset no longer exists." — the same sentence for any dataset.
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
+import { readTopic } from '../analysis/topics';
 
 export function register(): void {
-  ipcMain.handle('explore:suggest', async (_e, { projectId, datasetId }: { projectId?: string; datasetId?: string } = {}) => {
+  ipcMain.handle('explore:suggest', async (_e, { projectId, datasetId, topicId }: { projectId?: string; datasetId?: string; topicId?: string } = {}) => {
     const meta = await datasets.getDatasetMeta(String(projectId ?? ''), String(datasetId ?? ''));
     if (!meta) return { ok: false, error: liveDatasetMissing() };
-    return { ok: true, ...exploreSuggest(meta.columns) };
+    const all = exploreSuggest(meta.columns);
+    // A topic narrows the SUGGESTIONS to its fields of this dataset; the field lists stay whole (step 08, D15).
+    const t = topicId ? await readTopic(String(projectId), topicId) : null;
+    const fields = t?.rec.datasets.find((d) => d.id === meta.id)?.fields;
+    if (!fields) return { ok: true, ...all };
+    return { ok: true, ...all, suggestions: exploreSuggest(meta.columns.filter((c) => fields.includes(c.name))).suggestions };
   });
 }

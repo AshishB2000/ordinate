@@ -209,6 +209,29 @@ async function main(): Promise<void> {
   await stStore.clearStatus(pid, `metric:${margin.id}`);
   await stStore.clearStatus(pid, `metric:${retiredM.id}`);
   ok('NEGATIVE CONTROL: a project without status lists exactly as before', JSON.stringify([await call('list_metrics', {}), await call('list_terms', {}), await call('list_datasets', {})]) === stBefore);
+  // ── Topics (semantic part 6, step 08): lists narrow and order; nothing else reads a topic (D15) ──
+  const topicsStore: typeof import('../src/analysis/topics') = require('../src/analysis/topics');
+  const allDs = await call('list_datasets', {});
+  const allM = await call('list_metrics', {});
+  const metaCols = (await datasets.getDatasetMeta(pid, ds.id))!.columns;
+  const pickF = ['region', 'state', 'revenue'];
+  await topicsStore.saveTopic(pid, { name: 'Sales', description: 'The sales team', datasets: [{ id: ds.id, fields: pickF }], metricIds: [margin.id], termIds: [westT.id] });
+  const lt = await call('list_topics', {});
+  ok('list_topics: the topic, its datasets with their fields, its metric and its term by name', lt.length === 1 && lt[0].name === 'Sales' && lt[0].datasets[0].name === ds.name
+    && lt[0].datasets[0].fields.join() === pickF.join() && lt[0].metrics.join() === 'Margin %' && lt[0].terms.join() === 'West only', JSON.stringify(lt));
+  ok('list_datasets with a topic lists its datasets only (by name, any case)', (await call('list_datasets', { topic: 'sales' })).map((d: any) => d.name).join() === ds.name && allDs.length > 1);
+  ok('list_metrics with a topic lists its metrics only', (await call('list_metrics', { topic: 'Sales' })).map((m: any) => m.name).join() === 'Margin %' && allM.length > 1);
+  ok('list_terms with a topic lists its terms only', (await call('list_terms', { topic: 'Sales' })).map((t: any) => t.name).join() === 'West only');
+  const inT = await call('describe_dataset', { dataset: ds.name, topic: 'Sales' });
+  ok('describe_dataset with a topic: the topic\'s fields first, every column kept, each marked inTopic',
+    inT.columns.slice(0, 3).map((c: any) => c.name).join() === pickF.join() && inT.columns.slice(0, 3).every((c: any) => c.inTopic === true)
+    && inT.columns.length === metaCols.length && inT.columns.slice(3).every((c: any) => c.inTopic === false));
+  ok('NEGATIVE CONTROL: without a topic, no inTopic key and the same columns as before', !('inTopic' in d.columns[0]) && JSON.stringify(d.columns) === JSON.stringify((await call('describe_dataset', { dataset: ds.name })).columns));
+  const outside = metaCols.find((c) => !pickF.includes(c.name) && c.type === 'text')!;
+  ok('D15: query_sql over a column outside the topic still answers', (await call('query_sql', { sql: `select "${outside.name}", count(*) from retail_orders group by 1`, limit: 5 })).rowCount > 0);
+  ok('an unknown topic is a usage error naming it', ((r) => r.code === 'usage' && r.message === 'No topic called "Nope".')(await refusal('list_datasets', { topic: 'Nope' })));
+  ok('a topic by its id works', (await call('list_metrics', { topic: lt[0].id })).length === 1);
+
   const found = await call('insights', { dataset: ds.name });
   ok('insights: the same findings the app ranks', found.length === (await ins.insightsForDataset(pid, ds.id)).length && found.length > 0);
   const dash = await call('list_dashboards', {});

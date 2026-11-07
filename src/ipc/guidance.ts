@@ -14,6 +14,7 @@ import { verifiedStates } from './verifiedState';
 import { pickExamples } from '../ai/verifiedPick';
 import { listTerms } from '../analysis/terms';
 import { withheldColumns } from '../app/sharePolicy';
+import { readTopic, topicForReaders } from '../analysis/topics';
 
 const NONE: Guided = { text: '', ledger: [], used: { instructions: 0, examples: [] } };
 /** The project inventory's datasets, in the order and cut of `buildFacts`' fallback. */
@@ -40,10 +41,20 @@ async function exampleLines(projectId: string, question: string, datasetId: stri
   });
 }
 
+/** A topic's datasets in its order (gone ones dropped), or null when there is no such topic: the project's then. */
+async function topicDatasets(projectId: string, id: string): Promise<{ id: string; name: string }[] | null> {
+  const stored = await readTopic(projectId, id);
+  if (!stored) return null;
+  const { topic } = await topicForReaders(projectId, stored.rec);
+  const all = new Map((await datasets.listDatasets(projectId)).map((d) => [d.id, d] as const));
+  return topic.datasets.flatMap((t) => all.get(t.id) ?? []);
+}
+
 /**
  * The block for one `copilot:ask`. `factsKind` is the kind of the facts `buildFacts` built (its provenance), so a
  * context that fell back to the project inventory gets the inventory's guides. Guides: the dataset's own for a
- * dataset, the visual's dataset's for a visual, the first 12 datasets' on Home; any other kind gets instructions only.
+ * dataset, the visual's dataset's for a visual, the first 12 datasets' on Home, a topic's first 12 in its order (part 6; its
+ * facts are the inventory's, narrowed); any other kind gets instructions only.
  */
 export async function askGuidance(
   projectId: string, context: { kind?: string; id?: string }, factsKind: string, question?: string, opts: { exclude?: string } = {},
@@ -60,7 +71,8 @@ export async function askGuidance(
       if (meta) guides.push({ dataset: meta.name, text: guideOf(one), max: GUIDE_OPEN_MAX });
     }
     if (factsKind === 'project') {
-      for (const d of (await datasets.listDatasets(projectId)).slice(0, INVENTORY)) {
+      const topic = context.kind === 'topic' && id ? await topicDatasets(projectId, id) : null;
+      for (const d of (topic ?? (await datasets.listDatasets(projectId))).slice(0, INVENTORY)) {
         if (guideOf(d.id)) guides.push({ dataset: d.name, text: guideOf(d.id), max: GUIDE_INVENTORY_MAX });
       }
     }

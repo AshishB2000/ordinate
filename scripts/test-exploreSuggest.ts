@@ -143,12 +143,30 @@ const cols = (spec: string): Col[] => spec.split(',').map((x) => {
   const own = await post('explore:suggest', { projectId: other.pid, datasetId: other.did });
   ok('CONTROL: in its own project it answers', own.value.ok === true && show(own.value.dimensions) === show([{ name: 'secret_col', type: 'text' }]), own.body);
 
+  // ── A topic narrows the suggestions, never the field lists (semantic part 6, step 08) ──
+  const dim0 = extract.value.dimensions[0].name as string;
+  const mea0 = extract.value.measures[0].name as string;
+  const named = (r: Reply): string[] => r.value.suggestions.flatMap((x: { encoding: { category: string; values: { column: string }[] } }) => [x.encoding.category, ...x.encoding.values.map((v) => v.column)]);
+  const mk = await post('topic:save', { projectId: P, topic: { name: 'Narrow', datasets: [{ id: X, fields: [dim0, mea0] }, { id: L }], metricIds: [], termIds: [] } });
+  const T = mk.value.topic.id as string;
+  const lists = (r: Reply) => show({ d: r.value.dimensions, t: r.value.dates, m: r.value.measures });
+  const inT = await post('explore:suggest', { projectId: P, datasetId: X, topicId: T });
+  ok('topic: the suggestions name only the topic\'s fields', inT.value.ok === true && inT.value.suggestions.length > 0 && named(inT).every((c) => c === dim0 || c === mea0), named(inT).join());
+  ok('…the dimension, date and measure lists equal the reply without a topic', lists(inT) === lists(extract));
+  ok('NEGATIVE CONTROL: without a topic the suggestions name other columns', named(extract).some((c) => c !== dim0 && c !== mea0));
+  ok('a dataset the topic lists with no fields: the reply without a topic', show((await post('explore:suggest', { projectId: P, datasetId: L, topicId: T })).value) === show(live.value));
+  const gone = await post('explore:suggest', { projectId: P, datasetId: X, topicId: '00000000-0000-4000-8000-000000000000' });
+  ok('an unknown topic id: the reply without a topic', show(gone.value) === show(extract.value));
+  const unlisted = await post('topic:save', { projectId: P, topic: { name: 'Other', datasets: [{ id: L }], metricIds: [], termIds: [] } });
+  ok('a dataset the topic does not list: the reply without a topic', show((await post('explore:suggest', { projectId: P, datasetId: X, topicId: unlisted.value.topic.id })).value) === show(extract.value));
+  ok('the reply has no number either', numbersIn(inT.value).length === 0);
+
   // Access: the real contract through the real decision, a project viewer's grant stubbed.
   const contract = api.contracts['explore:suggest'];
   const grants = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) }) as unknown as import('pg').Pool;
   const viewer: import('../src/server/context').Identity = { user: { email: 'vi@acme.test', role: 'viewer' }, org: { id: 'acme' } };
   const input = { projectId: P, datasetId: X };
-  const asViewer = (c: typeof contract, rank: number, i: unknown = input) => H.as(viewer, () => authz.authorize(c as never, i, viewer, grants(rank)));
+  const asViewer = (c: unknown, rank: number, i: unknown = input) => H.as(viewer, () => authz.authorize(c as never, i, viewer, grants(rank)));
   ok('the contract is a `read`, scoped to the input\'s project', contract.access === 'read' && 'project' in contract && contract.project(input) === P);
   ok('a project VIEWER may call it', (await asViewer(contract, 1)).ok === true);
   ok('CONTROL: with no grant on the project the same caller is refused', (await asViewer(contract, 0)).ok === false);

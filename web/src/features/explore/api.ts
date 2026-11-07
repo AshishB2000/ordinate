@@ -33,11 +33,11 @@ type SuggestReply =
     }
   | { ok: false; error?: string };
 
-export function useExploreFields(projectId: string, datasetId: string) {
+export function useExploreFields(projectId: string, datasetId: string, topicId?: string) {
   return useQuery({
-    queryKey: ['explore:suggest', projectId, datasetId],
+    queryKey: ['explore:suggest', projectId, datasetId, topicId ?? null],
     queryFn: async (): Promise<Fields> => {
-      const r = (await rpc('explore:suggest', { projectId, datasetId })) as SuggestReply;
+      const r = (await rpc('explore:suggest', { projectId, datasetId, ...(topicId ? { topicId } : {}) })) as SuggestReply;
       if (!r.ok) throw new Error(r.error || 'The fields could not be read.');
       return {
         fields: [

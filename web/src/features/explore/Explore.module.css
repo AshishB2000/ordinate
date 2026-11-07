@@ -365,3 +365,41 @@
   padding-left: var(--sp-4);
   border-left: 1px solid var(--border);
 }
+
+/* A topic's other fields: a disclosure under the topic's own list. */
+.otherFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.otherFields > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.otherFields > summary:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.topicBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.allDatasets {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  cursor: pointer;
+}
+.allDatasets:hover {
+  text-decoration: underline;
+}
+.allDatasets:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}

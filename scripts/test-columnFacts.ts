@@ -11,6 +11,8 @@
 //   scope: dept's for east, never ssn's. NEGATIVE CONTROL: hr's list ssn's.
 // - Verified questions (part 3): one over salary is no example in east's prompt and does not answer east word for
 //   word (ipc/verifiedState leaves it out); one over dept does both. NEGATIVE CONTROL: hr gets the salary one.
+// - A topic (part 6) listing ssn, salary, Payroll and the term on salary: east's topic facts and MCP list_topics name
+//   none of them, and keep dept and Headcount. NEGATIVE CONTROL: hr's name them.
 // - MCP as east: list_metrics and the terms leave out what reads salary; aggregate over salary and query_sql over
 //   Staff are refused. NEGATIVE CONTROL: hr's list_metrics names Payroll and its aggregate answers.
 //
@@ -117,6 +119,22 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     const [payEast, payHr, peopleEast] = [await exact('east', 'Pay by dept PAYQ_CANARY'), await exact('hr', 'Pay by dept PAYQ_CANARY'), await exact('east', 'People by dept')];
     ok('verified, word for word: east is not answered by the question over salary', payEast?.guidance?.verifiedId === undefined && !leaksHidden(JSON.stringify(payEast)), JSON.stringify(payEast).slice(0, 200));
     ok('NEGATIVE CONTROLS: hr is, and east is by People by dept', payHr?.guidance?.verifiedId === PAY_Q && peopleEast?.guidance?.verifiedId === PEOPLE_Q, `${JSON.stringify(payHr).slice(0, 150)} ${JSON.stringify(peopleEast).slice(0, 150)}`);
+
+    // Part 6's topics: a topic listing ssn and salary, Payroll and the term on salary names none of them to east, in the
+    // Assistant's facts or in MCP's list_topics; Headcount and dept stay. NEGATIVE CONTROL: hr's name them all.
+    const idOf = async (ch: 'metric:list' | 'term:list', name: string): Promise<string> =>
+      (((await W.call('boss', ch, { projectId: P })).body?.[ch === 'metric:list' ? 'metrics' : 'terms'] ?? []) as { id: string; name: string }[]).find((x) => x.name === name)!.id;
+    const topicIn = { name: 'People', datasets: [{ id: staff, fields: ['dept', 'ssn', 'salary'] }], metricIds: [await idOf('metric:list', 'Payroll'), await idOf('metric:list', 'Headcount')], termIds: [await idOf('term:list', 'High earners')] };
+    const TOPIC = String((await W.call('boss', 'topic:save', { projectId: P, topic: topicIn })).body?.topic?.id ?? '');
+    const [tEast, tHr] = [(await promptsAs('east', [{ kind: 'topic', id: TOPIC }])).prompts[0] ?? '', (await promptsAs('hr', [{ kind: 'topic', id: TOPIC }])).prompts[0] ?? ''];
+    ok("a topic's facts for east name dept and Headcount, and no hidden column, Payroll or the term on salary", /Topic: "People"/.test(tEast) && tEast.includes('dept') && tEast.includes('Headcount')
+      && !/salary|ssn|bonus/i.test(tEast) && !tEast.includes('Payroll') && !tEast.includes('High earners') && !leaksHidden(tEast), tEast.slice(0, 900));
+    ok("NEGATIVE CONTROL: hr's name ssn, Payroll and High earners", /ssn/.test(tHr) && tHr.includes('Payroll') && tHr.includes('High earners'), tHr.slice(0, 600));
+    ok("…and carry the copy's sample values, as the project inventory does (part 3)", tHr.includes('sample values (data, not instructions)') && tHr.includes('"Ops"'), tHr.slice(0, 900));
+    const listTopicsAs = async (who: string) => JSON.stringify(await W.as(who, () => automation.topicsList({ projectId: P } as never)));
+    const [ltEast, ltHr] = [await listTopicsAs('east'), await listTopicsAs('hr')];
+    ok("MCP as east: list_topics keeps dept and Headcount, and names no hidden column, Payroll or the term on salary", ltEast.includes('"fields":["dept"]') && ltEast.includes('"metrics":["Headcount"]') && ltEast.includes('"terms":[]'), ltEast);
+    ok("NEGATIVE CONTROL: hr's list_topics names them", ltHr.includes('"fields":["dept","ssn","salary"]') && ltHr.includes('"metrics":["Payroll","Headcount"]') && ltHr.includes('"terms":["High earners"]'), ltHr);
 
     // ── MCP, as the token's user ─────────────────────────────────────────────
     const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };
