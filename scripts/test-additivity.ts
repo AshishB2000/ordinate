@@ -43,6 +43,8 @@ const { paramValues }: typeof import('../src/analysis/params') = require('../src
 const { savedScope }: typeof import('../src/ipc/copilotCards') = require('../src/ipc/copilotCards');
 const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const { buildStory }: typeof import('../src/publish/storyData') = require('../src/publish/storyData');
+const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const { aggWord }: typeof import('../src/data/aggregations') = require('../src/data/aggregations');
 type Additivity = import('../src/analysis/additivity').Additivity;
 type Metric = import('../src/analysis/metrics').Metric;
 type Any = any; // any: each handler's own reply shape, read field by field below
@@ -288,6 +290,35 @@ async function main(): Promise<void> {
   const overCd = await chart({ category: 'day', grain: 'month', overlay: 'previous_year', values: [CD] }, { filters: FEB_2024 });
   ok('overlay over countd: the series, no caption', overCd.ok && overCd.data.series.some((x: Any) => x.role === 'overlay') && overCd.overlay?.caption === undefined && overCd.overlay?.pct === undefined, show(overCd));
   ok('NEGATIVE CONTROL: the same overlay over count keeps its caption', captioned(await chart({ category: 'day', grain: 'month', overlay: 'previous_year', values: [{ column: 'region', aggregation: 'count' }] }, { filters: FEB_2024 })));
+
+  // ── chart shapes: a waterfall's running level, a Pareto's cumulative share and a 100% stack's shares add the measure up ──
+  const SHAPES = [['waterfall', 'a waterfall'], ['pareto', 'a Pareto chart'], ['pct_stacked_column', 'a 100% stacked chart'], ['pct_stacked_bar', 'a 100% stacked chart']] as const;
+  for (const [chartType, what] of SHAPES) {
+    for (const [agg, col] of [['avg', 'amount'], ['countd', 'region'], ['min', 'amount'], ['max', 'amount']] as const) {
+      const r = await chart({ category: 'region', values: [{ column: col, aggregation: agg }] }, { chartType });
+      ok(`${agg} as ${chartType} → refused with its sentence`, r.ok === false && r.code === 'calc_not_additive' && r.error === msg.calcNotAdditive(`${aggWord(agg)} of ${col}`, what), show(r));
+    }
+    const sum = await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, { chartType });
+    ok(`NEGATIVE CONTROL: sum as ${chartType} draws, with its figures`, sum.ok === true && !!sum.data.figures, show(sum).slice(0, 300));
+    ok(`NEGATIVE CONTROL: count as ${chartType} draws`, (await chart({ category: 'region', values: [{ column: 'region', aggregation: 'count' }] }, { chartType })).ok === true);
+  }
+  ok('a split 100% stack of a countd metric → refused, named', (await chart({ category: 'day', grain: 'month', series: 'region', values: [{ ...CD, metricId: regions.id }] }, { chartType: 'pct_stacked_column' })).error === msg.calcNotAdditive('Regions', 'a 100% stacked chart'));
+  ok('a waterfall of a snapshot by month → the over-time sentence', (await chart({ category: 'day', grain: 'month', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] }, { chartType: 'waterfall' })).error === msg.calcNotAdditiveOverTime('Stock', 'a waterfall'));
+  ok('NEGATIVE CONTROL: …by region it adds, and draws', (await chart({ category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] }, { chartType: 'waterfall' })).ok === true);
+  const bridge = await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }] }, { chartType: 'waterfall' });
+  ok('a two-measure waterfall bridges to its second measure, so an avg there is refused, named', bridge.ok === false && bridge.error === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(bridge));
+  ok('NEGATIVE CONTROL: a sum-to-sum bridge draws', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'qty', aggregation: 'sum' }] }, { chartType: 'waterfall' })).ok === true);
+  ok('NEGATIVE CONTROL: a waterfall draws two series only, so a third avg is not judged', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'qty', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }] }, { chartType: 'waterfall' })).ok === true);
+  ok('NEGATIVE CONTROL: avg as a plain column draws', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'avg' }] }, { chartType: 'column' })).ok === true);
+  const pareto = (await visuals.saveVisual(pid, { datasetId: ds, name: 'Avg Pareto', chartType: 'pareto', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'avg' }] } } as never))!;
+  const shapeDash = (await analysisStore.saveAnalysis(pid, { name: 'Shapes', sheets: [{ id: randomUUID(), name: 'Main', cards: [{ id: randomUUID(), type: 'visual', visualId: pareto.id, layout: { x: 0, y: 0, w: 6, h: 4 } }] }] } as never))!;
+  const shapeCard = (await buildDashboard(pid, shapeDash.id, 1))?.sheets[0].cards[0];
+  ok('/p/: an avg Pareto tile is built as the sentence', !!shapeCard && payload(shapeCard).error === msg.calcNotAdditive('avg of amount', 'a Pareto chart'), show(shapeCard && payload(shapeCard)));
+  const card = await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'avg' }], filters: [], chartType: 'waterfall', title: 'x' } as never);
+  ok('an answer card drawn as an avg waterfall → refused with the sentence', 'reason' in card && card.reason === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(card).slice(0, 300));
+  ok('NEGATIVE CONTROL: …as a sum it draws', 'card' in (await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'waterfall', title: 'x' } as never)));
+  const cardBridge = await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }], filters: [], chartType: 'waterfall', title: 'x' } as never);
+  ok('an answer card bridging sum to avg as a waterfall → refused', 'reason' in cardBridge && cardBridge.reason === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(cardBridge).slice(0, 300));
 }
 
 main()

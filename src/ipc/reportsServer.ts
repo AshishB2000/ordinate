@@ -85,7 +85,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       const out = await call(event, 'analysis:tiles', { projectId, params, items: [item], ...(share ? { share: 'report' } : {}) });
       const r = Array.isArray(out) ? out[0] : null;
       if (r && r.hiddenByPolicy) return { value: null, display: String(r.error), ...(r.name ? { name: r.name } : {}) };
-      return r && r.ok ? { value: typeof r.value === 'number' ? r.value : null, display: r.display, name: r.name } : { value: null };
+      return r && r.ok ? { value: typeof r.value === 'number' ? r.value : null, display: r.display, name: r.name, ...(Array.isArray(r.notes) && r.notes.length ? { note: r.notes.join(' ') } : {}) } : { value: null };
     },
     metricValue: async (id, filters) => {
       const r = await call(event, 'metric:value', { projectId, id, filters, ...(share ? { share: 'report' } : {}) });

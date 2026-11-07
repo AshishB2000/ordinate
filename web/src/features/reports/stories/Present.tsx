@@ -73,6 +73,7 @@ export function Present({ projectId, name, blocks, figures, onExit }: { projectI
                     <div className={`${s.chart} ${s.chartPresent}`}>
                       {f.chart ? <DrawnVisual type={f.chart.type} data={f.chart.data} overrides={f.chart.overrides} label={f.title || 'Chart'} projectId={projectId} /> : <p className={s.figNote}>{f.note}</p>}
                     </div>
+                    {f.chart && f.note && <p className={s.figNote}>{f.note}</p>}
                     {cap && <p className={pr.presentCaption}>{cap}</p>}
                   </figure>
                 );

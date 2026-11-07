@@ -224,6 +224,7 @@ function Body({ props }: { props: BlockProps }) {
           <div className={s.chart}>
             {fig.chart ? <DrawnVisual type={fig.chart.type} data={fig.chart.data} overrides={fig.chart.overrides} label={fig.title || 'Chart'} projectId={projectId} /> : <p className={s.figNote}>{fig.note}</p>}
           </div>
+          {fig.chart && fig.note && <p className={s.figNote}>{fig.note}</p>}
           <Caption block={block} appCaption={fig.caption} props={props} />
         </figure>
       );

@@ -125,7 +125,7 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   ok('NEGATIVE CONTROL: a plain chart\'s drill has no tier filter', plainRows.ok && !plainRows.filters.some((f: Reply) => f.column === 'tier'), show(plainRows.filters));
   ok('NEGATIVE CONTROL: and lists all of West\'s rows', plainRows.total === inRegion('West').length, show(plainRows.total));
   const perMeasureRows = await drill(threeEnc);
-  ok('a per-measure chart keeps today\'s rows: no one set of rows adds up to two filter lists', perMeasureRows.ok && !perMeasureRows.filters.some((f: Reply) => f.column === 'tier') && perMeasureRows.total === inRegion('West').length, show(perMeasureRows.filters));
+  ok('a per-measure chart is refused, said: no one set of rows adds up to two filter lists', perMeasureRows.ok && perMeasureRows.available === false && typeof perMeasureRows.reason === 'string' && perMeasureRows.rows === undefined, show(perMeasureRows));
 
   // A dated axis asks the chart for its grain (the tile's cached answer): the month's rows still carry the metric's filter.
   const dated = { category: 'd', grain: 'month', values: [enc3.values[0]] };

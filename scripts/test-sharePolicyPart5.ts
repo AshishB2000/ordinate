@@ -131,7 +131,7 @@ async function snapshotPer(env: H.Env): Promise<void> {
   await judged(env, 'snapshot-per', fx,
     { tiles: ['Current payroll KPI'], metrics: ['Current payroll'], rules: ['Current payroll above 1000'], mcp: ['Current payroll'], charts: ['Current payroll by team'] },
     { tiles: ['Current hours KPI'], metrics: ['Current hours'], rules: ['Current hours above 10'], mcp: ['Current hours'], charts: ['Current hours by team'] },
-    (on) => H.mark(env, P, S, 'salary', on), '96585e47b2e787f70404b49d5c5cbb5dc450a109a7d3da0d171c232453eec04c');
+    (on) => H.mark(env, P, S, 'salary', on), 'bcb739084de92d6345aa533c49ff28e3eee2707bf528ec4a5f515c748536f96b');
 }
 
 async function funnel(env: H.Env): Promise<void> {

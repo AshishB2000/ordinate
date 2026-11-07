@@ -268,6 +268,7 @@ async function main(): Promise<void> {
 require('../src/ipc/visuals').register();
 require('../src/ipc/vizSample').register();
 require('../src/ipc/copilot').register();
+require('../src/ipc/terms').register();
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const OTHER_NOTE = categoryKey.OTHER_NOTE;
 
@@ -372,6 +373,10 @@ async function charts(P: string): Promise<void> {
   ok('…while the step filters by the raw value', json(fCard.steps) === '[{"type":"filter","column":"region","op":"=","value":"EU"}]', json(fCard.steps));
   const fBuilt = await answers.computeCard(P, filtered as never);
   ok('…and the model\'s facts keep "region = EU"', 'factsText' in fBuilt && fBuilt.factsText.includes('Filtered to: region = EU.') && !fBuilt.factsText.includes('Europe'), 'factsText' in fBuilt ? fBuilt.factsText : json(fBuilt));
+  const gold = await call('term:save', { projectId: P, input: { name: 'Gold tier', aliases: [], description: '', datasetId: S, filters: [{ type: 'filter', column: 'tier', op: '=', value: 'gold' }] } });
+  const tCard = await call('answer:card', { projectId: P, spec: { ...filtered, filters: [{ term: gold.term.id }, ...filtered.filters] } });
+  ok('a glossary term beside a labelled filter keeps its name in the chips and the bullet', tCard.ok === true && json(tCard.filterLabels) === '["region = Europe","Gold tier"]'
+    && tCard.bullets.includes('Filtered to region = Europe; Gold tier.'), json([tCard.filterLabels, tCard.bullets]));
   const fPlainSpec = { projectId: P2, spec: { ...filtered, datasetId: S2 } };
   const fPlain = await call('answer:card', fPlainSpec);
   const fPlainStub = await stubbed(() => call('answer:card', fPlainSpec));

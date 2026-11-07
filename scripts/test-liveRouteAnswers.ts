@@ -184,7 +184,15 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const asTurn = [{ id: 't', role: 'assistant' as const, text: '', createdAt: '', answer: byCat }];
   const pendingLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const pendingBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
+  // A dashboard draft's column notes too (ipc/draftFacts): no value label of a column the Live facts withhold.
+  const { loadDraftFacts }: typeof import('../src/ipc/draftFacts') = require('../src/ipc/draftFacts');
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [{ value: KEPT_OUT, label: 'Kept label' }] }));
+  const draftCodes = async () => show((await H.as(ORG_A, () => loadDraftFacts(P, { datasets: [{ id: L }] } as never))).columnDocs?.[L]?.cat?.values ?? null);
+  const pendingDraft = await draftCodes();
+  ok('pending: a dashboard draft is told no value label of the column', !pendingDraft.includes('Kept label') && !pendingDraft.includes(KEPT_OUT), pendingDraft);
   await H.as(ORG_A, () => privacy.decide(P, L, 'cat', 'none'));
+  ok('NEGATIVE CONTROL: dismissed, the draft is told the label', (await draftCodes()).includes('Kept label'));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   const dismissedLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const dismissedBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
   const catLabels = !('ok' in dismissedLive) ? dismissedLive.card.data.labels.map(String) : [];
@@ -315,8 +323,11 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('Live card: its filter chip and bullet say the label; the step keeps the stored value', show(liveFiltered.filterLabels) === show(['region in The north'])
     && liveFiltered.bullets.includes('Filtered to region in The north.') && show(liveFiltered.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['North'] }]), show(liveFiltered).slice(0, 300));
   ok('…and the model\'s facts keep "region in North"', 'factsText' in liveFilteredFacts && liveFilteredFacts.factsText.includes('Filtered to: region in North.') && !liveFilteredFacts.factsText.includes('The north'));
-  // Under a row lock the case fix looks up the caller's rows only: a value outside them has no label to say (the unlocked card above is the control).
   const liveAnswersIpc: typeof import('../src/ipc/liveAnswers') = require('../src/ipc/liveAnswers');
+  const termed = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['North']), [], ['Gold tier']));
+  ok('Live card: a glossary term beside a labelled filter keeps its name', !!termed && 'card' in termed && show(termed.card.filterLabels) === show(['region in The north', 'Gold tier'])
+    && termed.card.bullets.includes('Filtered to region in The north; Gold tier.'), show(termed).slice(0, 300));
+  // Under a row lock the case fix looks up the caller's rows only: a value outside them has no label to say (the unlocked card above is the control).
   const lockedCard = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['North']), [{ type: 'filter', column: 'region', op: '=', value: 'South' }]));
   ok('Live card under a lock that holds no North: its filter text says North as asked, never its label', !!lockedCard && 'card' in lockedCard
     && show(lockedCard.card.filterLabels) === show(['region in North']) && !show(lockedCard.card).includes('The north'), show(lockedCard).slice(0, 300));

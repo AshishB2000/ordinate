@@ -75,3 +75,21 @@ export function termNotHere(): string {
 export function termOtherDataset(name: string, termDataset: string, dataset: string): string {
   return t('termMessages.filters_not_ask_about_or_use', { name, termDataset, dataset });
 }
+
+// ── The term handlers (ipc/terms) ────────────────────────────────────────────
+
+export function termNotSaved(): string {
+  return t('termMessages.could_not_save_the_term_check');
+}
+
+export function termNotFound(): string {
+  return t('termMessages.glossary_term_not_found');
+}
+
+export function termNotUpdated(): string {
+  return t('termMessages.failed_to_update_the_term');
+}
+
+export function termNotDeleted(): string {
+  return t('termMessages.could_not_delete_the_term');
+}

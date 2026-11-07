@@ -32,11 +32,11 @@
 // exactly two shapes, each optionally followed by a time — `YYYY-MM-DD[ T…]`
 // and `MM/DD/YYYY[ T…]` (either separator) — and must be a real calendar date.
 // `residentCategory.sqlPeriodDate` is its SQL twin, and the two are pinned by a
-// differential test. Anything else (`Jan 5, 2023`) matches no period, on both
-// paths: a filter that is identical everywhere beats one that is smarter on one
-// path only.
+// differential test. A period FILTER reads anything else (`Jan 5, 2023`) as a
+// date axis does (`periodFilterDay`), so it keeps the rows the axis draws; SQL
+// cannot, so its predicate raises on such a cell and the JS fold answers.
 
-import { daysFromCivil, civilFromDays } from './categoryKey';
+import { daysFromCivil, civilFromDays, parseDateCell } from './categoryKey';
 import type { CivilDate, DateGrain } from './categoryKey';
 import {
   CALENDAR_TYPES, bucketStartOf, ordinalOf, ordinalStart, sameDayLastYear, scopeWeekCal, setActiveWeekCal, unitOfGrain,
@@ -158,6 +158,21 @@ export function periodDay(cell: unknown): number | null {
   const day = daysFromCivil(c.y, c.m, c.d);
   const back = civilFromDays(day);
   return back.y === c.y && back.m === c.m && back.d === c.d ? day : null;
+}
+
+/**
+ * The day a `period` FILTER reads: periodDay's two shapes, and a cell of neither shape the way a date axis reads it
+ * (categoryKey.parseDateCell, "Mar 5, 2024" included), so a filter keeps exactly the rows the axis puts on its days.
+ * SQL has no Date.parse: periodSql.sqlPeriodPredicate raises on such a cell and the resident path falls back to this.
+ * A cell with no digit ('soon', 'n/a') is no date (Date.parse reads none), so it stays resident: null on both paths.
+ */
+export function periodFilterDay(cell: unknown): number | null {
+  if (cell == null) return null;
+  const s = String(cell);
+  if (ISO_RX.test(s) || US_RX.test(s)) return periodDay(s);
+  if (!/[0-9]/.test(s)) return null;
+  const c = parseDateCell(s);
+  return c ? daysFromCivil(c.y, c.m, c.d) : null;
 }
 
 // ── Sanitising ──────────────────────────────────────────────────────────────
