@@ -36,6 +36,7 @@ const comp: typeof import('../src/engine/live/compile') = require('../src/engine
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 const { duckdbDialect } = require('../src/engine/live/dialects/duckdb') as typeof import('../src/engine/live/dialects/duckdb');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const answersSpec: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -324,6 +325,25 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const liveClash = (await post('answer:card', { projectId: P, spec: spec(['North', 'South']) })).value;
   ok('Live card: a filter label that is also a found value says the value, and the note says why', show(liveClash.filterLabels) === show(['region in North, South'])
     && liveClash.notes.includes('“South” is also a value of region, so its labelled value shows as stored.'), show([liveClash.filterLabels, liveClash.notes]));
+  // A filter said as a value LABEL (part 3 D6) becomes its stored value in the same one lookup, which asks the raw key beside it.
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'region', { values: [{ value: 'North', label: 'Up north' }] }));
+  queryCache.clear();
+  const lookups0 = lookups().length;
+  const mapped = await H.as(ORG_A, () => answers.computeCard(P, spec(['up north']), true));
+  const mappedCard = 'card' in mapped ? mapped.card : null;
+  ok('Live: a label said becomes its stored value, and the card says so', !!mappedCard && show(mappedCard.spec.filters) === show([{ column: 'region', op: 'in', values: ['North'] }])
+    && show(mappedCard.spec.matched) === show([{ column: 'region', said: 'up north', value: 'North' }]) && mappedCard.notes[0] === 'Matched "up north" to Up north in region.'
+    && show(mappedCard.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['North'] }]), show(mappedCard).slice(0, 400));
+  ok('…through ONE lookup statement, the raw key bound beside the said one', lookups().length === lookups0 + 1 && show(lookups().at(-1)!.params.map((p) => p.value).slice(-2)) === show(['north', 'up north']), show(lookups().slice(lookups0).map((c) => c.params)));
+  ok('…and the card\'s spec passes the stored-spec whitelist with its match (a reload draws it)', !!mappedCard && show(answersSpec.sanitizeStoredSpec(mappedCard.spec)?.matched) === show(mappedCard.spec.matched));
+  const asStored = await H.as(ORG_A, () => answers.computeCard(P, spec(['up north'])));
+  ok('control: a STORED spec is drawn as it stands — no label mapping', 'card' in asStored && !asStored.card.spec.matched && show(asStored.card.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['up north'] }]));
+  const upNorth = new Map([['region', [{ value: 'North', label: 'Up north' }]]]);
+  const lockedLabel = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['up north']), [{ type: 'filter', column: 'region', op: '=', value: 'South' }], [], upNorth));
+  ok('NEGATIVE CONTROL: a lock that hides North maps nothing, and says nothing', !!lockedLabel && 'card' in lockedLabel && !lockedLabel.card.spec.matched
+    && show(lockedLabel.card.spec.filters) === show([{ column: 'region', op: 'in', values: ['up north'] }]) && !lockedLabel.card.notes.some((n) => n.startsWith('Matched')), show(lockedLabel).slice(0, 300));
+  const southStored = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['South']), [], [], new Map([['region', [{ value: 'North', label: 'South' }]]])));
+  ok('Live: a said value that is stored is never remapped by a label', !!southStored && 'card' in southStored && !southStored.card.spec.matched && show(southStored.card.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['South'] }]));
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'region', { values: [] }));
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   ok('control: the list removed, the Live card says the stored value and carries no pairs', !('valueLabels' in (await post('answer:card', { projectId: P, spec: bare })).value.data));

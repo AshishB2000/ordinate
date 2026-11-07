@@ -41,8 +41,10 @@ import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
-import { MATCH_OPS } from '../ai/answerValues';
-import { cardTextAsSeen, filterText, labelCardData, saidFilters } from './valueLabelReplies';
+import { MATCH_OPS, MAX_MATCHED } from '../ai/answerValues';
+import type { FilterLabels, ValueMatch } from '../ai/answerValues';
+import { valueMatched } from '../ai/answerMessages';
+import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
 
 /** How the case fix compares a stored and an asked value: JS's own trim and lower case. */
 const caseKey = (v: string): string => v.trim().toLowerCase();
@@ -69,20 +71,24 @@ function fail(f: LiveFailure): Failure {
  * question in another order is the same statement. A value nothing matches is
  * left as asked (the chart then says so, as the extract's does). `held`: the
  * spellings found, per column — values the caller's own (locked) rows hold.
+ * A value said as one of `labels` (part 3 D6) asks its stored value in the same
+ * statement, and becomes it only when the lookup finds it: `said` is the filters
+ * with just those values replaced, `matched` says so.
  */
 export async function liveCaseFix(
-  projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = [],
-): Promise<{ ok: true; filters: AnswerFilter[]; held: ReadonlyMap<string, ReadonlyMap<string, string>> } | LiveFailure> {
+  projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = [], labels?: FilterLabels,
+): Promise<{ ok: true; filters: AnswerFilter[]; held: ReadonlyMap<string, ReadonlyMap<string, string>>; said: AnswerFilter[]; matched: ValueMatch[] } | LiveFailure> {
+  const labelOf = (column: string, v: string) => labels?.get(column)?.find((l) => caseKey(l.label) === caseKey(v));
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
     if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) continue;
     const col = columns.find((c) => c.name === f.column);
     if (!col || col.type !== 'text') continue;
     const keys = asked.get(col.name) ?? new Set<string>();
-    for (const v of [f.value, ...(f.values ?? [])]) if (typeof v === 'string') keys.add(caseKey(v));
+    for (const v of [f.value, ...(f.values ?? [])]) if (typeof v === 'string') keys.add(caseKey(v)).add(caseKey(labelOf(col.name, v)?.value ?? v));
     if (keys.size) asked.set(col.name, keys);
   }
-  if (!asked.size) return { ok: true, filters, held: new Map() };
+  if (!asked.size) return { ok: true, filters, held: new Map(), said: filters, matched: [] };
   const stored = new Map<string, Map<string, string>>();
   for (const [column, keys] of asked) {
     // Under a row access lock the stored spellings come from the caller's rows only (row-policy D13).
@@ -103,20 +109,27 @@ export async function liveCaseFix(
     }
     stored.set(column, byKey);
   }
-  return {
-    ok: true,
-    held: stored,
-    filters: filters.map((f): AnswerFilter => {
-      if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) return f;
-      const byKey = stored.get(f.column);
-      if (!byKey) return f;
-      const fix = (v: Cell): Cell => (typeof v === 'string' ? byKey.get(caseKey(v)) ?? v : v);
-      const out = { ...f };
-      if (f.value !== undefined) out.value = fix(f.value);
-      if (f.values) out.values = f.values.map(fix);
-      return out;
-    }),
-  };
+  const each = (list: AnswerFilter[], fix: (column: string, byKey: ReadonlyMap<string, string>, v: string) => string): AnswerFilter[] => list.map((f): AnswerFilter => {
+    if ('term' in f || 'period' in f || !MATCH_OPS.has(f.op)) return f;
+    const byKey = stored.get(f.column);
+    if (!byKey) return f;
+    const one = (v: Cell): Cell => (typeof v === 'string' ? fix(f.column, byKey, v) : v);
+    const out = { ...f };
+    if (f.value !== undefined) out.value = one(f.value);
+    if (f.values) out.values = f.values.map(one);
+    return out;
+  });
+  // The card's filters: a label said becomes its stored value when the caller's rows hold it; a stored value is never remapped.
+  const matched: ValueMatch[] = [];
+  const said = each(filters, (column, byKey, v) => {
+    const l = labelOf(column, v);
+    const raw = l && !byKey.has(caseKey(v)) && matched.length < MAX_MATCHED ? byKey.get(caseKey(l.value)) : undefined;
+    if (raw === undefined) return v;
+    matched.push({ column, said: v, value: raw });
+    return raw;
+  });
+  // The query's: every value in the warehouse's own spelling.
+  return { ok: true, held: stored, filters: each(said, (_c, byKey, v) => byKey.get(caseKey(v)) ?? v), said: matched.length ? said : filters, matched };
 }
 
 /**
@@ -162,8 +175,9 @@ function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[
 }
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
-/** `lock`: steps that never skip (a row lock, a glossary term's steps); `termLabels`: those terms' names, for the card's filter line. */
-export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: readonly FilterStep[] = [], termLabels: string[] = []): Promise<Built | Failure | null> {
+/** `lock`: steps that never skip (a row lock, a glossary term's steps); `termLabels`: those terms' names, for the card's filter line; `labels`: value labels a just-written spec's filters may say (part 3 D6). */
+export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: readonly FilterStep[] = [], termLabels: string[] = [], labels?: FilterLabels): Promise<Built | Failure | null> {
+  let spec = asked;
   const meta = await datasets.getDatasetMeta(projectId, spec && spec.datasetId);
   if (!meta || !isLive(meta)) return null;
   // A column the warehouse dropped (L2.5): said as exactly that, typed — before the case fix asks anything.
@@ -175,8 +189,9 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${meta.name}.` };
 
-  const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters, lock);
+  const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters, lock, labels);
   if (!fixed.ok) return fail(fixed);
+  if (fixed.matched.length) spec = { ...spec, filters: fixed.said, matched: [...(spec.matched ?? []), ...fixed.matched].slice(0, MAX_MATCHED) }; // as the extract's matchValues: a reload draws the same chart
   const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock });
   if (!r.ok) return fail(r);
 
@@ -208,7 +223,8 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category) }),
-      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), notes: r.notes.concat(labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n))), asOf: r.asOf,
+      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), asOf: r.asOf,
+      notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n))),
     },
     factsText: facts.text,
     ledger: facts.ledger,

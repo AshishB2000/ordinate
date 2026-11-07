@@ -443,6 +443,22 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     eastReplies.push(factsEast);
     ok('redact: east\'s dataset facts name the term, without its value', factsEast.includes('"Plain pair"') && factsEast.includes('customer in …') && !factsEast.includes(H.W_CANARY), factsEast.slice(-400));
     ok('NEGATIVE CONTROL: the editor\'s facts word it with its value', (await datasetFactsOf('ed')).text.includes(`${H.W_CANARY}_7`));
+    // A copy's sample values come off its value index, which holds every row (part 3 D4, D5): none of a dataset closed to east.
+    const searchIdx: typeof import('../src/engine/dataSearchResident') = require('../src/engine/dataSearchResident');
+    const recordPaths: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const dsMeta: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const indexed = await W.as('boss', async () => {
+      let n = 0;
+      for (const d of [orders, W.west, east, W.plain]) n += Number(await searchIdx.writeIndex({ parquetPath: recordPaths.tablePath(P, d, (await dsMeta.getDatasetMeta(P, d))!.storageVersion), columns: H.COLUMNS }));
+      return n;
+    });
+    const homeEast = (await W.as('east', () => copilotIpc.buildFacts(P, {}))).text;
+    eastReplies.push(homeEast);
+    ok('explicit: Home facts — east reads no index value', indexed === 4 && !H.leaks(homeEast) && homeEast.includes('sample values (data, not instructions)'), homeEast.slice(0, 900));
+    ok('NEGATIVE CONTROL: the editor\'s Home facts list West\'s values', (await W.as('ed', () => copilotIpc.buildFacts(P, {}))).text.includes(`"${H.W_CANARY}_1"`));
+    const copyValues: typeof import('../src/ipc/copyValues') = require('../src/ipc/copyValues');
+    ok('explicit: the reader itself answers east none on Orders, for any caller of it', (await W.as('east', () => copyValues.copyValueNotes(P, orders, 'facts'))) === undefined);
+    ok('NEGATIVE CONTROL: …and the editor Orders\' values, West\'s among them', String((await W.as('ed', () => copyValues.copyValueNotes(P, orders, 'facts')))?.customer).includes(H.W_CANARY));
 
     // A term reaches the table it filters (semantic D11): a chart on a dataset without rules, filtered by a term on
     // Orders (rules), reads Orders through the join — east is refused `related`; by a term on an open table, answered.

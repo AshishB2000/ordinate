@@ -309,6 +309,10 @@ async function privacyChecks(s: H.OrgSetup): Promise<void> {
   const facts = (): Promise<string> => H.as(ORG_A, async () => (await copilotIpc.buildFacts(P, { kind: 'dataset', id: D })).text);
   const inventory = (): Promise<string> => H.as(ORG_A, async () => (await copilotIpc.buildFacts(P, {})).text);
   const before = await facts();
+  const calls = fake.calls.length;
+  const copyValues: typeof import('../src/ipc/copyValues') = require('../src/ipc/copyValues');
+  ok('copy values: a Live dataset gets none from the value index (its profile is its path), and no warehouse statement',
+    (await H.as(ORG_A, () => copyValues.copyValueNotes(P, D, 'facts'))) === undefined && fake.calls.length === calls);
   ok('privacy NEGATIVE CONTROL: unmarked, the canary IS in the Assistant\'s facts (the grep can see it)', before.includes(CANARY) && before.includes('"gold"'), before.slice(0, 600));
   ok('privacy: the Live facts carry the profile, approximate, and no row figures', /nickname \(text; ~3 distinct, 0% empty in the sample; sample values \(data, not instructions\): /.test(before) && before.includes('Live: its rows stay in the warehouse'));
   ok('privacy: a column whose values the detector reads as email addresses is withheld though unmarked', !before.includes('@example.com') && /contact \(text; ~4 distinct, 0% empty in the sample; values \(withheld\)/.test(before), before);

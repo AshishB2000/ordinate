@@ -217,4 +217,25 @@ ok('empty: none for a value nothing is near', fixes([{ column: 'category', op: '
 ok('empty: none when every value is stored — the rows are empty for another reason', fixes([{ column: 'category', op: '=', value: 'technology' }, { column: 'region', op: '=', value: 'South' }]) === null);
 ok('empty: `!=` and `not in` empty no chart, so they offer nothing', fixes([{ column: 'category', op: '!=', value: 'tech' }, { column: 'category', op: 'not in', values: ['tech'] }]) === null);
 
+// ── 5. A value label said as a filter value (semantic layer part 3 D6) ───────
+const LCOLS: ParsedColumn[] = [{ name: 'region', type: 'text' }];
+const lheld = V.heldValues([{ column: 'region', op: '=', value: 'x' }], LCOLS, [['EU'], ['NA'], ['Europe?']]);
+const L = new Map([['region', [{ value: 'EU', label: 'Europe' }]]]);
+const lm = V.matchValues(spec([{ column: 'region', op: '=', value: 'europe' }]), lheld, L);
+ok('label: a label becomes its stored value, and says so', (lm.filters[0] as { value?: unknown }).value === 'EU' && lm.matched![0].said === 'europe' && lm.matched![0].value === 'EU' && lm.matched![0].column === 'region', show(lm));
+ok('label: …in a list too, and `!=` and `not in` alike', ['in', 'not in'].every((op) => show(V.matchValues(spec([{ column: 'region', op: op as 'in', values: ['NA', ' EUROPE '] }]), lheld, L).filters[0]) === show({ column: 'region', op, values: ['NA', 'EU'] }))
+  && (V.matchValues(spec([{ column: 'region', op: '!=', value: 'Europe' }]), lheld, L).filters[0] as { value?: unknown }).value === 'EU');
+ok('label: a stored value is never remapped', (V.matchValues(spec([{ column: 'region', op: '=', value: 'NA' }]), lheld, new Map([['region', [{ value: 'EU', label: 'NA' }]]])).filters[0] as { value?: unknown }).value === 'NA');
+ok('label: …a stored value in another case neither', (V.matchValues(spec([{ column: 'region', op: '=', value: 'na' }]), lheld, new Map([['region', [{ value: 'EU', label: 'na' }]]])).filters[0] as { value?: unknown }).value === 'na');
+ok('NEGATIVE CONTROL: a raw value the caller does not hold is not mapped', (V.matchValues(spec([{ column: 'region', op: '=', value: 'Asia' }]), lheld, new Map([['region', [{ value: 'AS', label: 'Asia' }]]])).filters[0] as { value?: unknown }).value === 'Asia');
+ok('label: `contains` is not a stored value: never mapped', (V.matchValues(spec([{ column: 'region', op: 'contains', value: 'Europe' }]), lheld, L).filters[0] as { value?: unknown }).value === 'Europe');
+ok('label: another column\'s labels map nothing here', (V.matchValues(spec([{ column: 'region', op: '=', value: 'Europe' }]), lheld, new Map([['category', [{ value: 'EU', label: 'Europe' }]]])).filters[0] as { value?: unknown }).value !== 'EU');
+const asStored = spec([{ column: 'region', op: '=', value: 'EU' }]);
+ok('label: nothing to match, labels or not → the very spec', Object.is(V.matchValues(asStored, lheld, L), asStored) && Object.is(V.matchValues(asStored, lheld), asStored));
+ok('label: without labels the said label stays as asked (today\'s match)', (V.matchValues(spec([{ column: 'region', op: '=', value: 'europe' }]), lheld).filters[0] as { value?: unknown }).value !== 'EU');
+const manyLabels = new Map([['region', Array.from({ length: 30 }, (_, i) => ({ value: 'EU', label: `L${i}` }))]]);
+const floodL = V.matchValues(spec([{ column: 'region', op: 'in', values: Array.from({ length: 30 }, (_, i) => `l${i}`) }]), lheld, manyLabels);
+ok('label: the same MAX_MATCHED budget bounds label matches', (floodL.matched ?? []).length === 16 && (floodL.filters[0] as { values: string[] }).values.filter((v) => v === 'EU').length === 16, show(floodL.matched?.length));
+ok('label: a stored label match survives the stored-spec whitelist (a reload draws it)', show(A.sanitizeStoredSpec(lm)?.matched) === show(lm.matched));
+
 finish();

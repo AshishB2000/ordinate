@@ -178,6 +178,8 @@ export function datasetFacts(
   table?: FactTableDoc,
   // The dataset's glossary terms (./termFacts), values already hidden where they must be. Optional, same reason.
   terms: FactTerm[] = [],
+  // A text column's line-end of sample values from the value index (src/ipc/copyValues.ts). Optional, same reason.
+  valueNotes: Record<string, string> = {},
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -208,7 +210,7 @@ export function datasetFacts(
           ? `most common value ${WITHHELD} (${s.mostCommon.count}x)`
           : `most common ${cell(s.mostCommon.value)} (${s.mostCommon.count}x)`);
       }
-      lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}`);
+      lines.push(`- ${s.name} (${s.type}): ${parts.join(', ')}${Object.prototype.hasOwnProperty.call(valueNotes, s.name) ? valueNotes[s.name] : ''}`);
       num(ledger, `${s.name} distinct`, s.distinct ?? 0, 'count', SRC);
       num(ledger, `${s.name} non-empty`, s.nonEmpty, 'count', SRC);
       if (s.mostCommon) num(ledger, `${s.name} most common count`, s.mostCommon.count, 'count', SRC);

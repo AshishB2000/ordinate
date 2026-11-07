@@ -66,6 +66,7 @@ import { asOfFrom, utcLabel } from '../data/figureAsOf';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { answerNames } from '../engine/live/liveMissing';
 import { liveCardFor } from './liveAnswers';
+import { filterLabels as labelsSaid } from './filterLabels';
 import { liveWithheld } from './liveProfile';
 import { isLive } from '../data/liveDataset';
 import { ensureFresh } from '../data/freshOnAsk';
@@ -189,7 +190,8 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures)); // part 5's shapes first; extract and Live alike
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
-  const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels);
+  const sayable = loose ? await labelsSaid(projectId, asked.datasetId, asked.filters) : undefined; // value labels a just-written spec may say (part 3 D6)
+  const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels, sayable);
   if (live) return live;
   await ensureFresh(projectId, [asked.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
@@ -206,7 +208,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 
   // What the filtered text columns hold: read once, for the loose match, the case fix and the empty answer's suggestions.
   const held = heldValues(asked.filters, ds.columns, ds.rows);
-  const spec = loose ? matchValues(asked, held) : asked;
+  const spec = loose ? matchValues(asked, held, sayable) : asked; // a label said becomes its stored value, within held
   const { steps, labels } = specFilterSteps(spec, ds.columns, ds.rows);
   canonicaliseTextFilters(steps, held);
   const filterLabels = [...labels, ...terms.labels]; // a glossary term reads as its name

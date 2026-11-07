@@ -107,6 +107,9 @@ async function asks(): Promise<void> {
   const OTHER = (await datasets.saveDataset(P, { name: 'Budget', sourceKind: 'csv', columns: [{ name: 'plan', type: 'number' }], rows: [[5]] }))!.id;
   const V = (await visuals.saveVisual(P, { name: 'Net by region', datasetId: D, chartType: 'bar', encoding: { category: 'region', values: [{ column: 'net_amount', aggregation: 'sum' }] } } as any))!.id;
   const A = (await analysis.saveAnalysis(P, { name: 'Overview', sheets: [{ name: 'Main', cards: [] }] }))!.id;
+  // The facts read each copy's value index (p3-04): built now, so no build lands between two prompts compared below.
+  const searchIdx: typeof import('../src/engine/dataSearchResident') = require('../src/engine/dataSearchResident');
+  for (const d of [D, OTHER]) await searchIdx.writeIndex({ parquetPath: require('../src/data/datasetRecord').tablePath(P, d, (await datasets.getDatasetMeta(P, d))!.storageVersion), columns: (await datasets.getDatasetMeta(P, d))!.columns });
 
   // The model, stubbed at its own boundary: every call kept whole.
   const sent: { facts: string; q: string }[] = [];
