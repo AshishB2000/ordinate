@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Base, byProjectId, FileToken, rpc, Uuid } from './contract';
-import { PLAIN_AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS } from '../data/aggregations';
 
 /** A column name as the dataset record holds it. */
 const Column = z.string().min(1).max(512);
@@ -45,7 +45,7 @@ const Encoding = z.looseObject({
     .array(
       z.looseObject({
         column: Column,
-        aggregation: z.enum([...PLAIN_AGGREGATIONS, 'none']),
+        aggregation: z.enum([...AGGREGATIONS, 'none']),
       }),
     )
     .max(64),

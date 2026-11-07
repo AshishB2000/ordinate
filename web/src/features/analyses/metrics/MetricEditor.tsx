@@ -29,10 +29,11 @@ import { AGG_LABEL, failure, type Agg } from '../api';
 import { isFormula, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
 import { movesPin } from '../../model/status/status';
 import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
+import { KeyHint } from './KeyHint';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
-const AGGS: Agg[] = ['sum', 'avg', 'count', 'min', 'max'];
+const AGGS: Agg[] = ['sum', 'avg', 'count', 'countd', 'min', 'max'];
 /** Long enough that typing a formula is not a query per keystroke (ME_PREVIEW_MS). */
 const PREVIEW_MS = 300;
 
@@ -277,6 +278,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
                   </button>
                 ))}
               </div>
+              <KeyHint projectId={projectId} datasetId={ds ?? ''} column={col ?? ''} aggregation={agg} onUseCount={() => setAgg('count')} />
               {(dates.length > 0 || snapshot) && (
                 <Select
                   label="Snapshot"

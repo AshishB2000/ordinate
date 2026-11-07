@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { Base, byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
 import { FigureAskFields } from './visuals';
-import { PLAIN_AGGREGATIONS } from '../data/aggregations';
+import { AGGREGATIONS } from '../data/aggregations';
 
 const Name = z.string().max(200);
 /** A sheet array: `sanitizePages` whitelists every card by type. */
@@ -23,7 +23,7 @@ const Parameters = z.array(z.looseObject({})).max(50);
 const ParamPayload = z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50);
 /** An AI or template plan envelope — `validatePlan` re-checks every field. */
 const Plan = z.looseObject({});
-const Aggregation = z.enum(PLAIN_AGGREGATIONS);
+const Aggregation = z.enum(AGGREGATIONS);
 /** A KPI compare (dateIntel `sanitizeCompare`). */
 const Compare = z.strictObject({
   mode: z.enum(['previous_period', 'previous_year', 'custom']),

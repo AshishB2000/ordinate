@@ -13,6 +13,7 @@
 // over another dataset, a chart the control's column does not reach.
 
 import * as analysis from '../analysis/analysis';
+import { aggWord } from '../data/aggregations';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
 import { sanitizeEncoding } from '../analysis/visuals';
@@ -498,7 +499,7 @@ export async function buildDashboard(
       }
       if (card.type === 'metric' && card.metric) {
         const m = card.metric;
-        let title = m.label || `${m.aggregation} of ${m.column}`;
+        let title = m.label || `${aggWord(m.aggregation)} of ${m.column}`;
         if (lock && !(await metricAllowed(lock, projectId, m, scopes.flatMap((sc) => sc.filters)))) {
           cards.push(refuse(base, title));
           done += plan.keys.length;

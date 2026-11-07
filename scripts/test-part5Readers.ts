@@ -92,7 +92,7 @@ void (async () => {
   ok('NEGATIVE CONTROL: the same expression for count is SQL', typeof residentQuery.aggExpr(COLS, 0, 'count') === 'string');
   ok('NEGATIVE CONTROL: the Prepare pivot step still refuses countd', typeof stepsSanitize.checkPowerStep({ type: 'pivot', key: 'day', value: 'amount', fn: 'countd' }) === 'string');
   ok('NEGATIVE CONTROL: an unknown aggregation still reads as sum', (metrics.sanitizeDefinition({ column: 'amount', aggregation: 'median' }) as { aggregation: string }).aggregation === 'sum');
-  ok('a countd(col) metric formula has no figure on this release', metricFormula.compileMetricFormula('countd(customer_id)', ['customer_id', 'amount', 'day']).ok === false);
+  ok('a countd(col) metric formula compiles (step 04)', metricFormula.compileMetricFormula('countd(customer_id)', ['customer_id', 'amount', 'day']).ok === true);
 
   // ── kinds kept: funnel and period definitions, a snapshot's per, a metric's target ──
   const U1 = '11111111-1111-4111-8111-111111111111';
@@ -187,9 +187,9 @@ void (async () => {
   ipcScenarios.register();
   ipcTemplates.register();
   const listed = ((await handlers.get('scenario:metrics')!(null, { projectId: P })) as Array<{ id: string }>).map((x) => x.id);
-  ok('scenarios: the picker offers no part-5 metric', [customers, funnelM, periodM, perM].every((x) => !listed.includes(x.id)) && listed.includes(plain.id), JSON.stringify(listed));
+  ok('scenarios: the picker offers no pending part-5 metric, and offers a countd one (step 04)', [funnelM, periodM, perM].every((x) => !listed.includes(x.id)) && listed.includes(plain.id) && listed.includes(customers.id), JSON.stringify(listed));
   const planned = (await planExec.loadProjectCtx(P)).metrics.map((x) => x.id);
-  ok('plans: a plan step cannot name a part-5 metric', [customers, funnelM, periodM, perM].every((x) => !planned.includes(x.id)) && planned.includes(plain.id), JSON.stringify(planned));
+  ok('plans: a plan step cannot name a pending part-5 metric, and can name a countd one (step 04)', [funnelM, periodM, perM].every((x) => !planned.includes(x.id)) && planned.includes(plain.id) && planned.includes(customers.id), JSON.stringify(planned));
   const open = { covers: async () => true } as never; // any lock that covers the dataset
   ok('embed: a KPI of a funnel metric is not allowed under a lock', (await embedLock.metricAllowed(open, P, { metricId: funnelM.id, datasetId: D, column: 'amount' })) === false);
   ok('NEGATIVE CONTROL: embed: the KPI of the plain metric is allowed', (await embedLock.metricAllowed(open, P, { metricId: plain.id, datasetId: D, column: 'amount' })) === true);

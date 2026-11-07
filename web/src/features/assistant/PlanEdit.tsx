@@ -17,7 +17,7 @@ interface PlField {
   wide?: boolean;
 }
 
-const AGGS = ['sum', 'avg', 'count', 'min', 'max'];
+const AGGS = ['sum', 'avg', 'count', 'countd', 'min', 'max'];
 
 /** The editable fields per step kind. Paths are dotted into the step object. */
 const FIELDS: Record<string, PlField[]> = {

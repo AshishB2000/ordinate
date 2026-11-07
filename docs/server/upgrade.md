@@ -540,6 +540,13 @@ KPI card, the count distinct in a Prepare group step (a refresh then writes a ta
 column) and in a stored answer, and a metric's target. It **deletes** a target alert, and an alert
 that counts distinct values, on its next evaluation.
 
+### The release that lets people write them (`p5-04`)
+
+Count distinct becomes pickable in this release (the metric editor, charts, KPI cards, the Assistant,
+MCP and `countd(col)` in a formula). **It must not roll out until the release with `p5-01` is on every
+pod**: a pod older than that turns a count distinct on a metric or a chart into a sum and drops it
+from a KPI card, a Prepare group step and a stored answer. Nothing in the server checks this.
+
 ### The release that adds them needs this release first
 
 **The release that adds these metrics needs this release (or a later one) on every pod first.**

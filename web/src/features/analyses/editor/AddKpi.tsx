@@ -23,7 +23,7 @@ import { findSlot } from './geometry';
 import { uuid } from './doc';
 import s from './Dialogs.module.css';
 
-const AGGS: Agg[] = ['sum', 'avg', 'count', 'min', 'max'];
+const AGGS: Agg[] = ['sum', 'avg', 'count', 'countd', 'min', 'max'];
 /** Rows past this and the picker is a list to scroll — which is what search is for (MPK_MAX_ROWS). */
 const MAX_ROWS = 40;
 

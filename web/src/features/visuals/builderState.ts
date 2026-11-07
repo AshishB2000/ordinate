@@ -70,7 +70,7 @@ function effective(enc: Encoding, isDate: boolean): Encoding {
 
 /** The measure names the series are drawn under (chartFormat.measureNames). */
 function measureNames(enc: Encoding): string[] {
-  return enc.values.flatMap((v) => (v.aggregation === 'count' ? [v.column] : v.aggregation === 'none' ? [`sum of ${v.column}`, v.column] : [`${v.aggregation} of ${v.column}`]));
+  return enc.values.flatMap((v) => (v.aggregation === 'count' ? [v.column] : v.aggregation === 'countd' ? [`count distinct of ${v.column}`] : v.aggregation === 'none' ? [`sum of ${v.column}`, v.column] : [`${v.aggregation} of ${v.column}`]));
 }
 
 export function useBuilder(projectId: string, columns: Column[], related: RelatedCol[], initial: Initial) {

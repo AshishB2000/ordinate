@@ -49,7 +49,7 @@ export const SUGGEST_STEPS_SYSTEM_PROMPT =
   'shapes, and reference ONLY the exact column names given to you:\n' +
   '  { "type": "calculated_field", "name": "<new column>", "expression": "<formula over column names>" }\n' +
   '  { "type": "filter", "column": "<col>", "op": "=|!=|>|<|>=|<=|contains|is_empty|not_empty", "value": <optional> }\n' +
-  '  { "type": "group_aggregate", "groupBy": ["<col>"], "aggregations": [{ "column": "<col>", "fn": "sum|avg|count|min|max", "as": "<new column>" }] }\n' +
+  '  { "type": "group_aggregate", "groupBy": ["<col>"], "aggregations": [{ "column": "<col>", "fn": "sum|avg|count|countd|min|max", "as": "<new column>" }] }\n' +
   '  { "type": "dedupe", "columns": ["<col>"] }\n' +
   '  { "type": "fill_empty", "column": "<col>", "value": <string|number> }\n' +
   '  { "type": "trim", "column": "<col optional>" }\n' +
@@ -91,7 +91,7 @@ export const SUGGEST_CHARTS_SYSTEM_PROMPT =
   'number, figure, percentage or count; the app performs all math itself. ' +
   'Reference ONLY the exact column names given to you — never invent a column. ' +
   'Use this exact shape for each element:\n' +
-  '  { "category": "<dimension column>", "values": [{ "column": "<col>", "aggregation": "sum|avg|count|min|max" }], ' +
+  '  { "category": "<dimension column>", "values": [{ "column": "<col>", "aggregation": "sum|avg|count|countd|min|max" }], ' +
   '"series": "<optional split column>", "chartType": "<one of the listed chart types>", ' +
   '"why": "<short caption naming ONLY columns and the aggregation, e.g. \\"Revenue summed by region\\">" }\n' +
   '"why" must be under 100 characters and must NOT contain a number. ' +

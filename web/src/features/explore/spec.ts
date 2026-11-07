@@ -31,7 +31,7 @@ export interface Field {
 
 export const EMPTY: Question = { chartType: '', encoding: { category: '', values: [] }, filters: [] };
 
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
+const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'countd', 'min', 'max', 'none']);
 const GRAINS: ReadonlySet<string> = new Set(['day', 'week', 'month', 'quarter', 'year']);
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -144,7 +144,7 @@ export function groupBy(q: Question, f: Field, kindOf: KindOf): Question {
 /** Group by nothing (the Group by well's remove). */
 export const ungroup = (q: Question): Question => ({ ...q, encoding: axis(q.encoding, '', null) });
 
-const AGG_WORD: Record<Agg, string> = { sum: 'total', avg: 'average', count: 'count of', min: 'lowest', max: 'highest', none: '' };
+const AGG_WORD: Record<Agg, string> = { sum: 'total', avg: 'average', count: 'count of', countd: 'distinct', min: 'lowest', max: 'highest', none: '' };
 
 const listed = (xs: string[]): string => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 

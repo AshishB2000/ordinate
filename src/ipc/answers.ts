@@ -75,7 +75,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
-import { pendingMeasureRefusal, unofferedMetric } from '../analysis/pendingKinds';
+import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
@@ -319,7 +319,7 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
     for (const s of await metrics.listMetrics(projectId)) {
       // Part 5's shapes and a layer's metric (no column measure) are not named by a model on this release; one
       // reading a hidden column is not the caller's (part 4).
-      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s) || (await metricHidden(projectId, s.id))) continue;
+      if (!metrics.isSimpleDefinition(s.definition) || pendingMetric(s) || (await metricHidden(projectId, s.id))) continue;
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,

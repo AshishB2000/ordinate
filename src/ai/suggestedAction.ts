@@ -191,7 +191,7 @@ const ACTION_PROMPT =
   '("revenue by region last quarter", "top 5 products by profit", "how did West do vs East"). ' +
   'For "answer" ONLY, the line carries a spec, all on the same single line:\n' +
   ACTION_MARKER + ' {"kind":"answer","intent":"<the question, restated>","spec":{"dataset":"<dataset name>",' +
-  '"category":"<column>","measures":[{"column":"<column>","aggregation":"sum|avg|count|min|max"}],' +
+  '"category":"<column>","measures":[{"column":"<column>","aggregation":"sum|avg|count|countd|min|max"}],' +
   '"filters":[{"column":"<column>","op":"=","value":"<value>"}],"chartType":"<optional>","top":<optional N>}}\n' +
   'Name columns EXACTLY as the FACTS list them. A filter is {"column","op","value"} with op one of ' +
   '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +

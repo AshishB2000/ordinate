@@ -164,9 +164,9 @@ export const PLAN_PROMPT =
   '(filter: "column","op" (= != > < >= <= contains is_empty not_empty),"value"; dedupe: "columns":[…]; ' +
   'trim/fill_empty/drop_column: "column" (fill_empty also "value"); rename_column: "from","to")\n' +
   '{"kind":"calc","dataset":"<dataset>","name":"<new column>","expression":"<formula over [column] names>"}\n' +
-  '{"kind":"metric","dataset":"<dataset>","name":"<metric name>","column":"<column>","aggregation":"sum|avg|count|min|max"}\n' +
+  '{"kind":"metric","dataset":"<dataset>","name":"<metric name>","column":"<column>","aggregation":"sum|avg|count|countd|min|max"}\n' +
   '{"kind":"chart","dataset":"<dataset>","name":"<visual name>","chartType":"<chart type>",' +
-  '"encoding":{"category":"<column>","values":[{"column":"<column>","aggregation":"sum|avg|count|min|max"}]}}\n' +
+  '"encoding":{"category":"<column>","values":[{"column":"<column>","aggregation":"sum|avg|count|countd|min|max"}]}}\n' +
   '{"kind":"dashboard","name":"<dashboard name>","visuals":["<visual name>",…],"metrics":["<metric name>",…]}\n' +
   '{"kind":"style","dashboard":"<dashboard name>","preset":"clean|executive|dense|dark"}\n' +
   '{"kind":"alert","metric":"<metric name>","op":">|<|>=|<=","value":<a number the USER stated>,"name":"<alert name>"}\n' +

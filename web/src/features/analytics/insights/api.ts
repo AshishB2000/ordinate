@@ -16,7 +16,7 @@ export interface Insight {
   datasetId: string;
   column?: string;
   facts: Record<string, string | number>;
-  chart?: { type: string; encoding: { category: string; values: Array<{ column: string; aggregation: 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none' }> } & Record<string, unknown>; filters?: Array<{ type: string } & Record<string, unknown>> };
+  chart?: { type: string; encoding: { category: string; values: Array<{ column: string; aggregation: 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max' | 'none' }> } & Record<string, unknown>; filters?: Array<{ type: string } & Record<string, unknown>> };
   periodKey?: string;
 }
 

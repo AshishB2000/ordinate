@@ -24,7 +24,7 @@ export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
   return isNewerKind(d) || (metrics.isSimpleDefinition(d) && !!d.snapshot?.per);
 }
 
-/** Not offered to a surface that writes a card or reads a metric as its column (plans, answer specs, templates): pending, or a count distinct (step 04 offers it). */
+/** Not offered to a template role, which reads a metric as its bare column: pending, or a count distinct (a role's picker is plain). */
 export function unofferedMetric(m: Pick<Metric, 'definition'>): boolean {
   return pendingMetric(m) || (metrics.isSimpleDefinition(m.definition) && m.definition.aggregation === 'countd');
 }

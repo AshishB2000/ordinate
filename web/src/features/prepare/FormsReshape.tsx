@@ -2,7 +2,7 @@
 // (legacy prepareReshape.ts). Views over a draft; ./drafts.ts builds the step.
 
 import { Checkbox } from '../../ui/Choice';
-import { AGG_FNS, WINDOW_FNS } from './steps';
+import { PIVOT_FNS, WINDOW_FNS } from './steps';
 import { arr, ColumnSelect, Hint, NameChecks, PickSelect, str, TextField, type FormProps } from './FormParts';
 
 export function SplitForm({ draft, set, ctx }: FormProps) {
@@ -47,7 +47,7 @@ export function PivotForm({ draft, set, ctx }: FormProps) {
     <>
       <ColumnSelect label="Key column (its values become columns)" value={str(draft.key)} columns={ctx.columns} onChange={(key) => set({ key })} />
       <ColumnSelect label="Value column" value={str(draft.value)} columns={ctx.columns} onChange={(value) => set({ value })} />
-      <PickSelect label="Aggregation" value={str(draft.fn) || 'sum'} options={AGG_FNS.map((f) => [f, f] as const)} onChange={(fn) => set({ fn })} />
+      <PickSelect label="Aggregation" value={str(draft.fn) || 'sum'} options={PIVOT_FNS.map((f) => [f, f] as const)} onChange={(fn) => set({ fn })} />
       <NameChecks label="One row per" names={ctx.columns.map((c) => c.name)} value={arr<string>(draft.groupBy)} onChange={(groupBy) => set({ groupBy })} />
       <Hint>Each distinct value of the key column becomes a column (up to 100, in first-seen order).</Hint>
     </>

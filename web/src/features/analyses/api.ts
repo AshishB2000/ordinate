@@ -10,7 +10,7 @@ import type { ChartDataShape } from '../../charts/types';
 import type { AsOf } from '../../ui/asOfView';
 import { figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 
-export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max';
+export type Agg = 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max';
 /** A starter layout, spelled as the `analysis:starterCards` contract spells it. */
 export type StarterKind = RpcInput<'analysis:starterCards'>['kind'];
 export type Layout = { x: number; y: number; w: number; h: number };
@@ -420,4 +420,4 @@ export function failure(r: unknown, fallback: string): string {
 }
 
 /** Aggregations as the editor names them (dashboards.ts DASH_AGG_LABELS). */
-export const AGG_LABEL: Record<Agg, string> = { sum: 'Sum', avg: 'Average', count: 'Count', min: 'Min', max: 'Max' };
+export const AGG_LABEL: Record<Agg, string> = { sum: 'Sum', avg: 'Average', count: 'Count', countd: 'Count distinct', min: 'Min', max: 'Max' };

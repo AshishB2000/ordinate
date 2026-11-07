@@ -56,7 +56,7 @@ import { ROWS_PROMPT, flattenRows, validateRows, type PlanRow } from './planRows
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { fillMapRegions, geoHitsFor, type GeoHits } from './geoHits';
-import { NUMBER_AGGREGATIONS, isPlainAggregation } from '../data/aggregations';
+import { NUMBER_AGGREGATIONS, isAggregation, aggWord } from '../data/aggregations';
 
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
@@ -486,7 +486,7 @@ function validateMetric(
     return null;
   }
   const aggregation = str(raw.aggregation);
-  if (!isPlainAggregation(aggregation)) { // a model's card never counts distinct here (part 5 step 04 offers it)
+  if (!isAggregation(aggregation)) {
     dropped.push({ kind: 'encoding', where, message: `${at} dropped: ${JSON.stringify(aggregation)} is not a metric aggregation.` });
     return null;
   }
@@ -654,7 +654,7 @@ function validateVisual(
       dropped.push({
         kind: 'encoding',
         where,
-        message: `${at} ("${title}") dropped: ${m.aggregation} of "${m.column}" needs a number column, but "${m.column}" is ${real.get(m.column)} in "${ds.name}".`,
+        message: `${at} ("${title}") dropped: ${aggWord(m.aggregation)} of "${m.column}" needs a number column, but "${m.column}" is ${real.get(m.column)} in "${ds.name}".`,
       });
       return null;
     }

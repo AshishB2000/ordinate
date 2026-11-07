@@ -164,7 +164,7 @@ export function useStatsPair(projectId: string, spec: StatsSpec, pair: [string, 
 
 export type DriversRequest = {
   datasetId: string;
-  metric: { metricId?: string; column?: string; aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max'; label?: string };
+  metric: { metricId?: string; column?: string; aggregation?: 'sum' | 'avg' | 'count' | 'countd' | 'min' | 'max'; label?: string };
   compare: Record<string, unknown> & { mode: string };
   filters?: Array<Record<string, unknown> & { type: string }>;
   path?: Array<{ column: string; value: string }>;

@@ -39,7 +39,9 @@ export const TEXT_STEPS = new Set(['text_terms', 'text_sentiment', 'keyword_rule
 
 export const labelOf = (type: string): string => STEP_TYPES.find((s) => s.type === type)?.label ?? type;
 
-export const AGG_FNS = ['sum', 'avg', 'count', 'min', 'max'] as const;
+/** The group step's functions; the pivot step takes one value per cell, so it never counts distinct. */
+export const GROUP_FNS = ['sum', 'avg', 'count', 'countd', 'min', 'max'] as const;
+export const PIVOT_FNS = ['sum', 'avg', 'count', 'min', 'max'] as const;
 
 export const WINDOW_FNS: readonly { fn: string; label: string }[] = [
   { fn: 'row_number', label: 'Row number' },

@@ -17,6 +17,7 @@
 // these same sentences and is audited against their ledger.
 
 import { ipcMain } from './bus';
+import { aggWord } from '../data/aggregations';
 import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
@@ -158,7 +159,7 @@ async function kpiLevel(projectId: string, card: Card, m: NonNullable<Card['metr
   }
   const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, filters, params);
   const text = r.ok && r.value !== null ? formatValue(r.value, m.format || 'auto') : '';
-  return r.ok ? kpiSentence({ cardId: card.id, metric: m.label || `${m.aggregation} of ${m.column}`, a: r.value, b: null, delta: null, pct: null, aText: text, bText: '', deltaText: '', aLabel: '', bLabel: '' }) : null;
+  return r.ok ? kpiSentence({ cardId: card.id, metric: m.label || `${aggWord(m.aggregation)} of ${m.column}`, a: r.value, b: null, delta: null, pct: null, aText: text, bText: '', deltaText: '', aLabel: '', bLabel: '' }) : null;
 }
 
 async function insightFacts(projectId: string, ids: string[], tiles: Tile[]): Promise<SummarySentence[]> {

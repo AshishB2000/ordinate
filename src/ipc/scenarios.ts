@@ -18,7 +18,7 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import { MAX_COMPARE, driverLabel, isMetricTarget, sanitizeBaseMetricIds, sanitizeDrivers } from '../analysis/scenarioModel';
 import type { Scenario } from '../analysis/scenarioModel';
 import { compareScenarios, computeScenario, scenarioCardValue, scenarioTargets } from '../analysis/scenarioResolve';
-import { unofferedMetric } from '../analysis/pendingKinds';
+import { pendingMetric } from '../analysis/pendingKinds';
 import { contentTag, recordReply } from '../app/editConflict';
 import { isCountLike } from '../data/aggregations';
 
@@ -112,7 +112,7 @@ export function register(): void {
   // "Add metric" lists and how a new scenario picks its first ones (a column
   // rollup, a formula, a count). Names and kinds only.
   ipcMain.handle('scenario:metrics', async (_e, { projectId }: any = {}) =>
-    (await metrics.listMetrics(id(projectId))).filter((m) => metrics.isFormulaDefinition(m.definition) || (metrics.isSimpleDefinition(m.definition) && !unofferedMetric(m) && !m.definition.snapshot)).map((m) => ({
+    (await metrics.listMetrics(id(projectId))).filter((m) => metrics.isFormulaDefinition(m.definition) || (metrics.isSimpleDefinition(m.definition) && !pendingMetric(m) && !m.definition.snapshot)).map((m) => ({
       id: m.id,
       name: m.name,
       kind: !metrics.isSimpleDefinition(m.definition) ? 'formula' : isCountLike(m.definition.aggregation) ? 'count' : 'column',

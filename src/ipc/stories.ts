@@ -11,6 +11,7 @@
 // notes. The model never writes a figure; every block is a live reference.
 
 import { ipcMain } from './bus';
+import { aggWord } from '../data/aggregations';
 import * as stories from '../analysis/stories';
 import * as metrics from '../analysis/metrics';
 import { buildPlanRecords } from '../analysis/planBuild';
@@ -31,7 +32,7 @@ async function metricFor(projectId: string, m: any): Promise<string | null> {
     && x.definition.column === m.column && x.definition.aggregation === m.aggregation && !x.definition.snapshot);
   if (same) return same.id;
   const saved = await metrics.saveMetric(projectId, {
-    name: typeof m.label === 'string' && m.label.trim() ? m.label.trim() : `${m.aggregation} of ${m.column}`,
+    name: typeof m.label === 'string' && m.label.trim() ? m.label.trim() : `${aggWord(m.aggregation)} of ${m.column}`,
     datasetId: m.datasetId,
     definition: { column: m.column, aggregation: m.aggregation },
   });

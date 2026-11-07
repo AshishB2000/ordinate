@@ -161,6 +161,7 @@ const AGG_ALIASES: Record<string, VizAggregation> = {
   count: 'count', number: 'count',
   min: 'min', minimum: 'min', lowest: 'min',
   max: 'max', maximum: 'max', highest: 'max',
+  countd: 'countd', count_distinct: 'countd', 'count distinct': 'countd', distinct: 'countd', unique: 'countd',
 };
 
 export function parseAgg(raw: unknown): VizAggregation | null {
@@ -405,6 +406,7 @@ function cleanTitle(t: unknown): string {
 function measureWords(m: VizMeasure): string {
   if (m.aggregation === 'count') return `count of ${m.column}`;
   if (m.aggregation === 'sum') return m.column;
+  if (m.aggregation === 'countd') return `distinct ${m.column}`;
   return `${m.aggregation} ${m.column}`;
 }
 
@@ -427,7 +429,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   if (typeof o.datasetId !== 'string' || !UUID_RE.test(o.datasetId)) return undefined;
   if (typeof o.category !== 'string' || !o.category) return undefined;
   const measures: VizMeasure[] = (Array.isArray(o.measures) ? o.measures : [])
-    .filter((m: any) => m && typeof m.column === 'string' && typeof m.aggregation === 'string' && (AGG_ALIASES[m.aggregation] === m.aggregation || m.aggregation === 'countd'))
+    .filter((m: any) => m && typeof m.column === 'string' && typeof m.aggregation === 'string' && (AGG_ALIASES[m.aggregation] === m.aggregation))
     .slice(0, MAX_MEASURES)
     .map((m: any) => (typeof m.metricId === 'string' && UUID_RE.test(m.metricId)
       ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }

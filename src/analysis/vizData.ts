@@ -11,6 +11,7 @@
 // `null` (never a string, never a re-stringified figure).
 
 import type { ParsedColumn } from '../data/parse';
+import { aggWord } from '../data/aggregations';
 import type { Cell, FilterStep, TableData } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { VizEncoding, VizMeasure } from './visuals';
@@ -106,7 +107,7 @@ export function keyOf(cell: Cell): string {
 // single verbatim column → just the column name.
 export function measureLabel(v: VizMeasure): string {
   if (v.aggregation === 'none' || v.aggregation === 'count') return v.column;
-  return `${v.aggregation} of ${v.column}`;
+  return `${aggWord(v.aggregation)} of ${v.column}`;
 }
 
 // ── recommendChartType ───────────────────────────────────────────────────────
