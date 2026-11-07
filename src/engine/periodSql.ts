@@ -41,13 +41,14 @@ export function sqlPeriodDate(p: string): string {
  * are bound parameters, pushed in the order they appear. `empty` is the
  * caller's `sqlGen.sqlEmpty(p)` (passed in: sqlGen imports this file).
  *
- * A non-empty cell of neither shape ("Mar 5, 2024") is read by `Date.parse` in
- * JS (`dateIntel.periodFilterDay`, as a date axis reads it), which SQL has not:
- * such a row RAISES, so the resident path declines and the JS fold answers.
+ * A cell of neither shape with a digit in it ("Mar 5, 2024") is read by
+ * `Date.parse` in JS (`dateIntel.periodFilterDay`, as a date axis reads it),
+ * which SQL has not: such a row RAISES, so the resident path declines and the
+ * JS fold answers. One with no digit ('soon') is no date on either path.
  */
 export function sqlPeriodPredicate(p: string, r: DateRange, params: DuckValue[], empty: string): string {
   const v = `CAST(${p} AS VARCHAR)`;
-  const odd = `NOT ${empty} AND NOT regexp_matches(${v}, '${PERIOD_ISO_RE}') AND NOT regexp_matches(${v}, '${PERIOD_US_RE}')`;
+  const odd = `NOT ${empty} AND regexp_matches(${v}, '[0-9]') AND NOT regexp_matches(${v}, '${PERIOD_ISO_RE}') AND NOT regexp_matches(${v}, '${PERIOD_US_RE}')`;
   const d = sqlPeriodDate(p);
   const parts = [`${d} IS NOT NULL`];
   if (r.from) {

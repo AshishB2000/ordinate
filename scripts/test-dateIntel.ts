@@ -169,6 +169,8 @@ function eq(label: string, got: string, want: string): void {
   const axis = (s: string): string => { const c = parseDateCell(s); return c ? isoFromDays(daysFromCivil(c.y, c.m, c.d)) : 'null'; };
   for (const s of ['Jan 5, 2024', 'Mar 28, 2024', ' 2024-03-05', '5 Mar 2024', 'n/a', '2024-03-05x', '']) eq(`filter reads ${JSON.stringify(s)} as the axis does`, f(s), axis(s));
   for (const s of ['2024-03-05', '03/05/2024', '2024-03-05T10:22:00Z', '2024-02-30', '2024-02-30T10:00', null]) eq(`filter reads ${JSON.stringify(s)} as periodDay`, f(s), d(s));
+  // No digit, no date: the axis's Date.parse reads none of these either, which is what lets SQL keep such a column resident.
+  for (const s of ['soon', 'n/a', 'Jan', 'March', 'Tue, Jan', 'today', 'now', 'GMT', 'T Z', '-']) ok(`no digit: ${JSON.stringify(s)} is no day for the filter or the axis`, f(s) === 'null' && axis(s) === 'null');
 }
 
 // ── 8. Overlay labels ───────────────────────────────────────────────────────

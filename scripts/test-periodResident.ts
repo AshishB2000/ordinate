@@ -67,7 +67,7 @@ const ROWS: Cell[][] = [];
       }
     }
   }
-  for (const junk of ['2024-02-30', '', ' ', '\t', null, '2024-3-5', '2024-10-15T23:59:59Z']) { // prose: its own block below
+  for (const junk of ['2024-02-30', '', ' ', '\t', null, '2024-3-5', '2024-10-15T23:59:59Z', 'soon', 'n/a']) { // prose with a digit: its own block below
     ROWS.push([id, junk, 'East', 1]);
     id += 1;
   }
@@ -185,7 +185,7 @@ for (const run of RUNS) {
   let raised = '';
   try { duck.query(`SELECT count(*) AS n FROM ${pq.relationSql(proseFile)} WHERE ${rq.filterPredicates(COLS, q1, params).join(' AND ')};`, params); } catch (e) { raised = String((e as Error).message); }
   ok('prose: the predicate raises the decline', raised.includes(PERIOD_DECLINE), raised);
-  ok('NEGATIVE CONTROL: empty, Feb 30 and timed cells (SQL reads them as JS does) → the resident answers', (await rq.computeMetricResident(src, { column: 'v', aggregation: 'sum' }, q1)) !== null);
+  ok('NEGATIVE CONTROL: empty, Feb 30, timed and digit-free cells (SQL reads them as JS does) → the resident answers', (await rq.computeMetricResident(src, { column: 'v', aggregation: 'sum' }, q1)) !== null);
 }
 
 delete process.env.ORDINATE_TODAY;

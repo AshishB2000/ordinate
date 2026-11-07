@@ -164,11 +164,13 @@ export function periodDay(cell: unknown): number | null {
  * The day a `period` FILTER reads: periodDay's two shapes, and a cell of neither shape the way a date axis reads it
  * (categoryKey.parseDateCell, "Mar 5, 2024" included), so a filter keeps exactly the rows the axis puts on its days.
  * SQL has no Date.parse: periodSql.sqlPeriodPredicate raises on such a cell and the resident path falls back to this.
+ * A cell with no digit ('soon', 'n/a') is no date (Date.parse reads none), so it stays resident: null on both paths.
  */
 export function periodFilterDay(cell: unknown): number | null {
   if (cell == null) return null;
   const s = String(cell);
   if (ISO_RX.test(s) || US_RX.test(s)) return periodDay(s);
+  if (!/[0-9]/.test(s)) return null;
   const c = parseDateCell(s);
   return c ? daysFromCivil(c.y, c.m, c.d) : null;
 }
