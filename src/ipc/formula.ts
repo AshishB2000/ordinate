@@ -39,6 +39,8 @@ import * as datasets from '../data/datasets';
 import { pageFor } from './datasets';
 import { lodPreview } from './lodData';
 import { withFormulaBudget } from '../formula/formulaBudget';
+import { liveFn } from '../engine/live/formulaSqlFunctions';
+import { calcFunctionRefused, calcLodRefused } from '../engine/formulaSqlMessages';
 
 /** How many rows the preview shows. Small on purpose: this runs per keystroke. */
 const SAMPLE_ROWS = 8;
@@ -190,6 +192,12 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
   };
 }
 
+function liveMarked(doc: FunctionDoc): FunctionDoc {
+  if (doc.category === 'lod') return { ...doc, live: false, liveWhy: calcLodRefused() };
+  const f = liveFn(doc.name);
+  return f?.v1 ? { ...doc, live: true } : { ...doc, live: false, liveWhy: calcFunctionRefused(doc.name, f ? f.reason : 'notMeasured') };
+}
+
 export function register(): void {
   ipcMain.handle('formula:check', async (_e, { projectId, datasetId, expression }: any = {}): Promise<FormulaCheck> => {
     // Its sample rows and LOD preview read the whole table: a restricted caller is refused, typed (row-policy D9).
@@ -203,6 +211,7 @@ export function register(): void {
     }
   });
 
-  // r7:lod — the level-of-detail entries ride at the end, in their own category.
-  ipcMain.handle('formula:functions', (): FunctionDoc[] => listFunctionDocs().concat(LOD_DOCS));
+  // r7:lod — the level-of-detail entries ride at the end, in their own category. Each says whether a
+  // Live calculated field may call it (part 8 D6): the editor greys the rest, with the sentence why.
+  ipcMain.handle('formula:functions', (): FunctionDoc[] => listFunctionDocs().concat(LOD_DOCS).map(liveMarked));
 }

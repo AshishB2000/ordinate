@@ -13,6 +13,7 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { isLive, setBaseFilters } from '../data/liveDataset';
 import { sanitizeBaseFilters } from '../data/liveBaseFilters';
+import { declaredColumns } from '../data/liveCalcs';
 import type { FilterStep } from '../data/transforms';
 import { announceRefreshed } from '../data/refreshEvents';
 import * as msg from '../data/liveMessages';
@@ -37,7 +38,8 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
   const steps = sanitizeBaseFilters(asked);
   // A step the stored form would drop (an unknown operator, a radius, too many values) is refused, never saved short.
   if (steps.length !== asked.length) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
-  const base = liveBaseOf(steps, meta.columns);
+  // The declared columns only: a base filter runs before any calculated field exists (part 8 step 04).
+  const base = liveBaseOf(steps, declaredColumns(meta));
   if (!base.ok) {
     // A skip (a column it lacks, an empty list) is the editor's sentence; any other refusal says its own why.
     const error = base.code === 'baseFilter' ? msg.liveBaseFilterInvalidMessage() : base.message;

@@ -26,6 +26,7 @@ import type { FilterStep } from '../data/transforms';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
+import { declaredColumns } from '../data/liveCalcs';
 import { LOW_CARDINALITY, profileDistinct, profileOf, type LiveProfile, type ProfileDistinct, type UnlistedReason } from '../data/liveProfile';
 import { formatNumber } from '../app/format';
 import { distribution, pctOf, type ColumnProfile } from '../data/profileView';
@@ -42,6 +43,7 @@ import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
 import type { FactTerm } from '../ai/termFacts';
+import { liveCalculated, type CalculatedView } from './liveCalcs';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -189,6 +191,8 @@ export interface LiveSchemaView {
   missing: MissingColumn[];
   /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
   baseFilters: FilterStep[];
+  /** The calculated fields (part 8 step 04, ./liveCalcs): names and types only to a caller row access restricts. */
+  calculated: CalculatedView;
 }
 
 const SKIP_NOTE = { tooCostly: msg.liveSampleTooCostly, failed: msg.liveSampleFailed, refused: msg.liveSampleRefused } as const;
@@ -211,7 +215,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     sampleRows: rows ?? null,
     method: prof?.method ?? null,
     note: prof?.skipped ? SKIP_NOTE[prof.skipped]() : null,
-    columns: meta.columns.map((c) => {
+    columns: declaredColumns(meta).map((c) => {
       const p = profileOf(meta, c.name);
       const filled = typeof p?.filled === 'number' ? p.filled : null;
       const values = closed ? [] : p?.values ?? [];
@@ -229,6 +233,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     }),
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
     baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
+    calculated: await liveCalculated(projectId, meta, closed),
   };
 }
 

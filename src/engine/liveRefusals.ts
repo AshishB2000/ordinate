@@ -141,7 +141,7 @@ export function liveBaseFilterRefused(column: string): string {
   return t('liveRefusals.the_always_applied_filter_on_can', { column });
 }
 
-/** A Live dataset with calculated fields this server cannot compute: it answers nothing, never a wider figure. */
+/** A Live dataset whose stored calculated fields this server cannot read in full: it answers nothing, never a wider figure. */
 export function liveCalculatedRefused(column: string): string {
   return t('liveRefusals.this_dataset_s_calculated_fields_can', { column });
 }
@@ -159,4 +159,19 @@ export function liveDistinctByWeekCalendar(): string {
 /** A dataset that asks another tool's semantic layer (part 7; a later release reads it): it answers nothing here. */
 export function liveSemanticPending(): string {
   return t('liveRefusals.this_dataset_asks_another_tool_s');
+}
+
+/** A calculated field a statement reads no longer compiles against the warehouse's columns (or its type moved). */
+export function liveCalcBroken(column: string): string {
+  return t('liveRefusals.the_calculated_field_no_longer_runs', { column });
+}
+
+/** Live calculated fields on Databricks (owner's answer 1: no real-engine parity run there yet). */
+export function liveCalcDialectRefused(): string {
+  return t('liveRefusals.calculated_fields_can_t_run_on');
+}
+
+/** The derived tables a statement needs passed MAX_CALC_SQL. */
+export function liveCalcTooLarge(): string {
+  return t('liveRefusals.the_calculated_fields_this_question');
 }

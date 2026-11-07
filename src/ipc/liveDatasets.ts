@@ -43,8 +43,8 @@ import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
 import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
-import { liveBaseFilterRefused, liveCalculatedRefused, liveSemanticPending } from '../engine/liveRefusals';
-import { hasLiveCalcs } from '../data/liveCalcs';
+import { liveBaseFilterRefused, liveCalcBroken, liveCalculatedRefused, liveSemanticPending } from '../engine/liveRefusals';
+import { calcSteps, declaredColumns } from '../data/liveCalcs';
 import { baseOfLive } from '../engine/live/liveBase';
 import type { LiveRefusalCode } from '../engine/live/liveSpec';
 import type { FilterStep } from '../data/transforms';
@@ -177,19 +177,31 @@ type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode; e
  */
 function copySteps(meta: DatasetMeta): { ok: true; steps: FilterStep[] } | BaseRefused {
   if (meta.live?.semanticPending) return { ok: false, code: 'live_refused', reason: 'semanticPending', error: liveSemanticPending() };
-  const b = meta.live ? baseOfLive(meta.live, meta.columns) : null;
+  const b = meta.live ? baseOfLive(meta.live, declaredColumns(meta)) : null;
   if (b && !b.ok) return { ok: false, code: 'live_refused', reason: b.code, error: b.message };
   return { ok: true, steps: meta.live?.baseFilters ?? [] };
 }
 
-/** The same for calculated fields (part 8, 00a): a copy would hold none of them, so a filter on one would be gone. */
-function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'calculated'; error: string } | null {
-  if (!hasLiveCalcs(meta.live)) return null;
-  return { ok: false, code: 'live_refused', reason: 'calculated', error: liveCalculatedRefused(meta.live?.calculated?.[0]?.name ?? '') };
+/** A stored list of calculated fields this pod cannot read in full (00a): a copy would hold only part of them. */
+function calcRefusal(meta: DatasetMeta): { ok: false; code: 'live_refused'; reason: 'calculatedUnreadable'; error: string } | null {
+  if (!meta.live?.calculatedUnreadable) return null;
+  return { ok: false, code: 'live_refused', reason: 'calculatedUnreadable', error: liveCalculatedRefused(meta.live.calculated?.[0]?.name ?? '') };
 }
 
 /** A base filter the fetched rows cannot take (its column is gone from the warehouse since the last sync). */
 const skippedBase = (column: string): BaseRefused => ({ ok: false, code: 'live_refused', reason: 'baseFilter', error: liveBaseFilterRefused(column) });
+
+/** A calc the fetched rows cannot compute (an input gone from the warehouse since the last sync): no copy. */
+const brokenCalc = (name: string): BaseRefused => ({ ok: false, code: 'live_refused', reason: 'calculated', error: liveCalcBroken(name) });
+
+/**
+ * A copy's Prepare steps: the base filters, then the calcs (part 8 step 04) — base filters name declared
+ * columns only, so they run first, before any calc exists, as they do innermost on Live.
+ */
+const stepsOf = (meta: DatasetMeta, base: FilterStep[]) => [...base, ...calcSteps(meta.live?.calculated ?? [])];
+
+/** Which of a copy's steps the fetched rows could not take: a base filter's column, else a calc's name. */
+const stepRefused = (base: FilterStep[], column: string): BaseRefused => (base.some((b) => b.column === column) ? skippedBase(column) : brokenCalc(column));
 
 /**
  * The Live dataset's column notes onto its copy — display names, descriptions,
@@ -234,10 +246,11 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
     logger.warn(`[live] make a copy of dataset ${id}: the source refused: ${ran.error}`);
     return { ok: false, error: msg.liveCopyReadFailedMessage() };
   }
-  const data = await extractData(ran.result, base.steps);
-  if (!data.ok) return skippedBase(data.column);
+  const steps = stepsOf(meta, base.steps);
+  const data = await extractData(ran.result, steps);
+  if (!data.ok) return stepRefused(base.steps, data.column);
   const input = { name: `${meta.name} (copy)`, sourceKind: meta.sourceKind, origin: meta.origin };
-  const save = () => base.steps.length
+  const save = () => steps.length
     ? saveFilteredCopy(projectId, input, data.data)
     : datasets.saveDataset(projectId, { ...input, columns: ran.result.columns, rows: ran.result.rows });
   // A copy of a dataset with access rules is born with them — never a moment without (docs/row-policy D14).
@@ -288,8 +301,8 @@ export async function setDatasetMode(p: Record<string, unknown>) {
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) return { ok: false, error: ran.error };
-  const data = await extractData(ran.result, base.steps);
-  if (!data.ok) return skippedBase(data.column);
+  const data = await extractData(ran.result, stepsOf(meta, base.steps));
+  if (!data.ok) return stepRefused(base.steps, data.column);
   const ds = await toExtractRecord(projectId, id, data.data);
   if (!ds) return { ok: false, error: 'Could not copy the data' };
   await scanDataset(projectId, ds);

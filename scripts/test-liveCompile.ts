@@ -17,6 +17,9 @@
 //      unknown column, within_km, and every feature live does not do yet.
 //   4. The pure pieces: shaping (−0, sum + count, row width), the probes,
 //      resolvePeriods, the step sequence of evaluateLive.
+//   5. Calculated fields (part 8 step 04): one derived table per calc a statement
+//      needs, golden fragments per dialect, the base filters innermost, every
+//      value bound in text order; Databricks refused; the size cap.
 //
 //   npm run build:ts && node scripts/test-liveCompile.js
 
@@ -36,6 +39,7 @@ const params: typeof import('../src/engine/live/sqlParams') = require('../src/en
 const i18n: typeof import('../src/app/i18n') = require('../src/app/i18n');
 const filterOps: typeof import('../src/data/filterOps') = require('../src/data/filterOps');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+const layers: typeof import('../src/engine/live/calcLayers') = require('../src/engine/live/calcLayers');
 const { duckdbDialect } = require('../src/engine/live/dialects/duckdb') as typeof import('../src/engine/live/dialects/duckdb');
 
 const show = (v: unknown): string => JSON.stringify(v);
@@ -324,7 +328,8 @@ function refusals(): void {
   }
   const all: Parameters<typeof spec.refuse>[0][] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
     'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate', 'unresolvedPeriod',
-    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable', 'distinctByWeekCalendar'];
+    'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable', 'calculatedUnreadable',
+    'calcDialect', 'calcTooLarge', 'columnMissing', 'distinctByWeekCalendar'];
   ok(`every refusal code (${all.length}) renders its catalog key with its parameters`, all.every((c) => t(spec.refuse(c, 'col'))));
 
   // What the extract SKIPS with a warning is skipped with the byte-identical warning.
@@ -398,9 +403,60 @@ async function pure(): Promise<void> {
   ok('bin edges are bound parameters, never text', binned.ok && binned.query.params.some((p) => p.value === 0.1) && !binned.query.sql.includes('0.1'));
 }
 
+// ── Calculated fields: the layers ────────────────────────────────────────────
+
+function calcLayerShapes(): void {
+  const CALCS = [
+    { name: 'Margin', expression: '[amount] - [tier]', type: 'number' as const },
+    { name: 'Band', expression: "IF [amount] > 10 THEN 'big' ELSE 'small' END", type: 'text' as const },
+  ];
+  const cols: LiveColumn[] = [...COLS, { name: 'Margin', type: 'number' }, { name: 'Band', type: 'text' }];
+  const src: LiveSource = { ...TABLE, calcs: CALCS };
+  const ir = adapt(spec.fromVizEncoding({ category: 'Band', values: [{ column: 'Margin', aggregation: 'sum' }] }, [F('region', '=', 'x')], cols, { weekCal: null }));
+  const baseIr = adapt(spec.fromVizEncoding({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, [F('note', '=', 'b')], COLS, { weekCal: null }));
+  for (const id of dialects.DIALECT_IDS) {
+    const d = dialects.dialectFor(id);
+    const r = comp.compileChart(ir, { kind: 'text' }, env(id, src, cols));
+    if (id === 'databricks') {
+      ok('databricks: a statement reading a calc refuses calcDialect, in its sentence', !r.ok && r.code === 'calcDialect' && r.message === i18n.t(r.key, r.params), show(r));
+      ok('databricks NEGATIVE CONTROL: a statement naming no calc answers', comp.compileChart(baseIr, { kind: 'text' }, env(id, src, cols)).ok);
+      continue;
+    }
+    const sql = sqlOf(r);
+    const want = [`${d.ident('amount')} AS ${d.ident('amount')}`, `END AS ${d.ident('Margin')} FROM (`, `, '') AS ${d.ident('Band')} FROM (`,
+      `${d.ident('orders')} AS lv_src) AS lv_src) AS lv_src)`, `lv_src.${d.ident('region')} AS ${d.ident('region')}`];
+    const missing = want.filter((w) => !sql.includes(w));
+    ok(`${id}: a layered statement (${want.length} fragments)`, missing.length === 0, `missing ${show(missing)}\n${sql}`);
+    ok(`${id}: …every value bound, placeholders in text order`, r.ok && placeholdersInOrder(id, r.query) && !sql.includes("'big'")
+      && r.query.params.some((p) => p.value === 'big') && r.query.params.some((p) => p.value === 'x'), r.ok && show(r.query.params));
+    ok(`${id}: …only the columns still needed (no note, no order_date)`, !sql.includes(d.ident('note')) && !sql.includes(d.ident('order_date')));
+    // Base filters (part 1 step 08) sit in the innermost layer, over the source's own columns.
+    const c = { d, b: new params.ParamSink(), columns: cols };
+    const inner = `${['db', 'sch', 'orders'].map((p) => d.ident(p)).join('.')} AS lv_src`;
+    const from = layers.calcFrom(c, src, ['Margin'], inner, baseIr.filters);
+    ok(`${id}: a base filter sits in the innermost WHERE, its column read there only`, typeof from === 'string'
+      && from.includes(`FROM ${inner} WHERE `) && from.indexOf(' WHERE ') < from.indexOf(') AS lv_src') && from.split(d.ident('note')).length === 2, show(from));
+  }
+  ok('NEGATIVE CONTROL: the same IR over the source without calcs never layers', comp.compileChart(baseIr, { kind: 'text' }, env('duckdb', src, cols)).ok
+    && !sqlOf(comp.compileChart(baseIr, { kind: 'text' }, env('duckdb', src, cols))).includes(') AS lv_src')
+    && sqlOf(comp.compileChart(baseIr, { kind: 'text' }, env('duckdb', src, cols))) === sqlOf(comp.compileChart(baseIr, { kind: 'text' }, env('duckdb', TABLE, COLS))));
+  ok('namesCalc ignores case; no calcs, never', layers.namesCalc(['band'], src) && !layers.namesCalc(['region'], src) && !layers.namesCalc(['Band'], TABLE));
+  const metric = (column: string, s2: LiveSource, c2: LiveColumn[]) => comp.compileMetric({ kind: 'metric', measures: [{ column, aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null }, env('duckdb', s2, c2));
+  const args = (first: string) => `min(${[first, ...Array.from({ length: 10 }, (_, i) => (i % 2 ? '[tier]' : '[amount]'))].join(', ')})`;
+  const BIG = [{ name: 'X1', expression: args('[tier]'), type: 'number' as const }, { name: 'X2', expression: args('[X1]'), type: 'number' as const }];
+  const bigCols = [...COLS, { name: 'X1', type: 'number' as const }, { name: 'X2', type: 'number' as const }];
+  ok('over 256 KB of derived tables refuses calcTooLarge', ((r) => !r.ok && r.code === 'calcTooLarge')(metric('X2', { ...TABLE, calcs: BIG }, bigCols)));
+  ok('NEGATIVE CONTROL: one of the two fits', metric('X1', { ...TABLE, calcs: BIG }, bigCols).ok);
+  const broken = [{ name: 'Margin', expression: '[amount] - [gone]', type: 'number' as const }, { name: 'Odd', expression: '[amount]', type: 'text' as const }];
+  ok('a dropped input refuses columnMissing, naming it', ((r) => !r.ok && r.code === 'columnMissing' && r.params.column === 'gone')(metric('Margin', { ...TABLE, calcs: broken }, cols)));
+  ok('a calc whose stored type moved refuses calculated', ((r) => !r.ok && r.code === 'calculated' && r.params.column === 'Odd')(
+    comp.compileMetric({ kind: 'metric', measures: [{ column: 'Odd', aggregation: 'count' }], filters: [], order: 'natural', weekCal: null }, env('duckdb', { ...TABLE, calcs: broken }, [...COLS, { name: 'Margin', type: 'number' }, { name: 'Odd', type: 'text' }]))));
+}
+
 async function main(): Promise<void> {
   goldenShapes();
   unchanged();
+  calcLayerShapes();
   await adversarial();
   refusals();
   await pure();

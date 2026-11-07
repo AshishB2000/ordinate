@@ -1,6 +1,7 @@
 // `model:overview` — the Data model's Datasets tab in one read (semantic layer part 1, step 10): for every
 // dataset, its role, key and whether the key was found to repeat, its description, the filters always applied
-// to it (a copy's Prepare filter steps, a Live dataset's base filters) and its calculated fields, plus what is
+// to it (a copy's Prepare filter steps, a Live dataset's base filters) and its calculated fields (a copy's Prepare
+// steps, a Live dataset's calcs, part 8 step 04), plus what is
 // left to fill in, ranked. METADATA ONLY: the dataset records and the catalog file, never a row, never a warehouse.
 //
 // A caller row access rules restrict on a dataset (REDACT) gets no key count (as `readableTableDoc`), and no
@@ -85,6 +86,7 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
     const description = file.records[`dataset:${d.id}`]?.description ?? '';
     const steps = live ? [] : meta?.steps ?? [];
     const filters = live ? meta?.live?.baseFilters ?? [] : steps.filter(isFilter);
+    const calcs = live ? meta?.live?.calculated ?? [] : steps.flatMap((s) => (s.type === 'calculated_field' ? [s] : []));
     rows.push({ datasetId: d.id, role: doc?.role ?? '', key, repeatedKeys: check ? check.repeatedKeys : null, hasGuide: !!doc?.guide, description });
     return {
       datasetId: d.id,
@@ -93,7 +95,7 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
       keyState: !key ? '' : !check ? 'unchecked' : check.repeatedKeys > 0 ? 'repeats' : 'unique',
       description,
       alwaysApplied: { kind: live ? 'live' : 'prepare', steps: redactBaseFilters(filters, closed) }, // the one REDACT of a filter list (PR 08)
-      calculated: steps.flatMap((s) => (s.type === 'calculated_field' ? [{ name: s.name, formula: closed ? '' : s.expression }] : [])),
+      calculated: calcs.map((s) => ({ name: s.name, formula: closed ? '' : s.expression })),
       ...(closed && { valuesHidden: true as const }),
     };
   }));

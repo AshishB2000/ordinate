@@ -69,6 +69,15 @@
   font-family: var(--font-mono);
   color: var(--text-strong);
 }
+/* A function a Live calculated field can't call: greyed, its reason in the title. */
+.itemOff {
+  color: var(--muted);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+.itemOff:hover {
+  background: none;
+}
 .fnRow {
   display: contents;
 }

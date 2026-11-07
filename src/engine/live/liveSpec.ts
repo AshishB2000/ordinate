@@ -133,7 +133,7 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'distinctByWeekCalendar' | 'semanticPending' | LayerRefusalCode;
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | LayerRefusalCode;
 
 /** What a semantic layer cannot answer (part 7, D16): sentences in ./semantic/semanticRefusals.ts, naming the layer. */
 export type LayerRefusalCode =
@@ -192,8 +192,11 @@ const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   badQuery: { key: 'liveRefusals.this_question_cannot_be_asked_of', text: () => msg.liveBadQuery() },
   columnMissing: { key: 'liveRefusals.is_no_longer_in_the_warehouse', param: 'column', text: (c) => msg.liveColumnMissing(c) },
   baseFilter: { key: 'liveRefusals.the_always_applied_filter_on_can', param: 'column', text: (c) => msg.liveBaseFilterRefused(c) },
-  calculated: { key: 'liveRefusals.this_dataset_s_calculated_fields_can', param: 'column', text: (c) => msg.liveCalculatedRefused(c) },
+  calculated: { key: 'liveRefusals.the_calculated_field_no_longer_runs', param: 'column', text: (c) => msg.liveCalcBroken(c) },
   baseFilterUnreadable: { key: 'liveRefusals.this_dataset_s_always_applied_filters', text: () => msg.liveBaseFiltersUnreadable() },
+  calculatedUnreadable: { key: 'liveRefusals.this_dataset_s_calculated_fields_can', param: 'column', text: (c) => msg.liveCalculatedRefused(c) },
+  calcDialect: { key: 'liveRefusals.calculated_fields_can_t_run_on', text: () => msg.liveCalcDialectRefused() },
+  calcTooLarge: { key: 'liveRefusals.the_calculated_fields_this_question', text: () => msg.liveCalcTooLarge() },
   distinctByWeekCalendar: { key: 'liveRefusals.a_distinct_count_can_t_be', text: () => msg.liveDistinctByWeekCalendar() },
   semanticPending: { key: 'liveRefusals.this_dataset_asks_another_tool_s', text: () => msg.liveSemanticPending() },
 };

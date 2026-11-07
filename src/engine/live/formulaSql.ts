@@ -265,7 +265,8 @@ export class SqlFormulaBuilder implements FormulaBuilder<SqlTerm> {
   }
 }
 
-export type CalcCompiled = { ok: true; sql: string; type: LiveCalcType; refs: string[] };
+/** `type`: as stored (a boolean is stored as text); `result`: what the formula itself gives, for the editor's badge. */
+export type CalcCompiled = { ok: true; sql: string; type: LiveCalcType; result: CalcValueType; refs: string[] };
 
 function refusalOf(e: unknown, tokens: Tok[], src: string): CalcRefusal {
   if (!(e instanceof FormulaError)) throw e; // a bug, said out loud — never a quiet refusal
@@ -283,7 +284,7 @@ export function compileCalcSql(expression: string, ctx: CalcCtx, B: typeof SqlFo
     const b = new B(ctx);
     const { root, refs } = parseTokens(tokens, b);
     const p = b.project(root, 0);
-    return { ok: true, sql: p.sql, type: p.type, refs };
+    return { ok: true, sql: p.sql, type: p.type, result: root.type, refs };
   } catch (e) {
     return refusalOf(e, tokens, expression);
   }
@@ -291,7 +292,7 @@ export function compileCalcSql(expression: string, ctx: CalcCtx, B: typeof SqlFo
 
 /** The save-time verdict, dialect-free: compileCalcSql on the DuckDB dialect with a throwaway sink. */
 export function checkCalc(expression: string, columns: LiveColumn[], earlier: readonly LiveCalc[], later: readonly LiveCalc[] = []):
-  { ok: true; type: LiveCalcType; refs: string[] } | CalcRefusal {
+  { ok: true; type: LiveCalcType; result: CalcValueType; refs: string[] } | CalcRefusal {
   const r = compileCalcSql(expression, { d: dialectFor('duckdb'), b: new ParamSink(), columns, earlier, later });
-  return r.ok ? { ok: true, type: r.type, refs: r.refs } : r;
+  return r.ok ? { ok: true, type: r.type, result: r.result, refs: r.refs } : r;
 }

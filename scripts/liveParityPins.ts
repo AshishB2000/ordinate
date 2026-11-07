@@ -19,6 +19,9 @@
 //   7. A TIMESTAMP-held date: buckets and periods agree; a text comparison does
 //      not (live compares the day, the extract the stored timestamp text).
 //   8. −0: a warehouse can return it, an extract never stores it; live reports 0.
+//   9. A calculated field's TYPE (part 8 step 04): Prepare types a calc column by its values, so a text
+//      formula whose every value reads as a number is a number on a copy; Live types it by its formula
+//      (text). Its figures as text agree; a copy may bin it where Live groups it as text.
 
 import type { FilterStep } from '../src/data/transforms';
 import type { LiveIR } from '../src/engine/live/liveSpec';
@@ -33,6 +36,8 @@ const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const formulaSql: typeof import('../src/engine/live/formulaSql') = require('../src/engine/live/formulaSql');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
 
@@ -153,4 +158,15 @@ export async function run(c: Ctx): Promise<void> {
     ok(`PIN 8 (−0): ${aggregation} over the −0 cells is +0 on live, as the extract stores it`,
       !!z && z.ok && z.kind === 'metric' && Object.is(z.value, 0), show(z));
   }
+
+  // 9. A calc's type: by its values on a copy, by its formula on Live.
+  const typeOn = (expression: string): [string | undefined, string | undefined] => {
+    const out = transforms.applyPipeline({ columns: c.stored.columns, rows: c.stored.rows }, [{ type: 'calculated_field', name: 'P9', expression }]);
+    const v = formulaSql.checkCalc(expression, c.env.columns, []);
+    return [out.columns.at(-1)?.type, v.ok ? v.type : undefined];
+  };
+  const [copyType, liveType] = typeOn("IF [amt] > 10 THEN '1' ELSE '2' END");
+  ok('PIN 9 (calc types): a text calc whose every value reads as a number is a number on a copy (Prepare types by values) and text on Live',
+    copyType === 'number' && liveType === 'text', show([copyType, liveType]));
+  ok('PIN 9 NEGATIVE CONTROL: a text calc with a word in it is text on both', show(typeOn("IF [amt] > 10 THEN '1' ELSE 'two' END")) === '["text","text"]');
 }

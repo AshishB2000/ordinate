@@ -1,21 +1,22 @@
-// A Live dataset's calculated fields (semantic layer part 8, step 00a): keep them, refuse them.
+// A Live dataset's calculated fields: kept, and refused where this pod cannot read them (semantic layer part 8,
+// step 00a, as step 04 leaves it).
 //
-// 00a is the rolling-deploy guard for step 04, which computes them. A pod of this release reads the stored
-// key and, because it cannot compute the fields, REFUSES every question that would answer without them —
-// typed, never a wider figure — and keeps the key through every writer. An older pod would SKIP a filter
-// on a calculated column ("Filter skipped: unknown column") and copy the dataset without them.
+// 00a was the rolling-deploy guard for step 04: a pod that cannot compute the fields refuses every question
+// that would answer without them. Step 04 computes them, so what stays of the guard is the UNREADABLE list: a
+// stored list this pod cannot read in full (a newer release's shape) still refuses every door, typed, because
+// a calc it dropped would read as an unknown column and a filter on it would be skipped.
 //
 // 1. sanitizeLiveCalcs rebuilds `{name, expression, type}` and drops what it cannot read; capped at 50;
 //    idempotent (a re-save never changes a stored field again).
-// 2. The key lives at the TOP LEVEL of the dataset record: `meta.live.calculated` is read from it, never
-//    appended to `meta.columns` (pickers must not offer what this pod cannot compute), and no Live writer
-//    (each rebuilds `raw.live`) erases it or copies it into `live` or `columns`.
-// 3. The guard: every door a question can come through (a chart, a KPI, an answer card with and without
-//    the case-fix lookup, a schema sync, the scheduler's daily sync), "Make a copy" and "Copy the data
-//    instead" refuse typed (`calculated`) and spend no warehouse call, and a copy saves nothing. A stored
-//    list this pod cannot read in full refuses the same. With base filters too (applied since PR 08), the calcs still refuse.
-//    NEGATIVE CONTROL: the same doors answer on a Live dataset with no key, an empty one, a null one, and
-//    on this one once the key is gone.
+// 2. The key lives at the TOP LEVEL of the dataset record: `meta.live.calculated` is read from it and the calcs
+//    are appended to `meta.columns` (step 04), and no Live writer (each rebuilds `raw.live`) erases it or
+//    copies it into `live` or `columns`.
+// 3. A readable list: every door that names no calc answers (step 04, test-liveCalcs covers the rest). An
+//    unreadable one: every door (a chart, a KPI, an answer card with and without the case-fix lookup, a
+//    schema sync, the scheduler's daily sync), "Make a copy" and "Copy the data instead" refuse typed
+//    (`calculated`) and spend no warehouse call, and a copy saves nothing. With base filters too (applied
+//    since PR 08), the same holds. NEGATIVE CONTROL: the same doors answer on a Live dataset with no key, an
+//    empty one, a null one, and on this one once the key is gone.
 //
 //   npm run build:ts && node scripts/test-liveCalcGuard.js
 
@@ -92,8 +93,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plant({ 0: CALCS[0] });
   ok('an object keyed like a list is marked unreadable too', (await meta()).live.calculated === undefined && (await meta()).live.calculatedUnreadable === true);
   await plant(CALCS);
-  ok('meta.live.calculated is read from the top-level key; meta.columns is unchanged', show((await meta()).live.calculated) === show(CALCS)
-    && (await meta()).live.calculatedUnreadable === undefined && show((await meta()).columns) === show(before), show((await meta()).live));
+  ok('meta.live.calculated is read from the top-level key; meta.columns gains the calcs at its end (step 04)', show((await meta()).live.calculated) === show(CALCS)
+    && (await meta()).live.calculatedUnreadable === undefined
+    && show((await meta()).columns) === show([...before, ...CALCS.map((c) => ({ name: c.name, type: c.type }))]), show((await meta()).live));
 
   const stamp = new Date().toISOString();
   const WRITERS: [string, () => Promise<unknown>][] = [
@@ -101,8 +103,10 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['setMaxCacheAge', () => H.liveDataset.setMaxCacheAge(P, L, 60)],
     ['stampSyncAttempt', () => H.liveDataset.stampSyncAttempt(P, L, stamp)],
     ['writeSchemaSync', async () => H.liveDataset.writeSchemaSync(P, L, {
-      columns: (await meta()).columns, profile: { columns: [] }, missingColumns: [], syncedAt: stamp, changed: false,
+      columns: calcs.declaredColumns((await meta()) as { columns: import('../src/data/parse').ParsedColumn[] }), profile: { columns: [] }, missingColumns: [], syncedAt: stamp, changed: false,
     })],
+    // Part 1 step 08's write of the base filters (and their removal) keeps the calculated fields too.
+    ['setBaseFilters', async () => (await H.liveDataset.setBaseFilters(P, L, BASE as never)) && H.liveDataset.setBaseFilters(P, L, [])],
   ];
   const holdsKey = async (): Promise<boolean> => {
     const r = await raw();
@@ -129,14 +133,14 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   ];
   const sentence = refusals.liveCalculatedRefused('Margin');
   ok('the sentence says why and what to do', /calculated fields can't be computed by this server/.test(sentence) && /finish upgrading Ordinate/.test(sentence), sentence);
-  ok('the refusal code renders its catalog key with its column', spec.refuse('calculated', 'Margin').message === sentence && spec.refuse('calculated', 'Margin').params.column === 'Margin');
+  ok('the refusal code renders its catalog key with its column', spec.refuse('calculatedUnreadable', 'Margin').message === sentence && spec.refuse('calculatedUnreadable', 'Margin').params.column === 'Margin');
   const count = async (): Promise<number> => (await H.as(ORG_A, () => H.datasets.listDatasets(P))).length;
 
   /**
    * Every door, the lookup, Make a copy and Copy the data instead refuse typed on L (whatever is planted), and
    * spend nothing. `why` is the code the refusal travels under and `said` its sentence.
    */
-  async function refusesEverywhere(what: string, why = 'calculated', said = sentence): Promise<unknown[]> {
+  async function refusesEverywhere(what: string, why = 'calculatedUnreadable', said = sentence): Promise<unknown[]> {
     H.queryCache.clear();
     const replies: unknown[] = [];
     const calls0 = fake.calls.length;
@@ -165,22 +169,31 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     return replies;
   }
 
-  const replies = await refusesEverywhere('00a guard');
+  /** A readable list (step 04): every door that names no calc answers on L. */
+  async function answersEverywhere(what: string): Promise<void> {
+    H.queryCache.clear();
+    for (const [label, call] of DOORS) {
+      const r = await call(L);
+      ok(`${what}: ${label} answers`, r.ok === true, show(r).slice(0, 240));
+    }
+  }
+  await answersEverywhere('a readable list (step 04)');
   ok('…and the record still holds the calculated fields it was planted with', show((await meta()).live.calculated) === show(CALCS) && (await holdsKey()));
-  ok('…and no refusal carries an expression', !show(replies).includes(CALCS[0].expression) && !show(replies).includes(CALCS[1].expression), show(replies).slice(0, 300));
 
-  // The scheduler's daily sync is a door too: queued, then refused typed, and it writes nothing but its own attempt stamp.
+  // The scheduler's daily sync is a door too: on an unreadable list, queued, then refused typed, and it writes nothing but its own attempt stamp.
+  await plant('everything');
   const rawBefore = await raw();
   const calls0 = fake.calls.length;
   const started = await H.as(ORG_A, () => job.startSchemaSync(P, L, { scheduled: true, now: Date.now() + 3_000 }));
   const synced = (started?.status === 'queued' ? await started.done : undefined) as Reply | undefined;
-  ok('the daily sync is queued, then refused typed (calculated), and spent no warehouse call',
-    started?.status === 'queued' && synced?.ok === false && synced.code === 'live_refused' && synced.reason === 'calculated' && synced.error === sentence && fake.calls.length === calls0, show(synced));
+  ok('the daily sync is queued, then refused typed (calculatedUnreadable), and spent no warehouse call',
+    started?.status === 'queued' && synced?.ok === false && synced.code === 'live_refused' && synced.reason === 'calculatedUnreadable' && synced.error === refusals.liveCalculatedRefused('') && fake.calls.length === calls0, show(synced));
   const rawAfter = await raw();
   const liveOf = (r: Reply) => show({ ...r.live, syncAttemptAt: undefined });
   ok('…it wrote only its attempt stamp: no missingColumns, same columns, same schemaSyncedAt, same calculated fields',
     typeof rawAfter.live.syncAttemptAt === 'string' && rawAfter.live.syncAttemptAt !== rawBefore.live.syncAttemptAt && !('missingColumns' in rawAfter.live)
-    && liveOf(rawAfter) === liveOf(rawBefore) && show(rawAfter.columns) === show(rawBefore.columns) && (await holdsKey()), show(rawAfter.live));
+    && liveOf(rawAfter) === liveOf(rawBefore) && show(rawAfter.columns) === show(rawBefore.columns) && rawAfter.calculated === 'everything', show(rawAfter.live));
+  await plant(CALCS);
 
   // A stored list this pod cannot READ in full is refused too: dropping an entry (or all of them) would answer without it.
   const GOOD = CALCS[0];
@@ -197,19 +210,22 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     await plant(stored);
     const m = (await meta()).live;
     ok(`unreadable: ${label} is marked, not read as none`, m.calculatedUnreadable === true, show(m));
-    await refusesEverywhere(`unreadable (${label})`, 'calculated', refusals.liveCalculatedRefused(Array.isArray(stored) && stored[0] === GOOD ? GOOD.name : ''));
+    await refusesEverywhere(`unreadable (${label})`, 'calculatedUnreadable', refusals.liveCalculatedRefused(Array.isArray(stored) && stored[0] === GOOD ? GOOD.name : ''));
   }
   await plant(many(calcs.MAX_LIVE_CALCS));
   ok('NEGATIVE CONTROL: exactly 50 valid calcs are read in full, not marked unreadable', (await meta()).live.calculated.length === 50 && (await meta()).live.calculatedUnreadable === undefined);
   await plant(CALCS);
   ok('NEGATIVE CONTROL: a readable list is not marked unreadable', (await meta()).live.calculatedUnreadable === undefined);
 
-  // With base filters too: release A refused both, base filters first. PR 08 applies base filters, so with both stored
-  // the calcs still refuse every door, with their own sentence: a dataset with calcs never answers on this pod.
+  // With base filters too (PR 08 applies them, so they no longer refuse): a readable list answers every door,
+  // and an unreadable one refuses with its own code, base filters or not.
   await plantKey('baseFilters', BASE);
-  await refusesEverywhere('base filters and calcs together: the calcs refuse (base filters apply now)');
+  await answersEverywhere('base filters and calcs together');
+  await plant([GOOD, 7]);
+  await refusesEverywhere('base filters and an unreadable list: the list refuses', 'calculatedUnreadable', refusals.liveCalculatedRefused(GOOD.name));
   await plantKey('baseFilters', undefined);
-  await refusesEverywhere('once the base filters are gone, the calcs answer');
+  await refusesEverywhere('once the base filters are gone, the unreadable list still refuses', 'calculatedUnreadable', refusals.liveCalculatedRefused(GOOD.name));
+  await plant(CALCS);
 
   // The one whole-record rebuild (persist, through writeRecordKeepingPolicy) would drop raw.calculated: no Live writer or door reaches it.
   const realWrite = rec.writeRecordKeepingPolicy;
@@ -217,7 +233,7 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   (rec as { writeRecordKeepingPolicy: typeof realWrite }).writeRecordKeepingPolicy = (...a) => { rebuilt += 1; return realWrite(...a); };
   try {
     for (const [, write] of WRITERS) await H.as(ORG_A, write);
-    await refusesEverywhere('through the persist spy');
+    await answersEverywhere('through the persist spy');
     ok('no Live writer or door goes through writeRecordKeepingPolicy (persist), which would drop raw.calculated', rebuilt === 0 && (await holdsKey()), String(rebuilt));
     await H.as(ORG_A, () => H.datasets.updateSteps(P, s.extractId, []));
     ok('NEGATIVE CONTROL: the spy sees a plain extract write', rebuilt > 0, String(rebuilt));

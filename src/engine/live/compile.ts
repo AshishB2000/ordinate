@@ -55,11 +55,13 @@ import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './com
 import { keyOf } from './profileSql';
 import type { Total } from './compileDistinct';
 import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
+import type { LiveCalc } from '../../data/liveCalcs';
+import { calcFrom, namesCalc } from './calcLayers';
 
 export type { CompiledQuery } from './sqlParams';
 
-/** Where a live dataset's rows are: a table (quoted per dialect) or its defining query. */
-export type LiveSource = { kind: 'table'; parts: string[] } | { kind: 'sql'; sql: string };
+/** Where a live dataset's rows are: a table (quoted per dialect) or its defining query; and its calculated fields, in every cache key. */
+export type LiveSource = ({ kind: 'table'; parts: string[] } | { kind: 'sql'; sql: string }) & { calcs?: LiveCalc[] };
 
 export interface CompileEnv {
   dialect: CompileDialectId | SqlDialect;
@@ -103,6 +105,7 @@ export function partsOf(m: LiveMeasure): Part[] {
 interface Prepared {
   c: Ctx;
   from: string;
+  /** The base filters `whereOf` ANDs in: none when they already sit innermost, in the calc layers. */
   base: LiveFilter[];
   /** The IR's measures, every one a column's (a layer metric was refused). */
   ms: LiveColumnMeasure[];
@@ -150,7 +153,8 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
   const d = dialectFor(env.dialect);
   if (!d) return refuse('badQuery');
   const columns = Array.isArray(env.columns) ? env.columns : [];
-  for (const name of namesOf(ir)) {
+  const names = namesOf(ir);
+  for (const name of names) {
     if (badName(name)) return refuse('badIdentifier');
     if (!columnOf(columns, name)) return refuse('unknownColumn', name);
   }
@@ -159,9 +163,14 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
-  const from = fromItem(d, env.source);
+  const c: Ctx = { d, b: new ParamSink(), columns };
+  const inner = fromItem(d, env.source);
+  // A calc the statement reads: one derived table per calc it needs (./calcLayers), the base filters innermost,
+  // before any calc exists. None: today's FROM and WHERE, byte for byte.
+  const layered = !isRefusal(inner) && namesCalc(names, env.source);
+  const from = layered ? calcFrom(c, env.source, names, inner, env.base) : inner;
   if (isRefusal(from)) return from;
-  return { c: { d, b: new ParamSink(), columns }, from, base: env.base ?? [], ms };
+  return { c, from, base: layered ? [] : env.base ?? [], ms };
 }
 
 /** The dataset's base filters, then the question's: every statement's WHERE. */

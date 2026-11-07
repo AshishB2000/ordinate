@@ -47,6 +47,10 @@ const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = requir
   await post('dataset:addStep', { projectId: P, datasetId: X, step: { type: 'calculated_field', name: 'double', expression: '[amt] * 2' } });
   // PR 08's store writer (live:setBaseFilters' own, without the schema sync that handler queues: no warehouse call here).
   ok('setup: a base filter on the Live dataset', !!(await H.as(H.ORG_A, () => liveDataset.setBaseFilters(P, L, [{ type: 'filter', column: 'region', op: '=', value: 'North' }]))));
+  const noCalc = (await ov()).tables.find((t: Reply) => t.datasetId === L);
+  ok('NEGATIVE CONTROL: Live with no calculated field lists none', JSON.stringify(noCalc.calculated) === '[]', JSON.stringify(noCalc));
+  // Part 8 step 04's store writer: a Live dataset's calculated fields.
+  ok('setup: a calculated field on the Live dataset', !!(await H.as(H.ORG_A, () => liveDataset.setLiveCalcs(P, L, [{ name: 'Margin', expression: '[amt] - [qty]', type: 'number' }]))));
   const calls0 = H.fake.calls.length;
   const hx = await hydrates(X, ov);
   const hl = await hydrates(L, ov);
@@ -55,7 +59,8 @@ const { todoOf, TODO_SHOWN }: typeof import('../src/ipc/modelOverview') = requir
   const meta = await H.as(H.ORG_A, () => H.datasets.getDatasetMeta(P, X));
   ok('a copy: its Prepare filter steps as stored', JSON.stringify(row(X).alwaysApplied) === JSON.stringify({ kind: 'prepare', steps: meta!.steps!.filter((s) => s.type === 'filter') }), JSON.stringify(row(X).alwaysApplied));
   ok('a copy: its calculated field with its formula', JSON.stringify(row(X).calculated) === '[{"name":"double","formula":"[amt] * 2"}]', JSON.stringify(row(X).calculated));
-  ok('Live: its base filters, and no calculated field', row(L).alwaysApplied.kind === 'live' && row(L).alwaysApplied.steps[0]?.value === 'North' && JSON.stringify(row(L).calculated) === '[]', JSON.stringify(row(L)));
+  ok('Live: its base filters, and its calculated field with its formula', row(L).alwaysApplied.kind === 'live' && row(L).alwaysApplied.steps[0]?.value === 'North'
+    && JSON.stringify(row(L).calculated) === '[{"name":"Margin","formula":"[amt] - [qty]"}]', JSON.stringify(row(L)));
   ok('an editor reads the values', !('valuesHidden' in row(X)) && !('valuesHidden' in row(L)));
 
   // ── 5. What needs review (part 4) ────────────────────────────────────────

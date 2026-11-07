@@ -25,6 +25,9 @@
 //    as on an identical dataset without it (NEGATIVE CONTROL).
 //    Planted on datasets with NO row rules, every REDACT, SKIP and META channel of 3 is redacted, skipped or
 //    structure-only for east, shown to east before the key, and shown to the editor (NEGATIVE CONTROLS).
+// 8. LIVE CALCULATED FIELDS (semantic layer part 8 step 04): on a Live dataset with Orders' rules, east reads a
+//    calc's name and type on the Schema tab but not its formula, whose literal is a West value; the editor
+//    reads the formula (NEGATIVE CONTROL).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicySafetyNet.js
 
@@ -739,6 +742,26 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('NEGATIVE CONTROL: with the key removed, east is answered through its row lock again (the refusals above were the key\'s)', reopened.body?.ok === true && !H.refused(reopened), reopened.text.slice(0, 160));
     const [mv, sf] = [await W.call('east', 'metric:values', { projectId: P, ids: [recs[orders].metricId] }), await W.call('east', 'story:figures', { projectId: P, blocks: [{ id: 'b1', kind: 'visual', visualId: recs[orders].visualId }] })];
     ok('NEGATIVE CONTROL: …so are the two channels whose refusal carries no reason (a figure, a drawn chart)', mv.body?.[0]?.ok === true && typeof mv.body[0].value === 'number' && sf.body?.blocks?.b1?.chart?.data?.labels?.length > 0, `${mv.text.slice(0, 120)} | ${sf.text.slice(0, 120)}`);
+
+    // ── 8. A Live dataset's calculated fields: names and types only to east (D8) ──
+    const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+    const recordMod: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const flag = { name: 'Flag', expression: `IF [customer] = '${H.W_CANARY}_c' THEN 1 ELSE 0 END`, type: 'number' };
+    const liveId = await W.as('boss', async () => {
+      const rec = await liveRecord.saveLiveRecord(P, { name: 'Orders (Live)', columns: H.COLUMNS, origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' } });
+      const rules = JSON.parse(await (require('../src/app/recordFs') as typeof import('../src/app/recordFs')).readFile(recordMod.datasetFilePath(P, orders), 'utf8')).rowPolicy;
+      await recordMod.serialized(recordMod.datasetFilePath(P, rec!.id), (raw) => { raw.rowPolicy = rules; raw.calculated = [flag]; });
+      return rec!.id;
+    });
+    const [schemaEast, schemaEd] = [await W.call('east', 'dataset:liveSchema', { projectId: P, datasetId: liveId }), await W.call('ed', 'dataset:liveSchema', { projectId: P, datasetId: liveId })];
+    ok('live calcs: east reads the calc\'s name and type on the Schema tab, never its formula (a West value)', schemaEast.body?.ok === true
+      && JSON.stringify(schemaEast.body.calculated.fields) === JSON.stringify([{ name: 'Flag', expression: '', type: 'number', hidden: true }]) && !H.leaks(schemaEast.text), schemaEast.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor reads the formula, West value and all', schemaEd.body?.ok === true && schemaEd.body.calculated.fields[0].expression === flag.expression && H.leaks(schemaEd.text));
+    const [ovLiveEast, ovLiveEd] = [await W.call('east', 'model:overview', { projectId: P }), await W.call('ed', 'model:overview', { projectId: P })];
+    const liveRow = (r: { body?: { tables?: { datasetId: string }[] } }) => r.body?.tables?.find((t) => t.datasetId === liveId) as { calculated?: unknown; valuesHidden?: true } | undefined;
+    ok('live calcs: east reads the calc\'s name in model:overview, never its formula', JSON.stringify(liveRow(ovLiveEast)?.calculated) === '[{"name":"Flag","formula":""}]' && liveRow(ovLiveEast)?.valuesHidden === true && !H.leaks(JSON.stringify(liveRow(ovLiveEast))), JSON.stringify(liveRow(ovLiveEast)));
+    ok('NEGATIVE CONTROL: the editor\'s model:overview carries the formula', JSON.stringify(liveRow(ovLiveEd)?.calculated) === JSON.stringify([{ name: 'Flag', formula: flag.expression }]) && H.leaks(JSON.stringify(liveRow(ovLiveEd))));
+    await W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: liveId, policy: null }); // the project-wide check below needs no other closed dataset
 
     // ── Project-wide: the colour map is withheld when ANY dataset is closed to the caller, and Orders' row rules (and the
     // other ruled datasets') would do that alone. They go first, so that only the key on `plain` can.

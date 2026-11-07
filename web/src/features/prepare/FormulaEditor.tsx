@@ -41,10 +41,14 @@ export interface ColumnFormulaProps {
   /** The primary button's word, and what is said while the save runs. */
   saveLabel?: string;
   savingNote?: string;
+  /** The server's check (`formula:check` by default; a Live calc's `live:checkCalc`). */
+  check?: (projectId: string, datasetId: string, expression: string) => Promise<FormulaCheck>;
+  /** A Live calculated field: functions it can't call are greyed, and there are no preview rows. */
+  live?: boolean;
 }
 
 /** The editor's body and footer, for whichever dialog lays them out; `fill` writes a template into the boxes. */
-export function useColumnFormula({ projectId, datasetId, columns, existing, onSave, onClose, saveLabel = 'Save', savingNote }: ColumnFormulaProps): {
+export function useColumnFormula({ projectId, datasetId, columns, existing, onSave, onClose, saveLabel = 'Save', savingNote, check = checkFormula, live = false }: ColumnFormulaProps): {
   body: ReactNode;
   footer: ReactNode;
   fill: (field: Partial<FormulaField>) => void;
@@ -60,6 +64,9 @@ export function useColumnFormula({ projectId, datasetId, columns, existing, onSa
   const docs = useFunctionDocs();
   const input = useRef<FormulaInputHandle>(null);
   const seq = useRef(0);
+  // A ref, so a caller's inline `check` closure does not re-run the check on every render.
+  const checker = useRef(check);
+  checker.current = check;
 
   // One check per pause in typing; a slower earlier reply never overwrites a newer one.
   useEffect(() => {
@@ -71,7 +78,7 @@ export function useColumnFormula({ projectId, datasetId, columns, existing, onSa
     }
     setChecking(true);
     const t = setTimeout(() => {
-      checkFormula(projectId, datasetId, expr).then(
+      checker.current(projectId, datasetId, expr).then(
         (res) => mine === seq.current && (setLast(res), setChecking(false)),
         () => mine === seq.current && (setLast({ tokens: [], ok: false, error: 'Could not check the formula.', refs: [], unknownRefs: [], resultType: null, sample: { columns: [], rows: [] } }), setChecking(false)),
       );
@@ -105,7 +112,7 @@ export function useColumnFormula({ projectId, datasetId, columns, existing, onSa
     <>
       {existing?.note && <p className={s.note}>{existing.note}</p>}
       <div className={s.body}>
-        <FormulaSide columns={columns} docs={docs.data ?? []} loading={docs.isPending} onInsert={(text, back) => input.current?.insert(text, back)} />
+        <FormulaSide columns={columns} docs={docs.data ?? []} loading={docs.isPending} live={live} onInsert={(text, back) => input.current?.insert(text, back)} />
 
         <div className={s.main}>
           <div className={s.nameRow}>
@@ -162,7 +169,7 @@ export function useColumnFormula({ projectId, datasetId, columns, existing, onSa
                 </tbody>
               </table>
             ) : (
-              last?.ok && <p className={s.sideEmpty}>This dataset has no rows to preview.</p>
+              last?.ok && !live && <p className={s.sideEmpty}>This dataset has no rows to preview.</p>
             )}
             {sample?.note && <p className={s.lodNote}>{sample.note}</p>}
           </div>

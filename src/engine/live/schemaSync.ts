@@ -34,6 +34,7 @@
 import * as datasets from '../../data/datasets';
 import type { ParsedColumn } from '../../data/parse';
 import { isLive, writeSchemaSync } from '../../data/liveDataset';
+import { declaredColumns } from '../../data/liveCalcs';
 import type { LiveColumnProfile, LiveProfile, SampleSkip } from '../../data/liveProfile';
 import { sampleMatrix } from '../../data/liveProfile';
 import type { DeclaredColumn } from '../../data/liveSchema';
@@ -287,8 +288,8 @@ function nextProfile(
   return out;
 }
 
-/** What changed between the stored columns and the warehouse's. */
-function diffColumns(before: ParsedColumn[], after: ParsedColumn[]): { added: string[]; removed: string[]; retyped: string[] } {
+/** What changed between the stored columns and the warehouse's. Exported for test-liveCalcs' negative control. */
+export function diffColumns(before: ParsedColumn[], after: ParsedColumn[]): { added: string[]; removed: string[]; retyped: string[] } {
   const was = new Map(before.map((c) => [c.name, c.type]));
   const now = new Map(after.map((c) => [c.name, c.type]));
   return {
@@ -325,7 +326,9 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
     return { ok: false, code: 'live_failed', error: msg.liveSyncReadFailed() };
   }
   const next = read.columns;
-  const diff = diffColumns(meta.columns, next);
+  // The warehouse's columns as last read: never the calcs `applyLive` appended, which the warehouse never has.
+  const stored = declaredColumns(meta);
+  const diff = diffColumns(stored, next);
 
   // 2. The sample, under the base filters. One that cannot be applied to these columns refuses the
   // sample, typed (the last sync's figures are kept), and the columns still sync.
@@ -336,7 +339,7 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
     : { outcome: { ok: false as const, code: 'live_refused' as const, reason: based.code, error: based.message } };
   if (signal.aborted) return { ok: false, code: 'live_cancelled', error: qmsg.liveCancelled() };
   const now = new Date().toISOString();
-  const profile = nextProfile(next, sampled, meta.live.profile, meta.columns, now);
+  const profile = nextProfile(next, sampled, meta.live.profile, stored, now);
 
   // 3. Columns gone from the warehouse that something still names.
   const gone = [...new Set([...(meta.live.missingColumns ?? []), ...diff.removed])].filter((n) => !next.some((c) => c.name === n));

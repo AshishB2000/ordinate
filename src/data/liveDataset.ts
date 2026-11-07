@@ -26,7 +26,7 @@ import type { LiveProfile } from './liveProfile';
 import { sanitizeMissing, sanitizeProfile, sanitizeStamp } from './liveProfile';
 import { sanitizeBaseFilters } from './liveBaseFilters';
 import type { LiveCalc } from './liveCalcs';
-import { sanitizeLiveCalcs } from './liveCalcs';
+import { calcColumns, sanitizeLiveCalcs } from './liveCalcs';
 import type { FilterStep } from './transforms';
 
 export type DatasetMode = 'extract' | 'live';
@@ -59,7 +59,7 @@ export interface LiveSettings {
   baseFiltersUnreadable?: true;
   /**
    * Calculated fields (./liveCalcs), stored at the record's top level like `baseFilters` and filled by `applyLive`, in
-   * memory only. NOT in `Dataset.columns`: this pod cannot compute them, so it refuses every question instead (liveTarget).
+   * memory only. `applyLive` also appends them to `Dataset.columns` (never to the stored `columns`).
    */
   calculated?: LiveCalc[];
   /** The stored list held something `sanitizeLiveCalcs` dropped, or was no list. In memory only; refused like `calculated` (`hasLiveCalcs`). */
@@ -202,7 +202,7 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
  * one can never put a Live dataset on the scheduler's queue (5 / 15 min or any).
  */
 export function applyLive(
-  target: { mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
+  target: { columns: ParsedColumn[]; mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
   data: { mode?: unknown; live?: unknown; updatedAt?: unknown; baseFilters?: unknown; calculated?: unknown; semantic?: unknown },
 ): void {
   const live = sanitizeLive(data);
@@ -218,6 +218,11 @@ export function applyLive(
   // Same rule: a calc this pod cannot read in full must never read as "no calcs".
   const storedCalcs = data.calculated;
   if (storedCalcs != null && (!Array.isArray(storedCalcs) || storedCalcs.length !== calculated.length)) live.calculatedUnreadable = true;
+  if (calculated.length) {
+    // A new array (the stored one may be the raw record's), and a column named exactly like a calc is replaced: twice == once.
+    const names = new Set(calculated.map((c) => c.name));
+    target.columns = [...target.columns.filter((c) => !names.has(c.name)), ...calcColumns(calculated)];
+  }
   target.mode = 'live';
   target.live = live;
   delete target.autoRefresh;
@@ -287,6 +292,24 @@ export function setBaseFilters(projectId: string, id: string, steps: FilterStep[
     if (live.profile) next.profile = unsampled(live.profile);
     raw.live = next;
     return next;
+  }).then((r) => r || false);
+}
+
+/**
+ * Replace a Live dataset's calculated fields (metadata only, part 8 step 04): ONE serialized write of the
+ * top-level key; `[]` deletes it. No epoch bump: the definitions travel in every statement's cache key
+ * (engine/live/compile `LiveSource.calcs`). The caller has checked them (engine/live/liveCalcCheck). False
+ * when not Live.
+ */
+export function setLiveCalcs(projectId: string, id: string, calcs: LiveCalc[]): Promise<LiveSettings | false> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const live = sanitizeLive(raw);
+    if (!live) return false;
+    const kept = sanitizeLiveCalcs(calcs);
+    if (kept.length) raw.calculated = kept;
+    else delete raw.calculated;
+    return live;
   }).then((r) => r || false);
 }
 

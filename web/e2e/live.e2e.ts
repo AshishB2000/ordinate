@@ -7,7 +7,10 @@
 //      default), Refresh now; the Data tab says what works, what needs a copy.
 //   2. Schema: not profiled yet → Sync schema reads the warehouse → the sample's
 //      figures (240 rows), each column's values. Always applied: region ≠ North,
-//      saved, re-sampled under it (180 rows, no North), then removed again.
+//      saved, re-sampled under it (180 rows, no North), then removed again. Then a
+//      calculated field (semantic layer part 8): added in the formula editor, listed
+//      under "Calculated fields", offered by the builder's category picker and
+//      computed by the warehouse.
 //   3. Settings: a new cache age reaches the server; Refresh now resets the cache.
 //   4. Off for Live: Quality, Prepare and Statistics say why and offer a copy —
 //      without calling the channel they guard (a refusal would be a console error
@@ -97,6 +100,21 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   await page.goto(`/data/${P}/${D}?tab=schema`);
   await ready(page);
 
+  const calcs = page.getByRole('region', { name: 'Calculated fields' });
+  await calcs.getByText('No calculated fields').waitFor();
+  await calcs.getByRole('button', { name: 'Add calculated field' }).click();
+  const calcDialog = page.getByRole('dialog', { name: 'New calculated field' });
+  await calcDialog.getByLabel('New column name').fill('Margin');
+  await calcDialog.getByLabel('Expression').fill('[amount] - 10');
+  await calcDialog.getByText('number', { exact: true }).waitFor();
+  await calcDialog.getByRole('button', { name: 'Add field' }).click();
+  await calcDialog.waitFor({ state: 'detached' });
+  await calcs.locator('[data-calc="Margin"]').getByText('[amount] - 10').waitFor();
+  await ready(page);
+  await screens(page, 'live-calculated-fields');
+  const sum = (await (await post(s, 'visual:data', { projectId: P, datasetId: D, encoding: { category: 'region', values: [{ column: 'Margin', aggregation: 'sum' }] } })).json()) as { ok: boolean; asOf?: { mode: string } };
+  assert.equal(sum.ok && sum.asOf?.mode, 'live', 'the warehouse computes the calculated field');
+
   // ── 3. Settings: the cache age, Refresh now ───────────────────────────────
   await page.getByRole('combobox', { name: 'Cache age of Orders (live)' }).click();
   await page.getByRole('option', { name: '1 h' }).click();
@@ -127,6 +145,9 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   else await page.locator('[data-live-refusal]').getByRole('button', { name: 'Make a copy' }).waitFor();
   assert.equal(await page.getByRole('combobox', { name: /As of/ }).count(), 0, 'no "As of" picker: a Live dataset keeps no snapshots');
   await screens(page, 'live-builder');
+  await page.getByRole('combobox', { name: 'Category', exact: true }).click();
+  await page.getByRole('option', { name: 'Margin' }).waitFor();
+  await page.keyboard.press('Escape');
 
   // ── 6. Make a copy: from the Quality tab, the copy opens on ITS Quality tab ─
   await page.goto(`/data/${P}/${D}?tab=quality`);
