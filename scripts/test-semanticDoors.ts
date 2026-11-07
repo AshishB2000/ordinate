@@ -86,7 +86,12 @@ void (async () => {
   const enc = (d: string, layers: string[], over: Record<string, unknown> = {}) => ({ category: 'region', values: layers.map((x) => (d === SEM ? onSem(x) : onExt(x))), ...over });
   const chart = async (d: string, layers: string[], over: Record<string, unknown> = {}, filters: unknown[] = []): Promise<Reply> =>
     (await post('visual:data', { projectId: P, datasetId: d, encoding: enc(d, layers, over), filters })).value;
+  const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
+  const before = trace.snapshot();
   chartsAgree('visual:data, a text axis, all four metrics', await chart(X, ALL4), await chart(SEM, ALL4), ALL4);
+  const after = trace.snapshot();
+  ok('…a layer\'s question is counted under its backend (live:semantic-fake), never as a DuckDB statement',
+    (after['live:semantic-fake']?.warehouse ?? 0) > (before['live:semantic-fake']?.warehouse ?? 0) && (after['live:duckdb']?.warehouse ?? 0) === (before['live:duckdb']?.warehouse ?? 0), JSON.stringify([before['live:duckdb'], after['live:semantic-fake']]));
   chartsAgree('visual:data, 60 categories ("Other" asked of the layer)', await chart(X, ['avg_amount'], { category: 'many' }), await chart(SEM, ['avg_amount'], { category: 'many' }), ['avg_amount']);
   chartsAgree('visual:data, a month axis under a relative period', await chart(X, ['revenue', 'avg_amount'], { category: 'd', grain: 'month' }, SIX_MONTHS),
     await chart(SEM, ['revenue', 'avg_amount'], { category: 'd', grain: 'month' }, SIX_MONTHS), ['revenue', 'avg_amount']);
