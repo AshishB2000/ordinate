@@ -75,6 +75,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { figureRefusal } from '../analysis/additivity';
 import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
@@ -189,7 +190,8 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }, hidden: ReadonlySet<string> = new Set()): Promise<Built | Failure> {
   const asMeasures = { category: asked.category, values: asked.measures };
-  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)); // part 5's shapes first; extract and Live alike
+  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)) // part 5's shapes first; extract and Live alike
+    ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up (D7)
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   const sayable = loose ? await labelsSaid(projectId, asked.datasetId, asked.filters) : undefined; // value labels a just-written spec may say (part 3 D6)

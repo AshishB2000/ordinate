@@ -31,6 +31,14 @@ export interface Additivity { categories: boolean; time: boolean }
 // A new aggregation is not additive until it is added to this list.
 const ADDS: ReadonlySet<string> = new Set(['sum', 'count', 'none']);
 const ADDING: ReadonlySet<TableCalcKind> = new Set<TableCalcKind>(['running_total', 'pct_of_total', 'moving_sum']);
+// The chart types whose drawn figures (./chartShapes) add a measure up: a waterfall's running level and a Pareto's
+// cumulative share add the first series along the axis; a 100% stack's shares add every series across the split.
+const FIGURE_SUMS: Readonly<Record<string, { name: string; split: boolean }>> = {
+  waterfall: { name: 'a waterfall', split: false },
+  pareto: { name: 'a Pareto chart', split: false },
+  pct_stacked_column: { name: 'a 100% stacked chart', split: true },
+  pct_stacked_bar: { name: 'a 100% stacked chart', split: true },
+};
 
 /** `sum`, `count` and `none` (the raw value) add; every other aggregation, an unknown or missing one included, does not. */
 export function aggregationAdditivity(aggregation: string): Additivity {
@@ -110,8 +118,13 @@ export function calcNeedsAdditive(kind: TableCalcKind, alongTime: boolean): 'cat
 /** The sentence that refuses `kind` of `measure`, or null when the measure adds on the side the calc needs. */
 export function calcRefusal(measure: string, kind: TableCalcKind, a: Additivity, alongTime: boolean): string | null {
   const needs = calcNeedsAdditive(kind, alongTime);
-  if (!needs || a[needs]) return null;
-  return needs === 'time' && a.categories ? calcNotAdditiveOverTime(measure, CALC_KIND_NAMES[kind]) : calcNotAdditive(measure, CALC_KIND_NAMES[kind]);
+  return needs ? notAdditive(measure, CALC_KIND_NAMES[kind], a, needs === 'time') : null;
+}
+
+/** The sentence that refuses adding `measure` up as `what` (along dates or across categories), or null when it adds there. */
+function notAdditive(measure: string, what: string, a: Additivity, alongTime: boolean): string | null {
+  if (a[alongTime ? 'time' : 'categories']) return null;
+  return alongTime && a.categories ? calcNotAdditiveOverTime(measure, what) : calcNotAdditive(measure, what);
 }
 
 /** What a measure is called in a sentence, and whether it adds. A metric that is gone (or is on another dataset) is what is plotted: its stored aggregation. */
@@ -139,34 +152,47 @@ export async function measureAdditivity(projectId: string, datasetId: string, m:
 
 /**
  * The reply itself, or a refusal when a running total, percent of total or moving sum is asked of a measure that
- * does not add. A chart checks the measures it calculates (a split chart calculates `values[0]` only); a pivot
+ * does not add, or the chart is drawn as `chartType` whose figures add it up (a waterfall, a Pareto, a 100% stack).
+ * A chart checks the measures it calculates (a split chart calculates `values[0]` only); a pivot
  * plots the stored column, so each value is judged by its aggregation, across categories. The first refusal wins.
- * A chart with no adding calc, or a reply that is not ok, comes back as the very object, with nothing read.
+ * A chart with no adding calc or figure, or a reply that is not ok, comes back as the very object, with nothing read.
  */
 export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?: { kind?: string } }>(
-  reply: R, projectId: string, datasetId: string, enc: VizEncoding, params?: ParamValues,
+  reply: R, projectId: string, datasetId: string, enc: VizEncoding, params?: ParamValues, chartType?: unknown,
 ): Promise<R | { ok: false; error: string; code: 'calc_not_additive' } | { ok: false; error: string; code: 'live_refused'; reason: 'nonAdditiveCalc' }> {
   // A map plots no calc (applyChartCalcs), so there is no total to get wrong.
   if (!reply.ok || enc.geo) return reply;
   const pivot = enc.pivot ?? null;
   const all = Array.isArray(enc.values) ? enc.values : [];
   const values: VizMeasure[] = pivot ? pivot.values : enc.series ? all.slice(0, 1) : all;
-  for (const m of Array.isArray(values) ? values : []) {
+  const figure = !pivot && typeof chartType === 'string' && Object.hasOwn(FIGURE_SUMS, chartType) ? FIGURE_SUMS[chartType] : null;
+  for (const [i, m] of (Array.isArray(values) ? values : []).entries()) {
     const calc = sanitizeTableCalc(m?.calc);
-    if (!calc || !calcNeedsAdditive(calc.kind, false)) continue;
+    const adds = !!calc && !!calcNeedsAdditive(calc.kind, false);
+    const sums = !!figure && (figure.split || i === 0);
+    if (!adds && !sums) continue;
     const { name, additivity, layer } = await resolveMeasure(projectId, datasetId, m, params, !!pivot);
-    let alongTime = false; // a pivot plots the stored column, never along time
-    if (!pivot) {
-      // The split column's declared type matters only to a measure that adds on one side and not the other.
-      const needsSplitType = additivity.categories !== additivity.time && !!enc.series;
-      alongTime = calcAlong(calc, enc) === 'across'
-        ? reply.category?.kind === 'date'
-        : needsSplitType && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
+    // The split column's declared type matters only to a measure that adds on one side and not the other.
+    const splitIsDate = async (): Promise<boolean> => additivity.categories !== additivity.time && !!enc.series
+      && (await getDatasetMeta(projectId, enc.seriesDatasetId ?? datasetId))?.columns.find((c) => c.name === enc.series)?.type === 'date';
+    let error: string | null = null;
+    if (calc && adds) {
+      // A pivot plots the stored column, never along time.
+      const alongTime = !pivot && (calcAlong(calc, enc) === 'across' ? reply.category?.kind === 'date' : await splitIsDate());
+      error = calcRefusal(name, calc.kind, additivity, alongTime);
     }
-    const error = calcRefusal(name, calc.kind, additivity, alongTime);
+    if (!error && figure && sums) error = notAdditive(name, figure.name, additivity, figure.split ? await splitIsDate() : reply.category?.kind === 'date');
     // A layer's metric says so naming the layer (part 7 b2, D16): its figures are never added up here.
     if (error && layer !== undefined) return { ok: false, error: refuseLayer('nonAdditiveCalc', { dataset: '', layer: layerLabel(layer), metric: name }).message, code: 'live_refused', reason: 'nonAdditiveCalc' };
     if (error) return { ok: false, error, code: 'calc_not_additive' };
   }
   return reply;
+}
+
+/** A door with no chart reply yet (an answer card): the sentence refusing `enc` drawn as `chartType`, or null. Reads metadata, never a row. */
+export async function figureRefusal(projectId: string, datasetId: string, enc: VizEncoding, chartType: unknown): Promise<string | null> {
+  if (typeof chartType !== 'string' || !Object.hasOwn(FIGURE_SUMS, chartType)) return null;
+  const kind = (await getDatasetMeta(projectId, datasetId))?.columns.find((c) => c.name === enc.category)?.type;
+  const r = await refuseNonAdditiveCalcs({ ok: true, category: { kind } }, projectId, datasetId, enc, undefined, chartType);
+  return r.ok ? null : r.error;
 }

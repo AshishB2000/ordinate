@@ -76,7 +76,7 @@ export async function buildStory(
         else geoLevels.add(enc.geo.level);
       }
       const blockFilters = mergeDashboardFilters(b.filters, v.filters);
-      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc), projectId, v.datasetId, blockFilters); // r8:events
+      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc, undefined, v.chartType), projectId, v.datasetId, blockFilters); // r8:events
       if (!reply.ok) { blocks.push({ kind: 'broken', reason: reply.error }); continue; }
       const named = { ...(await labelListsFor(projectId, v.datasetId, enc)), otherBucket: reply.category?.note === OTHER_NOTE }; // value labels, after the policy
       const shaped = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing, named);

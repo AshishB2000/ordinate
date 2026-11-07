@@ -484,7 +484,7 @@ export async function buildDashboard(
           const merged = mergeDashboardFilters(scope.filters, v.filters);
           const bound = resolveFilterParams(merged, scope.params);
           const drawn = await followedEncoding(projectId, v.datasetId, enc, scope.params); // each metric measure as it is defined NOW: what the tile draws
-          const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, drawn, bound.steps, { params: scope.params }), projectId, v.datasetId, drawn, scope.params), projectId, v.datasetId, bound.steps);
+          const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, drawn, bound.steps, { params: scope.params }), projectId, v.datasetId, drawn, scope.params, v.chartType), projectId, v.datasetId, bound.steps);
           const payload = reply.ok
             ? { ...(await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing, { ...lists, otherBucket: reply.category?.note === OTHER_NOTE })), ...noteOf(reply.notes) }
             : { error: reply.error || 'Could not compute this tile.' };
