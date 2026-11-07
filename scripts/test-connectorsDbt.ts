@@ -12,7 +12,7 @@
 //                verbatim beside Ordinate's; FAILED and GraphQL errors as errors; pages to the row cap; columns in any
 //                case; a saved query changed in dbt refused before anything is asked
 //   § abort      the caller's signal stops the polling at once (Cancelled, no further poll) and one cancelQuery goes
-//                out; the timeout too
+//                out; the timeout and a failed poll too
 //   § network    a region, environment or host off the list refused before any request; the token only in the header
 //
 //   npm run build:ts && node scripts/test-connectorsDbt.js
@@ -173,6 +173,11 @@ async function main(): Promise<void> {
   await new Promise((r) => setTimeout(r, 50));
   ok('…the timeout does too, across polls, and cancels', !timedOut.ok && /timed out/i.test(timedOut.error) && Date.now() - t1 < 3_000 && fake.ops('cancelQuery') === 2, show(timedOut));
   fake.waits = 0;
+  fake.hook = (op) => (op === 'query' ? { status: 502, json: { errors: [{ message: 'Bad gateway' }] } } : undefined);
+  const badPoll = await layer.run(ctx, cat);
+  await new Promise((r) => setTimeout(r, 50));
+  fake.hook = null;
+  ok('…a poll that fails (HTTP 502) is an error, and the created query is cancelled too', !badPoll.ok && /502/.test(badPoll.error) && fake.ops('cancelQuery') === 3, show([badPoll, fake.ops('cancelQuery')]));
 
   // ── § network ──
   const n3 = fake.requests.length;

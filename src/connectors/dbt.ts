@@ -208,16 +208,21 @@ async function answer(ctx: ConnectorContext, body: DbtBody, vars: Record<string,
   if (!created.ok) return created;
   const queryId = asString(prop(prop(created.data, 'createQuery'), 'queryId'));
   if (!queryId) return { ok: false, error: 'dbt answered without a query id' };
+  // D18: ask dbt to stop (the SDK's cancelQuery; its answer ignored, a fresh signal).
+  const cancel = (): void => void gql(ctx, DOCS.cancelQuery, { queryId }, Date.now() + CANCEL_MS, null).catch(() => undefined);
   const stopped = (): ConnectorError => {
-    // D18: stop polling, and ask dbt to stop (the SDK's cancelQuery; its answer ignored, a fresh signal).
-    void gql(ctx, DOCS.cancelQuery, { queryId }, Date.now() + CANCEL_MS, null).catch(() => undefined);
+    cancel();
     return { ok: false, error: ctx.signal?.aborted ? CANCELLED : timeoutError(budgetMs(ctx)).message };
   };
   const rows: Cell[][] = [];
   let wait = 250;
   for (let pageNum = 1; ;) {
     const r = await gql(ctx, DOCS.query, { queryId, pageNum }, deadline);
-    if (!r.ok) return ctx.signal?.aborted || Date.now() >= deadline ? stopped() : r;
+    if (!r.ok) {
+      if (ctx.signal?.aborted || Date.now() >= deadline) return stopped();
+      cancel(); // a failed poll leaves the query running at dbt
+      return r;
+    }
     const q = prop(r.data, 'query');
     const status = asString(prop(q, 'status'));
     if (status === 'FAILED') return { ok: false, error: safeError(`dbt: ${asString(prop(q, 'error')) || 'the query failed'}`, ctx.secrets) };
