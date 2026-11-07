@@ -57,6 +57,7 @@ import { loadPlanContext } from '../analysis/analysisPlan';
 import type { AnalysisPlan, PlannedMetric, PlannedVisual } from '../analysis/analysisPlan';
 import { buildStarterPlan } from '../analysis/starterPlan';
 import { logger } from './logger';
+import { seedSampleGuidance } from './sampleGuidance';
 
 export const SAMPLE_DATASET_NAME = 'Retail orders';
 export const SAMPLE_DASHBOARD_NAME = 'Retail overview';
@@ -290,6 +291,7 @@ export async function seedSampleProject(opts: { again?: boolean } = {}): Promise
   if (!planDs) return { seeded: true, projectId: project.id };
 
   await seedSampleMetrics(project.id, ds.id);
+  await seedSampleGuidance(project.id, ds.id);
 
   const built = await planBuild.buildPlan(project.id, sampleDashboardPlan(planDs));
   let analysisId: string | undefined;

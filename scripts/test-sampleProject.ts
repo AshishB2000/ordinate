@@ -35,6 +35,8 @@ const execConfig: typeof import('../src/app/execConfig') = require('../src/app/e
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const ipcDashboards: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
+const instructions: typeof import('../src/app/instructions') = require('../src/app/instructions');
+const verifiedState: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
 
 /** Every file under a directory, recursively. */
 function walk(dir: string, out: string[] = []): string[] {
@@ -155,6 +157,21 @@ async function main(): Promise<void> {
     visualCards.filter((c) => c !== mapCard).every((c) => c.layout.w === dashboards.GRID_COLS / 2),
     JSON.stringify(visualCards.map((c) => c.layout)));
 
+  // ── The Assistant's guidance: instructions and verified questions (semantic part 3 D13) ──
+  const instr = await instructions.listInstructions(pid);
+  ok('the sample ships instructions', instr.length === 3, JSON.stringify(instr.map((i) => i.text)));
+  const states = await verifiedState.verifiedStates(pid);
+  ok('the sample ships verified questions, and every one runs', states.length === 4 && states.every((s) => s.problem === null) && states[0].q.question === 'Revenue by region',
+    JSON.stringify(states.map((s) => [s.q.question, s.problem])));
+  const named = (q: string) => states.find((s) => s.q.question === q)?.q;
+  ok('…"Top 5 states by revenue" keeps its top 5', named('Top 5 states by revenue')?.spec.top === 5, JSON.stringify(named('Top 5 states by revenue')?.spec));
+  const monthly = named('Revenue by month last year')?.spec;
+  ok('…"Revenue by month last year" keeps a relative period, never dates',
+    !!monthly && monthly.grain === 'month' && JSON.stringify(monthly.filters) === JSON.stringify([{ column: 'order_date', period: 'last_year' }]), JSON.stringify(monthly));
+  const words = [...instr.map((i) => i.text), ...states.flatMap((s) => [s.q.question, ...s.q.phrasings])].join(' | ');
+  ok('…digit-free but for the 5 of one question', !/\d/.test(words.replace('Top 5 ', '')), words);
+  const firstSet = new Set(states.map((s) => s.q.id));
+
   // ── Starred, so Home is not empty ────────────────────────────────────────
   ok('the dashboard is pinned to Home',
     execConfig.publicConfig().starred.includes('analysis:' + anList[0].id),
@@ -200,6 +217,14 @@ async function main(): Promise<void> {
 
   const third = await sample.seedSampleProject();
   ok('…and it is not re-seeded on the next launch', third.seeded === false, JSON.stringify(third));
+
+  // `sample:seed` (`again`) into an org's new project: its own set, on its own dataset.
+  const again = await sample.seedSampleProject({ again: true });
+  const pid2 = String(again.projectId);
+  const theirs = await verifiedState.verifiedStates(pid2);
+  ok('a second seed into a new project makes its own set',
+    pid2 !== pid && (await instructions.listInstructions(pid2)).length === 3 && theirs.length === 4
+    && theirs.every((s) => !firstSet.has(s.q.id) && s.q.projectId === pid2 && s.problem === null), JSON.stringify(theirs.map((s) => [s.q.question, s.problem])));
 
   try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
 }

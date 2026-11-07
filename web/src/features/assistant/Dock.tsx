@@ -159,9 +159,10 @@ export default function DockPanel() {
     // Pointed at one thing (a Home suggestion): pinned as `@` pins, if the dock is in its project.
     const on = about && pid && about.projectId === pid ? about.context : undefined;
     if (on && pid) setPin({ projectId: pid, context: on });
-    if (asker.current.usable) void asker.current.send(q, on);
+    const asking = asker.current.usable; // the composer turns disabled while it is asked, and a browser drops focus from it
+    if (asking) void asker.current.send(q, on);
     else setText(q);
-    (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
+    (input.current && !input.current.disabled && !asking ? input.current : panel.current)?.focus();
   }, [handed, decided, pid]);
 
   // A verified answer handed over from Home's chips: run on the conversation shown, once the dock knows it.
