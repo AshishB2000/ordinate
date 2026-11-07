@@ -98,6 +98,8 @@ const AGG: Readonly<Record<string, Aggregation>> = { sum: 'sum', count: 'count',
 const NEEDS_NUMBER: ReadonlySet<string> = new Set(NUMBER_AGGREGATIONS);
 const FORMULA_FORMAT: MetricFormat = { kind: 'number', decimals: 2, compact: false };
 const MAX_FORMULA = 2_000;
+/** How deep ratio and derived metrics may nest: past it no person wrote it, and the translation's stack stays safe. */
+const MAX_CHAIN = 100;
 
 interface Dim { column: ParsedColumn | null; time: boolean }
 interface Model { name: string; ds?: DbtDataset; entity?: string; defaultTime?: string; dims: Map<string, Dim> }
@@ -247,7 +249,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (!ds) return { skip: 'no_dataset', model: model.name };
     const at = { model: model.name };
     if (own(inp, 'fill_nulls_with') !== undefined && own(inp, 'fill_nulls_with') !== null) return { skip: 'fill_nulls', ...at };
-    const agg = AGG[String(own(measure, 'agg'))];
+    const agg = own(AGG, String(own(measure, 'agg'))) as Aggregation | undefined;
     if (!agg || (own(measure, 'agg_params') !== undefined && own(measure, 'agg_params') !== null)) return { skip: 'unknown_aggregation', ...at };
     const expr = own(measure, 'expr');
     const column = columnOf(ds.columns, typeof expr === 'string' ? expr : String(own(measure, 'name')));
@@ -312,7 +314,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     const hit = done.get(n);
     if (hit) return hit;
     const m = raw.get(n);
-    if (!m || visiting.has(n)) return { skip: 'unreadable' };
+    if (!m || visiting.has(n) || visiting.size >= MAX_CHAIN) return { skip: 'unreadable' };
     visiting.add(n);
     const tp = own(m, 'type_params');
     let r: Result;

@@ -40,7 +40,8 @@ export interface CumulativeCtx {
   calendar: CalendarPrefs;
 }
 
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+/** Two copies of a window or a grain say the same, in what is read of them (a window's count and unit): never a whole nested value. */
+const sameRead = (a: unknown, b: unknown): boolean => (isObj(a) && isObj(b) ? Object.is(own(a, 'count'), own(b, 'count')) && Object.is(own(a, 'granularity'), own(b, 'granularity')) : Object.is(a, b));
 const UNIT_DAYS: Readonly<Record<string, number>> = { day: 1, days: 1, week: 7, weeks: 7 }; // singular or plural: dbt's docs do not say which the manifest writes
 const MAX_DAYS = 366;
 const TO_DATE: ReadonlySet<string> = new Set(['week', 'month', 'quarter', 'year']);
@@ -55,7 +56,7 @@ export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { win
   const both = (k: string): { v: unknown; clash: boolean } => {
     const inner = own(ctp, k);
     const top = own(typeParams, k);
-    return { v: given(inner) ? inner : top, clash: given(inner) && given(top) && !sameJson(inner, top) };
+    return { v: given(inner) ? inner : top, clash: given(inner) && given(top) && !sameRead(inner, top) };
   };
   const w = both('window');
   const g = both('grain_to_date');
@@ -64,7 +65,7 @@ export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { win
   if (given(w.v)) {
     const count = own(w.v, 'count');
     if (!Number.isInteger(count) || (count as number) < 1) return { skip: 'cumulative' };
-    const unit = UNIT_DAYS[String(own(w.v, 'granularity'))];
+    const unit = own(UNIT_DAYS, String(own(w.v, 'granularity'))) as number | undefined;
     if (!unit || (count as number) * unit > MAX_DAYS) return { skip: 'window_unit' };
     window = { last: (count as number) * unit, unit: 'day' };
   } else if (given(g.v)) {

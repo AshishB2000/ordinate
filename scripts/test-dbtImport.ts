@@ -32,6 +32,7 @@ const { isDeepStrictEqual }: typeof import('util') = require('util');
 const { translateDbt: translate }: typeof import('../src/app/dbtImport') = require('../src/app/dbtImport');
 const { parseDbtWhere }: typeof import('../src/app/dbtFilter') = require('../src/app/dbtFilter');
 const { readDbtUpload }: typeof import('../src/app/dbtRead') = require('../src/app/dbtRead');
+const { cumulativeWindow }: typeof import('../src/app/dbtCumulative') = require('../src/app/dbtCumulative');
 const { stableStringify }: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
 const { isValidId }: typeof import('../src/app/ids') = require('../src/app/ids');
 const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
@@ -81,6 +82,21 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   for (const [name, why, because] of SKIPS) {
     ok(`${name}: skipped, ${why}${because ? `, because of ${because}` : ''}`, skipped.some((s) => s.name === name && s.kind === 'metric' && s.reason === why && s.because === because) && !m(name), show(skipped.filter((s) => s.name === name)));
   }
+  // Hostile manifests: an agg or a window unit named like an Object.prototype key, a derived chain past 100, a window nested deep.
+  const aggOf = (agg: string) => translateDbt({ semantic_models: [{ name: 'orders', entities: [{ name: 'order', type: 'primary', expr: 'id' }], dimensions: [], measures: [{ name: 'm', agg, expr: 'amount' }] }], metrics: [{ name: 'x', type: 'simple', type_params: { measure: 'm' } }] }, DATASETS, {});
+  ok('an agg named constructor, __proto__, toString or hasOwnProperty is unknown_aggregation, never a sum', ['constructor', '__proto__', 'toString', 'hasOwnProperty'].every((a) => !aggOf(a).model.metrics.length && aggOf(a).skipped.some((s) => s.dbt === 'x' && s.reason === 'unknown_aggregation')));
+  ok('NEGATIVE CONTROL: agg sum is a sum', (aggOf('sum').model.metrics[0]?.definition as { aggregation?: string })?.aggregation === 'sum');
+  ok('a window granularity named constructor is window_unit', isDeepStrictEqual(cumulativeWindow({ cumulative_type_params: { window: { count: 2, granularity: 'constructor' }, period_agg: 'last' } }, DEFAULT_CALENDAR), { skip: 'window_unit' }));
+  const deepChain = copy();
+  deepChain.metrics = [{ name: 'd0', type: 'simple', type_params: { measure: 'order_total' } }, ...Array.from({ length: 1_499 }, (_, i) => ({ name: `d${i + 1}`, type: 'derived', type_params: { expr: `d${i} + 1`, metrics: [`d${i}`] } }))].reverse();
+  let chained: ReturnType<typeof translateDbt> | string;
+  try { chained = translateDbt(deepChain, DATASETS, {}); } catch (e) { chained = String(e); }
+  ok('a derived chain 1,500 deep: past 100 it is unreadable, never a crash', typeof chained !== 'string' && !metricNamed(chained.model, 'd1499') && chained.skipped.some((s) => s.dbt === 'd1499') && !!metricNamed(chained.model, 'd5'), typeof chained === 'string' ? chained : show(chained.skipped.slice(0, 3)));
+  let deep: unknown = 0;
+  for (let i = 0; i < 200_000; i++) deep = [deep];
+  let nested: string;
+  try { nested = JSON.stringify(cumulativeWindow({ window: deep, cumulative_type_params: { window: deep, period_agg: 'last' } }, DEFAULT_CALENDAR)); } catch (e) { nested = String(e); }
+  ok('a window nested 200,000 deep: a skip, never a crash', nested === '{"skip":"cumulative"}', nested);
   ok('every metric in the manifest is either translated or named in skipped', allMetricNames(MANIFEST).every((n) => !!m(n) || skipped.some((s) => s.name === n && s.kind === 'metric')));
   ok('… and never both', allMetricNames(MANIFEST).every((n) => !(m(n) && skipped.some((s) => s.name === n))));
   ok('fifteen translated, ten skipped', model.metrics.length === 15 && skipped.filter((s) => s.kind === 'metric').length === 10, show([model.metrics.map((x) => x.name), skipped]));
