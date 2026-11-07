@@ -22,3 +22,13 @@ export function drillLastLevel(column: string, name: string): string {
 export function drillNoHierarchy(column: string): string {
   return t('drillMessages.is_not_a_level_of_a', { column });
 }
+
+/** A chart whose measures are separate questions under different filters (metricMeasures' plan): no one row set is behind a mark. */
+export function drillSeparateFilters(): string {
+  return t('drillMessages.this_chart_s_measures_are_filtered');
+}
+
+/** A snapshot measure's figure is one day's rows only, chosen per bucket: no one row set the panel lists is behind a mark. */
+export function drillSnapshotRows(): string {
+  return t('drillMessages.this_chart_shows_a_snapshot_one');
+}

@@ -165,6 +165,26 @@ void (async () => {
   ok('a real figure, not an empty one', typeof (await kpi(stock, [])) === 'number' && typeof (await kpi(stock, SPRING)) === 'number');
   ok('NEGATIVE CONTROL: not the sum over every date', (await kpi(stock, [])) !== (await kpi(units, [])));
   ok('NEGATIVE CONTROL: earliest ≠ latest', (await kpi(opening, [])) !== (await kpi(stock, [])));
+
+  // The same rows with every third day spelled "Mar 5, 2024" (parse.looksLikeDate declares it a date, and a date axis
+  // reads it): the day filter keeps the rows the axis put on that day, so every figure is the canonical table's.
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const LONG = ROWS.map((row, i) => { const c = civilFromDays(periodDay(row[0]) ?? 0); return i % 3 === 0 && row[0] ? [`${MON[c.m - 1]} ${c.d}, ${c.y}`, ...row.slice(1)] : row; });
+  const dsLong = (await datasets.saveDataset(pid, { name: 'Stock, long days', sourceKind: 'csv', columns: COLS, rows: LONG } as Any))!.id;
+  ok('long fixture: the latest day carries the long spelling', LONG.some((row) => /^[A-Z][a-z]{2} \d/.test(String(row[0])) && parseDateCell(row[0] as string) && Object.is(periodDay(ROWS[LONG.indexOf(row)][0]), LAST)));
+  const CTRL = [{ type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2023-03-01', to: '2023-06-30' }, fromControl: true }] as FilterStep[];
+  for (const m of [stock, opening, lines, level, eastStock, units]) {
+    const res = await save({ name: `${m.name} (long)`, datasetId: dsLong, definition: m.definition, filters: m.filters });
+    for (const [name, scope] of [['no scope', []], ['East and West in spring', SPRING], ['a date control', CTRL], ['nothing in scope', NONE]] as Array<[string, FilterStep[]]>) {
+      const got = await kpi(res.metric, scope);
+      const t = transforms.applyPipeline({ columns: COLS, rows: LONG }, m.filters.concat(scope));
+      const want = 'snapshot' in m.definition ? computeMetric(t.columns, snap.snapshotRows(t.columns, t.rows, snapOf(m)), m.definition as Any) : computeMetric(t.columns, t.rows, m.definition as Any);
+      ok(`long days: kpi ${m.name}, ${name}: door = reference = the canonical table's (Object.is)`, Object.is(got, want) && Object.is(got, await kpi(m, scope)), show([got, want, await kpi(m, scope)]));
+    }
+  }
+  const longBy = (category: string) => handlers.get('visual:data')!(null, { projectId: pid, datasetId: dsLong, encoding: { category, values: [{ column: 'units', aggregation: 'sum' }] }, filters: CTRL });
+  const canonBy = (category: string) => handlers.get('visual:data')!(null, { projectId: pid, datasetId: ds, encoding: { category, values: [{ column: 'units', aggregation: 'sum' }] }, filters: CTRL });
+  ok('long days: a date control keeps the long-spelled rows (chart by region = the canonical table\'s)', isDeepStrictEqual((await longBy('region')).data, (await canonBy('region')).data), show([await longBy('region'), await canonBy('region')]));
   ok('both spellings on the latest day count', (await kpi(lines, [])) === ROWS.filter((row) => periodDay(row[0]) === LAST && typeof row[3] === 'number').length);
   ok('a formula over it: [Stock] * 2', Object.is(await kpi(double, []), 2 * (await kpi(stock, []))!));
   ok('the editor\'s preview of an unsaved snapshot is its figure', (await ipcMetrics.previewDefinition(pid, ds, { column: 'units', aggregation: 'sum', snapshot: S }, [], { kind: 'number' })).value === (await kpi(stock, [])));
@@ -221,6 +241,13 @@ void (async () => {
   const other = await chart({ category: 'counted', grain: 'month', values: [M(stock)] });
   ok('a chart by another date is refused, naming both', other.ok === false && other.error === msg.snapshotOtherDate('Stock', 'day', 'counted'), show(other));
   ok('NEGATIVE CONTROL: the same chart of a plain metric draws', (await chart({ category: 'counted', grain: 'month', values: [M(units)] })).ok === true);
+  // A related table's date of the same name is another date, not the snapshot's own.
+  const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+  const regions = (await datasets.saveDataset(pid, { name: 'Regions', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'day', type: 'date' }], rows: REGIONS.map((r, i) => [r, isoFromDays(START + i)]) } as Any))!.id;
+  await rels.saveRelationship(pid, { from: { datasetId: ds, column: 'region' }, to: { datasetId: regions, column: 'region' }, cardinality: 'many_to_one' } as Any);
+  const joined = await chart({ category: 'day', categoryDatasetId: regions, grain: 'month', values: [M(stock)] });
+  ok('a chart by a related table\'s same-named date is refused, naming it', joined.ok === false && joined.error === msg.snapshotOtherDate('Stock', 'day', 'Regions.day'), show(joined));
+  ok('NEGATIVE CONTROL: …a plain metric draws by it', (await chart({ category: 'day', categoryDatasetId: regions, grain: 'month', values: [M(units)] })).ok === true);
   const piv = await chart({ category: 'region', values: [M(stock)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(stock)] } });
   ok('a pivot is refused', piv.ok === false && piv.error === msg.snapshotInPivot('Stock'), show(piv));
   ok('NEGATIVE CONTROL: the same pivot of a plain metric draws', (await chart({ category: 'region', values: [M(units)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(units)] } })).ok === true);

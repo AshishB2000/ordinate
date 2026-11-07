@@ -10,6 +10,7 @@ export function kpiMeasure(aggregation: string, column: string): string {
     case 'count': return t('driverPointMessages.count_of', { column });
     case 'min': return t('publishMessages.minimum_of', { column });
     case 'max': return t('publishMessages.maximum_of', { column });
+    case 'countd': return t('publishMessages.distinct_count_of', { column });
     default: return column;
   }
 }

@@ -28,6 +28,7 @@ import type { Metric } from '../analysis/metrics';
 import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
+import { termWords } from '../analysis/terms';
 import { formatNumber } from '../app/format';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
 import { periodWindow, rowStatus, periodChange, rollupGroups, STATUS_WORDS } from '../analysis/scorecardModel';
@@ -444,7 +445,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
   const { status, attainment } = rowStatus(value, target, def ? def.thresholds : undefined, m.direction);
   return {
     ok: true,
-    metric: { id: m.id, name: m.name, datasetId: m.datasetId, definition: m.definition, definitionText: describeDefinition(m, undefined, await baseName(projectId, m.definition)), format: m.format, direction: m.direction },
+    metric: { id: m.id, name: m.name, datasetId: m.datasetId, definition: m.definition, definitionText: describeDefinition(m, await termWords(projectId, m.filters), await baseName(projectId, m.definition)), format: m.format, direction: m.direction },
     window: current ? { ...current, offset: off } : null,
     value, display: formatMetricValue(value, m.format),
     target, targetDisplay: target === null ? '' : formatMetricValue(target, m.format),
