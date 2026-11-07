@@ -584,6 +584,7 @@
   "semanticMessages.small_multiples_can_t_be_drawn": "No se pueden dibujar múltiplos pequeños a partir de {dataset}: {layer} calcula sus métricas y devuelve totales, no filas.",
   "semanticMessages.this_question_needs_the_latest_date": "Esta pregunta necesita la fecha más reciente o los valores almacenados de {dataset}, que {layer} no puede consultar.",
   "semanticMessages.your_access_to_is_limited_to": "Su acceso a {dataset} está limitado a algunas filas y {layer} no puede aplicar ese límite con exactitud, así que no se muestra ninguna cifra.",
+  "sourceTableMessages.only_a_dataset_built_from_a": "Solo un conjunto de datos creado a partir de una conexión nombra sus tablas de origen.",
   "sourceTableMessages.that_connection_is_gone": "Esa conexión ya no existe.",
   "sourceTableMessages.this_connection_already_documents_2_000": "Esta conexión ya documenta 2000 tablas.",
   "sourceTableMessages.this_connection_s_tables_were_read": "Las tablas de esta conexión se leyeron 60 veces en la última hora. Vuelve a intentarlo en {minutes} min.",

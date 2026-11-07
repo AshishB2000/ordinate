@@ -267,6 +267,8 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}`, editor: { role: 'combobox', name: 'Key' }, open: modelOverview },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=fields`, open: modelFields },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=guide`, editor: { role: 'button', name: 'Write a guide' } },
+  // A connection dataset's Guide shows its source tables' notes to an editor; a viewer's web never asks for them.
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.liveId}&panel=guide`, editor: { role: 'region', name: 'From the source table' } },
   // Its other tabs: New metric and New term are the header's, an editor's on every tab; New relationship is the tab's own.
   // Source tables are an editor's: a viewer's address lands on Datasets, with no such tab.
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=sources`, editor: { role: 'tab', name: 'Source tables' } },

@@ -21,6 +21,7 @@ import { useTableDoc } from '../../data/tableApi';
 import { useRoles } from '../../projects/api';
 import type { ModelTable } from '../api';
 import { FieldsPanel } from './FieldsPanel';
+import { SourceNotes } from './SourceNotes';
 import { OverviewPanel } from './OverviewPanel';
 import m from '../Model.module.css';
 
@@ -99,6 +100,7 @@ function Body({ projectId, dataset, table }: { projectId: string; dataset: Datas
           <TableGuide {...at} />
           {doc.data.updatedAt && <p className={m.stamp}>{`Updated by ${doc.data.updatedBy || 'someone'} · ${ago(doc.data.updatedAt)}`}</p>}
         </div>
+        <SourceNotes projectId={projectId} datasetId={dataset.id} />
       </TabPanel>
       <TabPanel value="lineage">
         <LineageView projectId={projectId} id={dataset.id} />

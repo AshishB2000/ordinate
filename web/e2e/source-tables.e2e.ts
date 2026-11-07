@@ -10,6 +10,8 @@
 //      same doc (created once, by its exact name).
 //   3. No warehouse on view: reloading and walking every tab of the panel asks the warehouse nothing. The
 //      designed states (no source tables, a refused read, a warehouse a read can start) and the phone.
+//   4. Lineage and the dataset Guide: the doc's Lineage tab draws the Live view built from the table; that
+//      dataset's Guide shows the doc's notes under "From the source table", read-only.
 //   Both themes of each state are written to __screens__/model-sources*.png.
 //
 //   npm --prefix web run e2e -- source-tables
@@ -188,4 +190,26 @@ e2e('source tables: no warehouse on view, and the designed states', async (s) =>
   await phoneFits(page, misfits, 'the Source tables panel');
   await screens(page, 'model-sources-phone');
   assert.deepEqual(misfits, []);
+});
+
+e2e('source tables: lineage and the dataset guide', async (s) => {
+  const { page } = s;
+  const { P, C } = ids(s);
+  assert.ok(docId, 'test 1 started the notes');
+  const liveId = s.server.sample.live?.datasetId;
+  assert.ok(liveId, 'the server was seeded with the Live dataset');
+  await page.goto(`/model/${P}?tab=sources&conn=${C}&doc=${docId}&panel=lineage`);
+  await ready(page);
+  const graph = page.getByRole('group', { name: 'Lineage graph' });
+  await graph.locator('text', { hasText: 'Orders (live)' }).first().waitFor();
+  await graph.locator('text', { hasText: TABLE }).first().waitFor();
+  await screens(page, 'model-sources-lineage');
+
+  await page.goto(`/model/${P}?dataset=${liveId}&panel=guide`);
+  await ready(page);
+  const notes = page.getByRole('region', { name: 'From the source table' });
+  await notes.getByRole('heading', { name: 'Always filter on day' }).waitFor();
+  await notes.getByText('Owner Data platform').waitFor();
+  assert.equal(await notes.getByRole('link', { name: /Open in Source tables/ }).getAttribute('href'), `/model/${P}?tab=sources&conn=${C}&doc=${docId}`);
+  await screens(page, 'model-dataset-source-notes');
 });
