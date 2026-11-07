@@ -13,7 +13,7 @@ import * as datasets from '../data/datasets';
 import { exploreSuggest } from '../analysis/exploreSuggest';
 // The catalog's "This dataset no longer exists." — the same sentence for any dataset.
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
-import { readTopic } from '../analysis/topics';
+import { readTopic, topicForReaders } from '../analysis/topics';
 import { hiddenColumnsFor } from '../data/rowAccess';
 
 export function register(): void {
@@ -24,7 +24,7 @@ export function register(): void {
     const all = { ...exploreSuggest(meta.columns), ...(hidden.length && { hidden }) };
     // A topic narrows the SUGGESTIONS to its fields of this dataset; the field lists stay whole (step 08, D15).
     const t = topicId ? await readTopic(String(projectId), topicId) : null;
-    const fields = t?.rec.datasets.find((d) => d.id === meta.id)?.fields;
+    const fields = t && (await topicForReaders(String(projectId), t.rec)).topic.datasets.find((d) => d.id === meta.id)?.fields; // as readers get it: gone fields left out
     if (!fields) return { ok: true, ...all };
     return { ok: true, ...all, suggestions: exploreSuggest(meta.columns.filter((c) => fields.includes(c.name))).suggestions };
   });

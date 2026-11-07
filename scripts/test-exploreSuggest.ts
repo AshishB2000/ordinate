@@ -159,6 +159,12 @@ const cols = (spec: string): Col[] => spec.split(',').map((x) => {
   ok('an unknown topic id: the reply without a topic', show(gone.value) === show(extract.value));
   const unlisted = await post('topic:save', { projectId: P, topic: { name: 'Other', datasets: [{ id: L }], metricIds: [], termIds: [] } });
   ok('a dataset the topic does not list: the reply without a topic', show((await post('explore:suggest', { projectId: P, datasetId: X, topicId: unlisted.value.topic.id })).value) === show(extract.value));
+  // A topic as readers get it (topicForReaders): fields that have all gone read as the whole dataset, never as no suggestions.
+  const Y = (await H.as(ORG_A, () => H.datasets.saveDataset(P, { name: 'Renamed', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['a', 1], ['b', 2]] })))!.id;
+  const stale = await post('topic:save', { projectId: P, topic: { name: 'Stale', datasets: [{ id: Y, fields: ['region'] }], metricIds: [], termIds: [] } });
+  await H.as(ORG_A, () => H.datasets.updateDataset(P, Y, { columns: [{ name: 'area', type: 'text' }, { name: 'amount', type: 'number' }] })); // the topic's one field is gone
+  const [fromStale, plainY] = [await post('explore:suggest', { projectId: P, datasetId: Y, topicId: stale.value.topic.id }), await post('explore:suggest', { projectId: P, datasetId: Y })];
+  ok('a topic whose fields of this dataset have all gone: the reply without a topic', plainY.value.suggestions.length > 0 && show(fromStale.value) === show(plainY.value), show(fromStale.value).slice(0, 200));
   ok('the reply has no number either', numbersIn(inT.value).length === 0);
 
   // Access: the real contract through the real decision, a project viewer's grant stubbed.

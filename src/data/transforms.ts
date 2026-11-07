@@ -27,7 +27,7 @@ import { evaluateTable, lodDimProblem } from '../formula/lod';
 import { isFormulaBudgetError, newFormulaBudget, type FormulaBudget } from '../formula/formulaBudget';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
-import { resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
+import { resolvePeriodNow, periodFilterDay, daysFromIso } from '../analysis/dateIntel';
 import type { PeriodSpec } from '../analysis/dateIntel';
 import { applyMaskStep } from './maskSteps';
 import type { MaskStep, PipelineCtx as MaskCtx } from './maskSteps';
@@ -402,7 +402,7 @@ function stepFilter(t: TableData, s: FilterStep): StepResult {
     const hi = daysFromIso(r.to);
     const rows = t.rows
       .filter((row) => {
-        const d = periodDay(row[ci]);
+        const d = periodFilterDay(row[ci]);
         return d !== null && (lo === null || d >= lo) && (hi === null || d <= hi);
       })
       .map((row) => row.slice());

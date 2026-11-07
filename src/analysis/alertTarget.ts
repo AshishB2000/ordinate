@@ -6,10 +6,12 @@ import { getMetric } from './metrics';
 import type { FilterStep } from '../data/transforms';
 import { metricTarget } from '../ipc/targetResolve';
 
-export async function ruleTarget(projectId: string, rule: AlertRule, filters: FilterStep[], value: number | null): Promise<number | null | 'gone'> {
+/** The target, and the sentence saying why there is none (the Test button's answer for a rule that cannot fire). */
+export async function ruleTarget(projectId: string, rule: AlertRule, filters: FilterStep[], value: number | null): Promise<{ value: number | null; none?: string } | 'gone'> {
   const m = rule.metric.metricId ? await getMetric(projectId, rule.metric.metricId) : null;
   if (!m) return 'gone';
-  return (await metricTarget(projectId, m, filters, value))?.value ?? null;
+  const t = await metricTarget(projectId, m, filters, value);
+  return { value: t?.value ?? null, ...(t?.none ? { none: t.none } : {}) };
 }
 
 /** The rules a deleted metric leaves unchecked (the inbox says so): a target rule, or one that has no column of its own to fall back on. */

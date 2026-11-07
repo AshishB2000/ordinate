@@ -1,7 +1,7 @@
 // A table's facts out of Oracle's data dictionary (docs/semantic-layer/02-source-tables.md, D6, D7): comments,
-// columns with types, the primary key and indexes, the partition key, the optimizer's row estimate and the date
-// it was last gathered. MAIN PROCESS ONLY, but it imports no driver: oracle.ts hands it `open`, which connects
-// (thin mode, guarded, SSRF-pinned) and closes, and a query function.
+// columns with types, the primary key and indexes, the partition key and the optimizer's row estimate. MAIN
+// PROCESS ONLY, but it imports no driver: oracle.ts hands it `open`, which connects (thin mode, guarded,
+// SSRF-pinned) and closes, and a query function.
 //
 // UNVERIFIED: every statement is written from the Oracle documentation and answered in the self-checks by a
 // fixture; nothing has run on Oracle Database or Autonomous. Only ALL_TAB_COLUMNS is required; each of the rest
@@ -40,7 +40,8 @@ const PARTITION_SQL = `SELECT p.partitioning_type, k.column_name, k.column_posit
  WHERE p.table_name = :1 AND p.owner = :2
  ORDER BY k.column_position FETCH FIRST :3 ROWS ONLY`;
 // UNVERIFIED: num_rows and last_analyzed are NULL until statistics are gathered.
-const TABLE_SQL = `SELECT num_rows, last_analyzed FROM all_tables WHERE table_name = :1 AND owner = :2 FETCH FIRST :3 ROWS ONLY`;
+// No date: last_analyzed is when the optimizer's statistics ran, not when the table changed.
+const TABLE_SQL = `SELECT num_rows FROM all_tables WHERE table_name = :1 AND owner = :2 FETCH FIRST :3 ROWS ONLY`;
 
 const INDEX_ROWS = 500, KEY_ROWS = 32;
 
@@ -90,8 +91,6 @@ async function readFacts(q: FactsQuery, ownerGiven: string, name: string): Promi
   if (table) {
     const estimate = figure(table[0]);
     if (estimate !== undefined) facts.rowEstimate = Math.round(estimate);
-    const analysed = table[1] instanceof Date ? table[1].toISOString() : str(table[1]); // the driver's DATE, or its ISO text
-    if (analysed) facts.lastModified = analysed;
   }
   return facts;
 }

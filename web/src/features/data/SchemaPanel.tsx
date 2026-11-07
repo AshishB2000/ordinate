@@ -20,7 +20,8 @@ const USE_WORD: Record<MissingColumn['usedBy'][number]['kind'], string> = { visu
 
 /** "Profiled from a sample of 240 rows · 7:12 PM" — or why there is no sample yet. */
 export function sampleLine(v: Pick<LiveSchema, 'sampledAt' | 'sampleRows' | 'method'>): string {
-  if (!v.sampledAt || v.sampleRows === null) return 'Not profiled yet. Sync schema reads the columns and a sample of the rows.';
+  if (!v.sampledAt) return 'Not profiled yet. Sync schema reads the columns and a sample of the rows.';
+  if (v.sampleRows === null) return `Profiled from a sample · ${stamp(v.sampledAt)}`; // no size to a caller row access rules restrict
   const how = v.method === 'limit' ? ' (the first rows, since this table could not be sampled at random)' : '';
   return `Profiled from a sample of ${rowsText(v.sampleRows)}${how} · ${stamp(v.sampledAt)}`;
 }

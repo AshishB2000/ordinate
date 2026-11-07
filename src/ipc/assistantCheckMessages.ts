@@ -23,3 +23,8 @@ export function checkNothing(): string {
 export function checkNoChart(): string {
   return t('assistantCheckMessages.the_assistant_did_not_answer_with');
 }
+
+/** A run that failed on something with no message of its own. */
+export function checkFailed(): string {
+  return t('assistantCheckMessages.something_went_wrong');
+}

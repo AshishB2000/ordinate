@@ -20,6 +20,8 @@ export interface TermSummary {
   updatedAt: string;
   /** Certified, changed since, or retired (part 4). */
   status?: StatusView;
+  /** It filters on a column hidden from the caller (part 4, D19): the server's mark, drawn as a lock. */
+  hidden?: true;
 }
 
 /** `term:get`'s record. */

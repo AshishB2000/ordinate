@@ -7,6 +7,7 @@
 import type { LineageInput } from './lineage';
 import type { VizEncoding } from './visuals';
 import { findPath, resolveColumnOwner, reachable } from './joinPlan';
+import { bareColumnTable, manySideColumnGroups } from './fanOutPlan';
 import type { DsInfo } from './joinPlan';
 import { compile } from '../formula/formula';
 import { compileMetricFormula } from './metricFormula';
@@ -31,6 +32,12 @@ export function dsInfos(input: LineageInput): Map<string, DsInfo> {
 }
 
 type Reads = Map<string, string[]>;
+
+/** The table a consumer's BARE column is on: the KPI door's rule (fanOutPlan.bareColumnTable), the primary when two many sides have it. */
+const ownerOf = (primary: string, input: LineageInput) => {
+  const infos = dsInfos(input);
+  return (c: string): string => bareColumnTable(primary, c, input.relationships ?? [], infos) ?? primary;
+};
 
 /** A reads map that starts with the primary dataset, so a consumer never loses its edge to it. */
 function reads(primary: string): { map: Reads; add: (ds: string, column: unknown) => void } {
@@ -84,13 +91,14 @@ export function consumerColumns(v: Rec, input: LineageInput): Map<string, string
   return map;
 }
 
-/** A formula metric's compiled program, read against its own dataset's columns and every reachable one's (D17); null when it has none or does not compile. */
+/** A formula metric's compiled program, read against its own dataset's columns, every reachable one's (D17) and its many sides' (as the metric door does); null when it has none or does not compile. */
 export function parsedFormula(m: Rec, input: LineageInput): MetricFormulaProgram | null {
   const def: Rec = m.definition || {};
   if (!def.formula) return null;
   const primary = str(m.datasetId);
   const infos = dsInfos(input);
-  const names = [primary, ...reachable(primary, input.relationships ?? []).keys()].flatMap((id) => infos.get(id)?.columns ?? []).map((c) => c.name);
+  const rels = input.relationships ?? [];
+  const names = [primary, ...reachable(primary, rels).keys()].flatMap((id) => infos.get(id)?.columns ?? []).concat(manySideColumnGroups(primary, rels, infos).flatMap((g) => g.columns)).map((c) => c.name);
   const parsed = compileMetricFormula(String(def.formula), names);
   return parsed.ok ? parsed.program : null;
 }
@@ -99,10 +107,8 @@ export function parsedFormula(m: Rec, input: LineageInput): MetricFormulaProgram
 export function metricColumns(m: Rec, input: LineageInput): Map<string, string[]> {
   const primary = str(m.datasetId);
   const def: Rec = m.definition || {};
-  const infos = dsInfos(input);
-  const rels = input.relationships ?? [];
   const { map, add } = reads(primary);
-  const own = (c: string): string => resolveColumnOwner(primary, c, rels, infos) ?? primary;
+  const own = ownerOf(primary, input);
   const program = parsedFormula(m, input);
   for (const a of program ? program.aggregates : []) {
     // an LOD aggregate (`{FIXED [region] : sum([amount])}`) reads the columns inside its braces
@@ -136,7 +142,7 @@ export function keyColumns(primary: string, others: string[], input: LineageInpu
 export function cardReads(c: Rec, input: LineageInput): Map<string, string[]> | null {
   if (c && c.type === 'metric' && c.metric && !c.metric.metricId) {
     const { map, add } = reads(str(c.metric.datasetId));
-    add(str(c.metric.datasetId), c.metric.column);
+    add(ownerOf(str(c.metric.datasetId), input)(str(c.metric.column)), c.metric.column);
     filterReads(str(c.metric.datasetId), c.metric.filters, input, add);
     return map;
   }
@@ -152,7 +158,7 @@ export function cardReads(c: Rec, input: LineageInput): Map<string, string[]> | 
 export function alertReads(al: Rec, input: LineageInput): Map<string, string[]> {
   const m: Rec = al.metric || {};
   const { map, add } = reads(str(al.datasetId));
-  add(str(al.datasetId), m.column);
+  add(ownerOf(str(al.datasetId), input)(str(m.column)), m.column);
   filterReads(str(al.datasetId), m.filters, input, add);
   add(str(al.datasetId), al.change && al.change.periodColumn);
   return map;

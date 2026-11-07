@@ -93,14 +93,14 @@ describe('A source table\'s panel', () => {
   it('Databricks: the button says a read can start the warehouse', async () => {
     serve({ 'sourceTable:list': body(listWith({ connectorId: 'databricks-sql', label: 'Databricks SQL', factsWake: true })), 'sourceTable:get': got() });
     open();
-    expect(await screen.findByText('Reading runs on the SQL warehouse and can start it.', {}, LAZY)).toBeTruthy();
+    expect(await screen.findByText('Reading runs on the SQL warehouse and can start it. While it starts, the first read may time out: try again in a minute.', {}, LAZY)).toBeTruthy();
   });
 
   it('NEGATIVE CONTROL: no wake line for a warehouse a read cannot start', async () => {
     serve({ 'sourceTable:get': got() });
     open();
     await screen.findByRole('button', { name: 'Read again' }, LAZY);
-    expect(screen.queryByText('Reading runs on the SQL warehouse and can start it.')).toBeNull();
+    expect(screen.queryByText(/Reading runs on the SQL warehouse/)).toBeNull();
   });
 
   it('a read over 30 days old is flagged', async () => {

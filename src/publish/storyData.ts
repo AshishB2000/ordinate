@@ -19,7 +19,7 @@ import { kpiHidden } from './kpiPolicy';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
 import { isExternalMetricError } from '../analysis/externalMetric';
-import { chartPayload } from './dashboardData';
+import { chartPayload, noteOf } from './dashboardData';
 import { withEvents } from '../ipc/events'; // r8:events
 import type { BuildProgress, Outgoing } from './dashboardData';
 import { labelListsFor } from '../ipc/valueLabelReplies';
@@ -76,15 +76,16 @@ export async function buildStory(
         else geoLevels.add(enc.geo.level);
       }
       const blockFilters = mergeDashboardFilters(b.filters, v.filters);
-      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc), projectId, v.datasetId, blockFilters); // r8:events
+      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc, undefined, v.chartType), projectId, v.datasetId, blockFilters); // r8:events
       if (!reply.ok) { blocks.push({ kind: 'broken', reason: reply.error }); continue; }
       const named = { ...(await labelListsFor(projectId, v.datasetId, enc)), otherBucket: reply.category?.note === OTHER_NOTE }; // value labels, after the policy
-      const data = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing, named);
-      if (typeof data.hidden === 'string') { blocks.push({ kind: 'broken', reason: data.hidden }); continue; }
+      const shaped = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing, named);
+      if (typeof shaped.hidden === 'string') { blocks.push({ kind: 'broken', reason: shaped.hidden }); continue; }
+      const data = { ...shaped, ...noteOf(reply.notes) }; // a term the block leaves out: said, as on a dashboard tile
       blocks.push({
         kind: 'chart', title: v.name, chartType: v.chartType || 'column', data,
         // The author's caption wins; otherwise the app's, written from what is shown.
-        caption: b.caption || String(data.caption || ''),
+        caption: b.caption || String(shaped.caption || ''),
       });
       continue;
     }

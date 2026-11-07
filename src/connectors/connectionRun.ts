@@ -177,7 +177,9 @@ export function selectionSql(
     return { ok: true, sql: query.replace(/;\s*$/, '') };
   }
   if (table) {
-    const sql = buildTableSql(def.family, table, rowLimit);
+    // One past the cap: the probe row a connector's cap + 1 wrapper (or fetchRows) reads truncation from.
+    // At the cap exactly, a table over it came back cut with `truncated` false and no warning.
+    const sql = buildTableSql(def.family, table, rowLimit + 1);
     return sql ? { ok: true, sql } : { ok: false, error: 'Invalid table name' };
   }
   // A source with no table picker and no SQL (the URL connector) still runs —

@@ -75,7 +75,7 @@ async function countd(env: H.Env): Promise<void> {
   await judged(env, 'countd', fx,
     { tiles: ['Pay levels KPI', 'Distinct pay KPI'], metrics: ['Distinct pay'], rules: ['Pay levels above 3'], mcp: ['Distinct pay'] },
     { tiles: ['Teams KPI'], metrics: ['Teams'], rules: ['Teams above 1'], mcp: ['Teams'] },
-    (on) => H.mark(env, P, S, 'salary', on), 'd2604e31e39603c141539f7e03a69a88b5e35cc0009051fd091cff5e9cf51dab');
+    (on) => H.mark(env, P, S, 'salary', on), '765261e43c35dbd70db570955894221e7b3207a3d4c8c1dd8c2d7d68cf240aa2');
 }
 
 const TO_JUNE = [{ type: 'filter', column: 'day', op: '<=', value: '2025-06-30' }]; // the window's end, so the year to date is the fixture's half year on any day
@@ -96,7 +96,7 @@ async function period(env: H.Env): Promise<void> {
   await judged(env, 'period', fx,
     { tiles: ['Payroll YTD KPI'], metrics: ['Payroll YTD'], rules: ['Payroll YTD above 1000'], mcp: ['Payroll YTD'] },
     { tiles: ['Hours YTD KPI'], metrics: ['Hours YTD'], rules: ['Hours YTD above 10'], mcp: ['Hours YTD'] },
-    (on) => H.mark(env, P, S, 'salary', on), '15c00e0e7e5dd5dfe1ed507db5e820f621e402fbc6ca97b7f16c3d4574b3af52');
+    (on) => H.mark(env, P, S, 'salary', on), '3d4b26e7f854855e37501677bc6ec9c37058bce9fdfd57ca53668dc237b59e50'); // 15c00e0e… before /p/ kept the tiles' periodRange (the same with it stripped)
 }
 
 /** A period metric charted by month: every point a resolution of its base, so the chart is judged by the base's columns. */
@@ -131,7 +131,7 @@ async function snapshotPer(env: H.Env): Promise<void> {
   await judged(env, 'snapshot-per', fx,
     { tiles: ['Current payroll KPI'], metrics: ['Current payroll'], rules: ['Current payroll above 1000'], mcp: ['Current payroll'], charts: ['Current payroll by team'] },
     { tiles: ['Current hours KPI'], metrics: ['Current hours'], rules: ['Current hours above 10'], mcp: ['Current hours'], charts: ['Current hours by team'] },
-    (on) => H.mark(env, P, S, 'salary', on), '96585e47b2e787f70404b49d5c5cbb5dc450a109a7d3da0d171c232453eec04c');
+    (on) => H.mark(env, P, S, 'salary', on), 'bcb739084de92d6345aa533c49ff28e3eee2707bf528ec4a5f515c748536f96b');
 }
 
 async function funnel(env: H.Env): Promise<void> {

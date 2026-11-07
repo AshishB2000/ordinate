@@ -9,9 +9,14 @@
 // - metric:list and term:list: Payroll, Payroll per head and High earners read a hidden column, so `hidden: true` for
 //   east; Headcount is not (CONTROL); nothing is for hr (CONTROL). Part 5's kinds likewise: a distinct count of salary,
 //   a period metric over Payroll (through its base) and a funnel by ssn; a period over Headcount is not (CONTROL).
+//   Hidden, it says so: metric:table's row keeps the typed refusal, a story's metric block and a chart overlay at
+//   Payroll keep its name and the sentence; Headcount's and hr's have their figures (CONTROL).
 // - verified:list (part 3) leaves out, for east, a verified question whose spec names a hidden column, with no value
 //   filter; People by dept stays (CONTROL); hr lists both (CONTROL).
-// - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL).
+// - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL). A
+//   reason on a Plain question whose reply was on Staff is struck too; a run's error reaches the owner only (CONTROL).
+// - a verified question with a value filter on dept (visible): east gets its spec and its mark; one filtered on ssn is
+//   left out (CONTROL).
 // - explore:suggest names, for east, the columns hidden from east (Explore's chip); none for hr (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
@@ -151,6 +156,22 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     ok('NEGATIVE CONTROL: a period over Headcount is not hidden for east', 'Headcount YTD' in kEast && kEast['Headcount YTD'] === undefined, JSON.stringify(kEast));
     ok("NEGATIVE CONTROL: none of part 5's kinds is hidden for hr", Object.values(await flags('hr', 'metric:list')).every((v) => v === undefined));
 
+    // ── A metric hidden from east says so (D19): metric:table keeps the typed refusal; a story's block and an overlay, its sentence ──
+    const SENTENCE = C.sentenceOf('hidden');
+    const tableRow = async (who: string, id: string) => (await W.call(who, 'metric:table', { projectId: P })).body?.rows?.[id];
+    const [payEast, headEast, payHr] = [await tableRow('east', PAYROLL_ID), await tableRow('east', HEADCOUNT_ID), await tableRow('hr', PAYROLL_ID)];
+    ok('metric:table: Payroll\'s row for east has no figure and the typed refusal', payEast?.display === null && payEast.refused?.code === 'row_policy' && payEast.refused.reason === 'hidden' && payEast.refused.error === SENTENCE, JSON.stringify(payEast));
+    ok('NEGATIVE CONTROL: …Headcount\'s has its figure and no refusal, and so has hr\'s Payroll', typeof headEast?.display === 'string' && !('refused' in headEast) && typeof payHr?.display === 'string' && !('refused' in payHr), JSON.stringify([headEast, payHr]));
+    const storyFig = async (who: string) => (await W.call(who, 'story:figures', { projectId: P, blocks: [{ id: 'b1', kind: 'metric', metricId: PAYROLL_ID }] })).body?.blocks?.b1?.figures?.[0];
+    const [sfEast, sfHr] = [await storyFig('east'), await storyFig('hr')];
+    ok('story:figures: east\'s Payroll block names the metric and says why, never "Missing metric"', sfEast?.name === 'Payroll' && sfEast.display === SENTENCE && sfEast.value === null, JSON.stringify(sfEast));
+    ok('NEGATIVE CONTROL: hr\'s has the figure', sfHr?.name === 'Payroll' && typeof sfHr.value === 'number', JSON.stringify(sfHr));
+    const overlayOf = async (who: string) => (await W.call(who, 'visual:data', { projectId: P, datasetId: staff, encoding: { category: 'dept', values: [{ column: 'employee_id', aggregation: 'count' }] },
+      analytics: [{ id: 'o1', kind: 'reference', value: { type: 'metric', metricId: PAYROLL_ID } }] })).body?.data?.analytics?.[0];
+    const [ovEast, ovHr] = [await overlayOf('east'), await overlayOf('hr')];
+    ok('overlay: a reference line at Payroll on east\'s chart is named, and says why it is not drawn', ovEast?.label === 'Payroll' && ovEast.warning === SENTENCE && ovEast.value === undefined, JSON.stringify(ovEast));
+    ok('NEGATIVE CONTROL: hr\'s is drawn at Payroll\'s figure', ovHr?.label === 'Payroll' && typeof ovHr.value === 'number' && !ovHr.warning, JSON.stringify(ovHr));
+
     // ── verified:list (part 3): a question whose spec names a hidden column is left out, value filter or none ──
     const QUESTION = 'VERIFIED_PAY_CANARY by dept';
     const verify = async (question: string, measures: object[]): Promise<void> => must(`verified ${question}`, await W.call('boss', 'verified:save', { projectId: P,
@@ -175,6 +196,27 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     ok('verified:checkResult: east reads the outcome of a Staff question, without its reason', crEast.body?.run?.results?.[0]?.outcome === 'refused' && !('reason' in crEast.body.run.results[0])
       && !crEast.text.includes(C.SSN_CANARY), crEast.text.slice(0, 300));
     ok('NEGATIVE CONTROL: hr reads the reason', (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true);
+    // A reason is struck by the reply's dataset too (the model may answer on Staff for a question on Plain); a run's error is no restricted caller's.
+    must('verified Plain', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Sales by region', spec: { datasetId: W.plain, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'x' } } }));
+    const PLAIN_Q: string = (await W.call('boss', 'verified:list', { projectId: P })).body?.questions?.find((q: { question: string }) => q.question === 'Sales by region')?.id ?? '';
+    await W.as('boss', () => recordFs.writeFile(path.join(recordKinds.projectDir(P), 'assistant-check.json'), JSON.stringify({ ...run, state: 'error', error: `ERR_${C.SSN_CANARY}`,
+      results: [{ id: PLAIN_Q, outcome: 'differs', reason: `"${C.SSN_CANARY}_7" is not a value of ssn.`, datasetId: staff }] }), 'utf8'));
+    const cr2 = await W.call('east', 'verified:checkResult', { projectId: P });
+    ok('verified:checkResult: no reason for east when the reply was on Staff, no error, and no dataset id sent', cr2.body?.run?.results?.[0]?.outcome === 'differs'
+      && !('reason' in cr2.body.run.results[0]) && !('datasetId' in cr2.body.run.results[0]) && !('error' in cr2.body.run) && !cr2.text.includes(C.SSN_CANARY), cr2.text.slice(0, 300));
+    const cr2Hr = (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run;
+    ok('NEGATIVE CONTROL: hr reads that reason; the owner reads the error', cr2Hr?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true
+      && (await W.call('boss', 'verified:checkResult', { projectId: P })).body?.run?.error === `ERR_${C.SSN_CANARY}`, JSON.stringify(cr2Hr));
+    // ── a value filter on a column east reads: hidden (D5) is row rules only, so east gets the spec and the mark ──
+    const OPS = { datasetId: staff, category: 'dept', measures: [{ column: 'employee_id', aggregation: 'count' }], filters: [{ column: 'dept', op: '=', value: 'Ops' }], chartType: 'column', title: 'Ops headcount' };
+    must('verified Ops', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Ops headcount', spec: OPS } }));
+    must('verified ssn', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'One person by dept', spec: { ...OPS, filters: [{ column: 'ssn', op: '=', value: `${C.SSN_CANARY}_1` }] } } }));
+    const vOps = await W.call('east', 'verified:list', { projectId: P });
+    const opsRow = vOps.body?.questions?.find((q: { question: string }) => q.question === 'Ops headcount');
+    const opsCard = (await W.call('east', 'answer:card', { projectId: P, spec: OPS })).body;
+    ok('a dept value question on Staff: east gets its spec, its filter in words and its mark', opsRow?.spec?.filters?.[0]?.value === 'Ops' && opsRow.filters[0] === 'dept = Ops'
+      && opsCard?.verified?.question === 'Ops headcount', `${JSON.stringify(opsRow).slice(0, 300)} ${JSON.stringify(opsCard?.verified)}`);
+    ok('NEGATIVE CONTROL: a question filtered on ssn is still left out for east', !vOps.text.includes(C.SSN_CANARY) && !vOps.body.questions.some((q: { question: string }) => q.question === 'One person by dept'), vOps.text.slice(0, 300));
 
     // ── explore:suggest (p4-07's chip): east's names the columns hidden from east, so Explore says its columns are limited ──
     const suggestOf = async (who: string) => (await W.call(who, 'explore:suggest', { projectId: P, datasetId: staff })).body;

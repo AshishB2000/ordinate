@@ -433,7 +433,8 @@ async function main(): Promise<void> {
     const masked = await call('answer_verified_question', { question: 'Revenue by region' });
     ok('verified: a sensitive category leaves masked, with no headline', !('headline' in masked) && !JSON.stringify(masked).includes('West') && masked.labels.length === ans.labels.length);
     await privacy.setPolicy(pid, { export: 'drop' });
-    ok('verified: under drop it is refused as aggregate refuses', /share policy/i.test((await refusal('answer_verified_question', { question: 'Revenue by region' })).message));
+    ok('verified: under drop it is refused as aggregate refuses, in the catalog\'s words', (await refusal('answer_verified_question', { question: 'Revenue by region' })).message
+      === (require('../src/automation/verifiedToolMessages') as typeof import('../src/automation/verifiedToolMessages')).verifiedSensitive());
     await privacy.setPolicy(pid, { export: 'mask' });
     await catalog.setColumn(pid, ds.id, 'region', { sensitivity: 'none' } as any);
     const open = await call('answer_verified_question', { question: 'Revenue by region' });

@@ -75,6 +75,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { figureRefusal } from '../analysis/additivity';
 import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
@@ -189,7 +190,8 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }, hidden: ReadonlySet<string> = new Set()): Promise<Built | Failure> {
   const asMeasures = { category: asked.category, values: asked.measures };
-  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)); // part 5's shapes first; extract and Live alike
+  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)) // part 5's shapes first; extract and Live alike
+    ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up (D7)
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   const sayable = loose ? await labelsSaid(projectId, asked.datasetId, asked.filters) : undefined; // value labels a just-written spec may say (part 3 D6)
@@ -248,7 +250,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const labelled = await labelCardData(projectId, ds.id, encoding, data, viz.category);
   const said = await filterText(projectId, ds.id, spec.filters, held);
   const shown = saidFilters(spec.filters, said, held);
-  const shownLabels = shown === spec.filters ? filterLabels : specFilterSteps({ filters: shown }, ds.columns, ds.rows).labels;
+  const shownLabels = shown === spec.filters ? filterLabels : [...specFilterSteps({ filters: shown }, ds.columns, ds.rows).labels, ...terms.labels];
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   const say = (column: string, value: string): string => saidValue(said, held, column, value);
   // What the app did to a value comes first: it changes what the chart is about. The CARD's line, never the facts'.
@@ -277,12 +279,13 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 }
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
-export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
-  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT };
+/** `asked`: a model was called (one was ready), whether or not its words were kept. */
+export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit; asked: boolean }> {
+  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT, asked: false };
   const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
   const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
-  if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT };
-  return guard(res.text, built.ledger.concat(g.ledger));
+  if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT, asked: true };
+  return { ...guard(res.text, built.ledger.concat(g.ledger)), asked: true };
 }
 
 // ── The three entry points ───────────────────────────────────────────────────
@@ -557,7 +560,7 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
-      const built = await computeCard(projectId, s, true);
+      const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
       const n = await narrate(projectId, built,

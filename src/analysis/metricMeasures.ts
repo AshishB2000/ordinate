@@ -54,7 +54,7 @@ import { liveSnapshotRefused } from '../engine/liveRefusals';
 import { relatedColumnGroups, resolveColumnOwner } from './joinPlan';
 import { manySideColumnGroups, manySideOwner } from './fanOutPlan';
 import { projectModel } from '../ipc/relationships';
-import { semanticMeasures } from './semanticMeasures';
+import { layerReads, semanticMeasures } from './semanticMeasures';
 
 /** How deep `[A]` → `[B]` may go — ipc/metrics.ts's MAX_FORMULA_DEPTH, for the same reason. */
 const MAX_DEPTH = 10;
@@ -218,8 +218,10 @@ export async function planMetricMeasures(
   const checkSnapshot = async (m: Metric, snap: MetricSnapshot): Promise<void> => {
     if (meta === undefined) meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (isLive(meta)) throw new PlanError(liveSnapshotRefused(), true);
-    const cat = meta?.columns.find((c) => c.name === encoding.category);
-    if (cat && cat.type === 'date' && cat.name !== snap.column) throw new PlanError(msg.snapshotOtherDate(m.name, snap.column, cat.name));
+    // A related table's category (encoding.categoryDatasetId) is never the snapshot's own date, whatever its name.
+    const other = encoding.categoryDatasetId && encoding.categoryDatasetId !== datasetId ? await datasets.getDatasetMeta(projectId, encoding.categoryDatasetId) : null;
+    const cat = (other ?? meta)?.columns.find((c) => c.name === encoding.category);
+    if (cat && cat.type === 'date' && (other || cat.name !== snap.column)) throw new PlanError(msg.snapshotOtherDate(m.name, snap.column, other ? `${other.name}.${cat.name}` : cat.name));
   };
 
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
@@ -328,12 +330,27 @@ export function evaluateOperand(op: Operand | null, leafValue: (leaf: number) =>
   return evaluateMetricFormula(op.program, values);
 }
 
+/** The encoding with each layer metric's measure replaced by every column of its semantic dataset (./semanticMeasures layerReads), or null when it has none. */
+async function layerLeaves(projectId: string, encoding: VizEncoding): Promise<VizEncoding | null> {
+  let hit = false;
+  const values: VizMeasure[] = [];
+  for (const v of encoding.values || []) {
+    const m = typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
+    if (!m || !isExternalDefinition(m.definition)) { values.push(v); continue; }
+    hit = true;
+    values.push(...(await layerReads(projectId, m.datasetId)).map((r) => ({ column: r.column, aggregation: r.aggregation, datasetId: r.datasetId })));
+  }
+  return hit ? { ...encoding, values } : null;
+}
+
 /**
  * The encoding as the door draws it, each planned measure replaced by the COLUMNS
  * it totals — what a policy that decides by column must be shown (app/sharePolicy.ts):
  * a formula over a sensitive column, or a metric edited onto one, is a figure drawn from that column.
  */
 export async function withLeafMeasures(projectId: string, datasetId: string, encoding: VizEncoding, inner = false): Promise<VizEncoding> {
+  const layer = await layerLeaves(projectId, encoding);
+  if (layer) return layer;
   const res = await planMetricMeasures(projectId, datasetId, encoding);
   if (!res || !res.ok) return encoding;
   if (res.special) {

@@ -132,7 +132,7 @@ function DocPanel({ projectId, conn, row, docId, onDeleted, onReload }: DocProps
       {conn.readsFacts && conn.factsWake && (
         <p className={x.wake}>
           <Icon name="zap" size={12} />
-          <span>Reading runs on the SQL warehouse and can start it.</span>
+          <span>Reading runs on the SQL warehouse and can start it. While it starts, the first read may time out: try again in a minute.</span>
         </p>
       )}
     </>

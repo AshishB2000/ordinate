@@ -5,7 +5,7 @@
 // (../visuals/ChartStage, charts/DataTable) — nothing is summed, rounded or
 // sorted here. The states are the kit's, <LiveRefusal> included.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { DataTable } from '../../charts/DataTable';
 import { withGeoChartType } from '../../charts/maps/mapKinds';
 import type { MapGeo } from '../../charts/maps/types';
@@ -78,8 +78,12 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   // Before the answer arrives it is the asked type (the table's skeleton holds its place); an answer no chart suits is a table.
   const current = !data ? asked : asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
 
-  const drill = useExploreDrill({ projectId, datasetId, question, reply: stale ? undefined : reply, chartType: current, hierarchies, ladder, onChange });
-  const crumbs = stale ? null : crumbsOf(question, hierarchies);
+  // The labels this page's drills were told, for the crumbs (a stored value is what the filter keeps).
+  const labels = useRef(new Map<string, string>());
+  const at = (column: string, value: string | number) => `${datasetId}\u0000${column}\u0000${value}`;
+  const onLabel = (column: string, value: string | number, label: string) => void labels.current.set(at(column, value), label);
+  const drill = useExploreDrill({ projectId, datasetId, question, reply: stale ? undefined : reply, chartType: current, hierarchies, ladder, onChange, onLabel });
+  const crumbs = stale ? null : crumbsOf(question, hierarchies, (c, v) => labels.current.get(at(c, v)) ?? v);
 
   /** A region map names its regions (the level the server saw in the labels); leaving one drops them. */
   const pick = (t: string) => {

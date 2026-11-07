@@ -231,6 +231,12 @@ async function partPin(): Promise<Fixtures> {
   ok('a refresh (rows, updatedAt, lastRefreshedAt) does not move a dataset',
     !(await movesAfter(`dataset:${ORD}`, () => datasets.updateDatasetData(P, ORD, { columns: ORDER_COLUMNS, rows: [...ORDER_ROWS, ['AF', 1, 4, '2026-01-04', 'c2']] }))));
   ok('NEGATIVE CONTROL: a Prepare edit moves it', await movesAfter(`dataset:${ORD}`, () => datasets.updateSteps(P, ORD, [])));
+  // A dataset built from another (a SQL origin here; a union, lookup, combine or compose alike) moves with its upstream's Prepare.
+  const BUILT = await as(async () => (await datasets.saveDataset(P, { name: 'Over customers', sourceKind: 'sql', columns: [{ name: 'id', type: 'text' }, { name: 'segment', type: 'text' }],
+    rows: [['c1', 'ent']], origin: { kind: 'sql', sql: 'SELECT * FROM "Customers"', deps: [CUST] } } as never))!.id);
+  ok('a Prepare edit upstream moves a dataset built from it', await movesAfter(`dataset:${BUILT}`, () => datasets.updateSteps(P, CUST, [SEGMENT])));
+  ok('NEGATIVE CONTROL: a docs edit upstream does not', !(await movesAfter(`dataset:${BUILT}`, () => catalog.setDoc(P, `dataset:${CUST}`, { description: 'who buys' }))));
+  await as(() => datasets.updateSteps(P, CUST, []));
   const loop = await pin(`metric:${LOOP_A}`);
   ok('a formula naming itself through another stops (cycle), stable', loop !== null && loop === (await pin(`metric:${LOOP_A}`)));
   ok('a deleted metric has no pin', (await pin(`metric:${GONE}`)) === null);

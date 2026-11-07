@@ -16,7 +16,7 @@ import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import { isValidId } from '../app/ids';
 import { sanitizeFilterList } from '../data/filterList';
-import { hasTermType } from '../data/termStep';
+import { hasTermType, isTermStep } from '../data/termStep';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
@@ -158,6 +158,19 @@ export async function readTerm(projectId: string, id: string): Promise<Tagged<Te
 
 export async function getTerm(projectId: string, id: string): Promise<Term | null> {
   return (await readTerm(projectId, id))?.rec ?? null;
+}
+
+/** How a definition words each of `filters`: a glossary term by its name (a record read per term), any other step by `words`. */
+export async function termWords(projectId: string, filters: readonly FilterStep[], words: (s: FilterStep) => string = describeFilter): Promise<(s: FilterStep) => string> {
+  const idOf = (s: unknown): string | null => (isTermStep(s) ? s.term : null); // a term is a kept step, not a FilterStep
+  const names = new Map<string, string>();
+  for (const f of filters) {
+    const id = idOf(f);
+    if (!id || names.has(id)) continue;
+    const t = await getTerm(projectId, id).catch(() => null);
+    if (t) names.set(id, t.name);
+  }
+  return (s) => names.get(idOf(s) ?? '') ?? words(s);
 }
 
 /**
