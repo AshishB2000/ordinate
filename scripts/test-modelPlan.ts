@@ -269,7 +269,11 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
   const taken = await H.as(H.ORG_A, async () => require('../src/ipc/metrics').nameTakenMessage('Margin') as string);
   ok('two new metrics with one name: both skipped with the editor\'s sentence', [41, 42].every((n) => itemOf(twoNew, `metric:${fid(n)}`).error === taken), show(twoNew));
   const swapped = await plan(F.P, edit(edit(filesG, 'metrics', F.stock, (m) => { m.name = 'Orders'; }), 'metrics', jsonAt(filesG, 'metrics/orders.json').id, (m) => { m.name = 'Stock on hand'; }));
-  ok('two metrics swapping names: both plan, against the names after the import', itemOf(swapped, `metric:${F.stock}`).status === 'renamed' && itemOf(swapped, `metric:${ordersMetric.id}`).status === 'renamed', show(swapped));
+  const swapSaid = await H.as(H.ORG_A, async () => [msg.modelNameSwap('Orders'), msg.modelNameSwap('Stock on hand')]);
+  ok('two metrics swapping names: both skipped with the sentence (no order of writes lands either)', itemOf(swapped, `metric:${F.stock}`).reason === 'invalid' && itemOf(swapped, `metric:${F.stock}`).error === swapSaid[0]
+    && itemOf(swapped, `metric:${ordersMetric.id}`).error === swapSaid[1], show(swapped));
+  const chained = await plan(F.P, put(edit(filesG, 'metrics', F.stock, (m) => { m.name = 'Zz stock'; }), 'metrics/new-stock.json', { ...ordersMetric, id: fid(68), name: 'Stock on hand' }));
+  ok('NEGATIVE CONTROL: a rename and a new metric taking its old name both plan', itemOf(chained, `metric:${F.stock}`).status === 'renamed' && itemOf(chained, `metric:${fid(68)}`).status === 'new', show(chained));
   const pending = await plan(F.P, put(put(filesG, 'metrics/units.json', { ...ordersMetric, id: fid(43), name: 'Units', definition: { column: 'units', aggregation: 'sum' }, timeColumn: 'day' }), 'metrics/units-mtd.json', { ...jsonAt(filesG, 'metrics/revenue-mtd.json'), id: fid(44), name: 'Units MTD', definition: { base: fid(43), window: { to_date: 'month' } } }));
   ok('a period metric over a new base metric is new: its base is checked when it is written', itemOf(pending, `metric:${fid(44)}`).status === 'new' && itemOf(pending, `metric:${fid(43)}`).status === 'new', show(pending));
   let withSkip = put(filesG, 'datasets/returns.json', { id: fid(45), name: 'Returns', base: BASE });

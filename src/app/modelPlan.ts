@@ -30,7 +30,7 @@ import { objectBase, type ModelDataset, type ModelField, type ModelRelationship 
 import { baseFilterRefusal, fieldRefusal, metricRefusal, relationshipRefusal, tableRefusal, termRefusal, type PostNames } from './modelGates';
 import type { Relationship } from '../analysis/relationships';
 import type { DatasetMeta } from '../data/datasets';
-import { modelDatasetMoved } from './modelFileMessages';
+import { modelDatasetMoved, modelNameSwap } from './modelFileMessages';
 import { dbtItems, formulaNames, keepHere, withImportTags } from './dbtPlan';
 import type { DbtSkip } from './dbtImport';
 
@@ -124,6 +124,14 @@ const writes = (i: PlanItem): boolean => WRITES.has(i.status);
 const refuse = (i: PlanItem, error: string, reason: SkipReason = 'invalid'): void => void Object.assign(i, { status: 'skipped', reason, error });
 
 export type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
+
+/** The name (lower-cased) an item gives up: its object's name here, when the files rename it. */
+export const givesUp = (i: PlanItem): string | undefined => {
+  const c = i.changes?.find((x) => x.field === 'name');
+  return typeof c?.here === 'string' && c.file !== undefined ? c.here.trim().toLowerCase() : undefined;
+};
+/** The name (lower-cased) a term or metric takes, as the files name it. */
+export const takes = (o: { name?: unknown }): string => String(o.name ?? '').trim().toLowerCase();
 
 export async function planImport(projectId: string, file: ParsedModel): Promise<ImportPlan> {
   return (await planDetailed(projectId, file)).plan;
@@ -306,6 +314,18 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       terms: [...here.terms.map((pt) => ({ ...form('term', pt), id: pt.id })), ...fresh('term')].map((x) => ({ id: x.id, name: x.name, aliases: x.aliases ?? [] })),
     };
   };
+  /** A term or metric that takes a name another gives up, which (through any more) takes this one's: no order lands it. */
+  const giver = new Map(items.filter((i) => (i.kind === 'term' || i.kind === 'metric') && writes(i) && givesUp(i)).map((i) => [givesUp(i) as string, i]));
+  const swapped = (item: PlanItem): boolean => {
+    for (let cur = item, n = 0; n < giver.size; n++) {
+      const next = giver.get(takes((fileOf.get(cur.key) as Mapped).value));
+      if (!next || next === cur) return false; // nobody gives it up, or a change of case only
+      if (next === item) return true;
+      cur = next;
+    }
+    return false;
+  };
+  for (const item of [...giver.values()].filter(swapped)) refuse(item, modelNameSwap(String((fileOf.get(item.key) as Mapped).value.name)));
   for (let pass = 0; pass <= items.length; pass++) {
     const post = postNames();
     // A dbt formula's inputs this import writes are judged by their own saves, before its (the apply's order); the rest as stored.
@@ -315,6 +335,7 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       if ((item.kind !== 'term' && item.kind !== 'metric') || !writes(item)) continue;
       const r = fileOf.get(item.key) as Mapped;
       const self = item.targetId ?? r.value.id;
+
       const inputs = inputsOf(item.key);
       const pending = r.refs.some((k) => created(k) && !inputs?.includes(k.slice('metric:'.length)));
       const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending, written);

@@ -345,6 +345,12 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const notWritten = await as(async () => msg.modelDependencyNotWritten());
   ok('a new term refused at its write: a metric naming it is not written, and fails under it', r10.failed.some((f) => f.key === `term:${fid(80)}`) && r10.failed.some((f) => f.key === `metric:${fid(81)}` && f.error === notWritten)
     && !(await as(() => metrics.listMetrics(N.P))).some((m) => m.name === 'Wholesale orders'), show(r10));
+  // A new metric taking the name a rename gives up sorts before it ("Stock on hand" < "Zz stock"): written after it.
+  const n1 = await exported(N.P);
+  const taken = put(edit(n1, 'metrics', N.stock, (m) => { m.name = 'Zz stock'; }), 'metrics/new-stock.json', { ...jsonAt(n1, 'metrics/orders.json'), id: fid(82), name: 'Stock on hand' });
+  const r10b = done(await applyPlanned(N.P, taken));
+  const names10 = (await as(() => metrics.listMetrics(N.P))).map((m) => m.name);
+  ok('a rename and a new metric taking its old name: both land, in that order', r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
 
   await close();
   finish();

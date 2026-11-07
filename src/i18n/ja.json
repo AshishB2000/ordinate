@@ -530,6 +530,7 @@
   "modelFileMessages.has_always_applied_filters_this_version": "「{name}」には、このバージョンの Ordinate では読み取れない常時適用フィルターがあるため、モデルをエクスポートできません。Ordinate の更新を完了するよう管理者に依頼してください。",
   "modelFileMessages.is_defined_in_another_tool_s": "「{name}」は別のツールのセマンティックレイヤーで定義されているため、モデルファイルには含まれません。そのツールに残ります。",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate はこのファイルを読み込めません。値が欠けているか、型が正しくないか、長すぎます。",
+  "modelFileMessages.takes_a_name_another_object_in": null,
   "modelFileMessages.that_upload_has_expired_or_was": "このアップロードは期限切れか、すでに使用されています。もう一度ファイルを選択してください。",
   "modelFileMessages.the_model_files_hold_a_file": "モデルファイルに Ordinate が読み込まないファイル（{name}）が含まれているため、全体を拒否しました。",
   "modelFileMessages.the_model_files_hold_more_values": "モデルファイルに含まれる値が、Ordinate が読み込める数（1,000,000 個）を超えています。",

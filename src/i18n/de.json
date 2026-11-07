@@ -530,6 +530,7 @@
   "modelFileMessages.has_always_applied_filters_this_version": "„{name}“ hat stets angewendete Filter, die diese Version von Ordinate nicht lesen kann, daher kann das Modell nicht exportiert werden. Bitten Sie Ihren Administrator, das Update von Ordinate abzuschließen.",
   "modelFileMessages.is_defined_in_another_tool_s": "„{name}“ ist in der semantischen Schicht eines anderen Tools definiert, daher enthalten Modelldateien sie nie. Sie bleibt in diesem Tool.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate kann diese Datei nicht lesen: Ein Wert fehlt, hat den falschen Typ oder ist zu lang.",
+  "modelFileMessages.takes_a_name_another_object_in": null,
   "modelFileMessages.that_upload_has_expired_or_was": "Dieser Upload ist abgelaufen oder wurde bereits verwendet. Wählen Sie die Datei erneut aus.",
   "modelFileMessages.the_model_files_hold_a_file": "Die Modelldateien enthalten eine Datei, die Ordinate nicht liest ({name}) – sie wurden vollständig abgelehnt.",
   "modelFileMessages.the_model_files_hold_more_values": "Die Modelldateien enthalten mehr Werte, als Ordinate liest (über 1.000.000).",

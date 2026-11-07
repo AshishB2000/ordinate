@@ -3,7 +3,8 @@
 // import never stores what the editor would refuse. Nothing here writes.
 //
 // Names are checked against the names AFTER the import (`PostNames`): the project's, with each object the import
-// writes in its file form, so two file objects that would collide are refused too, and a swap of two names is not.
+// writes in its file form, so two file objects that would collide are refused too. A swap of two names is refused by the
+// plan (./modelPlan.ts): no order of saves lands it.
 // A check that reads the store for what an object names (a period's base, a target's plan metric) runs only when
 // everything it names exists already: one that names an object this import creates is checked by its save, when the
 // apply writes it after what it names.

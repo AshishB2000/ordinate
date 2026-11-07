@@ -4,7 +4,8 @@
 //
 // Order, so that what an object names is written before it: table and field docs (ONE locked catalog write) → a Live
 // dataset's base filters → relationships (a filter step's `via`) → terms (a metric's term step) → metrics (a new metric
-// after any new metric it names: a period's base, a target's plan metric).
+// after any new metric it names: a period's base, a target's plan metric); a term or metric taking a name another one
+// gives up, after that one.
 // - Each object is compared with the plan's `hereHash` when it is written: catalog docs inside the catalog's lock, terms
 //   and metrics as their editor's `base` (lockedUpdate). One edited since the dry run fails `moved`; the rest still land.
 // - New objects get fresh ids from their stores, never the file's (a pod's ids stay unique across projects), and what
@@ -25,8 +26,7 @@ import { logger } from './logger';
 import { fieldOf, relationshipOf, tableDocOf } from './modelExport';
 import { objectBase, type ModelDataset, type ModelMetric, type ModelRelationship, type ModelTerm } from './modelFormat';
 import { mapRefs, type ModelMatch } from './modelMatch';
-import { planDetailed, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
-import { formulaNames } from './dbtPlan';
+import { givesUp, planDetailed, takes, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
 import type { ParsedModel } from './modelRead';
 import { modelDependencyNotWritten, modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
 import { saveMetricChecked, updateMetricChecked } from '../ipc/metricSave';
@@ -198,42 +198,41 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
     }, dangling(item));
   }
 
-  for (const item of of('term')) {
-    await one(item, out, io, async () => {
-      const t = follow(formOf(item).value as ModelTerm);
-      if (item.targetId) {
-        const reply = await updateTermChecked(projectId, item.targetId, patchOf(item, t), item.hereHash);
-        return 'term' in reply ? null : reply.error;
-      }
-      const reply = await saveTermChecked(projectId, { name: t.name, aliases: t.aliases ?? [], description: t.description ?? '', datasetId: t.dataset, filters: t.filters });
-      if (!('term' in reply) || !reply.term) return reply.error;
-      fresh.terms.set(t.id, reply.term.id);
-      return null;
-    }, dangling(item));
-  }
-
-  // A new metric another new one names is written first; a cycle goes in plan order, and its save says why.
-  const pending = of('metric');
-  const nameOf = (p: PlanItem): string => String((formOf(p).value as ModelMetric).name).toLowerCase();
-  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId))
-    || (!!file.dbt && formulaNames(formOf(item).value).some((n) => pending.some((p) => p !== item && nameOf(p) === n))); // a dbt formula after its inputs (their date)
+  const termWrite = (item: PlanItem) => async (): Promise<string | null> => {
+    const t = follow(formOf(item).value as ModelTerm);
+    if (item.targetId) {
+      const reply = await updateTermChecked(projectId, item.targetId, patchOf(item, t), item.hereHash);
+      return 'term' in reply ? null : reply.error;
+    }
+    const reply = await saveTermChecked(projectId, { name: t.name, aliases: t.aliases ?? [], description: t.description ?? '', datasetId: t.dataset, filters: t.filters });
+    if (!('term' in reply) || !reply.term) return reply.error;
+    fresh.terms.set(t.id, reply.term.id);
+    return null;
+  };
+  const metricWrite = (item: PlanItem) => async (): Promise<string | null> => {
+    const m = follow(formOf(item).value as ModelMetric);
+    if (item.targetId) {
+      const reply = await updateMetricChecked(projectId, item.targetId, patchOf(item, m), item.hereHash);
+      return 'metric' in reply ? null : reply.error;
+    }
+    const reply = await saveMetricChecked(projectId, {
+      name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
+      description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
+    });
+    if (!('metric' in reply) || !reply.metric) return String(reply.error);
+    fresh.metrics.set(m.id, reply.metric.id);
+    return null;
+  };
+  // Terms, then metrics (a metric's term step), each after any new object it names (a dbt formula after every input:
+  // their date) and after any object giving up the name it takes (a rename, then a new one taking its old name). The
+  // plan refuses a swap, so a cycle left goes in plan order, and its save says why.
+  const pending = todo.filter((i) => i.kind === 'term' || i.kind === 'metric');
+  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && (!p.targetId || !!file.dbt)))
+    || pending.some((p) => p !== item && givesUp(p) === takes(formOf(item).value));
   while (pending.length) {
     const at = pending.findIndex((p) => !waits(p));
     const [item] = pending.splice(at < 0 ? 0 : at, 1);
-    await one(item, out, io, async () => {
-      const m = follow(formOf(item).value as ModelMetric);
-      if (item.targetId) {
-        const reply = await updateMetricChecked(projectId, item.targetId, patchOf(item, m), item.hereHash);
-        return 'metric' in reply ? null : reply.error;
-      }
-      const reply = await saveMetricChecked(projectId, {
-        name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
-        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
-      });
-      if (!('metric' in reply) || !reply.metric) return String(reply.error);
-      fresh.metrics.set(m.id, reply.metric.id);
-      return null;
-    }, dangling(item));
+    await one(item, out, io, item.kind === 'term' ? termWrite(item) : metricWrite(item), dangling(item));
   }
 
   return { ok: true, ...out, ...(downloadToken ? { before: { downloadToken } } : {}) };

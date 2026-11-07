@@ -68,6 +68,11 @@ export function modelExternalMetric(name: string): string {
   return t('modelFileMessages.is_defined_in_another_tool_s', { name });
 }
 
+/** Two (or more) objects in the files taking each other's names: no order of saves lands them. */
+export function modelNameSwap(name: string): string {
+  return t('modelFileMessages.takes_a_name_another_object_in', { name });
+}
+
 /** A metric whose definition, format or target the store would cut or drop on save (metric:save's contract refuses it). */
 export function modelMetricOutOfBounds(name: string): string {
   return t('modelFileMessages.can_t_be_imported_as_the', { name });

@@ -530,6 +530,7 @@
   "modelFileMessages.has_always_applied_filters_this_version": "« {name} » a des filtres toujours appliqués que cette version d’Ordinate ne sait pas lire : le modèle ne peut donc pas être exporté. Demandez à votre administrateur de terminer la mise à jour d’Ordinate.",
   "modelFileMessages.is_defined_in_another_tool_s": "« {name} » est définie dans la couche sémantique d’un autre outil : les fichiers du modèle ne la contiennent donc jamais. Elle reste dans cet outil.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate ne peut pas lire ce fichier : une valeur manque, n’a pas le bon type ou est trop longue.",
+  "modelFileMessages.takes_a_name_another_object_in": null,
   "modelFileMessages.that_upload_has_expired_or_was": "Ce téléversement a expiré ou a déjà été utilisé. Choisissez à nouveau le fichier.",
   "modelFileMessages.the_model_files_hold_a_file": "Les fichiers du modèle contiennent un fichier qu’Ordinate ne lit pas ({name}) : ils ont été refusés en entier.",
   "modelFileMessages.the_model_files_hold_more_values": "Les fichiers du modèle contiennent plus de valeurs qu’Ordinate n’en lit (plus de 1 000 000).",
