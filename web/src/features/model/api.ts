@@ -130,3 +130,31 @@ export const useLineageFields = (projectId: string, datasetId: string) =>
     queryKey: ['lineage:fields', projectId, datasetId],
     queryFn: async () => okOr((await rpc('lineage:fields', { projectId, datasetId })) as LineageFields | Fail, 'The usage'),
   });
+
+/** `model:export` (src/ipc/modelFiles.ts): a download token, the counts, and the kinds the files leave out. */
+export type ModelExportReply =
+  | { ok: true; downloadToken: string; counts: Record<'datasets' | 'metrics' | 'terms' | 'relationships', number>; notCarried: string[] }
+  | { ok: false; error: string };
+
+export const exportModel = async (projectId: string) => (await rpc('model:export', { projectId })) as ModelExportReply;
+
+/** src/app/modelExport.ts NOT_CARRIED, in words. */
+const NOT_CARRIED_WORDS: Record<string, string> = {
+  metricTrees: 'metric trees',
+  hierarchies: 'drill hierarchies',
+  status: 'certified and retired marks',
+  instructions: 'Assistant instructions',
+  verifiedQuestions: 'verified questions',
+  sourceDocs: 'source table notes',
+  liveCalcs: 'Live calculated fields',
+  topics: 'topics',
+  externalMetrics: 'metrics another tool defines',
+};
+
+/** "Exported the model files." plus, when something was left out, "Not in them: a, b and c." */
+export function exportedText(notCarried: readonly string[]): string {
+  const words = notCarried.map((k) => NOT_CARRIED_WORDS[k] ?? k);
+  if (!words.length) return 'Exported the model files.';
+  const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  return `Exported the model files. Not in them: ${list}.`;
+}

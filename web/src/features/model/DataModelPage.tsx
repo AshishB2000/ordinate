@@ -25,6 +25,7 @@ import { DefaultJoins } from './relationships/DefaultJoins';
 import { useNavigation } from './navigation';
 import { useTopicPick } from './topics/rememberTopic';
 import { TopicPicker } from './topics/TopicPicker';
+import { ExportMenu } from './ExportMenu';
 
 const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant'] as const;
 type TabId = (typeof TABS)[number];
@@ -71,6 +72,7 @@ function Section({ projectId }: { projectId: string }) {
           <TopicPicker projectId={projectId} value={pick} onChange={setPick} />
           {canEdit && (
             <>
+              <ExportMenu projectId={projectId} />
               <Button icon="plus" onClick={() => setNewTerm(true)}>
                 New term
               </Button>

@@ -1,0 +1,16 @@
+{
+  "base": "<base>",
+  "dataset": "00000000-0000-4000-8000-000000000003",
+  "definition": {
+    "aggregation": "countd",
+    "column": "order_id"
+  },
+  "format": {
+    "compact": false,
+    "decimals": 0,
+    "kind": "number"
+  },
+  "id": "00000000-0000-4000-8000-000000000005",
+  "name": "Orders",
+  "timeColumn": "day"
+}

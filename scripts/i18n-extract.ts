@@ -400,6 +400,7 @@ export const MAIN_FILES = [
   'src/analysis/fanOutMessages.ts',
   'src/data/columnAccessMessages.ts',
   'src/analysis/targetMessages.ts',
+  'src/app/modelFileMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

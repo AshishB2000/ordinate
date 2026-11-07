@@ -1,0 +1,31 @@
+{
+  "base": "<base>",
+  "dataset": "00000000-0000-4000-8000-000000000003",
+  "definition": {
+    "aggregation": "sum",
+    "column": "amount"
+  },
+  "description": "Net revenue in EMEA",
+  "direction": "up_good",
+  "filters": [
+    {
+      "term": "00000000-0000-4000-8000-000000000008",
+      "type": "term"
+    }
+  ],
+  "format": {
+    "compact": false,
+    "decimals": 0,
+    "kind": "currency",
+    "prefix": "$"
+  },
+  "id": "00000000-0000-4000-8000-000000000006",
+  "name": "Revenue",
+  "target": {
+    "per": "month",
+    "source": {
+      "value": 1200
+    }
+  },
+  "timeColumn": "day"
+}

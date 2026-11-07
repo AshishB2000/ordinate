@@ -3,7 +3,7 @@
 //
 //   1. Datasets: the "To fill in next" strip opens the dataset where its gap is filled in; a role and a
 //      key saved in the Overview, the key counted by the server, and the strip re-ranked by the same
-//      count; a guide written and rendered; the column notes and the lineage graph, inline.
+//      count; a guide written and rendered; the column notes and the lineage graph, inline; Export ▾ → Model files.
 //   2. Metrics (moved from /data/metrics, which redirects): the table from the server with each metric's
 //      date and whether it adds up, a new metric with a live preview and a filter, delete to Trash.
 //   3. Glossary: a term made here, added to a visual's filters, changes its chart, and reads "1 visual".
@@ -123,6 +123,17 @@ e2e('data model: datasets', async (s) => {
   await page.getByRole('tab', { name: 'Lineage' }).click();
   await page.getByRole('group', { name: 'Lineage graph' }).waitFor();
   await screens(page, 'model-lineage');
+
+  // Export ▾ → Model files (part 7, a1): the server's zip, downloaded, named after the project.
+  await page.getByRole('button', { name: 'Export' }).click();
+  const modelFiles = page.getByRole('menuitem', { name: 'Model files' });
+  await modelFiles.waitFor();
+  await screensInPlace(page, 'model-export-menu');
+  const download = page.waitForEvent('download');
+  await modelFiles.click();
+  assert.match((await download).suggestedFilename(), /-model\.zip$/);
+  await page.getByText(/^Exported the model files\./).waitFor();
+  await screensInPlace(page, 'model-export-done');
 
   // At phone width the list stacks over the panel, and nothing scrolls sideways.
   await page.getByRole('tab', { name: 'Overview' }).click();
