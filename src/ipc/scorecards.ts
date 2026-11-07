@@ -188,8 +188,9 @@ async function latestDate(projectId: string, datasetId: string, column: string):
   return null;
 }
 
+/** The scorecard's period, marked as a date control's (D9): a formula's part on another dataset counts it on its own date. */
 function periodFilter(column: string, w: PeriodWindow): FilterStep {
-  return { type: 'filter', column, op: 'period', period: { preset: 'custom', from: w.from, to: w.to } } as FilterStep;
+  return { type: 'filter', column, op: 'period', period: { preset: 'custom', from: w.from, to: w.to }, fromControl: true } as FilterStep;
 }
 
 const figureKey = (metricId: string, col: string | null, w: PeriodWindow | null): string =>
