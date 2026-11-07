@@ -68,6 +68,11 @@ export function modelExternalMetric(name: string): string {
   return t('modelFileMessages.is_defined_in_another_tool_s', { name });
 }
 
+/** A metric whose definition, format or target the store would cut or drop on save (metric:save's contract refuses it). */
+export function modelMetricOutOfBounds(name: string): string {
+  return t('modelFileMessages.can_t_be_imported_as_the', { name });
+}
+
 // ── Applying an import (a3) ──────────────────────────────────────────────────
 
 /** The plan's hash moved since the dry run: nothing is written. */

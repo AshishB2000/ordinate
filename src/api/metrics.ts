@@ -17,19 +17,19 @@ const Compare = z.strictObject({ vs: z.enum(['previous_period', 'previous_year']
 // A funnel metric (semantic part 5, D5): the funnel grid's matching, as its conversion rate, converted or entered count.
 const Col = z.string().min(1).max(512);
 const Funnel = z.strictObject({ entity: Col, event: Col, time: Col, steps: z.array(z.string().min(1).max(400)).min(2).max(8), window: z.strictObject({ n: z.number().gt(0).max(100_000), unit: z.enum(['hours', 'days']) }) }); // the window: the grid's own rule (sanitizeEventFunnel), so 1.5 hours saves
-const Definition = z.union([
+export const Definition = z.union([
   z.strictObject({ formula: z.string().max(2_000) }),
   z.strictObject({ column: z.string().max(512), aggregation: z.enum(AGGREGATIONS), snapshot: Snapshot.nullable().optional() }),
   z.strictObject({ base: Uuid, window: Window.optional(), compare: Compare.optional() }).refine((d) => !!d.window || !!d.compare),
   z.strictObject({ funnel: Funnel, show: z.enum(['rate', 'converted', 'entered']) }),
 ]);
 // A target (part 5, D12): a figure, or a metric over a plan dataset, for the period one figure covers. null clears it on update.
-const Target = z.strictObject({
+export const Target = z.strictObject({
   source: z.union([z.strictObject({ value: z.number() }), z.strictObject({ metricId: Uuid })]),
   per: z.enum(['week', 'month', 'quarter', 'year']).optional(),
   thresholds: z.strictObject({ good: z.number(), warn: z.number() }).optional(),
 });
-const Format = z.strictObject({
+export const Format = z.strictObject({
   kind: z.enum(['number', 'currency', 'percent', 'duration']),
   decimals: z.number().int().min(0).max(10).optional(),
   prefix: z.string().max(8).optional(),

@@ -523,6 +523,7 @@
   "metricTreeMessages.rose_2": "{metric} rose {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "That metric no longer exists.",
   "modelFileMessages.another_file_in_the_model_has": "Another file in the model has the same id, so this one was not read.",
+  "modelFileMessages.can_t_be_imported_as_the": "“{name}” can't be imported as the files define it: its definition, format or target is past what the metric editor saves (a formula over 2,000 characters, a funnel over 8 steps, a window over 366 days). Change it in the files to import it.",
   "modelFileMessages.has_always_applied_filters_this_version": "“{name}” has always-applied filters this version of Ordinate can't read, so the model can't be exported. Ask your admin to finish upgrading Ordinate.",
   "modelFileMessages.is_defined_in_another_tool_s": "“{name}” is defined in another tool’s semantic layer, so model files never carry it. It stays with that tool.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate can't read this file: a value is missing, has the wrong type or is too long.",

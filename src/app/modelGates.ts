@@ -27,7 +27,8 @@ import { checkMetricFormula, type KnownMetric } from '../analysis/metricCheck';
 import { compileMetricFormula } from '../analysis/metricFormula';
 import { relatedColumnNames } from '../ipc/relationships';
 import { metricProblem, nameRefusalAmong } from '../ipc/metricSave';
-import { modelExternalMetric, modelObjectUnreadable } from './modelFileMessages';
+import { modelExternalMetric, modelMetricOutOfBounds, modelObjectUnreadable } from './modelFileMessages';
+import { Definition, Format, Target } from '../api/metrics';
 import type { ModelField, ModelMetric, ModelRelationship, ModelTerm } from './modelFormat';
 
 type Columns = DatasetMeta['columns'];
@@ -121,6 +122,8 @@ async function formulaRefusal(projectId: string, m: ModelMetric, selfId: string,
  */
 export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean): Promise<string | null> {
   if (isExternalDefinition(sanitizeDefinition(m.definition))) return modelExternalMetric(m.name); // D13: a layer's metric is never written from a file
+  // metric:save's own contract: what it refuses, the store would cut or drop (a formula past 2,000, a 9th funnel step).
+  if (!Definition.safeParse(m.definition).success || !Format.safeParse(m.format).success || (m.target !== undefined && !Target.safeParse(m.target).success)) return modelMetricOutOfBounds(m.name);
   const named = nameRefusalAmong(m.name, post.metrics, post.terms, selfId);
   if (named) return named;
   const formula = await formulaRefusal(projectId, m, selfId, post);

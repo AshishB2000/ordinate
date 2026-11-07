@@ -526,6 +526,7 @@
   "metricTreeMessages.rose_2": "{metric} a augmenté de {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "Cette métrique n’existe plus.",
   "modelFileMessages.another_file_in_the_model_has": "Un autre fichier du modèle a le même identifiant : celui-ci n’a donc pas été lu.",
+  "modelFileMessages.can_t_be_imported_as_the": null,
   "modelFileMessages.has_always_applied_filters_this_version": "« {name} » a des filtres toujours appliqués que cette version d’Ordinate ne sait pas lire : le modèle ne peut donc pas être exporté. Demandez à votre administrateur de terminer la mise à jour d’Ordinate.",
   "modelFileMessages.is_defined_in_another_tool_s": "« {name} » est définie dans la couche sémantique d’un autre outil : les fichiers du modèle ne la contiennent donc jamais. Elle reste dans cet outil.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate ne peut pas lire ce fichier : une valeur manque, n’a pas le bon type ou est trop longue.",

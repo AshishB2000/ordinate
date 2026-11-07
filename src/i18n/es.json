@@ -526,6 +526,7 @@
   "metricTreeMessages.rose_2": "{metric} subió {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "Esa métrica ya no existe.",
   "modelFileMessages.another_file_in_the_model_has": "Otro archivo del modelo tiene el mismo id, así que este no se leyó.",
+  "modelFileMessages.can_t_be_imported_as_the": null,
   "modelFileMessages.has_always_applied_filters_this_version": "“{name}” tiene filtros que se aplican siempre y que esta versión de Ordinate no puede leer, así que el modelo no se puede exportar. Pide a tu administrador que termine de actualizar Ordinate.",
   "modelFileMessages.is_defined_in_another_tool_s": "«{name}» está definida en la capa semántica de otra herramienta, así que los archivos del modelo nunca la incluyen. Se queda en esa herramienta.",
   "modelFileMessages.ordinate_can_t_read_this_file": "Ordinate no puede leer este archivo: falta un valor, tiene un tipo incorrecto o es demasiado largo.",
