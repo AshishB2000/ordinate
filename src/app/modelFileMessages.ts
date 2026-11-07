@@ -85,6 +85,11 @@ export function modelObjectMoved(): string {
   return t('modelFileMessages.this_was_changed_in_the_project');
 }
 
+/** A new object this one names failed in the same apply: written, it would name nothing. */
+export function modelDependencyNotWritten(): string {
+  return t('modelFileMessages.this_names_something_the_import_could');
+}
+
 /** One object's write failed for a reason that is not its own (the log has it): the rest are written. */
 export function modelWriteFailed(): string {
   return t('modelFileMessages.this_could_not_be_written_check');

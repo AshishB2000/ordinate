@@ -539,6 +539,7 @@
   "modelFileMessages.this_file_is_neither_model_files": "Diese Datei ist weder eine Modelldatei aus Ordinate noch das semantische Manifest von dbt.",
   "modelFileMessages.this_guide_is_longer_than_8": "Dieser Leitfaden ist länger als 8.000 Zeichen. Kürzen Sie ihn, um ihn zu importieren.",
   "modelFileMessages.this_is_not_a_model_export": "Dies ist kein Modellexport aus Ordinate: Die Datei model.json fehlt oder kann nicht gelesen werden.",
+  "modelFileMessages.this_names_something_the_import_could": null,
   "modelFileMessages.this_project_changed_since_the_dry": "Dieses Projekt hat sich seit dem Probelauf geändert. Prüfen Sie erneut.",
   "modelFileMessages.this_semantic_manifest_defines_more_than": "Dieses semantische Manifest definiert mehr als 500 semantische Modelle oder 2.000 Kennzahlen, mehr als ein Import liest. Importieren Sie ein kleineres Projekt.",
   "modelFileMessages.this_was_changed_in_the_project": "Dies wurde nach dem Probelauf im Projekt geändert und daher nicht geschrieben. Prüfen Sie erneut.",

@@ -539,6 +539,7 @@
   "modelFileMessages.this_file_is_neither_model_files": "Este archivo no es ni un conjunto de archivos de modelo de Ordinate ni el manifiesto semántico de dbt.",
   "modelFileMessages.this_guide_is_longer_than_8": "Esta guía tiene más de 8.000 caracteres. Acórtala para importarla.",
   "modelFileMessages.this_is_not_a_model_export": "Esto no es una exportación de modelo de Ordinate: falta su model.json o no se puede leer.",
+  "modelFileMessages.this_names_something_the_import_could": null,
   "modelFileMessages.this_project_changed_since_the_dry": "Este proyecto cambió desde la prueba. Vuelve a comprobar.",
   "modelFileMessages.this_semantic_manifest_defines_more_than": "Este manifiesto semántico define más de 500 modelos semánticos o 2.000 métricas, más de las que lee una importación. Importa un proyecto más pequeño.",
   "modelFileMessages.this_was_changed_in_the_project": "Esto se cambió en el proyecto después de la prueba, así que no se escribió. Vuelve a comprobar.",

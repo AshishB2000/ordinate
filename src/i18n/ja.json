@@ -539,6 +539,7 @@
   "modelFileMessages.this_file_is_neither_model_files": "このファイルは Ordinate のモデルファイルでも、dbt のセマンティックマニフェストでもありません。",
   "modelFileMessages.this_guide_is_longer_than_8": "このガイドは 8,000 文字を超えています。インポートするには短くしてください。",
   "modelFileMessages.this_is_not_a_model_export": "これは Ordinate のモデルエクスポートではありません。model.json がないか、読み込めません。",
+  "modelFileMessages.this_names_something_the_import_could": null,
   "modelFileMessages.this_project_changed_since_the_dry": "ドライランの後にこのプロジェクトが変更されました。もう一度確認してください。",
   "modelFileMessages.this_semantic_manifest_defines_more_than": "このセマンティックマニフェストには 500 を超えるセマンティックモデルまたは 2,000 を超えるメトリクスが定義されており、1 回のインポートで読める数を超えています。より小さなプロジェクトをインポートしてください。",
   "modelFileMessages.this_was_changed_in_the_project": "ドライランの後にプロジェクトで変更されたため、これは書き込まれませんでした。もう一度確認してください。",

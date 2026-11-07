@@ -536,6 +536,7 @@
   "modelFileMessages.this_file_is_neither_model_files": "This file is neither model files from Ordinate nor dbt's semantic manifest.",
   "modelFileMessages.this_guide_is_longer_than_8": "This guide is longer than 8,000 characters. Shorten it to import it.",
   "modelFileMessages.this_is_not_a_model_export": "This is not a model export from Ordinate: its model.json is missing or can't be read.",
+  "modelFileMessages.this_names_something_the_import_could": "This names something the import could not write, so it was not written either. Check again and apply it again.",
   "modelFileMessages.this_project_changed_since_the_dry": "This project changed since the dry run. Check again.",
   "modelFileMessages.this_semantic_manifest_defines_more_than": "This semantic manifest defines more than 500 semantic models or 2,000 metrics, more than one import reads. Import a smaller project.",
   "modelFileMessages.this_was_changed_in_the_project": "This was changed in the project after the dry run, so it was not written. Check again.",

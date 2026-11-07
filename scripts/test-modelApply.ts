@@ -332,6 +332,20 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const r9b = await applyPlanned(K.P, edit(await exported(K.P), 'metrics', K.revenue, (m) => { m.filters = []; }));
   ok('NEGATIVE CONTROL: a definition the file changes moves the certified metric to needs review', done(r9b).written.length === 1 && (await bKinds()).state === 'needs_review', show([r9b, await bKinds()]));
 
+  // ── 10. Dependents and order within one apply ─────────────────────────────
+  const N = await buildModelFixture();
+  const n0 = await exported(N.P);
+  const nOrders = jsonAt(n0, 'metrics/orders.json');
+  const EU = [{ type: 'filter', column: 'region', op: '=', value: 'EU' }];
+  let nd = put(n0, 'terms/wholesale.json', { ...jsonAt(n0, 'terms/emea.json'), id: fid(80), name: 'Wholesale', aliases: undefined, filters: EU });
+  nd = put(nd, 'metrics/wholesale-orders.json', { ...nOrders, id: fid(81), name: 'Wholesale orders', filters: [{ type: 'term', term: fid(80) }] });
+  const r10 = done(await applyPlanned(N.P, nd, {}, async (key) => {
+    if (key === `term:${fid(80)}`) await post('term:save', { projectId: N.P, input: { name: 'Wholesale', datasetId: N.orders, filters: EU } });
+  }));
+  const notWritten = await as(async () => msg.modelDependencyNotWritten());
+  ok('a new term refused at its write: a metric naming it is not written, and fails under it', r10.failed.some((f) => f.key === `term:${fid(80)}`) && r10.failed.some((f) => f.key === `metric:${fid(81)}` && f.error === notWritten)
+    && !(await as(() => metrics.listMetrics(N.P))).some((m) => m.name === 'Wholesale orders'), show(r10));
+
   await close();
   finish();
 })().catch((err: unknown) => {

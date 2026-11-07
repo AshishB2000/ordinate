@@ -28,7 +28,7 @@ import { mapRefs, type ModelMatch } from './modelMatch';
 import { planDetailed, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
 import { formulaNames } from './dbtPlan';
 import type { ParsedModel } from './modelRead';
-import { modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
+import { modelDependencyNotWritten, modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
 import { saveMetricChecked, updateMetricChecked } from '../ipc/metricSave';
 import { saveTermChecked, updateTermChecked } from '../ipc/terms';
 import { saveRelationshipChecked } from '../ipc/relationships';
@@ -61,12 +61,15 @@ function patchOf(item: PlanItem, value: object): Json {
   return Object.fromEntries((item.changes ?? []).map((c) => [c.field, v[c.field] !== undefined ? v[c.field] : CLEARED[c.field]]));
 }
 
-/** Runs one object's write and files it as written or failed: `write` answers the save's refusal, or null. */
-async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<string | null>): Promise<void> {
+/**
+ * Runs one object's write and files it as written or failed: `write` answers the save's refusal, or null. `dangling`:
+ * a new object it names that this apply has not written (it failed, or is not written yet), so it fails too.
+ */
+async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<string | null>, dangling?: string): Promise<void> {
   await io.onBeforeWrite?.(item.key);
   let error: string | null;
   try {
-    error = await write();
+    error = dangling ? modelDependencyNotWritten() : await write();
   } catch (err) {
     if (isRecordChanged(err)) error = modelObjectMoved();
     else {
@@ -158,6 +161,8 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
   // File id → the id its store gave a new object; `follow` rewrites a later object's references to them.
   const fresh: ModelMatch = { datasets: new Map(), terms: new Map(), metrics: new Map(), relationships: new Map(), how: new Map(), here: new Set() };
   const follow = <T>(v: T): T => mapRefs(v, fresh).value;
+  const made = new Set(todo.filter((i) => !i.targetId).map((i) => i.key));
+  const dangling = (item: PlanItem): string | undefined => formOf(item).refs.find((k) => k !== item.key && made.has(k) && !out.written.includes(k));
 
   await writeCatalog(projectId, file, todo.filter((i) => i.kind === 'table' || i.kind === 'field'), out, io);
 
@@ -190,7 +195,7 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
       if (!reply?.ok) return String(reply?.error ?? modelWriteFailed());
       if (!item.targetId) fresh.relationships.set(r.id, reply.relationship.id);
       return null;
-    });
+    }, dangling(item));
   }
 
   for (const item of of('term')) {
@@ -204,7 +209,7 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
       if (!('term' in reply) || !reply.term) return reply.error;
       fresh.terms.set(t.id, reply.term.id);
       return null;
-    });
+    }, dangling(item));
   }
 
   // A new metric another new one names is written first; a cycle goes in plan order, and its save says why.
@@ -228,7 +233,7 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
       if (!('metric' in reply) || !reply.metric) return String(reply.error);
       fresh.metrics.set(m.id, reply.metric.id);
       return null;
-    });
+    }, dangling(item));
   }
 
   return { ok: true, ...out, ...(downloadToken ? { before: { downloadToken } } : {}) };

@@ -539,6 +539,7 @@
   "modelFileMessages.this_file_is_neither_model_files": "Ce fichier n’est ni un ensemble de fichiers de modèle d’Ordinate ni le manifeste sémantique de dbt.",
   "modelFileMessages.this_guide_is_longer_than_8": "Ce guide dépasse 8 000 caractères. Raccourcissez-le pour l’importer.",
   "modelFileMessages.this_is_not_a_model_export": "Ce n’est pas un export de modèle d’Ordinate : son model.json est absent ou illisible.",
+  "modelFileMessages.this_names_something_the_import_could": null,
   "modelFileMessages.this_project_changed_since_the_dry": "Ce projet a changé depuis la simulation. Vérifiez à nouveau.",
   "modelFileMessages.this_semantic_manifest_defines_more_than": "Ce manifeste sémantique définit plus de 500 modèles sémantiques ou 2 000 métriques, plus qu’une importation n’en lit. Importez un projet plus petit.",
   "modelFileMessages.this_was_changed_in_the_project": "Ceci a été modifié dans le projet après la simulation, il n’a donc pas été écrit. Vérifiez à nouveau.",
