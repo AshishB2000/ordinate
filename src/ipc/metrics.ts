@@ -31,7 +31,6 @@ import { isRowPolicyError } from '../data/rowAccess';
 import * as metrics from '../analysis/metrics';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
-import { controlOffOwnDate } from '../analysis/snapshotGuards';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -57,6 +56,7 @@ import type { AsOf } from '../api/asOf';
 import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
+import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
@@ -92,6 +92,9 @@ interface ResolveCtx {
   asOf?: AsOf;
   /** When the caller asks: every column a figure was totalled from — what a Share policy judges (publish/kpiPolicy). */
   reads?: MetricRead[];
+  /** D9: the scope as it came (a date control's period still marked) and the dataset `scope` was settled for, so a part on another dataset counts by its own date; unset when nothing was marked. */
+  marked?: { filters: FilterStep[]; on: string };
+  refused?: string; // why there is no figure: a part's dates disagree under a date control
 }
 
 /** One total a metric's figure was drawn from: a column (its own dataset's or a related one's) and its aggregation. */
@@ -199,11 +202,19 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
   if (!metric) return null;
 
   ctx.stack.add(key);
-  let value: number | null;
+  const outer = { scope: ctx.scope, marked: ctx.marked };
+  let value: number | null = null;
   try {
-    value = controlOffOwnDate(metric.timeColumn, ctx.scope) ? null : await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth); // as resolveMetric
+    const m = outer.marked;
+    const away = m && metric.datasetId !== m.on ? await metricScope(ctx.projectId, metric, m.filters) : null;
+    if (away && !away.ok) ctx.refused ??= away.error;
+    else {
+      if (away && m) Object.assign(ctx, { scope: away.filters, marked: { filters: m.filters, on: metric.datasetId } });
+      value = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, depth);
+    }
   } finally {
     ctx.stack.delete(key);
+    Object.assign(ctx, outer);
   }
   ctx.memo.set(key, value);
   return value;
@@ -227,6 +238,9 @@ export interface ResolvedMetric {
   fx?: FxInfo;
   /** Set when an operand is LIVE: the warehouse's time (L2.4), kept by stampAsOf. */
   asOf?: AsOf;
+  /** D9: the date a dashboard date control's period was moved onto (the tile's caption); why there is no figure when dates disagree under one. */
+  periodOn?: string;
+  refused?: string;
 }
 
 /**
@@ -243,13 +257,16 @@ export async function resolveMetric(
 ): Promise<ResolvedMetric | null> {
   const metric = await metrics.getMetric(projectId, metricId);
   if (!metric) return null;
-  const ctx = newCtx(projectId, Array.isArray(scope.filters) ? scope.filters : [], scope.params);
+  const filters = Array.isArray(scope.filters) ? scope.filters : [];
+  // D9: a date control's period on the date the metric counts by (no mark: the same filters, no read).
+  const s = await metricScope(projectId, metric, filters);
+  const ctx = newCtx(projectId, s.ok ? s.filters : [], scope.params);
   ctx.reads = scope.reads;
+  if (s.ok && s.filters !== filters) ctx.marked = { filters, on: metric.datasetId };
   // Seeded so a self-reference inside this metric's own formula is caught by the
   // same guard that catches a loop between two of them.
   ctx.stack.add(metric.name.toLowerCase());
-  // Counted by its own date under a date control on another column: no figure until the release that counts it so.
-  const value = controlOffOwnDate(metric.timeColumn, ctx.scope) ? null : await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0);
+  const value = s.ok ? await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0) : null;
   ctx.stack.delete(metric.name.toLowerCase());
   const out: ResolvedMetric = {
     ok: true,
@@ -263,6 +280,9 @@ export async function resolveMetric(
   if (metric.direction) out.direction = metric.direction;
   if (ctx.fx) out.fx = ctx.fx;
   if (ctx.asOf) out.asOf = ctx.asOf;
+  if (s.ok && s.periodOn) out.periodOn = s.periodOn;
+  const refused = s.ok ? ctx.refused : s.error;
+  if (refused) out.refused = refused;
   return out;
 }
 
@@ -384,14 +404,14 @@ export async function resolveMetricSeries(
 }
 
 /**
- * The date column a sparkline runs along, or null.
- *
- * First declared date column: a dataset with two of them (ordered/shipped) has
- * no app-knowable "the" date, and the first one is at least the same choice
- * every time rather than a different one per machine.
+ * The date column a sparkline runs along, or null: the date the metric counts by (D9), else the first declared
+ * date column — a dataset with two of them (ordered/shipped) and a metric that names neither has no app-knowable
+ * "the" date, and the first one is at least the same choice every time rather than a different one per machine.
  */
-async function sparkColumn(projectId: string, datasetId: string): Promise<string | null> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+async function sparkColumn(projectId: string, m: Metric): Promise<string | null> {
+  const own = await metricDate(projectId, m);
+  if (own) return own;
+  const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
   if (!meta) return null;
   const date = meta.columns.find((c) => c.type === 'date');
   return date ? date.name : null;
@@ -475,7 +495,8 @@ export function register() {
   ipcMain.handle('metric:get', async (_e, { projectId, id }: any = {}) => {
     const t = await metrics.readMetric(projectId, id);
     if (!t) return { ok: false, error: 'Metric not found' };
-    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag }; // tag: the metric dialog's base
+    const timeColumnGone = !!t.rec.timeColumn && !(await metricDate(projectId, t.rec)); // counts as unset (./metricTimeScope); the editor says so
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
@@ -483,9 +504,12 @@ export function register() {
       const raw = input && typeof input === 'object' ? input : {};
       // `field`: which box of the editor the sentence belongs beside.
       if (await nameTaken(projectId, raw.name)) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const when = await settleOnSave(projectId, raw);
+      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const m = await metrics.saveMetric(projectId, {
         ...raw,
         filters: sanitizeDashboardFilters(raw.filters),
+        ...when,
       });
       if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
       await versions.record(projectId, 'metric', m);
@@ -500,9 +524,11 @@ export function register() {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
       if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
-      const next = { ...raw };
-      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const before = await metrics.getMetric(projectId, id);
+      const when = before ? await settleOnUpdate(projectId, before, raw) : {};
+      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
+      const next = { ...raw, ...when };
+      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const m = await metrics.updateMetric(projectId, id, next, base);
       if (!m) return { ok: false, error: 'Metric not found' };
       await versions.record(projectId, 'metric', m, { before });
@@ -561,7 +587,7 @@ export function register() {
     try {
       const m = await metrics.getMetric(projectId, id);
       if (!m) return { ok: false, error: 'Metric not found' };
-      const by = typeof column === 'string' && column ? column : await sparkColumn(projectId, m.datasetId);
+      const by = typeof column === 'string' && column ? column : await sparkColumn(projectId, m);
       // No date column is not an error — it is a metric with no sparkline, and
       // the cell stays blank.
       if (!by) return { ok: true, series: null };

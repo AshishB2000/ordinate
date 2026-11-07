@@ -43,6 +43,7 @@ import { defaultProject, pick, resolveProject, runJob } from './resolve';
 import type { Ctx } from './registry';
 import * as sharePolicy from '../app/sharePolicy';
 import * as privacyStore from '../app/privacyStore';
+import { metricDate } from '../analysis/metricTimeScope';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
@@ -201,6 +202,7 @@ export async function metricsList(ctx: Ctx): Promise<unknown> {
     definition: describeDefinitionShort(m.definition),
     description: m.description || '',
     adds_up: await metricAdditivity(ctx.projectId, m.id, byName),
+    counts_by: (await metricDate(ctx.projectId, m)) || null, // D9: the date its periods are on; a column that is gone counts as none
   })));
 }
 

@@ -40,6 +40,7 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as comments from '../app/comments';
 import { resolveMetric, resolveMetricSeries, type MetricRead } from './metrics';
+import { metricDate } from '../analysis/metricTimeScope';
 import { vizDataFor } from './visuals';
 import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
@@ -158,14 +159,15 @@ async function metricOf(ctx: Ctx, id: string): Promise<Metric | null> {
   return ctx.metrics.get(id) || null;
 }
 
-/** The dataset's first date column — the same choice metric:series makes for a sparkline. */
-async function dateColOf(ctx: Ctx, datasetId: string): Promise<string | null> {
-  if (!ctx.dateCols.has(datasetId)) {
-    const meta = await datasets.getDatasetMeta(ctx.projectId, datasetId);
-    const col = meta ? meta.columns.find((c) => c.type === 'date') : undefined;
-    ctx.dateCols.set(datasetId, col ? col.name : null);
+/** The date a metric counts by (D9), else its dataset's first date column — the same choice metric:series makes for a sparkline. */
+async function dateColOf(ctx: Ctx, m: Metric): Promise<string | null> {
+  const key = `${m.datasetId}|${m.id}`; // two metrics on one dataset can count by two dates
+  if (!ctx.dateCols.has(key)) {
+    const own = await metricDate(ctx.projectId, m);
+    const meta = own ? null : await datasets.getDatasetMeta(ctx.projectId, m.datasetId);
+    ctx.dateCols.set(key, own || meta?.columns.find((c) => c.type === 'date')?.name || null);
   }
-  return ctx.dateCols.get(datasetId) || null;
+  return ctx.dateCols.get(key) || null;
 }
 
 /** The latest date with data in a date column, through the ordinary chart path (resident first). */
@@ -199,7 +201,7 @@ function refusalOf(err: unknown): FigureRefusal | null {
 async function figure(ctx: Ctx, metricId: string, w: PeriodWindow | null): Promise<number | null> {
   const m = await metricOf(ctx, metricId);
   if (!m) return null;
-  const col = await dateColOf(ctx, m.datasetId);
+  const col = await dateColOf(ctx, m);
   const key = figureKey(metricId, col, w);
   if (ctx.memo.has(key)) return ctx.memo.get(key) as number | null;
   if (ctx.reads && !ctx.reads.has(metricId)) ctx.reads.set(metricId, []);
@@ -220,9 +222,10 @@ async function anchorFor(ctx: Ctx, rows: ScorecardRow[]): Promise<string> {
   const seen = new Set<string>();
   for (const r of rows) {
     const m = await metricOf(ctx, r.metricId);
-    if (!m || seen.has(m.datasetId)) continue;
-    seen.add(m.datasetId);
-    const col = await dateColOf(ctx, m.datasetId);
+    if (!m) continue;
+    const col = await dateColOf(ctx, m);
+    if (seen.has(`${m.datasetId}|${col}`)) continue;
+    seen.add(`${m.datasetId}|${col}`);
     const d = col ? await latestDate(ctx.projectId, m.datasetId, col) : null;
     if (d && d > best) best = d;
   }
@@ -312,7 +315,7 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
       });
       continue;
     }
-    const dateCol = await dateColOf(ctx, m.datasetId);
+    const dateCol = await dateColOf(ctx, m);
     const dated = !!dateCol;
     const spark: Array<number | null> = [];
     if (dated) for (const w of windows) spark.push(await figure(ctx, m.id, w));
@@ -384,7 +387,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
   const cal = getCalendar();
   const anchor = await anchorFor(ctx, sc.rows);
   const off = Math.max(0, Math.floor(offset) || 0);
-  const col = await dateColOf(ctx, m.datasetId);
+  const col = await dateColOf(ctx, m);
   const windows: PeriodWindow[] = [];
   if (col) for (let k = HISTORY - 1; k >= 0; k--) { const w = periodWindow(anchor, sc.period, off + k, cal); if (w) windows.push(w); }
   const current = windows[windows.length - 1] || null;

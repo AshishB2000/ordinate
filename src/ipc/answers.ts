@@ -63,7 +63,8 @@ import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
-import { snapshotMeasureRefusal, timeColumnControlRefusal } from '../analysis/snapshotGuards';
+import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
@@ -262,6 +263,7 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
         id: s.id, name: s.name, datasetId: s.datasetId,
         column: s.definition.column, aggregation: s.definition.aggregation,
         hasFilters: !!(full && full.filters.length),
+        ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
       });
     }
   } catch (_) { /* no metric vocabulary — the spec must name columns */ }
@@ -456,9 +458,10 @@ export function register(guard: Guard): void {
           name: typeof tile.name === 'string' && tile.name.trim() ? tile.name.trim() : 'this chart',
         };
       }
-      // A spec keeps no `fromControl`, so the tile's own filters are asked here, before they become one.
-      const timeRefusal = src ? await timeColumnControlRefusal(projectId, src.encoding, src.filters) : null;
-      if (timeRefusal) return { ok: false, reason: timeRefusal };
+      // A spec keeps no `fromControl`, so the chart door's rewrite (a date control's period on the date the tile counts by) runs here, before the steps become one.
+      const scoped = src ? await chartScope(projectId, src.datasetId, src.encoding, src.filters) : null;
+      if (scoped && !scoped.ok) return { ok: false, reason: scoped.error };
+      if (src && scoped) src = { ...src, filters: scoped.filters };
       const spec = src ? tileSpec(src) : null;
       if (!spec || !src) return { ok: false, reason: 'This chart cannot be explained.' };
       const built = await computeCard(projectId, spec);

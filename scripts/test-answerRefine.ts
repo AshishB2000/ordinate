@@ -358,4 +358,16 @@ const worded = B.previousAnswerBlock(must({ ...P_RAW, filters: [{ column: 'segme
 ok('audit: a digit inside a text filter value may be repeated', cited('That chart is filtered to Tier 2.', worded.ledger).length === 0, JSON.stringify(worded.ledger));
 ok('audit: …but a filter\'s text never vouches for a percentage', cited('Revenue grew 12.4%.', worded.ledger).join() === '12.4%', JSON.stringify(worded.ledger));
 
+// ── A refine's period with no column (semantic layer D9): it replaces the stored period, never stacks on it ──
+{
+  const SHIPPED = { id: '55555555-5555-4555-8555-555555555555', name: 'Shipped take', datasetId: DS.id, column: 'revenue', aggregation: 'sum', timeColumn: 'ship_date' };
+  const first = A.validateAnswerSpec({ dataset: 'Orders', category: 'region', measures: [{ metric: 'Shipped take' }], filters: [{ period: 'last_quarter' }] }, ALL, { ...TITLE, metrics: [SHIPPED] });
+  const prev = first.ok ? first.spec : must(P_RAW);
+  const next = refined(prev, { refine: true, filters: [{ period: 'last_month' }] }, [SHIPPED]);
+  const periods = next.ok ? next.spec.filters.filter((f) => 'period' in f) : [];
+  ok('a refine with a period and no column replaces the stored period', first.ok && next.ok && periods.length === 1 && JSON.stringify(periods[0]) === JSON.stringify({ column: 'ship_date', period: 'last_month' }), JSON.stringify([first, next]));
+  const kept = refined(prev, { refine: true, filters: [{ column: 'region', op: '=', value: 'West' }] }, [SHIPPED]);
+  ok('NEGATIVE CONTROL: a refine of another filter keeps the stored period', kept.ok && kept.spec.filters.some((f) => 'period' in f && f.period === 'last_quarter'), JSON.stringify(kept));
+}
+
 finish();

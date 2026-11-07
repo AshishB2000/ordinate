@@ -26,6 +26,8 @@ export interface MetricSummary {
   format: MetricFormat;
   description?: string;
   direction?: 'up_good' | 'down_good';
+  /** The date column it counts by (semantic layer D9): a dashboard date control's period lands on it. Unset: the dashboard's date. */
+  timeColumn?: string;
   /** It has a metric tree (./tree). */
   hasTree?: true;
   updatedAt: string;

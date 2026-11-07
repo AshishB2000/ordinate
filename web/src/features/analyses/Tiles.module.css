@@ -27,6 +27,13 @@
   font-size: var(--t-11);
   color: var(--warn);
 }
+/* The date a dashboard date control's period was moved onto (D9): a quiet note under the chart. */
+.periodOn {
+  flex: 0 0 auto;
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
 /* Click-to-filter is on: a mark is a control (dashFiltersUi.ts .is-crossfilter). */
 .crossFilter canvas {
   cursor: pointer;

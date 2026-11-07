@@ -1,5 +1,5 @@
 import { ipcMain } from './bus';
-import { lockedViz, storedFigureAsk, visualReplyForCaller } from './rowDoors';
+import { expandedOrRefusal, lockedViz, storedFigureAsk, visualReplyForCaller } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
@@ -59,7 +59,8 @@ import type { FxInfo } from '../analysis/fx';
 import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { followedEncoding, hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
-import { snapshotMeasureRefusal, timeColumnControlRefusal } from '../analysis/snapshotGuards';
+import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { chartScope } from '../analysis/metricTimeScope';
 import { followMetricMeasures } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
@@ -415,6 +416,8 @@ export type VizDataReply =
       asOf?: AsOf;
       /** The labels are places and the encoding names no regions: the level a map of it would use (analysis/geoHits). */
       geoSuggest?: { level: 'us_state' | 'country' };
+      /** The date a dashboard date control's period was moved onto: the date the chart's metrics count by (analysis/metricTimeScope). */
+      periodOn?: string;
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply.
   | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE; reason?: string };
@@ -452,9 +455,14 @@ async function overCeiling(projectId: string, datasetId: string, max?: number): 
  * for this card", never a slow one and never a guessed one.
  */
 type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
-/** THE chart door: row access rules first (./rowDoors), then the unchanged body below. */
-export function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
-  return lockedViz(projectId, datasetId, encoding, filters, opts, vizDataForUnlocked);
+/** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body below. */
+export async function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
+  const expanded = await expandedOrRefusal(projectId, datasetId, filters);
+  if (!Array.isArray(expanded)) return expanded;
+  const scoped = await chartScope(projectId, datasetId, encoding, expanded); // no mark: the same steps, no read
+  if (!scoped.ok) return { ok: false, error: scoped.error };
+  const reply = await lockedViz(projectId, datasetId, encoding, scoped.filters, opts, vizDataForUnlocked);
+  return reply.ok && scoped.periodOn ? { ...reply, periodOn: scoped.periodOn } : reply;
 }
 
 async function vizDataForUnlocked(
@@ -464,8 +472,8 @@ async function vizDataForUnlocked(
   filters: FilterStep[],
   opts: VizOpts,
 ): Promise<VizDataReply> {
-  // A snapshot metric, or a metric's own date under a date control, is not computed until a later release.
-  const laterRefusal = (await snapshotMeasureRefusal(projectId, encoding)) || (await timeColumnControlRefusal(projectId, encoding, filters));
+  // A snapshot metric is not computed until a later release.
+  const laterRefusal = await snapshotMeasureRefusal(projectId, encoding);
   if (laterRefusal) return { ok: false, error: laterRefusal };
   // A measure that IS a saved metric is drawn as the metric defines it now, through this door again (./vizMetricMeasures).
   const planned = hasMetricMeasure(encoding) ? await planMetricMeasures(projectId, datasetId, encoding, opts.params) : null;
@@ -637,7 +645,9 @@ export function register() {
       const values = paramValues(params);
       const enc = await followedEncoding(projectId, datasetId, sanitizeEncoding(encoding), values); // each metric measure as it is defined NOW: what the calcs, overlay and policy judge
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
-      const flt = bound.steps;
+      // A date control's period on the date the chart counts by (D9), BEFORE the overlay and compare read it. A refusal is the door's reply, below.
+      const scoped = await chartScope(projectId, datasetId, enc, bound.steps);
+      const flt = scoped.ok ? scoped.filters : bound.steps;
       // Table calculations run on the aggregated grid, after either path (and
       // on the overlay's prior slice alike, so both sides mean the same thing).
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
@@ -651,7 +661,9 @@ export function register() {
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
       // The figures the chart draws (analysis/chartShapes) come LAST, off the series as shaped: never more than they say.
-      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
+      // A reference line's metric counts by its own date, so it is given the steps as they came (./visualsAnalytics).
+      const drew = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, flt), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
+      const reply = drew.ok && scoped.ok && scoped.periodOn ? { ...drew, periodOn: scoped.periodOn } : drew;
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the
       // as-of scope, so a snapshot view says the snapshot's time.

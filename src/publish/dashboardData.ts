@@ -493,7 +493,8 @@ export async function buildDashboard(
           try {
             if (m.metricId) {
               const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params, reads });
-              if (r && r.ok) {
+              if (r && r.refused) payload = { error: r.refused }; // D9: dates that disagree under a date control — never the stored column's figure
+              else if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
                 payload = { value: r.value, display: r.display };
                 viaMetric = true;

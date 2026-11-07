@@ -43,6 +43,8 @@ export async function writeBack(projectId: string, type: string, id: string, rec
       direction: rec.direction === undefined ? null : rec.direction,
       // The metric tree (docs/metric-tree): a version without one restores to none.
       tree: rec.tree === undefined ? null : rec.tree,
+      // The date it counts by (semantic D9): a version without one restores to none.
+      timeColumn: rec.timeColumn === undefined ? '' : rec.timeColumn,
     });
   }
   if (type === 'report') {

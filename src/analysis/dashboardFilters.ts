@@ -33,12 +33,14 @@ import { radiusControlSteps } from './geo/radius';
 // comparison, and re-ordering a list produces the same rows but a different
 // step, which is cheap to keep and wrong to guess at. A step this pod cannot read (a glossary
 // term) is keyed by its WHOLE body under its own prefix, so it never merges with a filter.
-function stepKey(s: FilterStep): string {
+export function stepKey(s: FilterStep): string {
   if (isKeptStep(s)) return 'kept:' + stableStringify(s);
   // `period` too: two different relative ranges on one column are two filters.
   // `context` too (r7:lod): the same predicate before and after LODs is two filters.
   // `via` too: the same predicate through a relationship reads another table's column (refused until it can be walked).
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null]);
+  // `fromControl` too (D9): a date control's period may move onto a metric's date, a tile's own identical one stays.
+  // `lock` too: a row lock is never merged away in favour of the same predicate unlocked (a warehouse compares it byte for byte).
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true, s.lock === true]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
@@ -191,13 +193,14 @@ export function controlSteps(
     // as strings (so `03/01/2024` is not "before" `12/31/2023`).
     if ('preset' in state && typeof state.preset === 'string' && state.preset !== 'custom') {
       const period = sanitizePeriod(state);
-      return period ? [{ type: 'filter', column, op: 'period', period }] : [];
+      return period ? [{ type: 'filter', column, op: 'period', period, fromControl: true }] : [];
     }
     const from = 'from' in state ? state.from : undefined;
     const to = 'to' in state ? state.to : undefined;
     if (!from && !to) return []; // neither end set → []
     const period = sanitizePeriod({ preset: 'custom', from, to });
-    return period ? [{ type: 'filter', column, op: 'period', period }] : [];
+    // `fromControl` (D9): the server moves this period onto the date a metric counts by; a tile's own date filter stays put.
+    return period ? [{ type: 'filter', column, op: 'period', period, fromControl: true }] : [];
   }
 
   return []; // a `state` shape that doesn't match this control's own kind

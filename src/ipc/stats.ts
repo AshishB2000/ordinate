@@ -7,6 +7,7 @@ import * as trace from '../engine/residentTrace';
 import { withAsOf } from '../data/asOf';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { FilterStep, TransformStep } from '../data/transforms';
+import { rewriteControlPeriods } from '../analysis/metricTime';
 import { sanitizeStatsSpec, vectorNeeds } from '../analysis/stats/spec';
 import type { StatsSpec, VectorNeed } from '../analysis/stats/spec';
 import type { PairScatter, StatsResult } from '../analysis/stats/run';
@@ -59,7 +60,9 @@ async function compute<T extends StatsResult | PairScatter>(
   spec: StatsSpec,
   opts: { filters?: FilterStep[]; pair?: [string, string]; asOf?: unknown } = {},
 ): Promise<Computed<T>> {
-  const filters = (await expandTerms(projectId, spec.datasetId, opts.filters)).steps; // a step it cannot apply THROWS (typed 'term')
+  const expanded = (await expandTerms(projectId, spec.datasetId, opts.filters)).steps; // a step it cannot apply THROWS (typed 'term')
+  // A statistic draws no metric: a date control's period stays on its column, and its mark reaches no engine or cache key (D9).
+  const filters = rewriteControlPeriods(expanded, '');
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
   if (!meta) return { ok: false, error: 'This dataset is no longer in the project.' };
   let needs: VectorNeed[];

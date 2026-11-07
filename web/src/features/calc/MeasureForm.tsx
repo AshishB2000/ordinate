@@ -19,7 +19,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { isFormula, type Metric, type MetricFormat, type MetricSummary } from '../analyses/metrics/api';
 import { ConflictBanner } from '../editConflicts/ConflictBanner';
 import { useEditGuard } from '../editConflicts/useEditGuard';
-import { DirectionSelect, FormatFields, saveMetric, type Direction } from '../analyses/metrics/parts';
+import { DirectionSelect, FormatFields, saveMetric, type Direction, type SaveField } from '../analyses/metrics/parts';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import { useFunctionDocs, type Column } from '../prepare/api';
@@ -58,7 +58,7 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
   const [direction, setDirection] = useState<Direction>(existing?.direction ?? '');
   const [check, setCheck] = useState<MetricCheck | null>(null);
   const [checking, setChecking] = useState(false);
-  const [refused, setRefused] = useState<{ error: string; field?: 'name' } | null>(null);
+  const [refused, setRefused] = useState<{ error: string; field?: SaveField } | null>(null);
   const [saving, setSaving] = useState(false);
   const docs = useFunctionDocs();
   const input = useRef<FormulaInputHandle>(null);
@@ -180,7 +180,8 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
             ) : (
               <p className={c.hint}>Totals first, then arithmetic: sum([Profit]) / sum([Revenue]). Type [ for columns and metrics.</p>
             )}
-            {refused && !refused.field && (
+            {/* Not the name's: also the date its parts count by (a formula over parts on different dates), which this form has no field for. */}
+            {refused && refused.field !== 'name' && (
               <p className={c.fieldError} role="alert">
                 <Icon name="alert" size={12} />
                 {refused.error}

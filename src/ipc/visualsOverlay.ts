@@ -22,6 +22,7 @@ import { measureAdditivity } from '../analysis/additivity';
 import { shiftBucketLabel } from '../analysis/dateIntel';
 import { compareScope, overlayCaption, overlayFilters } from '../analysis/periodScope';
 import { rangeLabel } from '../analysis/driverScope';
+import { measureDate } from '../analysis/metricTimeScope';
 import { OTHER_LABEL } from '../analysis/categoryKey';
 import type { VizDataReply } from './visuals';
 
@@ -130,7 +131,8 @@ export async function withCompareSeries(
 
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta) return reply;
-    const moved = compareScope(filters, meta.columns, compare);
+    // A custom range with no date in scope lands on the date the measure's metric counts by, else the first date column.
+    const moved = compareScope(filters, meta.columns, compare, compare.mode === 'custom' ? (await measureDate(projectId, datasetId, enc.values[0])) || undefined : undefined);
     if (!moved) return reply; // no date in scope to move: the chart stays whole rather than compare with itself
     const priorEnc: VizEncoding = { ...enc };
     delete priorEnc.compare;

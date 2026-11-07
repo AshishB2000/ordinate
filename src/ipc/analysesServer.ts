@@ -155,8 +155,9 @@ export function register(): void {
         const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency, share });
         if (r && r.code === TERM_CODE) return r; // a filter it cannot apply: says so — never "deleted", never the stored column's figure
         if (r && r.hiddenByPolicy) return r; // the Share policy's words — never the stored column's figure, nor a Compare
+        if (r && r.refused) return { ok: false, error: r.refused }; // D9: dates that disagree under a date control — nor the stored column's figure
         if (r && r.ok !== false) {
-          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}) };
+          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}), ...(r.periodOn ? { periodOn: r.periodOn } : {}) };
         }
       }
       if (!res) {

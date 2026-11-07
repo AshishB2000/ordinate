@@ -1,0 +1,63 @@
+// The date a metric counts by (semantic layer D9): a dashboard date control's period lands on the
+// metric's `timeColumn`, not on the column the control names. A control marks the period steps it
+// makes (`fromControl: true`); the figure doors call this rewrite once, before the Live split and the
+// answer-cache key, so JS, resident and Live receive the same plain steps and no mark reaches an
+// engine. PURE: no reads.
+
+import type { FilterStep } from '../data/transforms';
+import { isKeptStep } from '../data/filterList';
+import { stepKey } from './dashboardFilters';
+
+/**
+ * A step a dashboard control made. A kept step (a term, a newer release's step) carries its own flag
+ * verbatim, and a row lock is never one: the mark is no security property.
+ */
+const marked = (s: FilterStep): boolean => s.fromControl === true && s.lock !== true && !isKeptStep(s);
+const controlPeriod = (s: FilterStep): boolean => marked(s) && s.op === 'period';
+
+/** Whether a date control's period is in `filters`. */
+export const hasControlPeriod = (filters: FilterStep[]): boolean => filters.some(controlPeriod);
+
+/** Whether the rewrite moves a control's period: it names a column other than the metric's set date, or that name on a related table (`via`). */
+export const controlPeriodMoved = (filters: FilterStep[], timeColumn: string): boolean =>
+  !!timeColumn && filters.some((s) => controlPeriod(s) && (s.column !== timeColumn || s.via !== undefined));
+
+/**
+ * Whether date controls set different periods on the metric's date: once moved onto `timeColumn`, the
+ * control periods still differ, so they would narrow it to their overlap, which nobody asked for. The
+ * doors refuse it (D9: conflicts are refused, never guessed). The same period from two controls, on any
+ * columns, moves to one step and merges as today; unset, nothing moves.
+ */
+export const controlPeriodsConflict = (filters: FilterStep[], timeColumn: string): boolean =>
+  !!timeColumn && rewriteControlPeriods(filters.filter(controlPeriod), timeColumn).length > 1;
+
+/**
+ * `filters` with each control period on `timeColumn` (a column of the metric's own dataset, so with
+ * no `via`; left on its column when that is `''`, unset), every filter step's mark stripped, and a
+ * step identical to an earlier one dropped only when one of the two was a control's: a tile's own
+ * date filter equal to the control's survives a move, and the pair collapses to one as today when
+ * nothing moves. The same array when nothing is marked.
+ */
+export function rewriteControlPeriods(filters: FilterStep[], timeColumn: string): FilterStep[] {
+  if (!filters.some((s) => s.fromControl === true && !isKeptStep(s))) return filters;
+  const out: FilterStep[] = [];
+  const seen = new Map<string, boolean>(); // stepKey → whether the first step kept under it was a control's
+  for (const s of filters) {
+    if (isKeptStep(s)) {
+      out.push(s);
+      continue;
+    }
+    const step: FilterStep = { ...s };
+    delete step.fromControl;
+    if (timeColumn && controlPeriod(s)) {
+      step.column = timeColumn;
+      delete step.via; // the metric's date is a column of its own dataset, never a related table's
+    }
+    const k = stepKey(step);
+    const first = seen.get(k);
+    if (first !== undefined && (first || marked(s))) continue;
+    if (first === undefined) seen.set(k, marked(s));
+    out.push(step);
+  }
+  return out;
+}

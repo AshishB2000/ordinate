@@ -179,16 +179,16 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
   ok('date_range with BOTH ends set produces one custom period step',
     JSON.stringify(controlSteps(dateRange, { from: '2026-01-01', to: '2026-06-30' })) ===
     JSON.stringify([
-      { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01', to: '2026-06-30' } },
+      { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01', to: '2026-06-30' }, fromControl: true },
     ]));
   // Single-ended range: only `from`.
   ok('date_range with only `from` produces an open-ended period',
     JSON.stringify(controlSteps(dateRange, { from: '2026-01-01' })) ===
-    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01' } }]));
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2026-01-01' }, fromControl: true }]));
   // Single-ended range: only `to`.
   ok('date_range with only `to` produces an open-ended period',
     JSON.stringify(controlSteps(dateRange, { to: '2026-06-30' })) ===
-    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', to: '2026-06-30' } }]));
+    JSON.stringify([{ type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', to: '2026-06-30' }, fromControl: true }]));
   // date_range: neither end set → [].
   ok('date_range with neither end set → []', controlSteps(dateRange, {}).length === 0);
   ok('date_range with no selection (undefined) → []', controlSteps(dateRange, undefined).length === 0);

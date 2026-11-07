@@ -150,6 +150,7 @@ export function sentence(c: Change): string {
     case 'metric.format': return M.metricFormatChanged();
     case 'metric.direction': return M.directionChanged();
     case 'metric.tree': return M.metricTreeChanged(s('from'), s('to'));
+    case 'metric.timeColumn': return M.metricTimeColumnChanged(s('from'), s('to'));
     case 'report.format': return M.reportFormat(s('from'), s('to'));
     case 'report.dashboard': return M.reportDashboard();
     case 'report.pagesAdded': return M.pagesAdded(n('n'));

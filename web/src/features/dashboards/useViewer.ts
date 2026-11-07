@@ -82,8 +82,8 @@ export interface Opening {
   asOf: string | null;
 }
 
-/** One step's identity — two clicks on the same mark are the same step (dashSelKey); the same filter through a relationship (`via`) is another. A step the web cannot edit is its whole body, never a filter's key. */
-export const stepKey = (s: Step): string => (isKeptStep(s) ? keptKey(s) : JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.via ?? null]));
+/** One step's identity — two clicks on the same mark are the same step (dashSelKey); the same filter through a relationship (`via`), made by a date control (`fromControl`), or a row lock, is another. A step the web cannot edit is its whole body, never a filter's key. */
+export const stepKey = (s: Step): string => (isKeptStep(s) ? keptKey(s) : JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.via ?? null, s.fromControl === true, s.lock === true]));
 
 interface Pending {
   to: string;

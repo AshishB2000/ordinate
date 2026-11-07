@@ -233,6 +233,11 @@ export function directionChanged(): string {
   return t('versionDiffMessages.which_way_is_good_changed');
 }
 
+/** A metric's date, before and after (semantic D9): each side is a column, or "the dashboard’s date". */
+export function metricTimeColumnChanged(from: string, to: string): string {
+  return t('versionDiffMessages.date_it_counts_by_changed_from', { from, to });
+}
+
 export function reportDashboard(): string {
   return t('versionDiffMessages.the_report_now_prints_another_dashboard');
 }

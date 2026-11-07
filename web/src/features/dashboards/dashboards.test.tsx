@@ -107,6 +107,10 @@ describe('tile actions — differential against cardModel', () => {
     { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 30 } },
     { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 7 } },
     { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 7 } },
+    // A date control's step (fromControl) is another step than a tile's identical one: the server may move it.
+    { type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_days', n: 7 }, fromControl: true },
+    // A row lock is never merged away in favour of the identical unlocked step above.
+    { type: 'filter', column: 'year', op: '>=', value: 2024, lock: true },
   ];
   const clicks = [null, { column: 'region', value: 'West' }, { column: 'segment', value: 'B2B' }];
   it('carries the same steps for every carry mode and click', () => {

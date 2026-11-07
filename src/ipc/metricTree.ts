@@ -25,7 +25,7 @@ import type { ParsedColumn } from '../data/parse';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { describeCompare, sanitizeCompare, daysFromIso, isoFromDays } from '../analysis/dateIntel';
-import type { PeriodSpec } from '../analysis/dateIntel';
+import type { CompareMode, PeriodSpec } from '../analysis/dateIntel';
 import { compareScope, scopeRange } from '../analysis/periodScope';
 import { rangeLabel, withoutDateBounds } from '../analysis/driverScope';
 import { formatMetricValue } from '../analysis/metricFormat';
@@ -36,6 +36,7 @@ import type { TreeNode, TreeRelation } from '../analysis/metricTree';
 import { contributions, leadIndex, residualOf, shareOf } from '../analysis/metricTreeMath';
 import * as msg from '../analysis/metricTreeMessages';
 import { compareMetric } from './periods';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import { resolveMetricSeries, type MetricRead } from './metrics';
 import { liveCodeOf } from './liveRoute';
 import { splitSegments, OTHER_KEY, SPLIT_MAX_VALUES } from './metricTreeSplit';
@@ -153,11 +154,11 @@ interface Ctx {
   root: Metric;
   columns: ParsedColumn[];
   dateColumn: string;
+  /** The period's filters, a date control's period still marked: each node moves it onto its own date (D9, F-14). */
   current: FilterStep[];
-  previous: FilterStep[];
   /** The scope without its date bounds: what a sparkline runs under. */
   undated: FilterStep[];
-  compare: { mode: string; from?: string; to?: string };
+  compare: { mode: CompareMode; from?: string; to?: string };
   rawParams: unknown;
   byId: Map<string, Metric | null>;
   reads?: MetricRead[];
@@ -245,7 +246,12 @@ async function metricNode(ctx: Ctx, spec: TreeNode, path: string): Promise<TreeN
   } else if (spec.split) {
     node.breakdown = { kind: 'split', text: msg.splitBy(spec.split) };
     const params = paramValues(ctx.rawParams);
-    const res = await splitSegments(ctx.projectId, m, ctx.columns, spec.split, { current: ctx.current, previous: ctx.previous }, params);
+    // The node's own date, as its figure above (compareMetric): the period moved onto it, then the range.
+    const own = await metricScope(ctx.projectId, m, ctx.current);
+    const prior = own.ok ? compareScope(own.filters, ctx.columns, ctx.compare) : null;
+    const res = own.ok && prior
+      ? await splitSegments(ctx.projectId, m, ctx.columns, spec.split, { current: own.filters, previous: prior.filters }, params)
+      : { ok: false as const, error: own.ok ? msg.noDateColumn(m.name) : own.error };
     if (!res.ok) {
       node.note = res.error;
     } else {
@@ -325,13 +331,18 @@ async function computeFor(projectId: string, root: Metric, input: ComputeInput):
   const tree = input.tree !== undefined ? sanitizeTree(input.tree, root.id) : (root.tree ?? null);
   const compare = sanitizeCompare(input.compare) ?? { mode: 'previous_period' as const };
   const params = paramValues(input.params);
-  let filters = resolveFilterParams(sanitizeDashboardFilters(input.filters), params).steps;
-  // The date the scope already ranges over (a dashboard filtered on its ship date), else the first:
-  // the period, its comparison and every sparkline run along the same column.
-  const dateColumn = (!input.period && scopeRange(filters, meta.columns)?.column) || meta.columns.find((c) => c.type === 'date')?.name;
+  const raw = resolveFilterParams(sanitizeDashboardFilters(input.filters), params).steps;
+  // D9: a date control's period on the root's own date; each node moves the marked one onto its own (compareMetric).
+  const scoped = await metricScope(projectId, root, raw);
+  if (!scoped.ok) return { ok: false, error: scoped.error };
+  let filters = scoped.filters;
+  let current = raw;
+  // The date the scope already ranges over (a dashboard filtered on its ship date), else the root's own, else the
+  // first: the period, its comparison and every sparkline run along the same column.
+  const dateColumn = (!input.period && scopeRange(filters, meta.columns)?.column) || (await metricDate(projectId, root)) || meta.columns.find((c) => c.type === 'date')?.name;
   if (!dateColumn) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
   const ctx: Ctx = {
-    projectId, root, columns: meta.columns, dateColumn, current: [], previous: [], undated: withoutDateBounds(filters, dateColumn),
+    projectId, root, columns: meta.columns, dateColumn, current: [], undated: withoutDateBounds(filters, dateColumn),
     compare, rawParams: input.params, byId: new Map([[root.id, root]]), reads: input.reads,
   };
 
@@ -346,13 +357,14 @@ async function computeFor(projectId: string, root: Metric, input: ComputeInput):
       // No closed month to read (a Live metric, or no data yet): the calendar's.
       spec = r ? { preset: 'custom', ...r } : { preset: key === 'latest_quarter' ? 'last_quarter' : 'last_month' };
     }
-    filters = ctx.undated.concat([{ type: 'filter', column: dateColumn, op: 'period', period: spec } as FilterStep]);
+    const step = { type: 'filter', column: dateColumn, op: 'period', period: spec } as FilterStep;
+    filters = ctx.undated.concat([step]);
+    current = ctx.undated.concat([{ ...step, fromControl: true }]); // the tree's own period is the reader's, as a control's is
   }
   const moved = compareScope(filters, meta.columns, compare);
   const range = scopeRange(filters, meta.columns);
   if (!moved || !range) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
-  ctx.current = filters;
-  ctx.previous = moved.filters;
+  ctx.current = current;
 
   const node = await metricNode(ctx, tree ?? { id: root.id, metricId: root.id }, '');
   markLead(node);

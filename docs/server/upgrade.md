@@ -214,10 +214,11 @@ write. Each item says what a pod older than this release does, and what this rel
   control.** An older pod drops both. Renaming a metric or saving the metric tree erases its date
   column, and an alert saved from a KPI counts by the control's column instead of the metric's.
   This release keeps both. Where a dashboard's date control is on another column than the metric's
-  own date, the later release counts by the metric's date, so this release gives no figure for that
-  metric: it refuses a chart of it, Explain, an alert on it and its drivers ("This chart counts a
-  metric by its own date, which this server cannot do yet"), and the metric's own KPI tile and the
-  Summary card's KPI for it show none. Three places still give a figure: see
+  own date, the later release counts by the metric's date
+  ([A metric counts by its own date](#a-metric-counts-by-its-own-date-04)), so this release gives no
+  figure for that metric: it refuses a chart of it, Explain, an alert on it and its drivers ("This
+  chart counts a metric by its own date, which this server cannot do yet"), and the metric's own KPI
+  tile and the Summary card's KPI for it show none. Three places still give a figure: see
   [What stays open](#what-stays-open).
 - **Snapshot metrics**, which take the last (or first) value by date, as for a balance, instead of
   adding every row. An older pod cannot read one, so it draws a sum over every date. A rename or a
@@ -255,6 +256,9 @@ release that adds these features:
   - a KPI card's comparison period (the figure it compares with);
   - a what-if (scenario) card;
   - a formula built on such a metric, in a chart, in its drivers and in the Summary card.
+
+  The later release counts all three by the metric's own date, so these close once every pod runs
+  it.
 
 ## Certification and hidden columns a newer release writes are kept (`p4-01a`)
 
@@ -396,6 +400,35 @@ for Compose, Helm and ECS, are in
 (`helm rollback`, or an older `ORDINATE_IMAGE` in Compose). An older pod drops the instructions and
 how answers were guided the next time it saves them, and it makes backups without the verified
 questions.
+
+## A metric counts by its own date (`04`)
+
+A metric can name the date column it counts by (Metrics → the metric → "Date it counts by"). With
+none set, nothing changes. With one set, a dashboard's date control sets its period on the metric's
+date instead of the column the control names, for every figure of that metric: its charts, its KPI
+tile and the tile's comparison period, its metric tree (each part by its own date), an alert made
+from its KPI, "Why did this change?", the Summary card, a what-if card, and a formula built on it. A
+formula over metrics of several datasets counts each part by its own date. A date filter that is the
+tile's own stays on its column. The tile says which date it used ("Date range applied to
+ship_date"). Scorecards and the Metrics page sparkline run along the metric's date too, with or
+without a control, and the Assistant puts a period like "last month" on it. `list_metrics` (MCP)
+carries it as `counts_by`.
+
+Some figures are refused with a sentence instead of guessed:
+
+- two date controls that set different periods on the metric's date;
+- a chart whose metrics count by different dates (or one by its own date, one by the dashboard's);
+- a formula whose parts on one dataset count by different dates;
+- a pivot table of such a metric (show it as a chart, or put the date range on the tile).
+
+**This release needs the `05a` release on every pod first**
+([Filters a newer release writes are kept](#filters-a-newer-release-writes-are-kept-05a)). A pod
+older than that drops a metric's date when it saves the metric, and drops the control's mark from an
+alert. Go through `05a`, or stop every pod before you start the new ones, as described there. While
+a `05a` pod still runs beside this release, the figures above differ between the two (that pod
+refuses them, except the three places listed under [What stays open](#what-stays-open)); the
+difference ends when the rollout does. A rollback to `05a` keeps every date and mark, and shows the
+refusals again.
 
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 

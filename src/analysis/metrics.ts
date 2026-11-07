@@ -110,6 +110,8 @@ export interface MetricSummary {
   format: MetricFormat;
   description?: string;
   direction?: 'up_good' | 'down_good';
+  /** The date column it counts by, when it has one (a column that is no longer a date reads as none: ./metricTimeScope). */
+  timeColumn?: string;
   /** Set when the metric has a tree (the Metrics table's "Open tree"). */
   hasTree?: true;
   updatedAt: string;
@@ -142,6 +144,8 @@ const MAX_DECIMALS = 6;
 /** An expression longer than this is not a metric, it is a program. */
 const MAX_FORMULA = 2000;
 const MAX_DESCRIPTION = 500;
+/** A column name's length (the contract's `max(512)` for a column). */
+const MAX_TIME_COLUMN = 512;
 
 // Atomic JSON write: temp sibling then rename (atomic on same fs). Copied from
 // visuals.ts, per-write tmp suffix and all.
@@ -241,7 +245,7 @@ function normalize(data: any, projectId: string): Metric {
   if (data.direction === 'up_good' || data.direction === 'down_good') m.direction = data.direction;
   const tree = sanitizeTree(data.tree, m.id);
   if (tree) m.tree = tree;
-  const timeColumn = trimTo(data.timeColumn, 512);
+  const timeColumn = trimTo(data.timeColumn, MAX_TIME_COLUMN);
   if (timeColumn) m.timeColumn = timeColumn;
   return m;
 }
@@ -258,6 +262,7 @@ export function toSummary(m: Metric): MetricSummary {
   if (m.description) s.description = m.description;
   if (m.direction) s.direction = m.direction;
   if (m.tree) s.hasTree = true;
+  if (m.timeColumn) s.timeColumn = m.timeColumn;
   return s;
 }
 
@@ -415,7 +420,7 @@ export async function updateMetric(
       format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
       updatedAt: new Date().toISOString(),
     };
-    // Both are CLEARABLE, so "key present" decides, not truthiness: passing '' is
+    // These are CLEARABLE, so "key present" decides, not truthiness: passing '' is
     // how the editor removes a description, and `undefined` is how it leaves one
     // alone. A truthiness test would make an emptied box a no-op.
     if (patch.description !== undefined) {
@@ -426,6 +431,11 @@ export async function updateMetric(
     if (patch.direction !== undefined) {
       if (patch.direction === 'up_good' || patch.direction === 'down_good') updated.direction = patch.direction;
       else delete updated.direction;
+    }
+    if (patch.timeColumn !== undefined) {
+      const c = trimTo(patch.timeColumn, MAX_TIME_COLUMN);
+      if (c) updated.timeColumn = c;
+      else delete updated.timeColumn;
     }
     if (patch.tree !== undefined) {
       const tree = sanitizeTree(patch.tree, id);

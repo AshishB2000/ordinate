@@ -48,8 +48,8 @@ import type { DriversSpec, PeriodScopes } from '../analysis/driverScope';
 import * as alertStore from '../analysis/alertStore';
 import type { AlertRule } from '../analysis/alerts';
 import { resolveMetric } from './metrics';
-import { controlOffOwnDate } from '../analysis/snapshotGuards';
-import { measureTimeColumnPending } from '../analysis/metricCheckMessages';
+import { rewriteControlPeriods } from '../analysis/metricTime';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import { recall, remember } from './driversAsked';
 import { computeCardMetric } from './dashboards';
 import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
@@ -295,7 +295,10 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   const metric = spec.metric.metricId ? await metrics.getMetric(projectId, spec.metric.metricId) : null;
   if (spec.metric.metricId && !metric && !spec.metric.column) return { ok: false, error: 'That metric no longer exists.' };
   if (metric && metric.datasetId !== spec.datasetId) return { ok: false, error: 'That metric lives on another dataset.' };
-  if (metric && controlOffOwnDate(metric.timeColumn, spec.filters)) return { ok: false, error: measureTimeColumnPending() }; // as its KPI: no figure yet
+  // D9, for every asker (the Summary, alerts, the waterfall, the copilot): a control's period on the metric's date, as its KPI; no mark goes on.
+  const scoped = metric ? await metricScope(projectId, metric, spec.filters) : { ok: true as const, filters: rewriteControlPeriods(spec.filters, '') };
+  if (!scoped.ok) return { ok: false, error: scoped.error };
+  spec = { ...spec, filters: scoped.filters };
   const def = metric ? metric.definition : { column: spec.metric.column as string, aggregation: spec.metric.aggregation as MetricAggregation };
   const name = spec.metric.label || (metric ? metric.name : `${spec.metric.aggregation} of ${spec.metric.column}`);
   const shape = metricShape(spec.datasetId, src.columns, def, metric ? metric.filters : [], await metrics.metricsByName(projectId), params, metric?.name);
@@ -459,7 +462,8 @@ async function specFromAlert(projectId: string, ruleId: string): Promise<Drivers
 export async function specForRule(projectId: string, rule: AlertRule): Promise<DriversSpec | null> {
   const meta = await datasets.getDatasetMeta(projectId, rule.datasetId);
   if (!meta) return null;
-  const column = rule.change?.periodColumn || (meta.columns.find((c) => c.type === 'date') || { name: '' }).name;
+  const m = rule.metric.metricId ? await metrics.getMetric(projectId, rule.metric.metricId) : null;
+  const column = rule.change?.periodColumn || (m && (await metricDate(projectId, m))) || (meta.columns.find((c) => c.type === 'date') || { name: '' }).name;
   if (!column) return null;
   return {
     datasetId: rule.datasetId,

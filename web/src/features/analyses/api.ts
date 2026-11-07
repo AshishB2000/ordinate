@@ -266,7 +266,8 @@ export interface CompareReply {
 /** Every tile's answer says how fresh it is (`asOf`, L0.2) — the card's head shows it. */
 export type VisualTile =
   // `category`: how the server bucketed the axis (src/analysis/categoryKey.ts) — a `date` axis is a time series.
-  | { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf; category?: { kind: 'text' | 'date' | 'number'; grain?: string }; ask?: string }
+  // `periodOn` (D9): the date column a dashboard date control's period was moved onto — the metric's own; the tile says so.
+  | { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf; category?: { kind: 'text' | 'date' | 'number'; grain?: string }; ask?: string; periodOn?: string }
   | { ok: false; error: string };
 /** A statistics card's answer (src/ipc/stats.ts computeStatsTile): every cell a string the server wrote. */
 export type StatsTile =
@@ -288,7 +289,7 @@ export type ScenarioReply =
   | { ok: true; scenarioName: string; baseline: number | null; baselineDisplay: string; value: number | null; display: string; delta: number | null; deltaDisplay: string; pct: number | null; tone: 'good' | 'bad' | 'flat' | 'neutral' }
   | { ok: false; error: string };
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf }
+  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf; periodOn?: string }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE

@@ -158,7 +158,7 @@ const sc = viewScope(list[0], scope);
 ok('scope: dashboard filters, then each control\'s pick, then the selection', same(sc.filters, [
   { type: 'filter', column: 'status', op: '=', value: 'Shipped' },
   { type: 'filter', column: 'region', op: '=', value: 'West' },
-  { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'last_n_days', n: 30 } },
+  { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'last_n_days', n: 30 }, fromControl: true },
   { type: 'filter', column: 'category', op: '=', value: 'Technology' },
 ]), JSON.stringify(sc.filters));
 ok('scope: parameters at the view\'s values', same(sc.params, [{ name: 'target', kind: 'number', value: 250, min: 0, max: 500 }]));

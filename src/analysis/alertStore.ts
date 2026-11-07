@@ -36,7 +36,10 @@ import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
-import { snapshotMetric, timeColumnControlRefusal } from './snapshotGuards';
+import { snapshotMetric } from './snapshotGuards';
+import { getMetric } from './metrics';
+import { rewriteControlPeriods } from './metricTime';
+import { metricScope } from './metricTimeScope';
 import { sanitizeDashboardFilters } from './dashboards';
 import { detectAnomalies } from './anomalies';
 import { detectAnomaliesResident } from '../engine/anomaliesResident';
@@ -323,13 +326,16 @@ export async function metricFor(
   projectId: string,
   rule: AlertRule,
 ): Promise<{ value: number | null; previous: number | null; period?: string }> {
-  const filters = (rule.metric.filters || []) as FilterStep[];
+  const stored = (rule.metric.filters || []) as FilterStep[];
   const spec = { column: rule.metric.column, aggregation: rule.metric.aggregation };
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   // A rule made from a snapshot metric's KPI stores only its column and total: no figure until a later release, never the plain sum.
   if (await snapshotMetric(projectId, rule.metric.metricId)) return { value: null, previous: null };
-  // …nor one counted by the metric's own date under a dashboard date control on another column (a later release moves it).
-  if (await timeColumnControlRefusal(projectId, { category: '', values: [rule.metric] }, filters)) return { value: null, previous: null };
+  // D9: one saved from a KPI under a date control keeps the mark, so it counts by its metric's date, as the KPI did (no mark: no read).
+  const m = rewriteControlPeriods(stored, '') !== stored && typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
+  const scoped = m ? await metricScope(projectId, m, stored) : { ok: true as const, filters: stored };
+  if (!scoped.ok) return { value: null, previous: null }; // dates that disagree: no figure, never the control's column
+  const filters = scoped.filters;
 
   if (rule.compare === 'change' && rule.change?.vs === 'previous_period' && rule.change.periodColumn) {
     const periods = await recentPeriods(projectId, rule.datasetId, rule.change.periodColumn);

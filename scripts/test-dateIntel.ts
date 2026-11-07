@@ -252,10 +252,10 @@ function eq(label: string, got: string, want: string): void {
 {
   const rel = controlSteps({ kind: 'date_range', column: 'd' }, { preset: 'last_n_days', n: 30 });
   ok('a relative control emits a period step with its preset', JSON.stringify(rel) ===
-    '[{"type":"filter","column":"d","op":"period","period":{"preset":"last_n_days","n":30}}]', JSON.stringify(rel));
+    '[{"type":"filter","column":"d","op":"period","period":{"preset":"last_n_days","n":30},"fromControl":true}]', JSON.stringify(rel));
   const abs = controlSteps({ kind: 'date_range', column: 'd' }, { from: '2024-01-01' });
   ok('two fixed dates emit a custom period', JSON.stringify(abs) ===
-    '[{"type":"filter","column":"d","op":"period","period":{"preset":"custom","from":"2024-01-01"}}]', JSON.stringify(abs));
+    '[{"type":"filter","column":"d","op":"period","period":{"preset":"custom","from":"2024-01-01"},"fromControl":true}]', JSON.stringify(abs));
   ok('an unset date control filters nothing', controlSteps({ kind: 'date_range', column: 'd' }, {}).length === 0);
   const merged = mergeDashboardFilters(rel, [{ type: 'filter', column: 'd', op: 'period', period: { preset: 'last_year' } }]);
   ok('two different periods on one column are two filters, not a duplicate', merged.length === 2, JSON.stringify(merged));

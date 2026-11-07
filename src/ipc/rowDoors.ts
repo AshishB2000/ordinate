@@ -124,23 +124,29 @@ async function lockOrRefusal(projectId: string, datasetId: string): Promise<Lock
 
 const isRefusal = (x: unknown): x is Refusal => !!x && typeof x === 'object' && (x as { ok?: unknown }).ok === false;
 
+/** A chart's filters with every term expanded, or the typed refusal of a step this pod cannot apply. */
+export async function expandedOrRefusal(projectId: string, datasetId: string, filters: FilterStep[]): Promise<FilterStep[] | TermRefusal> {
+  try {
+    return (await expandTerms(projectId, datasetId, filters)).steps;
+  } catch (err) {
+    if (isTermNotExpandedError(err)) return termRefusal(err);
+    throw err;
+  }
+}
+
 /** `vizDataFor` under the rules: the body as before, or locked, or a typed refusal reply. */
 export async function lockedViz<O extends { sample?: boolean }, R>(
   projectId: string,
   datasetId: string,
   encoding: VizEncoding,
-  filters: FilterStep[],
+  asked: FilterStep[],
   opts: O,
   body: (projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: O) => Promise<R>,
 ): Promise<R | Refusal | TermRefusal> {
   // A step this pod cannot apply (a glossary term, a newer release's) refuses FIRST: before the lock, which
   // would drop it (withLockSteps), the gates that read the filters, the Live split and the answer cache.
-  try {
-    filters = (await expandTerms(projectId, datasetId, filters)).steps;
-  } catch (err) {
-    if (isTermNotExpandedError(err)) return termRefusal(err);
-    throw err;
-  }
+  const filters = await expandedOrRefusal(projectId, datasetId, asked);
+  if (!Array.isArray(filters)) return filters;
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
   if (!lock) {

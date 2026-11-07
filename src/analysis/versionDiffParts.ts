@@ -7,6 +7,7 @@ import { canonical } from './recordDiff';
 import { describeDefinitionShort, describeFilter } from './metricFormat';
 import type { FilterStep } from '../data/transforms';
 import type { MetricDefinition } from './metrics';
+import { dashboardDate } from './metricCheckMessages';
 import * as M from './versionDiffMessages';
 
 // ponytail: version records are stored JSON of five shapes, read field by field
@@ -22,7 +23,7 @@ export type ChangeKind =
   | 'card.calc' | 'card.scenario' | 'card.text' | 'card.control' | 'card.settings' | 'card.treeRoot'
   | 'visual.chartType' | 'visual.category' | 'visual.series' | 'visual.measureAdded' | 'visual.measureRemoved'
   | 'visual.grain' | 'visual.bins' | 'visual.geo' | 'visual.pivot' | 'visual.styling'
-  | 'metric.definition' | 'metric.format' | 'metric.direction' | 'metric.tree'
+  | 'metric.definition' | 'metric.format' | 'metric.direction' | 'metric.tree' | 'metric.timeColumn'
   | 'report.format' | 'report.dashboard' | 'report.pagesAdded' | 'report.pagesRemoved' | 'report.pagesIncluded'
   | 'report.pagesExcluded' | 'report.pagesEdited' | 'report.pagesReordered' | 'report.cover' | 'report.paper'
   | 'report.schedule' | 'report.includeFilters' | 'report.narrative'
@@ -155,6 +156,7 @@ function diffMetric(a: Rec, b: Rec, out: Change[]): void {
   const db = String(b.description || '');
   if (da !== db) rec('description', {}, wordDiff(da, db));
   if ((a.direction || '') !== (b.direction || '')) rec('metric.direction');
+  if ((a.timeColumn || '') !== (b.timeColumn || '')) rec('metric.timeColumn', { from: String(a.timeColumn || dashboardDate()), to: String(b.timeColumn || dashboardDate()) });
   // Its tree (docs/metric-tree): described by shape — the parts are other records, named on their own.
   if (!same(a.tree ?? null, b.tree ?? null)) rec('metric.tree', { from: treeShape(a.tree), to: treeShape(b.tree) });
 }

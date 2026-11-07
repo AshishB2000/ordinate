@@ -14,11 +14,12 @@ export function controlSteps(control: NonNullable<Card['control']>, state: Contr
   if (control.kind === 'dropdown' && 'value' in state) return state.value ? [{ type: 'filter', column, op: '=', value: state.value }] : [];
   if (control.kind === 'multi' && 'values' in state) return state.values.length ? [{ type: 'filter', column, op: 'in', values: state.values.slice() }] : [];
   if (control.kind === 'date_range') {
-    if ('preset' in state && state.preset !== 'custom') return [{ type: 'filter', column, op: 'period', period: { ...state } }];
+    // `fromControl` (D9): the server moves this period onto the date a metric counts by; a tile's own date filter stays put.
+    if ('preset' in state && state.preset !== 'custom') return [{ type: 'filter', column, op: 'period', period: { ...state }, fromControl: true }];
     const from = 'from' in state ? state.from : undefined;
     const to = 'to' in state ? state.to : undefined;
     if (!from && !to) return [];
-    return [{ type: 'filter', column, op: 'period', period: { preset: 'custom', ...(from ? { from } : {}), ...(to ? { to } : {}) } }];
+    return [{ type: 'filter', column, op: 'period', period: { preset: 'custom', ...(from ? { from } : {}), ...(to ? { to } : {}) }, fromControl: true }];
   }
   return [];
 }

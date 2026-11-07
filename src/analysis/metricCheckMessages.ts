@@ -64,9 +64,9 @@ export function measureSnapshotPending(name: string): string {
   return t('metricCheckMessages.is_a_snapshot_metric_which_this', { name });
 }
 
-/** A metric that counts by its own date, under a dashboard date control on another column: a later release moves the period onto that date. */
-export function measureTimeColumnPending(): string {
-  return t('metricCheckMessages.this_chart_counts_a_metric_by');
+/** Two dashboard date controls set different periods, and both land on the date a metric counts by. */
+export function controlPeriodsDisagree(): string {
+  return t('metricCheckMessages.this_metric_counts_by_its_own');
 }
 
 /** A running total, percent of total or moving sum of a measure that cannot be added up. `calc` is its name in prose. */
@@ -77,4 +77,37 @@ export function calcNotAdditive(measure: string, calc: string): string {
 /** The same, for a snapshot measure along dates: it adds across categories but not across time. */
 export function calcNotAdditiveOverTime(measure: string, calc: string): string {
   return t('metricCheckMessages.can_t_be_shown_as_along', { measure, calc });
+}
+
+// ── The date a metric counts by (semantic layer D9) ──────────────────────────
+// A date is a column name, or `dashboardDate()` for "no date of its own".
+
+/** A metric's date names a column that is not a date column of its dataset. */
+export function notADateColumn(column: string): string {
+  return t('metricCheckMessages.is_not_a_date_column_of', { column });
+}
+
+/** What a metric or measure with no date of its own counts by, inside a sentence. */
+export function dashboardDate(): string {
+  return t('metricCheckMessages.the_dashboard_s_date');
+}
+
+/** A formula's own date is not the date one of its parts counts by. */
+export function formulaDatesDiffer(name: string, part: string, partDate: string, ownDate: string): string {
+  return t('metricCheckMessages.counts_by_but_its_part_counts', { name, ownDate, part, partDate });
+}
+
+/** A formula with no date of its own, over parts that count by different dates: it has none to take. */
+export function formulaPartsDiffer(name: string, a: string, aDate: string, b: string, bDate: string): string {
+  return t('metricCheckMessages.is_calculated_from_which_counts_by', { name, a, aDate, b, bDate });
+}
+
+/** A pivot table's value is a metric with its own date, under a dashboard date control on another column: a pivot draws its stored copy, so the period is not moved. */
+export function pivotOwnDate(name: string): string {
+  return t('metricCheckMessages.counts_by_its_own_date_and', { name });
+}
+
+/** One chart draws measures that count by different dates, under a date control. */
+export function measuresCountByDifferentDates(a: string, aDate: string, b: string, bDate: string): string {
+  return t('metricCheckMessages.counts_by_and_by_so_one', { a, aDate, b, bDate });
 }

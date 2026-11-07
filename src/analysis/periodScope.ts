@@ -120,17 +120,19 @@ function toDate(range: DateRange, prior: DateRange, mode: 'previous_period' | 'p
  * from — no date filter in scope (for previous period / last year), or an
  * open-ended range that has no length (previous period only). A `custom`
  * comparison needs no date filter: it names its own range, on the scope's date
- * column or, failing that, the dataset's first date column.
+ * column or, failing that, `dateColumn` (the date a metric counts by) or the
+ * dataset's first date column.
  */
 export function compareScope(
   filters: FilterStep[],
   columns: ScopeColumn[],
   compare: { mode: CompareMode; from?: string; to?: string },
+  dateColumn?: string,
 ): MovedScope | null {
   const types = new Map(columns.map((c) => [c.name, c.type]));
   const found = scopeRange(filters, columns);
   if (compare.mode === 'custom') {
-    const column = found ? found.column : (columns.find((c) => c.type === 'date') || { name: '' }).name;
+    const column = found ? found.column : dateColumn || (columns.find((c) => c.type === 'date') || { name: '' }).name;
     if (!column || !compare.from || !compare.to) return null;
     const prior = { from: compare.from, to: compare.to };
     return { column, range: found ? found.range : {}, prior, filters: withRange(filters, column, prior, types) };

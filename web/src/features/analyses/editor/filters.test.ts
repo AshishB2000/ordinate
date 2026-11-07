@@ -9,6 +9,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'vitest';
 import { clickFilterOn, clickFilterSteps, toggleClickFilter, type ClickFilter, type ClickMark } from './filters';
+import { mergeFilters } from '../VisualTile';
+import { stepKey } from '../../dashboards/useViewer';
 
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
@@ -67,5 +69,36 @@ describe('click-to-filter mirrors dashboardFilters', () => {
     const stacked = [...one, ...toggleClickFilter([], 'a', cat('West'))];
     notDeepStrictEqual(stacked, server.toggleClickFilter(one, 'a', cat('West')));
     notDeepStrictEqual(clickFilterSteps(one), server.clickFilterSteps(one, 'a'));
+  });
+});
+
+describe('a date control\'s mark and a row lock are part of every merge key, as the server\'s', () => {
+  const CTRL = { type: 'filter', column: 'order_date', op: 'period', period: { preset: 'custom', from: '2024-03-01', to: '2024-03-31' }, fromControl: true };
+  const OWN = { type: 'filter', column: 'order_date', op: 'period', period: CTRL.period };
+  const F = { type: 'filter', column: 'region', op: '=', value: 'West' };
+  const LOCK = { ...F, lock: true };
+
+  it('mergeFilters keeps a control step and a tile\'s identical own step', () => {
+    strictEqual(mergeFilters([CTRL], [OWN]).length, 2);
+    strictEqual(mergeFilters([OWN], [OWN]).length, 1); // NEGATIVE CONTROL: two unmarked duplicates still collapse
+  });
+
+  it('mergeFilters never merges a row lock away in favour of an identical unlocked step', () => {
+    strictEqual(mergeFilters([F], [LOCK]).length, 2);
+    strictEqual(mergeFilters([LOCK], [{ ...LOCK }]).length, 1); // NEGATIVE CONTROL: the same lock twice is one
+  });
+
+  it('mergeFilters equals mergeDashboardFilters', () => {
+    const lists: unknown[][] = [[], [CTRL], [OWN], [CTRL, OWN], [OWN, { ...CTRL }, CTRL], [{ ...CTRL, column: 'ship_date' }, OWN], [F], [LOCK], [LOCK, F, { ...LOCK }]];
+    for (const a of lists) for (const b of lists) deepStrictEqual(mergeFilters(a as never, b as never), server.mergeDashboardFilters(a, b), JSON.stringify([a, b]));
+  });
+
+  // Not `radius` or `context`: useViewer.stepKey keys a reader's selection, which carries neither (the server's merge does).
+  it('useViewer.stepKey tells the same steps apart as the server\'s stepKey', () => {
+    const TERM = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' };
+    const V = '44444444-4444-4444-8444-444444444444';
+    const steps = [CTRL, OWN, { ...CTRL }, { ...CTRL, column: 'ship_date' }, { ...OWN, period: { preset: 'last_n_days', n: 7 } }, F, { ...F, fromControl: true }, LOCK, { ...F, via: V }, { ...LOCK, via: V }, TERM, { ...TERM, fromControl: true }];
+    for (const a of steps) for (const b of steps) strictEqual(stepKey(a) === stepKey(b), server.stepKey(a) === server.stepKey(b), JSON.stringify([a, b]));
+    for (const [a, b] of [[CTRL, OWN], [F, LOCK], [F, { ...F, via: V }], [OWN, steps[4]]]) notDeepStrictEqual(stepKey(a), stepKey(b)); // the walk above is not of one key
   });
 });

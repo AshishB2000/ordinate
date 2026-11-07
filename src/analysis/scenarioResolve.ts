@@ -53,6 +53,8 @@ import {
 } from './scenarioModel';
 import type { Driver, DriverKind, DriverTarget, Nudge, Partition, Scenario, TornadoBar } from './scenarioModel';
 import { expandTerms } from './termExpand';
+import { metricScope } from './metricTimeScope';
+import type { DateScope } from './metricTimeScope';
 
 const MAX_FORMULA_DEPTH = 10; // as src/ipc/metrics.ts
 
@@ -115,6 +117,8 @@ interface Ctx {
   inputs: Map<string, Promise<Partition[] | null>>;
   touched: Set<number>;
   notes: Set<string>;
+  /** D9: each metric's scope, a date control's period on the date it counts by (as resolveMetric moves it for the baseline). */
+  scopes: Map<string, Promise<DateScope>>;
 }
 
 /** One evaluation: the drivers as set, optionally one of them nudged. */
@@ -128,7 +132,7 @@ interface Pass {
 function newCtx(projectId: string, scope: FilterStep[], params: ParamValues, drivers: Driver[]): Ctx {
   return {
     projectId, scope, params, drivers: effectiveDrivers(drivers, params),
-    byName: null, byId: new Map(), inputs: new Map(), touched: new Set(), notes: new Set(),
+    byName: null, byId: new Map(), inputs: new Map(), touched: new Set(), notes: new Set(), scopes: new Map(),
   };
 }
 
@@ -210,9 +214,9 @@ async function operand(pass: Pass, datasetId: string, spec: { column: string; ag
   return res.ok ? res.value : null;
 }
 
-async function resolveDefinition(pass: Pass, datasetId: string, definition: MetricDefinition, filters: FilterStep[], depth: number): Promise<number | null> {
+async function resolveDefinition(pass: Pass, datasetId: string, definition: MetricDefinition, filters: FilterStep[], depth: number, scope: FilterStep[]): Promise<number | null> {
   const ctx = pass.ctx;
-  const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
+  const all = resolveFilterParams(filters, ctx.params).steps.concat(scope);
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
     return operand(pass, datasetId, definition, all);
@@ -239,9 +243,12 @@ async function metricValue(pass: Pass, metric: Metric, depth: number): Promise<n
   if (pass.memo.has(key)) return pass.memo.get(key) ?? null;
   if (pass.stack.has(key)) return null;
   pass.stack.add(key);
-  let raw: number | null;
+  let raw: number | null = null;
   try {
-    raw = await resolveDefinition(pass, metric.datasetId, metric.definition, metric.filters, depth);
+    let pending = pass.ctx.scopes.get(metric.id);
+    if (!pending) pass.ctx.scopes.set(metric.id, (pending = metricScope(pass.ctx.projectId, metric, pass.ctx.scope)));
+    const scoped = await pending;
+    if (scoped.ok) raw = await resolveDefinition(pass, metric.datasetId, metric.definition, metric.filters, depth, scoped.filters);
   } finally {
     pass.stack.delete(key);
   }

@@ -27,6 +27,7 @@ import { refuse } from '../engine/live/liveSpec';
 import { liveMetaOf } from './liveRoute';
 import { fxScope, fxVizContext } from './fxQuery';
 import { vizDataFor } from './visuals';
+import { chartScope } from '../analysis/metricTimeScope';
 import { runDrivers } from './drivers';
 import type { DriversResult } from './drivers';
 
@@ -63,7 +64,10 @@ export async function explainPoint(projectId: string, req: PointRequest): Promis
   // The same two whitelists and the same parameter resolution `visual:data` runs, so the buckets are the tile's.
   const enc = sanitizeEncoding(req.encoding);
   const values = paramValues(req.params);
-  const filters = resolveFilterParams(visuals.sanitizeFilters(req.filters), values).steps;
+  // A date control's period on the date the chart counts by (analysis/metricTimeScope), before the buckets are read off it.
+  const scoped = await chartScope(projectId, datasetId, enc, resolveFilterParams(visuals.sanitizeFilters(req.filters), values).steps);
+  if (!scoped.ok) return { ok: false, error: scoped.error };
+  const filters = scoped.filters;
   if (await fxScope(req.currency, () => fxVizContext(projectId, datasetId, enc, filters))) return refusePoint('converted', msg.pointConverted());
 
   const chart = await vizDataFor(projectId, datasetId, enc, filters, { params: values });

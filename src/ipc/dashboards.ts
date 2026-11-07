@@ -11,6 +11,7 @@ import type { MetricAggregation } from '../analysis/metricValue';
 import type { MetricSnapshot } from '../analysis/snapshot';
 import { applyPipeline } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
+import { rewriteControlPeriods } from '../analysis/metricTime';
 import { joinedMetricFor } from './relationships';
 import { lodMetricFor } from './lodData';
 import { paramValues, resolveFilterParams } from '../analysis/params';
@@ -157,7 +158,8 @@ export function computeCardMetric(
   params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
   if (spec.snapshot) return Promise.resolve({ ok: true, value: null }); // shortcut: snapshots are computed from step 07; until then no figure, never a sum over every date
-  return lockedMetric(projectId, datasetId, spec, filters, params, computeCardMetricUnlocked);
+  // D9: a column rollup counts by the control's own column, and no mark reaches an engine or a cache key (no mark: the same array).
+  return lockedMetric(projectId, datasetId, spec, rewriteControlPeriods(filters, ''), params, computeCardMetricUnlocked);
 }
 
 async function computeCardMetricUnlocked(
