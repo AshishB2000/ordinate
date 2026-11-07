@@ -350,7 +350,18 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const taken = put(edit(n1, 'metrics', N.stock, (m) => { m.name = 'Zz stock'; }), 'metrics/new-stock.json', { ...jsonAt(n1, 'metrics/orders.json'), id: fid(82), name: 'Stock on hand' });
   const r10b = done(await applyPlanned(N.P, taken));
   const names10 = (await as(() => metrics.listMetrics(N.P))).map((m) => m.name);
-  ok('a rename and a new metric taking its old name: both land, in that order', r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
+  // A file that drops a snapshot's per, or the snapshot, clears it (the update sends null, as the editor does).
+  const snapOf = async (): Promise<unknown> => ((await metric(N.P, N.stock))?.definition as { snapshot?: unknown }).snapshot;
+  const r10c = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot.per; })));
+  ok('a file without the snapshot\'s per: written, and the per is gone', r10c.written.includes(`metric:${N.stock}`) && JSON.stringify(await snapOf()) === '{"column":"day","take":"last"}', show([r10c, await snapOf()]));
+  const r10d = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot; })));
+  ok('… and a file without the snapshot: it is gone', r10d.written.includes(`metric:${N.stock}`) && (await snapOf()) === undefined, show([r10d, await snapOf()]));
+  const asWas = edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.base; }); // what a before file holds: the model as it was, no base
+  await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { m.definition.snapshot = { column: 'day', take: 'first' }; }));
+  const added = await snapOf();
+  await applyPlanned(N.P, asWas);
+  ok('importing the before file of an import that added a snapshot removes it', JSON.stringify(added) === '{"column":"day","take":"first"}' && (await snapOf()) === undefined, show([added, await snapOf()]));
+  ok('a rename and a new metric taking its old name: both land, in that order',r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
 
   await close();
   finish();

@@ -212,7 +212,11 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
   const metricWrite = (item: PlanItem) => async (): Promise<string | null> => {
     const m = follow(formOf(item).value as ModelMetric);
     if (item.targetId) {
-      const reply = await updateMetricChecked(projectId, item.targetId, patchOf(item, m), item.hereHash);
+      const patch = patchOf(item, m);
+      // The store keeps a snapshot (and its per) a definition leaves out; only null clears it, as the editor sends it.
+      const d = patch.definition as Record<string, unknown> | undefined;
+      if (d && 'column' in d) patch.definition = { ...d, snapshot: d.snapshot ? { per: null, ...(d.snapshot as object) } : null };
+      const reply = await updateMetricChecked(projectId, item.targetId, patch, item.hereHash);
       return 'metric' in reply ? null : reply.error;
     }
     const reply = await saveMetricChecked(projectId, {
