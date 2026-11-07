@@ -50,7 +50,8 @@ export function readModel(d: Described, backend: string, model: string, now: str
   for (const x of Array.isArray(d.dimensions) ? d.dimensions : []) {
     if (!x || !isLayerName(x.name) || seen.has(x.name)) continue;
     seen.add(x.name);
-    if (x.type === null || !TYPES.has(x.type)) {
+    // A type no column takes, or one past the dimensions a block holds grains for: left out, named.
+    if (x.type === null || !TYPES.has(x.type) || columns.length >= MAX_SEMANTIC_METRICS) {
       unmapped.push(x.name);
       continue;
     }

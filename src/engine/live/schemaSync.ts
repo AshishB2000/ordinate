@@ -89,7 +89,7 @@ export interface SyncReport {
   sample: SampleOutcome;
   /** A semantic dataset (part 7 b2, ./semantic/semanticSync): no row is sampled, so its markings are set by hand. */
   sensitivity?: 'manual';
-  /** A semantic dataset's dimensions of a type no column can take: left out. */
+  /** A semantic dataset's dimensions of a type no column can take, or past the 2,000 a dataset holds: left out. */
   unmapped?: string[];
   /** A semantic dataset's layer metrics whose mirror could not be written. */
   unmirrored?: string[];

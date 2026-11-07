@@ -69,6 +69,11 @@ void (async () => {
     ['no syncedAt', { ...BLOCK, syncedAt: 'yesterday' }], ['a metric that is no object', { ...BLOCK, metrics: [7] }], ['null', null], ['b0\'s test value', { backend: 'cube', model: 'orders' }],
   ];
   for (const [what, v] of bad) ok(`unreadable: ${what}`, sd.sanitizeSemantic(v) === null);
+  // A model with more date dimensions than a block holds grains for: capped, the rest named, never an unreadable block.
+  const semSync: typeof import('../src/engine/live/semantic/semanticSync') = require('../src/engine/live/semantic/semanticSync');
+  const wide = semSync.readModel({ ok: true, dimensions: Array.from({ length: 2100 }, (_x, i) => ({ name: `d${i}`, type: 'date' as const, grains: ['day' as const] })), metrics: [] }, 'fake', 'm', SYNCED);
+  ok('a model of 2,100 date dimensions: 2,000 read, the rest named unmapped, the block readable', wide.columns.length === 2000 && wide.semantic.grains.length === 2000 && wide.unmapped.length === 100
+    && wide.unmapped[0] === 'd2000' && sd.sanitizeSemantic(wide.semantic) !== null, show([wide.columns.length, wide.unmapped.length]));
   ok('NEGATIVE CONTROL: 2,000 metrics and a 512-character name read', sd.sanitizeSemantic({ ...BLOCK, metrics: Array.from({ length: 2000 }, (_x, i) => ({ name: i ? `m${i}` : 'y'.repeat(512), additive: false })) }) !== null);
 
   const ds = await add(CONN);
