@@ -195,9 +195,14 @@ async function surfacesSection({ P, D, rev, avg, plain }: Fx): Promise<void> {
   const pub = card ? card.payloads[card.variants[0]] : undefined;
   ok('a published KPI carries the same target', Object.is(pub?.target?.value, tile.target.value) && pub.target.status === tile.target.status, show(pub));
 
-  const sc = await H.as(H.ORG_A, () => scorecards.computeScorecard(P, { id: randomUUID(), name: 's', period: 'month', rows: [{ metricId: rev.id }, { metricId: rev.id, target: 5 }] } as never));
+  const sCard = { id: randomUUID(), name: 's', period: 'month', rows: [{ metricId: rev.id }, { metricId: rev.id, target: 5 }] };
+  const sc = await H.as(H.ORG_A, () => scorecards.computeScorecard(P, sCard as never));
   ok('scorecard: the metric\'s target for the month in progress, pro-rated', Object.is(sc.rows[0].target, planNov * (20 / 30)), show(sc.rows[0]));
   ok('scorecard: a row\'s own target wins', sc.rows[1].target === 5);
+  const det = await H.as(H.ORG_A, () => scorecards.scorecardDetail(P, sCard as never, rev.id, 0));
+  ok('scorecard detail: the row\'s target, attainment and status', typeof det.target === 'number' && Object.is(det.target, sc.rows[0].target) && Object.is(det.attainment, sc.rows[0].attainment) && det.status === sc.rows[0].status, show([det.target, det.attainment, det.status, sc.rows[0]]));
+  const own = await H.as(H.ORG_A, () => scorecards.scorecardDetail(P, { ...sCard, rows: [{ metricId: rev.id, target: 5 }] } as never, rev.id, 0));
+  ok('NEGATIVE CONTROL: … and a row\'s own target still wins there', own.target === 5, show(own.target));
 
   const mv = await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P, transport: 'mcp', cwd: '', headless: true, progress: () => undefined } as never, 'Revenue')) as Reply;
   ok('metric_value carries the target: an additive metric has no period there, so its sentence', mv.target?.none === tm.targetPickPeriod(), show(mv));

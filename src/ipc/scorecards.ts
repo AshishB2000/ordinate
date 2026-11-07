@@ -409,8 +409,12 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
   for (const w of windows) values.push(await figure(ctx, m.id, w));
 
   let target: number | null = null;
+  let thresholds = def?.thresholds;
   if (def && finite(def.target)) target = def.target;
-  else if (def && def.target && typeof def.target === 'object') target = await figure(ctx, def.target.metricId, current);
+  else if (!def?.target && m.target) { // D12: the metric's own target over the window, as its row takes it
+    target = (await metricTarget(projectId, m, col && current ? [periodFilter(col, current)] : [], null))?.value ?? null;
+    thresholds ??= m.target.thresholds;
+  } else if (def && def.target && typeof def.target === 'object') target = await figure(ctx, def.target.metricId, current);
 
   const data: { labels: string[]; series: Array<{ name: string; values: Array<number | null> }>; analytics: ResolvedOverlay[] } =
     { labels: windows.map((w) => w.label), series: [{ name: m.name, values }], analytics: [] };
@@ -443,7 +447,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
     }
   }
   const value = values.length ? values[values.length - 1] : await figure(ctx, m.id, null);
-  const { status, attainment } = rowStatus(value, target, def ? def.thresholds : undefined, m.direction);
+  const { status, attainment } = rowStatus(value, target, thresholds, m.direction);
   return {
     ok: true,
     metric: { id: m.id, name: m.name, datasetId: m.datasetId, definition: m.definition, definitionText: describeDefinition(m, await termWords(projectId, m.filters), await baseName(projectId, m.definition)), format: m.format, direction: m.direction },
