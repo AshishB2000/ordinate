@@ -206,6 +206,9 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const at = new Date().toISOString();
     await W.as('boss', () => pipeStore.appendRuns(P, [{ nodeId: `dataset:${staff}`, id: crypto.randomUUID(), runId: crypto.randomUUID(), trigger: 'manual' as const, status: 'failed' as const,
       startedAt: at, finishedAt: at, durationMs: 1, attempts: 1, warnings: [`${canary(7)} looks odd`], errors: [`no row for ${canary(8)}`] }]));
+    // A failed refresh's text can quote a value: every list of datasets leaves it out for east (dataset:list, home:overview).
+    const recMod: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    await W.as('boss', () => recMod.serialized(recMod.datasetFilePath(P, staff), (raw) => { raw.lastRefreshStatus = 'error'; raw.lastRefreshError = `"${canary(9)}" is not a number`; return true; }));
 
     const SUB = String(((await W.call('boss', 'subscription:list', { projectId: P })).body?.subscriptions as { id: string }[] | undefined)?.[0]?.id);
     const COUNT_BY = (category: string) => ({ category, values: [COUNT] });
@@ -313,6 +316,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const edTexts = [...(await sweep('ed')), ...(await mcpTextsAs('ed'))];
     ok('NEGATIVE CONTROL: hr\'s and the editor\'s replies carry them', hrTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => C.SALARY_FIGURES.some((f) => t.includes(f))));
     ok('NEGATIVE CONTROL: …and so do hr\'s prompts', prompts.some((p) => p.includes(C.SSN_CANARY)));
+    ok('NEGATIVE CONTROL: hr\'s dataset:list and home:overview carry the refresh error', ['dataset:list ', 'home:overview '].every((ch) => hrTexts.some((t) => t.startsWith(ch) && t.includes(canary(9)))));
     const answered = (texts: string[]): string => texts.find((t) => t.startsWith('answer_verified_question ')) ?? '';
     ok('NEGATIVE CONTROL: hr\'s answer_verified_question over salary carries its figures; east\'s does not', C.SALARY_FIGURES.some((f) => answered(hrTexts).includes(f))
       && !hasCanary(answered(eastTexts)), `${answered(hrTexts).slice(0, 200)} | ${answered(eastTexts).slice(0, 200)}`);
@@ -355,7 +359,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     };
     must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'employee_id'] }] } }));
     // Every metric of the project at once: Payroll's and the ssn metric's figures would show in the canary sweep above.
-    const PROJECT_WIDE = new Set(['home:overview', 'numbers:get', 'metric:table']);
+    const PROJECT_WIDE = new Set(['numbers:get', 'metric:table']);
     const gates = Object.entries(COLUMN_TREATMENT).filter(([, c]) => c === 'GATE').map(([ch]) => ch);
     const unproven = gates.filter((ch) => !(ch in PAIRS) && !PROJECT_WIDE.has(ch));
     ok('every GATE channel has a question naming ssn here, or is project-wide (proven by the canaries)', unproven.length === 0, unproven.join(', '));
