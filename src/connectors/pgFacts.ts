@@ -14,6 +14,7 @@
 // statement ends in `limit N`. Redshift is not Postgres: no pg_get_partkeydef, no pg_index, no
 // pg_total_relation_size, informational keys (`enforced: false`), and SVV_TABLE_INFO leaves out empty tables.
 
+import { splitTop } from './factsRead';
 import { FACTS_ROWS, type FactColumn, type FactsQuery, type FactsReply, type OpenFacts, type TableFacts } from './tableFacts';
 
 const N = FACTS_ROWS;
@@ -61,22 +62,6 @@ async function attempt(q: FactsQuery, sql: string, params: (string | number | nu
 function inListOrder(rows: unknown[][], listAt: number): string[] {
   const order = (str(rows[0]?.[listAt]).match(/\d+/g) ?? []).map(Number);
   return [...rows].sort((a, b) => order.indexOf(Number(a[1])) - order.indexOf(Number(b[1]))).map((r) => str(r[0]));
-}
-
-/** Split on the commas outside parentheses and quotes: `a, date_trunc('day', ts)` is two items. */
-function splitTop(list: string): string[] {
-  const out: string[] = [];
-  let depth = 0, quote = '', from = 0;
-  for (let i = 0; i < list.length; i++) {
-    const ch = list[i];
-    if (quote) { if (ch === quote) quote = ''; continue; }
-    if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === '(') depth += 1;
-    else if (ch === ')') depth -= 1;
-    else if (ch === ',' && depth === 0) { out.push(list.slice(from, i)); from = i + 1; }
-  }
-  out.push(list.slice(from));
-  return out.map((x) => x.trim()).filter(Boolean);
 }
 
 /** `RANGE (order_date)` (pg_get_partkeydef) → the method and the columns; an expression is kept as written. */

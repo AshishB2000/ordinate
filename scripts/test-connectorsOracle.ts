@@ -16,6 +16,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { byCatalog, recorder, refusing, type Answer } from './factsHarness';
 
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
@@ -141,6 +142,7 @@ Module._load = function (request: string, ...rest: unknown[]): unknown {
 
 // ponytail: compiled sibling of the .ts source.
 const oracle: typeof import('../src/connectors/oracle') = require('../src/connectors/oracle');
+const oracleFacts: typeof import('../src/connectors/oracleFacts') = require('../src/connectors/oracleFacts');
 
 type ConnectorContext = import('../src/connectors/types').ConnectorContext;
 type ConnectorDef = import('../src/connectors/types').ConnectorDef;
@@ -395,6 +397,91 @@ async function main(): Promise<void> {
   resetState();
   const empty = await ora.run(ctxFor(), '   ');
   ok('an empty query is rejected before connecting', empty.ok === false && state.lastAttrs === null);
+
+  // ── a table's facts ────────────────────────────────────────────────────────
+  //
+  // UNVERIFIED: every statement is written from the Oracle documentation; no database answered it. A fixture
+  // answers by dictionary view, and what is pinned is THIS side of the socket: a name is bound or refused before
+  // a connection, the verbatim spelling is tried before the upper-case one, every statement ends in
+  // FETCH FIRST :n ROWS ONLY, a refused view costs its field and only ALL_TAB_COLUMNS fails the read.
+
+  const CATALOG = byCatalog([
+    [/all_tab_comments/i, [['Orders']]],
+    [/all_col_comments/i, [['REGION', 'Sales region']]],
+    [/all_constraints/i, [['LINE_ID', 1, 'DISABLED', 'SYS_C0011']]],
+    [/all_indexes/i, [['SYS_C0011', 'UNIQUE', 'NORMAL', 'LINE_ID', 1], ['ORDERS_REGION', 'NONUNIQUE', 'BITMAP', 'REGION', 1], ['ORDERS_RD', 'UNIQUE', 'NORMAL', 'REGION', 1], ['ORDERS_RD', 'UNIQUE', 'NORMAL', 'ORDER_DATE', 2]]],
+    [/all_part_tables/i, [['LIST', 'REGION', 1]]],
+    [/\ball_tables\b/i, [[1200, '2024-05-01T12:00:00.000Z']]],
+  ]);
+  // The columns exist under the upper-case spelling only, as a table made with an unquoted `create table orders` does.
+  const UPPER_ONLY: Answer = (sql, params) => /all_tab_columns/i.test(sql)
+    ? (params[0] === 'ORDERS' ? [['LINE_ID', 'NUMBER', 'N', 'SHOP'], ['REGION', 'VARCHAR2', 'Y', 'SHOP'], ['ORDER_DATE', 'DATE', 'N', 'SHOP']] : [])
+    : CATALOG(sql, params);
+  const readFacts = async (answer = UPPER_ONLY, name = 'shop.orders') => {
+    const h = recorder(answer);
+    return { h, r: await oracleFacts.oracleTableFacts(name, h.open) };
+  };
+
+  let o = await readFacts();
+  const of = o.r.ok ? o.r : null;
+  ok('oracle facts: verbatim first, then upper case, then the upper-case pair for every later statement',
+    o.h.rec[0].params[0] === 'orders' && o.h.rec[0].params[1] === 'shop' && o.h.rec[1].params[0] === 'ORDERS' && o.h.rec[1].params[1] === 'SHOP'
+    && o.h.rec.slice(2).every((x) => x.params[0] === 'ORDERS' && x.params[1] === 'SHOP'), JSON.stringify(o.h.rec.map((x) => x.params)));
+  ok('oracle facts: every statement fetches first n rows', o.h.rec.length === 8 && o.h.rec.every((x) => /fetch first :3 rows only\s*$/i.test(x.sql.trim()) && typeof x.params[2] === 'number'), o.h.rec.map((x) => x.sql.trim().slice(-26)).join(' | '));
+  ok('oracle facts: no statement holds the name or the owner as text', o.h.rec.every((x) => !/orders|shop/i.test(x.sql.replace(/all_\w+|\borders_\w+/gi, ''))));
+  ok('oracle facts: columns, types and nullability', JSON.stringify(of?.columns.map((c) => [c.name, c.type, c.nullable])) === '[["LINE_ID","NUMBER",false],["REGION","VARCHAR2",true],["ORDER_DATE","DATE",false]]', JSON.stringify(of?.columns));
+  ok('oracle facts: the table and column comments', of?.comment === 'Orders' && JSON.stringify(of.columns.map((c) => c.comment ?? null)) === '[null,"Sales region",null]', JSON.stringify(of?.columns));
+  ok('oracle facts: a disabled key is not enforced', JSON.stringify(of?.primaryKey) === '{"columns":["LINE_ID"],"enforced":false}' && of?.columns[0].key === true, JSON.stringify(of?.primaryKey));
+  ok('oracle facts: indexes keep uniqueness and type, without the index that backs the key', JSON.stringify(of?.indexes) ===
+    '[{"name":"ORDERS_REGION","columns":["REGION"],"unique":false,"kind":"BITMAP"},{"name":"ORDERS_RD","columns":["REGION","ORDER_DATE"],"unique":true,"kind":"NORMAL"}]', JSON.stringify(of?.indexes));
+  ok('oracle facts: list partitioning', JSON.stringify(of?.partition) === '{"columns":["REGION"],"method":"LIST"}', JSON.stringify(of?.partition));
+  ok('oracle facts: the estimate and the date the optimizer last gathered it (and no size)', JSON.stringify([of?.rowEstimate, of?.lastModified, of && 'bytes' in of]) === '[1200,"2024-05-01T12:00:00.000Z",false]');
+  ok('oracle facts: one connection, asked for once', o.h.opened() === 1);
+
+  o = await readFacts(UPPER_ONLY, 'SHOP.ORDERS');
+  ok('oracle facts: a name already in upper case is not read twice', o.h.rec.filter((x) => /all_tab_columns/i.test(x.sql)).length === 1 && o.r.ok);
+  o = await readFacts((sql, params) => /all_tab_columns/i.test(sql) ? [['ID', 'NUMBER', 'N', 'SHOP']] : CATALOG(sql, params), 'orders');
+  ok('oracle facts: a lower-case table that exists wins and the retry never happens', o.h.rec[0].params[0] === 'orders' && o.h.rec[0].params[1] === null && o.h.rec[1].params[0] === 'orders' && o.h.rec[1].params[1] === 'SHOP'
+    && o.h.rec.filter((x) => /all_tab_columns/i.test(x.sql)).length === 1, JSON.stringify(o.h.rec.map((x) => x.params)));
+  o = await readFacts((sql, params) => /all_tab_columns/i.test(sql) ? [['ID', 'NUMBER', 'N', 'A'], ['ID', 'NUMBER', 'N', 'B']] : CATALOG(sql, params), 'orders');
+  ok('oracle facts: with no owner named, the first owner\'s table is the one read', o.r.ok && o.r.columns.length === 1 && o.h.rec.slice(1).every((x) => x.params[1] === 'A'));
+
+  o = await readFacts(UPPER_ONLY, "shop.x'; drop table y; --");
+  ok('oracle facts: a hostile name is a bound value, never text', o.h.rec.length > 0 && o.h.rec.every((x) => !/drop table/i.test(x.sql)) && o.h.rec[0].params[0] === "x'; drop table y; --");
+  const orefused = [];
+  for (const bad of ['a.b.c', '', '.x', 'x.', '  ']) {
+    const g = await readFacts(UPPER_ONLY, bad);
+    orefused.push(g.h.opened() === 0 && !g.r.ok && g.r.error === 'Invalid table name');
+  }
+  ok('oracle facts: three parts, an empty part or no name never open a connection', orefused.every(Boolean), orefused.join());
+
+  // A refused view costs the fields it feeds and nothing else: the keys of the reply are the full reply's minus those.
+  const FULL = Object.keys(of ?? {});
+  for (const [view, dropped] of [
+    [/all_tab_comments/i, ['comment']], [/all_constraints/i, ['primaryKey']], [/all_indexes/i, ['indexes']],
+    [/all_part_tables/i, ['partition']], [/\ball_tables\b/i, ['rowEstimate', 'lastModified']], [/all_col_comments/i, []],
+  ] as const) {
+    o = await readFacts(refusing(UPPER_ONLY, view));
+    ok(`oracle facts: a refused ${view.source.replace(/\\b/g, '')} costs ${dropped.join(' and ') || 'the column comments'} only`,
+      o.r.ok && Object.keys(o.r).sort().join() === FULL.filter((k) => !dropped.includes(k as never)).sort().join() && o.r.columns.length === 3
+      && (view.source === 'all_col_comments' ? o.r.columns.every((c) => !('comment' in c)) : o.r.columns[1].comment === 'Sales region'), JSON.stringify(o.r));
+  }
+  o = await readFacts(refusing(UPPER_ONLY, /all_tab_columns/i)).catch((e: Error) => ({ h: recorder(UPPER_ONLY), r: { ok: false as const, error: e.message } }));
+  ok('oracle facts: a refused ALL_TAB_COLUMNS fails the read', !o.r.ok && /permission denied/.test(o.r.error));
+  o = await readFacts(byCatalog([]));
+  ok('oracle facts: no column in either spelling is no such table', !o.r.ok && o.r.error === 'No such table: orders' && o.h.rec.length === 2, JSON.stringify(o.r));
+
+  // Through the real connector, over the fake oracledb: the adapter that binds an array and reads the rows.
+  ok('every Oracle variant has tableFacts', oracle.CONNECTORS.every((d) => typeof d.tableFacts === 'function'));
+  resetState();
+  state.rowsAvailable = 1;
+  const wired = await byId('oracle').tableFacts!(ctxFor(), 'SHOP.ORDERS');
+  ok('oracle facts, wired: the rows of the driver are the columns', wired.ok && wired.columns.length === 1, JSON.stringify(wired));
+  ok('oracle facts, wired: the binds are an array of name, owner and the row limit; the connection is closed', JSON.stringify(state.lastBinds) === '["ORDERS","SHOP",1]' && state.closed && state.rsClosed, JSON.stringify(state.lastBinds));
+  resetState();
+  state.connectError = new Error('ORA-01017: invalid credential (sup3r-s3cret-pw)');
+  const down = await byId('oracle').tableFacts!(ctxFor(), 'SHOP.ORDERS').catch((e: Error) => ({ ok: false as const, error: e.message }));
+  ok('oracle facts, wired: a connect failure is a failure of the read, not a crash (the door redacts it)', !down.ok);
 
   // ── source hygiene ─────────────────────────────────────────────────────────
   ok('the source contains no bare `any` type', !/:\s*any\b/.test(srcTs));

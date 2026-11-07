@@ -21,7 +21,8 @@
 // Some variables of a warehouse set but not all is a FAILURE, not a skip: a
 // half-configured nightly must not pass by doing nothing.
 //
-// Each warehouse: test connection, listTables, describeTable, a run truncated at
+// Each warehouse: test connection, listTables, describeTable, a table's facts (Snowflake's
+// SHOW, with the warehouse unset on the connection; BigQuery's one tables.get), a run truncated at
 // the cap (and one exactly at it, not truncated), partitions / pages past the
 // first, the type mapping (numbers, ids past 15 digits, dates and timestamps to
 // UTC ISO, JSON), runBound with adversarial literals and an injection control,

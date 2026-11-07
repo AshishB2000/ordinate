@@ -35,6 +35,7 @@ import {
   ConnectorTables,
   safeError,
 } from './types';
+import { mysqlTableFacts } from './mysqlFacts';
 
 // mysql2 ships a bidirectional {code ↔ NAME} map of protocol column types at
 // runtime but leaves it out of its typings, so it is pulled in with an explicit
@@ -613,4 +614,5 @@ export const CONNECTORS: ConnectorDef[] = VARIANTS.map((v) => ({
   listTables: (ctx: ConnectorContext) => listTables(v, ctx),
   run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
   describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
+  tableFacts: (ctx: ConnectorContext, t: string) => mysqlTableFacts(t, (read) => withConnection(v, ctx, (conn, plan) => read(async (sql, params) => (await conn.query<RawRows>(plan.prefix + sql, params))[0] ?? [])), { database: str(ctx.values.database).trim() }),
 }));

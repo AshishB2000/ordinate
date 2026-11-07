@@ -32,6 +32,8 @@ import { MAX_RESULT_BYTES, rowBytes, safeError } from './types';
 import { encryptionDeclined } from './connectorMessages';
 import { connect as netConnect, type Socket } from 'net';
 import { checkHost, guardOn, type PinnedHost } from './ssrf';
+import { mssqlTableFacts } from './mssqlFacts';
+import { FACTS_ROWS } from './tableFacts';
 
 // Loaded lazily so requiring the connector registry does not pull the driver
 // (and its socket/TLS machinery) into every app start.
@@ -707,6 +709,12 @@ async function describeTable(
   }
 }
 
+/** A facts reader's positional params as @p0, @p1…: a number is an Int, anything else an NVarChar. */
+const bindFacts = (params: (string | number | null)[]) => (req: import('tedious').Request): void => {
+  const { TYPES } = loadTedious();
+  params.forEach((p, i) => req.addParameter(`p${i}`, typeof p === 'number' ? TYPES.Int : TYPES.NVarChar, p));
+};
+
 function defFor(v: MssqlVariant): ConnectorDef {
   return {
     id: v.id,
@@ -719,6 +727,7 @@ function defFor(v: MssqlVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
     describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
+    tableFacts: (ctx: ConnectorContext, t: string) => mssqlTableFacts(t, (read) => withConnection(v, ctx, (conn) => read(async (sql, params) => (await execSql(conn, sql, FACTS_ROWS, bindFacts(params))).rows)), { synapse: v.id === 'azure-synapse' }),
   };
 }
 

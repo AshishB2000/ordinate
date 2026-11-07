@@ -20,10 +20,32 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { byCatalog, recorder, refusing } from './factsHarness';
+
+// The one thing here that talks to a driver: a table's facts (section "facts" below) go through the real
+// connector's `tableFacts`, so `mysql2/promise` is swapped for a connection that records each statement.
+const Module: { _load(request: string, ...rest: unknown[]): unknown } = require('module');
+const driver = { sent: [] as { sql: string; params: unknown }[], closed: 0 };
+const fakeMysql2 = {
+  createConnection: async () => ({
+    on: () => undefined,
+    query: async (sql: string, params?: unknown) => {
+      driver.sent.push({ sql, params });
+      return [/information_schema\.COLUMNS/.test(sql) ? [['id', 'bigint', 'NO', 'The key', 'PRI', 'shop']] : [], []];
+    },
+    end: async () => { driver.closed++; },
+    destroy: () => undefined,
+  }),
+};
+const loadReal = Module._load;
+Module._load = function (request: string, ...rest: unknown[]): unknown {
+  return request === 'mysql2/promise' ? fakeMysql2 : loadReal.apply(this, [request, ...rest]);
+};
 
 // ponytail: compiled siblings of the .ts sources.
 const mysqlConn: typeof import('../src/connectors/mysql') = require('../src/connectors/mysql');
 const connTypes: typeof import('../src/connectors/types') = require('../src/connectors/types');
+const mysqlFacts: typeof import('../src/connectors/mysqlFacts') = require('../src/connectors/mysqlFacts');
 
 type Ctx = import('../src/connectors/types').ConnectorContext;
 
@@ -294,6 +316,86 @@ async function main(): Promise<void> {
   ok('an explicit typeName wins', mysqlConn.columnTypeName({ columnType: 3, typeName: 'INT UNSIGNED' }) === 'INT UNSIGNED');
   ok('an unknown code degrades to a string, never throws', mysqlConn.columnTypeName({ columnType: 9999 }) === '9999');
   ok('a field with no type at all is UNKNOWN', mysqlConn.columnTypeName({}) === 'UNKNOWN');
+
+  // ── a table's facts ────────────────────────────────────────────────────────
+  //
+  // UNVERIFIED: every statement is written from the MySQL and MariaDB documentation; no server answered it. A
+  // fixture answers by catalog, and what is pinned is THIS side of the socket: a name is bound or refused before
+  // a connection, every statement is limited, a refused catalog costs its field and only COLUMNS fails the read.
+
+  const ORDERS = byCatalog([
+    [/information_schema\.COLUMNS/i, [
+      ['line_id', 'bigint', 'NO', '', 'PRI', 'shop'],
+      ['order_date', 'date', 'NO', '', 'PRI', 'shop'],
+      ['region', 'varchar(32)', 'YES', 'Sales region, after tax', '', 'shop'],
+    ]],
+    [/information_schema\.TABLES/i, [['Orders, one row per line', '1200', '8192', '2024-05-01 12:00:00']]],
+    [/information_schema\.STATISTICS/i, [['orders_region', 'region', 1, 'BTREE'], ['PRIMARY', 'line_id', 0, 'BTREE'], ['PRIMARY', 'order_date', 0, 'BTREE']]],
+    [/information_schema\.PARTITIONS/i, [['RANGE', 'to_days(`order_date`)']]],
+  ]);
+  const read = async (answer = ORDERS, name = 'shop.orders', database = 'shop') => {
+    const h = recorder(answer);
+    return { h, r: await mysqlFacts.mysqlTableFacts(name, h.open, { database }) };
+  };
+
+  let t = await read();
+  const f = t.r.ok ? t.r : null;
+  ok('mysql facts: comments, a key, an index, the partition',
+    JSON.stringify([f?.comment, f?.columns[2].comment, f?.primaryKey, f?.indexes, f?.partition]) ===
+      '["Orders, one row per line","Sales region, after tax",{"columns":["line_id","order_date"],"enforced":true},[{"name":"orders_region","columns":["region"],"unique":false,"kind":"BTREE"}],{"columns":["order_date"],"method":"RANGE"}]',
+    JSON.stringify(t.r));
+  ok('mysql facts: columns, types, nullability and the key flag', JSON.stringify(f?.columns.map((c) => [c.name, c.type, c.nullable, c.key ?? false])) ===
+    '[["line_id","bigint",false,true],["order_date","date",false,true],["region","varchar(32)",true,false]]');
+  ok('mysql facts: the estimate, size and modified time (the server\'s own clock, no zone)', JSON.stringify([f?.rowEstimate, f?.bytes, f?.lastModified]) === '[1200,8192,"2024-05-01T12:00:00"]');
+  ok('mysql facts: the name and the schema are bound, in that order, on every statement',
+    t.h.rec.length === 4 && t.h.rec.every((x) => x.params[0] === 'orders' && x.params.slice(1).every((p) => p === 'shop')) && t.h.rec.every((x) => !x.sql.includes('orders')),
+    JSON.stringify(t.h.rec.map((x) => x.params)));
+  ok('mysql facts: every statement is limited', t.h.rec.every((x) => /\blimit \d+\s*$/i.test(x.sql.trim())), t.h.rec.map((x) => x.sql.trim().slice(-12)).join(' | '));
+  ok('mysql facts: one connection, asked for once', t.h.opened() === 1);
+
+  t = await read(ORDERS, 'shop.x`; drop table y; --');
+  ok('mysql facts: a hostile name is a bound value, never text', t.h.rec.length > 0 && t.h.rec.every((x) => !/drop table/i.test(x.sql)) && t.h.rec[0].params[0] === 'x`; drop table y; --');
+  const refused = [];
+  for (const bad of ['a.b.c', '', '.x', 'x.', '  ']) {
+    const g = await read(ORDERS, bad);
+    refused.push(g.h.opened() === 0 && !g.r.ok && g.r.error === 'Invalid table name');
+  }
+  ok('mysql facts: three parts, an empty part or no name never open a connection', refused.every(Boolean), refused.join());
+
+  t = await read(ORDERS, 'orders', 'analytics');
+  ok('mysql facts: an unqualified name is looked up in the connection\'s own database', t.h.rec[0].params.join() === 'orders,analytics,analytics' && t.h.rec[1].params.join() === 'orders,shop', JSON.stringify(t.h.rec.map((x) => x.params)));
+  t = await read(byCatalog([[/information_schema\.COLUMNS/i, [['id', 'int', 'NO', '', 'PRI', 'a'], ['id', 'int', 'NO', '', '', 'b']]]]), 'orders', '');
+  ok('mysql facts: with no database to look in, the first schema that has the table is the one read', t.r.ok && t.r.columns.length === 1 && t.h.rec.length > 1 && t.h.rec.slice(1).every((x) => x.params[1] === 'a'), JSON.stringify(t.h.rec.map((x) => x.params)));
+
+  // Each catalog on its own: a refusal costs that field, never the read (a hosted plan may hide information_schema).
+  t = await read(refusing(ORDERS, /information_schema\.STATISTICS/i));
+  ok('mysql facts: a refused STATISTICS costs only the indexes and the key', t.r.ok && !('indexes' in t.r) && !('primaryKey' in t.r) && t.r.columns.length === 3 && t.r.columns[0].key === true && t.r.partition?.method === 'RANGE', JSON.stringify(t.r));
+  t = await read(refusing(ORDERS, /information_schema\.TABLES/i));
+  ok('mysql facts: a refused TABLES costs the comment, estimate, size and date', t.r.ok && !('comment' in t.r) && !('rowEstimate' in t.r) && !('bytes' in t.r) && !('lastModified' in t.r) && !!t.r.indexes, JSON.stringify(t.r));
+  t = await read(refusing(ORDERS, /information_schema\.PARTITIONS/i));
+  ok('mysql facts: a refused PARTITIONS costs only the partition', t.r.ok && !('partition' in t.r) && t.r.comment === 'Orders, one row per line' && !!t.r.primaryKey);
+  t = await read(refusing(ORDERS, /information_schema\.COLUMNS/i)).catch((e: Error) => ({ h: recorder(ORDERS), r: { ok: false as const, error: e.message } }));
+  ok('mysql facts: a refused COLUMNS fails the read (the door turns it into the sentence)', !t.r.ok && /permission denied/.test(t.r.error));
+  t = await read(byCatalog([]));
+  ok('mysql facts: no column is no such table', !t.r.ok && t.r.error === 'No such table: orders', JSON.stringify(t.r));
+  t = await read(byCatalog([[/information_schema\.COLUMNS/i, [['id', 'int', 'NO', '', '', 'shop']]], [/information_schema\.TABLES/i, [['VIEW', null, null, null]]]]));
+  ok('mysql facts: a view\'s "VIEW" is not a description, and a view has no size', t.r.ok && !('comment' in t.r) && !('bytes' in t.r) && !('rowEstimate' in t.r), JSON.stringify(t.r));
+  t = await read(byCatalog([[/information_schema\.COLUMNS/i, [['id', 'int', 'NO', '', '', 'shop']]], [/information_schema\.STATISTICS/i,
+    Array.from({ length: 60 }, (_, i) => [`ix${String(i).padStart(2, '0')}`, 'id', 1, 'BTREE'])]]));
+  ok('mysql facts: indexes fold to at most 50', t.r.ok && t.r.indexes?.length === 50, t.r.ok ? t.r.indexes?.length : '');
+  t = await read(byCatalog([[/information_schema\.COLUMNS/i, [['id', 'int', 'NO', '', '', 'shop']]], [/information_schema\.PARTITIONS/i, [['KEY', '`a`,`b`']]]]));
+  ok('mysql facts: a multi-column partition key names every column', t.r.ok && JSON.stringify(t.r.partition) === '{"columns":["a","b"],"method":"KEY"}', JSON.stringify(t.r));
+
+  // Through the real connector: the adapter that turns a mysql2 connection into a FactsQuery.
+  ok('every MySQL variant has tableFacts', mysqlConn.CONNECTORS.every((d) => typeof d.tableFacts === 'function'));
+  const mariadb = mysqlConn.CONNECTORS.find((d) => d.id === 'mariadb')!;
+  driver.sent.length = 0;
+  driver.closed = 0;
+  const wired = await mariadb.tableFacts!(ctx(), 'orders');
+  const facts = driver.sent.filter((x) => /information_schema/.test(x.sql));
+  ok('mysql facts, wired: the columns come back from the driver\'s [rows, fields]', wired.ok && wired.columns[0]?.name === 'id' && wired.columns[0].key === true && wired.columns[0].comment === 'The key', JSON.stringify(wired));
+  ok('mysql facts, wired: MariaDB\'s statement prefix reaches every catalog statement, with the params', facts.length === 4 && facts.every((x) => x.sql.startsWith('SET STATEMENT max_statement_time=')) && JSON.stringify(facts[0].params) === '["orders","analytics","analytics"]', JSON.stringify(facts.map((x) => x.params)));
+  ok('mysql facts, wired: the connection is closed', driver.closed === 1, driver.closed);
 
   // ── categories ─────────────────────────────────────────────────────────────
   const CATEGORIES = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local'];

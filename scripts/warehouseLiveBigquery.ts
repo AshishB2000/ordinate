@@ -18,6 +18,7 @@ import { errOf, ident, keep, leaksIn, ok, say, secret, spike, until } from './wa
 const registry: typeof import('../src/connectors') = require('../src/connectors');
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const bq: typeof import('../src/connectors/bigquery') = require('../src/connectors/bigquery');
+const factsRun: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
 const auth: typeof import('../src/connectors/bigqueryAuth') = require('../src/connectors/bigqueryAuth');
 const shape: typeof import('../src/connectors/bigqueryShape') = require('../src/connectors/bigqueryShape');
 const http: typeof import('../src/connectors/http') = require('../src/connectors/http');
@@ -166,6 +167,12 @@ export async function runBigquery(cfg: BigqueryConfig, nonce: string): Promise<v
     ok('bigquery: describeTable (tables.get) on a public table: its four columns, their types, a row estimate',
       !!desc && desc.ok && desc.columns.map((c) => `${c.name}:${c.type}`).join() === 'word:STRING,word_count:INTEGER,corpus:STRING,corpus_date:INTEGER' && (desc.rowEstimate ?? 0) > 0,
       desc && desc.ok ? JSON.stringify(desc.columns) : errOf(desc));
+    // The same table's facts: the one tables.get describeTable already makes (UNVERIFIED against BigQuery until this runs).
+    const gets = calls.length;
+    const read = keep(await factsRun.readTableFacts('bigquery', values, secrets, PUBLIC_TABLE));
+    ok('bigquery: facts for the public table are the same four columns, with a row count and a size, from ONE tables.get',
+      read?.ok === true && read.facts.columns.map((c) => c.name).join() === 'word,word_count,corpus,corpus_date' && (read.facts.rowEstimate ?? 0) > 0 && (read.facts.bytes ?? 0) > 0
+        && calls.slice(gets).filter((c) => c.method === 'GET' && /\/tables\//.test(c.url.pathname)).length === 1, read?.ok ? JSON.stringify({ ...read.facts, columns: read.facts.columns.length }) : errOf(read));
 
     // ── The token's scopes (the spike, part 1) ────────────────────────────
     const readToken = [...scopeOf].find(([, s]) => s === READ)?.[0];

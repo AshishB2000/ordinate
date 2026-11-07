@@ -22,6 +22,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, verify } from 'crypto';
 import { ok, finish } from './selfcheck';
+import { byCatalog, recorder, refusing } from './factsHarness';
 import { FakeSnowflake, HANDLE, deferred, fixture, reply, until } from './snowflakeFake';
 
 let captured = '';
@@ -37,6 +38,8 @@ const sf: typeof import('../src/connectors/snowflake') = require('../src/connect
 const auth: typeof import('../src/connectors/snowflakeAuth') = require('../src/connectors/snowflakeAuth');
 const shape: typeof import('../src/connectors/snowflakeShape') = require('../src/connectors/snowflakeShape');
 const sql: typeof import('../src/connectors/snowflakeSql') = require('../src/connectors/snowflakeSql');
+const sfFacts: typeof import('../src/connectors/snowflakeFacts') = require('../src/connectors/snowflakeFacts');
+const factsRun: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
 const registry: typeof import('../src/connectors') = require('../src/connectors');
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const context: typeof import('../src/server/context') = require('../src/server/context');
@@ -312,6 +315,96 @@ async function main(): Promise<void> {
   const badDb = keep(await def.describeTable!(ctxOf(), 'a"b.PUBLIC.ORDERS'));
   ok('describeTable: a database part that is not an identifier is refused before any request', !badDb.ok && fake.seen.length === n0);
   ok('describeTable: one-part names use current_schema()', (await def.describeTable!(ctxOf(), 'ORDERS')).ok && /current_schema\(\)/.test(fake.statements().at(-1)!));
+
+  // ── 6b. a table's facts (SHOW) ─────────────────────────────────────────────
+  //
+  // UNVERIFIED: the SHOW statements and the columns they answer with are written from Snowflake's documentation;
+  // no account answered them here (the nightly, scripts/warehouseLiveSnowflake.ts, does, when it has credentials).
+  // The pure reader runs over a recording FactsQuery (the first row of an answer is its column names, as SHOW has
+  // no stable column positions); the connector's own wiring runs over the fake SQL API.
+
+  const names = (...n: string[]): string[] => n;
+  const SHOW_COLUMNS = [names('table_name', 'schema_name', 'column_name', 'data_type', 'null?', 'default', 'kind', 'expression', 'comment', 'database_name', 'autoincrement'),
+    ['ORDERS', 'PUBLIC', 'LINE_ID', '{"type":"FIXED","precision":38,"scale":0,"nullable":false}', 'false', '', 'COLUMN', '', 'The line', 'ANALYTICS', ''],
+    ['ORDERS', 'PUBLIC', 'ORDER_DATE', '{"type":"DATE","nullable":false}', 'false', '', 'COLUMN', '', '', 'ANALYTICS', ''],
+    ['ORDERS', 'PUBLIC', 'REGION', '{"type":"TEXT","length":16777216,"byteLength":16777216,"nullable":true,"fixed":false}', 'true', '', 'COLUMN', '', '', 'ANALYTICS', ''],
+    ['ORDERS', 'PUBLIC', 'AMOUNT', '{"type":"REAL","nullable":true}', 'true', '', 'COLUMN', '', '', 'ANALYTICS', '']];
+  const SHOW_TABLES = [names('created_on', 'name', 'database_name', 'schema_name', 'kind', 'comment', 'cluster_by', 'rows', 'bytes'),
+    ['1700000000', 'ORDERS_X', 'ANALYTICS', 'PUBLIC', 'TABLE', 'The look-alike', '', '5', '10'],
+    ['1700000001', 'ORDERS', 'ANALYTICS', 'PUBLIC', 'TABLE', 'The real one', 'LINEAR(ORDER_DATE, REGION)', '1200', '8192']];
+  const SHOW_KEYS = [names('created_on', 'database_name', 'schema_name', 'table_name', 'column_name', 'key_sequence', 'constraint_name', 'rely', 'comment'),
+    ['1700000001', 'ANALYTICS', 'PUBLIC', 'ORDERS', 'ORDER_DATE', '2', 'PK_ORDERS', 'false', ''],
+    ['1700000001', 'ANALYTICS', 'PUBLIC', 'ORDERS', 'LINE_ID', '1', 'PK_ORDERS', 'false', '']];
+  const SHOWN = byCatalog([[/^SHOW COLUMNS/, SHOW_COLUMNS], [/^SHOW TABLES/, SHOW_TABLES], [/^SHOW PRIMARY KEYS/, SHOW_KEYS]]);
+  const readFacts = async (answer = SHOWN, name = 'ANALYTICS.PUBLIC.ORDERS') => {
+    const h = recorder(answer);
+    return { h, r: await sfFacts.snowflakeTableFacts(name, h.open) };
+  };
+
+  let sh = await readFacts();
+  const sff = sh.r.ok ? sh.r : null;
+  ok('snowflake facts: parts quoted as stored, one statement each, nothing bound', sh.h.rec.map((x) => x.sql).join(' | ') ===
+    'SHOW COLUMNS IN TABLE "ANALYTICS"."PUBLIC"."ORDERS" | SHOW TABLES LIKE \'ORDERS\' IN SCHEMA "ANALYTICS"."PUBLIC" LIMIT 50 | SHOW PRIMARY KEYS IN TABLE "ANALYTICS"."PUBLIC"."ORDERS"'
+    && sh.h.rec.every((x) => x.params.length === 0), sh.h.rec.map((x) => x.sql).join(' | '));
+  ok('snowflake facts: columns, NUMBER(p,s) and the other types as describeTable spells them, nullability, comments',
+    JSON.stringify(sff?.columns.map((c) => [c.name, c.type, c.nullable, c.comment ?? null, c.key ?? false])) ===
+      '[["LINE_ID","NUMBER(38,0)",false,"The line",true],["ORDER_DATE","DATE",false,null,true],["REGION","TEXT",true,null,false],["AMOUNT","FLOAT",true,null,false]]', JSON.stringify(sff?.columns));
+  ok('snowflake facts: a LIKE look-alike is not the table (the row whose name is exactly the part)', sff?.comment === 'The real one' && sff.rowEstimate === 1200 && sff.bytes === 8192, JSON.stringify(sff));
+  ok('snowflake facts: clustering, and an informational key in key_sequence order', JSON.stringify([sff?.clusterBy, sff?.primaryKey]) === '[["ORDER_DATE","REGION"],{"columns":["LINE_ID","ORDER_DATE"],"enforced":false}]', JSON.stringify([sff?.clusterBy, sff?.primaryKey]));
+  ok('snowflake facts: SHOW TABLES is limited', sh.h.rec.find((x) => /^SHOW TABLES/.test(x.sql))!.sql.endsWith('LIMIT 50'));
+  sh = await readFacts(byCatalog([[/^SHOW COLUMNS/, SHOW_COLUMNS]]), 'PUBLIC.ORDERS');
+  ok('snowflake facts: two parts run in the connection\'s database; no table row, no key, is still the columns', sh.h.rec[0].sql === 'SHOW COLUMNS IN TABLE "PUBLIC"."ORDERS"' && sh.h.rec[1].sql.includes('IN SCHEMA "PUBLIC" LIMIT 50')
+    && sh.r.ok && sh.r.columns.length === 4 && !('comment' in sh.r) && !('primaryKey' in sh.r) && !('clusterBy' in sh.r), JSON.stringify(sh.r));
+  sh = await readFacts(SHOWN, 'orders');
+  ok('snowflake facts: one part is the session\'s own schema; a lower-case name keeps its case', sh.h.rec[0].sql === 'SHOW COLUMNS IN TABLE "orders"' && sh.h.rec[1].sql === "SHOW TABLES LIKE 'orders' LIMIT 50" && sh.h.rec[2].sql === 'SHOW PRIMARY KEYS IN TABLE "orders"');
+  const sfRefused = [];
+  for (const bad of ['A.B"; DROP TABLE X; --', 'a.b.c.d', '', '.x', 'x.', 'A B', 'A.B.C\'; --', '1abc', 'A.B.C$D\u0000']) {
+    const g = await readFacts(SHOWN, bad);
+    sfRefused.push(g.h.opened() === 0 && !g.r.ok && g.r.error === 'Invalid table name');
+  }
+  ok('snowflake facts: a name failing the whitelist never opens a connection', sfRefused.every(Boolean), sfRefused.join());
+  sh = await readFacts(SHOWN, 'A.B$_x.T1');
+  ok('snowflake facts: $ and _ are identifier characters', sh.h.opened() === 1);
+
+  sh = await readFacts(refusing(SHOWN, /^SHOW TABLES/));
+  ok('snowflake facts: a refused SHOW TABLES costs the comment, clustering and figures only', sh.r.ok && !('comment' in sh.r) && !('clusterBy' in sh.r) && !('bytes' in sh.r) && !!sh.r.primaryKey && sh.r.columns.length === 4);
+  sh = await readFacts(refusing(SHOWN, /^SHOW PRIMARY KEYS/));
+  ok('snowflake facts: a refused SHOW PRIMARY KEYS costs only the key', sh.r.ok && !('primaryKey' in sh.r) && sh.r.comment === 'The real one' && sh.r.columns.every((c) => !('key' in c)));
+  sh = await readFacts(refusing(SHOWN, /^SHOW COLUMNS/)).catch((e: Error) => ({ h: recorder(SHOWN), r: { ok: false as const, error: e.message } }));
+  ok('snowflake facts: a refused SHOW COLUMNS fails the read', !sh.r.ok && /permission denied/.test(sh.r.error));
+  sh = await readFacts(byCatalog([[/^SHOW COLUMNS/, [SHOW_COLUMNS[0]]]]));
+  ok('snowflake facts: no column is no such table', !sh.r.ok && /No such table/.test(sh.r.error), JSON.stringify(sh.r));
+  sh = await readFacts(byCatalog([[/^SHOW COLUMNS/, [SHOW_COLUMNS[0], ['O', 'P', 'X', 'not json', 'true', '', 'COLUMN', '', '', 'D', '']]]]));
+  ok('snowflake facts: a data_type that is not JSON is kept as written', sh.r.ok && sh.r.columns[0].type === 'not json', JSON.stringify(sh.r));
+
+  // Through the connector, over the fake SQL API.
+  fake.seen = [];
+  const showJson = (rows: string[][]): string => JSON.stringify({
+    resultSetMetaData: { numRows: rows.length - 1, format: 'jsonv2', partitionInfo: [{ rowCount: rows.length - 1, uncompressedSize: 1024 }],
+      rowType: rows[0].map((name) => ({ name, type: ['rows', 'bytes'].includes(name) ? 'fixed' : 'text', nullable: true, length: null, scale: ['rows', 'bytes'].includes(name) ? 0 : null, precision: ['rows', 'bytes'].includes(name) ? 38 : null })) },
+    data: rows.slice(1), code: '090001', statementHandle: HANDLE, message: 'Statement executed successfully.' });
+  fake.answer = (r, kind) => {
+    if (kind !== 'submit') return reply(200, '{}');
+    const statement = String((JSON.parse(r.body ?? '{}') as { statement?: unknown }).statement);
+    const rows = /^SHOW COLUMNS/.test(statement) ? SHOW_COLUMNS : /^SHOW TABLES/.test(statement) ? SHOW_TABLES : /^SHOW PRIMARY/.test(statement) ? SHOW_KEYS : null;
+    return rows ? reply(200, showJson(rows)) : reply(422, fixture('failure-422'));
+  };
+  ok('snowflake has tableFacts', typeof def.tableFacts === 'function');
+  const facts = keep(await factsRun.readTableFacts('snowflake', VALUES, KP, 'ANALYTICS.PUBLIC.ORDERS'));
+  const submitted = fake.of('submit');
+  ok('snowflake facts, wired: through the door, columns come back with the figures of SHOW TABLES (numbers or strings)', facts?.ok === true && facts.facts.columns.length === 4 && facts.facts.rowEstimate === 1200 && facts.facts.bytes === 8192 && facts.facts.comment === 'The real one', JSON.stringify(facts));
+  ok('snowflake facts, wired: three submits, SHOW only, none bound, each with the connection\'s warehouse and role',
+    submitted.length === 3 && submitted.every((x) => /^SHOW /.test(String(x.json?.statement)) && !('bindings' in x.json!) && x.json?.warehouse === 'COMPUTE_WH' && x.json?.role === 'ORDINATE_READER'), JSON.stringify(submitted.map((x) => x.json)));
+  fake.seen = [];
+  const noWh = keep(await factsRun.readTableFacts('snowflake', { ...VALUES, warehouse: '' }, KP, 'ANALYTICS.PUBLIC.ORDERS'));
+  ok('snowflake facts, wired: with no warehouse the SHOW goes without one (it runs on cloud services)', noWh?.ok === true && fake.of('submit').length === 3 && fake.of('submit').every((x) => !('warehouse' in x.json!)), JSON.stringify(noWh));
+  fake.seen = [];
+  const sqlNoWh = keep(await connectionRun.runConnection('snowflake', { ...VALUES, warehouse: '' }, KP, { query: 'select 1' }));
+  ok('snowflake facts, wired (negative control): a query still needs its warehouse, and nothing is sent', !sqlNoWh.ok && /Warehouse is required/.test(types.safeError(String((sqlNoWh as { error?: unknown }).error), KP)) && fake.seen.length === 0, JSON.stringify(sqlNoWh));
+  fake.seen = [];
+  fake.answer = () => reply(422, JSON.stringify({ code: '002003', message: `SQL compilation error: Object does not exist or not authorized (${PASSPHRASE})`, statementHandle: HANDLE }));
+  const gone = keep(await factsRun.readTableFacts('snowflake', VALUES, KP, 'ANALYTICS.PUBLIC.ORDERS'));
+  ok('snowflake facts, wired: a refused SHOW COLUMNS is the warehouse\'s sentence, with the secrets redacted, and nothing more is asked', gone?.ok === false && /does not exist/.test(gone.error) && !leaks(JSON.stringify(gone)) && fake.of('submit').length === 1, JSON.stringify(gone));
 
   // ── 7. the secret canary ──────────────────────────────────────────────────
   // A hostile Snowflake echoing the bearer and the secrets back in an error body.

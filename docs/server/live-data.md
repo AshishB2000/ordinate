@@ -382,7 +382,7 @@ Live statements carry the query tag `ordinate:<org>:live`.
 The connectors' self-checks run against recorded replies. `scripts/test-warehouseLive.ts` runs the
 same code against a **real** Snowflake account and a **real** Google Cloud project, through the
 registry, over the network, with the SSRF guard on. For each warehouse it checks test connection,
-the table list, a table's columns, a query cut at the row limit (and one exactly at it, not cut),
+the table list, a table's columns, a table's facts (Snowflake's `SHOW` statements, read once more with no warehouse on the connection to confirm `SHOW` needs none; BigQuery's one `tables.get`), a query cut at the row limit (and one exactly at it, not cut),
 reading past the first result partition or page, how each type arrives (numbers, ids longer than 15
 digits, dates and timestamps as UTC, JSON), bound values against hostile literals, and that a query
 whose caller hangs up is cancelled *on the warehouse*, as the warehouse itself then reports. For

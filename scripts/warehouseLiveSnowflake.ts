@@ -13,6 +13,8 @@ const registry: typeof import('../src/connectors') = require('../src/connectors'
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const snowflake: typeof import('../src/connectors/snowflake') = require('../src/connectors/snowflake');
 const sfHttp: typeof import('../src/connectors/snowflakeHttp') = require('../src/connectors/snowflakeHttp');
+const factsRun: typeof import('../src/connectors/tableFactsRun') = require('../src/connectors/tableFactsRun');
+const { IDENT_RE }: typeof import('../src/connectors/snowflakeFacts') = require('../src/connectors/snowflakeFacts');
 
 type Ctx = import('../src/connectors/types').ConnectorContext;
 type LiveParam = import('../src/connectors/types').LiveParam;
@@ -108,6 +110,24 @@ export async function runSnowflake(cfg: SnowflakeConfig, nonce: string): Promise
       ident('snowflake table', pick.name);
       const desc = keep(await connectionRun.describeTable('snowflake', values, secrets, name));
       ok('snowflake: describeTable gives a listed table\'s columns, each named and typed', !!desc && desc.ok && desc.columns.length > 0 && desc.columns.every((c) => c.name && c.type), errOf(desc));
+
+      // A table's facts, from SHOW (UNVERIFIED against Snowflake until this runs: docs/semantic-layer/02-source-tables.md, D7).
+      // SHOW runs on cloud services, so it should need no warehouse: the second read names none. If that one fails, SHOW needed
+      // a warehouse: read INFORMATION_SCHEMA instead (bound, like describeTable) and set `factsWake` on the Snowflake def.
+      const plain = listed.tables.map((x) => (x.schema ? `${x.schema}.${x.name}` : x.name)).find((n) => n.split('.').every((p) => IDENT_RE.test(p)));
+      if (!plain) {
+        say('snowflake: no listed table has a plain identifier for a name, so its facts were not read');
+      } else {
+        const read = keep(await factsRun.readTableFacts('snowflake', values, secrets, plain));
+        ok('snowflake facts: SHOW COLUMNS answers for a listed table, each column named and typed, the same names describeTable gave',
+          read?.ok === true && read.facts.columns.length > 0 && read.facts.columns.every((c) => c.name && c.type)
+            && (!desc || !desc.ok || desc.columns.map((c) => c.name).join() === read.facts.columns.map((c) => c.name).join()), errOf(read));
+        const sent = seen.length;
+        const bare = keep(await factsRun.readTableFacts('snowflake', { ...values, warehouse: '' }, secrets, plain));
+        const posts = seen.slice(sent).filter((x) => x.method === 'POST' && !x.url.pathname.endsWith('/cancel'));
+        ok('snowflake facts: SHOW runs with no warehouse on the connection (if this fails: SHOW needed a warehouse, so switch the reader to INFORMATION_SCHEMA and set factsWake)',
+          bare?.ok === true && bare.facts.columns.length > 0 && posts.length > 0 && posts.every((x) => /^SHOW /.test(String((JSON.parse(x.body) as { statement?: unknown }).statement)) && !('warehouse' in (JSON.parse(x.body) as object))), errOf(bare));
+      }
     }
 
     // ── The row cap, partitions ───────────────────────────────────────────
