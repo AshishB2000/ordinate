@@ -8,6 +8,7 @@ import type { ChartHandle } from '../../charts/Chart';
 import { PHONE_QUERY } from '../../ui/Dialog';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { drillableAxis, useExploreDrill, type DrillProps } from './useExploreDrill';
+import { endAtHidden } from '../visuals/drill/drillApi';
 import { decodeQuestion, encodeQuestion, type Question } from './spec';
 import type { Preview } from '../visuals/api';
 
@@ -58,6 +59,10 @@ describe('drillableAxis', () => {
     expect(drillableAxis({ ...base, chartType: 'scatter' })).toBeNull();
     expect(drillableAxis({ ...base, encoding: { ...base.encoding, category: 'state' } })).toBeNull();
     expect(drillableAxis({ ...base, hierarchies: [] })).toBeNull();
+  });
+  it('offers no level hidden from the caller (part 4): the server refuses that drill', () => {
+    expect(drillableAxis({ ...base, hierarchies: endAtHidden([GEO], ['state']) })).toBeNull();
+    expect(drillableAxis({ ...base, hierarchies: endAtHidden([GEO], ['salary']) })).toEqual({ next: 'state', word: 'state' }); // NEGATIVE CONTROL
   });
 });
 

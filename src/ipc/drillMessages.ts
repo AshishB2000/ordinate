@@ -18,6 +18,11 @@ export function drillLastLevel(column: string, name: string): string {
   return t('drillMessages.is_the_last_level_of', { column, name });
 }
 
+/** The next level is a column hidden from the caller (part 4): its name is not repeated. */
+export function drillHiddenLevel(name: string): string {
+  return t('drillMessages.the_next_level_of_is_a', { name });
+}
+
 /** The axis is a text column no hierarchy names. */
 export function drillNoHierarchy(column: string): string {
   return t('drillMessages.is_not_a_level_of_a', { column });

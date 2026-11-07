@@ -213,6 +213,7 @@
   "drillMessages.a_day_is_the_finest_level": "Le jour est le niveau le plus fin auquel une date peut être détaillée.",
   "drillMessages.is_not_a_level_of_a": "{column} n’est un niveau d’aucune hiérarchie. Un éditeur peut en ajouter une dans l’onglet Champs du modèle de données.",
   "drillMessages.is_the_last_level_of": "{column} est le dernier niveau de {name}.",
+  "drillMessages.the_next_level_of_is_a": null,
   "drillMessages.this_chart_does_not_drill_down": "Ce graphique ne permet pas d’explorer en détail. ⋯ → Afficher les lignes liste ce qui se trouve derrière.",
   "drillMessages.this_chart_s_measures_are_filtered": null,
   "drillMessages.this_chart_shows_a_snapshot_one": null,

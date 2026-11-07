@@ -210,6 +210,7 @@
   "drillMessages.a_day_is_the_finest_level": "A day is the finest level a date drills to.",
   "drillMessages.is_not_a_level_of_a": "{column} is not a level of a hierarchy. An editor can add one on the Data model's Fields tab.",
   "drillMessages.is_the_last_level_of": "{column} is the last level of {name}.",
+  "drillMessages.the_next_level_of_is_a": "The next level of {name} is a column hidden from you, so this does not drill down.",
   "drillMessages.this_chart_does_not_drill_down": "This chart does not drill down. ⋯ → Show the rows lists what is behind it.",
   "drillMessages.this_chart_s_measures_are_filtered": "This chart's measures are filtered differently, so no one set of rows adds up to this mark. Open a measure on its own to see its rows.",
   "drillMessages.this_chart_shows_a_snapshot_one": "This chart shows a snapshot (one day's values), so the rows behind this mark cannot be listed here.",
