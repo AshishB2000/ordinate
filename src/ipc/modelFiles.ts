@@ -28,10 +28,13 @@ import { dbtModel } from '../app/dbtPlan';
 import { applyImport, type ApplyChoice, type ApplyReply } from '../app/modelApply';
 import { planImport, type ImportPlan } from '../app/modelPlan';
 import { modelUploadExpired } from '../app/modelFileMessages';
+import { OSSIE_SPEC_VERSION, ossieExport, type OssieReport } from '../app/ossieExport';
 import { modelRefusal } from '../app/modelAccess';
 
 export type ModelPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
 export type ModelApplyReply = ApplyReply | { ok: false; error: string };
+
+export type OssieExportReply = { ok: true; downloadToken: string; version: string; report: OssieReport } | { ok: false; error: string };
 
 export type ModelExportReply = { ok: true; downloadToken: string; counts: ModelCounts; notCarried: NotCarried[] } | { ok: false; error: string };
 
@@ -113,6 +116,14 @@ async function withModelUpload<T>(projectId: unknown, fileToken: unknown, datase
   }
 }
 
+/** The Ossie document's bytes, its download name and its report. Refuses a restricted caller as `modelZip` does (ModelExportRefused). */
+export async function ossieBytes(projectId: string): Promise<{ bytes: Buffer; name: string; report: OssieReport }> {
+  const { text, report } = await ossieExport(projectId);
+  const project = await projects.getProject(projectId);
+  const safe = (project?.name ?? '').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Project';
+  return { bytes: Buffer.from(text, 'utf8'), name: `${safe}-ossie.json`, report };
+}
+
 export function register(): void {
   ipcMain.handle('model:export', async (_e, { projectId }: { projectId?: unknown } = {}): Promise<ModelExportReply> => {
     try {
@@ -120,6 +131,22 @@ export function register(): void {
     } catch (err) {
       if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
       throw err; // the route answers 500 and logs it: an unknown failure's text is not for a browser
+    }
+  });
+
+  ipcMain.handle('model:exportOssie', async (_e, { projectId }: { projectId?: unknown } = {}): Promise<OssieExportReply> => {
+    let target = '';
+    try {
+      const { bytes, name, report } = await ossieBytes(typeof projectId === 'string' ? projectId : '');
+      target = path.join(appPaths.temp(), `ossie-${randomUUID()}.json`);
+      await recordFs.writeFile(target + '.partial', bytes);
+      await recordFs.rename(target + '.partial', target);
+      const { downloadToken } = await offerDownload(target, name, createHash('sha256').update(bytes).digest('hex'));
+      return { ok: true, downloadToken, version: OSSIE_SPEC_VERSION, report };
+    } catch (err) {
+      if (target) for (const f of [target + '.partial', target]) await recordFs.rm(f, { force: true }).catch(() => undefined);
+      if (err instanceof ModelExportRefused) return { ok: false, error: err.message };
+      throw err; // the route answers 500 and logs it
     }
   });
 
