@@ -42,6 +42,7 @@ import { proposeMetrics } from '../analysis/metricAuto';
 import { metricUsage } from '../analysis/metricUsage';
 import { computeCardMetric } from './dashboards';
 import { layerFigure } from './semanticFigures';
+import { layerReads } from '../analysis/semanticMeasures';
 import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import type { MetricAggregation } from '../analysis/metricValue';
@@ -158,6 +159,7 @@ export async function resolveDefinition(
   // scope arrived already resolved by the handler.
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
   if (metrics.isExternalDefinition(definition)) { // only its layer answers it, on its own semantic dataset (part 7 b2; ./semanticFigures)
+    if (ctx.reads) ctx.reads.push(...(await layerReads(ctx.projectId, datasetId))); // read from every field, as the Share policy sees it
     const res = await layerFigure(ctx.projectId, datasetId, definition, all, ctx.params, depth, name);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
     return res.ok ? res.value : null;
