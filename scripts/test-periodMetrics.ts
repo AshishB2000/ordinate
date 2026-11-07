@@ -142,6 +142,20 @@ void (async () => {
   ok('a formula over a period metric: the base keeps its own scope (the memo trap)', Object.is(await kpi(diff, [OCT]), (await kpi(ytd, [OCT]))! - (await kpi(REV, [OCT]))!) && (await kpi(diff, [OCT])) !== 0, show(await kpi(diff, [OCT])));
   const ytdShare = await save('Per sale YTD', { base: SHARE.id, window: { to_date: 'year' } });
   ok('a formula base: each part under the window', Object.is(await kpi(ytdShare, [OCT]), (await kpi(SHARE, [ON('2024-01-01', '2024-10-31')]))), show([await kpi(ytdShare, [OCT]), await kpi(SHARE, [ON('2024-01-01', '2024-10-31')])]));
+  // A base with a part on another dataset: that part counts the window on its own date, as under a date control (D9).
+  const V = (await H.as(H.ORG_A, () => H.datasets.saveDataset(P, { name: 'Visits', sourceKind: 'csv', ...H.fx.importTyped([{ name: 'vday', type: 'date' }, { name: 'n', type: 'number' }], Array.from({ length: DAYS }, (_, n) => [iso(n), (n % 9) + 1])) })))!.id;
+  await saved({ name: 'Visits', datasetId: V, definition: { column: 'n', aggregation: 'sum' }, timeColumn: 'vday' });
+  const RPV = await saved({ name: 'Revenue per visit', definition: { formula: '[Revenue] / [Visits]' }, timeColumn: 'day' });
+  const rpvYtd = await save('Revenue per visit YTD', { base: RPV.id, window: { to_date: 'year' } });
+  const rpvYoy = await save('Revenue per visit YoY', { base: RPV.id, window: { to_date: 'year' }, compare: { vs: 'previous_year', show: 'pct_change' } });
+  const CTL = (from: string, to: string): FilterStep => ({ ...ON(from, to), fromControl: true }) as FilterStep;
+  for (const scope of [[], [OCT]]) {
+    const to = scope.length ? '2024-10-31' : '2024-11-03';
+    const [got, want] = [await kpi(rpvYtd, scope), await kpi(RPV, [CTL('2024-01-01', to)])];
+    ok(`a base with a part on another dataset, ${label(scope)}: that part over the window on its own date`, typeof got === 'number' && Object.is(got, want), show([got, want]));
+  }
+  ok('… a compare too', Object.is(await kpi(rpvYoy, [OCT]), pm.pctChange(await kpi(RPV, [CTL('2024-01-01', '2024-10-31')]), await kpi(RPV, [CTL('2023-01-01', '2023-10-31')]))), show(await kpi(rpvYoy, [OCT])));
+  ok('NEGATIVE CONTROL: … never that part over all time', !Object.is(await kpi(rpvYtd, [OCT]), await kpi(RPV, [ON('2024-01-01', '2024-10-31')])));
   const cmpOnly = await save('Revenue vs LY', { base: REV, compare: { vs: 'previous_year', show: 'change' } });
   ok('compare with no window and no period: null, and why', (await kpi(cmpOnly, [])) === null && (await resolved(cmpOnly, [])).notes?.[0] === msg.pickPeriodToCompare(), show(await resolved(cmpOnly, [])));
   ok('NEGATIVE CONTROL: … with a period in scope it is the change on last year', Object.is(await kpi(cmpOnly, [OCT]), (await kpi(REV, [OCT]))! - (await kpi(REV, [ON('2023-10-01', '2023-10-31')]))!) && (await resolved(cmpOnly, [OCT])).notes === undefined);

@@ -11,7 +11,7 @@ import type { MetricPeriodDefinition } from '../analysis/periodMetric';
 import { periodValue, windowedScope } from '../analysis/periodMath';
 import { compareScope } from '../analysis/periodScope';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
-import { metricDate } from '../analysis/metricTimeScope';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import * as msg from '../analysis/metricCheckMessages';
 import { mergeFx } from '../analysis/fx';
 import * as datasets from '../data/datasets';
@@ -30,14 +30,28 @@ export async function baseOf(projectId: string, datasetId: string, def: MetricPe
   return date ? { base, date } : { error: msg.periodBaseNoDate(base.name) };
 }
 
-/** The base under `scope`, in its own context; its money, warehouse time and glossary notes join the caller's. */
-async function baseValue(ctx: ResolveCtx, base: Metric, scope: FilterStep[], depth: number): Promise<number | null> {
-  const inner = newCtx(ctx.projectId, scope, ctx.params);
+/** The scope with the period's date step (withRange writes it last) marked as a control's: a part on another dataset then counts it on its own date (D9). */
+const markLast = (filters: FilterStep[]): FilterStep[] => filters.map((s, i) => (i === filters.length - 1 ? { ...s, fromControl: true as const } : s));
+
+/**
+ * The base under `scope`, in its own context; its money, warehouse time, glossary notes and refusal join the caller's.
+ * `marked`: the scope with the period's own dates marked, settled through metricScope as resolveMetric settles a date
+ * control's; none: the scope as it is, under the caller's mark if it had one.
+ */
+async function baseValue(ctx: ResolveCtx, base: Metric, scope: FilterStep[], depth: number, marked?: FilterStep[]): Promise<number | null> {
+  const s = marked ? await metricScope(ctx.projectId, base, marked) : { ok: true as const, filters: scope };
+  if (!s.ok) {
+    ctx.refused ??= s.error;
+    return null;
+  }
+  const inner = newCtx(ctx.projectId, s.filters, ctx.params);
+  inner.marked = marked ? { filters: marked, on: base.datasetId } : ctx.marked; // the period metric and its base share a dataset
   inner.reads = ctx.reads; // the columns its figure is totalled from are the base's: what a Share policy judges (publish/kpiPolicy)
   inner.stack.add(base.name.toLowerCase()); // a base formula naming itself has no value, as at the top
   const value = await resolveDefinition(inner, base.datasetId, base.definition, base.filters, depth + 1);
   ctx.fx = mergeFx(ctx.fx, inner.fx);
   ctx.asOf = olderAsOf(ctx.asOf, inner.asOf);
+  ctx.refused ??= inner.refused;
   for (const n of inner.notes ?? []) if (!(ctx.notes ??= []).includes(n)) ctx.notes.push(n);
   return value;
 }
@@ -56,11 +70,12 @@ export async function periodMetricValue(ctx: ResolveCtx, datasetId: string, def:
   if ('error' in found) return say(found.error);
   const windowed = windowedScope(filters, found.date, def.window, todayIso(), getCalendar());
   if (depth === 0 && def.window && windowed.range) ctx.periodRange = windowed.range;
-  const now = await baseValue(ctx, found.base, windowed.filters, depth);
+  const now = await baseValue(ctx, found.base, windowed.filters, depth, def.window ? markLast(windowed.filters) : undefined);
   if (!def.compare) return now;
   const moved = compareScope(windowed.filters, [found.date], { mode: def.compare.vs });
   if (!moved) return say(msg.pickPeriodToCompare());
-  return periodValue(def.compare.show, now, await baseValue(ctx, found.base, moved.filters, depth));
+  const prior = def.window || ctx.marked ? markLast(moved.filters) : undefined; // like the now: a control's or the window's dates move, a tile's own stay (./periods)
+  return periodValue(def.compare.show, now, await baseValue(ctx, found.base, moved.filters, depth, prior));
 }
 
 /** Why a save of `definition` as a period metric on `datasetId` is refused, beside which field; null when it is not one or is fine. */
