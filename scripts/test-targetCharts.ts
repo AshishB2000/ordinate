@@ -63,7 +63,7 @@ async function fixtures() {
 }
 
 async function chartsSection(): Promise<void> {
-  const { P, D, rev, units } = await fixtures();
+  const { P, D, rev, units, saved } = await fixtures();
   const M = (m: Metric): Record<string, unknown> => ({ column: 'amount', aggregation: m.definition && (m.definition as { aggregation: string }).aggregation, metricId: m.id });
   const chart = async (encoding: Record<string, unknown>, filters: FilterStep[]): Promise<Reply> => (await post('visual:data', { projectId: P, datasetId: D, encoding, filters })).value;
   const targetOf = (r: Reply): Reply | undefined => r.data?.series?.find((s: Reply) => s.target);
@@ -89,6 +89,13 @@ async function chartsSection(): Promise<void> {
   ok('by region: the plan\'s region column, pro-rated', Object.is(at(byRegion, 'East'), 600_000 * 20 / 30) && Object.is(at(byRegion, 'West'), 600_000 * 20 / 30), show(targetOf(byRegion)));
   const span = await chart({ category: 'region', values: [M(rev)] }, on('2024-01-15', '2024-04-10'));
   ok('a span by region: partial Jan + whole Feb–Mar + partial Apr, three resolutions combined', Math.abs((at(span, 'East') ?? NaN) - (1_000_000 * 17 / 31 + 2_000_000 + 1_000_000 * 10 / 30)) < 1e-6, show(targetOf(span)));
+  // A folded "Other" bar holds other members than the plan's own "Other" (or its fold): no target there.
+  const PD2 = (await H.as(H.ORG_A, () => H.datasets.saveDataset(P, { name: 'Plan 2', sourceKind: 'csv', columns: PLAN_COLS, rows: [['2024-11-01', 'East', 600_000], ['2024-11-01', 'Other', 300_000]] } as never)))!.id;
+  const plan2 = await saved({ name: 'Plan 2 revenue', datasetId: PD2, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'month' });
+  const rev2 = await saved({ name: 'Revenue 2', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day', target: { source: { metricId: plan2.id }, per: 'month' } });
+  const otherBar = async (note?: string): Promise<unknown> => targetOf(await H.as(H.ORG_A, () => overlay.withTargetSeries({ ok: true, data: { labels: ['East', 'Other'], series: [{ name: 'Revenue 2', values: [1, 2] }] }, warnings: [], category: { kind: 'text', ...(note ? { note } : {}) } } as never, P, D, { category: 'region', values: [M(rev2)] } as never, THIS_MONTH)) as Reply)?.values;
+  ok('a folded "Other" bar has no target', show(await otherBar('folded')) === show([600_000 * 20 / 30, null]), show(await otherBar('folded')));
+  ok('NEGATIVE CONTROL: a member named "Other" keeps the plan\'s', show(await otherBar()) === show([600_000 * 20 / 30, 300_000 * 20 / 30]), show(await otherBar()));
   const byChannel = await chart({ category: 'channel', values: [M(rev)] }, THIS_MONTH);
   ok('by channel: no series, and why', !targetOf(byChannel) && !!byChannel.notes?.includes(tm.targetPlanNoColumn('channel')), show(byChannel.notes));
   const twenty5 = await chart({ category: 'day', grain: 'day', values: [M(rev)] }, Y2024);
