@@ -118,9 +118,10 @@ async function formulaRefusal(projectId: string, m: ModelMetric, selfId: string,
 
 /**
  * A metric, as its save checks one (`metricProblem`, moved out of `metric:save`) and as the editor checks its formula
- * (`metric:check`), its name against the names after the import. `pending`: it names an object this import creates.
+ * (`metric:check`), its name against the names after the import. `pending`: it names an object this import creates (a
+ * period's base, a target's metric, a term); `written`: the formula's parts this import writes first (lower-cased).
  */
-export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean): Promise<string | null> {
+export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean, written?: ReadonlySet<string>): Promise<string | null> {
   if (isExternalDefinition(sanitizeDefinition(m.definition))) return modelExternalMetric(m.name); // D13: a layer's metric is never written from a file
   // metric:save's own contract: what it refuses, the store would cut or drop (a formula past 2,000, a 9th funnel step).
   if (!Definition.safeParse(m.definition).success || !Format.safeParse(m.format).success || (m.target !== undefined && !Target.safeParse(m.target).success)) return modelMetricOutOfBounds(m.name);
@@ -128,6 +129,6 @@ export async function metricRefusal(projectId: string, m: ModelMetric, selfId: s
   if (named) return named;
   const formula = await formulaRefusal(projectId, m, selfId, post);
   if (formula || pending) return formula;
-  const checked = await metricProblem(projectId, { name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters, timeColumn: m.timeColumn, target: m.target }, async () => null);
+  const checked = await metricProblem(projectId, { name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters, timeColumn: m.timeColumn, target: m.target }, async () => null, written);
   return 'problem' in checked ? checked.problem.error : null;
 }

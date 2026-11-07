@@ -150,6 +150,8 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
     if (!metas.has(id)) metas.set(id, datasets.getDatasetMeta(projectId, id)); // the record's columns, never its rows
     return metas.get(id) as Promise<DatasetMeta | null>;
   };
+  /** A dbt formula's inputs (file ids), by its item key. */
+  const inputsOf = (key: string): string[] | undefined => (key.startsWith('metric:') ? file.dbt?.inputs.get(key.slice('metric:'.length)) : undefined);
   const dependency = (r: Mapped): string | undefined => r.missing[0] ?? r.refs.find((k) => gone.has(k));
   const created = (k: string): boolean => {
     const [kind, id] = k.split(':') as [string, string];
@@ -275,7 +277,7 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
   for (const fm of file.metrics) {
     const r = mapRefs(fm, m);
     // A dbt formula names its inputs by name: each is a reference too, so a skip of one takes the formula with it.
-    fileOf.set(`metric:${fm.id}`, { ...r, refs: [...r.refs, ...(file.dbt?.inputs.get(fm.id) ?? []).map((id) => `metric:${id}`)] });
+    fileOf.set(`metric:${fm.id}`, { ...r, refs: [...r.refs, ...(inputsOf(`metric:${fm.id}`) ?? []).map((id) => `metric:${id}`)] });
   }
   for (let more = true; more;) {
     more = false;
@@ -306,15 +308,16 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
   };
   for (let pass = 0; pass <= items.length; pass++) {
     const post = postNames();
-    // A dbt formula naming a metric this import writes is judged by its save after that one's (the apply's order).
+    // A dbt formula's inputs this import writes are judged by their own saves, before its (the apply's order); the rest as stored.
     const written = new Set(file.dbt ? items.filter((i) => i.kind === 'metric' && writes(i)).map((i) => String((fileOf.get(i.key) as Mapped).value.name).toLowerCase()) : []);
     let fell = false;
     for (const item of items) {
       if ((item.kind !== 'term' && item.kind !== 'metric') || !writes(item)) continue;
       const r = fileOf.get(item.key) as Mapped;
       const self = item.targetId ?? r.value.id;
-      const pending = r.refs.some(created) || formulaNames(r.value).some((n) => written.has(n));
-      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending);
+      const inputs = inputsOf(item.key);
+      const pending = r.refs.some((k) => created(k) && !inputs?.includes(k.slice('metric:'.length)));
+      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending, written);
       if (refusal) {
         // A layer's metric is never written from a file (D13): skipped as `external`, with the sentence.
         refuse(item, refusal, item.kind === 'metric' && isExternalDefinition(sanitizeDefinition((r.value as { definition?: unknown }).definition)) ? 'external' : 'invalid');
@@ -325,7 +328,7 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
     // A dbt formula's every [name] must be, after the import, the input dbt means by it, unchanged items too: never
     // the project's own metric of that name (an input refused, or renamed here and its name taken since).
     for (const item of items) {
-      const inputs = item.kind === 'metric' && item.status !== 'skipped' ? file.dbt?.inputs.get(item.key.slice('metric:'.length)) : undefined;
+      const inputs = item.status !== 'skipped' ? inputsOf(item.key) : undefined;
       if (!inputs) continue;
       const lands = new Set(inputs.map((id) => m.metrics.get(id) ?? id));
       const wrong = formulaNames((fileOf.get(item.key) as Mapped).value).find((n) => !lands.has(post.metrics.find((pm) => pm.name.toLowerCase() === n)?.id as string));

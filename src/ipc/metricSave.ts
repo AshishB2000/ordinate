@@ -61,12 +61,14 @@ export type MetricRefusal = { error: string; field: string };
 
 /**
  * `metric:save`'s checks, in its order: the refusal, or the date the save settles on. `named`: the name's check (the
- * project as stored; a model import passes its own set).
+ * project as stored; a model import passes its own set). `excused`: the formula's parts a model import writes first
+ * (lower-cased), left out of the date check: the save after theirs checks them.
  */
 export async function metricProblem(
   projectId: string,
   raw: any, // any: the zod-checked input, read field by field (as the handler always read it)
   named: (name: unknown) => Promise<string | null> = (n) => nameRefusal(projectId, n),
+  excused?: ReadonlySet<string>,
 ): Promise<{ problem: MetricRefusal } | { when: { timeColumn?: string } }> {
   // `field`: which box of the editor the sentence belongs beside.
   const taken = await named(raw.name);
@@ -76,7 +78,7 @@ export async function metricProblem(
   const per = (await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, raw.datasetId, raw.definition)); if (per) return { problem: per };
   const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
   if (snap) return { problem: { error: snap, field: 'snapshot' } };
-  const when = await settleOnSave(projectId, raw);
+  const when = await settleOnSave(projectId, raw, excused);
   if ('error' in when) return { problem: { error: when.error, field: 'timeColumn' } };
   const tg = await checkTarget(projectId, { ...raw, id: '', name: String(raw.name), definition: metrics.sanitizeDefinition(raw.definition), ...when }, raw.target); if (tg) return { problem: tg };
   return { when };

@@ -251,6 +251,23 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   await post('metric:save', { projectId: B.P, input: { name: 'Revenue', datasetId: B.orders, definition: { column: 'units', aggregation: 'sum' } } });
   const bPlan = await planOf(B.P);
   ok('a re-import after a rename here and a new "Revenue" of the project\'s own: the ratio already stored is skipped, under its input', fellWith(bPlan, 'aov', 'revenue') && fellWith(bPlan, 'net', 'revenue'), show([itemFor(bPlan, 'revenue'), itemFor(bPlan, 'aov')]));
+  // The dry run says what the apply does: a formula's date is checked against every input this import does not write.
+  const A = await seedProject('dbt own revenue, no date');
+  await post('metric:save', { projectId: A.P, input: { name: 'revenue', datasetId: A.orders, definition: { column: 'units', aggregation: 'sum' } } });
+  const aPlan = await planOf(A.P);
+  const aDone = await applyOf(A.P, aPlan.plan.hash);
+  ok('an input refused for a name the project has (another case, no date): the ratio is skipped, and the apply fails nothing', fellWith(aPlan, 'aov', 'revenue') && aDone.ok === true && aDone.failed.length === 0, show([itemFor(aPlan, 'aov'), aDone]));
+  const D = await seedProject('dbt input kept here');
+  await applyOf(D.P, (await planOf(D.P)).plan.hash);
+  await post('metric:update', { projectId: D.P, id: await idOf(D.P, 'Revenue'), patch: { timeColumn: 'stock_date' } });
+  await post('metric:update', { projectId: D.P, id: await idOf(D.P, 'Orders'), patch: { timeColumn: '' } });
+  await post('metric:delete', { projectId: D.P, id: await idOf(D.P, 'AOV') });
+  const twin = copy();
+  twin.metrics.push({ ...copyOf(twin.metrics.find((x: Json) => x.name === 'revenue')), name: 'revenue_twin' }); // a second "Revenue": dbt's update of Revenue is refused
+  const dPlan = await planOf(D.P, twin);
+  const dDone = await applyOf(D.P, dPlan.plan.hash, twin);
+  const dAov = itemFor(dPlan, 'aov');
+  ok('a ratio whose one input is written and the other kept here with another date: the dry run refuses it as the apply would', itemFor(dPlan, 'revenue')?.reason === 'invalid' && itemFor(dPlan, 'orders')?.status === 'updated' && dAov?.reason === 'invalid' && /stock_date/.test(String(dAov?.error)) && dDone.ok === true && !dDone.failed.some((f: Reply) => f.key === dAov?.key), JSON.stringify(dDone.failed ?? dDone));
 
   // A project with its own Revenue and docs: the copy updates what dbt says and keeps what Ordinate owns.
   const K = await seedProject('dbt over a model');
