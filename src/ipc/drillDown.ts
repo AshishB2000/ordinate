@@ -23,7 +23,7 @@ import { drillInputs } from './drillScope';
 import type { DrillRequest } from './drillScope';
 import { resolveDrill } from './visuals';
 import { gateColumnsReply } from './columnDoors';
-import { drillFinestDate, drillHiddenLevel, drillLastLevel, drillNoHierarchy, drillNotThisChart } from './drillMessages';
+import { drillFailed, drillFinestDate, drillHiddenLevel, drillLastLevel, drillNoHierarchy, drillNotThisChart } from './drillMessages';
 
 /** `label`: the mark as people read it (a value label, a period); `next`: the next level's column, or the date grain. */
 export interface DrillCrumb { column: string; label: string; next: string }
@@ -74,7 +74,7 @@ export function register(): void {
       const [p, d] = [String(projectId ?? ''), String(datasetId ?? '')];
       return await gateColumnsReply(p, d, async () => [], [encoding, filters], (hidden) => drillDown(p, d, { encoding, filters, mark, params }, hidden));
     } catch (err) {
-      return { ok: false, error: (err instanceof Error && err.message) || 'The drill could not be worked out.' };
+      return { ok: false, error: (err instanceof Error && err.message) || drillFailed() };
     }
   });
 }

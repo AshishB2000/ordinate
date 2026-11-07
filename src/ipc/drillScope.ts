@@ -40,7 +40,7 @@ import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution, VizDataReply } from './visuals';
 import { noRowsError } from '../analysis/externalMetric';
-import { drillSeparateFilters, drillSnapshotRows } from './drillMessages';
+import { drillJoinedCategory, drillSeparateFilters, drillSnapshotRows } from './drillMessages';
 
 export interface DrillRequest {
   encoding: unknown;
@@ -123,5 +123,5 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
 /** A category (or split) from a related dataset is not this table's column, even under the same name: no rows of this table are behind it. */
 export function joinedCategoryRefusal(encoding: VizEncoding): string | null {
   const column = encoding.categoryDatasetId ? encoding.category : encoding.series && encoding.seriesDatasetId ? encoding.series : null;
-  return column ? `“${column}” comes from a related dataset, so the rows behind this mark cannot be listed here.` : null;
+  return column ? drillJoinedCategory(column) : null;
 }
