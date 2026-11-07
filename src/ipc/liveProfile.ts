@@ -211,21 +211,21 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
   const rows = prof?.sampleRows;
   const withheld = await liveWithheld(projectId, datasetId, meta);
   const missingNames = meta.live.missingColumns ?? [];
-  // The sample's values are every row's: none to a caller row access rules restrict (REDACT).
+  // The sample's values and counts are every row's: none to a caller row access rules restrict (REDACT).
   const closed = await closedToCaller(projectId, datasetId);
   return {
     ok: true,
     schemaSyncedAt: meta.live.schemaSyncedAt,
     syncing: !!(await refreshRunning(projectId, datasetId)),
     sampledAt: prof?.sampledAt ?? null,
-    sampleRows: rows ?? null,
+    sampleRows: closed ? null : rows ?? null,
     method: prof?.method ?? null,
     note: prof?.skipped ? SKIP_NOTE[prof.skipped]() : null,
     columns: declaredColumns(meta).map((c) => {
       const p = profileOf(meta, c.name);
-      const filled = typeof p?.filled === 'number' ? p.filled : null;
+      const filled = !closed && typeof p?.filled === 'number' ? p.filled : null;
       const values = closed ? [] : p?.values ?? [];
-      const distinct = typeof p?.distinct === 'number' ? p.distinct : null;
+      const distinct = !closed && typeof p?.distinct === 'number' ? p.distinct : null;
       return {
         name: c.name,
         type: c.type,
