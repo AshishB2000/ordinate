@@ -11,6 +11,12 @@
 //     ([Profit] / [Revenue]) is refused: no one set of rows adds up to a ratio
 //     of two rollups, and this panel never shows an approximate set.
 //
+//   · a CHART'S followed metric. A bar over a measure that names "Tier 3 qty"
+//     is drawn under that metric's filters (analysis/metricMeasures), so the
+//     rows behind it carry them too, or they would not add up to the bar. A
+//     chart whose measures need different filter lists (a per-measure plan)
+//     keeps the chart's own rows: no one set of rows adds up to two lists.
+//
 //   · the GRAIN of a dated axis. A month's bar is every row dated in that
 //     month, but only the chart's own answer says the axis was bucketed by
 //     month — so the chart is asked (the cached answer the tile was drawn from)
@@ -22,6 +28,8 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParsedColumn } from '../data/parse';
 import type { DateGrain } from '../analysis/categoryKey';
 import { isLive } from '../data/liveDataset';
+import type { FilterStep } from '../data/transforms';
+import { planMetricMeasures } from '../analysis/metricMeasures';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution } from './visuals';
 
@@ -39,6 +47,8 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
   const enc = visuals.sanitizeEncoding(req.encoding);
   const values = paramValues(req.params);
   let filters = resolveFilterParams(visuals.sanitizeFilters(req.filters), values).steps;
+  // A followed metric's filters lead the ROWS' scope only: the grain question below is the tile's, so it keeps the filters as the tile asked them (its cached answer).
+  let followed: FilterStep[] = [];
 
   if (typeof req.metricId === 'string' && req.metricId) {
     const metric = await metrics.getMetric(projectId, req.metricId);
@@ -48,6 +58,9 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
       return { available: false, reason: `"${metric.name}" is calculated from other metrics, so no one set of rows adds up to it. Open a metric it is built from to see its rows.` };
     }
     filters = resolveFilterParams(metric.filters || [], values).steps.concat(filters);
+  } else {
+    const plan = await planMetricMeasures(projectId, datasetId, enc, values);
+    if (plan?.ok && !plan.plan) followed = plan.filters;
   }
 
   // resolveDrill reads a mark's two fields by type (its markValue), so the shape is all that is asserted here.
@@ -59,5 +72,5 @@ export async function drillFilters(projectId: string, datasetId: string, meta: {
     const chart = await vizDataFor(projectId, datasetId, enc, filters, { params: values });
     if (chart.ok && chart.category && chart.category.kind === 'date') grain = chart.category.grain;
   }
-  return resolveDrill(columns, enc, filters, mark, grain);
+  return resolveDrill(columns, enc, followed.concat(filters), mark, grain);
 }

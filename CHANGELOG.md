@@ -82,6 +82,25 @@ All notable changes to Ordinate are documented here. Format based on
   on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
   Off without a database. See `docs/notifications/00-design.md`.
 
+### Charts follow their metric
+
+- **A chart measure picked from a metric draws the metric as defined today.** Its column, its aggregation
+  and its filters apply, and editing the metric changes the chart on the next draw. The column and
+  aggregation the chart stored when the measure was picked are only the fallback for a metric that is
+  gone.
+- **Charts built from a metric with filters, or from a metric edited since, change their numbers once.**
+  The Metrics page marks them per metric ("2 charts changed"), and the chart names are on hover and in
+  text a screen reader reads. A chart that draws what it always drew is not marked.
+- **Pivots still draw their saved copy.** On a Live dataset a chart with two differently filtered metrics
+  asks the warehouse once per filter list.
+- **A chart that cannot follow its metric says why instead of drawing a number that ignores the metric's
+  filters:** a Live filter the warehouse compiler refuses, a metric over a level-of-detail (`{...}`)
+  column, small multiples of measures with different filters, and a filtered metric beside another
+  measure on a folded ("Other") or binned axis.
+- **The Assistant is told a followed metric by its name, definition and filters**, not as the bare
+  column's total. In chart and dataset facts alike, a filter on a column marked personal or financial
+  names the column and never its value.
+
 ### Breaking — Ordinate is now a self-hosted web app (Phase 7)
 
 The Electron desktop app is gone. Ordinate is a server a company runs in its own infrastructure,

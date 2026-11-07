@@ -31,6 +31,7 @@ import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
 import { refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { followedEncoding } from '../analysis/metricMeasures';
 import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
 import { liveDistinct } from '../ipc/liveProfile';
@@ -458,9 +459,10 @@ export async function buildDashboard(
           if (ctx.checkCancelled) ctx.checkCancelled();
           const merged = mergeDashboardFilters(scope.filters, v.filters);
           const bound = resolveFilterParams(merged, scope.params);
-          const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, bound.steps, { params: scope.params }), projectId, v.datasetId, enc, scope.params), projectId, v.datasetId, bound.steps);
+          const drawn = await followedEncoding(projectId, v.datasetId, enc, scope.params); // each metric measure as it is defined NOW: what the tile draws
+          const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, drawn, bound.steps, { params: scope.params }), projectId, v.datasetId, drawn, scope.params), projectId, v.datasetId, bound.steps);
           const payload = reply.ok
-            ? await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing)
+            ? await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing)
             : { error: reply.error || 'Could not compute this tile.' };
           base.variants.push(intern(store, payload));
           done++;

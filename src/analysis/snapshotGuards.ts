@@ -23,7 +23,7 @@ export async function snapshotMetric(projectId: string, metricId: unknown): Prom
  * is drawn (vizData.buildPivot), so only it is checked. A chart with no `metricId` reads nothing.
  */
 export async function snapshotMeasureRefusal(projectId: string, encoding: VizEncoding | null | undefined): Promise<string | null> {
-  for (const v of drawnMeasures(encoding)) {
+  for (const v of snapshotDrawn(encoding)) {
     const m = await snapshotMetric(projectId, v?.metricId);
     if (m) return msg.measureSnapshotPending(m.name);
   }
@@ -37,7 +37,7 @@ export async function snapshotMeasureRefusal(projectId: string, encoding: VizEnc
  */
 export async function timeColumnControlRefusal(projectId: string, encoding: VizEncoding | null | undefined, filters: readonly FilterStep[] | null | undefined): Promise<string | null> {
   if (!(Array.isArray(filters) && filters.some((f) => f && f.fromControl === true))) return null; // no control: no metric read
-  for (const v of drawnMeasures(encoding)) {
+  for (const v of snapshotDrawn(encoding)) {
     const m = typeof v?.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
     if (m && controlOffOwnDate(m.timeColumn, filters)) return msg.measureTimeColumnPending();
   }
@@ -53,8 +53,8 @@ export function controlOffOwnDate(timeColumn: string | undefined, filters: reado
   return !!timeColumn && (Array.isArray(filters) ? filters : []).some((f) => f && f.fromControl === true && f.column !== timeColumn);
 }
 
-/** The measures a chart draws: a pivot's values, else its values (only the first under a split, as vizData.buildPivot); none for the grids beside it. */
-function drawnMeasures(encoding: VizEncoding | null | undefined): VizEncoding['values'] {
+/** The measures a chart draws, for the guards here (not metricMeasures.drawnMeasures, which leaves a pivot to its copy): a pivot's values, else its values (only the first under a split, as vizData.buildPivot); none for the grids beside it. */
+function snapshotDrawn(encoding: VizEncoding | null | undefined): VizEncoding['values'] {
   if (!encoding || encoding.cohort || encoding.eventFunnel || encoding.drivers) return [];
   const all = encoding.pivot ? encoding.pivot.values : encoding.values;
   return Array.isArray(all) ? (encoding.series && !encoding.pivot ? all.slice(0, 1) : all) : [];

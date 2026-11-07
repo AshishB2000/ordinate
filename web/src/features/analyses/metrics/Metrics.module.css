@@ -121,6 +121,9 @@ th.num {
 .unused {
   color: var(--text-dim);
 }
+.changed {
+  margin-left: var(--sp-8);
+}
 .actions {
   width: 40px;
   text-align: right;

@@ -106,8 +106,13 @@
 }
 .valueRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4);
+}
+/* A measure whose metric was deleted: the rail is too narrow to share the line, so the badge takes its own beneath. */
+.gone {
+  flex: 1 0 100%;
 }
 .grow {
   flex: 1 1 0;

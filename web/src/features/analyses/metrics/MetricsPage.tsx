@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { EmptyState, ErrorState, Page } from '../../../app/blocks';
+import { Badge } from '../../../ui/Badge';
 import { Button, IconButton } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
@@ -34,6 +35,18 @@ interface Row {
   usage: Usage | null;
 }
 type Table = { ok: true; metrics: MetricSummary[]; rows: Record<string, Row> } | { ok: false; error: string };
+
+/** The charts that follow this metric now and so drew other numbers before (the server marks them). */
+function ChangedCharts({ usage }: { usage: Usage }) {
+  const names = usage.refs.filter((r) => r.change).map((r) => r.name);
+  if (!names.length) return null;
+  return (
+    <span className={s.changed} title={names.join(', ')}>
+      <Badge tone="warn">{`${names.length} ${names.length === 1 ? 'chart' : 'charts'} changed`}</Badge>
+      <span className={s.srOnly}>{`Changed charts: ${names.join(', ')}`}</span>
+    </span>
+  );
+}
 
 function useTable(projectId: string) {
   return useQuery({
@@ -190,7 +203,10 @@ function Metrics({ projectId }: { projectId: string }) {
                   </td>
                   <td className={s.num}>{row?.display ?? '—'}</td>
                   <td>{row?.series && <Sparkline values={row.series} label={`${m.name} trend`} />}</td>
-                  <td className={row?.usage?.total ? s.dim : s.unused}>{row?.usage ? (row.usage.total ? row.usage.summary : 'Not used yet') : '—'}</td>
+                  <td className={row?.usage?.total ? s.dim : s.unused}>
+                    {row?.usage ? (row.usage.total ? row.usage.summary : 'Not used yet') : '—'}
+                    {row?.usage && <ChangedCharts usage={row.usage} />}
+                  </td>
                   <td className={s.actions}>
                     {(canEdit || m.hasTree) && (
                       <Menu

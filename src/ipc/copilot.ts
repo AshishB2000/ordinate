@@ -13,6 +13,8 @@ import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { followedEncoding } from '../analysis/metricMeasures';
+import { followedMeasureTexts, metricDefinitionText } from './copilotMeasures';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -156,6 +158,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const list = await metrics.listMetrics(projectId);
     const byName = await metrics.metricsByName(projectId);
     const out: FactMetric[] = [];
+    const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
@@ -165,7 +168,11 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       });
       if (!r) continue;
       const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
-      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, additivity, description: s.description });
+      // Its filters are worded as the Assistant is told a chart's: a value of a column marked personal or financial is withheld.
+      const stored = await metrics.getMetric(projectId, s.id);
+      if (!stored) continue;
+      const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description });
     }
     return out;
   } catch (_) {
@@ -234,12 +241,13 @@ export async function buildFacts(
       // The chart's figures through THE chart door (vizDataFor) — the same numbers
       // the tile draws, a Live dataset's from its warehouse (L2.4) — with the
       // calculated figures beside the raw ones (tableCalc.ts). No figure → none.
-      const reply = await vizDataFor(projectId, v.datasetId, v.encoding, v.filters);
+      const drawn = await followedEncoding(projectId, v.datasetId, v.encoding); // each metric measure as it is defined NOW: what the tile draws
+      const reply = await vizDataFor(projectId, v.datasetId, drawn, v.filters);
       const raw: { ok: true } & VizDataResult = reply.ok
         ? { ok: true, data: reply.data, recommendedShape: reply.recommendedShape, warnings: reply.warnings, category: reply.category }
         : { ok: true, data: { labels: [], series: [] }, recommendedShape: 'categorical', warnings: [] };
       // A calculation that was refused (additivity.ts) is never read: the Assistant gets the raw figures.
-      const viz = (await refuseNonAdditiveCalcs(reply, projectId, v.datasetId, v.encoding)).ok ? withTableCalcs(raw, v.encoding) : raw;
+      const viz = (await refuseNonAdditiveCalcs(reply, projectId, v.datasetId, drawn)).ok ? withTableCalcs(raw, drawn) : raw;
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
       // The visual's Analytics overlays, resolved under the visual's own filters.
@@ -251,7 +259,7 @@ export async function buildFacts(
       for (const rid of [v.encoding.categoryDatasetId, v.encoding.seriesDatasetId]) {
         if (rid && rid !== v.datasetId && !relatedDocs[rid]) relatedDocs[rid] = await catalogColumns(projectId, rid);
       }
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId));
+      return copilot.visualFacts({ ...v, encoding: drawn }, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId), await followedMeasureTexts(projectId, v.datasetId, drawn, columnDocs));
     }
   }
 

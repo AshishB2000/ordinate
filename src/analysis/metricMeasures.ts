@@ -15,11 +15,14 @@
 // Nothing here aggregates: the leaves are the engines' figures, and the only
 // arithmetic is the user's own expression over them.
 //
-// A measure whose metric is gone, or is a simple `{column, aggregation}`, is
-// not planned: it plots its stored column as it always has (visuals.VizMeasure).
+// A SIMPLE metric measure is drawn as the metric defines it now (D16): its
+// column, its aggregation and its own filters. One filter list shared by every
+// measure rides on the chart's filters in one question; measures that need
+// different rows are planned here as leaves. The copy the chart stored is only
+// the fallback for a metric that is gone (visuals.VizMeasure).
 
 import * as metrics from './metrics';
-import type { Metric } from './metrics';
+import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isFormulaDefinition } from './metrics';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
@@ -27,6 +30,7 @@ import type { MetricAggregation } from './metricValue';
 import { bindFormulaText, resolveFilterParams } from './params';
 import type { ParamValues } from './params';
 import type { VizEncoding, VizMeasure } from './visuals';
+import { measureLabel } from './vizData';
 import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import * as msg from './metricCheckMessages';
@@ -46,11 +50,20 @@ export type Operand = { leaf: number } | { program: MetricFormulaProgram; operan
 
 export interface MeasurePlan {
   leaves: Leaf[];
-  /** By `encoding.values` index: the measures to calculate. Every other index plots as stored. */
-  formulas: Map<number, { name: string; root: Operand }>;
+  /** By `encoding.values` index: the measures to calculate (`simple`: a filtered simple metric as one leaf). Every other index plots as given. */
+  formulas: Map<number, { name: string; root: Operand; simple?: true }>;
 }
 
-export type PlanResult = { ok: true; plan: MeasurePlan } | { ok: false; error: string };
+/**
+ * `values`: the encoding's measures, each drawn simple metric's `column`/`aggregation` replaced by its metric's.
+ * `filters`: the metric filters every measure shares, params bound. `plan`: only when the measures need separate questions.
+ */
+export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string };
+
+/** Whether a simple metric reads other rows than its column's plain total (step 07 adds a snapshot). */
+export function needsMetricPlan(m: Metric): boolean {
+  return m.filters.length > 0;
+}
 
 /** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}`. */
 class PlanError extends Error {}
@@ -61,9 +74,38 @@ export function hasMetricMeasure(encoding: VizEncoding | null | undefined): bool
   return Array.isArray(encoding.values) && encoding.values.some((v) => v && typeof v.metricId === 'string');
 }
 
+/** The measures the door draws from their metrics: none for a pivot, cohort, funnel or drivers chart, and with a split only the first (vizData.buildPivot). */
+export function drawnMeasures(encoding: VizEncoding | null | undefined): VizMeasure[] {
+  if (!encoding || !hasMetricMeasure(encoding)) return [];
+  return encoding.series ? encoding.values.slice(0, 1) : encoding.values;
+}
+
 /**
- * The plan for a chart's formula measures, an error sentence, or null when it
- * has none (the door then answers as it always did).
+ * The definition the door draws `encoding.values[i]` from when its metric `m` is a simple one it follows: the
+ * ONE rule behind the planner, `chartChange` and the Assistant's facts. null: the measure is drawn as stored
+ * (no metric, another dataset's, a formula, no column of its own, or not a drawn measure).
+ */
+export function followedDefinition(m: Metric | null | undefined, datasetId: string, encoding: VizEncoding, i: number): MetricSimpleDefinition | null {
+  if (!m || m.datasetId !== datasetId || isFormulaDefinition(m.definition) || !m.definition.column) return null;
+  return i < drawnMeasures(encoding).length ? m.definition : null;
+}
+
+/**
+ * Whether a chart's numbers differ from its stored copy now that it follows `m`, and why: `filters` when the metric
+ * reads other rows than its column's plain total, `definition` when a drawn copy names another column or aggregation.
+ * A snapshot metric's chart is refused (step 07 draws it), so it shows no other numbers: null.
+ */
+export function chartChange(m: Metric, datasetId: string, encoding: VizEncoding): 'filters' | 'definition' | null {
+  const copies = drawnMeasures(encoding).filter((v, i) => v.metricId === m.id && followedDefinition(m, datasetId, encoding, i));
+  const def = m.definition as MetricSimpleDefinition; // followed (when copies is not empty), so a simple one
+  if (!copies.length || def.snapshot) return null;
+  if (needsMetricPlan(m)) return 'filters';
+  return copies.some((v) => v.column !== def.column || v.aggregation !== def.aggregation) ? 'definition' : null;
+}
+
+/**
+ * How a chart's metric measures are drawn, an error sentence, or null when
+ * nothing differs from the measures as stored (the door then answers as it always did).
  */
 export async function planMetricMeasures(
   projectId: string,
@@ -72,8 +114,7 @@ export async function planMetricMeasures(
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
   if (!hasMetricMeasure(encoding)) return null;
-  // With a split only the first measure is drawn (vizData.buildPivot).
-  const considered = encoding.series ? encoding.values.slice(0, 1) : encoding.values;
+  const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
   const leafAt = new Map<string, number>();
   let byName: Map<string, Metric> | null = null;
@@ -129,19 +170,52 @@ export async function planMetricMeasures(
     return { program: compiled.program, operands };
   };
 
+  const values = encoding.values.slice();
+  const own: FilterStep[][] = considered.map(() => []); // each drawn measure's own filters, params bound
+  const filtered = new Map<number, Metric>();
+  let formula = false;
+  let changed = false;
   try {
     for (let i = 0; i < considered.length; i += 1) {
-      const id = considered[i]?.metricId;
-      const m = id ? await metrics.getMetric(projectId, id) : null;
-      if (!m || !isFormulaDefinition(m.definition)) continue;
-      const root = await build(m, new Set([m.name.toLowerCase()]), 0, true);
-      if (root) plan.formulas.set(i, { name: m.name, root });
+      const v = considered[i];
+      const m = v?.metricId ? await metrics.getMetric(projectId, v.metricId) : null;
+      if (!m) continue; // gone: the stored copy, as before
+      if (isFormulaDefinition(m.definition)) {
+        formula = true;
+        const root = await build(m, new Set([m.name.toLowerCase()]), 0, true);
+        if (root) plan.formulas.set(i, { name: m.name, root });
+        continue;
+      }
+      const def = followedDefinition(m, datasetId, encoding, i);
+      if (!def) continue; // another dataset's, or no column of its own: the stored copy, as before
+      if (def.snapshot) throw new PlanError(msg.measureSnapshotPending(m.name)); // a sum over every date would be wrong; step 07 removes this
+      if (def.column !== v.column || def.aggregation !== v.aggregation) {
+        values[i] = { ...v, column: def.column, aggregation: def.aggregation };
+        changed = true;
+      }
+      if (!needsMetricPlan(m)) continue;
+      own[i] = resolveFilterParams(m.filters, params).steps;
+      filtered.set(i, m);
+    }
+    const shared = own[0] ?? [];
+    if (!formula && own.every((f) => JSON.stringify(f) === JSON.stringify(shared))) {
+      return shared.length || changed ? { ok: true, values, filters: shared } : null;
+    }
+    // A filtered simple metric is one leaf under its own filters; values[i] holds its metric's column and aggregation.
+    for (const [i, m] of filtered) {
+      plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name), simple: true });
     }
   } catch (err) {
     if (err instanceof PlanError) return { ok: false, error: err.message };
     throw err;
   }
-  return plan.formulas.size ? { ok: true, plan } : null;
+  return { ok: true, values, filters: [], plan };
+}
+
+/** The encoding as the chart door draws it: each simple metric measure as its metric defines it now. */
+export async function followedEncoding(projectId: string, datasetId: string, encoding: VizEncoding, params?: ParamValues): Promise<VizEncoding> {
+  const res = await planMetricMeasures(projectId, datasetId, encoding, params);
+  return res && res.ok ? { ...encoding, values: res.values } : encoding;
 }
 
 /** One cell's value: the formula over that cell's leaf totals. A missing total is null, and so is the result. */
@@ -154,14 +228,16 @@ export function evaluateOperand(op: Operand | null, leafValue: (leaf: number) =>
 }
 
 /**
- * The encoding with each formula measure replaced by the COLUMNS it totals —
- * what a policy that decides by column must be shown (app/sharePolicy.ts): a
- * formula over a sensitive column is a figure drawn from that column.
+ * The encoding as the door draws it, each planned measure replaced by the COLUMNS
+ * it totals — what a policy that decides by column must be shown (app/sharePolicy.ts):
+ * a formula over a sensitive column, or a metric edited onto one, is a figure drawn from that column.
  */
 export async function withLeafMeasures(projectId: string, datasetId: string, encoding: VizEncoding): Promise<VizEncoding> {
   const res = await planMetricMeasures(projectId, datasetId, encoding);
   if (!res || !res.ok) return encoding;
-  const plain = encoding.values.filter((_, i) => !res.plan.formulas.has(i));
-  const leaves: VizMeasure[] = res.plan.leaves.map((l) => ({ column: l.column, aggregation: l.aggregation }));
+  const plan = res.plan;
+  if (!plan) return { ...encoding, values: res.values };
+  const plain = res.values.filter((_, i) => !plan.formulas.has(i));
+  const leaves: VizMeasure[] = plan.leaves.map((l) => ({ column: l.column, aggregation: l.aggregation }));
   return { ...encoding, values: plain.concat(leaves) };
 }

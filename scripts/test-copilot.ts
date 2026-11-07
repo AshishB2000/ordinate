@@ -153,6 +153,13 @@ async function main(): Promise<void> {
   ok('visualFacts has the guard line', /computed by the app/i.test(vFacts.text));
   // D3: cells are quoted
   ok('visualFacts embeds the computed series values', vFacts.text.includes('"Paris"=100') && vFacts.text.includes('"Berlin"=300'));
+  // A measure with no metric text keeps today's line byte for byte; a followed metric's text replaces only its own measure.
+  ok('visualFacts: a measure with no metric is the bare aggregation(column) line', vFacts.text.includes('\nCategory (x): city. Measures: sum(pop).'));
+  const popVisual = { name: 'Pop chart', chartType: 'column', datasetId: ds!.id,
+    encoding: { category: 'city', values: [{ column: 'pop', aggregation: 'sum' as const }, { column: 'pop', aggregation: 'avg' as const }] } } as any;
+  const bare = copilot.visualFacts(popVisual, 'Cities', viz).text;
+  ok('visualFacts: empty measure texts change nothing, byte for byte', copilot.visualFacts(popVisual, 'Cities', viz, {}, [], {}, undefined, [undefined, undefined]).text === bare && bare.includes('Measures: sum(pop), avg(pop).'));
+  ok('visualFacts: a metric\'s text replaces its own measure only, and a `;` ends its filter', copilot.visualFacts(popVisual, 'Cities', viz, {}, [], {}, undefined, ['"Big" = sum(pop) where pop > 150']).text.includes('Measures: "Big" = sum(pop) where pop > 150; avg(pop).'));
   ok('visualFacts provenance names the visual + dataset',
     vFacts.provenance.kind === 'visual' && vFacts.provenance.name === 'Pop chart' && vFacts.provenance.datasetName === 'Cities');
 

@@ -28,6 +28,7 @@ import { listReports } from './reportSpec';
 import { compileMetricFormula } from './metricFormula';
 import { isFormulaDefinition } from './metrics';
 import { treeMetricIds } from './metricTree';
+import { chartChange } from './metricMeasures';
 
 export type MetricUsageKind = 'card' | 'visual' | 'alert' | 'report' | 'metric';
 
@@ -40,6 +41,8 @@ export interface MetricUsageRef {
   id: string;
   /** For a card: which sheet it sits on, so "open" lands on the right one. */
   sheetIndex?: number;
+  /** For a visual: how its numbers differ from its stored copy now that it follows this metric (analysis/metricMeasures.chartChange). */
+  change?: 'filters' | 'definition';
 }
 
 export interface MetricUsage {
@@ -83,6 +86,10 @@ export function summarize(refs: MetricUsageRef[]): string {
 export async function metricUsage(projectId: string, metricId: string): Promise<MetricUsage> {
   const refs: MetricUsageRef[] = [];
   const usingAnalyses = new Set<string>();
+  let self: metrics.Metric | null = null;
+  try {
+    self = await metrics.getMetric(projectId, metricId);
+  } catch (_) { /* as below: no metric read, no "changed" marks */ }
 
   try {
     for (const summary of await analysis.listAnalyses(projectId)) {
@@ -116,7 +123,8 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
       const pivotValues = (v.encoding as { pivot?: { values?: { metricId?: string }[] } }).pivot?.values || [];
       if (v.encoding.values.some((m) => m.metricId === metricId)
         || pivotValues.some((m) => m && m.metricId === metricId)) {
-        refs.push({ kind: 'visual', name: v.name, id: v.id });
+        const change = self ? chartChange(self, v.datasetId, v.encoding) : null;
+        refs.push({ kind: 'visual', name: v.name, id: v.id, ...(change && { change }) });
       }
     }
   } catch (_) { /* as above */ }
@@ -137,7 +145,6 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
   } catch (_) { /* as above */ }
 
   try {
-    const self = await metrics.getMetric(projectId, metricId);
     const name = self ? self.name.toLowerCase() : '';
     if (name) {
       for (const s of await metrics.listMetrics(projectId)) {

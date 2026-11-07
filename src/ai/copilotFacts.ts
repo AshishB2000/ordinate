@@ -267,12 +267,14 @@ export function visualFacts(
   relatedDocs: Record<string, Record<string, FactColumnDoc>> = {},
   // The user's notes on the visual's dataset.
   table?: FactTableDoc,
+  // By measure: a followed metric's name and filters (ipc/copilotMeasures), else the bare `aggregation(column)`.
+  measureTexts: (string | undefined)[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   lines.push(`Visual: "${v.name}" — a ${v.chartType} chart over dataset "${datasetName}".`);
   const measures = (v.encoding.values || [])
-    .map((m) => `${m.aggregation}(${m.column})`)
-    .join(', ');
+    .map((m, i) => measureTexts[i] ?? `${m.aggregation}(${m.column})`)
+    .join(measureTexts.some(Boolean) ? '; ' : ', '); // a filter can hold a list ("tier in 1, 2"), so a comma no longer ends a measure
   lines.push(`Category (x): ${v.encoding.category}. Measures: ${measures || '(none)'}` +
     (v.encoding.series ? `. Split by: ${v.encoding.series}.` : '.'));
   tableNoteLines(lines, table);

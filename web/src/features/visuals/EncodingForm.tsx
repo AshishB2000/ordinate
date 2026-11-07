@@ -207,6 +207,8 @@ export function EncodingForm({
           const metric = m.metricId ? byId.get(m.metricId) : undefined;
           // While the list is on its way a metric measure keeps its name; one whose metric is gone is a column again.
           const asMetric = !!m.metricId && (!!metric || metrics.isPending);
+          // Once the list is in and the metric is not on it, the chart draws the copy stored on the measure: say so.
+          const gone = !!m.metricId && !metric && metrics.isSuccess;
           const options = [
             ...measureOpts,
             ...(asMetric && !metric ? [{ value: METRIC + m.metricId, label: m.column }] : []),
@@ -243,6 +245,13 @@ export function EncodingForm({
                 disabled={encoding.values.length <= 1}
                 onClick={() => set({ values: encoding.values.filter((_, j) => j !== i) })}
               />
+              {gone && (
+                <span className={s.gone} title={`Its metric was deleted, so this draws the copy it was made from: ${m.aggregation} of ${m.column}.`}>
+                  <Badge tone="warn" icon="alert">
+                    Metric deleted
+                  </Badge>
+                </span>
+              )}
             </div>
           );
         })}
