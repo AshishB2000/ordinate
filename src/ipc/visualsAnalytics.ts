@@ -21,12 +21,13 @@ import { resolveMetric } from './metrics';
 import * as metricStore from '../analysis/metrics';
 import { metricScope } from '../analysis/metricTimeScope';
 import type { VizDataReply } from './visuals';
+import { isRowPolicyError, rowPolicyRefusal } from '../data/rowAccess';
 
 /** Every metric the overlays name → its figure under the scope. */
 async function overlayMetrics(
   projectId: string, overlays: Overlay[], filters: FilterStep[], params?: ParamValues,
-): Promise<Map<string, { name: string; value: number | null }>> {
-  const out = new Map<string, { name: string; value: number | null }>();
+): Promise<Map<string, { name: string; value: number | null; refused?: string }>> {
+  const out = new Map<string, { name: string; value: number | null; refused?: string }>();
   for (const ov of overlays) {
     if (ov.hidden) continue;
     for (const src of [ov.value, ov.from, ov.to]) {
@@ -37,7 +38,12 @@ async function overlayMetrics(
         out.set(src.metricId, { name: m ? m.name : '', value: null });
         continue;
       }
-      const r = await resolveMetric(projectId, src.metricId, { filters: scoped.filters, params }).catch(() => null);
+      let refused: string | undefined; // under access rules (D19): its name and why, never "Missing metric"
+      const r = await resolveMetric(projectId, src.metricId, { filters: scoped.filters, params }).catch((err: unknown) => {
+        if (isRowPolicyError(err)) refused = rowPolicyRefusal(err.reason).error;
+        return null;
+      });
+      if (refused) { out.set(src.metricId, { name: m ? m.name : '', value: null, refused }); continue; }
       out.set(src.metricId, r ? { name: r.name, value: r.value } : { name: m && metricStore.isExternalDefinition(m.definition) ? m.name : 'Missing metric', value: null }); // a layer's metric keeps its name (b3)
     }
   }

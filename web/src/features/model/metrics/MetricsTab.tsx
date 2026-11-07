@@ -28,7 +28,7 @@ import { MetricEditor, type MetricDraft } from '../../analyses/metrics/MetricEdi
 import { Sparkline } from '../../analyses/metrics/Sparkline';
 import { StatusActions } from '../status/StatusActions';
 import { StatusBadge } from '../status/StatusBadge';
-import { AddsUp, CountsBy, type Additivity } from './MetricCells';
+import { AddsUp, CountsBy, HiddenLock, type Additivity } from './MetricCells';
 import type { NavTopic } from '../navigation';
 import { inOrder } from '../topics/api';
 import { TopicLine } from '../topics/TopicPicker';
@@ -218,6 +218,7 @@ export function MetricsTab({ projectId, topic }: { projectId: string; topic?: Na
                           {m.name}
                         </span>
                       )}
+                      {m.hidden && <HiddenLock why={row?.refused?.error} />}
                       {m.hasTree && (
                         <button type="button" className={s.treeLink} onClick={() => tree(m)} aria-label={`Open ${m.name}’s tree`}>
                           <Icon name="lineage" size={12} /> Tree

@@ -17,7 +17,8 @@
 //   story:export       a story as report pages (audited)
 
 import { ipcMain } from './bus';
-import { exportScope } from '../data/rowAccess';
+import { ROW_POLICY_CODE, exportScope } from '../data/rowAccess';
+import * as metrics from '../analysis/metrics';
 import { handlers } from '../server/rpc';
 import * as appPaths from '../app/paths';
 import * as reportSpec from '../analysis/reportSpec';
@@ -89,6 +90,8 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
     metricValue: async (id, filters) => {
       const r = await call(event, 'metric:value', { projectId, id, filters, ...(share ? { share: 'report' } : {}) });
       if (r && r.hiddenByPolicy) return { name: String(r.name ?? ''), display: String(r.error), value: null };
+      // Refused under access rules (D19): its name (names are not secret) and why, never "Missing metric".
+      if (r && r.code === ROW_POLICY_CODE) return { name: (await metrics.getMetric(projectId, id))?.name ?? '', display: String(r.error), value: null };
       return r && r.ok !== false && r.name ? { name: String(r.name), display: String(r.display ?? '—'), value: typeof r.value === 'number' ? r.value : null } : null;
     },
     caption: async (input) => {
