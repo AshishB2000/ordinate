@@ -304,6 +304,13 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('…a warehouse that does not answer skips that rule (its state untouched) and the others are still evaluated', show(before) === show(after)
     && (await H.as(ORG_A, () => alertStore.load(P))).rules.filter((r) => r.name === 'Copy sales').every((r) => (r.history || []).length >= 2), show(warned.lines).slice(0, 200));
   fake.hook = null;
+  // A Live rule by period has no rows to list its periods from (D6, typed): it alone is skipped, never the project's evaluation.
+  const byPeriod = { id: '6c1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f', name: 'Live by period', datasetId: L, enabled: true, metric: { column: 'amt', aggregation: 'sum' }, compare: 'change', change: { pct: 1, direction: 'either', vs: 'previous_period', periodColumn: 'd' } };
+  await H.as(ORG_A, () => alertStore.restoreRule(P, byPeriod));
+  const copies = async () => ((await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.name === 'Copy sales')?.history ?? []).length;
+  const [had, ran] = [await copies(), await H.as(ORG_A, () => alertStore.evaluateProject(P)).then(() => 'ran', (e: unknown) => String(e))];
+  const stuck = (await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.id === byPeriod.id);
+  ok('alerts: a Live rule by period is skipped, untouched, and the others are still evaluated', ran === 'ran' && (await copies()) === had + 1 && stuck?.lastEvaluatedAt === undefined, show([ran, had, stuck]));
 
   // Value labels on a Live card (PR 06): what a person reads says the label; the chart keeps the warehouse's value beside it,
   // and the model's facts keep the value (F5). Before THE SPY: labelling reads the record, never the rows.

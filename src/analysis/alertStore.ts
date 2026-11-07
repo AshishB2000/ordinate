@@ -53,7 +53,7 @@ import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
-import { isLiveDatasetError } from '../data/liveDataset';
+import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isExternalMetricError, refuseExternal } from './externalMetric';
 import { logger } from '../app/logger';
@@ -408,6 +408,7 @@ export async function recentPeriods(
  */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   try {
+    requireExtract(await datasets.getDatasetMeta(projectId, datasetId)); // D6: a Live dataset's periods are not routed; said from its record, never hydrated
     // A door (D17): the column gate on the period column (a hidden one refuses), then the row lock, so an alert's
     // fan-out reads its periods over a dataset whose other columns are hidden.
     return await withLockOf(projectId, datasetId, async (lock) => {
@@ -517,7 +518,7 @@ export async function evaluateProject(
     } catch (err) {
       // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
       // time — its state untouched, never "the value was null" — and the others still are. Nor is a refused one.
-      if (isLiveFigureError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue;
+      if (isLiveFigureError(err) || isLiveDatasetError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue; // a Live rule by period (D6) too
       throw err;
     }
     if (!res) continue; // untouched: its metric is gone
