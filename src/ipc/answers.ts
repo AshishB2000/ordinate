@@ -248,7 +248,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const labelled = await labelCardData(projectId, ds.id, encoding, data, viz.category);
   const said = await filterText(projectId, ds.id, spec.filters, held);
   const shown = saidFilters(spec.filters, said, held);
-  const shownLabels = shown === spec.filters ? filterLabels : specFilterSteps({ filters: shown }, ds.columns, ds.rows).labels;
+  const shownLabels = shown === spec.filters ? filterLabels : [...specFilterSteps({ filters: shown }, ds.columns, ds.rows).labels, ...terms.labels];
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   const say = (column: string, value: string): string => saidValue(said, held, column, value);
   // What the app did to a value comes first: it changes what the chart is about. The CARD's line, never the facts'.
