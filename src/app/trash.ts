@@ -96,7 +96,7 @@ async function moveToTrash(projectId: string, type: FileRecordType, id: string, 
     for (const n of await store.datasetFiles(path.dirname(file), id)) await move(path.join(path.dirname(file), n), path.join(dir, n));
   }
   await recordFs.rm(file, { force: true });
-  return typeof rec.name === 'string' ? rec.name : '';
+  return store.recordName(rec);
 }
 
 /**
@@ -132,7 +132,7 @@ async function moveBack(projectId: string, type: RecordType, id: string): Promis
   const rec = await store.readEntry(projectId, type, id);
   if (!rec) return null;
   const { deletedAt: _at, deletedWith: _with, ...live } = rec;
-  const name = typeof live.name === 'string' ? live.name : '';
+  const name = store.recordName(live);
   if (type === 'alert') {
     if (!(await alertStore.restoreRule(projectId, live))) return null;
     await store.removeEntry(projectId, type, id);

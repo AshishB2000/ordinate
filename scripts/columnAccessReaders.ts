@@ -206,6 +206,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'tokens:list': 'META',
   'tokens:revoke': 'META',
   'trash:list': 'META',
+  'verified:list': 'DROP', // a question whose spec names a hidden column is left out (ipc/verifiedState); test-columnRedact
   'versions:diff': 'NET',
   'versions:figures': 'GATE',
   'versions:get': 'NET',

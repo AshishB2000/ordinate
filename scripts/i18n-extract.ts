@@ -391,6 +391,7 @@ export const MAIN_FILES = [
   'src/analysis/statusMessages.ts',
   'src/app/sourceTableMessages.ts',
   'src/app/instructionMessages.ts',
+  'src/analysis/verifiedMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

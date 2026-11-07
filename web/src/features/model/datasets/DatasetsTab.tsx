@@ -100,7 +100,10 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
       q.set('panel', panel);
       return q;
     }, { replace: true });
-  const open = (item: TodoItem) => go(item.datasetId, todoPanel(item.kind));
+  const open = (item: TodoItem) =>
+    item.kind === 'verified_broken'
+      ? setParams(new URLSearchParams({ tab: 'assistant' }), { replace: true }) // the verified list is on the Assistant tab
+      : go(item.datasetId, todoPanel(item.kind));
   // A review chip opens the item where an admin acts on it: a dataset here, a metric or term on its tab.
   const openReview = (item: ReviewItem) => {
     const [kind, id = ''] = item.ref.split(':');

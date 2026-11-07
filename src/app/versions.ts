@@ -24,8 +24,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { projectDir, isValidId } from './recordKinds';
-import type { FileRecordType } from './recordKinds';
 import { contentOf, sameContent, summarize } from '../analysis/recordDiff';
+import type { DiffType } from '../analysis/recordDiff';
 import * as recordFs from './recordFs';
 import { ctx } from '../server/context';
 import { logger } from './logger';
@@ -67,7 +67,7 @@ export interface VersionMeta {
   thumb?: Array<{ x: number; y: number; w: number; h: number; type: string }>;
 }
 
-export function isVersionType(t: unknown): t is FileRecordType {
+export function isVersionType(t: unknown): t is DiffType {
   return typeof t === 'string' && TYPES.has(t);
 }
 
@@ -117,7 +117,7 @@ async function readVersion(dir: string, key: string): Promise<VersionFile | null
  */
 export function record(
   projectId: string,
-  type: FileRecordType,
+  type: DiffType,
   // ponytail: any stored record; contentOf picks the versioned fields
   rec: any,
   opts: RecordOpts = {},
@@ -164,7 +164,7 @@ export interface RecordOpts {
 
 async function write(
   dir: string,
-  type: FileRecordType,
+  type: DiffType,
   // ponytail: see record()
   rec: any,
   opts: RecordOpts,

@@ -142,6 +142,17 @@ describe('The Data model: datasets', () => {
   });
 });
 
+describe('The Data model: verified questions in the strip', () => {
+  it('reads how many verified questions no longer run, and its click opens the Assistant tab', async () => {
+    serve({ 'model:overview': { body: overview({ todo: [TODO[0], { datasetId: '', kind: 'verified_broken', count: 1 }, TODO[1]], more: 0 }) } });
+    const router = renderApp(`/model/${P}`);
+    const s = await strip();
+    expect(within(s).getAllByRole('button').map((b) => b.textContent)).toEqual(['Orders: 12 keys repeat', '1 verified question no longer runs', 'Set a key on Regions']);
+    fireEvent.click(within(s).getByRole('button', { name: '1 verified question no longer runs' }));
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('tab')).toBe('assistant'));
+  });
+});
+
 describe('todoText', () => {
   it('words each kind, and one repeating key in the singular', () => {
     const t = (kind: TodoItem['kind'], repeats?: number) => todoText({ datasetId: O, kind, repeats }, 'Orders');
@@ -154,5 +165,6 @@ describe('todoText', () => {
       'Set a role for Orders',
     ]);
     expect(t('key_repeats', 1234)).toBe('Orders: 1,234 keys repeat');
+    expect([1, 3].map((count) => todoText({ datasetId: '', kind: 'verified_broken', count }, ''))).toEqual(['1 verified question no longer runs', '3 verified questions no longer run']);
   });
 });

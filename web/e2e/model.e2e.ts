@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, screensInPlace, settled } from './fixtures.ts';
+import { csrfToken, e2e, SCREENS, screens, screensInPlace, settled, type Session } from './fixtures.ts';
 import { phoneFits } from './phoneFits.ts';
 
 /** The loading skeleton in both themes: `channel` is held unanswered while each theme loads. */
@@ -31,6 +31,12 @@ async function loadingShots(page: Page, url: string, channel: string, label: str
   }
   await page.unroute(held);
   await page.evaluate(() => localStorage.removeItem('ordinate.theme'));
+}
+
+/** One RPC the spec sends itself, as the signed-in user, with the CSRF pair. */
+async function post(s: Session, channel: string, payload: unknown): Promise<any> { // any: each channel's own reply
+  const r = await s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': await csrfToken(s) }, data: { args: [payload] } });
+  return r.json();
 }
 
 /** The first whole number in a text: a count the server sent, as the page printed it. */
@@ -283,5 +289,35 @@ e2e('data model: assistant', async (s) => {
   const misfits: string[] = [];
   await phoneFits(page, misfits, 'the Data model Assistant tab');
   await screens(page, 'model-assistant-phone');
+  assert.deepEqual(misfits, []);
+
+  // Verified questions (part 3 D7): two the server drew before it kept them, then one whose glossary term is deleted.
+  const ds = ((await post(s, 'dataset:list', { projectId: pid })) as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!;
+  const spec = (category: string, filters: unknown[] = []) => ({ datasetId: ds.id, category, measures: [{ column: 'revenue', aggregation: 'sum' }], filters });
+  const saved = await post(s, 'verified:save', { projectId: pid, input: { question: 'Revenue by category', phrasings: ['Sales by category'], note: 'Revenue is net of discounts.', spec: spec('category') } });
+  assert.equal(saved.ok, true, JSON.stringify(saved));
+  assert.equal((await post(s, 'verified:save', { projectId: pid, input: { question: 'East revenue by state', spec: spec('state', [{ column: 'region', op: '=', value: 'East' }]) } })).ok, true);
+  const term = await post(s, 'term:save', { projectId: pid, input: { name: 'Big orders', datasetId: ds.id, filters: [{ type: 'filter', column: 'units', op: '>=', value: 10 }] } });
+  assert.equal((await post(s, 'verified:save', { projectId: pid, input: { question: 'Big order revenue by region', spec: spec('region', [{ term: term.term.id }]) } })).ok, true);
+  await post(s, 'term:delete', { projectId: pid, id: term.term.id });
+  await page.setViewportSize({ width: 1440, height: 900 }); // back from phone width
+  await page.reload();
+  await settled(page);
+  const verified = page.getByRole('region', { name: 'Verified questions' });
+  await verified.getByText('1 no longer runs').waitFor();
+  await verified.getByText('A glossary term this question uses was deleted.').waitFor();
+  await verified.getByText('Retail orders · sum of revenue by state · region = East').waitFor();
+  await screens(page, 'model-verified');
+  // The edit dialog, shot in place (screens() reloads, which would close it).
+  await verified.getByRole('listitem').filter({ hasText: 'Revenue by category' }).getByRole('button', { name: 'Edit' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit verified question' });
+  await dialog.getByRole('textbox', { name: 'Other ways people ask it' }).fill('Sales by category\nRevenue per category');
+  await screensInPlace(page, 'model-verified-edit');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await verified.getByText('Also asked as “Sales by category”, “Revenue per category”').waitFor();
+  await phoneFits(page, misfits, 'the verified questions');
+  await verified.scrollIntoViewIfNeeded(); // the shot is of the rows, not the instructions above them
+  await screensInPlace(page, 'model-verified-phone');
   assert.deepEqual(misfits, []);
 });

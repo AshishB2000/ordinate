@@ -3,7 +3,7 @@
 // files and (with DATABASE_URL) on Postgres.
 //
 // Per channel (dashboard, visual, metric, metric tree, report, story,
-// scorecard, scenario):
+// scorecard, scenario, verified question):
 //   (a) open → two saves with the open tag: the first lands; the second is 409
 //       `record_changed` with the catalog's sentence and the current tag, and
 //       the record is the first write;
@@ -107,6 +107,13 @@ function channels(call: (c: string, p?: unknown) => Promise<Reply>, pid: string,
   // A metric tree's content here is its split column; each value is a column of the dataset.
   const COLS: Record<string, string> = { A: 'region', B: 'product', C: 'channel', D: 'segment', E: 'region' };
   let metricN = 0;
+  let verifiedN = 0;
+  const verifiedSpec = { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [] };
+  const verifiedRow = async (id: string) => (await call('verified:list', { projectId: pid })).body.questions.find((q: { id: string }) => q.id === id);
+  const verifiedSave = async (id: string | undefined, question: string, base?: string): Promise<Reply> => {
+    const r = await call('verified:save', { projectId: pid, ...(id ? { id } : {}), ...(base ? { base } : {}), input: { question, spec: verifiedSpec } });
+    return r.status === 200 && r.body?.question ? { status: r.status, body: { ...r.body, tag: r.body.question.tag } } : r; // the row carries the next base
+  };
   const metricSeed = async (): Promise<string> => (await call('metric:save', { projectId: pid, input: { name: `Seed metric ${++metricN}`, datasetId: ds, definition: { column: 'amount', aggregation: 'sum' } } })).body.metric.id;
   return [
     {
@@ -189,6 +196,16 @@ function channels(call: (c: string, p?: unknown) => Promise<Reply>, pid: string,
       save: (id, v, base) => call('scenario:update', { projectId: pid, id, ...(base ? { base } : {}), patch: { name: v, baseMetricIds: [], drivers: [] } }),
       read: async (id) => (await call('scenario:get', { projectId: pid, id })).body.name,
       quiet: async (id) => call('scenario:update', { projectId: pid, id, patch: { name: (await call('scenario:get', { projectId: pid, id })).body.name, baseMetricIds: [], drivers: [] } }),
+    },
+    {
+      // A verified question (semantic part 3 D7): edited in place by verified:save with `id` and `base`; its open is the list row.
+      type: 'verified', label: 'verified question', dir: 'verified', mutate: (rec, v) => { rec.question = `Question ${v}`; },
+      seed: async () => (await verifiedSave(undefined, `Seed question ${++verifiedN}`)).body.question.id,
+      open: async (id) => ({ status: 200, body: { tag: (await verifiedRow(id))?.tag } }),
+      save: (id, v, base) => verifiedSave(id, `Question ${v}`, base),
+      read: async (id) => String((await verifiedRow(id))?.question).replace(/^Question /, ''),
+      // The same words again: who and when are restamped, which is not what the tag covers.
+      quiet: async (id) => verifiedSave(id, String((await verifiedRow(id))?.question)),
     },
   ];
 }

@@ -147,6 +147,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   }
 
   const enc = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
+  let asked = 0; // each pass verifies a question of its own: a second one by the same words is refused as taken
   /** Every channel that reads a dataset's rows, enumerated from the src/api contracts that take a dataset. */
   const ROW_READERS = (d: string, other: string, metricId: string): [string, string, unknown][] => [
     // the table view, its search and its profile
@@ -198,6 +199,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     // "Save as visual" rebuilds the card it saves — the warehouse's on a Live dataset — with a top-N and a value filter to resolve.
     ['answer: save as visual', 'answer:saveVisual', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ column: 'region', op: '!=', value: 'R1' }], top: 3 } }],
+    // A verified question is drawn once before it is kept (semantic part 3 D7): the warehouse's card on a Live dataset.
+    ['verified save', 'verified:save', { projectId: P, input: { question: `Sales by region ${++asked}`, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } } }],
     // drivers, segments, scenarios
     ['key drivers', 'drivers:explain', { projectId: P, request: { datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, dimension: 'region' } }],
     ['key drivers from a chart point', 'drivers:explainPoint', { projectId: P, datasetId: d, encoding: { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }], grain: 'month' }, point: {} }],
@@ -225,7 +228,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual',
+    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual', 'verified save',
     'alert test: threshold', 'key check (catalog:checkKey)']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {

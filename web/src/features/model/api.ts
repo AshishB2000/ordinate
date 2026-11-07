@@ -11,12 +11,15 @@ import type { TableRole } from '../data/tableApi';
 import type { FilterStep } from '../visuals/api';
 
 /** A gap, by rank (src/ipc/modelOverview.ts TodoKind). */
-export type TodoKind = 'key_repeats' | 'no_key' | 'no_guide' | 'no_description' | 'no_role';
+export type TodoKind = 'key_repeats' | 'verified_broken' | 'no_key' | 'no_guide' | 'no_description' | 'no_role';
 export interface TodoItem {
+  /** '' for verified_broken: the project's, not one dataset's. */
   datasetId: string;
   kind: TodoKind;
   /** key_repeats only: how many key values repeat, counted by the server. */
   repeats?: number;
+  /** verified_broken only: how many verified questions no longer run, counted by the server. */
+  count?: number;
 }
 
 export interface ModelTable {
@@ -62,6 +65,10 @@ export function todoText(item: TodoItem, name: string): string {
     case 'key_repeats': {
       const n = item.repeats ?? 0;
       return `${name}: ${formatNumber(n)} ${n === 1 ? 'key repeats' : 'keys repeat'}`;
+    }
+    case 'verified_broken': {
+      const n = item.count ?? 0;
+      return n === 1 ? '1 verified question no longer runs' : `${formatNumber(n)} verified questions no longer run`;
     }
     case 'no_key':
       return `Set a key on ${name}`;

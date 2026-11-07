@@ -12,10 +12,10 @@ import * as path from 'path';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
 
-export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term';
+export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified';
 export type FileRecordType = Exclude<RecordType, 'alert'>;
 
-export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term'];
+export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified'];
 
 export const RECORD_DIR: Record<FileRecordType, string> = {
   dataset: 'datasets',
@@ -24,6 +24,7 @@ export const RECORD_DIR: Record<FileRecordType, string> = {
   metric: 'metrics',
   report: 'reports',
   term: 'terms', // a glossary term (semantic D10)
+  verified: 'verified', // a verified question (semantic part 3 D7): a spec, never a figure
 };
 
 export function isRecordType(v: unknown): v is RecordType {

@@ -27,6 +27,8 @@ export function recordChanged(type: SaveKind): string {
       return t('editConflictMessages.this_scenario_was_changed_in_another');
     case 'term':
       return t('editConflictMessages.this_glossary_term_was_changed_in');
+    case 'verified':
+      return t('editConflictMessages.this_verified_question_was_changed_in');
     default:
       return t('editConflictMessages.this_was_changed_in_another_tab');
   }
