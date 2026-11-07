@@ -842,6 +842,7 @@
   "verifiedMessages.a_glossary_term_this_question_uses": "Se eliminó un término del glosario que usa esta pregunta.",
   "verifiedMessages.is_already_a_verified_question_or": "«{text}» ya es una pregunta verificada o una de sus formulaciones.",
   "verifiedMessages.is_no_longer_a_column_of": "«{column}» ya no es una columna de {dataset}.",
+  "verifiedMessages.it_could_not_be_restored_is": null,
   "verifiedMessages.the_dataset_this_question_was_verified": "El conjunto de datos con el que se verificó esta pregunta ya no existe.",
   "verifiedMessages.this_answer_cannot_be_verified": "Esta respuesta no se puede verificar: {reason}",
   "verifiedMessages.this_answer_could_not_be_read": "No se pudo leer esta respuesta.",

@@ -842,6 +842,7 @@
   "verifiedMessages.a_glossary_term_this_question_uses": "Un terme du glossaire utilisé par cette question a été supprimé.",
   "verifiedMessages.is_already_a_verified_question_or": "« {text} » est déjà une question vérifiée ou l’une de ses formulations.",
   "verifiedMessages.is_no_longer_a_column_of": "« {column} » n’est plus une colonne de {dataset}.",
+  "verifiedMessages.it_could_not_be_restored_is": null,
   "verifiedMessages.the_dataset_this_question_was_verified": "Le jeu de données sur lequel cette question a été vérifiée n’existe plus.",
   "verifiedMessages.this_answer_cannot_be_verified": "Cette réponse ne peut pas être vérifiée : {reason}",
   "verifiedMessages.this_answer_could_not_be_read": "Cette réponse n’a pas pu être lue.",

@@ -842,6 +842,7 @@
   "verifiedMessages.a_glossary_term_this_question_uses": "この質問が使う用語集の用語が削除されました。",
   "verifiedMessages.is_already_a_verified_question_or": "「{text}」はすでに検証済みの質問か、その言い換えの 1 つです。",
   "verifiedMessages.is_no_longer_a_column_of": "「{column}」は {dataset} の列ではなくなりました。",
+  "verifiedMessages.it_could_not_be_restored_is": null,
   "verifiedMessages.the_dataset_this_question_was_verified": "この質問を検証したデータセットはもう存在しません。",
   "verifiedMessages.this_answer_cannot_be_verified": "この回答は検証できません: {reason}",
   "verifiedMessages.this_answer_could_not_be_read": "この回答を読み取れませんでした。",

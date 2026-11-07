@@ -839,6 +839,7 @@
   "verifiedMessages.a_glossary_term_this_question_uses": "A glossary term this question uses was deleted.",
   "verifiedMessages.is_already_a_verified_question_or": "“{text}” is already a verified question or one of its phrasings.",
   "verifiedMessages.is_no_longer_a_column_of": "“{column}” is no longer a column of {dataset}.",
+  "verifiedMessages.it_could_not_be_restored_is": "It could not be restored: “{text}” is already a verified question or one of its phrasings.",
   "verifiedMessages.the_dataset_this_question_was_verified": "The dataset this question was verified on no longer exists.",
   "verifiedMessages.this_answer_cannot_be_verified": "This answer cannot be verified: {reason}",
   "verifiedMessages.this_answer_could_not_be_read": "This answer could not be read.",

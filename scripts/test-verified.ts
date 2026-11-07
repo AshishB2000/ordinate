@@ -3,7 +3,9 @@
 //
 //   § record   one line, the spec without `matched`, its title the question; the key squashes; a clash is
 //              found across phrasings; a term or a period is no value filter; sanitizing is idempotent;
-//              Trash round-trips under the question; a stale base refuses; a corrupt file is skipped
+//              Trash round-trips under the question; a stale base refuses; a corrupt file is skipped; a restore
+//              whose key a live question holds is refused (NEGATIVE CONTROL: no clash restores); two saves of one
+//              question at once: one lands
 //   § retired  (part 4, cross-part check item 8) a question on a retired metric still runs (verifiedProblem
 //              null), its card is marked and its notes say what replaces the metric. NEGATIVE CONTROL: certified,
 //              no retired note.
@@ -193,6 +195,21 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   const inTrash = (await call('trash:list', { projectId: P })).body;
   ok('delete goes to Trash, under its question', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string; name: string }) => e.type === 'verified' && e.id === id && e.name === 'Revenue by region'), JSON.stringify(inTrash).slice(0, 300));
   ok('…and leaves the list', !(await call('verified:list', { projectId: P })).body.questions.some((x: { id: string }) => x.id === id));
+  const inList = async (x: string): Promise<boolean> => (await call('verified:list', { projectId: P })).body.questions.some((r: { id: string }) => r.id === x);
+  const holder = await call('verified:save', { projectId: P, input: { question: 'Total amount by region', phrasings: ['revenue BY region'], spec: SPEC } });
+  const refused = await call('trash:restore', { projectId: P, type: 'verified', id });
+  const stillIn = ((await call('trash:list', { projectId: P })).body ?? []).some((e: { id: string }) => e.id === id);
+  ok('restore refuses a question a live phrasing now holds, and it stays in the Trash', holder.body?.ok === true && refused.body?.ok === false
+    && refused.body.error === msg.verifiedRestoreTaken('Revenue by region') && stillIn && !(await inList(id)), refused.text);
+  await call('verified:delete', { projectId: P, id: holder.body?.question?.id });
+  const back = await call('trash:restore', { projectId: P, type: 'verified', id });
+  ok('NEGATIVE CONTROL: with no clash it restores', back.body?.ok === true && (await inList(id)), back.text);
+  await call('verified:delete', { projectId: P, id }); // § mark starts without it
+  const race = await Promise.all(['Margin by region', 'margin by REGION?'].map((question) => call('verified:save', { projectId: P, input: { question, spec: SPEC } })));
+  const landed = race.filter((r) => r.body?.ok === true);
+  ok('two saves of one question at once: one lands, the other is refused as taken', landed.length === 1
+    && race.some((r) => r.body?.ok === false && r.body.field === 'question'), race.map((r) => r.text.slice(0, 120)).join(' | '));
+  for (const r of landed) await call('verified:delete', { projectId: P, id: r.body.question.id });
   ok('a bad id is refused at the contract', (await call('verified:delete', { projectId: P, id: 'nope' })).status === 400);
 
   // ── § mark: "✓ Verified" by comparison only, worked out at every draw ─────

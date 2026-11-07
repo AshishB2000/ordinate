@@ -23,6 +23,11 @@ export function verifiedTaken(text: string): string {
   return t('verifiedMessages.is_already_a_verified_question_or', { text });
 }
 
+/** A question in the Trash whose question or a phrasing a live question now holds: it stays in the Trash. */
+export function verifiedRestoreTaken(text: string): string {
+  return t('verifiedMessages.it_could_not_be_restored_is', { text });
+}
+
 /** A question that is only punctuation: it has no key, so nobody could ask it. */
 export function verifiedNoWords(): string {
   return t('verifiedMessages.write_the_question_in_words');
