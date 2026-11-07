@@ -50,7 +50,8 @@ export interface DbtSkipped {
 
 /** Which dataset a semantic model landed on, and how; no `datasetId`: none here. */
 export interface DbtModelMatch { name: string; datasetId?: string; how?: 'map' | 'exact' | 'name' }
-export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[] }
+/** `inputs`: each ratio or derived metric's file id → its inputs' file ids (it names them by name, so a2 reads them as references). */
+export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[]; inputs: Map<string, string[]> }
 export interface DbtDataset { id: string; name: string; columns: ParsedColumn[]; live?: boolean }
 
 type Obj = Record<string, unknown>;
@@ -89,7 +90,7 @@ const MAX_FORMULA = 2_000;
 
 interface Dim { column: ParsedColumn | null; time: boolean }
 interface Model { name: string; ds?: DbtDataset; entity?: string; defaultTime?: string; dims: Map<string, Dim> }
-type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean } | { skip: DbtSkip; model?: string; because?: string };
+type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean; inputs?: string[] } | { skip: DbtSkip; model?: string; because?: string };
 
 const aliasOf = (i: Obj): string => String(name(own(i, 'alias')) ?? own(i, 'name'));
 
@@ -290,7 +291,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (!f || f.length > MAX_FORMULA) return { skip: 'unreadable', model };
     const ds = models.get(model as string)?.ds as DbtDataset;
     const definition: MetricDefinition = sanitizeDefinition({ formula: f });
-    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string };
+    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string, inputs: metrics.map((x) => x.id) };
   };
 
   function translate(n: string): Result {
@@ -349,10 +350,13 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
   }
 
   const metrics: ModelMetric[] = [];
+  const inputs = new Map<string, string[]>();
   for (const [n, m] of raw) {
     const r = translate(n);
-    if ('metric' in r) metrics.push(r.metric);
-    else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
+    if ('metric' in r) {
+      metrics.push(r.metric);
+      if (r.inputs) inputs.set(r.metric.id, r.inputs);
+    } else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
   }
 
   const model: ParsedModel = {
@@ -363,7 +367,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     terms: [],
     relationships: [],
     invalid: [],
-    dbt: { models: [...matches.values()], skipped },
+    dbt: { models: [...matches.values()], skipped, inputs },
   };
   return { model, skipped };
 }

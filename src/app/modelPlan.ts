@@ -272,7 +272,11 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
     await objectItem('term', ft, ft.name, target, here.terms.find((x) => x.id === target), async (id) => (await readTerm(projectId, id))?.tag ?? '');
   }
   // A metric may name another (a period's base, a target): a skip travels until nothing more falls.
-  for (const fm of file.metrics) fileOf.set(`metric:${fm.id}`, mapRefs(fm, m));
+  for (const fm of file.metrics) {
+    const r = mapRefs(fm, m);
+    // A dbt formula names its inputs by name: each is a reference too, so a skip of one takes the formula with it.
+    fileOf.set(`metric:${fm.id}`, { ...r, refs: [...r.refs, ...(file.dbt?.inputs.get(fm.id) ?? []).map((id) => `metric:${id}`)] });
+  }
   for (let more = true; more;) {
     more = false;
     for (const fm of file.metrics) {
@@ -317,6 +321,19 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
         if (!item.targetId) gone.add(item.key);
         fell = true;
       }
+    }
+    // A dbt formula's every [name] must be, after the import, the input dbt means by it, unchanged items too: never
+    // the project's own metric of that name (an input refused, or renamed here and its name taken since).
+    for (const item of items) {
+      const inputs = item.kind === 'metric' && item.status !== 'skipped' ? file.dbt?.inputs.get(item.key.slice('metric:'.length)) : undefined;
+      if (!inputs) continue;
+      const lands = new Set(inputs.map((id) => m.metrics.get(id) ?? id));
+      const wrong = formulaNames((fileOf.get(item.key) as Mapped).value).find((n) => !lands.has(post.metrics.find((pm) => pm.name.toLowerCase() === n)?.id as string));
+      if (wrong === undefined) continue;
+      const input = file.metrics.find((fm) => inputs.includes(fm.id) && fm.name.toLowerCase() === wrong)?.id ?? inputs[0];
+      Object.assign(item, { status: 'skipped', reason: 'depends_on_skipped', because: `metric:${input}` });
+      if (!item.targetId) gone.add(item.key);
+      fell = true;
     }
     // What names a refused new object goes with it.
     for (let more = true; more;) {

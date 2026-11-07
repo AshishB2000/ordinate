@@ -229,6 +229,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   await post('metric:update', { projectId: S.P, id: await idOf(S.P, 'Revenue'), patch: { name: 'Revenue (net)' } });
   const renamed = await planOf(S.P);
   ok('a re-import matches by importedFrom after a rename', itemFor(renamed, 'revenue')?.targetId === await idOf(S.P, 'Revenue (net)') && itemFor(renamed, 'revenue')?.status === 'renamed', show(itemFor(renamed, 'revenue')));
+  ok('NEGATIVE CONTROL: a ratio over it is unchanged: its [Revenue] is the renamed-back input', itemFor(renamed, 'aov')?.status === 'unchanged', show(itemFor(renamed, 'aov')));
   const back = await applyOf(S.P, renamed.plan.hash);
   ok('applying it renames it back to dbt\'s name, the same record', back.ok === true && back.written.length === 1 && (await stored(S.P)).some((x) => x?.name === 'Revenue' && x.importedFrom?.name === 'revenue'), show(back));
   const otherPlan = await planOf(S.P, MANIFEST, { orders: S.other });
@@ -236,6 +237,20 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('… and the apply takes it too: the dry run\'s hash without the map is refused', (await applyOf(S.P, otherPlan.plan.hash)).code === 'plan_changed');
   ok('a map to a dataset of no project here is refused by the contract', (await post('model:importPlan', { projectId: S.P, fileToken: await uploadJson(MANIFEST), datasetMap: { orders: 'nope' } })).status === 400);
   ok('JSON that is not a manifest is refused with the sentence', (await planOf(S.P, { nodes: {} })).error === msg.dbtNotAManifest());
+
+  // A formula names its inputs by name: one whose input is refused never binds to the project's metric of that name.
+  const fellWith = (p: Reply, dbt: string, input: string): boolean => itemFor(p, dbt)?.status === 'skipped' && itemFor(p, dbt)?.reason === 'depends_on_skipped' && itemFor(p, dbt)?.because === `metric:${fileId(input)}`;
+  const X = await seedProject('dbt name taken elsewhere');
+  await post('metric:save', { projectId: X.P, input: { name: 'Revenue', datasetId: X.other, definition: { column: 'amount', aggregation: 'sum' } } });
+  const xPlan = await planOf(X.P);
+  ok('an input refused (its name is another dataset\'s metric): the ratio and the derived metric over it are skipped, under it', itemFor(xPlan, 'revenue')?.reason === 'invalid' && fellWith(xPlan, 'aov', 'revenue') && fellWith(xPlan, 'net', 'revenue'), show([itemFor(xPlan, 'revenue'), itemFor(xPlan, 'aov'), itemFor(xPlan, 'net')]));
+  ok('… and the apply writes neither', ((await applyOf(X.P, xPlan.plan.hash)).ok === true) && !(await stored(X.P)).some((x) => x?.name === 'AOV' || x?.name === 'Net'));
+  const B = await seedProject('dbt rename here');
+  await applyOf(B.P, (await planOf(B.P)).plan.hash);
+  await post('metric:update', { projectId: B.P, id: await idOf(B.P, 'Revenue'), patch: { name: 'Gross revenue' } });
+  await post('metric:save', { projectId: B.P, input: { name: 'Revenue', datasetId: B.orders, definition: { column: 'units', aggregation: 'sum' } } });
+  const bPlan = await planOf(B.P);
+  ok('a re-import after a rename here and a new "Revenue" of the project\'s own: the ratio already stored is skipped, under its input', fellWith(bPlan, 'aov', 'revenue') && fellWith(bPlan, 'net', 'revenue'), show([itemFor(bPlan, 'revenue'), itemFor(bPlan, 'aov')]));
 
   // A project with its own Revenue and docs: the copy updates what dbt says and keeps what Ordinate owns.
   const K = await seedProject('dbt over a model');
