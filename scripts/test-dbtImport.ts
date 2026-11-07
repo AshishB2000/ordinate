@@ -224,6 +224,8 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   fs.truncateSync(BIG, 32 * 1024 * 1024 + 1);
   ok('… and one over 32 MiB, before it is read', isDeepStrictEqual(await readDbtUpload(BIG), { error: msg.dbtUseSemanticManifest() }));
   ok('NEGATIVE CONTROL: the fixture reads', isDeepStrictEqual(await readDbtUpload(path.join(DIR, 'semantic_manifest.json')), { json: MANIFEST }));
+  const BOM = at('bom.json', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), fs.readFileSync(path.join(DIR, 'semantic_manifest.json'))]));
+  ok('… and so does it saved with a UTF-8 byte order mark (an editor on Windows)', isDeepStrictEqual(await readDbtUpload(BOM), { json: MANIFEST }));
   ok('JSON that is not a semantic manifest is refused', isDeepStrictEqual(await readDbtUpload(at('other.json', '{"nodes":{}}')), { error: msg.dbtNotAManifest() }));
   ok('… and so is a file that is not JSON', isDeepStrictEqual(await readDbtUpload(at('bad.json', '{"semantic_models": [}')), { error: msg.dbtNotAManifest() }));
   const many = { semantic_models: [], metrics: Array.from({ length: 2_001 }, (_, i) => ({ name: `m${i}` })) };
