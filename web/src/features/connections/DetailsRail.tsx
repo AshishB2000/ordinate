@@ -123,7 +123,7 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
   const every = d.autoRefresh?.every ?? null;
   const stamp = formatWhen(d.lastRefreshedAt ?? d.updatedAt);
   const live = d.mode === 'live';
-  const when = live ? 'Live · asked at the warehouse' : every ? `Refreshes ${everyWord(every)} · last ${stamp}` : `Data as of ${stamp}`;
+  const when = live ? (d.semantic ? `Live · asked of ${d.semantic.label}` : 'Live · asked at the warehouse') : every ? `Refreshes ${everyWord(every)} · last ${stamp}` : `Data as of ${stamp}`;
   async function refresh() {
     setBusy(true);
     try {
@@ -230,7 +230,7 @@ export function DetailsRail({
           if (f === optIn) return null;
           const raw = conn.values[f.key];
           if (raw === undefined || raw === null || raw === '') return null;
-          const text = typeof raw === 'boolean' ? (raw ? 'Yes' : 'No') : String(raw);
+          const text = typeof raw === 'boolean' ? (raw ? 'Yes' : 'No') : (f.options?.find((o) => o.value === raw)?.label ?? String(raw)); // a select by its option's words
           return (
             <div key={f.key} className={s.kvPair}>
               <dt>{f.label}</dt>

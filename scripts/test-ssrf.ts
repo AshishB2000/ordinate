@@ -189,6 +189,12 @@ async function main(): Promise<void> {
   ok('server: no DB socket opened for any refused host', tcp.conns === 0, tcp.conns);
   const chRes = await run.listTables('clickhouse', { host: 'localhost', port: ch.port, insecureHttp: true }, {}, QUICK);
   ok('server: HTTP engine on localhost refused, stub untouched', !chRes.ok && /^Refused/.test(chRes.error) && ch.hits.length === 0, JSON.stringify(chRes));
+  // § cube (semantic layer part 7, e1): the deployment's URL is operator-given, so every request is checked.
+  for (const u of ['http://169.254.169.254/', 'https://internal.ssrf.test/', 'http://10.0.0.5:4000/', `http://127.0.0.1:${ch.port}/`, 'https://[::ffff:10.0.0.1]/']) {
+    const res = await run.listTables('cube', { url: u, auth: 'token' }, { token: 't0ken-canary' }, QUICK);
+    ok(`server: Cube URL ${u} refused`, !res.ok && /^Refused/.test(res.error) && /SSRF_ALLOW/.test(res.error), JSON.stringify(res));
+  }
+  ok('server: no refused Cube URL reached a socket', ch.hits.length === 0);
   for (const u of ['https://169.254.169.254/latest/meta-data/', 'https://2130706433/', 'https://[::ffff:10.0.0.1]/', 'https://internal.ssrf.test/x.json']) {
     const res = await run.runConnection('url', { url: u }, {}, {}, QUICK);
     ok(`server: URL source ${u} refused (the refresh path runs the same call)`, !res.ok && /^Refused/.test(res.error), JSON.stringify(res));
@@ -252,6 +258,16 @@ async function main(): Promise<void> {
   ch.hits.length = 0;
   await run.listTables('clickhouse', { host: 'pinned.ssrf.test', port: ch.port, insecureHttp: true }, {}, QUICK);
   ok('allowlisted: HTTP engine dials the pinned address, Host header keeps the name', ch.hits.length === 1 && ch.hits[0].host === `pinned.ssrf.test:${ch.port}`, JSON.stringify(ch.hits));
+  ch.hits.length = 0;
+  await run.listTables('cube', { url: `http://pinned.ssrf.test:${ch.port}`, auth: 'token' }, { token: 't0ken-canary' }, QUICK);
+  ok('allowlisted: Cube dials the pinned address over http (SSRF_ALLOW admits it), its token sent, the name kept',
+    ch.hits.length === 1 && ch.hits[0].host === `pinned.ssrf.test:${ch.port}` && ch.hits[0].auth === 't0ken-canary' && ch.hits[0].url === '/cubejs-api/v1/meta', JSON.stringify(ch.hits));
+  const redir = await httpStub((_req, res) => { res.writeHead(302, { location: 'http://169.254.169.254/latest/meta-data/' }); res.end(); });
+  const viaRedirect = await run.listTables('cube', { url: `http://127.0.0.1:${redir.port}`, auth: 'token' }, { token: 't0ken-canary' }, QUICK);
+  ok('allowlisted: a Cube redirect (to the metadata service) is never followed', !viaRedirect.ok && /302/.test(viaRedirect.error) && redir.hits.length === 1, JSON.stringify(viaRedirect));
+  redir.close();
+  const publicHttp = await run.listTables('cube', { url: 'http://93.184.216.34/', auth: 'token' }, { token: 't0ken-canary' }, QUICK);
+  ok('allowlisted: plain http to a public Cube is refused (https only, unless SSRF_ALLOW admits the address)', !publicHttp.ok && /https/.test(publicHttp.error), JSON.stringify(publicHttp));
   ch.hits.length = 0;
   const saasOk = await saasHttp.saasRequest(ctx, ['api.github.com'], { url: new URL('https://api.github.com/repos/a/b/issues') });
   ok('allowlisted: the SaaS fixture is reached', ch.hits.length === 1 && !saasOk.ok && saasOk.status === 500);

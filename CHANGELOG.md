@@ -29,6 +29,13 @@ All notable changes to Ordinate are documented here. Format based on
   `SUM` or `COUNT` metric counts as adding up. Restricted viewers stay refused. Built from
   Snowflake's documentation: the warehouse nightly checks it against a real view once one is set
   up (`SNOWFLAKE_SEMANTIC_VIEW`, docs/live-data/snowflake-semantic-views.md).
+- **Cube** is a connection under a new **Semantic layers** group: its cubes and views are added as
+  datasets, each question one JSON query to Cube's REST API with every value in `values`, signed
+  with a fresh HS256 token from the API secret (or an API token as is), polled while Cube says
+  "Continue wait". Filters Cube cannot apply exactly are refused; restricted viewers stay refused.
+  A self-hosted Cube on a private address needs `SSRF_ALLOW`. Built from Cube's documentation and
+  source: the warehouse nightly runs the parity matrix against a Cube container
+  (docs/live-data/cube.md).
 
 ### MongoDB and Amazon Athena connectors
 

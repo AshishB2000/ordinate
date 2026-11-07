@@ -1,4 +1,4 @@
-name: Warehouse nightly (Snowflake, BigQuery, ClickHouse)
+name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube)
 
 # The two warehouse connectors against REAL accounts (docs/live-data/00-plan.md,
 # L1.5): scripts/test-warehouseLive.ts, with credentials from repository
@@ -17,6 +17,10 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse)
 #
 # The `clickhouse` job runs the same matrix against a ClickHouse server in a
 # service container (scripts/test-liveParityClickhouse.ts); it needs no secret.
+# The `cube` job runs the semantic parity matrix against a Cube server over
+# Postgres seeded with the same fixture (scripts/fixtures/cube/compose.yml, the
+# image pinned by digest; scripts/test-semanticCubeLive.ts, semantic layer part
+# 7, e1); it needs no secret either: the deployment's API secret is a fixture.
 # Postgres, standing in for Redshift, runs it on every PR (ci.yml's `check`).
 #
 # Not a required check, and nothing else depends on it. Without the secrets (a
@@ -111,11 +115,40 @@ jobs:
         env:
           CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123
 
+  cube:
+    name: Semantic parity on Cube (containers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - name: Type-check + compile TypeScript
+        run: npm run build:ts
+      # Not job services: Cube reads the fixture's data model from the checkout, which services start before.
+      - name: Start Postgres and Cube
+        run: docker compose -f scripts/fixtures/cube/compose.yml up -d
+      - name: Wait for Cube
+        run: |
+          for i in $(seq 1 90); do curl -fs http://127.0.0.1:4000/readyz && exit 0; sleep 2; done
+          docker compose -f scripts/fixtures/cube/compose.yml logs; echo "Cube never became ready on 4000"; exit 1
+      - name: Semantic parity on Cube
+        run: node scripts/test-semanticCubeLive.js
+        env:
+          CUBE_URL: http://127.0.0.1:4000
+          CUBE_API_SECRET: ordinate-cube-parity-not-a-secret
+      - name: Cube's log, on failure
+        if: failure()
+        run: docker compose -f scripts/fixtures/cube/compose.yml logs cube | tail -200
+
   # A red nightly is otherwise seen by nobody. One open issue per workflow: the
   # first failure opens it, each later one adds the run to it.
   report:
     name: Open an issue on failure
-    needs: [live, clickhouse]
+    needs: [live, clickhouse, cube]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:

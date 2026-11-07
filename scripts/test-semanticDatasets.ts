@@ -184,8 +184,8 @@ void (async () => {
   ok('a connection without the semantic capability: a sentence', noLayer.ok === false && noLayer.error === (await as(async () => smsg.noLayer())), show(noLayer));
   const noLayerAdd = (await post('connection:addSemanticDataset', { projectId: P, connId: s.connId, model: MODEL })).value;
   ok('…and nothing is added from it', noLayerAdd.ok === false && noLayerAdd.error === (await as(async () => smsg.noLayer())), show(noLayerAdd));
-  ok('the catalog says which connectors have a layer (Snowflake\'s semantic views, c1)', catalogMod.connectorCatalog().every((e) => typeof e.semantic === 'boolean')
-    && show(catalogMod.connectorCatalog().filter((e) => e.semantic).map((e) => e.id)) === '["snowflake"]');
+  ok('the catalog says which connectors have a layer (Snowflake\'s semantic views, c1; Cube, e1)', catalogMod.connectorCatalog().every((e) => typeof e.semantic === 'boolean')
+    && show(catalogMod.connectorCatalog().filter((e) => e.semantic).map((e) => e.id)) === '["snowflake","cube"]');
 
   const before = (await as(() => H.datasets.listDatasets(P))).length;
   const added = await post('connection:addSemanticDataset', { projectId: P, connId: LC, model: MODEL, name: 'Sales' });

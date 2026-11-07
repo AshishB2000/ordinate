@@ -207,6 +207,8 @@ export interface ConnectorSemantic {
   backend: SemanticBackendId;
   /** `lookups`: it answers a dimension's distinct values (the latest date, stored spellings). `binaryCompare`: it compares a row lock's values exactly (D17). */
   caps: { lookups: boolean; binaryCompare: boolean };
+  /** The most rows the layer answers one question with, when it caps below LIVE_ROW_LIMIT (Cube: 50,000): the too-many-groups sentence names it. */
+  rowLimit?: number;
   listModels(ctx: ConnectorContext): Promise<{ ok: true; models: Array<{ name: string; label?: string; description?: string }> } | ConnectorError>;
   describeModel(ctx: ConnectorContext, model: string): Promise<{
     ok: true;
@@ -226,7 +228,7 @@ export interface ConnectorDef {
    *  'duckdb'. Sources sharing a wire protocol share an implementation. */
   family: string;
   /** Grouping in the picker UI. */
-  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local' | 'Apps & SaaS';
+  category: 'Databases' | 'Cloud warehouses' | 'Query engines' | 'Files & local' | 'Apps & SaaS' | 'Semantic layers';
   /** Always true. See rule 1 above. */
   readOnly: true;
   /** One factual line for the picker tile. */

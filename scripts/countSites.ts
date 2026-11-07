@@ -23,6 +23,7 @@ export const COUNT_SITES: Readonly<Record<string, { count: number; how: CountSit
   // additive checks: a distinct count does not add up (D3), so only sum and count pass
   'src/ipc/answers.ts': { count: 1, how: 'countOnly' },
   'src/ipc/liveAnswers.ts': { count: 1, how: 'countOnly' },
+  'src/connectors/cube.ts': { count: 1, how: 'countOnly' }, // Cube's own measure type: its countDistinct does not add up (D16) either
   // Live: compute branches; countd has its own part `d` beside each (engine/live/compileDistinct)
   'src/engine/live/compile.ts': { count: 3, how: 'countOnly' },
   'src/engine/live/shape.ts': { count: 2, how: 'countOnly' }, // the fold, and the series name

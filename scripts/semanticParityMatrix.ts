@@ -51,6 +51,8 @@ export interface Bench {
   kit: ReturnType<typeof mx.parityKit>;
   /** The layer under test as a runner, every question logged in `log`. */
   ask: (log: Log) => SemanticRunner;
+  /** Filters this backend cannot express exactly (`show` of the steps → the code each case must refuse with): a refusal, never a figure (e1 Cube). */
+  refused?: ReadonlyMap<string, string>;
 }
 
 export const layerIr = (ir: LiveIR, metrics: string[]): LiveIR => ({ ...ir, measures: metrics.map((metric): LiveMeasure => ({ metric })) });
@@ -157,7 +159,17 @@ export async function matrix(b: Bench, ok: (label: string, cond: boolean, extra?
     ok(`${c.name}: labels, every cell (Object.is; sum/avg within ${PINS.relTol}), the Other note and the SQL path's order agree`, r.problems.length === 0, r.problems.join(' | '));
   }
   let bad = 0;
+  let refusedAll = 0;
   for (const f of FILTERS) {
+    const code = b.refused?.get(show(f));
+    if (code) {
+      const said = [(await chartCase(b, { name: 'f', metrics: ['revenue'], enc: { category: 'many' }, filters: f })).sem, (await chartCase(b, { name: 'f', metrics: ['avg_amount'], enc: { category: 'region' }, filters: f })).sem];
+      const kpis = [...(await metricCase(b, 'revenue', f)), ...(await metricCase(b, 'avg_amount', f))];
+      const each = said.every((s) => !s.ok && s.code === code) && kpis.length === 2 && kpis.every((k) => k.includes(`"code":"${code}"`));
+      if (each) refusedAll += 1;
+      else ok(`filter ${show(f)}: refused ${code} on two charts and two KPIs`, false, show([said, kpis]));
+      continue;
+    }
     const p = [
       ...(await chartCase(b, { name: 'f', metrics: ['revenue'], enc: { category: 'many' }, filters: f })).problems,
       ...(await chartCase(b, { name: 'f', metrics: ['avg_amount'], enc: { category: 'region' }, filters: f })).problems,
@@ -165,7 +177,8 @@ export async function matrix(b: Bench, ok: (label: string, cond: boolean, extra?
     ];
     if (p.length && ++bad <= 6) ok(`filter ${show(f)}`, false, p.join(' | '));
   }
-  ok(`every filter (${FILTERS.length}: =, !=, in, not in, a range, empty, not empty, contains, >) agrees on two charts and two KPIs`, bad === 0);
+  const pinned = b.refused?.size ?? 0;
+  ok(`every filter (${pinned ? `${FILTERS.length - pinned} of ` : ''}${FILTERS.length}: =, !=, in, not in, a range, empty, not empty, contains, >) agrees on two charts and two KPIs${pinned ? `; the ${pinned} the backend cannot express are refused at each` : ''}`, bad === 0 && refusedAll === pinned);
   const kpis = (await Promise.all(ALL.map((m) => metricCase(b, m, [])))).flat();
   ok('a KPI of each metric agrees with computeCardMetric', kpis.length === 0, kpis.join(' | '));
   const ANSWERS = [

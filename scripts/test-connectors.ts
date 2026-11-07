@@ -32,8 +32,8 @@ const connections: typeof import('../src/connectors/connections') = require('../
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
-const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
-const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake', 'mongodb', 'athena']);
+const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS', 'Semantic layers']);
+const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake', 'mongodb', 'athena', 'cube']);
 const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 const SECRET_PW = 'sup3r-s3cret-pw';
 
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   ok('every select field has options', selectWithoutOptions.length === 0, selectWithoutOptions.join(', '));
 
   // Categories are grouped, not interleaved — the picker renders in list order.
-  const order = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
+  const order = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS', 'Semantic layers'];
   const seenCats: string[] = [];
   for (const c of all) if (seenCats[seenCats.length - 1] !== c.category) seenCats.push(c.category);
   ok('listConnectors() groups categories (no interleaving)',

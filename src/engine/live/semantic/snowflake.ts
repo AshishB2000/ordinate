@@ -112,4 +112,4 @@ function encode(q: SemanticQuery, model: string, columns: readonly LiveColumn[] 
 }
 
 /** The Snowflake semantic-view encoder: registered in ./adapters as the `snowflake` backend. */
-export const snowflakeAdapter: SemanticAdapter = { encode };
+export const snowflakeAdapter = { encode } satisfies SemanticAdapter; // it never refuses: its encode is a request

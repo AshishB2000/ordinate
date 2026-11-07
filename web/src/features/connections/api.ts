@@ -94,6 +94,8 @@ export interface ConnDataset {
   behindSchedule?: true;
   /** A Live dataset keeps no rows here; its Refresh resets the cache (L2.1). */
   mode?: 'live';
+  /** A semantic layer answers it (part 7): the layer's product name, for the rail's words. */
+  semantic?: { layer: string; label: string };
   /** Fresh on ask (L3.1): the age past which a figure pulls the new rows first. */
   freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }

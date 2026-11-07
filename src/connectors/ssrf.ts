@@ -90,6 +90,12 @@ function allowed(): BlockList {
   return allowList;
 }
 
+/** True when SSRF_ALLOW admits `address` (an internal address an operator opened). */
+export function allowListed(address: string): boolean {
+  const family = isIP(address);
+  return family !== 0 && allowed().check(address, family === 6 ? 'ipv6' : 'ipv4');
+}
+
 /** Why `address` is refused, or null when it may be connected to. */
 export function refusedRange(address: string): string | null {
   const family = isIP(address);
