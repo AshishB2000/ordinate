@@ -440,7 +440,7 @@
   "metricTreeMessages.rose": "{metric} a augmenté de {change} ({pct}) {compare}.",
   "metricTreeMessages.rose_2": "{metric} a augmenté de {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "Cette métrique n’existe plus.",
-  "pendingMessages.counts_distinct_values_which_needs_a": "« {measure} » compte des valeurs distinctes, ce qui nécessite une version plus récente d’Ordinate. Terminez la mise à niveau, puis réessayez.",
+  "pendingMessages.counts_distinct_values_which_a_point": "« {measure} » compte des valeurs distinctes, ce qu’une carte de points, d’hexagones ou de flux ne peut pas montrer. Choisissez un nombre, une somme ou une moyenne, ou une carte par région.",
   "pendingMessages.is_a_kind_of_metric_from": "« {name} » est un type de métrique d’une version plus récente d’Ordinate. Terminez la mise à niveau, puis réessayez.",
   "pendingMessages.this_alert_uses_a_figure_from": "Cette alerte utilise un chiffre d’une version plus récente d’Ordinate. Elle sera de nouveau vérifiée une fois la mise à niveau terminée.",
   "pivotRender.ascending": ", croissant",

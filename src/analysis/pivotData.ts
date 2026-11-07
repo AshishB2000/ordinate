@@ -349,10 +349,10 @@ function applyGrains(table: TableData, dims: PivotDim[]): { table: TableData; na
   return { table: cur, names };
 }
 
-function aggFn(v: PivotValue): 'sum' | 'avg' | 'count' | 'min' | 'max' {
+function aggFn(v: PivotValue): Exclude<PivotValue['aggregation'], 'none'> {
   // 'none' has no meaning in a pivot cell — every cell is a group. Coerced to
   // sum exactly as `vizData.buildAggregated` coerces it, and named that way too.
-  return (v.aggregation === 'none' ? 'sum' : v.aggregation) as 'sum' | 'avg' | 'count' | 'min' | 'max';
+  return v.aggregation === 'none' ? 'sum' : v.aggregation;
 }
 
 /** The legend/header name for a value field — `vizData.measureLabel`'s rule. */

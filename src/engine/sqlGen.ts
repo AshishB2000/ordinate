@@ -388,7 +388,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
           // Unknown aggregation fn falls back to `count` with NO warning —
           // transforms.aggregate:368 does exactly that (sanitizeSteps normally
           // blocks it, but direct callers can reach it).
-          if (agg.fn === 'countd') return bail('count distinct is computed by the fold'); // which refuses it on this release
+          if (agg.fn === 'countd') return bail('count distinct is computed by the fold'); // analysis/countDistinct, the reference
           const fn: AggFn = AGG_FNS.has(agg.fn) ? agg.fn : 'count';
           let expr: string;
           if (ci < 0) {

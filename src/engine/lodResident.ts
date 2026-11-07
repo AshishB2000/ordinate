@@ -133,12 +133,13 @@ export async function lodMetricResident(
     const rel = joined(src.columns, p, context, normal, params);
     // `computeMetric` over the appended column: finite numbers only, count = non-null.
     const n = 'CASE WHEN isfinite(__v) THEN __v END';
-    const m: Partial<Record<MetricAggregation, string>> = { // countd: none here, so null and the JS reference (no figure)
+    const m: Record<MetricAggregation, string> = {
       sum: `sum(${n})`,
       avg: `CASE WHEN count(${n}) > 0 THEN sum(${n}) / count(${n}) END`,
       min: `min(${n})`,
       max: `max(${n})`,
       count: `count(${n})`,
+      countd: `count(DISTINCT ${n} + 0.0)`, // the appended column is a number: analysis/countDistinct's number rule
     };
     if (!m[aggregation]) return null;
     const out = await runOrderedAsync(src.parquetPath, (from, ord) => `SELECT CAST(${m[aggregation]} AS DOUBLE) AS m0 FROM ${rel(from, ord)};`, params);

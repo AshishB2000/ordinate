@@ -437,7 +437,7 @@
   "metricTreeMessages.rose": "{metric} rose {change} ({pct}) {compare}.",
   "metricTreeMessages.rose_2": "{metric} rose {change} {compare}.",
   "metricTreeMessages.that_metric_no_longer_exists": "That metric no longer exists.",
-  "pendingMessages.counts_distinct_values_which_needs_a": "“{measure}” counts distinct values, which needs a newer version of Ordinate. Finish the upgrade, then try again.",
+  "pendingMessages.counts_distinct_values_which_a_point": "“{measure}” counts distinct values, which a point, hexbin or flow map cannot show. Pick a count, a sum or an average, or map it by region.",
   "pendingMessages.is_a_kind_of_metric_from": "“{name}” is a kind of metric from a newer version of Ordinate. Finish the upgrade, then try again.",
   "pendingMessages.this_alert_uses_a_figure_from": "This alert uses a figure from a newer version of Ordinate. It will be checked again once the upgrade is finished.",
   "pivotRender.ascending": ", ascending",

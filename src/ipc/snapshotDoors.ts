@@ -16,6 +16,7 @@ import type { FilterStep } from '../data/transforms';
 import type { AsOf } from '../api/asOf';
 import { vizDataFor } from './visuals';
 import type { VizDataReply } from './visuals';
+import { isCountLike } from '../data/aggregations';
 
 type Figure = { ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf };
 
@@ -41,7 +42,7 @@ export async function snapshotCardMetric(
   if (!days.ok) return { ok: false, value: null };
   if (days.category?.kind !== 'date') return { ok: true, value: null }; // the column is gone or no longer a date: no figure, never a count of 0
   const day = latestDay(days.data.labels, snap.take);
-  if (day === null) return { ok: true, value: spec.aggregation === 'count' ? 0 : null };
+  if (day === null) return { ok: true, value: isCountLike(spec.aggregation) ? 0 : null }; // no rows: a count is 0
   return figure({ column: spec.column, aggregation: spec.aggregation }, filters.concat([onDay(snap.column, day)]));
 }
 

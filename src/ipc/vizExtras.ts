@@ -15,6 +15,7 @@ import { buildVizData } from '../analysis/vizData';
 import { decorateGeoReply, pointItems } from '../analysis/mapData';
 import { joinedVizDataFor } from './relationships';
 import { geoVizReply } from './geoViz';
+import { mapCountdRefused } from '../analysis/pendingMessages';
 
 // ponytail: every reply below is the visual:data envelope (VizDataReply in ipc/visuals.ts), or null
 async function pointMapReply(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<any> {
@@ -40,6 +41,9 @@ export async function authoringVizData(
   filters: FilterStep[],
 ): Promise<any> {
   const geo = encoding && encoding.geo;
+  const m0 = encoding?.values?.[0];
+  // A point map plots each row's value and a hexbin or flow cell folds count/sum/avg: neither is a distinct count (a region map counts it).
+  if (geo && ['point', 'hexbin', 'flow'].includes(geo.level as string) && m0?.aggregation === 'countd') return { ok: false, error: mapCountdRefused(`countd of ${m0.column}`) };
   if (geo && geo.level === 'point') return pointMapReply(projectId, datasetId, encoding, filters);
   const density = await geoVizReply(projectId, datasetId, encoding, filters); // r6:geo — hexbin / flow
   if (density) return density;
