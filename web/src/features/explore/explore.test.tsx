@@ -6,6 +6,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
+import { render } from '@testing-library/react';
+import { FieldList } from './FieldList';
 import { decodeQuestion, encodeQuestion, type Question } from './spec';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -33,7 +35,7 @@ const SUGGEST = {
 const ANSWER = { ok: true, data: { labels: ['East', 'West'], series: [{ name: 'sum of revenue', values: [1406441.74, 1565150.46] }] }, recommendedShape: 'categorical', warnings: [] };
 
 /** The read channels this page may send — the shell's and Explore's own. Anything else fails the test. */
-const READS = new Set(['projects:overview', 'projects:roles', 'ai:status', 'dataset:list', 'explore:suggest', 'visual:data', 'visual:dataBatch', 'format:colors:get', 'onboarding:get', 'alerts:events', 'jobs:list', 'prefs:get', 'period:picker']);
+const READS = new Set(['projects:overview', 'projects:roles', 'ai:status', 'dataset:list', 'explore:suggest', 'visual:data', 'visual:dataBatch', 'format:colors:get', 'onboarding:get', 'alerts:events', 'jobs:list', 'prefs:get', 'period:picker', 'model:navigation']);
 /** Channels that compute a figure: Explore uses only the two that run vizDataFor. */
 const FIGURES = new Set(['visual:data', 'visual:dataBatch']);
 
@@ -270,5 +272,35 @@ describe('Explore: every figure is asked of visual:data', () => {
     const asks = calls.filter((c) => c.channel === 'visual:data');
     expect(asks.length).toBeGreaterThan(0);
     expect(asks.every((c) => !('chartType' in (c.payload as object)))).toBe(true);
+  });
+});
+
+describe('Explore: the field list nests a hierarchy', () => {
+  const F = (name: string, kind: 'dimension' | 'measure' = 'dimension') => ({ name, kind, type: kind === 'dimension' ? ('text' as const) : ('number' as const) });
+  const FIELDS = [F('customer_segment'), F('region'), F('state'), F('revenue', 'measure')];
+  const GEO = { id: 'h1', name: 'Geography', levels: ['region', 'state'] };
+  const dims = () => screen.getByRole('region', { name: 'Dimensions' });
+  const draw = (hierarchies: Parameters<typeof FieldList>[0]['hierarchies'], onPick = vi.fn()) => render(<FieldList fields={FIELDS} roleOf={() => null} onPick={onPick} hierarchies={hierarchies} />);
+
+  it('puts Geography first over its levels in order, then the other dimensions', () => {
+    draw([GEO]);
+    const text = dims().textContent!;
+    expect(text.indexOf('Geography')).toBeLessThan(text.indexOf('region'));
+    expect(text.indexOf('region')).toBeLessThan(text.indexOf('state'));
+    expect(text.indexOf('state')).toBeLessThan(text.indexOf('customer_segment'));
+    expect(within(screen.getByRole('group', { name: 'Geography' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['region', 'state']);
+  });
+  it('a search keeps the heading over a level it matches, and a click is the same pick', () => {
+    const onPick = vi.fn();
+    draw([GEO], onPick);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search fields' }), { target: { value: 'sta' } });
+    expect(dims().textContent).toContain('Geography');
+    expect(screen.queryByRole('button', { name: /customer_segment/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /state/ }));
+    expect(onPick).toHaveBeenCalledWith(FIELDS[2]);
+  });
+  it('NEGATIVE CONTROL: a hierarchy with a missing level, or no hierarchy, is not nested', () => {
+    draw([{ ...GEO, missing: ['state'] }]);
+    expect(screen.queryByRole('group', { name: 'Geography' })).toBeNull();
   });
 });

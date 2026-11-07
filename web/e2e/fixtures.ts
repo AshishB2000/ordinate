@@ -337,3 +337,15 @@ export function e2e(name: string, fn: (s: Session) => Promise<void>, opts: E2eOp
     }
   });
 }
+
+/** Clicks points across a box until `done()` holds — a mark's pixel position depends on the data and the font. */
+export async function clickUntil(page: Page, box: { x: number; y: number; width: number; height: number }, done: () => Promise<boolean>, cols = 9, rows = 6): Promise<boolean> {
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      await page.mouse.click(box.x + (box.width * c) / (cols + 1), box.y + (box.height * r) / (rows + 1));
+      await page.waitForTimeout(120);
+      if (await done()) return true;
+    }
+  }
+  return false;
+}

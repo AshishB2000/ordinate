@@ -343,3 +343,25 @@
   height: 136px;
   border-radius: var(--r-lg);
 }
+
+/* A hierarchy nested under Dimensions (./FieldList.tsx): its name, then its levels indented in drill order. */
+.hier {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hierName {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8) 0;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.hierRows {
+  margin-left: var(--sp-12);
+  padding-left: var(--sp-4);
+  border-left: 1px solid var(--border);
+}

@@ -16,6 +16,8 @@ import { Sheet } from '../../ui/Sheet';
 import { Skeleton, SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { useCanEdit } from '../projects/api';
+import { navFor, useNavigation } from '../model/navigation';
+import { dateLadder } from '../../../../src/analysis/drillLevels.ts';
 import { ScopedChip } from '../data/RowAccessOff';
 import { Answer } from './Answer';
 import { useExploreFields, type Suggestion } from './api';
@@ -33,6 +35,7 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
   const { question, setQuestion } = useExploreSpec();
   const [, setParams] = useSearchParams();
   const canEdit = useCanEdit(projectId);
+  const nav = useNavigation(projectId); // its failure means no hierarchies; a date still drills on the default ladder
   const [sheet, setSheet] = useState(false);
   const live = dataset.mode === 'live';
   const list = fields.data?.fields ?? [];
@@ -58,7 +61,7 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
       ) : fields.isError ? (
         <ErrorState compact heading={3} title="The fields could not be read" message={fields.error.message} onRetry={() => void fields.refetch()} />
       ) : (
-        <FieldList fields={list} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
+        <FieldList fields={list} hierarchies={navFor(nav.data, dataset.id)} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
       )}
     </>
   );
@@ -101,6 +104,8 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
               canEdit={canEdit}
               question={question}
               onChange={setQuestion}
+              hierarchies={navFor(nav.data, dataset.id)}
+              ladder={nav.data?.dateLadder ?? dateLadder(false)}
             />
           ) : (
             <>

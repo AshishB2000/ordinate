@@ -30,7 +30,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { copiedText, e2e, grantClipboard, hasWebGL2, SCREENS, screens, settled, watchCopies } from './fixtures.ts';
+import { clickUntil, copiedText, e2e, grantClipboard, hasWebGL2, SCREENS, screens, settled, watchCopies } from './fixtures.ts';
 
 /** One screenshot per theme WITHOUT a reload (a dialog or a mode stays up). */
 async function screensInPlace(page: Page, name: string): Promise<void> {
@@ -273,18 +273,6 @@ e2e('publish: the dialog, the list, and the published page under its own CSP', a
     await page.screenshot({ path: path.join(SCREENS, `dashboards-published-${scheme}.png`), fullPage: true });
   }
 });
-
-/** Clicks points across a box until `done()` holds — a mark's pixel position depends on the data and the font. */
-async function clickUntil(page: Page, box: { x: number; y: number; width: number; height: number }, done: () => Promise<boolean>, cols = 9, rows = 6): Promise<boolean> {
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      await page.mouse.click(box.x + (box.width * c) / (cols + 1), box.y + (box.height * r) / (rows + 1));
-      await page.waitForTimeout(120);
-      if (await done()) return true;
-    }
-  }
-  return false;
-}
 
 e2e('runtime: reset controls, quick filters, map selection, a drill, comment doors and Home', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
