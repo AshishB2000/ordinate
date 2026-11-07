@@ -103,7 +103,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
     // is registered on the server (the Summary card is T2.9's); until then none.
     summaryLines: async (a, filters, params) => {
       if (!handlers.has('summary:compute') || !a.sheets.some((s) => (s.cards || []).some((c) => c && c.type === 'summary'))) return [];
-      const r = await call(event, 'summary:compute', { projectId, analysisId: a.id, name: a.name, pages: a.sheets, filters, params, asOf: null, outbound: true });
+      const r = await call(event, 'summary:compute', { projectId, analysisId: a.id, name: a.name, pages: a.sheets, filters, params, asOf: null, outbound: true, ...(share ? { share: 'report' } : {}) });
       return r && r.ok && Array.isArray(r.sentences) ? r.sentences.map((x: { text: unknown }) => String(x.text)) : [];
     },
     // ONE model call per distinct narrative in a request, however many times a
