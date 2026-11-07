@@ -840,6 +840,7 @@
   "valueLabelMessages.value_labels_are_for_text_columns": "Les libellés de valeur sont réservés aux colonnes de texte. {column} est une colonne de type {type}.",
   "valueLabelMessages.would_name_both_and_a_label": "« {label} » désignerait à la fois « {a} » et « {b} ». Un libellé ne peut désigner qu’une seule valeur.",
   "verifiedMessages.a_glossary_term_this_question_uses": "Un terme du glossaire utilisé par cette question a été supprimé.",
+  "verifiedMessages.a_metric_this_question_uses_changed": null,
   "verifiedMessages.is_already_a_verified_question_or": "« {text} » est déjà une question vérifiée ou l’une de ses formulations.",
   "verifiedMessages.is_no_longer_a_column_of": "« {column} » n’est plus une colonne de {dataset}.",
   "verifiedMessages.it_could_not_be_restored_is": null,

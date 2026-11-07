@@ -16,6 +16,11 @@ export function verifiedTermGone(): string {
   return t('verifiedMessages.a_glossary_term_this_question_uses');
 }
 
+/** A measure named by a metric that was redefined, given filters of its own, or deleted since (a retired one still runs). */
+export function verifiedMetricChanged(): string {
+  return t('verifiedMessages.a_metric_this_question_uses_changed');
+}
+
 // ── Saving one (../ipc/verified) ─────────────────────────────────────────────
 
 /** A question or phrasing whose key another question or phrasing of the project holds (./verifiedRules `keyClash`). */

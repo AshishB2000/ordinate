@@ -9,6 +9,8 @@
 //   § retired  (part 4, cross-part check item 8) a question on a retired metric still runs (verifiedProblem
 //              null), its card is marked and its notes say what replaces the metric. NEGATIVE CONTROL: certified,
 //              no retired note.
+//   § metric   a question on a metric that is redefined, given a filter, or deleted no longer runs and marks nothing.
+//              NEGATIVE CONTROL: put back as it was, it runs (and § retired: a retired one still runs).
 // What a row-restricted viewer reads of a verified question is pinned in scripts/test-rowPolicySafetyNet.ts.
 //
 //   npm run build:ts && node scripts/test-verified.js
@@ -255,6 +257,20 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   await certifyNow(`metric:${GROSS}`);
   const certifiedCard = await card(GSPEC);
   ok('NEGATIVE CONTROL: certified, the card is marked and carries no retired note', certifiedCard?.verified?.id === GQ && !certifiedCard.notes.some((n: string) => /retired/.test(n)), JSON.stringify(certifiedCard?.notes));
+
+  // ── § metric: a question on a metric is that metric as it was verified ──
+  const drift = async (label: string, change: () => Promise<unknown>, undo: () => Promise<unknown>) => {
+    await as(change);
+    const p = await as(async () => state.verifiedProblem((await S.getVerified(P, GQ))!, await state.verifiedEnv(P)));
+    const c = await card(GSPEC);
+    ok(`metric ${label}: no longer runs, and the card is not marked`, p === msg.verifiedMetricChanged() && c?.verified === undefined, `${p} ${JSON.stringify(c?.verified)}`);
+    await as(undo);
+  };
+  const DEF = { column: 'amount', aggregation: 'max' as const };
+  await drift('redefined', () => metricsMod.updateMetric(P, GROSS, { definition: { column: 'amount', aggregation: 'sum' } }), () => metricsMod.updateMetric(P, GROSS, { definition: DEF }));
+  await drift('given a filter', () => metricsMod.updateMetric(P, GROSS, { filters: [{ type: 'filter', column: 'segment', op: '=', value: 'SMB' }] }), () => metricsMod.updateMetric(P, GROSS, { filters: [] }));
+  ok('NEGATIVE CONTROL: put back as it was, it runs and is marked', (await card(GSPEC))?.verified?.id === GQ);
+  await drift('deleted', () => metricsMod.deleteMetric(P, GROSS), async () => undefined);
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });

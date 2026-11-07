@@ -837,6 +837,7 @@
   "valueLabelMessages.value_labels_are_for_text_columns": "Value labels are for text columns. {column} is a {type} column.",
   "valueLabelMessages.would_name_both_and_a_label": "“{label}” would name both “{a}” and “{b}”. A label can name one value only.",
   "verifiedMessages.a_glossary_term_this_question_uses": "A glossary term this question uses was deleted.",
+  "verifiedMessages.a_metric_this_question_uses_changed": "A metric this question uses changed or was deleted since it was verified.",
   "verifiedMessages.is_already_a_verified_question_or": "“{text}” is already a verified question or one of its phrasings.",
   "verifiedMessages.is_no_longer_a_column_of": "“{column}” is no longer a column of {dataset}.",
   "verifiedMessages.it_could_not_be_restored_is": "It could not be restored: “{text}” is already a verified question or one of its phrasings.",
