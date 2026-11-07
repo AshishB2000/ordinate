@@ -12,6 +12,7 @@ import { sanitizeEncoding } from '../analysis/visuals';
 import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
+import { refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { kpiHidden } from './kpiPolicy';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
@@ -71,7 +72,7 @@ export async function buildStory(
         else geoLevels.add(enc.geo.level);
       }
       const blockFilters = mergeDashboardFilters(b.filters, v.filters);
-      const reply = await withEvents(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, blockFilters); // r8:events
+      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc), projectId, v.datasetId, blockFilters); // r8:events
       if (!reply.ok) { blocks.push({ kind: 'broken', reason: reply.error }); continue; }
       const data = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing);
       if (typeof data.hidden === 'string') { blocks.push({ kind: 'broken', reason: data.hidden }); continue; }

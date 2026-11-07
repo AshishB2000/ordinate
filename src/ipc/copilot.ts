@@ -12,6 +12,7 @@ import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
+import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -153,6 +154,7 @@ function reasonLedger(reason: string): LedgerEntry[] {
 async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope): Promise<FactMetric[]> {
   try {
     const list = await metrics.listMetrics(projectId);
+    const byName = await metrics.metricsByName(projectId);
     const out: FactMetric[] = [];
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
@@ -162,7 +164,8 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
         throw err;
       });
       if (!r) continue;
-      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, description: s.description });
+      const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
+      out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, additivity, description: s.description });
     }
     return out;
   } catch (_) {
@@ -232,9 +235,11 @@ export async function buildFacts(
       // the tile draws, a Live dataset's from its warehouse (L2.4) — with the
       // calculated figures beside the raw ones (tableCalc.ts). No figure → none.
       const reply = await vizDataFor(projectId, v.datasetId, v.encoding, v.filters);
-      const viz = withTableCalcs<{ ok: true } & VizDataResult>(reply.ok
+      const raw: { ok: true } & VizDataResult = reply.ok
         ? { ok: true, data: reply.data, recommendedShape: reply.recommendedShape, warnings: reply.warnings, category: reply.category }
-        : { ok: true, data: { labels: [], series: [] }, recommendedShape: 'categorical', warnings: [] }, v.encoding);
+        : { ok: true, data: { labels: [], series: [] }, recommendedShape: 'categorical', warnings: [] };
+      // A calculation that was refused (additivity.ts) is never read: the Assistant gets the raw figures.
+      const viz = (await refuseNonAdditiveCalcs(reply, projectId, v.datasetId, v.encoding)).ok ? withTableCalcs(raw, v.encoding) : raw;
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
       // The visual's Analytics overlays, resolved under the visual's own filters.

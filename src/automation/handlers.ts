@@ -28,6 +28,7 @@ import { refreshDependents } from '../data/datasetDependents';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
 import { describeDefinitionShort } from '../analysis/metricFormat';
+import { metricAdditivity } from '../analysis/additivity';
 import * as analysis from '../analysis/analysis';
 import * as drafts from '../analysis/publishDashboard';
 import { dashboardGone } from '../analysis/savedViewMessages';
@@ -192,13 +193,15 @@ export async function query(ctx: Ctx, sql: string, limit: number): Promise<unkno
 
 export async function metricsList(ctx: Ctx): Promise<unknown> {
   const names = new Map((await datasets.listDatasets(ctx.projectId)).map((d) => [d.id, d.name]));
-  return (await metrics.listMetrics(ctx.projectId)).map((m) => ({
+  const byName = await metrics.metricsByName(ctx.projectId);
+  return Promise.all((await metrics.listMetrics(ctx.projectId)).map(async (m) => ({
     id: m.id,
     name: m.name,
     dataset: names.get(m.datasetId) || null,
     definition: describeDefinitionShort(m.definition),
     description: m.description || '',
-  }));
+    adds_up: await metricAdditivity(ctx.projectId, m.id, byName),
+  })));
 }
 
 export async function metricValue(ctx: Ctx, ref: string): Promise<unknown> {

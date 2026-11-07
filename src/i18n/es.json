@@ -387,6 +387,8 @@
   "mentionMessages.you_can_only_mention_people_who": null,
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Una medida calculada aún no se puede dibujar como múltiplos pequeños. Quita el campo de múltiplos pequeños o mide una columna.",
+  "metricCheckMessages.can_t_be_shown_as_along": "{measure} no se puede mostrar como {calc} a lo largo de fechas: es una instantánea, y una instantánea no se puede sumar a lo largo del tiempo.",
+  "metricCheckMessages.can_t_be_shown_as_it": "{measure} no se puede mostrar como {calc}: no se puede sumar, así que un total sería incorrecto.",
   "metricCheckMessages.is_a_column_a_measure_is": "«{column}» es una columna. Una medida se calcula después de los totales, así que indica cómo totalizarla; por ejemplo, sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "«{name}» es circular: {path}. Una métrica no puede formar parte de su propia fórmula.",

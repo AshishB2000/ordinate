@@ -205,7 +205,7 @@ export const COMMANDS: readonly Command[] = [
   },
   {
     cli: 'metrics list', tool: 'list_metrics', readOnly: true,
-    summary: "List the project's saved metrics and how each is defined.",
+    summary: "List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter).",
     args: {},
     run: (_a, ctx) => h.metricsList(ctx),
   },

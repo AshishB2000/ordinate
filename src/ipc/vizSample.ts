@@ -9,6 +9,7 @@ import { withPeriodOverlay } from './visualsOverlay';
 import { withAnalytics } from './visualsAnalytics';
 import { withEvents } from './events'; // r8:events
 import { withTableCalcs } from '../analysis/tableCalc';
+import { refuseNonAdditiveCalcs } from '../analysis/additivity';
 import { sanitizeOverlays } from '../analysis/analytics';
 import { stampAsOf } from '../data/figureAsOf';
 import { withGeoSuggest } from '../analysis/geoHits';
@@ -33,8 +34,8 @@ export function register(): void {
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        withTableCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), e);
-      const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
+        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), p, d, e, values), e);
+      const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run, values);
       // …and offers the map when the labels are places (analysis/geoHits) — what un-greys the builder's map chips.
       // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes).
       const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events

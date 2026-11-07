@@ -387,6 +387,8 @@
   "mentionMessages.you_can_only_mention_people_who": null,
   "mentionMessages.you_get_this_email_because_mentioned": null,
   "metricCheckMessages.a_calculated_measure_cannot_be_drawn": "Une mesure calculée ne peut pas encore être dessinée en petits multiples. Retirez le champ des petits multiples, ou mesurez une colonne.",
+  "metricCheckMessages.can_t_be_shown_as_along": "{measure} ne peut pas être affiché comme {calc} au fil des dates : c’est un instantané, et un instantané ne s’additionne pas dans le temps.",
+  "metricCheckMessages.can_t_be_shown_as_it": "{measure} ne peut pas être affiché comme {calc} : il ne s’additionne pas, donc son total serait faux.",
   "metricCheckMessages.is_a_column_a_measure_is": "« {column} » est une colonne. Une mesure se calcule après les totaux : indiquez comment la totaliser, par exemple sum([{column}]).",
   "metricCheckMessages.is_a_snapshot_metric_which_this": null,
   "metricCheckMessages.is_circular_a_metric_cannot_be": "« {name} » est circulaire : {path}. Une métrique ne peut pas faire partie de sa propre formule.",
