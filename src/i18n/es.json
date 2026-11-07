@@ -214,6 +214,7 @@
   "drillMessages.is_the_last_level_of": "{column} es el último nivel de {name}.",
   "drillMessages.this_chart_does_not_drill_down": "Este gráfico no permite desglosar. ⋯ → Mostrar las filas enumera lo que hay detrás.",
   "drillMessages.this_chart_s_measures_are_filtered": null,
+  "drillMessages.this_chart_shows_a_snapshot_one": null,
   "driverPointMessages.a_change_is_explained_between_two": "Un cambio se explica entre dos periodos, así que hace falta un gráfico con una fecha en su eje.",
   "driverPointMessages.a_change_is_explained_from_today": "Un cambio se explica con los datos de hoy, y este panel muestra una instantánea anterior. Vuelva a poner “As of” en el momento actual para explicarlo.",
   "driverPointMessages.average_of": "Promedio de {column}",

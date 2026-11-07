@@ -27,3 +27,8 @@ export function drillNoHierarchy(column: string): string {
 export function drillSeparateFilters(): string {
   return t('drillMessages.this_chart_s_measures_are_filtered');
 }
+
+/** A snapshot measure's figure is one day's rows only, chosen per bucket: no one row set the panel lists is behind a mark. */
+export function drillSnapshotRows(): string {
+  return t('drillMessages.this_chart_shows_a_snapshot_one');
+}

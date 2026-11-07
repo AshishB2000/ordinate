@@ -15,7 +15,8 @@
 //     is drawn under that metric's filters (analysis/metricMeasures), so the
 //     rows behind it carry them too, or they would not add up to the bar. A
 //     chart whose measures need different filter lists (a per-measure plan)
-//     is refused: no one set of rows adds up to two lists.
+//     has no rows here: no one set of rows adds up to two lists. Its
+//     drill-down still resolves (it needs filter steps, not a row set).
 //
 //   · a dashboard date control's period on the date the figure counts by
 //     (analysis/metricTimeScope): the chart's, or the KPI's metric's. A chart
@@ -39,7 +40,7 @@ import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution, VizDataReply } from './visuals';
 import { noRowsError } from '../analysis/externalMetric';
-import { drillSeparateFilters } from './drillMessages';
+import { drillSeparateFilters, drillSnapshotRows } from './drillMessages';
 
 export interface DrillRequest {
   encoding: unknown;
@@ -50,8 +51,11 @@ export interface DrillRequest {
   metricId?: unknown;
 }
 
-/** What `resolveDrill` reads, sanitized and bound: the rows panel's (drillFilters) and the drill-down's (./drillDown). */
-export interface DrillInputs { columns: ParsedColumn[]; enc: VizEncoding; filters: FilterStep[]; mark?: DrillMark; grain?: DateGrain }
+/**
+ * What `resolveDrill` reads, sanitized and bound: the rows panel's (drillFilters) and the drill-down's (./drillDown).
+ * `noRowSet`: why no one set of rows adds up to the mark (the rows panel refuses; a drill-down needs no row set).
+ */
+export interface DrillInputs { columns: ParsedColumn[]; enc: VizEncoding; filters: FilterStep[]; mark?: DrillMark; grain?: DateGrain; noRowSet?: string }
 /** `failure` (with `liveGrain` only): the grain lookup's own typed refusal (Live, row access, a term), answered as it is. */
 export type DrillInputsResult = { ok: true; inputs: DrillInputs } | { ok: false; reason: string } | { ok: false; failure: Extract<VizDataReply, { ok: false }> };
 
@@ -62,6 +66,7 @@ export async function drillInputs(projectId: string, datasetId: string, meta: { 
   let filters = resolveFilterParams(visuals.sanitizeFilters(req.filters), values).steps;
   // A followed metric's filters lead the ROWS' scope only: the grain question below is the tile's, so it keeps the filters as the tile asked them (its cached answer).
   let followed: FilterStep[] = [];
+  let noRowSet: string | undefined;
 
   if (typeof req.metricId === 'string' && req.metricId) {
     const metric = await metrics.getMetric(projectId, req.metricId);
@@ -81,10 +86,15 @@ export async function drillInputs(projectId: string, datasetId: string, meta: { 
     const plan = await planMetricMeasures(projectId, datasetId, enc, values);
     if (plan?.ok && !plan.plan) followed = plan.filters;
     if (plan?.ok && plan.plan) {
-      // Separate questions: their rows are one set only when every leaf asks the same filters.
-      const lists = new Set(plan.plan.leaves.map((l) => JSON.stringify([l.filters, l.snapshot ?? null, l.datasetId ?? null])));
-      if (lists.size > 1) return { ok: false, reason: drillSeparateFilters() };
-      followed = plan.plan.leaves[0]?.filters ?? [];
+      // Separate questions: their rows are one set only when every leaf asks the same filters, no leaf keeps only
+      // one day's rows (a snapshot), and a measure plotted as given (under the chart's filters alone) asks no other.
+      const leaves = plan.plan.leaves;
+      const shared = leaves[0]?.filters ?? [];
+      const lists = new Set(leaves.map((l) => JSON.stringify([l.filters, l.datasetId ?? null])));
+      const asGiven = (enc.values ?? []).length > plan.plan.formulas.size;
+      if (leaves.some((l) => l.snapshot)) noRowSet = drillSnapshotRows();
+      else if (lists.size > 1 || (asGiven && shared.length > 0)) noRowSet = drillSeparateFilters();
+      else followed = shared;
     }
   }
 
@@ -98,14 +108,15 @@ export async function drillInputs(projectId: string, datasetId: string, meta: { 
     if (chart.ok && chart.category && chart.category.kind === 'date') grain = chart.category.grain;
     else if (!chart.ok && chart.code && opts?.liveGrain) return { ok: false, failure: chart }; // the drill-down's only: the rows panel keeps resolveDrill's sentence
   }
-  return { ok: true, inputs: { columns, enc, filters: followed.concat(filters), mark, grain } };
+  return { ok: true, inputs: { columns, enc, filters: followed.concat(filters), mark, grain, ...(noRowSet ? { noRowSet } : {}) } };
 }
 
 /** The rows behind a mark: `drillInputs`, then `resolveDrill`. A failed grain lookup leaves no grain, so resolveDrill's own sentence (as before the split). */
 export async function drillFilters(projectId: string, datasetId: string, meta: { columns: ParsedColumn[]; mode?: unknown }, req: DrillRequest): Promise<DrillResolution> {
   const r = await drillInputs(projectId, datasetId, meta, req);
   if (!r.ok) return { available: false, reason: 'reason' in r ? r.reason : r.failure.error };
-  const { columns, enc, filters, mark, grain } = r.inputs;
+  const { columns, enc, filters, mark, grain, noRowSet } = r.inputs;
+  if (noRowSet) return { available: false, reason: noRowSet };
   return resolveDrill(columns, enc, filters, mark, grain);
 }
 
