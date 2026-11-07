@@ -3,7 +3,10 @@
 // only: a release that cannot write one still keeps what a newer release stored, through every catalog
 // read and re-save. Never checked against the data; a level is a column name matched exactly, never trimmed.
 
+import { randomUUID } from 'crypto';
 import { clip } from './clip';
+import type { ParsedColumn } from '../data/parse';
+import { hierarchyColumnTaken, hierarchyLevelMissing, hierarchyLevelNotText, hierarchyNameTaken } from './hierarchyMessages';
 import { isValidId } from './ids';
 
 export interface Hierarchy { id: string; name: string; levels: string[] }
@@ -42,4 +45,40 @@ export function sanitizeHierarchies(raw: unknown): Hierarchy[] {
     out.push({ id: o.id, name, levels });
   }
   return out;
+}
+
+/** A patch entry as a person sends it: an id only when it is editing one that exists. */
+export interface HierarchyDraft { id?: string; name: string; levels: string[] }
+
+/** Keeps an id that names an existing hierarchy (once), gives every other entry a new one, and trims names. */
+export function withIds(list: readonly HierarchyDraft[], existing: readonly Hierarchy[]): Hierarchy[] {
+  const known = new Set(existing.map((h) => h.id));
+  const used = new Set<string>();
+  return list.map((h) => {
+    const id = h.id && known.has(h.id) && !used.has(h.id) ? h.id : randomUUID();
+    used.add(id);
+    return { id, name: h.name.trim(), levels: h.levels };
+  });
+}
+
+/** The first broken rule's sentence, or null: a level that is no column, not text, in one hierarchy twice or in two, then a name used twice. */
+export function hierarchyProblem(list: readonly { name: string; levels: string[] }[], columns: readonly ParsedColumn[]): string | null {
+  const byName = new Map(columns.map((c) => [c.name, c]));
+  const levels = list.flatMap((h) => h.levels);
+  for (const l of levels) if (!byName.has(l)) return hierarchyLevelMissing(l);
+  for (const l of levels) if (byName.get(l)!.type !== 'text') return hierarchyLevelNotText(l, byName.get(l)!.type);
+  const owner = new Map<string, string>();
+  for (const h of list) {
+    for (const l of h.levels) {
+      if (owner.has(l)) return hierarchyColumnTaken(l, owner.get(l)!);
+      owner.set(l, h.name.trim());
+    }
+  }
+  const names = new Set<string>();
+  for (const h of list) {
+    const n = h.name.trim().toLowerCase();
+    if (names.has(n)) return hierarchyNameTaken(h.name.trim());
+    names.add(n);
+  }
+  return null;
 }

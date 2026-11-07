@@ -40,6 +40,16 @@ async function post(s: Session, channel: string, payload: unknown): Promise<any>
   return r.json();
 }
 
+/** The open page in both themes, without reloading it (a dialog stays open). */
+async function screenshotBoth(page: Page, name: string): Promise<void> {
+  const prev = await page.evaluate(() => document.documentElement.dataset.theme);
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+  }
+  await page.evaluate((t) => { if (t) document.documentElement.dataset.theme = t; }, prev);
+}
+
 /** The first whole number in a text: a count the server sent, as the page printed it. */
 const countIn = (text: string | null): number => Number((/\d[\d,]*/.exec(text ?? '')?.[0] ?? 'NaN').replace(/,/g, ''));
 
@@ -87,6 +97,23 @@ e2e('data model: datasets', async (s) => {
   await page.getByRole('tab', { name: 'Fields' }).click();
   await page.getByRole('region', { name: 'Column notes' }).waitFor();
   await screens(page, 'model-fields');
+
+  // Hierarchies: Geography, region then state, saved through the dialog and kept by the server.
+  const hierarchies = page.getByRole('region', { name: 'Hierarchies' });
+  await hierarchies.getByText('Dates drill by themselves: year › quarter › month › day').waitFor();
+  await hierarchies.getByRole('button', { name: 'Hierarchy' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name').fill('Geography');
+  for (const level of ['region', 'state']) {
+    await dialog.getByRole('combobox', { name: 'Add level' }).click();
+    await page.getByRole('option', { name: level, exact: true }).click();
+  }
+  await screenshotBoth(page, 'model-hierarchy-dialog');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await hierarchies.getByText('region › state').waitFor();
+  await screens(page, 'model-hierarchies');
+  await hierarchies.getByText('region › state').waitFor(); // kept across the reload
   await page.getByRole('tab', { name: 'Lineage' }).click();
   await page.getByRole('group', { name: 'Lineage graph' }).waitFor();
   await screens(page, 'model-lineage');

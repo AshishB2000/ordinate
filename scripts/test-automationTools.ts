@@ -106,6 +106,14 @@ async function main(): Promise<void> {
   await tableDocs.setTableDoc(pid, ds.id, { role: 'dimension', guide: 'g', key: meta.columns[0].name });
   const noted = await call('describe_dataset', { dataset: ds.name });
   ok('describe_dataset: the table notes after catalog:setTable — role and guide', noted.table.role === 'dimension' && noted.table.guide === 'g' && noted.table.key === meta.columns[0].name && noted.table.grain === '' && !('keyCheck' in noted.table), JSON.stringify(noted.table));
+  const texts = meta.columns.filter((c) => c.type === 'text').map((c) => c.name);
+  if (texts.length >= 2) {
+    await tableDocs.setTableDoc(pid, ds.id, { hierarchies: [{ id: '5d3b6f0e-6c1f-4a8e-9a3e-0e5a1b2c3d4e', name: 'Geography', levels: texts.slice(0, 2) }] });
+    const h = (await call('describe_dataset', { dataset: ds.name })).table.hierarchies;
+    ok('describe_dataset: the hierarchies, levels in order, none missing', h[0].name === 'Geography' && h[0].levels.join() === texts.slice(0, 2).join() && !('missing' in h[0]), JSON.stringify(h));
+    await tableDocs.setTableDoc(pid, ds.id, { hierarchies: [] });
+    ok('NEGATIVE CONTROL: …and with none the table has no hierarchies key', !('hierarchies' in (await call('describe_dataset', { dataset: ds.name })).table));
+  }
   await tableDocs.writeKeyCheck(pid, ds.id, meta.columns[0].name, { rows: 4, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-04T00:00:00.000Z' });
   ok('describe_dataset: …and the key check once it was counted',
     JSON.stringify((await call('describe_dataset', { dataset: ds.id })).table.keyCheck) === JSON.stringify({ rows: 4, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-04T00:00:00.000Z' }));

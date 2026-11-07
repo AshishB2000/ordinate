@@ -29,6 +29,9 @@ const TablePatch = z.strictObject({
   key: z.string().max(256).optional(),
   grain: z.string().max(200).optional(),
   guide: z.string().max(8_000).optional(),
+  // Drill hierarchies: replaces the whole list, [] removes them all. An `id` names an existing one to keep; the server mints the rest.
+  // A level that is no text column of the dataset, or a column in two, is refused with a sentence (src/app/hierarchies.ts).
+  hierarchies: z.array(z.strictObject({ id: Uuid.optional(), name: z.string().min(1).max(80), levels: z.array(z.string().min(1).max(256)).min(2).max(6) })).max(10).optional(),
 });
 
 export const catalog = {

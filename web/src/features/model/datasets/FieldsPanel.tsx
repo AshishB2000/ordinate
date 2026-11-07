@@ -6,11 +6,13 @@ import { ColumnsTab } from '../../data/ColumnsTab';
 import type { ModelTable } from '../api';
 import { SuggestedMeanings } from './SuggestedMeanings';
 import m from '../Model.module.css';
+import { HierarchiesBlock } from './HierarchiesBlock';
 
 export function FieldsPanel({ projectId, header, table }: { projectId: string; header: DatasetColumns; table: ModelTable | undefined }) {
   const calculated = table?.calculated ?? [];
   return (
     <>
+      <HierarchiesBlock projectId={projectId} dataset={header} />
       {calculated.length > 0 && (
         <section className={m.calc} aria-label="Calculated in Prepare">
           <h3 className={m.calcHead}>Calculated in Prepare</h3>

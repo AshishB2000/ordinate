@@ -550,6 +550,13 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       && ovRow(ovEast)?.valuesHidden === true && ovRow(ovEast)?.keyState === 'unchecked', ovEast.text.slice(0, 240));
     ok('…and still reads the step\'s column and operator', JSON.stringify(ovRow(ovEast)?.alwaysApplied.steps) === '[{"type":"filter","column":"customer","op":"!="}]', JSON.stringify(ovRow(ovEast)));
     ok('NEGATIVE CONTROL: the editor\'s model:overview carries the value and the key count', H.leaks(ovEd.text) && repeatsItem(ovEd) && ovRow(ovEd)?.keyState === 'repeats', ovEd.text.slice(0, 240));
+    // model:navigation (META): level NAMES and the calendar's ladder, never a value. east gets the editor's reply, hierarchy included.
+    const hs = await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { hierarchies: [{ name: 'Who', levels: ['customer', 'region'] }] } });
+    const [navEast, navEd] = [await W.call('east', 'model:navigation', { projectId: P }), await W.call('ed', 'model:navigation', { projectId: P })];
+    eastReplies.push(navEast.text);
+    ok('setup: boss saves a hierarchy over Orders', hs.body?.ok === true, hs.text.slice(0, 160));
+    ok('meta: model:navigation — east reads no value a lock hides', navEast.body?.ok === true && !H.leaks(navEast.text), navEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: …and it is the editor\'s reply, hierarchy included (nothing was withheld, because nothing was a value)', navEast.text === navEd.text && /"Who"/.test(navEd.text) && navEd.body?.tables?.[0]?.datasetId === orders, navEd.text.slice(0, 240));
 
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {

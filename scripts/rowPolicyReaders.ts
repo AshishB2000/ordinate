@@ -105,6 +105,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'metricTree:compute': 'DOOR+',
   'metricTree:suggest': 'META',
   'model:overview': 'REDACT', // key counts and the values a filter step or formula quotes: withheld from a caller closed to the dataset
+  'model:navigation': 'META', // hierarchy and column NAMES and the calendar's ladder: never a value, the same reply for every caller
   'numbers:follow': 'META', // the caller's own follow list; checks the metric or scorecard exists, returns no figure
   'numbers:get': 'DOOR+', // metric:series / metric:value / scorecard:compute handlers, as metric:table asks them
   'onboarding:set': 'META', // the caller's own fold and hide; returns no row or figure

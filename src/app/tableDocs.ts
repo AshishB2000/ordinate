@@ -4,8 +4,9 @@
 
 import { isValidId } from './ids';
 import { clip } from './clip';
-import { sanitizeHierarchies, type Hierarchy } from './hierarchies';
+import { sanitizeHierarchies, withIds, type Hierarchy, type HierarchyDraft } from './hierarchies';
 import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
+import { navHierarchies } from '../analysis/drillLevels';
 import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
 import type { FactTableDoc } from '../ai/columnNotes';
@@ -85,7 +86,7 @@ export async function getTableDoc(projectId: string, datasetId: string, strict =
 }
 
 /** What a person typed: the fields PRESENT are merged. Clipped by `sanitizeTableDoc`; never `keyCheck`, `updatedBy` or `updatedAt`. */
-export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown }
+export interface TablePatch { role?: unknown; key?: unknown; grain?: unknown; guide?: unknown; hierarchies?: HierarchyDraft[] }
 
 /**
  * Merge the fields present in `patch`. A changed `key` drops the old key's `keyCheck`. Stamps who and when, here.
@@ -103,7 +104,7 @@ export async function setTableDoc(projectId: string, datasetId: string, patch: T
       grain: p.grain !== undefined ? p.grain : cur.grain,
       guide: p.guide !== undefined ? p.guide : cur.guide,
       keyCheck: p.key === undefined || p.key === cur.key ? cur.keyCheck : undefined,
-      hierarchies: cur.hierarchies, // no channel writes them yet; a save of the notes must keep them
+      hierarchies: p.hierarchies ? withIds(p.hierarchies, cur.hierarchies ?? []) : cur.hierarchies, // absent = keep; [] removes
       updatedBy: osUser(),
       updatedAt: new Date().toISOString(),
     });
@@ -146,8 +147,11 @@ export async function readableTableDoc(projectId: string, datasetId: string): Pr
  */
 export async function tableFacts(projectId: string, datasetId: string): Promise<FactTableDoc | undefined> {
   const doc = await readableTableDoc(projectId, datasetId);
-  if (!doc.role && !doc.key && !doc.grain) return undefined; // the guide is the Assistant's guidance (ipc/guidance), not a table note
-  const key = doc.key && (await getDatasetMeta(projectId, datasetId))?.columns.some((c) => c.name === doc.key) ? doc.key : '';
+  if (!doc.role && !doc.key && !doc.grain && !doc.hierarchies) return undefined; // the guide is the Assistant's guidance (ipc/guidance), not a table note
+  const columns = (doc.key || doc.hierarchies) ? (await getDatasetMeta(projectId, datasetId))?.columns ?? [] : [];
+  const key = doc.key && columns.some((c) => c.name === doc.key) ? doc.key : '';
+  // Only the hierarchies whose every level is still a text column: a half-resolved one names nothing a spec could group by.
+  const hierarchies = navHierarchies(doc.hierarchies ?? [], columns).filter((h) => !h.missing).map(({ name, levels }) => ({ name, levels }));
   const out: FactTableDoc = {};
   if (doc.role) out.role = doc.role;
   if (key) {
@@ -156,5 +160,6 @@ export async function tableFacts(projectId: string, datasetId: string): Promise<
   }
   if (doc.grain) out.grain = doc.grain;
   else if (key) out.grain = `One row per ${(await getColumns(projectId, datasetId))[key]?.displayName || key}`;
+  if (hierarchies.length) out.hierarchies = hierarchies;
   return out;
 }
