@@ -544,6 +544,7 @@
   "modelFileMessages.upload_target_semantic_manifest_json": "Laden Sie stattdessen target/semantic_manifest.json hoch: Diese Datei enthält nur die semantische Schicht.",
   "modelFileMessages.your_access_to_this_project_is": "Ihr Zugriff auf dieses Projekt ist durch Zeilenzugriffsregeln eingeschränkt, daher können seine Definitionen weder exportiert noch importiert werden.",
   "ossieMessages.a_dataset_of_this_relationship_is": "Ein Datensatz dieser Beziehung fehlt.",
+  "ossieMessages.a_metric_on_a_dataset_with": null,
   "ossieMessages.ossie_does_not_say_which_date": "Ossie gibt nicht an, nach welchem Datum eine Kennzahl zählt; das Datumsfeld wird als Zeit markiert.",
   "ossieMessages.ossie_has_no_always_applied_filters": "Ossie kennt keine immer angewendeten Filter; sie bleiben in der ordinate-Erweiterung erhalten.",
   "ossieMessages.ossie_has_no_calendar_settings": "Ossie kennt keine Kalendereinstellungen.",

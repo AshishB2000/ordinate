@@ -544,6 +544,7 @@
   "modelFileMessages.upload_target_semantic_manifest_json": "Sube target/semantic_manifest.json en su lugar: solo contiene la capa semántica.",
   "modelFileMessages.your_access_to_this_project_is": "Tu acceso a este proyecto está limitado por reglas de acceso a filas, así que sus definiciones no se pueden exportar ni importar.",
   "ossieMessages.a_dataset_of_this_relationship_is": "Falta un conjunto de datos de esta relación.",
+  "ossieMessages.a_metric_on_a_dataset_with": null,
   "ossieMessages.ossie_does_not_say_which_date": "Ossie no indica por qué fecha cuenta una métrica; el campo de fecha se marca como tiempo.",
   "ossieMessages.ossie_has_no_always_applied_filters": "Ossie no tiene filtros siempre aplicados; se conservan en la extensión ordinate.",
   "ossieMessages.ossie_has_no_calendar_settings": "Ossie no tiene ajustes de calendario.",

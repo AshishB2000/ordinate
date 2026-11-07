@@ -544,6 +544,7 @@
   "modelFileMessages.upload_target_semantic_manifest_json": "Importez plutôt target/semantic_manifest.json : il ne contient que la couche sémantique.",
   "modelFileMessages.your_access_to_this_project_is": "Votre accès à ce projet est limité par des règles d’accès aux lignes : ses définitions ne peuvent donc être ni exportées ni importées.",
   "ossieMessages.a_dataset_of_this_relationship_is": "Un jeu de données de cette relation est manquant.",
+  "ossieMessages.a_metric_on_a_dataset_with": null,
   "ossieMessages.ossie_does_not_say_which_date": "Ossie n’indique pas selon quelle date une mesure compte ; le champ de date est marqué comme temps.",
   "ossieMessages.ossie_has_no_always_applied_filters": "Ossie n’a pas de filtres toujours appliqués ; ils sont conservés dans l’extension ordinate.",
   "ossieMessages.ossie_has_no_calendar_settings": "Ossie n’a pas de réglages de calendrier.",

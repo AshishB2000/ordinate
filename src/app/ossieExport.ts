@@ -68,10 +68,13 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     const taken = new Set(fields.map((f) => f.name));
     const dm: Json[] = [];
     for (const m of metrics.filter((x) => x.dataset === d.id).sort(byName)) {
-      const def = m.definition;
-      if (!isSimpleDefinition(def) || !AGG_SQL[def.aggregation]) { miss('metric', m.name, ossieWhy.metricFormula()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
-      if (def.snapshot) { miss('metric', m.name, ossieWhy.metricSnapshot()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
-      if (m.filters?.length) { miss('metric', m.name, ossieWhy.metricFilters()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
+      const def = isSimpleDefinition(m.definition) && AGG_SQL[m.definition.aggregation] ? m.definition : undefined;
+      const why = !def ? ossieWhy.metricFormula()
+        : def.snapshot ? ossieWhy.metricSnapshot()
+        : m.filters?.length ? ossieWhy.metricFilters()
+        : d.baseFilters?.length ? ossieWhy.metricBaseFilters() // `source` is the whole table: the figure would be another number
+        : undefined;
+      if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields
       while (taken.has(name)) name += ' (metric)';
       taken.add(name);

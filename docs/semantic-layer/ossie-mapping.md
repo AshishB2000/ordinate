@@ -26,6 +26,7 @@ Interchange until it entered the Apache Incubator). Licence: Apache 2.0.
 | Value labels, sensitivity | none | reported, labels kept in the extension |
 | Simple metric: sum, avg, count, min, max, distinct count | dataset-scoped `metrics[]`, `expression.sql` (`SUM(x)`, `COUNT(DISTINCT x)`) | mapped |
 | Metric filters | none | metric not mapped, reported (a metric without its filter would be another number) |
+| A metric on a Live dataset with base filters | none: `source` is the whole table | not mapped, reported (the same reason) |
 | Formula, period, funnel metric | none: "metrics cannot reference other metrics" | not mapped, reported |
 | Snapshot metric | none (no semi-additive measure) | not mapped, reported |
 | `timeColumn` | `dimension.is_time` on that field | the field only; which metric counts by it is reported |

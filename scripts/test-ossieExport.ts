@@ -98,6 +98,31 @@ void (async () => {
   const sent = await H.as(H.ORG_A, () => ossieBytes(F.P));
   ok('the file the route offers is the export, named for the project', sent.bytes.toString('utf8') === out.text && sent.name === 'Retail model-ossie.json', sent.name);
 
+  // ── 6. A metric is in the document only where its SQL over the source gives Ordinate's figure ──
+  // After every check above, which read the fixture as built. `Blanks`: a Live dataset over a warehouse table, no base filter.
+  const must = async (channel: string, payload: unknown) => {
+    const res = await post(channel, payload);
+    if (res.status !== 200 || res.value?.ok === false) throw new Error(`${channel}: ${res.body.slice(0, 300)}`);
+    return res.value;
+  };
+  const metric = async (datasetId: string, name: string, definition: unknown): Promise<string> => {
+    const v = await must('metric:save', { projectId: F.P, input: { datasetId, name, definition } });
+    return (v.metric?.id ?? v.id) as string;
+  };
+  const BCOLS = [{ name: 'tag', type: 'text' as const }, { name: 'n', type: 'number' as const }];
+  await H.as(H.ORG_A, () => H.fakeMod.loadWarehouseTable('blanks', BCOLS, [['EU', 1], ['', 2], ['  ', 2], [null, null], ['ME', 3], ['EU', 1]]));
+  const B = await H.as(H.ORG_A, () => liveRecord.saveLiveRecord(F.P, { name: 'Blanks', columns: BCOLS, origin: { kind: 'connection', connId: F.connId, table: 'blanks' } }));
+  if (!B) throw new Error('Blanks not saved');
+  const ids6 = new Map<string, string>();
+  ids6.set('Live revenue', await metric(F.live, 'Live revenue', { column: 'amount', aggregation: 'sum' }));
+  ids6.set('N total', await metric(B.id, 'N total', { column: 'n', aggregation: 'sum' }));
+  const six = await H.as(H.ORG_A, () => ossieExport(F.P));
+  const doc6 = JSON.parse(six.text);
+  const metricsOf = (n: string) => (doc6.datasets.find((d: { name: string }) => d.name === n)?.metrics ?? []) as { name: string; expression: { sql: string } }[];
+  const rep6 = (kind: string, name: string) => six.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
+  ok('a metric on a Live dataset with base filters is reported, never exported as the whole table\'s total', rep6('metric', 'Live revenue') && !metricsOf('live').length, JSON.stringify(metricsOf('live')));
+  ok('NEGATIVE CONTROL: a metric on a Live dataset without base filters maps', metricsOf('blanks').some((m) => m.name === 'N total' && m.expression.sql === 'SUM(n)'), JSON.stringify(metricsOf('blanks')));
+
   await close();
   finish();
 })();
