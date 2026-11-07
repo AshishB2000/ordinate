@@ -24,6 +24,10 @@
 //    database, user, table, SQL, saved queries, last failure text or dates. NEGATIVE CONTROL: the editor reads them all.
 //    A connection named after its database or host (what a blank name field saves) reads as the connector ("PostgreSQL") for a viewer
 //    in connections:list, dataset:source, lineage:get, pipelines:get and the ⌘K search (the index and the reference path).
+// 6. `sourceTable:*` (the store's four channels, semantic layer p2-03): each is `write`, so a viewer is refused 403 before a handler
+//    and its reply holds no table name. Every channel in the contract file has a viewer case here (a channel a later PR adds
+//    must add its payload). NEGATIVE CONTROL: the editor is answered. The store also runs here on Postgres rows: the doc's lock,
+//    then the index's inside it, one transaction.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -43,6 +47,7 @@ const { sourceView }: typeof import('../src/data/datasetOrigin') = require('../s
 const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('../src/data/sourceNames');
 const searchMod: typeof import('../src/ipc/search') = require('../src/ipc/search');
 const lineageMod: typeof import('../src/ipc/lineage') = require('../src/ipc/lineage');
+const sourceDocs: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
 
 const HOST = 'canary-host-9f3.internal';
 const DATABASE = 'canary_db_9f3';
@@ -248,6 +253,34 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     const ran = await W.call('ed', 'pipelines:run', { projectId: P, nodeId: feeds(pipeEditor, web).id });
     const stored = Object.keys((await W.as('boss', () => pipelineStore.load(P))).runs);
     ok('pipelines:run: the editor\'s run is stored under source:url:<url>, not a masked or viewer id', paused.body.ok === true && ran.body.ok === true && stored.includes('source:url:' + WEB_URL) && !stored.some((k) => k.includes('#')), `${ran.text} ${stored.join()}`);
+
+    // 6. Source table docs: the four channels are `write`, so a viewer is refused before a handler, and the refusal names nothing.
+    const created = await W.call('ed', 'sourceTable:save', { projectId: P, connId, table: TABLE, patch: { owner: 'Data platform', guide: `Filter on ${TABLE}` } });
+    const docId: string = created.body.docId;
+    ok('sourceTable:save: the editor creates a doc on Postgres rows', created.status === 200 && created.body.ok === true && created.body.created === true && /^[0-9a-f-]{36}$/.test(docId), created.text);
+    const PAYLOAD: Record<string, object> = {
+      'sourceTable:list': { projectId: P },
+      'sourceTable:get': { projectId: P, connId, docId },
+      'sourceTable:save': { projectId: P, connId, table: TABLE, patch: { guide: 'x' } },
+      'sourceTable:delete': { projectId: P, connId, docId },
+    };
+    const channels = Object.keys(require('../src/api/sourceTables').sourceTables);
+    ok('every source table channel has a viewer case here', channels.every((ch) => ch in PAYLOAD), channels.filter((ch) => !(ch in PAYLOAD)).join());
+    for (const ch of channels) {
+      const r = await W.call('nobody', ch, PAYLOAD[ch]);
+      ok(`${ch}: a viewer is refused 403, and the refusal names no table`, r.status === 403 && !CANARY.test(r.text), r.text);
+    }
+    ok('…and nothing was changed by the viewer\'s save or delete', (await W.as('boss', () => sourceDocs.listSourceIndex(P, connId))).map((e) => e.table).join() === TABLE);
+    const [edList, edGet] = [await W.call('ed', 'sourceTable:list', { projectId: P }), await W.call('ed', 'sourceTable:get', PAYLOAD['sourceTable:get'])];
+    ok('NEGATIVE CONTROL: the editor is answered, and reads the table name', edList.status === 200 && edGet.status === 200 && edGet.body.doc.table === TABLE && CANARY.test(edList.text) && edGet.body.datasets.some((d: { id: string }) => d.id === D), `${edList.text} ${edGet.text}`);
+    ok('sourceTable:list: the table a dataset is built from is a row, with its doc', ((r) => r?.docId === docId && r.datasetIds.includes(D))(edList.body.connections.find((c: { connId: string }) => c.connId === connId)?.rows.find((r: { table: string }) => r.table === TABLE)), edList.text);
+    // The store on Postgres: a stale save is a 409 and changes nothing; the current tag saves; the delete takes the entry with the doc.
+    const stale = await W.call('ed', 'sourceTable:save', { projectId: P, connId, docId, patch: { guide: 'lost' }, base: 'stale' });
+    ok('sourceTable:save: a stale base is a 409 on Postgres rows, and the doc is unchanged', stale.status === 409 && stale.body.code === 'record_changed' && (await W.call('ed', 'sourceTable:get', PAYLOAD['sourceTable:get'])).body.doc.guide === `Filter on ${TABLE}`, stale.text);
+    const next = await W.call('ed', 'sourceTable:save', { projectId: P, connId, docId, patch: { guide: 'second' }, base: edGet.body.tag });
+    ok('NEGATIVE CONTROL: the current tag saves, the index follows', next.status === 200 && next.body.tag !== edGet.body.tag && (await W.as('boss', () => sourceDocs.readSourceDoc(P, connId, docId)))?.rec.guide === 'second' && (await W.as('boss', () => sourceDocs.listSourceIndex(P, connId)))[0].hasGuide === true, next.text);
+    const gone = await W.call('ed', 'sourceTable:delete', PAYLOAD['sourceTable:delete']);
+    ok('sourceTable:delete: the doc and its entry go together', gone.body.ok === true && (await W.as('boss', () => sourceDocs.listSourceIndex(P, connId))).length === 0 && (await W.as('boss', () => sourceDocs.readSourceDoc(P, connId, docId))) === null, gone.text);
   } finally {
     await W.close();
   }

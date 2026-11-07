@@ -389,6 +389,7 @@ export const MAIN_FILES = [
   'src/analysis/externalMetricMessages.ts',
   'src/engine/semanticMessages.ts',
   'src/analysis/statusMessages.ts',
+  'src/app/sourceTableMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
