@@ -382,6 +382,28 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       ok(`gate: ${ch} answers east the question on dept, Object.is-equal to the editor's`, mine.status === 200 && !noFigure(mine, ch) && d === '', `${d} | ${show(mine)}`);
     }
 
+    // ── Key drivers: a drivers tile ranks every text column, named or not, so a caller its dataset hides one from is refused it ──
+    const GRADE_ROWS = Array.from({ length: 30 }, (_, i) => ['All', `${C.SSN_CANARY}_G${'ABC'[i % 3]}`, 100 + i * (i % 3 + 1), `2024-0${1 + (i % 2)}-1${i % 9}`]);
+    const grades = await W.as('boss', async () => (await datasets.saveDataset(P, { name: 'Grades', sourceKind: 'csv', rows: GRADE_ROWS,
+      columns: [{ name: 'region', type: 'text' }, { name: 'grade', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] }))!.id);
+    await W.plant(grades, [{ column: 'grade', visibleTo: [{ teamId: W.hrTeam }] }]);
+    const SUM_AMOUNT = { column: 'amount', aggregation: 'sum' };
+    const WHY = { category: 'region', values: [SUM_AMOUNT], drivers: { metric: SUM_AMOUNT, compare: { mode: 'bucket', column: 'day', label: '2024-02', prev: '2024-01', grain: 'month' }, path: [] } };
+    const WHY_V = idOf(must('drivers visual', await W.call('boss', 'visual:save', { projectId: P, datasetId: grades, name: 'Why', chartType: 'waterfall', encoding: WHY, overrides: { waterfallTotals: ['Start', 'End'] } })));
+    const whyAsks: Array<[string, unknown]> = [['visual:preview', { projectId: P, datasetId: grades, encoding: WHY }], ['visual:data', { projectId: P, datasetId: grades, encoding: WHY, visualId: WHY_V }]];
+    for (const [ch, input] of whyAsks) {
+      const r = await W.call('east', ch, input);
+      ok(`drivers: ${ch} refuses east a key-drivers tile on a dataset hiding a column from them`, H.refused(r, 'hidden') && !hasCanary(r.text), show(r));
+      for (const who of ['hr', 'ed']) {
+        const a = await W.call(who, ch, input);
+        ok(`NEGATIVE CONTROL: drivers: ${ch} answers ${who}, the column's members ranked`, a.body?.ok === true && a.text.includes(`${C.SSN_CANARY}_G`), show(a));
+      }
+    }
+    const whyBoard = (must('drivers board', await W.call('boss', 'analysis:create', { projectId: P, name: 'Drivers board', sheets: [{ name: 'One', cards: [
+      { id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId: WHY_V }] }] })).body);
+    const whyRun = await W.call('boss', 'publish:run', target(String(whyBoard?.id ?? whyBoard?.analysis?.id)));
+    ok('drivers: a publish of the drivers board refuses (its audience includes east)', H.refused(whyRun) && !hasCanary(whyRun.text), show(whyRun));
+
     // ── The next-level chip (part 6): an answer never offers a level hidden from the caller ──
     must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'ssn'] }] } }));
     const chipsOf = async (who: string): Promise<string[]> => ((await W.call(who, 'answer:card', { projectId: P, spec: spec('dept') })).body?.chips ?? []).map((c: { label: string }) => c.label);
