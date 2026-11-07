@@ -329,7 +329,7 @@ async function main(): Promise<void> {
       ['order_date', 'date', 'NO', '', 'PRI', 'shop'],
       ['region', 'varchar(32)', 'YES', 'Sales region, after tax', '', 'shop'],
     ]],
-    [/information_schema\.TABLES/i, [['Orders, one row per line', '1200', '8192', '2024-05-01 12:00:00']]],
+    [/information_schema\.TABLES/i, [['Orders, one row per line', '1200', '8192', '1714564800.000000']]],
     [/information_schema\.STATISTICS/i, [['orders_region', 'region', 1, 'BTREE'], ['PRIMARY', 'line_id', 0, 'BTREE'], ['PRIMARY', 'order_date', 0, 'BTREE']]],
     [/information_schema\.PARTITIONS/i, [['RANGE', 'to_days(`order_date`)']]],
   ]);
@@ -346,7 +346,8 @@ async function main(): Promise<void> {
     JSON.stringify(t.r));
   ok('mysql facts: columns, types, nullability and the key flag', JSON.stringify(f?.columns.map((c) => [c.name, c.type, c.nullable, c.key ?? false])) ===
     '[["line_id","bigint",false,true],["order_date","date",false,true],["region","varchar(32)",true,false]]');
-  ok('mysql facts: the estimate, size and modified time (the server\'s own clock, no zone)', JSON.stringify([f?.rowEstimate, f?.bytes, f?.lastModified]) === '[1200,8192,"2024-05-01T12:00:00"]');
+  ok('mysql facts: the estimate, size and modified time (asked as Unix seconds, so no zone is guessed)', JSON.stringify([f?.rowEstimate, f?.bytes, f?.lastModified]) === '[1200,8192,"2024-05-01T12:00:00.000Z"]'
+    && t.h.rec.some((x) => /UNIX_TIMESTAMP\(UPDATE_TIME\)/.test(x.sql)), JSON.stringify(f?.lastModified));
   ok('mysql facts: the name and the schema are bound, in that order, on every statement',
     t.h.rec.length === 4 && t.h.rec.every((x) => x.params[0] === 'orders' && x.params.slice(1).every((p) => p === 'shop')) && t.h.rec.every((x) => !x.sql.includes('orders')),
     JSON.stringify(t.h.rec.map((x) => x.params)));

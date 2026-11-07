@@ -8,7 +8,7 @@ import type { Connection } from '../connectors/connections';
 import { estimateLabel } from '../connectors/bigqueryShape';
 import type { ConnectorDef } from '../connectors/types';
 import * as datasets from '../data/datasets';
-import { sourceTablesOf } from '../data/sourceTableOf';
+import { docTablesOf, sourceTablesOf } from '../data/sourceTableOf';
 import { listSourceIndex, type SourceTableDoc } from './sourceTables';
 
 /** Also the rank: a gap earlier in the list is shown first. */
@@ -60,18 +60,19 @@ export function sourceTodoOf(conns: SourceConn[], now: number): { todo: SourceTo
 const byName = (a: { name: string; id: string }, b: { name: string; id: string }): number => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1);
 
 /**
- * connId → table → the datasets built from it, by name. Metadata only: the summaries, then each
+ * connId → table (as its doc names it: docTablesOf) → the datasets built from it, by name. Metadata only: the summaries, then each
  * one's origin (`getDatasetMeta` never hydrates). A Live view and a copy of it are two datasets on
  * one table; a query with no link is on none (D9).
  */
 export async function usedTables(projectId: string, conns: Connection[]): Promise<Map<string, Map<string, UsedDataset[]>>> {
   const byId = new Map(conns.map((c) => [c.id, c]));
   const out = new Map<string, Map<string, UsedDataset[]>>();
+  const documented = new Map(await Promise.all(conns.map(async (c) => [c.id, (await listSourceIndex(projectId, c.id)).map((e) => e.table)] as const)));
   const mine = (await datasets.listDatasets(projectId)).filter((d) => d.originConnId !== undefined && byId.has(d.originConnId));
   for (const d of mine.map((x) => ({ id: x.id, name: x.name, connId: x.originConnId as string })).sort(byName)) {
     const meta = await datasets.getDatasetMeta(projectId, d.id);
     const perTable = out.get(d.connId) ?? new Map<string, UsedDataset[]>();
-    for (const table of sourceTablesOf(meta?.origin, byId.get(d.connId))) perTable.set(table, [...(perTable.get(table) ?? []), { id: d.id, name: d.name }]);
+    for (const table of docTablesOf(sourceTablesOf(meta?.origin, byId.get(d.connId)), documented.get(d.connId) ?? [])) perTable.set(table, [...(perTable.get(table) ?? []), { id: d.id, name: d.name }]);
     out.set(d.connId, perTable);
   }
   return out;

@@ -36,6 +36,9 @@ interface FakeState {
   /** The 'name' cell of every emitted row, when set (a byte-budget check). */
   cell: string | null;
   lastConn: FakeConnection | null;
+  /** How long each request takes, and the timeout each one was given (Request.setTimeout), in order. */
+  delayMs: number;
+  timeouts: (number | undefined)[];
 }
 
 const state: FakeState = {
@@ -50,6 +53,8 @@ const state: FakeState = {
   emitted: 0,
   cell: null,
   lastConn: null,
+  delayMs: 0,
+  timeouts: [],
 };
 
 function resetState(): void {
@@ -64,11 +69,14 @@ function resetState(): void {
   state.emitted = 0;
   state.cell = null;
   state.lastConn = null;
+  state.delayMs = 0;
+  state.timeouts = [];
 }
 
 class FakeRequest extends EventEmitter {
   sqlTextOrProcedure: string;
   userCallback: (err: Error | null | undefined, rowCount?: number) => void;
+  timeout: number | undefined;
   constructor(sql: string, cb: (err: Error | null | undefined, rowCount?: number) => void) {
     super();
     this.sqlTextOrProcedure = sql;
@@ -76,6 +84,9 @@ class FakeRequest extends EventEmitter {
   }
   addParameter(name: string, _type: unknown, value?: unknown): void {
     state.lastParams.push({ name, value });
+  }
+  setTimeout(ms?: number): void {
+    this.timeout = ms;
   }
 }
 
@@ -104,7 +115,8 @@ class FakeConnection extends EventEmitter {
   }
   execSql(req: FakeRequest): void {
     state.lastSql = req.sqlTextOrProcedure;
-    setImmediate(() => {
+    state.timeouts.push(req.timeout);
+    (state.delayMs ? (f: () => void) => setTimeout(f, state.delayMs) : setImmediate)(() => {
       if (state.requestError) {
         req.userCallback(state.requestError);
         return;
@@ -506,6 +518,14 @@ async function main(): Promise<void> {
   ok('mssql facts, wired: the rows of the driver are the columns', wired.ok && wired.columns.length === 1, JSON.stringify(wired));
   ok('mssql facts, wired: positional params are @p0, @p1 (schema, name), never in the text', state.lastParams.length >= 2 && state.lastParams.every((p, i) => p.name === `p${i % 2}` && p.value === ['dbo', 'orders'][i % 2]) && !/orders/.test(state.lastSql), JSON.stringify(state.lastParams));
   ok('mssql facts, wired: the connection is closed', state.closed === true);
+  ok('NEGATIVE CONTROL: mssql facts, wired: inside the budget every statement is sent', state.timeouts.length === 4, JSON.stringify(state.timeouts));
+  // ONE budget for the whole read, as factsQuery: each statement gets what is left, and none starts after it.
+  resetState();
+  state.rowsToEmit = 1;
+  state.delayMs = 40;
+  const slow = await byId('azure-sql').tableFacts!(ctxFor({ timeoutMs: 100 }), 'dbo.orders');
+  const ts = state.timeouts;
+  ok('mssql facts, wired: one budget: each statement gets what is left, the last ones are not sent', slow.ok && ts.length >= 1 && ts.length < 4 && ts.every((t, i) => t !== undefined && t > 0 && t <= 100 && (i === 0 || t < ts[i - 1]!)), JSON.stringify(ts));
   resetState();
   state.connectError = new Error('Login failed (password sup3r-s3cret-pw)');
   const down = await byId('azure-sql').tableFacts!(ctxFor(), 'dbo.orders').catch((e: Error) => ({ ok: false as const, error: e.message }));

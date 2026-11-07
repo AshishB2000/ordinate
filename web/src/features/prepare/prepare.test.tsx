@@ -228,6 +228,23 @@ describe('Prepare', () => {
       expect(removes(calls)).toHaveLength(0);
     });
 
+    it('after a remove, the next Remove judges by a fresh lineage:fields (the indexes moved)', async () => {
+      let after = false; // lineage as the server holds it: Margin is step 2, then step 1 once the filter is gone
+      const lineage = async () => fields([{ index: after ? 0 : 1, produces: ['Margin'], usedIn: { metric: 1 } }]);
+      const gone = { ...REMOVED, dataset: { ...REMOVED.dataset, steps: [MARGIN] }, preview: { ...REMOVED.preview, stepCounts: [{ before: 5, after: 5 }] } };
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], lineage, { 'dataset:removeStep': () => ((after = true), { body: gone }) }));
+      renderApp(URL_);
+      const first = await screen.findByRole('button', { name: 'Remove step 1' });
+      await settled(calls);
+      fireEvent.click(first);
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove step 2' })).toBeNull());
+      await settled(calls);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove step 1' }));
+      expect(await screen.findByText(/It feeds 1 metric\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(1);
+    });
+
     it('a rename step that feeds something asks too', async () => {
       const calls = serve(withSteps([{ type: 'rename_column', from: 'amt', to: 'amount' }], fields([{ index: 0, produces: ['amount'], usedIn: { dashboard: 2 } }])));
       renderApp(URL_);

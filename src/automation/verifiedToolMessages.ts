@@ -11,3 +11,8 @@ export function noVerifiedQuestion(question: string): string {
 export function useAnswerVerified(): string {
   return t('verifiedToolMessages.use_answer_verified_question_for_its');
 }
+
+/** A Share policy that drops a column the question reads (MCP is an export). */
+export function verifiedSensitive(): string {
+  return t('verifiedToolMessages.hidden_by_the_share_policy_a');
+}

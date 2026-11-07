@@ -6,6 +6,7 @@ import { rpc } from '../../../api/client';
 import { okOr, type Fail } from '../../data/api';
 import type { Lineage } from '../../data/api';
 import { LIST } from './api';
+import { SUGGESTIONS } from './suggestApi';
 
 export const LINEAGE = 'sourceTable:lineage';
 export const FOR_DATASET = 'sourceTable:forDataset';
@@ -65,6 +66,6 @@ export function useSetSourceTables(projectId: string, datasetId: string) {
       if (!r.ok) throw new Error(r.error || 'The tables could not be linked.');
       return r.tables;
     },
-    onSuccess: () => Promise.all([FOR_DATASET, LIST, LINEAGE].map((k) => client.invalidateQueries({ queryKey: [k] }))),
+    onSuccess: () => Promise.all([FOR_DATASET, LIST, LINEAGE, SUGGESTIONS].map((k) => client.invalidateQueries({ queryKey: [k] }))),
   });
 }

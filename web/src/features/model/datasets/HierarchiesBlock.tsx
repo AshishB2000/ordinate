@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { DatasetColumns } from '../../../api/datasets';
 import { Badge } from '../../../ui/Badge';
 import { Button, IconButton } from '../../../ui/Button';
+import { ConfirmDelete } from '../../../ui/ConfirmDelete';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { useWrite } from '../../data/api';
@@ -21,9 +22,11 @@ export function HierarchiesBlock({ projectId, dataset }: { projectId: string; da
   const canEdit = useCanEdit(projectId);
   const nav = useNavigation(projectId);
   const [dialog, setDialog] = useState<{ existing?: NavHierarchy } | null>(null);
+  const [removing, setRemoving] = useState<NavHierarchy | null>(null);
   const write = useWrite('catalog:setTable', ['catalog:getTable', 'model:overview', 'model:navigation']);
   const all = navFor(nav.data, dataset.id);
-  const remove = (h: NavHierarchy) => write.mutate({ projectId, datasetId: dataset.id, patch: { hierarchies: all.filter((x) => x.id !== h.id).map(({ id, name, levels }) => ({ id, name, levels })) } });
+  const remove = (h: NavHierarchy) =>
+    write.mutate({ projectId, datasetId: dataset.id, patch: { hierarchies: all.filter((x) => x.id !== h.id).map(({ id, name, levels }) => ({ id, name, levels })) } }, { onSettled: () => setRemoving(null) });
   const add = (
     <Button size="sm" variant="secondary" icon="plus" onClick={() => setDialog({})}>
       Hierarchy
@@ -55,7 +58,7 @@ export function HierarchiesBlock({ projectId, dataset }: { projectId: string; da
               {canEdit && (
                 <span className={m.hMoves}>
                   <IconButton icon="pencil" size="sm" label={`Edit ${h.name}`} onClick={() => setDialog({ existing: h })} />
-                  <IconButton icon="trash" size="sm" label={`Remove ${h.name}`} disabled={write.isPending} onClick={() => remove(h)} />
+                  <IconButton icon="trash" size="sm" label={`Remove ${h.name}`} disabled={write.isPending} onClick={() => setRemoving(h)} />
                 </span>
               )}
             </li>
@@ -63,6 +66,16 @@ export function HierarchiesBlock({ projectId, dataset }: { projectId: string; da
         </ul>
       )}
       {ladder.length > 0 && <p className={m.hLadder}>{`Dates drill by themselves: ${ladder.map((g) => grainWord(g, ladder)).join(' › ')}`}</p>}
+      {removing && (
+        <ConfirmDelete
+          title={`Remove ${removing.name}?`}
+          description={`Charts stop drilling from ${removing.levels.join(' › ')}, for everyone in this project.`}
+          confirm="Remove"
+          busy={write.isPending}
+          onConfirm={() => remove(removing)}
+          onClose={() => setRemoving(null)}
+        />
+      )}
       {dialog && <HierarchyDialog projectId={projectId} dataset={dataset} all={all} existing={dialog.existing} onClose={() => setDialog(null)} />}
     </section>
   );

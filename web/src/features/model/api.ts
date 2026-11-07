@@ -156,6 +156,7 @@ const OSSIE_KINDS: Record<string, (n: number) => string> = {
   sensitivity: (n) => `Sensitivity on ${plural(n, 'field', 'fields')}`,
   relationship: (n) => plural(n, 'relationship', 'relationships'),
   cardinality: (n) => `One-to-one on ${plural(n, 'relationship', 'relationships')}`,
+  calculated: (n) => plural(n, 'calculated field', 'calculated fields'),
   calendar: () => 'Calendar settings',
 };
 

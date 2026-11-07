@@ -19,11 +19,27 @@ export function ossieWhy_role(): string {
 }
 
 export function ossieWhy_sensitivity(): string {
-  return (t('ossieMessages.sensitivity_marks_are_never_exported'));
+  return t('ossieMessages.a_field_marked_personal_or_financial');
 }
 
 export function ossieWhy_metricFilters(): string {
   return (t('ossieMessages.ossie_metrics_have_no_filters_and'));
+}
+
+export function ossieWhy_metricBaseFilters(): string {
+  return t('ossieMessages.a_metric_on_a_dataset_with');
+}
+
+export function ossieWhy_metricCountText(): string {
+  return t('ossieMessages.ordinate_counts_only_text_that_is');
+}
+
+export function ossieWhy_metricCountdDate(): string {
+  return t('ossieMessages.ordinate_counts_the_distinct_days_of');
+}
+
+export function ossieWhy_metricNotNumber(): string {
+  return t('ossieMessages.ordinate_totals_averages_and_takes_a');
 }
 
 export function ossieWhy_metricFormula(): string {
@@ -40,6 +56,10 @@ export function ossieWhy_metricDate(): string {
 
 export function ossieWhy_metricSettings(): string {
   return (t('ossieMessages.ossie_has_no_number_format_direction'));
+}
+
+export function ossieWhy_calculated(): string {
+  return t('ossieMessages.ossie_fields_are_the_source_table');
 }
 
 export function ossieWhy_cardinality(): string {
@@ -61,10 +81,15 @@ export const ossieWhy = {
   role: ossieWhy_role,
   sensitivity: ossieWhy_sensitivity,
   metricFilters: ossieWhy_metricFilters,
+  metricBaseFilters: ossieWhy_metricBaseFilters,
+  metricCountText: ossieWhy_metricCountText,
+  metricCountdDate: ossieWhy_metricCountdDate,
+  metricNotNumber: ossieWhy_metricNotNumber,
   metricFormula: ossieWhy_metricFormula,
   metricSnapshot: ossieWhy_metricSnapshot,
   metricDate: ossieWhy_metricDate,
   metricSettings: ossieWhy_metricSettings,
+  calculated: ossieWhy_calculated,
   cardinality: ossieWhy_cardinality,
   relationship: ossieWhy_relationship,
   calendar: ossieWhy_calendar,
