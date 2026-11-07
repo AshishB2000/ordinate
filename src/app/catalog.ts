@@ -289,6 +289,18 @@ function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promise<T> 
 /** The same locked read-modify-write for the other stores that keep their docs in catalog.json (./tableDocs). */
 export { mutate as mutateCatalog };
 
+/** The `status` section under the catalog's lock (../analysis/statusStore). `fn` is sync; when it throws, nothing is written. */
+export function updateStatus<T>(projectId: string, fn: (status: Record<string, StatusDoc>) => T): Promise<T> {
+  if (!isValidId(projectId)) return Promise.reject(new Error('Invalid project id'));
+  return mutate(projectId, (file) => {
+    const status = file.status ?? dict<StatusDoc>();
+    const result = fn(status);
+    if (Object.keys(status).length > 0) file.status = status;
+    else delete file.status; // present only when non-empty: a project that clears every status writes today's file
+    return result;
+  });
+}
+
 /** Who is editing, for `updatedBy`: the signed-in user on the server, else the OS account (which throws on some locked-down accounts). */
 export function osUser(): string {
   if (serverDataDir()) return ctx().user.email.slice(0, MAX_OWNER);

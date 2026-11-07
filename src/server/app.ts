@@ -573,6 +573,7 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs', '../ipc/terms', '../ipc/modelOverview']) {
     (require(mod) as { register: () => void }).register();
   }
+  (require('../ipc/governance') as typeof import('../ipc/governance')).register(); // …and status: review, certify, retire (part 4)
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
   registerCaller(() => dbPool); // row access rules: who is a project viewer
   (require('../ipc/rowPolicy') as typeof import('../ipc/rowPolicy')).register(() => dbPool); // …and the admin's Row access tab

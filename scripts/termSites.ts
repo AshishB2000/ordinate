@@ -127,6 +127,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
+  // a status pin (part 4) reads a plain filter's column; a term step is a dep, hashed by its own pin
+  'src/analysis/statusPin.ts': { count: 1, how: 'ignores' },
   // names a term by its name and any other kept step by its kind, in a version's facts (05b)
   'web/src/features/projects/VersionPreview.tsx': { count: 2, how: 'ignores' },
 };
