@@ -39,6 +39,7 @@ import { LiveTabs } from './LiveDataset';
 import { CacheAgePicker, LiveSwitch, RefreshNow } from './LiveSettings';
 import { RefreshUrlDialog } from './RefreshUrl';
 import { RowAccessTab } from './RowAccessTab';
+import { ColumnAccessSection } from './ColumnAccessSection';
 import { RowAccessOff, ScopedChip } from './RowAccessOff';
 import { useCan } from '../projects/api';
 
@@ -84,7 +85,7 @@ function LineageLine({ projectId, id, list }: { projectId: string; id: string; l
   );
 }
 
-function Header({ projectId, id, name, rowCount, columnCount, live, scoped = false }: { projectId: string; id: string; name: string; rowCount: number; columnCount: number; live: boolean; scoped?: boolean }) {
+function Header({ projectId, id, name, rowCount, columnCount, live, scoped = null }: { projectId: string; id: string; name: string; rowCount: number; columnCount: number; live: boolean; scoped?: 'rows' | 'columns' | null }) {
   const navigate = useNavigate();
   const list = useDatasets(projectId);
   const source = useSource(projectId, id);
@@ -112,7 +113,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
               </span>
             )}
             {live && <LiveBadge maxCacheAgeSec={source.data?.maxCacheAgeSec} />}
-            {scoped && <ScopedChip />}
+            {scoped && <ScopedChip columns={scoped === 'columns'} />}
             <TagChips tags={tagsOf(tags.data, `dataset:${id}`)} max={4} />
           </>
         }
@@ -261,7 +262,8 @@ export default function DatasetPage() {
     );
   }
   const header = q.data;
-  const scoped = header.scoped === true;
+  // Closed to whole-table readers for this caller: by row rules, or by a column hidden from them (part 4).
+  const scoped = header.scoped === true ? (header.columns.some((c) => c.hidden) ? 'columns' : 'rows') : null;
   const failing = list.data?.find((x) => x.id === datasetId)?.qualityFailing;
   // A Live dataset keeps no rows here: its Data tab says so, and the tabs that read rows are off (L2.1).
   const live = header.mode === 'live';
@@ -298,10 +300,10 @@ export default function DatasetPage() {
           <Tab value="snapshots" icon="history">
             Snapshots
           </Tab>
-          {/* Row access rules (docs/row-policy): a project admin's — hidden, never disabled, for everyone else. */}
+          {/* Row and column access rules (docs/row-policy, part 4): a project admin's — hidden, never disabled, for everyone else. */}
           {admin && (
             <Tab value="access" icon="lock">
-              Row access
+              Access
             </Tab>
           )}
         </TabList>
@@ -309,7 +311,7 @@ export default function DatasetPage() {
           <DataTab projectId={projectId} datasetId={datasetId} header={header} />
         </TabPanel>
         <TabPanel value="quality">
-          {scoped ? <RowAccessOff what="Quality checks" /> : <QualityTab projectId={projectId} datasetId={datasetId} header={header} />}
+          {scoped ? <RowAccessOff what="Quality checks" columns={scoped === 'columns'} /> : <QualityTab projectId={projectId} datasetId={datasetId} header={header} />}
         </TabPanel>
         <TabPanel value="columns">
           <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} />
@@ -318,14 +320,15 @@ export default function DatasetPage() {
           <AboutTab projectId={projectId} datasetId={datasetId} header={header} />
         </TabPanel>
         <TabPanel value="insights">
-          {scoped ? <RowAccessOff what="Insights" /> : <InsightsTab projectId={projectId} datasetId={datasetId} />}
+          {scoped ? <RowAccessOff what="Insights" columns={scoped === 'columns'} /> : <InsightsTab projectId={projectId} datasetId={datasetId} />}
         </TabPanel>
         <TabPanel value="snapshots">
-          {scoped ? <RowAccessOff what="Snapshot comparisons" /> : <SnapshotsTab projectId={projectId} datasetId={datasetId} />}
+          {scoped ? <RowAccessOff what="Snapshot comparisons" columns={scoped === 'columns'} /> : <SnapshotsTab projectId={projectId} datasetId={datasetId} />}
         </TabPanel>
         {admin && (
           <TabPanel value="access">
             <RowAccessTab projectId={projectId} datasetId={datasetId} header={header} />
+            <ColumnAccessSection projectId={projectId} datasetId={datasetId} header={header} />
           </TabPanel>
         )}
       </Tabs>

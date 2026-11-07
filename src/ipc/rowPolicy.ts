@@ -18,7 +18,7 @@ import * as recordFs from '../app/recordFs';
 import { isValidId } from '../app/ids';
 import { datasetFilePath, serialized } from '../data/datasetRecord';
 import { sanitizeSteps } from '../data/transforms';
-import { parseRules, policyFromRecord, ruleState, textColumn, writersHash, type RowPolicy, type RuleState } from '../data/rowPolicy';
+import { parseRules, policyFromRecord, ruleState, textColumn, writersHash, type RuleState } from '../data/rowPolicy';
 import { parentsOfRecord, upstreamIds } from '../data/upstream';
 import { rulesChanged } from '../data/rowAccess';
 import * as msg from '../data/rowAccessMessages';
@@ -26,7 +26,7 @@ import * as msg from '../data/rowAccessMessages';
 // ponytail: one pool per process, like authz/share.ts — set by register().
 let poolOf: () => Pool | null = () => null;
 
-async function readRaw(projectId: string, id: string): Promise<Record<string, unknown> | null> {
+export async function readRaw(projectId: string, id: string): Promise<Record<string, unknown> | null> {
   try {
     const raw: unknown = JSON.parse(await recordFs.readFile(datasetFilePath(projectId, id), 'utf8'));
     return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
@@ -36,7 +36,7 @@ async function readRaw(projectId: string, id: string): Promise<Record<string, un
 }
 
 /** The datasets of the project built from `id`, at any depth (D14): closed to viewers until they have rules of their own. */
-async function builtFrom(projectId: string, id: string): Promise<{ id: string; name: string }[]> {
+export async function builtFrom(projectId: string, id: string): Promise<{ id: string; name: string }[]> {
   const out: { id: string; name: string }[] = [];
   const parents = async (p: string): Promise<string[]> => (isValidId(p) ? parentsOfRecord(await readRaw(projectId, p)) : []);
   for (const d of await datasets.listDatasets(projectId)) {
@@ -46,8 +46,8 @@ async function builtFrom(projectId: string, id: string): Promise<{ id: string; n
   return out;
 }
 
-/** Every user and team a rule names must be one of this org's. */
-async function membersExist(pool: Pool, rules: RowPolicy['rules']): Promise<boolean> {
+/** Every user and team a rule names must be one of this org's (the column setter, ./columnAccess, asks it too). */
+export async function membersExist(pool: Pool, rules: ReadonlyArray<{ userId?: string; teamId?: string }>): Promise<boolean> {
   const org = ctx().org.id;
   const users = [...new Set(rules.map((r) => r.userId).filter((x): x is string => !!x))];
   const teams = [...new Set(rules.map((r) => r.teamId).filter((x): x is string => !!x))];

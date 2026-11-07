@@ -31,6 +31,12 @@
   gap: var(--sp-8);
   flex-wrap: wrap;
 }
+/* "2 columns hidden": what a column rule hides from this viewer (the title names them). */
+.hiddenNote {
+  font-size: var(--t-12);
+  color: var(--muted);
+  cursor: help;
+}
 .count {
   margin-left: auto;
   font-size: var(--t-12);

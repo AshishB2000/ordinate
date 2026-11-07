@@ -398,6 +398,7 @@ export const MAIN_FILES = [
   'src/ipc/drillMessages.ts',
   'src/analysis/topicMessages.ts',
   'src/analysis/fanOutMessages.ts',
+  'src/data/columnAccessMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

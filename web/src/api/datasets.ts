@@ -55,7 +55,8 @@ export interface DatasetColumns {
   id: string;
   name: string;
   rowCount: number;
-  columns: { name: string; type: 'text' | 'number' | 'date' }[];
+  /** `hidden`: a column rule hides its values from the caller (semantic layer part 4); its cells come back null. */
+  columns: { name: string; type: 'text' | 'number' | 'date'; hidden?: true }[];
   /** A Live dataset keeps no rows here (L2.1). */
   mode?: 'live';
   /** Row access rules limit what the caller sees here (docs/row-policy): nothing else about them is sent. */
@@ -74,7 +75,8 @@ export function useDatasetColumns(projectId: string | undefined, id: string | un
 }
 
 type Cell = string | number | null;
-type PageReply = { ok: true; rows: Cell[][]; total: number; offset: number } | { ok: false; error: string };
+/** `hidden`: the columns whose cells are null, in place, for this caller (part 4). */
+type PageReply = { ok: true; rows: Cell[][]; total: number; offset: number; hidden?: string[] } | { ok: false; error: string };
 
 /** The search / sort a grid's rows are read with — run by the server, never here. */
 export interface PageQuery {

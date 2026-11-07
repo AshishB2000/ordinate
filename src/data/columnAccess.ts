@@ -207,6 +207,25 @@ export function buildColumnAccess(raw: Record<string, unknown>, rules: Array<{ c
   return { columns, readersHash: pipelineHash(res.readers), updatedBy: by, updatedAt: at };
 }
 
+/**
+ * An admin's rule on a column computed from another ruled one that names someone its sources do not: a carrier
+ * typed WIDER would hand out what the source hides (D14). The first such rule and its source, or null. Narrower
+ * is kept as typed: hiding more is safe.
+ */
+export function widerCarrier(raw: Record<string, unknown>, rules: ReadonlyArray<{ column: string; visibleTo: Member[] }>): { column: string; from: string } | null {
+  const { steps, source, final } = shapeOf(raw);
+  if (!steps.length) return null;
+  const key = (m: Member): string => ('userId' in m ? `u:${m.userId}` : `t:${m.teamId}`);
+  const ruled = new Map(rules.map((r) => [r.column, r.visibleTo]));
+  for (const r of rules) {
+    const from = carriersOf(steps, source, final, rules.filter((x) => x.column !== r.column).map((x) => x.column)).roots.get(r.column);
+    if (!from) continue;
+    const allowed = new Set(intersect(from.map((f) => ruled.get(f) ?? [])).map(key));
+    if (r.visibleTo.some((m) => !allowed.has(key(m)))) return { column: r.column, from: from[0] };
+  }
+  return null;
+}
+
 /** Do the rules hold on the record as it is now? `gone`: a rule column it no longer has; `pipeline`: a reader changed, an unknown step, or a carrier no rule names. */
 export type AccessState = 'ok' | 'pipeline' | 'gone';
 

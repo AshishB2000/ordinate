@@ -17,7 +17,7 @@ alerts — is **off** for a dataset with rules (see below).
 
 | Need | Why | Without it |
 |---|---|---|
-| `DATABASE_URL` | Rules name users and teams, which live in Postgres, and who is a viewer comes from the project's grants. | There is no user directory: the Row access tab says so and no rule can be set. (A server without Postgres has only the dev sign-in, where everyone is an admin.) |
+| `DATABASE_URL` | Rules name users and teams, which live in Postgres, and who is a viewer comes from the project's grants. | There is no user directory: the Access tab says so and no rule can be set. (A server without Postgres has only the dev sign-in, where everyone is an admin.) |
 
 Nothing else: no new environment variable, no migration, no new port. Rules are stored in the
 dataset's own record, so a backup or a project bundle carries them.
@@ -35,7 +35,8 @@ role or team change takes effect on the person's next request.
 
 ## Set rules (project admins)
 
-1. Open the dataset → **Row access**. Only project admins see this tab.
+1. Open the dataset → **Access**. Only project admins see this tab. Row rules come first on it;
+   [Hide a column](#hide-a-column) is below them.
 2. Pick the **column** the rules are about — a text column such as `region`, `customer_id` or
    `cost_center`.
 3. **Add a rule** per user or team: pick the member, then the values they may see. You can type a
@@ -61,6 +62,71 @@ The rules stop holding, and every viewer is **refused** rather than shown more, 
   dataset — phase 1 cannot filter rows that were mixed before they were stored;
 - an editor changed a step that writes the rule column (for example a find-and-replace on it) after
   the rules were saved. The tab says so: **save the rules again** after checking the step.
+
+## Hide a column
+
+A project admin can also hide a **column**: its values, and every figure computed from it, from
+everyone the rule does not name. Use it for a `salary` or `ssn` column that most people who read
+the dataset should not see, where row rules would hide whole rows instead.
+
+**Who is restricted** is the same as for rows: project viewers. Org admins, project admins and
+project editors see every column. A rule is an **allow-list**: the users and teams it names see the
+column; every other viewer does not, including someone added to the project later. A rule that
+names no one hides the column from every viewer.
+
+**Set it:** open the dataset → **Access** → *Who sees each column* → **Hide a column…**, pick the
+column and who can see it, and **Save**. The Access tab suggests the columns marked personal or
+financial on the Columns tab ("ssn is marked sensitive. Hide it from viewers?"); one click hides
+such a column from every viewer, and **Edit** then names who sees it. **Stop hiding** asks first.
+Each save is audited (Admin → Audit log, channel `dataset:setColumnAccess`). The rules are not
+versioned: the audit log is their history.
+
+**What hiding protects:** the column's values and every figure computed from it, never its
+**name**. Names already sit in chart definitions, notes, version diffs and comments; rename a column
+in Prepare if its name is itself sensitive.
+
+**Columns computed from it are hidden too.** When the rules are saved, the server finds every
+column a Prepare step computes from a hidden one (a formula such as `bonus_pct = [salary] / 1000`, a
+rename, a split, a pivot) and hides it from the same people. The tab lists such a column read-only:
+`bonus_pct · Only: HR (hidden too: computed from salary)`. A rule an admin types on such a column
+may name fewer people than its source, never more: the save says so.
+
+**When the rules stop holding**, the dataset is closed to every viewer it hides a column from
+(they see "Some columns of this dataset are limited to certain people…") until an admin acts:
+
+- **A Prepare step that reads a hidden column changed**, or a new one computes a column from it.
+  The tab says so: check the step, then **Save again** (the new columns are hidden with it).
+- **A hidden column is gone** (renamed or removed, or a Live warehouse dropped it). A source rename
+  may have moved the data to a new name, so the tab names the column: stop hiding it, or hide the
+  column under its new name.
+
+**What a viewer it hides a column from sees:**
+
+- A chart, KPI, metric, Explore question or Assistant answer that uses the column (or one computed
+  from it) says "This uses a column a project admin has limited to certain people, so it can't be
+  shown here." Everything else draws as before, with figures equal to an editor's.
+- The data grid leaves the hidden columns out and says "3 columns hidden" (the names on hover); a
+  search of the grid is off for them. The rows behind a chart mark, and their CSV, leave them out.
+  The Columns tab lists each with a lock and no example or value labels.
+- The Assistant and MCP agents never get the column, its values, its notes or a figure computed
+  from it, nor the metrics and glossary terms that read it; a tile on such a metric says why.
+- What reads the whole table — SQL, statistics, key drivers, insights, quality results, snapshot
+  comparisons, exports — is off for them on that dataset, and on every dataset built from it (the
+  Access tab lists those).
+
+**Published links, embeds, subscriptions and alerts** refuse only when they **read** a hidden
+column: a dashboard of headcount by department over the same dataset still publishes and sends.
+A page published **before** column rules were set on a dataset it reads stops being served until it
+is published again; a cached embed is checked again on every view.
+
+**A ceiling:** a column that a hidden one was computed **from** is not hidden. If `salary` is
+`base + bonus`, hide `base` and `bonus` too.
+
+**Upgrading:** column rules need every pod on the release that applies them. A pod of the release
+before it keeps the rules and closes the dataset to viewers (see
+[the upgrade note](upgrade.md#certification-and-hidden-columns-a-newer-release-writes-are-kept-p4-01a));
+an older pod would show every column and drop the rules. Once rules exist, **never `helm rollback`
+below that release**.
 
 ## What a restricted viewer sees and does not see
 
@@ -90,7 +156,7 @@ dataset, or one whose prepare steps append or look up the protected dataset, how
 removed — is **closed** to restricted viewers ("This dataset is built from a dataset with row access
 rules…") and to published links, embeds, subscriptions and alerts, until a project admin gives it
 rules of its own. A **copy** of a dataset with rules ("Make a copy" of a Live dataset, a duplicate)
-starts with the same rules. The Row access tab lists the datasets built from the one you are on.
+starts with the same rules. The Access tab lists the datasets built from the one you are on.
 
 ## Off for a dataset with rules (phase 1)
 
@@ -120,7 +186,8 @@ gone, viewers are refused until an admin picks another.
 | Symptom | Cause |
 |---|---|
 | A viewer sees "You don't have access to any rows of this dataset." | No rule names them or one of their teams. Add one, or add them to a team that has one. |
-| Every viewer is refused with "…name a column it no longer has…" | The rule column was renamed, removed or retyped. Pick the column again in Row access. |
+| Every viewer is refused with "…name a column it no longer has…" | The rule column was renamed, removed or retyped. Pick the column again in Access. |
+| A viewer is refused with "…limited to certain people, and this can't keep to that…" | A column is hidden from them and the feature reads the whole table (SQL, statistics, an export), or the column rules stopped holding: Access says why (**Save again**, or a column that is gone). |
 | Every viewer is refused with "…values computed across all of its rows…" | A prepare step stores a cross-row value or reads a parameter (see *Set rules*). |
 | Every viewer is refused with "…built from a dataset with row access rules…" | The dataset is derived from one with rules. Give it rules of its own (and, for a SQL or composed dataset, expect phase 1 to refuse viewers anyway). |
 | A viewer still sees a total for all regions somewhere | Check it is the total row count (always visible) or text someone typed. Anything else is a bug: report it. |

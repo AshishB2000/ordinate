@@ -137,6 +137,22 @@ All notable changes to Ordinate are documented here. Format based on
   warehouse's column comments, table comment and primary key as suggestions in Data model → Fields. Nothing
   changes until an editor clicks Use.
 
+### Certified metrics and hidden columns
+
+- **Certified and retired.** A project admin can certify a metric, a glossary term or a dataset after
+  reviewing it, or retire it and name what replaces it. Lists, the Assistant and MCP agents carry the status:
+  certified items come first, a retired one only when asked for by name, and an answer card on a retired
+  metric says what replaces it. Editing a certified metric marks it "changed since certified" until an admin
+  reviews it again. Each step is a version event, audited.
+- **Hide a column.** On a dataset's **Access** tab (the Row access tab, renamed), a project admin chooses who
+  sees each column: everyone, or only named users and teams. A viewer it hides a column from gets no value from
+  it and no figure computed from it: a chart that uses it says why, the grid leaves it out ("2 columns hidden"),
+  the Columns tab shows a lock, and the Assistant and MCP never see it. Columns a Prepare step computes from a
+  hidden one are hidden with it. Published links, embeds, subscriptions and alerts refuse only when they read a
+  hidden column; a page published before the rules stops until it is published again. Needs Postgres, and every
+  pod on this release: never roll back below the release that keeps the rules (`p4-01a`). See
+  `docs/server/row-level-security.md` ("Hide a column").
+
 ### Snapshot metrics
 
 - **A metric can be a snapshot** (Metrics → the metric → "Snapshot"): a balance, stock count or headcount is

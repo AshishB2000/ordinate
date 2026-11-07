@@ -142,8 +142,10 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
     }, { replace: true });
 
   const all = header.columns;
+  // Columns a column rule hides from this caller (the server marks them; their cells are null): never drawn, never offered.
+  const secret = all.filter((c) => c.hidden).map((c) => c.name);
   const grid: GridColumn[] = useMemo(
-    () => all.flatMap((c, at) => (hidden.has(c.name) ? [] : [{ name: c.name, type: c.type, at }])),
+    () => all.flatMap((c, at) => (hidden.has(c.name) || c.hidden ? [] : [{ name: c.name, type: c.type, at }])),
     [all, hidden],
   );
   // A new function is a new query: memoized on everything the server is asked.
@@ -206,7 +208,8 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
           size="sm"
           className={g.rowSearch}
           aria-label="Search rows"
-          placeholder="Search rows…"
+          placeholder={secret.length ? 'Search off: columns hidden' : 'Search rows…'}
+          disabled={secret.length > 0 /* the server refuses it: a search reads every cell */}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -219,7 +222,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
           }
         >
           <div className={g.colsMenu}>
-            {all.map((c) => (
+            {all.filter((c) => !c.hidden).map((c) => (
               <Checkbox
                 key={c.name}
                 label={c.name}
@@ -241,6 +244,12 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
             )}
           </div>
         </Popover>
+        {secret.length > 0 && (
+          <span className={g.hiddenNote} title={`Hidden from you: ${secret.join(', ')}`}>
+            <Icon name="lock" size={12} />
+            {secret.length === 1 ? '1 column hidden' : `${secret.length} columns hidden`}
+          </span>
+        )}
         {sort && (
           <Button size="sm" variant="ghost" icon="x" onClick={() => setSort(null)}>
             Sorted by {sort.column} {sort.dir === 'asc' ? '↑' : '↓'}
@@ -272,7 +281,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
             emptyBody={search || banner ? 'Nothing in this dataset matches. Clear the search or the filter to see every row.' : 'This dataset has no rows yet.'}
           />
         </div>
-        {profile && all.some((c) => c.name === profile) && (
+        {profile && all.some((c) => c.name === profile && !c.hidden) && (
           <ProfilePanel
             projectId={projectId}
             datasetId={datasetId}

@@ -114,7 +114,7 @@ export function Explorer({
                 Live
               </span>
             )}
-            {dataset.scoped && <ScopedChip />}
+            {dataset.scoped && <ScopedChip columns={!!fields.data?.hidden.length} />}
           </>
         }
         sub={

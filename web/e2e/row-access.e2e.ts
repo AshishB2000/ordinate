@@ -8,8 +8,14 @@
 //     table), the Region dropdown offers East and nothing else, and the dataset
 //     page and Explore say "Rows limited to your access".
 //   - The admin's Publish dialog says why that dashboard cannot be published.
+//   - Who sees each column (semantic layer part 4): on its own project, the admin hides
+//     salary and ssn from everyone but team HR, in the UI; the carrier bonus_pct is listed
+//     read-only. Vera, outside HR, sees "3 columns hidden" over the grid, locks in Columns,
+//     the server's sentence on "Pay by department" and "Headcount by department" drawn;
+//     Hana, in HR, sees salary. The admin then stops hiding both, each asked first.
 //
-// Screens: web/e2e/__screens__/row-access-{tab,viewer,explore,publish}-{light,dark}.png.
+// Screens: web/e2e/__screens__/row-access-{tab,viewer,explore,publish}-{light,dark}.png,
+// column-access-{none,set,editor,dashboard,viewer-grid,viewer-fields}-{light,dark}.png.
 // Needs Postgres: without DATABASE_URL this spec prints one skip line.
 
 import { after, test } from 'node:test';
@@ -32,7 +38,7 @@ if (!adminUrl) {
   await root.connect();
   await root.query(`CREATE DATABASE ${dbName}`);
 
-  const { e2e, settled, screens, configureServer, failOnConsoleError, SCREENS } = await import('./fixtures.ts');
+  const { e2e, settled, screens, configureServer, failOnConsoleError, rpcBudget, SCREENS } = await import('./fixtures.ts');
   configureServer({
     env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN },
     headers: { 'x-forwarded-email': ADMIN },
@@ -125,7 +131,7 @@ if (!adminUrl) {
       await screens(vpage, 'row-access-viewer');
       await vpage.goto(`/data/${pid}/${did}`);
       await vpage.getByText('Rows limited to your access').waitFor();
-      assert.equal(await vpage.getByRole('tab', { name: 'Row access' }).count(), 0, 'a viewer has no Row access tab');
+      assert.equal(await vpage.getByRole('tab', { name: 'Access', exact: true }).count(), 0, 'a viewer has no Access tab');
       // Explore: the same chip, and its suggestions drawn over East's rows (they go through visual:data).
       await vpage.goto(`/explore?project=${pid}&dataset=${did}`);
       await vpage.getByRole('heading', { level: 1, name: 'Explore' }).waitFor();
@@ -152,4 +158,137 @@ if (!adminUrl) {
     await dlg.getByText(/row access rules/).waitFor();
     await screensInPlace(page, 'row-access-publish');
   }, { rpcBudget: 40 });
+
+  e2e('column access: an admin hides salary and ssn from all but HR; a viewer outside HR sees them hidden, HR sees them', async ({ page, server, rpc: adminLoads }) => {
+    await page.request.get(`${server.base}/api/auth/me`);
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+    const rpc = async (as: string, channel: string, payload?: unknown): Promise<any> => { // any: each channel's own reply
+      const r = await page.request.post(`${server.base}/api/rpc/${channel}`, { data: { args: payload === undefined ? [] : [payload] }, headers: { 'x-forwarded-email': as, 'x-csrf-token': csrf } });
+      assert.equal(r.status(), 200, `${channel} as ${as}: ${await r.text()}`);
+      return r.json();
+    };
+    const HANA = 'hana@acme.test';
+    // A project of its own: Staff (bonus_pct is computed from salary, so it is a carrier), two charts on a published dashboard.
+    const pid: string = (await rpc(ADMIN, 'projects:create', { name: 'People' })).id;
+    const DEPTS = ['Ops', 'Eng', 'Sales'];
+    const saved = await rpc(ADMIN, 'dataset:composeSave', {
+      projectId: pid,
+      name: 'Staff',
+      base: { inline: { name: 'Staff', columns: [{ name: 'dept', type: 'text' }, { name: 'salary', type: 'number' }, { name: 'ssn', type: 'text' }, { name: 'employee_id', type: 'text' }], rows: Array.from({ length: 9 }, (_, i) => [DEPTS[i % 3], 52000 + i * 1500, `SSN-00${i}`, `e${i}`]) } },
+      joins: [],
+      steps: [],
+      sourceKind: 'paste',
+    });
+    assert.equal(saved.ok, true, JSON.stringify(saved));
+    const staff: string = saved.dataset.id;
+    assert.equal((await rpc(ADMIN, 'dataset:addStep', { projectId: pid, datasetId: staff, step: { type: 'calculated_field', name: 'bonus_pct', expression: '[salary] / 1000' } })).ok, true);
+    assert.equal((await rpc(ADMIN, 'catalog:setColumn', { projectId: pid, datasetId: staff, column: 'ssn', patch: { sensitivity: 'personal' } })).ok, true);
+    for (const who of [HANA, VERA]) await rpc(who, 'projects:list'); // a first request provisions each (the row test may not have run)
+    const users = (await rpc(ADMIN, 'admin:users')) as { id: string; email: string }[];
+    const idOf = (email: string) => users.find((u) => u.email === email)!.id;
+    const hr: string = (await rpc(ADMIN, 'admin:createTeam', { name: 'HR' })).id;
+    await rpc(ADMIN, 'admin:teamMember', { teamId: hr, userId: idOf(HANA), member: true });
+    for (const member of [{ teamId: hr }, { userId: idOf(VERA) }]) assert.equal((await rpc(ADMIN, 'project:share', { projectId: pid, member, role: 'viewer' })).ok, true);
+    const visual = async (name: string, values: object[]): Promise<string> => {
+      const v = await rpc(ADMIN, 'visual:save', { projectId: pid, datasetId: staff, name, chartType: 'bar', encoding: { category: 'dept', values } });
+      return v.visual?.id ?? v.id;
+    };
+    const pay = await visual('Pay by department', [{ column: 'salary', aggregation: 'sum' }]);
+    const heads = await visual('Headcount by department', [{ column: 'employee_id', aggregation: 'count' }]);
+    const card = (visualId: string, x: number) => ({ id: crypto.randomUUID(), type: 'visual', layout: { x, y: 0, w: 6, h: 6 }, visualId });
+    const board = await rpc(ADMIN, 'analysis:create', { projectId: pid, name: 'People', sheets: [{ name: 'One', cards: [card(pay, 0), card(heads, 6)] }] });
+    assert.equal((await rpc(ADMIN, 'analysis:publish', { projectId: pid, id: board.id })).ok, true);
+
+    // ── The admin hides salary and ssn, in the Access tab ─────────────────
+    await page.goto(`/data/${pid}/${staff}?tab=access`);
+    const section = page.getByRole('region', { name: 'Who sees each column' });
+    await section.getByRole('heading', { name: 'No hidden columns' }).waitFor();
+    await section.getByText('ssn is marked sensitive. Hide it from viewers?').waitFor();
+    await screens(page, 'column-access-none');
+    await section.getByRole('button', { name: 'Hide a column…' }).click();
+    const add = page.getByRole('dialog', { name: 'Hide a column' });
+    await add.getByRole('combobox', { name: 'Column' }).click();
+    await page.getByRole('option', { name: 'salary', exact: true }).click();
+    await add.getByRole('combobox', { name: 'Add a person or team' }).fill('HR');
+    await page.getByRole('option', { name: 'HR (team)' }).click();
+    await add.getByRole('button', { name: 'Save' }).click();
+    await page.getByText('Who sees salary is saved.').waitFor();
+    await section.getByRole('button', { name: 'Hide ssn' }).click(); // one click: hidden from every viewer
+    await section.getByText('Hidden from every viewer').waitFor();
+    await section.getByRole('button', { name: 'Edit who sees ssn' }).click();
+    const edit = page.getByRole('dialog', { name: 'Who sees ssn' });
+    await edit.getByRole('combobox', { name: 'Add a person or team' }).fill('HR');
+    await page.getByRole('option', { name: 'HR (team)' }).click();
+    await edit.getByRole('button', { name: 'Save' }).click();
+    await page.getByText('Who sees ssn is saved.').waitFor();
+    const rows = section.getByRole('list', { name: 'Hidden columns' }).getByRole('listitem');
+    await rows.filter({ hasText: 'ssn' }).getByText('Only: HR').waitFor(); // the list is asked again after the save
+    await rows.filter({ hasText: 'bonus_pct' }).getByText('(hidden too: computed from salary)').waitFor();
+    assert.deepEqual(await rows.allTextContents().then((t) => t.map((x) => x.replace(/\s+/g, ''))), ['salary·Only:HR', 'ssn·Only:HR', 'bonus_pct·Only:HR(hiddentoo:computedfromsalary)']);
+    assert.equal(await rows.filter({ hasText: 'bonus_pct' }).getByRole('button').count(), 0, 'a carrier has no edit');
+    const stored = await rpc(ADMIN, 'dataset:columnAccess', { projectId: pid, datasetId: staff });
+    assert.deepEqual(stored.rules, [{ column: 'salary', visibleTo: [{ teamId: hr }] }, { column: 'ssn', visibleTo: [{ teamId: hr }] }, { column: 'bonus_pct', visibleTo: [{ teamId: hr }], from: 'salary' }]);
+    await screens(page, 'column-access-set');
+    await section.getByRole('button', { name: 'Edit who sees salary' }).click();
+    await page.getByRole('dialog', { name: 'Who sees salary' }).waitFor();
+    await screensInPlace(page, 'column-access-editor');
+    await page.getByRole('dialog', { name: 'Who sees salary' }).getByRole('button', { name: 'Cancel' }).click();
+
+    // ── Vera, a viewer outside HR; then Hana, in HR ──────────────────────
+    const as = async (email: string, fn: (p: Page) => Promise<void>): Promise<void> => {
+      const ctx = await page.context().browser()!.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', extraHTTPHeaders: { 'x-forwarded-email': email } });
+      const p = await ctx.newPage();
+      const problems = await failOnConsoleError(p);
+      const budget = rpcBudget(p);
+      try {
+        await fn(p);
+        assert.deepEqual([...problems(), ...budget.problems()], []);
+        console.log(budget.loads.map((l) => `rpc ${l.rpcs} ${new URL(l.url).pathname}${new URL(l.url).search}`).join('\n'));
+      } finally {
+        await ctx.close();
+      }
+    };
+    await as(VERA, async (v) => {
+      await v.goto(`/analyses/${pid}/${board.id}`);
+      await v.getByRole('heading', { level: 1, name: 'People' }).waitFor();
+      await v.getByRole('group', { name: 'Pay by department card' }).getByText(/limited to certain people/).waitFor();
+      await v.getByRole('group', { name: 'Headcount by department card' }).locator('canvas').waitFor();
+      await settled(v);
+      await screens(v, 'column-access-dashboard');
+      await v.goto(`/data/${pid}/${staff}`);
+      await v.getByText('Limited to your access', { exact: true }).waitFor();
+      const note = v.getByText('3 columns hidden');
+      await note.waitFor();
+      assert.equal(await note.getAttribute('title'), 'Hidden from you: salary, ssn, bonus_pct');
+      const grid = v.getByRole('grid', { name: 'Staff rows' });
+      await grid.getByText('Ops').first().waitFor();
+      const names = (await grid.getByRole('columnheader').allInnerTexts()).map((t) => t.split('\n')[0].trim());
+      assert.deepEqual(names, ['dept', 'employee_id']);
+      assert.equal(await v.getByText(/SSN-00/).count(), 0, 'no ssn value on the page');
+      await screens(v, 'column-access-viewer-grid');
+      await v.goto(`/data/${pid}/${staff}?tab=columns`);
+      await v.getByRole('img', { name: 'Hidden from you' }).first().waitFor();
+      assert.equal(await v.getByRole('img', { name: 'Hidden from you' }).count(), 3);
+      await screens(v, 'column-access-viewer-fields');
+    });
+    await as(HANA, async (h) => {
+      await h.goto(`/data/${pid}/${staff}`);
+      const grid = h.getByRole('grid', { name: 'Staff rows' });
+      await grid.getByText('SSN-000').waitFor();
+      const names = (await grid.getByRole('columnheader').allInnerTexts()).map((t) => t.split('\n')[0].trim());
+      assert.deepEqual(names, ['dept', 'salary', 'ssn', 'employee_id', 'bonus_pct']);
+      assert.equal(await h.getByText(/columns? hidden/).count(), 0);
+    });
+
+    // ── Clean up: stop hiding both, each asked first ──────────────────────
+    for (const column of ['ssn', 'salary']) {
+      await section.getByRole('button', { name: `Stop hiding ${column}` }).click();
+      const ask = page.getByRole('dialog', { name: `Stop hiding ${column}?` });
+      await ask.getByRole('button', { name: 'Stop hiding' }).click();
+      await ask.waitFor({ state: 'detached' });
+    }
+    await section.getByRole('heading', { name: 'No hidden columns' }).waitFor();
+    assert.deepEqual((await rpc(ADMIN, 'dataset:columnAccess', { projectId: pid, datasetId: staff })).rules, []);
+    console.log(adminLoads.loads.map((l) => `rpc ${l.rpcs} ${new URL(l.url).pathname}${new URL(l.url).search}`).join('\n'));
+  });
 }
