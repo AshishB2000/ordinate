@@ -348,6 +348,22 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   ok('control: the list removed, the Live card says the stored value and carries no pairs', !('valueLabels' in (await post('answer:card', { projectId: P, spec: bare })).value.data));
 
+  // Next-level chip (part 6, step 06): built from metadata, so it costs no statement; clicking it is one answer.
+  const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+  const byRegion: AnswerSpec = { ...bare, category: 'region' };
+  const plainChips = (await post('answer:card', { projectId: P, spec: byRegion })).value.chips.map((c: { label: string }) => c.label);
+  await H.as(ORG_A, () => tableDocs.setTableDoc(P, L, { hierarchies: [{ name: 'Places', levels: ['region', 'cat'] }] }));
+  queryCache.clear();
+  H.fakeMod.resetFake();
+  const navCard = (await post('answer:card', { projectId: P, spec: byRegion })).value;
+  const navCalls = fake.calls.length;
+  const chip = navCard.chips.find((c: { label: string }) => c.label === 'By cat');
+  ok('Live card: a saved hierarchy adds the "By <next>" chip, and the answer is its own one statement', !!chip && chip.spec.category === 'cat' && navCalls === 1
+    && show(navCard.chips.map((c: { label: string }) => c.label).filter((l: string) => l !== 'By cat')) === show(plainChips), show([navCalls, navCard.chips]));
+  const rerun = (await post('answer:rerun', { projectId: P, spec: chip.spec, label: 'By cat' })).value;
+  ok('…clicking it answers from the warehouse by the next level, one more statement', rerun.ok !== false && fake.calls.length === navCalls + 1 && show(rerun).includes('"cat"'), show(rerun).slice(0, 300));
+  await H.as(ORG_A, () => tableDocs.setTableDoc(P, L, { hierarchies: [] }));
+
   ok('THE SPY: nothing here asked getDataset for the Live dataset', !hydrated.slice(from).includes(L), show(hydrated.slice(from)));
 
   // AFTER the spy, because this case IS the safety net: a saved filter that reaches the Live dataset through a

@@ -40,6 +40,7 @@ import { expandAnswerTerms } from '../analysis/termExpand';
 import type { AnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
 import { displayNames, load as loadCatalog } from '../app/catalog';
+import { navContext } from './modelNavigation';
 import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
@@ -260,7 +261,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: ds.name, data: labelled.data, ...seen,
-      chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
+      chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category), ...(await navContext(projectId, spec.datasetId)) }),
       filterLabels: shownLabels, steps, notes, ...(asOf ? { asOf } : {}),
       ...(near ? { noMatch: { text: noRowsMatch(near.column, near.op, near.said), options: near.options } } : {}),
     },

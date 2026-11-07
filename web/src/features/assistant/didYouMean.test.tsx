@@ -126,6 +126,18 @@ describe('the "Did you mean" row', () => {
 });
 
 describe('in the dock', () => {
+  it('an answer card draws every chip the server sent, a next-level one too; a click reruns that chip\'s spec under its label', async () => {
+    const STATE = { ...SPEC, category: 'state', title: 'Sales by region by state' };
+    const chips = ['Split by segment', 'By state', 'Show as table'].map((label) => ({ label, spec: label === 'By state' ? STATE : SPEC }));
+    const calls = serve({ ...shell([user('u1', 'sales by region'), ANSWERED]), 'answer:card': { ...CARD, chips }, 'answer:rerun': { ok: true, threadId: TID, turns: [user('u1', 'sales by region'), ANSWERED] } });
+    renderApp('/');
+    const dock = await openDock();
+    const card = await within(dock).findByTestId('answer-card');
+    for (const name of ['Split by segment', 'By state', 'Show as table']) expect(within(card).getByRole('button', { name })).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'By state' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toEqual({ projectId: PID, threadId: TID, spec: STATE, label: 'By state' }));
+  });
+
   it('under a refused reply: the server’s options; a click reruns that option and the answer turn appears', async () => {
     // The conversation as the server holds it: the rerun appends to it, so a refetch reads it back.
     let turns: unknown[] = [user('u1', 'sales by region'), REFUSED];

@@ -26,6 +26,8 @@ import type { FilterOp } from '../data/filterOps';
 import type { VizAggregation, VizMeasure } from '../analysis/visuals';
 import { dateBucket, dateBucketLabel, isDateGrain, parseDateCell } from '../analysis/categoryKey';
 import type { CivilDate, DateGrain } from '../analysis/categoryKey';
+import { grainWord, nextGrain, nextLevel } from '../analysis/drillLevels';
+import type { NavHierarchy } from '../analysis/drillLevels';
 // Pure, like this file: the rules for what people call a column, `squash` among them.
 import { squash, taughtColumn } from '../app/columnNames';
 // Pure too, and it takes only this file's TYPES back: what a loosely matched filter value remembers.
@@ -599,7 +601,7 @@ export interface AnswerChip {
  */
 export function answerChips(
   spec: AnswerSpec,
-  ctx: { columns: ParsedColumn[]; splitCandidates: string[] },
+  ctx: { columns: ParsedColumn[]; splitCandidates: string[]; hierarchies?: readonly NavHierarchy[]; ladder?: readonly DateGrain[] },
 ): AnswerChip[] {
   const chips: AnswerChip[] = [];
   const catCol = ctx.columns.find((c) => c.name === spec.category);
@@ -618,6 +620,13 @@ export function answerChips(
       });
     }
   }
+
+  // One step down: a hierarchy's next level regroups the whole answer; a set grain steps to the finer one (an auto grain has no rung).
+  // A next level that is none of `columns` (a column hidden from the caller, part 4) is no chip.
+  const down = ctx.hierarchies && nextLevel(ctx.hierarchies, spec.category);
+  const finer = ctx.ladder && spec.grain && catCol?.type === 'date' ? nextGrain(ctx.ladder, spec.grain) : null;
+  if (down && ctx.columns.some((c) => c.name === down.next)) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
+  else if (finer) chips.push({ label: `By ${grainWord(finer, ctx.ladder!)}`, spec: { ...spec, grain: finer } });
 
   const periodIdx = spec.filters.findIndex((f) => 'period' in f);
   const dateCol = ctx.columns.find((c) => c.type === 'date');

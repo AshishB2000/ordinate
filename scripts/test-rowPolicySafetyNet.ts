@@ -571,6 +571,8 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('door: visual:drillDown — east\'s drilled chart is east\'s own visual:data for the same question, cell by cell', drEast.d.body?.available === true && drEast.d.body.encoding.category === 'region'
       && sameCells(cellsOf(drEast.chart), cellsOf(byHand)) && JSON.stringify(cellsOf(drEast.chart)?.[0]) === '["East"]', `${drEast.d.text.slice(0, 200)} | ${drEast.chart?.text.slice(0, 200)}`);
     ok('NEGATIVE CONTROL: the editor\'s drilled chart differs (c3 is in more regions than East)', drEd.d.body?.available === true && !sameCells(cellsOf(drEd.chart), cellsOf(drEast.chart)) && (cellsOf(drEd.chart)?.[0].length ?? 0) > 1, drEd.chart?.text.slice(0, 200));
+    // The hierarchy goes now: Orders' twins below have none, and since step 06 an answer offers its next level as a chip.
+    ok('setup: boss clears the hierarchy', (await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { hierarchies: [] } })).body?.ok === true);
 
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {
