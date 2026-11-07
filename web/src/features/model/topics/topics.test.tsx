@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc, type RpcReply } from '../../../test-utils';
 
+// Its waits allow 15 s for a lazy route chunk, so a test needs longer than Vitest's 5 s default.
+vi.setConfig({ testTimeout: 30_000 });
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
