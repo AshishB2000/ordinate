@@ -25,7 +25,7 @@
 
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
-import { e2e, screens, settled, withLiveDataset, type Session } from './fixtures.ts';
+import { e2e, screens, screensInPlace, settled, withLiveDataset, type Session } from './fixtures.ts';
 
 withLiveDataset();
 
@@ -166,4 +166,88 @@ e2e('live: the dataset page — settings, Schema and Sync schema, what is off, t
   assert.equal(live?.mode, 'live', 'the Live dataset stays Live');
   assert.equal(copy?.mode, undefined, 'the copy is an extract');
   assert.equal(copy?.rowCount, 240, 'with every row the warehouse holds');
+});
+
+// A semantic layer (semantic layer part 7, b3): the fake layer this spec's server registers beside the fake warehouse
+// (scripts/semanticFake.ts registerSemanticE2e), its one model `live_typed` labelled "Orders".
+//   1. Connections: the layer's connection lists its models; Add as dataset makes a Live dataset and opens it.
+//   2. The dataset: Live, its figures the layer's; no copy of either kind is offered.
+//   3. The builder: a column chart from the layer's metric at its month grain, drawn by the layer.
+//   4. A pivot: off, in the layer's words, where the chart would be. 5. The Data model: "Defined in Fake layer".
+//   No page but the connection's carries the model's name.
+e2e('live: a semantic layer — its models, a dataset from one, a chart from its metric, what is off', async (s) => {
+  const { page } = s;
+  const P = s.server.sample.projectId;
+  const MODEL = 'live_typed';
+  await page.goto(`/connections/${P}`); // a page first: its CSRF cookie signs the request below
+  await ready(page);
+  const conn = (await (await post(s, 'connection:testAndSave', { projectId: P, connectorId: 'semantic-fake', name: 'Layer prod', values: {} })).json()) as { ok: boolean; connection?: { id: string } };
+  assert.ok(conn.ok && conn.connection, 'the layer connection is saved');
+  const noModelName = async (where: string) => assert.equal((await page.content()).includes(MODEL), false, `no model name on ${where}`);
+
+  // ── 1. Connections ───────────────────────────────────────────────────────
+  await page.goto(`/connections/${P}/${conn.connection.id}`);
+  await ready(page);
+  const models = page.getByRole('region', { name: 'Models' });
+  await models.getByText('Every order, by region and day').waitFor();
+  assert.equal(await page.getByRole('button', { name: /^Run/ }).count(), 0, 'a layer has no SQL to run');
+  await screens(page, 'live-semantic-models');
+  await models.getByRole('button', { name: 'Add as dataset' }).click();
+  await page.getByRole('textbox', { name: 'Dataset name' }).fill('Orders (layer)');
+  await page.getByRole('button', { name: 'Add dataset' }).click();
+  await page.waitForURL((u) => /^\/data\/[^/]+\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 30_000 });
+  const D = new URL(page.url()).pathname.split('/').pop() as string;
+
+  // ── 2. The dataset ───────────────────────────────────────────────────────
+  await ready(page);
+  await page.getByRole('heading', { name: 'Live: Fake layer computes these figures' }).waitFor();
+  await page.getByText('Orders (layer) comes from Fake layer, which returns totals, not rows.', { exact: false }).first().waitFor();
+  for (const name of ['Make a copy', 'Copy the data instead']) assert.equal(await page.getByRole('button', { name }).count(), 0, `no ${name}`);
+  assert.equal(await page.getByRole('switch', { name: 'Live' }).count(), 0, 'no switch back to a copy');
+  await noModelName('the dataset page');
+  await screens(page, 'live-semantic-dataset');
+  // The queued sync writes the layer's metrics as mirrors.
+  let mirrors: { id: string; name: string }[] = [];
+  for (let i = 0; i < 60 && mirrors.length < 4; i += 1) {
+    const listed = (await (await post(s, 'metric:list', { projectId: P })).json()) as { metrics: { id: string; name: string; datasetId: string }[] };
+    mirrors = listed.metrics.filter((m) => m.datasetId === D);
+    if (mirrors.length < 4) await page.waitForTimeout(250);
+  }
+  // The sample project has its own Revenue and Orders: a mirror that clashes takes the connection's name (D13).
+  assert.deepEqual(mirrors.map((m) => m.name).sort(), ['avg_amount', 'max_amount', 'orders · Layer prod', 'revenue · Layer prod'], 'one mirror per layer metric');
+  const REVENUE = 'revenue · Layer prod';
+
+  // ── 3. The builder ───────────────────────────────────────────────────────
+  await page.goto(`/visuals/${P}/new?dataset=${D}`);
+  await ready(page);
+  await page.getByRole('combobox', { name: 'Category', exact: true }).click();
+  await page.getByRole('option', { name: 'd', exact: true }).click();
+  assert.match((await page.getByRole('combobox', { name: 'Date grain' }).textContent()) ?? '', /Month/, 'a date starts at the layer’s month');
+  await page.getByRole('combobox', { name: 'Measure', exact: true }).click();
+  await page.getByRole('option', { name: new RegExp(`^${REVENUE}`) }).click();
+  await page.getByRole('radio', { name: /^Column/ }).first().click();
+  await page.locator('[data-testid="as-of"]').filter({ hasText: /^Live · / }).waitFor({ timeout: 30_000 });
+  assert.equal(await page.locator('[data-live-refusal]').count(), 0, 'the layer draws it');
+  await noModelName('the builder');
+  await screensInPlace(page, 'live-semantic-chart'); // the picks are not saved: a reload would lose them
+
+  // ── 4. A pivot: the layer's words where the chart would be ───────────────
+  await page.goto(`/analytics?project=${P}`);
+  await ready(page);
+  await page.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Orders (layer)' }).click();
+  await page.getByRole('link', { name: 'New pivot table' }).click();
+  await ready(page);
+  await page.locator('[data-live-off="pivot"]').getByText('Orders (layer) comes from Fake layer, which returns totals, not rows.').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Make a copy' }).count(), 0, 'no copy to make');
+  await noModelName('the pivot');
+  await screens(page, 'live-semantic-pivot');
+
+  // ── 5. The Data model ────────────────────────────────────────────────────
+  await page.goto(`/model/${P}?tab=metrics`);
+  await ready(page);
+  const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: REVENUE, exact: true }) });
+  await row.getByText('Defined in Fake layer').waitFor();
+  await noModelName('the Data model');
+  await screens(page, 'live-semantic-metrics');
 });

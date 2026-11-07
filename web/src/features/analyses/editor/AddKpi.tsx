@@ -15,7 +15,7 @@ import { Select } from '../../../ui/Select';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import { AGG_LABEL, useTile, type Agg, type Card, type MetricTile } from '../api';
-import { formatBadge, isFormula, isFunnel, isPeriod, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
+import { formatBadge, isExternal, isFormula, isFunnel, isPeriod, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
 import { pickerOrder } from '../../model/status/status';
 import { RetiredGroup } from '../../model/status/RetiredGroup';
 import { useEditor } from './context';
@@ -176,8 +176,8 @@ export function AddKpiDialog({ onClose }: { onClose: () => void }) {
     const def = m.definition;
     add({
       datasetId: m.datasetId,
-      column: isFormula(def) || isPeriod(def) || isFunnel(def) ? '' : def.column,
-      aggregation: isFormula(def) ? 'count' : isPeriod(def) || isFunnel(def) ? 'sum' : def.aggregation,
+      column: isFormula(def) || isPeriod(def) || isFunnel(def) || isExternal(def) ? '' : def.column,
+      aggregation: isFormula(def) ? 'count' : isPeriod(def) || isFunnel(def) || isExternal(def) ? 'sum' : def.aggregation,
       label: m.name,
       metricId: m.id,
     });

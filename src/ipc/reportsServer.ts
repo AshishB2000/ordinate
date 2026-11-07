@@ -39,8 +39,7 @@ import { kpiHidden } from '../publish/kpiPolicy';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
 import { figureAsk } from '../analysis/figureAsk';
-import * as metrics from '../analysis/metrics';
-import { ExternalMetricError, externalRefusal } from '../analysis/externalMetric';
+import { layerBlockRefusal } from './semanticFigures';
 import { visualForCaller } from './rowDoors';
 import { ctx } from '../server/context';
 
@@ -271,8 +270,8 @@ export function register(): void {
         out[b.id] = fig || { missing: true };
       } else if (b.kind === 'metric' || b.kind === 'metrics_row') {
         const ids = b.kind === 'metric' ? [b.metricId as string] : b.metricIds || [];
-        const layer = (await Promise.all(ids.map((id) => metrics.getMetric(projectId, id)))).find((m) => m && metrics.isExternalDefinition(m.definition));
-        if (layer) { out[b.id] = externalRefusal(new ExternalMetricError('pending', layer.name)); continue; } // a layer's metric: the block says why (part 7 b0)
+        const refused = await layerBlockRefusal(projectId, ids, (id) => call(event, 'metric:value', { projectId, id, filters: b.filters || [] }));
+        if (refused) { out[b.id] = refused; continue; } // a layer's metric: asked as a KPI is, or the block says why (part 7 b0, b3)
         const figures = [];
         for (const id of ids) figures.push((await deps.metricValue(id, b.filters || [])) || { name: t('common.missing_metric'), display: '—', value: null });
         const caption = b.kind === 'metric' ? await deps.caption({ kpis: figures.map((f) => ({ label: f.name, value: f.value })) }) : '';

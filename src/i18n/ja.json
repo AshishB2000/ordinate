@@ -275,6 +275,7 @@
   "embedMessages.this_site_is_not_allowed_to": "このサイトにはこのダッシュボードを表示する権限がありません。",
   "embedMessages.too_many_views_of_this_dashboard": "このダッシュボードへのアクセスが集中しています。1 分後にもう一度お試しください。",
   "externalMetricMessages.defined_in_another_tool": "別のツールで定義",
+  "externalMetricMessages.is_computed_by_which_returns_totals": "「{name}」は{layer}が計算しており、返すのは合計だけで、ここで必要な行は返しません。",
   "externalMetricMessages.is_defined_in_another_tool_s": "「{name}」は別のツールのセマンティックレイヤーで定義されていますが、このサーバーはまだそこに問い合わせできません。アップグレードを完了してから、もう一度お試しください。",
   "externalMetricMessages.is_defined_in_another_tool_s_2": "「{name}」は別のツールのセマンティックレイヤーで定義されているため、ここでは複製できません。",
   "externalMetricMessages.it_is_defined_in_another_tool": "別のツールのセマンティックレイヤーで定義されているため、このサーバーではメンバーに分割できません。",

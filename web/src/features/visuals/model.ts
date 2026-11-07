@@ -97,7 +97,8 @@ export function fitEncoding(preset: Encoding | undefined, cols: readonly Column[
     delete out.seriesDatasetId;
   }
   // A measure that is a saved metric names the metric, not a column (../calc/api.ts metricMeasure).
-  const keep = (preset.values ?? []).filter((v) => v.column && (!!v.metricId || has(v.column, v.datasetId, v.via)));
+  // A layer's metric (part 7) has no column at all: `column: ''`, its id alone.
+  const keep = (preset.values ?? []).filter((v) => !!v.metricId || (v.column && has(v.column, v.datasetId, v.via)));
   out.values = keep.length ? keep : base.values;
   return out;
 }

@@ -26,6 +26,7 @@ import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridE
 import { chartFeature, LIVE_OFF_CHARTS } from '../live/offFeatures';
 import { useEditGuard } from '../editConflicts/useEditGuard';
 import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
+import type { SemanticInfo } from './SemanticMeasures';
 
 export interface Initial {
   visualId?: string;
@@ -38,6 +39,8 @@ export interface Initial {
   analytics: Record<string, unknown>[];
   /** The dataset is Live (L2.6): pivot, cohort and funnel are off, and the stage says so instead of asking. */
   live?: boolean;
+  /** A semantic dataset (part 7): the layer's metrics are its measures, the layer's grains its dates' (./SemanticMeasures). */
+  semantic?: SemanticInfo;
   /** The saved visual's content tag: every save sends it (docs/edit-conflicts). */
   tag?: string;
 }
@@ -58,9 +61,9 @@ function useSettled<T>(value: T, ms: number): T {
   return v;
 }
 
-/** What goes to the server: the grain and the overlay belong to a date category only; empty measures drop. */
-function effective(enc: Encoding, isDate: boolean): Encoding {
-  const e: Encoding = { ...enc, values: enc.values.filter((v) => v.column) };
+/** What goes to the server: the grain and the overlay belong to a date category only; empty measures drop (a layer's metric has no column, part 7). */
+export function effective(enc: Encoding, isDate: boolean): Encoding {
+  const e: Encoding = { ...enc, values: enc.values.filter((v) => v.column || v.metricId) };
   if (!isDate) {
     delete e.grain;
     delete e.overlay;

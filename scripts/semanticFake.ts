@@ -176,3 +176,29 @@ export function resetLayerFake(): void {
   layerFake.list = null;
   layerFake.described.length = 0;
 }
+
+// ── The e2e server's layer (semantic layer part 7, b3 Task 5) ─────────────────
+//
+// `src/server/main.ts` under ORDINATE_TEST_LIVE_FAKE=1 (which env.ts refuses in prod; the image ships no scripts/):
+// the fake connector, its encoder, and one model — the parity fixture as `live_typed`, loaded into the org's own
+// DuckDB worker the first time the layer is asked — so a browser can add a semantic dataset and chart its metrics.
+
+export const E2E_MODEL = 'live_typed';
+
+let e2eRegistered = false;
+
+export function registerSemanticE2e(): void {
+  if (e2eRegistered) return;
+  registerSemanticFake();
+  const adapters: typeof import('../src/engine/live/semantic/adapters') = require('../src/engine/live/semantic/adapters');
+  const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
+  const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+  adapters.registerTestSemanticAdapter('fake', { encode: (q, model) => ({ kind: 'semantic', body: { table: model, columns: fx.COLUMNS, query: q }, columns: sq.answerColumns(q) }) });
+  layerFake.list = async () => ({ ok: true, models: [{ name: E2E_MODEL, label: 'Orders', description: 'Every order, by region and day' }] });
+  layerFake.hook = async () => {
+    const have = await duck.queryAsync(`SELECT 1 FROM information_schema.tables WHERE table_name = '${E2E_MODEL}'`, []);
+    if (!have.length) await fx.loadWarehouse(E2E_MODEL, fx.COLUMNS, fx.fixtureRows());
+    return undefined; // then the fake answers as ever
+  };
+  e2eRegistered = true;
+}

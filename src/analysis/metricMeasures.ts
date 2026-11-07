@@ -35,7 +35,7 @@ import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { pendingMetric, pendingSentence } from './pendingKinds';
-import { ExternalMetricError, externalRefusal, isExternalMetricError, type EXTERNAL_CODE } from './externalMetric';
+import { ExternalMetricError, externalRefusal, isExternalMetricError, noRowsError, type EXTERNAL_CODE } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
 import type { MetricAggregation } from './metricValue';
@@ -170,7 +170,7 @@ export async function planMetricMeasures(
   const alone = await chartsAlone(projectId, datasetId, encoding);
   if (alone) return 'error' in alone ? { ok: false, error: alone.error } : { ok: true, values: encoding.values, filters: [], special: { kind: metrics.isPeriodDefinition(alone.metric.definition) ? 'period' : 'funnel', metric: alone.metric, params } };
   const inPivot = await pivotSnapshot(projectId, encoding);
-  if (inPivot) return isExternalDefinition(inPivot.definition) ? externalRefusal(new ExternalMetricError('pending', inPivot.name)) : { ok: false, error: msg.snapshotInPivot(inPivot.name) };
+  if (inPivot) return isExternalDefinition(inPivot.definition) ? externalRefusal(noRowsError(inPivot)) : { ok: false, error: msg.snapshotInPivot(inPivot.name) };
   if (!hasMetricMeasure(encoding)) return null;
   const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };

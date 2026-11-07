@@ -22,6 +22,8 @@ export interface SelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** A muted word after the label, in the open list only ("can be added up"). */
+  hint?: string;
 }
 
 /** The next enabled index from `from` in direction `dir`, or `from` if there is none. */
@@ -67,6 +69,7 @@ export function OptionList({
         onPointerMove={() => !o.disabled && i !== active && onHover(i)}
       >
         <span className={f.itemText}>{o.label}</span>
+        {o.hint && <span className={f.shortcut}>{o.hint}</span>}
         {isSel && (
           <span className={f.check}>
             <Icon name="check" />

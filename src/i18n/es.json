@@ -275,6 +275,7 @@
   "embedMessages.this_site_is_not_allowed_to": "Este sitio no tiene permiso para mostrar este panel.",
   "embedMessages.too_many_views_of_this_dashboard": "Demasiadas visitas a este panel ahora mismo. Inténtalo de nuevo en un minuto.",
   "externalMetricMessages.defined_in_another_tool": "Definida en otra herramienta",
+  "externalMetricMessages.is_computed_by_which_returns_totals": "«{name}» lo calcula {layer}, que devuelve totales, no las filas que esto necesita.",
   "externalMetricMessages.is_defined_in_another_tool_s": "«{name}» está definida en la capa semántica de otra herramienta, que este servidor todavía no puede consultar. Termina la actualización y vuelve a intentarlo.",
   "externalMetricMessages.is_defined_in_another_tool_s_2": "«{name}» está definida en la capa semántica de otra herramienta, así que no se puede duplicar aquí.",
   "externalMetricMessages.it_is_defined_in_another_tool": "Está definida en la capa semántica de otra herramienta, así que este servidor no puede dividirla en miembros.",

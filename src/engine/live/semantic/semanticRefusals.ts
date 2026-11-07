@@ -70,6 +70,11 @@ export function registerLayerLabel(id: string, label: string): void {
   if (!LABELS.has(id)) LABELS.set(id, label);
 }
 
+/** The product name of a backend this pod knows, or null. */
+export function knownLayerLabel(id: string): string | null {
+  return LABELS.get(id) ?? null;
+}
+
 /** What a sentence calls the layer behind backend `id`: its product name, or "another tool". */
 export function layerLabel(id: string): string {
   return LABELS.get(id) ?? msg.anotherTool();

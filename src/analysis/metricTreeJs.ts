@@ -15,7 +15,7 @@ import type { ParsedColumn } from '../data/parse';
 import type { Metric } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { isNewerKind } from './pendingKinds';
-import { ExternalMetricError } from './externalMetric';
+import { noRowsError } from './externalMetric';
 import { computeMetric } from './metricValue';
 import { snapshotRows } from './snapshot';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
@@ -47,7 +47,7 @@ const MAX_DEPTH = 10;
 /** A metric's figure over the rows under `scope` — ipc/metrics.resolveDefinition, over rows. */
 export function metricJs(columns: ParsedColumn[], rows: Cell[][], metrics: Metric[], m: Metric, scope: FilterStep[], depth = 0, stack = new Set<string>()): number | null {
   const table = (filters: FilterStep[]) => applyPipeline({ columns, rows }, filters.concat(scope));
-  if (isExternalDefinition(m.definition)) throw new ExternalMetricError('pending', m.name); // a layer's metric reaching the JS engine: never a figure
+  if (isExternalDefinition(m.definition)) throw noRowsError(m); // a layer's metric reaching the JS engine: never a figure
   if (isNewerKind(m.definition)) return null; // part 5's kinds: no figure on this release, as the door
   if (!isFormulaDefinition(m.definition)) {
     const t = table(m.filters);

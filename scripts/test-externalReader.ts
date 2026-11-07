@@ -125,8 +125,9 @@ void (async () => {
   const overIt = await save('Twice the layer', { formula: `[${NAME}] * 2` });
   const overPlain = await save('Twice the plain', { formula: '[Plain amount] * 2' });
   const pending = msg.externalPending(NAME);
+  const onLayer = msg.externalOnLayer(NAME, 'dbt'); // b3: a path that never asks a layer names a known one
   /** Typed, with the sentence (or one naming the formula's operand), and no number anywhere a figure would sit. */
-  const refusedExternal = (r: Reply | undefined): boolean => !!r && r.ok === false && r.code === ext.EXTERNAL_CODE && (r.error === pending || r.reason === pending || r.message === pending);
+  const refusedExternal = (r: Reply | undefined): boolean => !!r && r.ok === false && r.code === ext.EXTERNAL_CODE && [pending, onLayer].some((x) => r.error === x || r.reason === x || r.message === x);
   const scenario = async (metricId: string): Promise<string> => (await post('scenario:create', { projectId: P, input: { name: `S ${metricId.slice(0, 4)}`, baseMetricIds: [metricId], drivers: [] } })).value.scenario.id as string;
   const scorecard = async (metricId: string): Promise<string> => (await post('scorecard:create', { projectId: P, name: `C ${metricId.slice(0, 4)}`, period: 'month', rows: [{ metricId }] })).value.scorecard.id as string;
   const tree = async (metricId: string): Promise<void> => { await post('metricTree:save', { projectId: P, id: metricId, tree: { relation: 'sum', children: [{ metricId }] } }); };
@@ -153,6 +154,7 @@ void (async () => {
   for (const [ch, call] of ENTRIES) {
     const r = await call(id);
     ok(`${ch}: refused, typed, with the sentence; no figure`, refusedExternal(r) && !('value' in r && typeof r.value === 'number'), show(r));
+    if (/pivot|drivers/.test(ch)) ok(`${ch}: …naming the layer (b3: it never asks one)`, r.reason === 'layer' && r.error === onLayer, show(r));
   }
   const formula = ((await post('metric:values', { projectId: P, ids: [overIt] })).value as unknown as Reply[])[0];
   ok('metric:values of a formula naming it: refused, typed, naming it', refusedExternal(formula), show(formula));

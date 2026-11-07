@@ -29,7 +29,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/metricMeasures.ts': { count: 25, how: 'answers' }, // + a period measure charts alone, on its base (p5-06); a semantic dataset's measures go to its door first (./semanticMeasures)
   'src/ipc/metrics.ts': { count: 10, how: 'answers' }, // + a period metric resolves its base (p5-05); a mirror resolves through ./semanticFigures layerFigure
   'src/analysis/semanticMeasures.ts': { count: 2, how: 'answers' }, // a formula measure on a semantic dataset: formulaOverLayer, or columnOnLayer
-  'src/ipc/semanticFigures.ts': { count: 2, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only
+  'src/ipc/semanticFigures.ts': { count: 3, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only; a story's metric block asks the KPI door, or says why (b3)
   // refuses
   'src/ai/planExec.ts': { count: 1, how: 'refuses' }, // a plan step cannot name it
   'src/ipc/periodMetric.ts': { count: 3, how: 'refuses' }, // a period over an external base: its base's resolution throws ExternalMetricError
@@ -41,8 +41,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/answers.ts': { count: 5, how: 'refuses' }, // never a spec's column measure
   'src/ipc/copilot.ts': { count: 3, how: 'refuses' }, // left out of the Assistant's figures
   'src/ipc/drillScope.ts': { count: 2, how: 'refuses' }, // its rows are the layer's
-  'src/ipc/drivers.ts': { count: 1, how: 'refuses' },
-  'src/ipc/reportsServer.ts': { count: 1, how: 'refuses' }, // a story's metric block says why
+  'src/ipc/drivers.ts': { count: 2, how: 'refuses' }, // naming a known layer (b3: noRowsError)
   'src/ipc/scenarios.ts': { count: 5, how: 'refuses' }, // the picker leaves it out
   'src/ipc/stories.ts': { count: 4, how: 'refuses' }, // an inline KPI is never tied to it
   'src/ipc/summary.ts': { count: 1, how: 'refuses' }, // no sentence; the tile says why
@@ -53,7 +52,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/targetSeries.ts': { count: 1, how: 'refuses' }, // a plan as a chart measure: an external plan is refused by the chart door, so no line
   'src/publish/embedLock.ts': { count: 3, how: 'refuses' }, // never allowed under a lock
   // keeps
-  'src/analysis/externalMetric.ts': { count: 2, how: 'keeps' }, // the kind and its whitelist
+  'src/analysis/externalMetric.ts': { count: 4, how: 'keeps' }, // the kind and its whitelist; b3: which sentence a path that never asks a layer says, and a Metrics-table row's layer
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
   'src/analysis/metrics.ts': { count: 3, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13), which only the layer sync's external one replaces
   'src/engine/live/semantic/mirrors.ts': { count: 2, how: 'keeps' }, // the sync's mirrors: found by their external name, written only as external
@@ -68,6 +67,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/periods.ts': { count: 1, how: 'keeps' }, // formats a delta after resolveMetric (which refuses first)
   'web/src/features/calc/MeasureForm.tsx': { count: 1, how: 'keeps' }, // formulas only
   // words
+  'src/ipc/visualsAnalytics.ts': { count: 1, how: 'words' }, // a reference line from a layer's metric keeps its name (b3)
   'src/analysis/metricFormat.ts': { count: 4, how: 'words' }, // + a period metric's words (p5-05)
   'src/automation/handlers.ts': { count: 2, how: 'words' }, // list_metrics' snapshot flag; metric_value refuses through resolveMetric
   'src/ipc/search.ts': { count: 5, how: 'words' },

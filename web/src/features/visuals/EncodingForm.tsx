@@ -31,6 +31,7 @@ import { MapRegions } from './MapRegions';
 import { AGG_LABELS, AGGS, categoryType, fieldKey, GRAINS, measureColumns, measureFrom, parseKey, type Column } from './model';
 import { pickerOrder } from '../model/status/status';
 import { RetiredGroup } from '../model/status/RetiredGroup';
+import { defaultGrain, layerGrains, SemanticMeasures, type SemanticInfo } from './SemanticMeasures';
 import s from './Builder.module.css';
 
 const heading = (label: string, key: string): SelectOption => ({ value: `__h:${key}`, label, disabled: true });
@@ -65,6 +66,7 @@ export function EncodingForm({
   info,
   live,
   canEdit,
+  semantic,
   onChange,
   onFormat,
 }: {
@@ -79,6 +81,8 @@ export function EncodingForm({
   live?: boolean;
   /** May this person save a metric or a step? A viewer picks from what exists. */
   canEdit?: boolean;
+  /** A semantic dataset (part 7): its layer's metrics are the measures, its grains the dates' ./SemanticMeasures. */
+  semantic?: SemanticInfo;
   onChange: (e: Encoding) => void;
   /** A new measure is the chart's only one: how its figures read (percent, currency). */
   onFormat?: (kind: Metric['format']['kind']) => void;
@@ -97,12 +101,14 @@ export function EncodingForm({
   };
   const dims = cols.filter((c) => c.type !== 'number');
   const nums = cols.filter((c) => c.type === 'number');
-  const catOptions: SelectOption[] = [
+  // On a layer a number field is no axis (the server would bin it) and a related one is refused: its fields only.
+  const catOptions: SelectOption[] = semantic ? dims.map((c) => ({ value: c.name, label: c.name })) : [
     ...dims.map((c) => ({ value: c.name, label: c.name })),
     ...(nums.length ? [heading('Bin numeric…', 'bin'), ...nums.map((c) => ({ value: c.name, label: c.name }))] : []),
     ...relatedOptions(related, (c) => !c.many), // a one-side row would sit in several groups (D13)
   ];
   const isDate = categoryType(encoding, cols, related) === 'date';
+  const listed = semantic && layerGrains(semantic.grains, encoding.category); // the layer's grains: no Auto, nothing it does not list
   const own = (metrics.data ?? []).filter((m) => m.datasetId === datasetId);
   const byId = new Map(own.map((m) => [m.id, m]));
   const ordered = pickerOrder(own); // certified first; retired are folded under the measures, not offered
@@ -120,7 +126,7 @@ export function EncodingForm({
   // The dimension moved: the grain belonged to the old column and the overlay to a date.
   const pickCategory = (v: string) => {
     const { column, datasetId: from, via } = parseKey(v);
-    set({ category: column, categoryDatasetId: from, categoryVia: via, grain: undefined });
+    set({ category: column, categoryDatasetId: from, categoryVia: via, grain: semantic ? defaultGrain(semantic.grains, column) : undefined });
   };
   const setMeasure = (i: number, m: Measure) => set({ values: encoding.values.map((x, j) => (j === i ? m : x)) });
   /** Into its slot, or as one more measure. Returns how many measures the chart then has. */
@@ -182,9 +188,9 @@ export function EncodingForm({
           <Select
             aria-label="Date grain"
             size="sm"
-            placeholder="Auto"
+            placeholder={semantic ? 'Choose a grain' : 'Auto'}
             value={(encoding.grain as string | undefined) || info?.grain || null}
-            options={GRAINS}
+            options={listed ? GRAINS.filter((g) => listed.includes(g.value)) : GRAINS}
             onValueChange={(g) => set({ grain: g })}
           />
         )}
@@ -207,75 +213,79 @@ export function EncodingForm({
         </div>
       )}
 
-      <div className={s.row} role="group" aria-labelledby="enc-measures">
-        <span className={s.label} id="enc-measures">
-          Measures
-        </span>
-        {encoding.values.map((m, i) => {
-          const metric = m.metricId ? byId.get(m.metricId) : undefined;
-          // While the list is on its way a metric measure keeps its name; one whose metric is gone is a column again.
-          const asMetric = !!m.metricId && (!!metric || metrics.isPending);
-          // Once the list is in and the metric is not on it, the chart draws the copy stored on the measure: say so.
-          const gone = !!m.metricId && !metric && metrics.isSuccess;
-          const options = [
-            ...measureOpts,
-            ...(metric?.status?.state === 'retired' ? [{ value: METRIC + metric.id, label: metric.name }] : []), // the one this measure already uses
-            ...(asMetric && !metric ? [{ value: METRIC + m.metricId, label: m.column }] : []),
-            ...(canEdit ? [{ value: NEW, label: '+ New calculated measure…' }] : []),
-          ];
-          return (
-            <div key={i} className={s.valueRow}>
-              <div className={s.grow}>
-                <Select aria-label="Measure column" size="sm" value={asMetric ? METRIC + m.metricId : fieldKey(m.column, m.datasetId, m.via)} options={options} onValueChange={(v) => pickMeasure(i, v)} />
-              </div>
-              {asMetric ? (
-                <span className={s.metric} title={metric ? `A saved metric: ${metric.definitionText}` : 'A saved metric'}>
-                  <Badge tone="accent" icon="function">
-                    Metric
-                  </Badge>
-                  {canEdit && metric && <IconButton icon="pencil" size="sm" label={`Edit the metric ${metric.name}`} onClick={() => edit(i, metric)} />}
-                </span>
-              ) : (
-                <div className={s.agg}>
-                  <Select
-                    aria-label="Aggregation"
-                    size="sm"
-                    value={m.aggregation}
-                    options={AGGS.filter((a) => a !== 'countd' || !noDistinct).map((a) => ({ value: a, label: AGG_LABELS[a] }))}
-                    onValueChange={(a) => setMeasure(i, { ...m, aggregation: a as Agg })}
-                  />
+      {semantic ? (
+        <SemanticMeasures projectId={projectId} datasetId={datasetId} semantic={semantic} values={encoding.values} onValues={(values) => set({ values })} />
+      ) : (
+        <div className={s.row} role="group" aria-labelledby="enc-measures">
+          <span className={s.label} id="enc-measures">
+            Measures
+          </span>
+          {encoding.values.map((m, i) => {
+            const metric = m.metricId ? byId.get(m.metricId) : undefined;
+            // While the list is on its way a metric measure keeps its name; one whose metric is gone is a column again.
+            const asMetric = !!m.metricId && (!!metric || metrics.isPending);
+            // Once the list is in and the metric is not on it, the chart draws the copy stored on the measure: say so.
+            const gone = !!m.metricId && !metric && metrics.isSuccess;
+            const options = [
+              ...measureOpts,
+              ...(metric?.status?.state === 'retired' ? [{ value: METRIC + metric.id, label: metric.name }] : []), // the one this measure already uses
+              ...(asMetric && !metric ? [{ value: METRIC + m.metricId, label: m.column }] : []),
+              ...(canEdit ? [{ value: NEW, label: '+ New calculated measure…' }] : []),
+            ];
+            return (
+              <div key={i} className={s.valueRow}>
+                <div className={s.grow}>
+                  <Select aria-label="Measure column" size="sm" value={asMetric ? METRIC + m.metricId : fieldKey(m.column, m.datasetId, m.via)} options={options} onValueChange={(v) => pickMeasure(i, v)} />
                 </div>
-              )}
-              {m.calc && <Badge tone="accent">{String(m.calc.kind ?? 'calc').replace(/_/g, ' ')}</Badge>}
-              <IconButton
-                icon="x"
-                size="sm"
-                label="Remove measure"
-                disabled={encoding.values.length <= 1}
-                onClick={() => set({ values: encoding.values.filter((_, j) => j !== i) })}
-              />
-              {gone && (
-                <span className={s.gone} title={`Its metric was deleted, so this draws the copy it was made from: ${m.aggregation} of ${m.column}.`}>
-                  <Badge tone="warn" icon="alert">
-                    Metric deleted
-                  </Badge>
-                </span>
-              )}
-            </div>
-          );
-        })}
-        <RetiredGroup items={ordered.retired} />
-        <div className={s.addRow}>
-          <Button size="sm" icon="plus" className={s.addSlot} onClick={() => set({ values: [...encoding.values, { column: firstMeasure, aggregation: 'sum' }] })}>
-            Add measure
-          </Button>
-          {canEdit && (
-            <Button size="sm" variant="ghost" icon="function" title="Write a formula (a ratio, a difference, a share) and chart it" onClick={() => setCalc({ slot: -1 })}>
-              Calculated measure
+                {asMetric ? (
+                  <span className={s.metric} title={metric ? `A saved metric: ${metric.definitionText}` : 'A saved metric'}>
+                    <Badge tone="accent" icon="function">
+                      Metric
+                    </Badge>
+                    {canEdit && metric && <IconButton icon="pencil" size="sm" label={`Edit the metric ${metric.name}`} onClick={() => edit(i, metric)} />}
+                  </span>
+                ) : (
+                  <div className={s.agg}>
+                    <Select
+                      aria-label="Aggregation"
+                      size="sm"
+                      value={m.aggregation}
+                      options={AGGS.filter((a) => a !== 'countd' || !noDistinct).map((a) => ({ value: a, label: AGG_LABELS[a] }))}
+                      onValueChange={(a) => setMeasure(i, { ...m, aggregation: a as Agg })}
+                    />
+                  </div>
+                )}
+                {m.calc && <Badge tone="accent">{String(m.calc.kind ?? 'calc').replace(/_/g, ' ')}</Badge>}
+                <IconButton
+                  icon="x"
+                  size="sm"
+                  label="Remove measure"
+                  disabled={encoding.values.length <= 1}
+                  onClick={() => set({ values: encoding.values.filter((_, j) => j !== i) })}
+                />
+                {gone && (
+                  <span className={s.gone} title={`Its metric was deleted, so this draws the copy it was made from: ${m.aggregation} of ${m.column}.`}>
+                    <Badge tone="warn" icon="alert">
+                      Metric deleted
+                    </Badge>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          <RetiredGroup items={ordered.retired} />
+          <div className={s.addRow}>
+            <Button size="sm" icon="plus" className={s.addSlot} onClick={() => set({ values: [...encoding.values, { column: firstMeasure, aggregation: 'sum' }] })}>
+              Add measure
             </Button>
-          )}
+            {canEdit && (
+              <Button size="sm" variant="ghost" icon="function" title="Write a formula (a ratio, a difference, a share) and chart it" onClick={() => setCalc({ slot: -1 })}>
+                Calculated measure
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={s.row}>
         <Select
@@ -290,7 +300,7 @@ export function EncodingForm({
         />
       </div>
 
-      <MapRegions projectId={projectId} cols={cols} geo={encoding.geo} canEdit={canEdit} onChange={(geo) => set({ geo })} />
+      {!semantic && <MapRegions projectId={projectId} cols={cols} geo={encoding.geo} canEdit={canEdit} onChange={(geo) => set({ geo })} />}
 
       {calc?.full ? (
         <MetricEditor

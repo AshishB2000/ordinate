@@ -18,7 +18,7 @@ import { Switch } from '../../ui/Choice';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { MakeCopyButton } from '../live/LiveOff';
+import { MakeCopyButton, useLayerOf } from '../live/LiveOff';
 import { useCan } from '../projects/api';
 import { useWrite } from './api';
 import { useResetCache, useSetCacheAge } from './liveApi';
@@ -154,7 +154,8 @@ export function LiveSwitch({ projectId, datasetId, name, live, canGoLive, rowCou
 }) {
   const [asking, setAsking] = useState(false);
   const can = useCan(projectId);
-  if (!live && !canGoLive) return null;
+  const layer = useLayerOf(projectId, datasetId); // a semantic dataset is Live for good: there are no rows to copy (part 7)
+  if ((!live && !canGoLive) || layer) return null;
   return (
     <span className={s.switch}>
       <Switch label="Live" checked={live} disabled={!can('editor')} onCheckedChange={() => setAsking(true)} />

@@ -37,16 +37,20 @@ export interface DatasetSummary {
   maxCacheAgeSec?: number;
   /** Fresh on ask (L3.1): pull the new rows when a figure asks a copy older than this; `fullDue` — it waits for a full refresh first. */
   freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
+  /** A semantic dataset (part 7): its layer by backend id and by name ("Snowflake"). Never its model. */
+  semantic?: { layer: string; label: string };
 }
 
 /** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */
 export type AutoRefreshEvery = '5min' | '15min' | 'hourly' | 'daily' | 'weekly';
 
 /** The project's saved datasets; idle until a project is chosen. */
-export function useDatasets(projectId: string | undefined) {
+export function useDatasets(projectId: string | undefined, opts: { cachedOnly?: boolean } = {}) {
   return useQuery({
     queryKey: ['dataset:list', projectId],
     queryFn: projectId === undefined ? skipToken : async () => (await rpc('dataset:list', { projectId })) as DatasetSummary[],
+    // `cachedOnly`: the list the screen around it already holds, never asked for here (a gate inside a tile at its request budget).
+    enabled: !opts.cachedOnly,
   });
 }
 
@@ -61,6 +65,14 @@ export interface DatasetColumns {
   mode?: 'live';
   /** Row access rules limit what the caller sees here (docs/row-policy): nothing else about them is sent. */
   scoped?: true;
+  /** A semantic dataset (part 7): its layer, and the grains it lists per date field — a chart picks one of those. */
+  semantic?: SemanticHeader;
+}
+
+export interface SemanticHeader {
+  layer: string;
+  label: string;
+  grains: { column: string; grains: string[] }[];
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */

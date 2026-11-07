@@ -293,3 +293,28 @@ th.num {
   font-family: var(--font-mono);
   color: var(--text);
 }
+
+/* A layer's metric in its editor (./MirrorEditor): its name there, whether the layer adds it up, and where it is defined. */
+.mirrorDef {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-12);
+}
+.mirrorDef code {
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.mirrorDef .groupHint {
+  margin-top: 0;
+}
+.mirrorNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}

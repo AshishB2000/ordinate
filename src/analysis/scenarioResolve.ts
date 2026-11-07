@@ -32,7 +32,7 @@ import * as metrics from './metrics';
 import type { Metric, MetricDefinition, MetricFormat } from './metrics';
 import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { isNewerKind } from './pendingKinds';
-import { ExternalMetricError } from './externalMetric';
+import { noRowsError } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import { bindFormulaText, resolveFilterParams } from './params';
 import type { ParamValues } from './params';
@@ -225,7 +225,7 @@ async function operand(pass: Pass, datasetId: string, spec: { column: string; ag
 async function resolveDefinition(pass: Pass, datasetId: string, definition: MetricDefinition, filters: FilterStep[], depth: number, scope: FilterStep[]): Promise<number | null> {
   const ctx = pass.ctx;
   const all = resolveFilterParams(filters, ctx.params).steps.concat(scope);
-  if (isExternalDefinition(definition)) throw new ExternalMetricError('pending', definition.external); // behind resolveMetric's own refusal
+  if (isExternalDefinition(definition)) throw noRowsError({ name: definition.external, definition }); // a what-if moves rows a layer keeps (b3)
   if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;

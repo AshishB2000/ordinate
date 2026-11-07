@@ -46,6 +46,8 @@ registerHandlers();
 if (cfg.testLiveFake) {
   const load: (id: string) => unknown = require;
   (load(path.join(__dirname, '..', '..', 'scripts', 'liveFakeConnector.js')) as { registerLiveFake(): void }).registerLiveFake();
+  // …and a fake semantic layer beside it (semantic layer part 7, b3): a browser adds a semantic dataset from it.
+  (load(path.join(__dirname, '..', '..', 'scripts', 'semanticFake.js')) as { registerSemanticE2e(): void }).registerSemanticE2e();
 }
 const app = buildApp(cfg);
 // What a crashed pod left in the org temp dirs (a bundle's staging, a backup…), a day old or more.

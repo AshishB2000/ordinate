@@ -228,6 +228,23 @@ void (async () => {
   ok('the layer\'s words go to the log, the token redacted', log.includes('denied:') && log.includes(ENV_ID) && !log.includes(TOKEN), log.slice(0, 400));
   ok('CANARY: the grep finds the dataset\'s own name', all.includes('Sales'));
 
+  // ── § replies (b3): what the browser needs, and only that ──
+  const GRAINS = [{ column: 'd', grains: [...ck.DATE_GRAINS] }];
+  const listed2 = (await post('dataset:list', { projectId: P })).value as unknown as Reply[];
+  const entry = (d: string): Reply | undefined => listed2.find((x) => x.id === d);
+  ok('dataset:list: a semantic dataset says its layer by id and by name, nothing more', isDeepStrictEqual(entry(A)?.semantic, { layer: 'fake', label: 'Fake layer' }), show(entry(A)));
+  const cols = (d: string): Promise<Reply> => post('dataset:columns', { projectId: P, id: d }).then((r) => r.value);
+  ok('dataset:columns: the header adds the layer\'s grains', isDeepStrictEqual((await cols(A)).semantic, { layer: 'fake', label: 'Fake layer', grains: GRAINS }), show(await cols(A)));
+  ok('dataset:liveSchema: the grains per date dimension', isDeepStrictEqual((await post('dataset:liveSchema', { projectId: P, datasetId: A })).value.grains, GRAINS));
+  const plainSchema = (await post('dataset:liveSchema', { projectId: P, datasetId: s.liveId })).value;
+  ok('NEGATIVE CONTROL: an extract and a plain Live dataset carry no semantic key and no grains', !('semantic' in entry(s.extractId)!) && !('semantic' in entry(s.liveId)!)
+    && !('semantic' in (await cols(s.extractId))) && !('semantic' in (await cols(s.liveId))) && plainSchema.ok === true && !('grains' in plainSchema), show([entry(s.liveId), plainSchema.grains]));
+  const conns = (await post('connections:list', { projectId: P })).value as unknown as Reply[];
+  ok('connections:list: a layer\'s connection says so, so its page lists models', conns.find((c) => c.id === LC)?.semantic === true, show(conns.map((c) => [c.connectorId, c.semantic])));
+  ok('NEGATIVE CONTROL: a warehouse connection carries no semantic key', !('semantic' in conns.find((c) => c.id === s.connId)!));
+  const replies2 = [JSON.stringify(entry(A)), JSON.stringify(await cols(A)), (await post('dataset:liveSchema', { projectId: P, datasetId: A })).body].join('\n');
+  ok('…and no model name or environment id in them', !replies2.includes(MODEL) && !replies2.includes(ENV_ID), replies2.slice(0, 300));
+
   // ── § saves ──
   const said = (fn: () => string): Promise<string> => as(async () => fn());
   const ORD = named(await mirrorsOf(D), 'orders')!.id as string;

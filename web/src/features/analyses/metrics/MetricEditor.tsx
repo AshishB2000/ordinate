@@ -26,12 +26,13 @@ import type { FilterStep } from '../../visuals/api';
 import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
-import { isFormula, isFunnel, isPeriod, periodRangeText, useMetricList, type FunnelDefinition, type Metric, type MetricFormat, type Snapshot } from './api';
+import { isExternal, isFormula, isFunnel, isPeriod, periodRangeText, useMetricList, type EditableDefinition, type FunnelDefinition, type Metric, type MetricFormat, type Snapshot } from './api';
 import { movesPin } from '../../model/status/status';
 import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
 import { KeyHint } from './KeyHint';
 import { PeriodFields, type PeriodDraft } from './PeriodFields';
 import { FunnelFields } from './FunnelFields';
+import { MirrorEditor } from './MirrorEditor';
 import { TargetFields, targetBody, targetDraftOf, targetProblem } from './TargetFields';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
@@ -63,6 +64,8 @@ export function MetricEditor(props: EditorProps) {
     setCurrent({ ...r.metric, ...(current?.status && { status: current.status }), tag: r.tag });
     setGen((g) => g + 1);
   };
+  // A layer's metric (part 7): its definition and filters are the layer's, so its own editor never sends them.
+  if (current?.definition && isExternal(current.definition)) return <MirrorEditor key={gen} {...props} existing={{ ...current, definition: current.definition }} onReload={() => void reload()} />;
   return <EditorBody key={gen} {...props} existing={current} onReload={() => void reload()} />;
 }
 
@@ -125,7 +128,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   const live = liveFilters(filters);
   const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
-    const [d, dfn, flt, f] = JSON.parse(key) as [string | null, Metric['definition'] | null, FilterStep[], MetricFormat];
+    const [d, dfn, flt, f] = JSON.parse(key) as [string | null, EditableDefinition | null, FilterStep[], MetricFormat];
     if (!d || !dfn) return setPreview(null);
     let on = true;
     setPreviewing(true);

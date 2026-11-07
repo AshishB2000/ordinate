@@ -257,7 +257,7 @@ export function register(): void {
       const counts = new Map<string, number>();
       for (const d of await datasets.listDatasets(projectId)) if (d.originConnId) counts.set(d.originConnId, (counts.get(d.originConnId) ?? 0) + 1);
       const sees = await seesSourceNames(projectId);
-      return await Promise.all(list.map(async (c) => (sees ? { ...(await withSecretSet(c)), datasetCount: counts.get(c.id) ?? 0 } : viewerConnection(c, counts.get(c.id) ?? 0))));
+      return await Promise.all(list.map(async (c) => (sees ? { ...(await withSecretSet(c)), datasetCount: counts.get(c.id) ?? 0, ...(getConnector(c.connectorId)?.semantic ? { semantic: true } : {}) } : viewerConnection(c, counts.get(c.id) ?? 0)))); // `semantic`: its layer's models can be added (part 7)
     } catch (_) {
       return [];
     }

@@ -23,7 +23,7 @@ import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { rowsText } from '../data/format';
 import { useCanEdit } from '../projects/api';
-import { LIVE_OFF, type LiveOffFeature } from './offFeatures';
+import { LIVE_OFF, layerWhy, type LiveOffFeature } from './offFeatures';
 import { isRowRefusal, liveRefusalOf } from './refusal';
 import s from './Live.module.css';
 
@@ -70,7 +70,8 @@ export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary'
 }) {
   const copy = useMakeCopy(projectId, datasetId, open);
   const canEdit = useCanEdit(projectId);
-  if (!canEdit) return null;
+  const layer = useLayerOf(projectId, datasetId); // a semantic dataset has no rows to copy (part 7): the server refuses one too
+  if (!canEdit || layer) return null;
   return (
     <Button
       variant={variant}
@@ -95,6 +96,7 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
 }) {
   const words = LIVE_OFF[feature];
   const canEdit = useCanEdit(projectId);
+  const layer = useLayerOf(projectId, datasetId);
   return (
     <div className={s.off} data-live-off={feature}>
       <EmptyState
@@ -104,9 +106,11 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
         title={words.title}
         actions={<MakeCopyButton projectId={projectId} datasetId={datasetId} open={(id) => words.open(projectId, id)} size={compact ? 'sm' : 'md'} />}
       >
-        {canEdit
-          ? `${words.why} Make a copy to use it. The copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`
-          : `${words.why} An editor of this project can make a copy that keeps its rows here.`}
+        {layer
+          ? layerWhy(layer.dataset, layer.label)
+          : canEdit
+            ? `${words.why} Make a copy to use it. The copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`
+            : `${words.why} An editor of this project can make a copy that keeps its rows here.`}
       </EmptyState>
     </div>
   );
@@ -166,13 +170,28 @@ export function LiveRefusalLine({ message }: { message: string }) {
 
 /** One line above tools that read rows, where a Live dataset is the one picked: why they need a copy, and the copy. */
 export function LiveBanner({ projectId, datasetId, name }: { projectId: string; datasetId: string; name: string }) {
+  const layer = useLayerOf(projectId, datasetId);
   return (
     <div className={s.banner} role="note" data-live-banner="">
       <Icon name="zap" size={16} />
-      <p>{`“${name}” is Live: its rows stay in the warehouse. Charts, KPI tiles and answers ask it directly; the tools below read rows, so each works on a copy.`}</p>
+      <p>
+        {layer
+          ? `${layerWhy(name, layer.label)} Charts and KPI tiles ask it directly; the tools below read rows, so they are off for it.`
+          : `“${name}” is Live: its rows stay in the warehouse. Charts, KPI tiles and answers ask it directly; the tools below read rows, so each works on a copy.`}
+      </p>
       <MakeCopyButton projectId={projectId} datasetId={datasetId} size="sm" variant="secondary" />
     </div>
   );
+}
+
+/**
+ * The layer a semantic dataset comes from (part 7), from the dataset list the screen already holds — never asked
+ * for here, so a gate in a dashboard tile adds no request. Null for any other dataset, or before the list is in.
+ */
+export function useLayerOf(projectId: string | undefined, datasetId: string | undefined): { label: string; dataset: string } | null {
+  const list = useDatasets(projectId, { cachedOnly: true });
+  const d = list.data?.find((x) => x.id === datasetId);
+  return d?.semantic ? { label: d.semantic.label, dataset: d.name } : null;
 }
 
 /**

@@ -402,3 +402,23 @@
   flex: 0 0 auto;
   margin-bottom: var(--sp-12);
 }
+
+/* A semantic dataset's measures while its layer's metrics load (./SemanticMeasures). */
+.skMeasure {
+  display: block;
+  width: 100%;
+  height: 32px;
+}
+
+/* A layer's metric beside its measure (./SemanticMeasures): the layer's mark, its words in the tooltip. */
+.layerMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+}

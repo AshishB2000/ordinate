@@ -275,6 +275,7 @@
   "embedMessages.this_site_is_not_allowed_to": "Diese Website darf dieses Dashboard nicht anzeigen.",
   "embedMessages.too_many_views_of_this_dashboard": "Zu viele Aufrufe dieses Dashboards. Versuchen Sie es in einer Minute erneut.",
   "externalMetricMessages.defined_in_another_tool": "In einem anderen Tool definiert",
+  "externalMetricMessages.is_computed_by_which_returns_totals": "„{name}“ wird von {layer} berechnet, das Summen liefert, nicht die Zeilen, die hierfür nötig sind.",
   "externalMetricMessages.is_defined_in_another_tool_s": "„{name}“ ist in der semantischen Schicht eines anderen Tools definiert, die dieser Server noch nicht abfragen kann. Schließen Sie das Upgrade ab und versuchen Sie es erneut.",
   "externalMetricMessages.is_defined_in_another_tool_s_2": "„{name}“ ist in der semantischen Schicht eines anderen Tools definiert und kann daher hier nicht dupliziert werden.",
   "externalMetricMessages.it_is_defined_in_another_tool": "Sie ist in der semantischen Schicht eines anderen Tools definiert, daher kann dieser Server sie nicht in Elemente aufteilen.",
