@@ -101,7 +101,15 @@ export function Chip({ card }: { card: Card }) {
           <span className={s.missing}>Parameter removed</span>
         )
       ) : (
-        <ControlWidget projectId={ed.projectId} control={control} value={ed.controlValue(card.id)} onChange={(v) => ed.setControl(card.id, v)} />
+        <ControlWidget
+          projectId={ed.projectId}
+          control={control}
+          value={ed.controlValue(card.id)}
+          siblings={barControls(ed.cards)
+            .filter((c) => c.id !== card.id)
+            .map((c) => ({ control: c.control as NonNullable<Card['control']>, value: ed.controlValue(c.id) }))}
+          onChange={(v) => ed.setControl(card.id, v)}
+        />
       )}
       {active && <IconButton icon="x" size="sm" label={`Clear ${label}`} onClick={clear} />}
       {/* Edit, the default and Remove change the dashboard: a viewer sets the control's value, and that is all — as does anyone reading it on a phone. */}

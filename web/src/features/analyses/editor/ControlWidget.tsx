@@ -8,6 +8,7 @@ import { Checkbox } from '../../../ui/Choice';
 import { Popover } from '../../../ui/Popover';
 import type { Card, ControlValue, Parameter } from '../api';
 import { DateControl } from './DateControl';
+import type { Sibling } from './cascade';
 import { ValuePicker } from './ValuePicker';
 import s from './FilterBar.module.css';
 
@@ -79,9 +80,21 @@ export function ParamWidget({ param, value, onChange, label }: { param: Paramete
 }
 
 /** The widget for one control's kind. */
-export function ControlWidget({ projectId, control, value, onChange }: { projectId: string; control: NonNullable<Card['control']>; value: ControlValue | undefined; onChange: (v: ControlValue | undefined) => void }) {
+export function ControlWidget({
+  projectId,
+  control,
+  value,
+  siblings,
+  onChange,
+}: {
+  projectId: string;
+  control: NonNullable<Card['control']>;
+  value: ControlValue | undefined;
+  siblings?: readonly Sibling[];
+  onChange: (v: ControlValue | undefined) => void;
+}) {
   if (!control.datasetId || !control.column) return <span className={s.missing}>No source column</span>;
   if (control.kind === 'date_range') return <DateControl control={control} value={value} onChange={onChange} />;
-  if (control.kind === 'dropdown' || control.kind === 'multi') return <ValuePicker projectId={projectId} control={control} value={value} onChange={onChange} />;
+  if (control.kind === 'dropdown' || control.kind === 'multi') return <ValuePicker projectId={projectId} control={control} value={value} siblings={siblings} onChange={onChange} />;
   return <span className={s.missing}>Shown on the dashboard</span>;
 }
