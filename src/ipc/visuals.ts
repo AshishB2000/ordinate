@@ -31,7 +31,7 @@ import { coerceValue } from '../data/parse';
 import { CATEGORY_CAP, OTHER_LABEL } from '../analysis/categoryKey';
 import type { DateGrain } from '../analysis/categoryKey';
 import { bucketRange, periodStep } from '../analysis/driverScope';
-import { drillFilters } from './drillScope';
+import { drillFilters, joinedCategoryRefusal } from './drillScope';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
@@ -199,6 +199,7 @@ export function resolveDrill(
   if (typeof encoding.category !== 'string' || encoding.category === '') {
     return { available: false, reason: 'This visual has no category column, so a mark identifies nothing.' };
   }
+  const joined = joinedCategoryRefusal(encoding); if (joined) return { available: false, reason: joined };
 
   const hasSplit = typeof encoding.series === 'string' && encoding.series.length > 0;
   if (category === undefined) {

@@ -603,7 +603,7 @@ export function registerHandlers(): void {
   }
   // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill
   // panel and period picker, and the project colour map that Format → Colours edits.
-  for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format']) (require(mod) as { register: () => void }).register();
+  for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format', '../ipc/drillDown']) (require(mod) as { register: () => void }).register();
   // Explore (docs/explore): a dataset's fields and suggested questions; every figure it draws is `visual:data`'s.
   (require('../ipc/explore') as typeof import('../ipc/explore')).register();
 

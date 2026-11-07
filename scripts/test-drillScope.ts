@@ -108,6 +108,15 @@ async function main(): Promise<void> {
   const loose = await all(monthly, { encoding: monthsEnc, mark: { category: 'Mar 2024' } });
   ok('NEGATIVE CONTROL: a label that is not one of the axis\'s buckets is refused, with a reason', loose.ok === true && loose.available === false && typeof loose.reason === 'string' && loose.rows === undefined, show(loose));
 
+  // ── inputs ──────────────────────────────────────────────────────────────
+  // The drill-down's half of the scope (src/ipc/drillDown.ts): the chart's grain, read off its answer.
+  const scope: typeof import('../src/ipc/drillScope') = require('../src/ipc/drillScope');
+  const inReq = { encoding: monthsEnc, filters: [], mark: { category: label }, params: undefined };
+  const plain = await scope.drillInputs(pid, monthly, meta, inReq);
+  const liveOpt = await scope.drillInputs(pid, monthly, meta, inReq, { liveGrain: true });
+  ok('inputs: a dated mark carries the chart\'s grain', plain.ok && plain.inputs.grain === 'month', show(plain));
+  ok('NEGATIVE CONTROL: on an extract the Live grain option changes nothing', liveOpt.ok && plain.ok && JSON.stringify(liveOpt.inputs) === JSON.stringify(plain.inputs), show(liveOpt));
+
   // ── metric ──────────────────────────────────────────────────────────────
   const format = { kind: 'number', decimals: 0, compact: false };
   const sales = await metrics.saveMetric(pid, { name: 'Sales', datasetId: monthly, definition: { column: 'amount', aggregation: 'sum' }, filters: [{ type: 'filter', column: 'kind', op: '=', value: 'sale' }], format } as Any);

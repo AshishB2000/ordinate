@@ -191,6 +191,8 @@ export const visuals = {
   // The rows behind a figure (or one clicked mark): main composes the filters
   // (resolveDrill) and pages, searches and sorts in SQL; a refusal says why.
   'visual:rows': rpc({ access: 'read', input: z.strictObject({ ...Drill, page: DrillPage.optional() }), project: byProjectId }),
+  // Semantic layer part 6: a clicked mark → the exact steps behind it and the next level (src/ipc/drillDown.ts). No metricId: a KPI does not drill.
+  'visual:drillDown': rpc({ access: 'read', input: z.strictObject({ ...Drill, mark: z.strictObject({ category: Cell, series: Cell.optional() }) }).omit({ metricId: true }), project: byProjectId }),
   // Server only: the same row set as a CSV download (T0.4 token), Share-policy shaped.
   'visual:rowsDownload': rpc({
     access: 'read',

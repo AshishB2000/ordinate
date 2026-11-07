@@ -348,7 +348,9 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       'dataset:distinct': [{ ...cols, column: 'ssn' }, { ...cols, column: 'dept' }],
       'dataset:profile': [{ ...cols, column: 'ssn' }, { ...cols, column: 'dept' }],
       'versions:figures': [{ projectId: P, type: 'metric', id: SSN_METRIC, from: smKeys[smKeys.length - 1], to: smKeys[0] }, { projectId: P, type: 'metric', id: HEADCOUNT, from: hmKeys[hmKeys.length - 1], to: hmKeys[0] }],
+      'visual:drillDown': [{ ...viz(COUNT_BY('ssn')), mark: { category: canary(0) } }, { ...viz(COUNT_BY('dept')), mark: { category: 'Ops' } }], // dept › employee_id (below)
     };
+    must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'employee_id'] }] } }));
     // Every metric of the project at once: Payroll's and the ssn metric's figures would show in the canary sweep above.
     const PROJECT_WIDE = new Set(['home:overview', 'numbers:get', 'metric:table']);
     const gates = Object.entries(COLUMN_TREATMENT).filter(([, c]) => c === 'GATE').map(([ch]) => ch);
