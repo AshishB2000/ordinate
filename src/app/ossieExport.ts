@@ -72,7 +72,8 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     const taken = new Set(fields.map((f) => f.name));
     const dm: Json[] = [];
     for (const m of metrics.filter((x) => x.dataset === d.id).sort(byName)) {
-      const def = isSimpleDefinition(m.definition) && AGG_SQL[m.definition.aggregation] ? m.definition : undefined;
+      const given = m.definition;
+      const def = isSimpleDefinition(given) && AGG_SQL[given.aggregation] ? given : undefined;
       const col = def && colsOf(d).find((c) => c.name === def.column);
       const why = !def ? ossieWhy.metricFormula()
         : def.snapshot ? ossieWhy.metricSnapshot()
