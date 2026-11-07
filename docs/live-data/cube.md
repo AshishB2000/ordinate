@@ -19,7 +19,9 @@ So each item is marked **documented**, **source** (read in Cube's code, not prom
 every one is **unverified on a deployment**. `scripts/fixtures/cube/` starts one (Postgres seeded with the live-parity
 fixture, the pinned Cube image, the model `scripts/cubeFixture.ts` writes), and the warehouse nightly's `cube` job runs
 the whole semantic parity matrix against it (`scripts/test-semanticCubeLive.ts`). Until that run is green, treat this
-page as a plan, not as facts.
+page as a plan, not as facts. Even then, parity is proven on a **Postgres-backed Cube only**: `equals`, `notEquals` and
+the order compare in the warehouse's collation, so on a case-insensitive one (MySQL, SQL Server) a filter or "Other" can
+match `west` with `West` where an extract does not.
 
 ## The request Ordinate sends
 
