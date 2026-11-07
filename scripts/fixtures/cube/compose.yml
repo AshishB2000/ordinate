@@ -38,6 +38,9 @@ services:
       CUBEJS_DB_PASS: parity
       CUBEJS_API_SECRET: ordinate-cube-parity-not-a-secret
       CUBEJS_DEV_MODE: 'false'
+      # Out of dev mode Cube queues and caches in Cube Store, which this deployment does not run (it refused to
+      # start: "set CUBEJS_CUBESTORE_HOST"). The in-memory driver suits one Cube process over a fixture.
+      CUBEJS_CACHE_AND_QUEUE_DRIVER: memory
     volumes:
       - ./model:/cube/conf/model:ro
     ports:
