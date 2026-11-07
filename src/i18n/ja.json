@@ -705,6 +705,7 @@
   "semanticMessages.your_access_to_is_limited_to": "{dataset}へのアクセスは一部の行に制限されていますが、{layer}はその制限を正確に適用できないため、数値は表示されません。",
   "sourceTableMessages.only_a_dataset_built_from_a": "接続から作られたデータセットだけが、そのソーステーブルを指定できます。",
   "sourceTableMessages.that_connection_is_gone": "その接続は削除されました。",
+  "sourceTableMessages.these_notes_already_keep_dismissed": null,
   "sourceTableMessages.this_connection_already_documents_2_000": "この接続では、すでに2,000個のテーブルが文書化されています。",
   "sourceTableMessages.this_connection_s_tables_were_read": "この接続のテーブルは、過去1時間に60回読み取られました。{minutes}分後にもう一度お試しください。",
   "sourceTableMessages.this_source_has_no_catalog_ordinate": "このソースには、Ordinateが読み取れるカタログがありません。ノートは手動で書いてください。",

@@ -702,6 +702,7 @@
   "semanticMessages.your_access_to_is_limited_to": "Your access to {dataset} is limited to some rows, and {layer} can't apply that limit exactly, so no figure is shown.",
   "sourceTableMessages.only_a_dataset_built_from_a": "Only a dataset built from a connection names its source tables.",
   "sourceTableMessages.that_connection_is_gone": "That connection is gone.",
+  "sourceTableMessages.these_notes_already_keep_dismissed": "These notes already keep dismissed suggestions for 500 datasets.",
   "sourceTableMessages.this_connection_already_documents_2_000": "This connection already documents 2,000 tables.",
   "sourceTableMessages.this_connection_s_tables_were_read": "This connection's tables were read 60 times in the last hour. Try again in {minutes} min.",
   "sourceTableMessages.this_source_has_no_catalog_ordinate": "This source has no catalog Ordinate can read. Write its notes by hand.",
