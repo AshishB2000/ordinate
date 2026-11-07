@@ -67,7 +67,10 @@ LIMIT 51
 
 Read from `DESCRIBE`'s `EXPRESSION` (documented, e.g. `AVG(orders.o_totalprice)`). Additive only
 when the whole expression is one `SUM(…)` or `COUNT(…)`, not `COUNT(DISTINCT …)`, with no other
-aggregate or operator outside it (`additiveExpression`). A derived metric is never additive.
+aggregate or operator outside it (`additiveExpression`). A derived metric is never additive, nor is
+one declared `NON ADDITIVE BY (…)` (a semi-additive metric, a balance; documented in CREATE SEMANTIC
+VIEW): DESCRIBE's property for the clause is not documented, so a metric with any property whose
+name holds `ADDITIVE` (the organization usage view's column is `NON_ADDITIVE_DIMENSIONS`) is not.
 Anything unreadable is `false`: the cost of being wrong is a refused running total, never a wrong
 sum.
 

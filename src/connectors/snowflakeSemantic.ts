@@ -10,9 +10,9 @@
 //                  the session's); a view whose parts are not plain identifiers is not listed
 //   describeModel  DESCRIBE SEMANTIC VIEW "DB"."SCHEMA"."VIEW" — dimensions typed through the Live column mapping
 //                  (a DATE or TIMESTAMP at every grain: the encoder truncates inside the clause; a TIMESTAMP_TZ
-//                  unmapped, its day would be its own offset's), metrics with
-//                  whether they add up (`additiveExpression`, failing safe); private members left out; a name two
-//                  members share stored as TABLE.NAME, so every stored name is unambiguous in a query
+//                  unmapped, its day would be its own offset's), metrics with whether they add up
+//                  (`additiveExpression`, failing safe; never one NON ADDITIVE BY a dimension); private members left
+//                  out; a name two members share stored as TABLE.NAME, so every stored name is unambiguous in a query
 //   run            the encoder's `{ sql, params }` through the connector's `runBound`: `?` binds, the row cap
 //
 // The capabilities stay narrow until the warehouse nightly proves more: `binaryCompare: false`, so a viewer
@@ -115,7 +115,9 @@ async function describeModel(io: SnowflakeIo, ctx: ConnectorContext, model: stri
     const name = stored(m);
     if (!name) return [];
     const description = m.props.get('COMMENT');
-    return [{ name, additive: m.kind === 'METRIC' && additiveExpression(m.props.get('EXPRESSION') ?? ''), ...(description ? { description } : {}) }];
+    // NON ADDITIVE BY (a balance): DESCRIBE's property for it is undocumented, so any property naming additivity says not.
+    const semi = [...m.props.keys()].some((p) => /ADDITIVE/i.test(p));
+    return [{ name, additive: m.kind === 'METRIC' && !semi && additiveExpression(m.props.get('EXPRESSION') ?? ''), ...(description ? { description } : {}) }];
   });
   return { ok: true, dimensions, metrics };
 }

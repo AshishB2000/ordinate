@@ -141,6 +141,9 @@ async function listingSection(): Promise<void> {
       ['METRIC', 'REVENUE', 'ORDERS', 'COMMENT', 'Gross sales'],
       ['METRIC', 'ORDER_COUNT', 'ORDERS', 'EXPRESSION', 'count(orders.order_id)'],
       ['METRIC', 'AVG_ORDER', 'ORDERS', 'EXPRESSION', 'AVG(orders.amount)'],
+      // NON ADDITIVE BY (a balance): DESCRIBE's property for it is undocumented; the organization usage view names it so.
+      ['METRIC', 'BALANCE', 'ORDERS', 'EXPRESSION', 'SUM(orders.balance)'],
+      ['METRIC', 'BALANCE', 'ORDERS', 'NON_ADDITIVE_DIMENSIONS', '["ORDER_DATE"]'],
       ['METRIC', 'MARGIN', 'ORDERS', 'EXPRESSION', 'SUM(orders.profit) / SUM(orders.amount)'],
       ['METRIC', 'HIDDEN', 'ORDERS', 'EXPRESSION', 'SUM(orders.cost)'],
       ['METRIC', 'HIDDEN', 'ORDERS', 'ACCESS_MODIFIER', 'PRIVATE'],
@@ -173,10 +176,10 @@ async function listingSection(): Promise<void> {
   const read = d.ok ? (require('../src/engine/live/semantic/semanticSync') as typeof import('../src/engine/live/semantic/semanticSync')).readModel(d, 'snowflake', 'SALES.PUBLIC.ORDERS_SV', '2026-11-06T00:00:00.000Z') : null;
   ok('…a TIMESTAMP_TZ dimension is no column of the dataset, named unmapped by the sync; a TIMESTAMP_NTZ one is a date',
     !!read && show(read.unmapped) === '["PAID_AT"]' && !read.columns.some((c) => c.name === 'PAID_AT') && read.columns.some((c) => c.name === 'SHIPPED_AT' && c.type === 'date'), show(read));
-  ok('…metrics say whether they add up (SUM, COUNT yes; AVG, a ratio, a derived metric no), a private one is left out, a comment is the description',
+  ok('…metrics say whether they add up (SUM, COUNT yes; AVG, a ratio, a derived metric, a SUM NON ADDITIVE BY a dimension no), a private one is left out, a comment is the description',
     d.ok && show(d.metrics) === show([
       { name: 'REVENUE', additive: true, description: 'Gross sales' }, { name: 'ORDER_COUNT', additive: true }, { name: 'AVG_ORDER', additive: false },
-      { name: 'MARGIN', additive: false }, { name: 'REVENUE_PER_ORDER', additive: false },
+      { name: 'BALANCE', additive: false }, { name: 'MARGIN', additive: false }, { name: 'REVENUE_PER_ORDER', additive: false },
     ]), show(d));
   const n = fake.statements().length;
   const badName = await layer.describeModel(CTX(), 'SALES.PUBLIC."x"');
@@ -186,7 +189,7 @@ async function listingSection(): Promise<void> {
   const ADDS: Array<[string, boolean]> = [
     ['SUM(amount)', true], ['count(order_id)', true], ['COUNT(*)', true], ['sum( orders.amount * orders.qty )', true], ['SUM(IFF(x > 0, x, 0))', true],
     ['SUM(a)/SUM(b)', false], ['AVG(a)', false], ['COUNT(DISTINCT a)', false], ['count( distinct a)', false], ['SUM(a) + 1', false], ['MAX(a)', false],
-    ['SUM(AVG(a))', false], ['SUM(a) OVER (PARTITION BY b)', false], ['1 + SUM(a)', false], ['', false], ['SUM(a', false], ['SUM(\'(\')', true],
+    ['SUM(AVG(a))', false], ['SUM(a) OVER (PARTITION BY b)', false], ['1 + SUM(a)', false], ['', false], ['SUM(a', false], ['SUM(\'(\')', true], ['SUM(a) NON ADDITIVE BY (d)', false],
   ];
   const wrong = ADDS.filter(([e, want]) => sem.additiveExpression(e) !== want);
   ok(`additiveExpression: ${ADDS.length} expressions read as the rule says`, wrong.length === 0, show(wrong));
