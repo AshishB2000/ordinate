@@ -10,7 +10,7 @@
 //    `sourceView(hideNames)` keeps "a query". NEGATIVE CONTROL: the editor still reads the names.
 // 2. `seesSourceNames` fails closed on an id that is not a project id.
 // 3. `lineage:get` and `pipelines:get`: a viewer's source node says the connector's kind ("postgres") or "Web address",
-//    the editor and an org admin read "Table <table>" and the host and get the same bytes. NEGATIVE CONTROL: the editor.
+//    the editor and an org admin read the same kind (D20: no reader reads the table there) and the web import's host. NEGATIVE CONTROL: the editor.
 // 4. `dataset:list` and `pipelines:get`: a warehouse driver's refresh error ("relation … does not exist") names the table,
 //    so a viewer gets the failure without its text; a dataset not from a connection keeps its text.
 //    NEGATIVE CONTROL: the editor reads the text. The runner stores the editor's run under the web import's real id.
@@ -186,11 +186,45 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('lineage:get: a viewer reads the connector kind', srcNode(linViewer).sub === 'postgres' && !CANARY.test(linViewer.text), linViewer.text);
     ok('lineage:get: a viewer reads "Web address", not its host', webNode(linWebViewer).name === 'Web address' && !CANARY.test(linWebViewer.text), linWebViewer.text);
     ok('pipelines:get: a viewer reads the connector kind and "Web address", nothing of a source', connNode(pipeViewer).sub === 'postgres' && feeds(pipeViewer, web).name === 'Web address' && !CANARY.test(pipeViewer.text), pipeViewer.text);
-    ok('NEGATIVE CONTROL: the editor reads "Table public.canary_tbl_9f3" in lineage and in pipelines', srcNode(linEditor).sub === `Table ${TABLE}` && connNode(pipeEditor).sub === `Table ${TABLE}`, linEditor.text);
+    // D20 (semantic layer part 8): a connection source says its connector's kind to every reader, never the table. The editor's
+    // non-vacuous anchor for the name rule is `dataset:source` above ("Connection · Warehouse · public.canary_tbl_9f3").
+    ok('NEGATIVE CONTROL: the editor reads the connector kind too, and the table in neither lineage nor pipelines', srcNode(linEditor).sub === 'postgres' && connNode(pipeEditor).sub === 'postgres' && !CANARY.test(linEditor.text) && !CANARY.test(connNode(pipeEditor).sub), linEditor.text);
     ok('NEGATIVE CONTROL: the editor reads the web import\'s host in lineage and in pipelines', webNode(linWebEditor).name === WEB_HOST && feeds(pipeEditor, web).name === WEB_HOST, linWebEditor.text);
     const [linDbViewer, linDbEditor] = [await lin('nobody', dDb), await lin('ed', dDb)];
     ok('lineage:get and pipelines:get: a connection named after its database reads as the connector for a viewer', srcNode(linDbViewer).name === 'PostgreSQL' && connNode(pipeViewer, byDb).name === 'PostgreSQL' && !CANARY.test(linDbViewer.text), linDbViewer.text);
     ok('NEGATIVE CONTROL: the editor reads the stored name in lineage and in pipelines', srcNode(linDbEditor).name === NAMED_DB && connNode(pipeEditor, byDb).name === NAMED_DB, linDbEditor.text);
+
+    // lineage:column, lineage:fields and the column nodes (semantic layer part 8): names and counts, never an origin or a value.
+    // A term, a metric and a chart filter on the web of datasets carry the West rule's own values (W_CANARY, POLICY_CANARY).
+    const termsStore: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
+    const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+    const visualsStore: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+    const linePlanted = await W.as('boss', async () => {
+      const byRegion = (ds: string, extra: unknown[]) => ({ datasetId: ds, filters: [{ type: 'filter', column: 'region', op: 'in', values: ['East', H.W_CANARY, H.POLICY_CANARY] }, ...extra] });
+      const out: Record<string, string> = {};
+      for (const [key, ds] of [['D', D], ['O', W.orders]] as const) {
+        const term = await termsStore.saveTerm(P, { name: `Big ${key}`, datasetId: ds, filters: byRegion(ds, []).filters });
+        await metricsStore.saveMetric(P, { name: `Sales ${key}`, ...byRegion(ds, [{ type: 'term', term: term!.id }]), definition: { column: 'sales', aggregation: 'sum' } } as never);
+        await visualsStore.saveVisual(P, { name: `Sales by region ${key}`, ...byRegion(ds, []), chartType: 'column', encoding: { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] } } as never);
+        out[key] = term!.id;
+      }
+      return out;
+    });
+    const colCall = (who: string, ds: string, column = 'sales') => W.call(who, 'lineage:column', { projectId: P, datasetId: ds, column });
+    const fieldsCall = (who: string, ds: string) => W.call(who, 'lineage:fields', { projectId: P, datasetId: ds });
+    const [colViewer, colEditor, fieldsViewer, fieldsEditor, getViewer] = [await colCall('nobody', D), await colCall('ed', D), await fieldsCall('nobody', D), await fieldsCall('ed', D), await lin('nobody')];
+    const [colEast, fieldsEast, getEast] = [await colCall('east', W.orders), await fieldsCall('east', W.orders), await W.call('east', 'lineage:get', { projectId: P, type: 'dataset', id: W.orders })];
+    const hides = (t: string) => !CANARY.test(t) && !H.leaks(t);
+    ok('lineage:column and lineage:fields: a viewer reads the connector kind, no table, no host, and no filter value', colViewer.body?.nodes.some((n: N) => n.kind === 'source' && n.sub === 'postgres') && colViewer.body.usedIn.metric === 1 && fieldsViewer.body?.fields.sales.usedIn.metric === 1 && hides(colViewer.text + fieldsViewer.text + getViewer.text), colViewer.text);
+    ok('lineage:column and lineage:fields: the editor gets the same bytes (nothing a viewer is denied is in them)', colViewer.text === colEditor.text && fieldsViewer.text === fieldsEditor.text);
+    ok('lineage:get draws no column or term node, for a viewer', !getViewer.body.nodes.some((n: N) => n.kind === 'column' || n.kind === 'term'));
+    ok('a row-restricted viewer: no value of the West rule or the West rows in lineage:column, lineage:fields or lineage:get, and the record counts are the same as the editor\'s', colEast.body?.usedIn.metric === 1 && fieldsEast.body?.fields.sales.usedIn.metric === 1 && getEast.body?.nodes.length > 0 && hides(colEast.text + fieldsEast.text + getEast.text) && colEast.text === (await colCall('ed', W.orders)).text, colEast.text);
+    // the term node sits on the `region` column (its filter's column): a row-restricted viewer reads its name, never its values
+    const termEast = await colCall('east', W.orders, 'region');
+    ok('a row-restricted viewer reads the term by name on the column it filters, and none of its values', termEast.body?.nodes.some((n: N) => n.kind === 'term' && n.sub === 'Glossary term') && hides(termEast.text), termEast.text.slice(0, 300));
+    const storedTerm = JSON.stringify(await W.as('boss', () => termsStore.getTerm(P, linePlanted.O)));
+    ok('NEGATIVE CONTROL: the stored term and the stored table name hold the values the replies above lack', storedTerm.includes(H.POLICY_CANARY) && storedTerm.includes(H.W_CANARY) && CANARY.test(JSON.stringify(await W.as('boss', () => datasets.getDatasetMeta(P, D)))));
+    ok('NEGATIVE CONTROL: the check can fail: the same test over a reply that does carry a value reads as a leak', !hides(storedTerm) && !hides(`Table ${TABLE}`));
     // The input both read: `readsTables` (spec D11) names warehouse tables, so it is trimmed with `table`.
     const originOf = async (who: string) => JSON.parse(JSON.stringify((await W.as(who, () => lineageMod.loadInput(P))).datasets.find((d) => d.id === D)?.origin));
     const [inViewer, inEditor] = [await originOf('nobody'), await originOf('ed')];

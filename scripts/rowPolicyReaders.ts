@@ -92,6 +92,8 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'jobs:list': 'META',
   'key:status': 'META',
   'lineage:get': 'META',
+  'lineage:column': 'META', // names and counts of the records around one column, never a value (part 8)
+  'lineage:fields': 'META',
   'mentions:list': 'META', // the caller's own mention rows; snippets of comments, never a row or figure
   'mentions:prefs': 'META',
   'mentions:seen': 'META',

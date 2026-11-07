@@ -27,9 +27,11 @@
 // ordering, so every edge in the output points left to right.
 
 import { parentsOfRecord } from '../data/upstream';
+import type { Relationship } from './relationships';
+import { consumerColumns, metricColumns, parsedFormula } from './lineageColumns';
 
 export type LineageKind =
-  | 'source' | 'dataset' | 'prepare' | 'calc' | 'metric' | 'visual' | 'dashboard' | 'report' | 'alert';
+  | 'source' | 'dataset' | 'prepare' | 'calc' | 'column' | 'term' | 'metric' | 'visual' | 'dashboard' | 'report' | 'alert';
 
 export interface LineageNode {
   id: string;
@@ -59,7 +61,7 @@ export interface FocusedLineage extends LineageGraph {
 
 /** Left-to-right order. A node never sits left of this rank for its kind. */
 export const KIND_RANK: Record<LineageKind, number> = {
-  source: 0, dataset: 1, prepare: 2, calc: 3, metric: 4, visual: 5, dashboard: 6, report: 7, alert: 7,
+  source: 0, dataset: 1, prepare: 2, calc: 3, column: 3, term: 4, metric: 4, visual: 5, dashboard: 6, report: 7, alert: 7,
 };
 
 // ── Input shapes: only the fields read here ─────────────────────────────────
@@ -77,6 +79,9 @@ export interface LineageInput {
   captures?: Array<{ id: string; title?: string }>;
   /** r7:notebooks — the notebooks a `notebook` origin names. */
   notebooks?: Array<{ id: string; name: string }>;
+  /** Glossary terms and relationships: read only by the column pass (./lineageNodes) and by a figure's per-dataset columns. */
+  terms?: Rec[];
+  relationships?: Relationship[];
 }
 
 const SOURCE_WORD: Record<string, string> = {
@@ -104,13 +109,6 @@ export function visualColumns(v: Rec): string[] {
   for (const val of arr(p.values)) if (val && !val.metricId) cols.push(str(val.column));
   for (const f of arr(v.filters)) cols.push(str(f && f.column));
   return cols.filter(Boolean);
-}
-
-/** `[Name]` references and `agg(column)` operands of a metric formula. */
-function formulaRefs(formula: string): { names: string[]; columns: string[] } {
-  const names = [...formula.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1].trim());
-  const columns = [...formula.matchAll(/\b(?:sum|avg|count|min|max)\s*\(\s*([^()]+?)\s*\)/gi)].map((m) => m[1].replace(/^\[|\]$/g, '').trim());
-  return { names, columns };
 }
 
 export function buildGraph(input: LineageInput): LineageGraph {
@@ -184,7 +182,7 @@ export function buildGraph(input: LineageInput): LineageGraph {
       const c = connName.get(str(o.connId));
       sid = add({
         id: 'source:conn:' + str(o.connId), kind: 'source', name: c ? c.name : 'Connection',
-        sub: o.table ? `Table ${o.table}` : (c && c.kind ? c.kind : 'Connection'),
+        sub: c && c.kind ? c.kind : 'Connection', // never the table (D20)
         ref: { type: 'connection', id: str(o.connId) },
       });
     } else if (o.kind === 'file') {
@@ -242,22 +240,18 @@ export function buildGraph(input: LineageInput): LineageGraph {
   for (const m of input.metrics) {
     const id = 'metric:' + str(m.id);
     const def: Rec = m.definition || {};
-    const cols = arr(m.filters).map((f) => str(f && f.column));
     if (def.formula) {
-      const refs = formulaRefs(String(def.formula));
-      for (const n of refs.names) {
+      // D17: the parser says which names are metrics and which are columns
+      for (const n of parsedFormula(m, input)?.metricRefs ?? []) {
         const other = metricByName.get(n.toLowerCase());
         if (other) link(other, id);
-        else cols.push(n);
       }
-      cols.push(...refs.columns);
-    } else {
-      cols.push(str(def.column));
     }
+    const byDs = metricColumns(m, input);
     // A formula made only of other metrics reads no column itself: its data
     // arrives through them, and a second edge from the dataset would say otherwise.
-    if (def.formula && !cols.some(Boolean)) continue;
-    for (const src of inputsFor(str(m.datasetId), cols.filter(Boolean))) link(src, id);
+    if (def.formula && ![...byDs.values()].some((c) => c.length)) continue;
+    for (const [ds, cols] of byDs) for (const src of inputsFor(ds, cols)) link(src, id);
   }
 
   // Visuals.
@@ -267,7 +261,7 @@ export function buildGraph(input: LineageInput): LineageGraph {
       sub: str(v.chartType).replace(/_/g, ' ') || 'Visual',
       ref: { type: 'visual', id: str(v.id) },
     });
-    for (const src of inputsFor(str(v.datasetId), visualColumns(v))) link(src, id);
+    for (const [ds, cols] of consumerColumns(v, input)) for (const src of inputsFor(ds, cols)) link(src, id); // D19: each field on its own dataset
     const e: Rec = v.encoding || {};
     for (const mm of [...arr(e.values), ...arr(e.pivot && e.pivot.values)]) {
       if (mm && mm.metricId) link('metric:' + mm.metricId, id);
