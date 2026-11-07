@@ -7,6 +7,7 @@ import { dropHidden, factsOf, tableWithout } from '../ai/hiddenFacts';
 import { metricHidden } from '../analysis/columnHidden';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
+import { assistantOff } from '../ai/aiMessages';
 import * as copilot from '../ai/copilot';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
@@ -547,6 +548,7 @@ export function register() {
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
       const hit = sharing ? null : await verifiedAsk(projectId, q, tid, guardAnswer); // a verified question, word for word (./verifiedAsk)
       if (hit) return hit;
+      if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {}, emit, q, sharing);

@@ -52,3 +52,8 @@ export function aiKeyForNewEndpoint(): string {
 export function aiColumnWithheld(): string {
   return t('aiMessages.this_column_is_marked_personal_or');
 }
+
+/** An admin turned the Assistant off (copilot:setEnabled): every model call it would make is refused on the server. */
+export function assistantOff(): string {
+  return t('aiMessages.the_assistant_is_off_for_your');
+}

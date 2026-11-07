@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 import * as jobs from '../app/jobs';
 import * as recordFs from '../app/recordFs';
 import * as execConfig from '../app/execConfig';
+import { assistantOff } from '../ai/aiMessages';
 import * as analyze from '../ai/analyze';
 import { projectDir, isValidId } from '../app/recordKinds';
 import { osUser } from '../app/catalog';
@@ -133,6 +134,7 @@ async function runCheck(projectId: string, run: CheckRun, questions: VerifiedQue
     };
     for (const q of questions) {
       jc.checkCancelled();
+      if (!execConfig.assistantOn()) throw new jobs.JobCancelled(); // switched off mid-run: no further model call
       await beat();
       const r = await askOne(projectId, facts, q);
       run.results.push(r);
@@ -155,6 +157,7 @@ async function runCheck(projectId: string, run: CheckRun, questions: VerifiedQue
 
 /** Start a check as the caller: refused with a sentence when there is no model, nothing to ask, or one runs already. */
 export async function startCheck(projectId: string): Promise<{ ok: true; runId: string; done: Promise<unknown> } | { ok: false; error: string }> {
+  if (!execConfig.assistantOn()) return { ok: false, error: assistantOff() };
   if (!(await execConfig.executionReady())) return { ok: false, error: msg.checkNoModel() };
   const working = (await verifiedStates(projectId)).filter((s) => s.problem === null && !s.hidden); // newest first
   if (!working.length) return { ok: false, error: msg.checkNothing() };

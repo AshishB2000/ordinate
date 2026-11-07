@@ -281,7 +281,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
 /** `asked`: a model was called (one was ready), whether or not its words were kept. */
 export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit; asked: boolean }> {
-  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT, asked: false };
+  if (!execConfig.assistantOn() || !(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT, asked: false };
   const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
   const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
   if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT, asked: true };

@@ -102,6 +102,12 @@ All notable changes to Ordinate are documented here. Format based on
 
 ### Security
 
+- **Turning the Assistant off now holds on the server.** Only the dock obeyed the switch, so an API
+  token or a hand-made request could still ask the Assistant, run Check the Assistant or have a plan
+  step fixed, on the org's model budget. Every model call the Assistant makes is now refused with
+  "The Assistant is off for your organization." A question asked word for word as a verified one, a
+  follow-up chip and Explain still answer with the app's figures, without the model's prose. A check
+  already running stops before its next question. Turning it back on works at once, on every pod.
 - **A project viewer no longer reads where your data comes from.** Someone who can read a project but not
   edit it sees a connection as its card only (name, connector, status, how many datasets use it): no host,
   database, user, saved queries or last error. A connection named after its host or database reads as the
