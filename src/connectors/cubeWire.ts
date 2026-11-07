@@ -40,7 +40,7 @@ export interface CubeQuery {
 /**
  * The encoder's request body. `query` is all Cube sees. `nonBlank` names text members whose blank values (null,
  * '' or whitespace) the connector drops from a value list (Cube cannot test whitespace); `limit` is then the cut
- * applied after the drop, the query itself asking for every value.
+ * applied after the drop. The query asks the same limit, and a full reply the drop left short is asked again whole.
  */
 export interface CubeBody {
   query: CubeQuery;
@@ -128,7 +128,11 @@ export function readLoad(body: CubeBody, json: unknown): LoadRead {
   // One blank form in a cut may hide the other past it (the check above needs both, and "Other" drops both): re-ask.
   if (full && dims.some((i) => !numeric.has(keys[i].key) && rows.some((r) => r[i] === '' || r[i] === null))) return { recut: true };
   const drop = new Set((body.nonBlank ?? []).map((m) => keys.findIndex((k) => k.key === m)));
-  if (drop.size) rows = rows.filter((r) => ![...drop].some((i) => blank(r[i])));
+  if (drop.size) {
+    const kept = rows.filter((r) => ![...drop].some((i) => blank(r[i])));
+    if (full && kept.length < rows.length) return { recut: true }; // the drop left the cut short: the rest is past it
+    rows = kept;
+  }
   if (body.limit !== undefined) rows = rows.slice(0, body.limit);
   return { ok: true, columns: keys.map(({ name }) => ({ name, type: '' })), rows, truncated: false };
 }

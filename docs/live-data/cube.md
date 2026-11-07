@@ -106,7 +106,7 @@ date as its ISO day). **The encoding,** exact for every row, or refused `layerFi
 | in list (a blank or a NULL in it matches both) | `equals [...]`, with `or […, notSet]` when a blank is in the list | `equals [...]` of its finite numbers | refused |
 | not in list | `notEquals [...]`, with `and […, set]` when a blank is in the list | `notEquals [...]` | refused |
 | contains | refused (Cube's is case-insensitive) | refused (as on any Live dataset) | refused |
-| empty / not empty | refused: Cube cannot tell a whitespace-only cell from text (Ordinate's empty is null, `''` or whitespace); **except** a value list's own "not empty", which drops the blank values from the list here (exact: each row is one value) | `notSet` / `set` | `notSet` / `set` |
+| empty / not empty | refused: Cube cannot tell a whitespace-only cell from text (Ordinate's empty is null, `''` or whitespace); **except** a value list's own "not empty", which drops the blank values from the list here (exact: each row is one value; a full reply the drop left short is asked again whole) | `notSet` / `set` | `notSet` / `set` |
 | a period (from, to) | — | — | `and [afterOrOnDate [from], beforeDate [to + 1 day]]` |
 | "Other" (all but the kept categories) | the not-in form, wrapped in its own `and` | — | — |
 

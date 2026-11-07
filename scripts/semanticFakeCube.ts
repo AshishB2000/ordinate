@@ -122,7 +122,7 @@ export function decodeCube(body: unknown, columns: readonly LiveColumn[], as: 'o
   ];
   const metrics = q.measures.map(nameOf);
   const nonBlank = as === 'ours' ? body.nonBlank ?? [] : [];
-  if ((body.nonBlank?.length ?? 0) > 0 && q.limit !== wire.CUBE_ROW_LIMIT) bad('a value list cut by Cube before its blanks are dropped', body);
+  if ((body.nonBlank?.length ?? 0) > 0 && q.limit !== wire.CUBE_ROW_LIMIT && q.limit !== body.limit) bad('a value list Cube cuts elsewhere than at its own limit', body);
   const where = q.filters.map((f) => decodeFilter(f, column, nonBlank));
   const order = q.order.map(([m, dir]) => (dir === 'asc' || dir === 'desc' ? { by: nameOf(m), desc: dir === 'desc' } : bad('an order direction', dir)));
   const limit = as === 'ours' && body.limit !== undefined ? body.limit : q.limit === wire.CUBE_ROW_LIMIT ? undefined : q.limit;

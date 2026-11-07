@@ -37,6 +37,7 @@ const adapters: typeof import('../src/engine/live/semantic/adapters') = require(
 const es: typeof import('../src/engine/live/semantic/evaluateSemantic') = require('../src/engine/live/semantic/evaluateSemantic');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
+const sp: typeof import('../src/engine/live/semantic/semanticPlan') = require('../src/engine/live/semantic/semanticPlan');
 const qc: typeof import('../src/engine/queryCache') = require('../src/engine/queryCache');
 const ck: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 const shaped: typeof import('./semanticShapes') = require('./semanticShapes');
@@ -151,8 +152,8 @@ function encodeSection(): void {
       && refusedOn({ kind: 'compare', column: 'nope', op: '=', value: 'x' }) === 'unknownColumn');
   // A value list's own "not empty": '' and NULL out at Cube, whitespace out when read, its cut after.
   const values = bodyOf({ dimensions: [{ name: 'many' }], metrics: [], where: [{ kind: 'empty', column: 'many', negate: true }], order: [{ by: 'many', desc: false }], limit: 201 });
-  ok('a value list\'s "not empty": notEquals \'\' AND set at Cube, the blanks named for the connector, Cube asked for every value and the cut after',
-    show(values.nonBlank) === '["orders.many"]' && values.limit === 201 && values.query.limit === wire.CUBE_ROW_LIMIT
+  ok('a value list\'s "not empty": notEquals \'\' AND set at Cube, the blanks named for the connector, Cube asked for the list\'s own limit',
+    show(values.nonBlank) === '["orders.many"]' && values.limit === 201 && values.query.limit === 201
       && show(values.query.filters) === show([{ and: [{ member: 'orders.many', operator: 'notEquals', values: [''] }, { member: 'orders.many', operator: 'set' }] }]));
 
   const [, q] = SHAPES[0];
@@ -257,6 +258,21 @@ async function replySection(): Promise<void> {
   const list: CubeBody = { query: { measures: [], dimensions: ['orders.many'], timeDimensions: [], filters: [], order: [['orders.many', 'asc']], limit: wire.CUBE_ROW_LIMIT, timezone: 'UTC' }, nonBlank: ['orders.many'], limit: 2 };
   const listed = wire.readLoad(list, { data: ['\t', '  ', 'a', 'b', 'c'].map((v) => ({ 'orders.many': v })), annotation: { dimensions: { 'orders.many': { type: 'string' } } } });
   ok('a value list: whitespace-only values dropped, then the cut', show(rowsOf(listed)?.rows) === '[["a"],["b"]]', show(listed));
+  // A picker on a 60,000-value dimension (planValues asks 201): Cube cuts at 201, asked again whole only when a
+  // whitespace-only value dropped here left the cut short.
+  const picker = cube.cubeAdapter.encode(sp.planValues('many', [], { ...ENV, columns: [{ name: 'many', type: 'text' }] }, { limit: 201 }) as SemanticQuery, 'orders', [{ name: 'many', type: 'text' }], NAMES);
+  const pickerBody = 'body' in picker ? picker.body as CubeBody : list;
+  const many = (pad: boolean) => async (b: CubeBody) => {
+    posts.push(b.query.limit);
+    const all = Array.from({ length: 60_000 }, (_v, i) => (pad && i === 3 ? '  ' : `c${String(i).padStart(5, '0')}`));
+    return { ok: true as const, json: { data: all.slice(0, b.query.limit).map((v) => ({ 'orders.many': v })), annotation: { dimensions: { 'orders.many': { type: 'string' } } } } };
+  };
+  posts.length = 0;
+  const first = await wire.loadRows(pickerBody, many(false));
+  ok('a picker on a 60,000-value dimension asks Cube for 201 and lists them, not tooManyGroups', show(posts) === '[201]' && first.ok && 'rows' in first && first.rows.length === 201 && !first.truncated, show([posts, 'rows' in first ? first.rows.length : first]));
+  posts.length = 0;
+  await wire.loadRows(pickerBody, many(true));
+  ok('…a whitespace-only value dropped from a full cut asks again whole', show(posts) === show([201, wire.CUBE_ROW_LIMIT]), show(posts));
 }
 
 async function matrixSection(): Promise<void> {
