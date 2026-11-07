@@ -270,6 +270,14 @@ as one already is on any saved-metric measure (`src/ipc/rowDoors.ts`). Value pic
 spelling lookups take the same refusal. The Snowflake dialect's `TO_BINARY` form, if it works inside
 `SEMANTIC_VIEW` (to verify), lifts it for Snowflake once pinned in `test-rowPolicyLive`.
 
+**D17a. A layer's metric reads every field of its dataset (review ruling).** The layer computes a
+metric from fields we cannot see, so the Share policy and the column rules treat it as read from
+every column of its semantic dataset (`layerReads`, `src/analysis/semanticMeasures.ts`): under drop,
+any marked column on the dataset withholds every mirror's KPI, chart, report and alert figure; under
+mask they pass, as every aggregate does. A column hidden from the caller refuses every layer query
+(`layerRowPolicy`, `src/engine/live/liveQuery.ts`). Tests: `test-sharePolicyLiveCalcs` § layer,
+`test-semanticRowPolicy` § columns.
+
 **D18. The Live cost guards, unchanged.** `warehouse()` (`src/engine/live/liveWarehouse.ts`) is
 widened to take a semantic request beside a SQL statement, so every request is slotted
 (`LIVE_MAX_CONCURRENT`), counted (`LIVE_DAILY_QUERY_LIMIT`, `live_usage`), timed out

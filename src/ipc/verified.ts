@@ -1,6 +1,7 @@
 // Verified questions IPC (semantic layer part 3 D5, D7) — list, save (new, or an edit in place with `base`), delete.
 //
-// A save re-reads the spec, refuses one that no longer runs or whose question is taken, and DRAWS it once through
+// A save re-reads the spec, refuses one that no longer runs or whose question is taken (checked under one lock with
+// the write, as a Trash restore is: ../app/trash), and DRAWS it once through
 // `computeCard` (row lock, Live door): a spec that does not draw cannot be verified. What is kept is the card's spec,
 // never a figure. Whoever saves vouches for what the record now says, so every save restamps who and when.
 //
@@ -16,7 +17,7 @@ import { sanitizeStoredSpec, type AnswerFilter, type AnswerSpec } from '../ai/an
 import { describeAnswer } from '../ai/answerFacts';
 import { describeFilter } from '../analysis/metricFormat';
 import { keyClash, questionKey, sanitizeVerified, type VerifiedQuestion } from '../analysis/verifiedRules';
-import { listVerified, readVerified, writeVerified } from '../analysis/verifiedQuestions';
+import { listVerified, lockedKeys, readVerified, writeVerified } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
 import { listTerms } from '../analysis/terms';
 import * as datasets from '../data/datasets';
@@ -101,13 +102,17 @@ export async function saveVerifiedQuestion(projectId: string, input: Input, at?:
   if (!draft) return { ok: false, error: msg.verifiedNoWords(), field: 'question' };
   const problem = verifiedProblem(draft, await verifiedEnv(projectId));
   if (problem) return { ok: false, error: problem, field: 'spec' };
-  const taken = keyClash(await listVerified(projectId), [draft.question, ...draft.phrasings], at?.id);
-  if (taken !== null) return { ok: false, error: msg.verifiedTaken(taken), field: taken === draft.question ? 'question' : 'phrasings' };
   const built = await computeCard(projectId, draft.spec); // row lock, Live door; a stored spec is drawn as it stands
   if ('ok' in built) return { ok: false, error: msg.verifiedDoesNotDraw(built.reason), field: 'spec', ...(built.code ? { code: built.code } : {}) };
   const q = sanitizeVerified({ ...draft, spec: built.card.spec }); // the card's spec: no `matched`, the question its title
-  const saved = q ? await writeVerified(projectId, q, at?.base) : null;
-  return saved ? { ok: true, q: saved } : { ok: false, error: msg.verifiedGone() };
+  if (!q) return { ok: false, error: msg.verifiedGone() };
+  // The key check and the write under one lock (the draw stays outside it): two saves of one question cannot both pass.
+  return lockedKeys(projectId, async (): Promise<Saved> => {
+    const taken = keyClash(await listVerified(projectId), [q.question, ...q.phrasings], at?.id);
+    if (taken !== null) return { ok: false, error: msg.verifiedTaken(taken), field: taken === q.question ? 'question' : 'phrasings' };
+    const saved = await writeVerified(projectId, q, at?.base);
+    return saved ? { ok: true, q: saved } : { ok: false, error: msg.verifiedGone() };
+  });
 }
 
 export function register(): void {

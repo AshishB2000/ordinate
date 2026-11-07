@@ -156,6 +156,7 @@ const OSSIE_KINDS: Record<string, (n: number) => string> = {
   sensitivity: (n) => `Sensitivity on ${plural(n, 'field', 'fields')}`,
   relationship: (n) => plural(n, 'relationship', 'relationships'),
   cardinality: (n) => `One-to-one on ${plural(n, 'relationship', 'relationships')}`,
+  calculated: (n) => plural(n, 'calculated field', 'calculated fields'),
   calendar: () => 'Calendar settings',
 };
 
@@ -214,6 +215,8 @@ export interface PlanItem {
   because?: string;
   /** The editor's own sentence, for `invalid`. */
   error?: string;
+  /** src/app/dbtImport.ts DbtNote: where a dbt metric's figure can differ from dbt's (imported, and said). */
+  differs?: Array<'empty_text' | 'whole_division'>;
 }
 
 export interface ImportPlan {

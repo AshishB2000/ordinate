@@ -3,10 +3,14 @@
 //
 //   § record   one line, the spec without `matched`, its title the question; the key squashes; a clash is
 //              found across phrasings; a term or a period is no value filter; sanitizing is idempotent;
-//              Trash round-trips under the question; a stale base refuses; a corrupt file is skipped
+//              Trash round-trips under the question; a stale base refuses; a corrupt file is skipped; a restore
+//              whose key a live question holds is refused (NEGATIVE CONTROL: no clash restores); two saves of one
+//              question at once: one lands
 //   § retired  (part 4, cross-part check item 8) a question on a retired metric still runs (verifiedProblem
 //              null), its card is marked and its notes say what replaces the metric. NEGATIVE CONTROL: certified,
 //              no retired note.
+//   § metric   a question on a metric that is redefined, given a filter, or deleted no longer runs and marks nothing.
+//              NEGATIVE CONTROL: put back as it was, it runs (and § retired: a retired one still runs).
 // What a row-restricted viewer reads of a verified question is pinned in scripts/test-rowPolicySafetyNet.ts.
 //
 //   npm run build:ts && node scripts/test-verified.js
@@ -193,6 +197,21 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   const inTrash = (await call('trash:list', { projectId: P })).body;
   ok('delete goes to Trash, under its question', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string; name: string }) => e.type === 'verified' && e.id === id && e.name === 'Revenue by region'), JSON.stringify(inTrash).slice(0, 300));
   ok('…and leaves the list', !(await call('verified:list', { projectId: P })).body.questions.some((x: { id: string }) => x.id === id));
+  const inList = async (x: string): Promise<boolean> => (await call('verified:list', { projectId: P })).body.questions.some((r: { id: string }) => r.id === x);
+  const holder = await call('verified:save', { projectId: P, input: { question: 'Total amount by region', phrasings: ['revenue BY region'], spec: SPEC } });
+  const refused = await call('trash:restore', { projectId: P, type: 'verified', id });
+  const stillIn = ((await call('trash:list', { projectId: P })).body ?? []).some((e: { id: string }) => e.id === id);
+  ok('restore refuses a question a live phrasing now holds, and it stays in the Trash', holder.body?.ok === true && refused.body?.ok === false
+    && refused.body.error === msg.verifiedRestoreTaken('Revenue by region') && stillIn && !(await inList(id)), refused.text);
+  await call('verified:delete', { projectId: P, id: holder.body?.question?.id });
+  const back = await call('trash:restore', { projectId: P, type: 'verified', id });
+  ok('NEGATIVE CONTROL: with no clash it restores', back.body?.ok === true && (await inList(id)), back.text);
+  await call('verified:delete', { projectId: P, id }); // § mark starts without it
+  const race = await Promise.all(['Margin by region', 'margin by REGION?'].map((question) => call('verified:save', { projectId: P, input: { question, spec: SPEC } })));
+  const landed = race.filter((r) => r.body?.ok === true);
+  ok('two saves of one question at once: one lands, the other is refused as taken', landed.length === 1
+    && race.some((r) => r.body?.ok === false && r.body.field === 'question'), race.map((r) => r.text.slice(0, 120)).join(' | '));
+  for (const r of landed) await call('verified:delete', { projectId: P, id: r.body.question.id });
   ok('a bad id is refused at the contract', (await call('verified:delete', { projectId: P, id: 'nope' })).status === 400);
 
   // ── § mark: "✓ Verified" by comparison only, worked out at every draw ─────
@@ -212,6 +231,20 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   ok('broken (its measure no longer fits): the card draws, unmarked', drawn?.ok === true && drawn.verified === undefined, JSON.stringify(drawn).slice(0, 200));
   await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
   ok('NEGATIVE CONTROL: restored, the mark is back', (await card(SEG))?.verified?.id === VQ);
+  // A verified chip reruns the question's own spec: drawn as stored, never moved to a near value under its ✓.
+  const WSPEC = { ...SPEC, filters: [{ column: 'region', op: '=', value: 'West' }] };
+  const wq = await call('verified:save', { projectId: P, input: { question: 'Revenue in the West', spec: WSPEC } });
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS.map((r) => (r[0] === 'West' ? ['Wests', ...r.slice(1)] : r)) }));
+  const rerunSpec = async (spec: object) => {
+    const turns = (await call('answer:rerun', { projectId: P, spec })).body?.turns ?? [];
+    return turns[turns.length - 1]?.answer ?? null;
+  };
+  const chipSpec = await rerunSpec(WSPEC);
+  ok('a verified question\'s own spec reruns as stored: no near value', chipSpec?.filters?.[0]?.value === 'West' && !chipSpec.matched, JSON.stringify(chipSpec));
+  const nearSpec = await rerunSpec({ ...WSPEC, category: 'segment' });
+  ok('NEGATIVE CONTROL: any other spec still finds the near value', nearSpec?.filters?.[0]?.value === 'Wests', JSON.stringify(nearSpec));
+  await as(() => datasets.updateDatasetData(P, D, { columns: COLUMNS, rows: ROWS }));
+  await call('verified:delete', { projectId: P, id: wq.body?.question?.id });
 
   // ── § retired (part 4; cross-part check item 8): a verified question on a retired metric keeps running ──
   const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
@@ -238,6 +271,20 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   await certifyNow(`metric:${GROSS}`);
   const certifiedCard = await card(GSPEC);
   ok('NEGATIVE CONTROL: certified, the card is marked and carries no retired note', certifiedCard?.verified?.id === GQ && !certifiedCard.notes.some((n: string) => /retired/.test(n)), JSON.stringify(certifiedCard?.notes));
+
+  // ── § metric: a question on a metric is that metric as it was verified ──
+  const drift = async (label: string, change: () => Promise<unknown>, undo: () => Promise<unknown>) => {
+    await as(change);
+    const p = await as(async () => state.verifiedProblem((await S.getVerified(P, GQ))!, await state.verifiedEnv(P)));
+    const c = await card(GSPEC);
+    ok(`metric ${label}: no longer runs, and the card is not marked`, p === msg.verifiedMetricChanged() && c?.verified === undefined, `${p} ${JSON.stringify(c?.verified)}`);
+    await as(undo);
+  };
+  const DEF = { column: 'amount', aggregation: 'max' as const };
+  await drift('redefined', () => metricsMod.updateMetric(P, GROSS, { definition: { column: 'amount', aggregation: 'sum' } }), () => metricsMod.updateMetric(P, GROSS, { definition: DEF }));
+  await drift('given a filter', () => metricsMod.updateMetric(P, GROSS, { filters: [{ type: 'filter', column: 'segment', op: '=', value: 'SMB' }] }), () => metricsMod.updateMetric(P, GROSS, { filters: [] }));
+  ok('NEGATIVE CONTROL: put back as it was, it runs and is marked', (await card(GSPEC))?.verified?.id === GQ);
+  await drift('deleted', () => metricsMod.deleteMetric(P, GROSS), async () => undefined);
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });

@@ -115,11 +115,17 @@ describe('The Data model: hierarchies on the Fields tab', () => {
     expect(within(b).getByRole('button', { name: 'Edit Geography' })).toBeTruthy();
   });
 
-  it('Remove sends the list without it', async () => {
+  it('Remove asks first; Keep it sends nothing, Remove sends the list without it', async () => {
     const calls = serve();
     open();
+    const sets = () => calls.filter((c) => c.channel === 'catalog:setTable');
     fireEvent.click(await within(await block()).findByRole('button', { name: 'Remove Geography' }));
-    await waitFor(() => expect(calls.find((c) => c.channel === 'catalog:setTable')?.payload).toEqual({ projectId: P, datasetId: D, patch: { hierarchies: [] } }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sets()).toHaveLength(0);
+    fireEvent.click(within(await block()).getByRole('button', { name: 'Remove Geography' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(sets()[0]?.payload).toEqual({ projectId: P, datasetId: D, patch: { hierarchies: [] } }));
   });
 
   it('empty: an editor is told what a hierarchy is and can add one', async () => {

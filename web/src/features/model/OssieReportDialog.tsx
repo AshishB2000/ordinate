@@ -44,7 +44,10 @@ export function OssieReportDialog({ version, report, onClose }: { version: strin
               </section>
             ))}
           </div>
-          <p className={s.foot}>What Ossie cannot hold also sits in the file under the ordinate extension, so nothing is lost.</p>
+          <p className={s.foot}>
+            Terms, value labels, base filters, the calendar, and the metrics and metric settings Ossie cannot hold also sit in the file under
+            the ordinate extension; the rest of this list is not in the file.
+          </p>
         </>
       )}
       {report.noSource.length > 0 && (

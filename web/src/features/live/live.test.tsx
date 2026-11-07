@@ -105,6 +105,8 @@ describe('the Schema panel’s words', () => {
     expect(sampleLine({ sampledAt: '2026-10-09T19:12:00Z', sampleRows: 240, method: 'sample' })).toMatch(/^Profiled from a sample of 240 rows · /);
     expect(sampleLine({ sampledAt: '2026-10-09T19:12:00Z', sampleRows: 1000, method: 'limit' })).toMatch(/the first rows/);
     expect(sampleLine({ sampledAt: null, sampleRows: null, method: null })).toMatch(/^Not profiled yet/);
+    // A viewer row access rules restrict gets no count of every row: profiled, with no size.
+    expect(sampleLine({ sampledAt: '2026-10-09T19:12:00Z', sampleRows: null, method: 'sample' })).toMatch(/^Profiled from a sample · /);
   });
   it('words a sync: what changed, the sample, or the server’s refusal', () => {
     expect(syncWords({ ok: true, status: 'synced', columns: 3, added: ['note'], removed: [], retyped: [], missing: [], sample: { ok: true, rows: 240 } }).text)

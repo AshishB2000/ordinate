@@ -30,9 +30,9 @@ import { objectBase, type ModelDataset, type ModelField, type ModelRelationship 
 import { baseFilterRefusal, fieldRefusal, metricRefusal, relationshipRefusal, tableRefusal, termRefusal, type PostNames } from './modelGates';
 import type { Relationship } from '../analysis/relationships';
 import type { DatasetMeta } from '../data/datasets';
-import { modelDatasetMoved } from './modelFileMessages';
+import { modelDatasetMoved, modelNameSwap } from './modelFileMessages';
 import { dbtItems, formulaNames, keepHere, withImportTags } from './dbtPlan';
-import type { DbtSkip } from './dbtImport';
+import type { DbtNote, DbtSkip } from './dbtImport';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
 export const PLAN_STATUSES: readonly PlanStatus[] = ['unchanged', 'updated', 'renamed', 'new', 'conflict', 'skipped', 'onlyHere'];
@@ -58,6 +58,8 @@ export interface PlanItem {
   because?: string;
   /** The editor's own sentence, for `invalid`. */
   error?: string;
+  /** A dbt metric's figure can differ from dbt's here, and how (./dbtImport.ts DbtNote): imported, and said. */
+  differs?: DbtNote[];
   fileHash: string;
   hereHash: string;
 }
@@ -125,6 +127,22 @@ const refuse = (i: PlanItem, error: string, reason: SkipReason = 'invalid'): voi
 
 export type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
 
+type Named = { name?: unknown; label?: unknown; from?: { dataset?: unknown }; to?: { dataset?: unknown } };
+/**
+ * The name an item's object takes in `v` (its file form), case-blind: a term's or metric's name (one namespace), a
+ * relationship's label on its pair of datasets (`labelClash`); none for a relationship with no label.
+ */
+export const takes = (i: PlanItem, v: Named): string | undefined => {
+  if (i.kind !== 'relationship') return `name:${String(v.name ?? '').trim().toLowerCase()}`;
+  return typeof v.label === 'string' && v.label ? `label:${[String(v.from?.dataset), String(v.to?.dataset)].sort().join()}:${v.label.toLowerCase()}` : undefined;
+};
+/** The name an item gives up: what its object takes here (its changed keys as they are here), when the files move it. */
+export const givesUp = (i: PlanItem, v: Named): string | undefined => {
+  if (!i.targetId) return undefined;
+  const was = takes(i, { ...v, ...Object.fromEntries((i.changes ?? []).map((c) => [c.field, c.here])) });
+  return was !== takes(i, v) ? was : undefined; // a change of case only gives up nothing
+};
+
 export async function planImport(projectId: string, file: ParsedModel): Promise<ImportPlan> {
   return (await planDetailed(projectId, file)).plan;
 }
@@ -150,6 +168,8 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
     if (!metas.has(id)) metas.set(id, datasets.getDatasetMeta(projectId, id)); // the record's columns, never its rows
     return metas.get(id) as Promise<DatasetMeta | null>;
   };
+  /** A dbt formula's inputs (file ids), by its item key. */
+  const inputsOf = (key: string): string[] | undefined => (key.startsWith('metric:') ? file.dbt?.inputs.get(key.slice('metric:'.length)) : undefined);
   const dependency = (r: Mapped): string | undefined => r.missing[0] ?? r.refs.find((k) => gone.has(k));
   const created = (k: string): boolean => {
     const [kind, id] = k.split(':') as [string, string];
@@ -272,7 +292,11 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
     await objectItem('term', ft, ft.name, target, here.terms.find((x) => x.id === target), async (id) => (await readTerm(projectId, id))?.tag ?? '');
   }
   // A metric may name another (a period's base, a target): a skip travels until nothing more falls.
-  for (const fm of file.metrics) fileOf.set(`metric:${fm.id}`, mapRefs(fm, m));
+  for (const fm of file.metrics) {
+    const r = mapRefs(fm, m);
+    // A dbt formula names its inputs by name: each is a reference too, so a skip of one takes the formula with it.
+    fileOf.set(`metric:${fm.id}`, { ...r, refs: [...r.refs, ...(inputsOf(`metric:${fm.id}`) ?? []).map((id) => `metric:${id}`)] });
+  }
   for (let more = true; more;) {
     more = false;
     for (const fm of file.metrics) {
@@ -300,23 +324,52 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       terms: [...here.terms.map((pt) => ({ ...form('term', pt), id: pt.id })), ...fresh('term')].map((x) => ({ id: x.id, name: x.name, aliases: x.aliases ?? [] })),
     };
   };
+  /** A term, metric or relationship taking a name (a label) another gives up, which (through any more) takes this one's: no order lands it. */
+  const valueOf = (i: PlanItem): Named => (fileOf.get(i.key) as Mapped).value;
+  const giver = new Map(items.filter((i) => (i.kind === 'term' || i.kind === 'metric' || i.kind === 'relationship') && writes(i) && givesUp(i, valueOf(i))).map((i) => [givesUp(i, valueOf(i)) as string, i]));
+  const swapped = (item: PlanItem): boolean => {
+    for (let cur = item, n = 0; n < giver.size; n++) {
+      const t = takes(cur, valueOf(cur));
+      const next = t === undefined ? undefined : giver.get(t);
+      if (!next || next === cur) return false; // nobody gives it up
+      if (next === item) return true;
+      cur = next;
+    }
+    return false;
+  };
+  for (const item of [...giver.values()].filter(swapped)) refuse(item, modelNameSwap(String(valueOf(item).name ?? valueOf(item).label)));
   for (let pass = 0; pass <= items.length; pass++) {
     const post = postNames();
-    // A dbt formula naming a metric this import writes is judged by its save after that one's (the apply's order).
+    // A dbt formula's inputs this import writes are judged by their own saves, before its (the apply's order); the rest as stored.
     const written = new Set(file.dbt ? items.filter((i) => i.kind === 'metric' && writes(i)).map((i) => String((fileOf.get(i.key) as Mapped).value.name).toLowerCase()) : []);
     let fell = false;
     for (const item of items) {
       if ((item.kind !== 'term' && item.kind !== 'metric') || !writes(item)) continue;
       const r = fileOf.get(item.key) as Mapped;
       const self = item.targetId ?? r.value.id;
-      const pending = r.refs.some(created) || formulaNames(r.value).some((n) => written.has(n));
-      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending);
+
+      const inputs = inputsOf(item.key);
+      const pending = r.refs.some((k) => created(k) && !inputs?.includes(k.slice('metric:'.length)));
+      const refusal = item.kind === 'term' ? await termRefusal(projectId, r.value, self, post) : await metricRefusal(projectId, r.value, self, post, pending, written);
       if (refusal) {
         // A layer's metric is never written from a file (D13): skipped as `external`, with the sentence.
         refuse(item, refusal, item.kind === 'metric' && isExternalDefinition(sanitizeDefinition((r.value as { definition?: unknown }).definition)) ? 'external' : 'invalid');
         if (!item.targetId) gone.add(item.key);
         fell = true;
       }
+    }
+    // A dbt formula's every [name] must be, after the import, the input dbt means by it, unchanged items too: never
+    // the project's own metric of that name (an input refused, or renamed here and its name taken since).
+    for (const item of items) {
+      const inputs = item.status !== 'skipped' ? inputsOf(item.key) : undefined;
+      if (!inputs) continue;
+      const lands = new Set(inputs.map((id) => m.metrics.get(id) ?? id));
+      const wrong = formulaNames((fileOf.get(item.key) as Mapped).value).find((n) => !lands.has(post.metrics.find((pm) => pm.name.toLowerCase() === n)?.id as string));
+      if (wrong === undefined) continue;
+      const input = file.metrics.find((fm) => inputs.includes(fm.id) && fm.name.toLowerCase() === wrong)?.id ?? inputs[0];
+      Object.assign(item, { status: 'skipped', reason: 'depends_on_skipped', because: `metric:${input}` });
+      if (!item.targetId) gone.add(item.key);
+      fell = true;
     }
     // What names a refused new object goes with it.
     for (let more = true; more;) {
@@ -330,6 +383,11 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       }
     }
     if (!fell) break;
+  }
+
+  for (const item of items) {
+    const notes = item.kind === 'metric' && item.status !== 'skipped' ? file.dbt?.notes.get(item.key.slice('metric:'.length)) : undefined;
+    if (notes) item.differs = notes;
   }
 
   // ── Unreadable files: one skipped item each ──

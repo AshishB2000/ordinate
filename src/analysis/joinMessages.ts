@@ -22,3 +22,23 @@ export function viaNoColumn(join: string, column: string): string {
 export function labelTaken(label: string): string {
   return t('joinMessages.another_relationship_between_these_two', { label });
 }
+
+/** A relationship whose two ends are not two datasets with a column each. */
+export function relationshipEndsRefused(): string {
+  return t('joinMessages.pick_two_different_datasets_and_a');
+}
+
+/** A relationship to a dataset the project no longer has. */
+export function relationshipDatasetGone(): string {
+  return t('joinMessages.dataset_not_found');
+}
+
+/** A relationship on a column its dataset no longer has. */
+export function relationshipColumnGone(): string {
+  return t('joinMessages.that_column_no_longer_exists');
+}
+
+/** The store wrote nothing. */
+export function relationshipNotSaved(): string {
+  return t('joinMessages.could_not_save_the_relationship');
+}

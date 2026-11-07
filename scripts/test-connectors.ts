@@ -250,6 +250,10 @@ async function main(): Promise<void> {
   const passthrough = connectionRun.selectionSql(urlDef, { query: 'select 1 from t;  ' }, 10);
   ok('selectionSql() passes a user query through, minus the trailing semicolon',
     passthrough.ok === true && passthrough.sql === 'select 1 from t', JSON.stringify(passthrough));
+  // A table at exactly the cap would hide the probe row every connector's cap + 1 wrapper reads truncation from.
+  const tableSel = connectionRun.selectionSql(registry.getConnector('postgres')!, { table: 'public.sales' }, 100);
+  ok('selectionSql() limits a table at the cap + 1 (the probe row), so a cut table reports truncated',
+    tableSel.ok === true && tableSel.sql === 'select * from "public"."sales" limit 101', JSON.stringify(tableSel));
 
   const ctx = connectionRun.buildContext({ a: 1 }, { password: 'p' }, { rowLimit: 10, timeoutMs: 5 });
   ok('buildContext() honours a smaller requested bound', ctx.rowLimit === 10 && ctx.timeoutMs === 5);

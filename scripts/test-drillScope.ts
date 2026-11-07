@@ -146,6 +146,33 @@ async function main(): Promise<void> {
   const gone = await all(monthly, { encoding: kpiEnc, mark: null, metricId: '00000000-0000-4000-8000-000000000000' });
   ok('formula: a metric of another dataset, or one that is gone, is refused', other.available === false && gone.available === false, show([other, gone]));
 
+  // ── a chart whose measures are separate questions (a per-measure plan) ──
+  const viz = handlers.get('visual:data')!;
+  const M = (m: { id: string; name: string }) => ({ column: m.name, aggregation: 'sum', metricId: m.id });
+  const twoLists = await all(monthly, { encoding: { category: 'region', values: [M(sales), M(refunds!)] }, mark: { category: 'East' } });
+  ok('plan: two measures under different metric filters are refused — no one set of rows adds up to both', twoLists.ok === true && twoLists.available === false && typeof twoLists.reason === 'string' && twoLists.rows === undefined, show(twoLists));
+  const ratio = await all(monthly, { encoding: { category: 'region', values: [M(rate)] }, mark: { category: 'East' } });
+  ok('plan: a formula over metrics with different filters is refused too', ratio.available === false && ratio.rows === undefined, show(ratio));
+  const twice = (await metrics.saveMetric(pid, { name: 'Sales twice', datasetId: monthly, definition: { formula: '[Sales] * 2' }, filters: [], format } as Any))!;
+  const sharedEnc = { category: 'region', values: [M(sales), M(twice)] };
+  const shared = await all(monthly, { encoding: sharedEnc, mark: { category: 'East' } });
+  const bars = await viz(null, { projectId: pid, datasetId: monthly, encoding: sharedEnc, filters: [] }) as Any;
+  const eastBar = bars.ok ? bars.data.series[0].values[bars.data.labels.indexOf('East')] : null;
+  ok('NEGATIVE CONTROL: measures that share one filter list keep it: the rows add up to the bar', shared.available === true && Object.is(sum(shared.rows), eastBar) && shared.rows.every((r: unknown[]) => r[2] === 'sale'), show([eastBar, shared.available && sum(shared.rows)]));
+  const mixed = await all(monthly, { encoding: { category: 'region', values: [M(sales), { column: 'amount', aggregation: 'sum' }] }, mark: { category: 'East' } });
+  ok('plan: a filtered metric beside a plain measure is refused too (the plain one reads every row)', mixed.available === false && mixed.rows === undefined, show(mixed));
+  const stock = (await metrics.saveMetric(pid, { name: 'Stock', datasetId: monthly, definition: { column: 'amount', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } }, filters: [], format } as Any))!;
+  const snapRows = await all(monthly, { encoding: { category: 'region', values: [M(stock)] }, mark: { category: 'East' } });
+  ok('plan: a snapshot\'s rows are one day\'s only, so they are refused, said', snapRows.available === false && /snapshot/.test(snapRows.reason) && snapRows.rows === undefined, show(snapRows));
+  // A drill-down resolves the mark into filter steps and needs no single row set: it still drills.
+  require('../src/ipc/drillDown').register();
+  const drillDownOf = handlers.get('visual:drillDown')!;
+  const twoDated = { category: 'day', grain: 'month', values: [M(sales), M(refunds!)] };
+  const twoLabel = ((await viz(null, { projectId: pid, datasetId: monthly, encoding: twoDated, filters: [] })) as Any).data.labels[1];
+  const down = await drillDownOf(null, { projectId: pid, datasetId: monthly, encoding: twoDated, filters: [], mark: { category: twoLabel } }) as Any;
+  ok('drill-down: two differently filtered metrics still drill a level down', down.ok === true && down.available === true && ['week', 'day'].includes(down.encoding.grain) && down.steps.length === 1, show(down));
+  ok('NEGATIVE CONTROL: …while their rows panel is refused', (await all(monthly, { encoding: twoDated, mark: { category: twoLabel } })).available === false);
+
   // ── export ──────────────────────────────────────────────────────────────
   const listed = await all(monthly, { encoding: kpiEnc, mark: null, metricId: sales.id });
   const file = await download(null, { projectId: pid, datasetId: monthly, encoding: kpiEnc, filters: [], mark: null, metricId: sales.id, name: 'Sales' });

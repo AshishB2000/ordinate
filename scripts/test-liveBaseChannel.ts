@@ -6,7 +6,8 @@
 // 2. The write: saved in one record write with an epoch bump, the next chart asks the warehouse with
 //    them, a schema sync is queued and samples under them, and `dataset:liveSchema` returns them.
 //    Refused in a sentence, with nothing written: on an extract, a step the stored form would drop, a
-//    step that would be skipped (an unknown column, an empty list) and one the column cannot take.
+//    step that would be skipped (an unknown column, an empty list) and one the column cannot take; past
+//    the contract (a model import), a step the stored form would change (a via, lock, context, datasetId).
 // 3. REDACT: a caller row access rules restrict gets each step's column and operator, never a value.
 //
 //   npm run build:ts && node scripts/test-liveBaseChannel.js
@@ -78,6 +79,24 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
   await refusedWith('an empty in-list (it would be skipped)', [F('region', 'in', undefined, { values: [] })], L, 'live_refused', liveMsg.liveBaseFilterInvalidMessage());
   await refusedWith('a column the dataset lacks', [BASE[0], F('gone', '=', 1)], L, 'live_refused', liveMsg.liveBaseFilterInvalidMessage());
   await refusedWith('a period on a text column (its own sentence)', [F('region', 'period', undefined, { period: { preset: 'last_n_months', n: 6 } })], L, 'live_refused', refusals.livePeriodNotDate('region'));
+  // A model file's step reaches the handler with no contract: a key the stored form would strip is refused, never
+  // saved without it (a `via` would become a filter on this table's own column).
+  for (const [label, extra] of [['a via', { via: ID }], ['a lock mark', { lock: true }], ['a context mark', { context: true }], ['a datasetId', { datasetId: ID }]] as [string, Reply][]) {
+    const r = await H.as(ORG_A, () => handler.setLiveBaseFilters({ projectId: P, datasetId: L, filters: [{ ...BASE[0], ...extra }] })) as Reply;
+    ok(`refused past the contract (a model import): ${label} the stored form would strip, nothing written`,
+      r.ok === false && r.code === 'live_refused' && r.error === liveMsg.liveBaseFilterInvalidMessage() && (await meta()).live.epoch === e0 && (await meta()).live.baseFilters === undefined, show(r));
+  }
+  const cols = (await meta()).columns;
+  ok('NEGATIVE CONTROL: the plain step passes the check, its keys in any order', 'steps' in handler.baseFiltersRefusal({ columns: cols }, [{ values: BASE[0].values, op: 'not in', column: 'region', type: 'filter' }]));
+  ok('NEGATIVE CONTROL: a period the sanitizer only normalizes (a stray n on this_month) passes',
+    'steps' in handler.baseFiltersRefusal({ columns: cols }, [F('d', 'period', undefined, { period: { preset: 'this_month', n: 6 } })]));
+  // A failure the handler did not expect answers the catalog's sentence: a record store's error can name its path.
+  const realSet = H.liveDataset.setBaseFilters;
+  const PATH = '/srv/ordinate/data/orgs/acme/records/x.json';
+  (H.liveDataset as { setBaseFilters: typeof realSet }).setBaseFilters = async () => { throw new Error(`EACCES: permission denied, open '${PATH}'`); };
+  let thrown: Reply;
+  try { thrown = (await set(BASE)).value; } finally { (H.liveDataset as { setBaseFilters: typeof realSet }).setBaseFilters = realSet; }
+  ok('a thrown save answers the catalog sentence, never the error\'s own words', thrown.ok === false && thrown.error === liveMsg.liveBaseFiltersSaveFailedMessage() && !show(thrown).includes(PATH), show(thrown));
 
   H.queryCache.clear();
   // Called in a request context of its own: an injected request's signal fires when its reply closes,

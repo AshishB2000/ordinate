@@ -3,7 +3,8 @@
 // import never stores what the editor would refuse. Nothing here writes.
 //
 // Names are checked against the names AFTER the import (`PostNames`): the project's, with each object the import
-// writes in its file form, so two file objects that would collide are refused too, and a swap of two names is not.
+// writes in its file form, so two file objects that would collide are refused too. A swap of two names is refused by the
+// plan (./modelPlan.ts): no order of saves lands it.
 // A check that reads the store for what an object names (a period's base, a target's plan metric) runs only when
 // everything it names exists already: one that names an object this import creates is checked by its save, when the
 // apply writes it after what it names.
@@ -27,7 +28,8 @@ import { checkMetricFormula, type KnownMetric } from '../analysis/metricCheck';
 import { compileMetricFormula } from '../analysis/metricFormula';
 import { relatedColumnNames } from '../ipc/relationships';
 import { metricProblem, nameRefusalAmong } from '../ipc/metricSave';
-import { modelExternalMetric, modelObjectUnreadable } from './modelFileMessages';
+import { modelExternalMetric, modelMetricOutOfBounds, modelObjectUnreadable } from './modelFileMessages';
+import { Definition, Format, Target } from '../api/metrics';
 import type { ModelField, ModelMetric, ModelRelationship, ModelTerm } from './modelFormat';
 
 type Columns = DatasetMeta['columns'];
@@ -117,14 +119,17 @@ async function formulaRefusal(projectId: string, m: ModelMetric, selfId: string,
 
 /**
  * A metric, as its save checks one (`metricProblem`, moved out of `metric:save`) and as the editor checks its formula
- * (`metric:check`), its name against the names after the import. `pending`: it names an object this import creates.
+ * (`metric:check`), its name against the names after the import. `pending`: it names an object this import creates (a
+ * period's base, a target's metric, a term); `written`: the formula's parts this import writes first (lower-cased).
  */
-export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean): Promise<string | null> {
+export async function metricRefusal(projectId: string, m: ModelMetric, selfId: string, post: PostNames, pending: boolean, written?: ReadonlySet<string>): Promise<string | null> {
   if (isExternalDefinition(sanitizeDefinition(m.definition))) return modelExternalMetric(m.name); // D13: a layer's metric is never written from a file
+  // metric:save's own contract: what it refuses, the store would cut or drop (a formula past 2,000, a 9th funnel step).
+  if (!Definition.safeParse(m.definition).success || !Format.safeParse(m.format).success || (m.target !== undefined && !Target.safeParse(m.target).success)) return modelMetricOutOfBounds(m.name);
   const named = nameRefusalAmong(m.name, post.metrics, post.terms, selfId);
   if (named) return named;
   const formula = await formulaRefusal(projectId, m, selfId, post);
   if (formula || pending) return formula;
-  const checked = await metricProblem(projectId, { name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters, timeColumn: m.timeColumn, target: m.target }, async () => null);
+  const checked = await metricProblem(projectId, { name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters, timeColumn: m.timeColumn, target: m.target }, async () => null, written);
   return 'problem' in checked ? checked.problem.error : null;
 }
