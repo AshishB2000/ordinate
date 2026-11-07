@@ -18,3 +18,8 @@ export function encryptionDeclined(): string {
 export function walletRefused(): string {
   return t('connectorMessages.a_wallet_folder_is_a_path');
 }
+
+/** A table-facts read whose reply holds no columns list. */
+export function noFactColumns(): string {
+  return t('connectorMessages.the_source_returned_no_columns_for');
+}

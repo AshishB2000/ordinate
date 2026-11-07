@@ -17,6 +17,8 @@
 // gives east the editor's target, attainment and status.
 // TARGET CHARTS (p5-10): its chart by month and by dept draws east no target series from the salary plan; NEGATIVE
 // CONTROLS: the editor's has one, and the dept plan's series is east's Object.is-equal to the editor's.
+// ALERTS BY PERIOD: a change rule on count(dept) against the previous period, over a dataset whose ssn and second date
+// are hidden, saves and fires (its periods are read through the column gate); NEGATIVE CONTROL: by the hidden date it refuses.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -29,7 +31,10 @@ process.env.ORDINATE_TODAY = '2024-06-30'; // the log runs January to June 2024:
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const rowMessages: typeof import('../src/data/rowAccessMessages') = require('../src/data/rowAccessMessages');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 
+const DEPTS3 = ['Ops', 'Eng', 'Sales'];
+const crypto: typeof import('crypto') = require('crypto');
 const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 240)}`;
 
 void (async () => {
@@ -162,6 +167,19 @@ void (async () => {
       const dTC = H.diff(seriesOf(await tChart('east', ON_ROWS, by)), seriesOf(await tChart('ed', ON_ROWS, by)), {});
       ok(`NEGATIVE CONTROL: target chart ${label}: the dept plan's series is east's Object.is-equal to the editor's`, Array.isArray(seriesOf(await tChart('east', ON_ROWS, by))) && dTC === '', dTC);
     }
+
+    // ── Alerts by period ─────────────────────────────────────────────────────
+    const hireRows = [['2024-01-15', 2], ['2024-02-15', 3], ['2024-03-15', 6]].flatMap(([d, n]) => Array.from({ length: n as number }, (_, i) => [d, DEPTS3[i % 3], `${C.SSN_CANARY}_h${i}`, d]));
+    const hires = await W.as('boss', async () => (await datasets.saveDataset(P, { name: 'Hires', sourceKind: 'csv', columns: [{ name: 'day', type: 'date' }, { name: 'dept', type: 'text' }, { name: 'ssn', type: 'text' }, { name: 'hired', type: 'date' }], rows: hireRows }))!.id);
+    await W.plant(hires, [{ column: 'ssn', visibleTo: [{ teamId: W.hrTeam }] }, { column: 'hired', visibleTo: [{ teamId: W.hrTeam }] }]);
+    const change = (periodColumn: string) => ({ id: crypto.randomUUID(), name: `Hires by ${periodColumn}`, datasetId: hires, enabled: true, metric: { column: 'dept', aggregation: 'count' }, compare: 'change', change: { pct: 5, direction: 'either', vs: 'previous_period', periodColumn } });
+    const byDay = change('day');
+    const savedRule = await W.call('boss', 'alerts:save', { projectId: P, rule: byDay });
+    ok('alerts: a change on count(dept) by its visible date saves over a dataset with hidden columns', savedRule.status === 200 && savedRule.body?.ok !== false && !H.refused(savedRule), show(savedRule));
+    const fired = await W.as('boss', () => alertStore.evaluateProject(P, hires));
+    ok('… and fires: 3 hires to 6, with no hidden value', fired.length === 1 && fired[0].ruleId === byDay.id && !C.leaksHidden(JSON.stringify(fired)), JSON.stringify(fired).slice(0, 300));
+    const byHired = await W.call('boss', 'alerts:save', { projectId: P, rule: change('hired') });
+    ok('NEGATIVE CONTROL: alerts: by the hidden date it refuses', H.refused(byHired) && !C.leaksHidden(byHired.text), show(byHired));
   } finally {
     await W.close();
   }

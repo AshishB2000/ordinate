@@ -166,13 +166,14 @@ async function describeModel(ctx: ConnectorContext, model: string): Promise<Awai
   for (const name of metricNames) {
     const m = metricOf.get(name);
     if (!m) continue;
-    // Additive only for a SIMPLE metric whose one measure aggregates SUM or COUNT (the SDK's `measures`, not on the
-    // API page); every other type, and a measure that cannot be read, cannot be added up.
+    // Additive only for a SIMPLE metric whose one measure aggregates SUM or COUNT with no non-additive dimension (the
+    // SDK's `measures`, not on the API page); every other type, and a measure that cannot be read — an API refusing
+    // nonAdditiveDimension included, which cannot say a balance is one — cannot be added up.
     let additive = false;
     if (prop(m, 'type') === 'SIMPLE') {
       const ms = await gql(ctx, DOCS.measures, { metrics: [{ name }] }, deadline);
       const list = ms.ok ? asArray(prop(ms.data, 'measures')) : [];
-      additive = list.length === 1 && ['SUM', 'COUNT'].includes(asString(prop(list[0], 'agg')));
+      additive = list.length === 1 && ['SUM', 'COUNT'].includes(asString(prop(list[0], 'agg'))) && prop(list[0], 'nonAdditiveDimension') == null;
     }
     const description = text(prop(m, 'description'));
     metrics.push({ name, additive, ...(description ? { description } : {}) });
@@ -201,16 +202,21 @@ async function answer(ctx: ConnectorContext, body: DbtBody, vars: Record<string,
   if (!created.ok) return created;
   const queryId = asString(prop(prop(created.data, 'createQuery'), 'queryId'));
   if (!queryId) return { ok: false, error: 'dbt answered without a query id' };
+  // D18: ask dbt to stop (the SDK's cancelQuery; its answer ignored, a fresh signal).
+  const cancel = (): void => void gql(ctx, DOCS.cancelQuery, { queryId }, Date.now() + CANCEL_MS, null).catch(() => undefined);
   const stopped = (): ConnectorError => {
-    // D18: stop polling, and ask dbt to stop (the SDK's cancelQuery; its answer ignored, a fresh signal).
-    void gql(ctx, DOCS.cancelQuery, { queryId }, Date.now() + CANCEL_MS, null).catch(() => undefined);
+    cancel();
     return { ok: false, error: ctx.signal?.aborted ? CANCELLED : timeoutError(budgetMs(ctx)).message };
   };
   const rows: Cell[][] = [];
   let wait = 250;
   for (let pageNum = 1; ;) {
     const r = await gql(ctx, DOCS.query, { queryId, pageNum }, deadline);
-    if (!r.ok) return ctx.signal?.aborted || Date.now() >= deadline ? stopped() : r;
+    if (!r.ok) {
+      if (ctx.signal?.aborted || Date.now() >= deadline) return stopped();
+      cancel(); // a failed poll leaves the query running at dbt
+      return r;
+    }
     const q = prop(r.data, 'query');
     const status = asString(prop(q, 'status'));
     if (status === 'FAILED') return { ok: false, error: safeError(`dbt: ${asString(prop(q, 'error')) || 'the query failed'}`, ctx.secrets) };

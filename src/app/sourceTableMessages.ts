@@ -32,3 +32,8 @@ export function factsNotReadable(): string {
 export function notLinkable(): string {
   return t('sourceTableMessages.only_a_dataset_built_from_a');
 }
+
+/** `catalog:dismissSuggestion` for a new dataset on a doc that keeps dismissals for MAX_DISMISSED_DATASETS datasets, every one still listed. */
+export function dismissalsFull(): string {
+  return t('sourceTableMessages.these_notes_already_keep_dismissed');
+}

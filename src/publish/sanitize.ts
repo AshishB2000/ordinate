@@ -14,6 +14,7 @@
 import { sanitizeBundle, sanitizeChartData, sanitizePng, sanitizeLayout } from '../analysis/dashboardExport';
 import type { ExportChartData } from '../analysis/dashboardExport';
 import { sanitizeFormatPrefs } from '../app/format';
+import { TABLE_CALC_KINDS } from '../analysis/tableCalc';
 
 const MAX_STR = 20_000;
 const MAX_LABEL = 400;
@@ -42,6 +43,8 @@ const PUBLISHED_HEXES = 1500;
 const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter']);
 const TONES: ReadonlySet<string> = new Set(['info', 'success', 'warning', 'danger']);
 const ROW_KINDS: ReadonlySet<string> = new Set(['leaf', 'subtotal']);
+/** A series' table calc, by kind only (the site formats its figures by it): never the calc object, never its raw figures. */
+const CALC_KINDS: ReadonlySet<unknown> = new Set(TABLE_CALC_KINDS);
 const FILE_RE = /^[a-z0-9][a-z0-9-]{0,80}\.html$/;
 const KEY_RE = /^(\d{1,3}(\.\d{1,3}){0,15})?$/;
 // Raster only — an SVG data: URL is a document that can carry script.
@@ -140,6 +143,13 @@ function sanitizeFlow(raw: unknown): unknown {
   };
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A period metric's days (part 5, D9): exactly two ISO days, else nothing. */
+function dayPair(raw: unknown): Obj | null {
+  const r = obj(raw);
+  return typeof r.from === 'string' && ISO_DAY.test(r.from) && typeof r.to === 'string' && ISO_DAY.test(r.to) ? { from: r.from, to: r.to } : null;
+}
+
 const TARGET_STATUS: ReadonlySet<unknown> = new Set(['good', 'warn', 'off', 'none']);
 /** A KPI's target as the server worked it out (part 5, D14, ipc/targetResolve): its figures and the app's own words. */
 function sanitizeTarget(raw: unknown): Obj {
@@ -164,12 +174,17 @@ export function sanitizePayload(raw: unknown): unknown {
     if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
     if (typeof o.note === 'string' && o.note) kpi.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
     if (o.target && typeof o.target === 'object') kpi.target = sanitizeTarget(o.target); // printed under the figure (site/publishTiles)
+    const days = dayPair(o.periodRange); // the days a period metric's figure covers, printed under it
+    if (days) kpi.periodRange = days;
     return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
   const out: Obj = {
     labels: data.labels.map((l) => (typeof l === 'string' ? l.slice(0, MAX_LABEL) : l)),
-    series: data.series.map((s) => ({ label: s.label.slice(0, MAX_LABEL), values: s.values })),
+    series: data.series.map((s, i) => {
+      const calc = Array.isArray(o.series) ? obj(o.series[i]).calc : undefined;
+      return { label: s.label.slice(0, MAX_LABEL), values: s.values, ...(CALC_KINDS.has(calc) ? { calc } : {}) };
+    }),
     caption: str(o.caption, MAX_LABEL),
   };
   // The figures the chart draws, as the export whitelist named them field by field (analysis/exportSanitize).

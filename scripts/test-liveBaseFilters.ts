@@ -7,13 +7,16 @@
 //    `setBaseFilters` writes it with an epoch bump and drops the figures sampled under the old ones;
 //    `liveBaseOf` adapts it, and a step that cannot be applied refuses, never skips.
 // 3. A stored list this pod cannot read in full refuses every door, the case-fix lookup and both
-//    copies, typed (`baseFilterUnreadable`), with no warehouse call. NEGATIVE CONTROL: 20 steps read.
+//    copies, typed (`baseFilterUnreadable`), with no warehouse call; the Schema reply flags it and a save
+//    refuses while it is set (an older pod never overwrites a newer list). NEGATIVE CONTROL: 20 steps read.
 // 4. The doors: every statement each Live entry point sends binds the base filter (the canary).
 //    NEGATIVE CONTROL: the same doors on a Live dataset without base filters bind none. A period base
 //    moves at midnight (the resolved range is in the key); a base change never serves the stale answer
 //    from before it; an empty sample under a base is retried LIMIT-only; a sync sampled under other
 //    filters stores no figures; a base column the warehouse dropped refuses every question, typed,
 //    while the sync still syncs the columns. (scripts/test-liveBaseCompile.ts holds the pure builders.)
+// 5. Copies keep the base filters as Prepare steps. A fetch the import row cap cut refuses both copies
+//    typed (`copyCapped`). NEGATIVE CONTROLS: a table that just fits copies whole; no base filters, cut + warned.
 //
 //   npm run build:ts && node scripts/test-liveBaseFilters.js
 
@@ -32,6 +35,8 @@ const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engin
 const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
 const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+const liveMsg: typeof import('../src/data/liveMessages') = require('../src/data/liveMessages');
 const { isLive } = H.liveDataset;
 
 const { fake, ORG_A } = H;
@@ -193,6 +198,13 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ok(`${what}: Copy the data instead refuses typed; the record stays Live`,
       toExtract.ok === false && toExtract.code === 'live_refused' && toExtract.reason === 'baseFilterUnreadable' && (await meta()).mode === 'live', show(toExtract));
     ok(`${what}: none of it spent a warehouse call`, fake.calls.length === calls0, show(fake.calls.length - calls0));
+    // An older pod reading a newer pod's list: the Schema reply says so, and a save would overwrite what it cannot read.
+    const view = (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value;
+    ok(`${what}: the Schema reply flags the list unreadable`, view.ok === true && view.baseFiltersUnreadable === true, show(view.baseFiltersUnreadable));
+    const e = (await meta()).live.epoch;
+    const saved = (await post('live:setBaseFilters', { projectId: P, datasetId: L, filters: [F('region', '!=', 'y')] })).value;
+    ok(`${what}: live:setBaseFilters refuses typed while it is set, and writes nothing`,
+      saved.ok === false && saved.code === 'live_refused' && saved.reason === 'baseFilterUnreadable' && saved.error === unreadable && (await meta()).live.epoch === e && (await meta()).live.baseFiltersUnreadable === true, show(saved));
     return replies;
   }
 
@@ -218,7 +230,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plant(Array.from({ length: base.MAX_BASE_FILTERS }, (_, i) => F('region', '!=', `v${i}`)));
   ok('NEGATIVE CONTROL: exactly 20 valid steps are read in full, not marked unreadable', (await meta()).live.baseFilters.length === 20 && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant(BASE);
-  ok('NEGATIVE CONTROL: a readable list is not marked unreadable', (await meta()).live.baseFiltersUnreadable === undefined);
+  // (A save over a readable list is test-liveBaseChannel's "saves"; one here would queue a sync into section 4's counts.)
+  ok('NEGATIVE CONTROL: a readable list is not marked unreadable, nor flagged in the Schema reply',
+    (await meta()).live.baseFiltersUnreadable === undefined && (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.baseFiltersUnreadable === false);
 
   // ── 4. The doors: every statement a Live question sends binds the base filter ──
   const M = (column: string, aggregation: string) => ({ column, aggregation });
@@ -357,15 +371,42 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   }
 
   // ── 5. Copies keep the base filters as Prepare steps (never wider than the dataset) ──
+  // The fetch a copy reads (a table selection, the fake's cap + 1 wrapper) says when the row cap cut it.
+  const N = H.fx.fixtureRows().length;
+  const cutRun = await H.as(ORG_A, () => connectionRun.runConnection(H.fakeMod.LIVE_FAKE_ID, {}, {}, { table: 'live_typed' }, { rowLimit: 300 }));
+  ok('a table over the row cap: the run keeps the cap and reports it truncated, with the warning',
+    cutRun.ok === true && cutRun.truncated && cutRun.result.rows.length === 300 && cutRun.result.warnings.some((w) => /truncated at 300 rows/.test(w)), show(cutRun.ok ? { truncated: cutRun.truncated, rows: cutRun.result.rows.length, warnings: cutRun.result.warnings } : cutRun));
+  const fitRun = await H.as(ORG_A, () => connectionRun.runConnection(H.fakeMod.LIVE_FAKE_ID, {}, {}, { table: 'live_typed' }, { rowLimit: N }));
+  ok('NEGATIVE CONTROL: a table exactly at the cap is all of it, not truncated', fitRun.ok === true && !fitRun.truncated && fitRun.result.rows.length === N && fitRun.result.warnings.length === 0, show(fitRun.ok ? fitRun.result.warnings : fitRun));
   await setBase(L, BASE);
   H.queryCache.clear();
   const kpi = async (d: string, column: string, aggregation: string): Promise<Reply> => (await post('dashboard:metric', { projectId: P, datasetId: d, column, aggregation })).value;
   const liveCount = await kpi(L, 'qty', 'count');
   const liveSum = await kpi(L, 'amt', 'sum');
+  // Over the import row cap, the base filters would keep their part of an arbitrary first N rows, not what the
+  // Live dataset answers over: both copies refuse, typed, and save nothing (the cap lowered to 300 of N rows).
+  const cap = connectionRun as { ROW_LIMIT: number };
+  const realCap = cap.ROW_LIMIT;
+  const atCap = async (rows: number, channel: string, payload: Reply): Promise<Reply> => {
+    cap.ROW_LIMIT = rows;
+    try { return (await post(channel, payload)).value; } finally { cap.ROW_LIMIT = realCap; }
+  };
+  const capped = liveMsg.liveCopyCappedMessage('300');
+  const n3 = await count();
+  for (const [label, channel, extra] of [['Make a copy', 'dataset:copyLive', {}], ['Copy the data instead', 'dataset:setMode', { mode: 'extract' }]] as [string, string, Reply][]) {
+    const r = await atCap(300, channel, { projectId: P, datasetId: L, ...extra });
+    ok(`over the row cap: ${label} of a dataset with base filters refuses typed (copyCapped), saves nothing, stays Live`,
+      r.ok === false && r.code === 'live_refused' && r.reason === 'copyCapped' && r.error === capped && (await count()) === n3 && isLive(await meta()), show(r));
+  }
+  ok('the sentence names the cap and what to do', /300/.test(capped) && /query/.test(capped), capped);
+  const cutPlain = await atCap(300, 'dataset:copyLive', { projectId: P, datasetId: second.liveId });
+  ok('NEGATIVE CONTROL: over the cap with no base filters, the copy is made, cut, and says so (as any import)',
+    cutPlain.ok === true && cutPlain.dataset.rowCount === 300 && cutPlain.warnings.some((w: string) => /truncated at 300 rows/.test(w)), show(cutPlain));
   const writes: Reply[] = [];
   const realPersist = H.datasets.persist;
   (H.datasets as { persist: typeof realPersist }).persist = (projectId, ds, progress) => { writes.push({ id: ds.id, steps: ds.steps }); return realPersist(projectId, ds, progress); };
-  const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
+  // NEGATIVE CONTROL for the refusal: a table that just fits the cap is copied whole, so the copy is the Live dataset.
+  const copy = await atCap(N, 'dataset:copyLive', { projectId: P, datasetId: L });
   (H.datasets as { persist: typeof realPersist }).persist = realPersist;
   const copyMeta = await metaOf(copy.dataset.id);
   ok('Make a copy: the copy carries the base filters as its Prepare steps', copy.ok === true && show(copyMeta.steps) === show(BASE), show(copy));

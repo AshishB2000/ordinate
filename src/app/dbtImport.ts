@@ -50,7 +50,19 @@ export interface DbtSkipped {
 
 /** Which dataset a semantic model landed on, and how; no `datasetId`: none here. */
 export interface DbtModelMatch { name: string; datasetId?: string; how?: 'map' | 'exact' | 'name' }
-export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[] }
+/**
+ * Where an imported metric's figure can differ from dbt's, kept and said (the owner's ruling): `empty_text`, Ordinate
+ * reads a text cell that is '' or spaces as empty where dbt counts it (a count, `!=`, `NOT IN`, `IS [NOT] NULL` on
+ * text); `whole_division`, a derived metric that divides is computed with decimals, where dbt on Postgres, Redshift or
+ * Trino divides two whole numbers as whole numbers.
+ */
+export type DbtNote = 'empty_text' | 'whole_division';
+
+/**
+ * `inputs`: each ratio or derived metric's file id → its inputs' file ids (it names them by name, so a2 reads them as
+ * references). `notes`: a metric's file id → where its figure can differ from dbt's.
+ */
+export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[]; inputs: Map<string, string[]>; notes: Map<string, DbtNote[]> }
 export interface DbtDataset { id: string; name: string; columns: ParsedColumn[]; live?: boolean }
 
 type Obj = Record<string, unknown>;
@@ -86,10 +98,12 @@ const AGG: Readonly<Record<string, Aggregation>> = { sum: 'sum', count: 'count',
 const NEEDS_NUMBER: ReadonlySet<string> = new Set(NUMBER_AGGREGATIONS);
 const FORMULA_FORMAT: MetricFormat = { kind: 'number', decimals: 2, compact: false };
 const MAX_FORMULA = 2_000;
+/** How deep ratio and derived metrics may nest: past it no person wrote it, and the translation's stack stays safe. */
+const MAX_CHAIN = 100;
 
 interface Dim { column: ParsedColumn | null; time: boolean }
 interface Model { name: string; ds?: DbtDataset; entity?: string; defaultTime?: string; dims: Map<string, Dim> }
-type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean } | { skip: DbtSkip; model?: string; because?: string };
+type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean; inputs?: string[]; notes?: DbtNote[] } | { skip: DbtSkip; model?: string; because?: string };
 
 const aliasOf = (i: Obj): string => String(name(own(i, 'alias')) ?? own(i, 'name'));
 
@@ -235,11 +249,12 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (!ds) return { skip: 'no_dataset', model: model.name };
     const at = { model: model.name };
     if (own(inp, 'fill_nulls_with') !== undefined && own(inp, 'fill_nulls_with') !== null) return { skip: 'fill_nulls', ...at };
-    const agg = AGG[String(own(measure, 'agg'))];
+    const agg = own(AGG, String(own(measure, 'agg'))) as Aggregation | undefined;
     if (!agg || (own(measure, 'agg_params') !== undefined && own(measure, 'agg_params') !== null)) return { skip: 'unknown_aggregation', ...at };
     const expr = own(measure, 'expr');
     const column = columnOf(ds.columns, typeof expr === 'string' ? expr : String(own(measure, 'name')));
-    if (!column || (NEEDS_NUMBER.has(agg) && column.type !== 'number')) return { skip: 'not_a_column', ...at };
+    // countd over a date column counts distinct days, where dbt counts distinct timestamps: not the same figure.
+    if (!column || (NEEDS_NUMBER.has(agg) && column.type !== 'number') || (agg === 'countd' && column.type === 'date')) return { skip: 'not_a_column', ...at };
     let snapshot: { column: string; take: 'last' | 'first' } | undefined;
     const nad = own(measure, 'non_additive_dimension');
     if (nad !== undefined && nad !== null) {
@@ -257,9 +272,11 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     const filters = texts[0] && texts[1] ? where([...new Set([...texts[0], ...texts[1]])], model) : null; // one condition twice is once
     if (!filters) return { skip: 'filter_shape', ...at };
     const definition = sanitizeDefinition({ column: column.name, aggregation: agg, ...(snapshot && { snapshot }) });
+    const onText = (c: string): boolean => ds.columns.some((x) => x.name === c && x.type === 'text');
+    const empties = ((agg === 'count' || agg === 'countd') && onText(column.name)) || filters.some((s) => (s.op === 'not_empty' || s.op === 'is_empty') && onText(s.column));
     return {
       metric: { ...shell(n, m, ds), definition, ...(filters.length && { filters }), format: sanitizeFormat(formatFor(column.name, agg)), ...(timeColumn && { timeColumn }) },
-      model: model.name, measure: own(inp, 'name') as string, filtered: filters.length > 0,
+      model: model.name, measure: own(inp, 'name') as string, filtered: filters.length > 0, ...(empties && { notes: ['empty_text' as const] }),
     };
   };
 
@@ -290,14 +307,14 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (!f || f.length > MAX_FORMULA) return { skip: 'unreadable', model };
     const ds = models.get(model as string)?.ds as DbtDataset;
     const definition: MetricDefinition = sanitizeDefinition({ formula: f });
-    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string };
+    return { metric: { ...shell(n, m, ds), definition, format: FORMULA_FORMAT, ...(metrics[0].timeColumn && { timeColumn: metrics[0].timeColumn }) }, model: model as string, inputs: metrics.map((x) => x.id) };
   };
 
   function translate(n: string): Result {
     const hit = done.get(n);
     if (hit) return hit;
     const m = raw.get(n);
-    if (!m || visiting.has(n)) return { skip: 'unreadable' };
+    if (!m || visiting.has(n) || visiting.size >= MAX_CHAIN) return { skip: 'unreadable' };
     visiting.add(n);
     const tp = own(m, 'type_params');
     let r: Result;
@@ -315,6 +332,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
         const expr = own(tp, 'expr');
         const inputs = nodes(own(tp, 'metrics')).map(input);
         r = typeof expr === 'string' && inputs.every((x) => x) ? formula(n, m, inputs as Obj[], (refs) => derivedFormula(expr, refs)) : { skip: 'unreadable' };
+        if ('metric' in r && typeof expr === 'string' && expr.includes('/')) r = { ...r, notes: ['whole_division'] };
         break;
       }
       case 'cumulative':
@@ -349,10 +367,15 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
   }
 
   const metrics: ModelMetric[] = [];
+  const inputs = new Map<string, string[]>();
+  const notes = new Map<string, DbtNote[]>();
   for (const [n, m] of raw) {
     const r = translate(n);
-    if ('metric' in r) metrics.push(r.metric);
-    else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
+    if ('metric' in r) {
+      metrics.push(r.metric);
+      if (r.inputs) inputs.set(r.metric.id, r.inputs);
+      if (r.notes) notes.set(r.metric.id, r.notes);
+    } else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
   }
 
   const model: ParsedModel = {
@@ -363,7 +386,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     terms: [],
     relationships: [],
     invalid: [],
-    dbt: { models: [...matches.values()], skipped },
+    dbt: { models: [...matches.values()], skipped, inputs, notes },
   };
   return { model, skipped };
 }

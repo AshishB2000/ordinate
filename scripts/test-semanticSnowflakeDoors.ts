@@ -140,8 +140,8 @@ void (async () => {
   const asked = questions();
   ok(`every one of the ${asked.length} statements was decoded back to a question the plan asks`, asked.length > 20 && sfFake.asked.length === asked.length);
   ok('…none carries a filter value in its text (West, the six months\' bounds, the kept categories)', !asked.some((q) => /West|20\d\d-\d\d-\d\d|'m\d\d'/.test(q)), show(asked.filter((q) => /West|20\d\d-|'m\d\d'/.test(q)).slice(0, 1)));
-  ok('…each under the live QUERY_TAG, inside the row cap', fake.of('submit').filter((x) => String(x.json?.statement).includes('SEMANTIC_VIEW(')).every((x) =>
-    (x.json?.parameters as Reply)?.QUERY_TAG === 'ordinate:acme:live' && /^select \* from \(\n[\s\S]*\n\) limit 100001$/.test(String(x.json?.statement))));
+  ok('…each under the live QUERY_TAG, inside the row cap (its own last line, so its ORDER BY holds)', fake.of('submit').filter((x) => String(x.json?.statement).includes('SEMANTIC_VIEW(')).every((x) =>
+    (x.json?.parameters as Reply)?.QUERY_TAG === 'ordinate:acme:live' && /^SELECT [\s\S]*\nLIMIT \d+$/.test(String(x.json?.statement)) && Number(/\d+$/.exec(String(x.json?.statement))?.[0]) <= 100_001));
 
   // ── § refusals ──
   const n0 = questions().length;

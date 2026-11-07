@@ -9,7 +9,8 @@
 //             labelled join a column is read through (pin, and the data model becomes a dep); its own dataset and every
 //             other dataset its figure reads, resolved as the door resolves them (each one's pin is a dep)
 //   Term      the record (TERM_PIN); a metric that names one has it as a dep
-//   Dataset   Live baseFilters and calculated fields (LIVE_PIN, pin); origin.readsTables (out: a label, p2-02)
+//   Dataset   Live baseFilters and calculated fields (LIVE_PIN, pin); origin.readsTables (out: a label, p2-02); each
+//             dataset it is built from (parentsOfRecord: a union, lookup, combine, compose or SQL origin), its pin a dep
 //   Catalog   TableDoc (role, key, grain, guide, keyCheck, hierarchies) and ColumnDoc (value labels, display names,
 //             aliases): all out, docs and labels that change no figure
 //   Model     a relationship's ends and cardinality (pin), its label (out)
@@ -29,6 +30,7 @@ import { listRelationships, type Relationship } from './relationships';
 import { expandTerms } from './termExpand';
 import { metricReads } from '../ipc/relationships';
 import { getDatasetMeta, type DatasetMeta } from '../data/datasets';
+import { parentsOfRecord } from '../data/upstream';
 import type { LiveSettings } from '../data/liveDataset';
 import type { DatasetOrigin } from '../data/datasetOrigin';
 import { isTermNotExpandedError, isTermStep } from '../data/termStep';
@@ -196,8 +198,15 @@ async function compute(w: Walk, ref: string, stack: readonly string[]): Promise<
     const t = await getTerm(w.projectId, r.id);
     return t && digest({ kind: r.kind, own: pinned(t, TERM_PIN), deps: {} });
   }
-  const meta = await getDatasetMeta(w.projectId, r.id); // its upstream is not its definition: no deps
-  return meta && digest({ kind: r.kind, own: datasetOwn(meta), deps: {} });
+  const meta = await getDatasetMeta(w.projectId, r.id);
+  if (!meta) return null;
+  // Its figures are its upstream's Prepare output too (a union, lookup, combine, compose or SQL origin): each parent's pin, bounded as a metric's deps are.
+  const deps: Record<string, string> = {};
+  for (const p of parentsOfRecord(meta).sort()) {
+    const ref = `dataset:${p}`;
+    deps[ref] = here.includes(ref) || here.length > MAX_DEPTH ? 'cycle' : ((await pinIn(w, ref, here)) ?? 'missing');
+  }
+  return digest({ kind: r.kind, own: datasetOwn(meta), deps });
 }
 
 function pinIn(w: Walk, ref: string, stack: readonly string[]): Promise<string | null> {

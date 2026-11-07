@@ -253,7 +253,7 @@ async function previewVisual(
   const drawn = await followedEncoding(projectId, pv.datasetId, encoding);
   const res = withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(projectId, pv.datasetId, drawn, filters, {
     maxHydrateRows: PREVIEW_MAX_HYDRATE_ROWS,
-  }), projectId, pv.datasetId, drawn), drawn);
+  }), projectId, pv.datasetId, drawn, undefined, base.chartType), drawn);
   if (!res.ok) {
     base.note = 'tooLarge' in res && res.tooLarge
       ? 'Too large to preview without the DuckDB bridge. The chart renders normally once built.'

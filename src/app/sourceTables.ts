@@ -54,7 +54,8 @@ export interface SourceIndexEntry {
 
 export const MAX_SOURCE_DOCS = 2000, MAX_TABLE = 1000, MAX_OWNER = 80, MAX_REFRESH = 200, MAX_REQUIRED = 500, MAX_SOURCE_GUIDE = 8000;
 const MAX_STAMP = 40;
-const MAX_DISMISSED_DATASETS = 500, MAX_DISMISSED_COLUMNS = 2000, MAX_COLUMN_NAME = 256;
+export const MAX_DISMISSED_DATASETS = 500;
+const MAX_DISMISSED_COLUMNS = 2000, MAX_COLUMN_NAME = 256;
 const HASH_RE = /^[A-Za-z0-9_-]{12}$/;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');

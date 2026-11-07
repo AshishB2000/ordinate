@@ -27,7 +27,12 @@ export interface Field {
   type: 'text' | 'number' | 'date';
   /** A measure's aggregate when it is added: the server's (starterPlan.aggregationFor). */
   aggregation?: 'sum' | 'avg';
+  /** A layer's metric (a semantic dataset's mirror): read by this id, computed by the layer, so no aggregate is chosen. */
+  metricId?: string;
 }
+
+/** The measure a click on `f` adds. */
+export const measureOf = (f: Field): Measure => ({ column: f.name, aggregation: f.aggregation ?? 'sum', ...(f.metricId ? { metricId: f.metricId } : {}) });
 
 export const EMPTY: Question = { chartType: '', encoding: { category: '', values: [] }, filters: [] };
 
@@ -59,7 +64,7 @@ export function decodeQuestion(raw: string | null | undefined): Question | null 
   if (!str(category) || !Array.isArray(rows)) return null;
   const values: Measure[] = [];
   for (const v of rows as unknown[]) {
-    if (isObj(v) && str(v.column) && v.column && str(v.aggregation) && AGGS.has(v.aggregation)) values.push({ column: v.column, aggregation: v.aggregation as Agg });
+    if (isObj(v) && str(v.column) && v.column && str(v.aggregation) && AGGS.has(v.aggregation)) values.push({ column: v.column, aggregation: v.aggregation as Agg, ...(str(v.metricId) && v.metricId ? { metricId: v.metricId } : {}) });
   }
   const encoding: Encoding = { category, values };
   if (str(grain) && GRAINS.has(grain)) encoding.grain = grain;
@@ -101,7 +106,7 @@ export function withField(q: Question, f: Field, kindOf: KindOf): Question {
   if (f.kind === 'measure') {
     return withValues(
       q,
-      e.values.some((v) => v.column === f.name) ? e.values.filter((v) => v.column !== f.name) : [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }],
+      e.values.some((v) => v.column === f.name) ? e.values.filter((v) => v.column !== f.name) : [...e.values, measureOf(f)],
     );
   }
   if (e.series === f.name) return withSplit(q);
@@ -150,7 +155,7 @@ const listed = (xs: string[]): string => (xs.length < 2 ? (xs[0] ?? '') : `${xs.
 
 /** "Total revenue by region", "Average discount by month of order_date, split by segment". Words, never a figure. */
 export function questionTitle(e: Encoding): string {
-  const shown = listed(e.values.map((v) => `${AGG_WORD[v.aggregation] ?? ''} ${v.column}`.trim()));
+  const shown = listed(e.values.map((v) => (v.metricId ? v.column : `${AGG_WORD[v.aggregation] ?? ''} ${v.column}`.trim()))); // a layer's metric is its own name
   if (!shown || !e.category) return 'New question';
   const by = e.grain ? `by ${e.grain} of ${e.category}` : `by ${e.category}`;
   const text = `${shown} ${by}${e.series ? `, split by ${e.series}` : ''}`;

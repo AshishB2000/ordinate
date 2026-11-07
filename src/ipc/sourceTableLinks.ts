@@ -12,7 +12,7 @@ import { perTableGraph, tableNodeId, type TableLink } from '../analysis/sourceLi
 import { loadInput, redactSources } from './lineage';
 import { loadSecrets } from './connectionSecrets';
 import * as datasets from '../data/datasets';
-import { sourceTablesOf } from '../data/sourceTableOf';
+import { docTablesOf, sourceTablesOf } from '../data/sourceTableOf';
 import { choiceOrder, setReadsTables } from '../data/datasetSourceTables';
 import { connectionGone, notLinkable, sourceDocGone } from '../app/sourceTableMessages';
 import { usedTables } from '../app/sourceTableList';
@@ -50,7 +50,7 @@ export function register(): void {
     const conn = await connections.getConnection(projectId, origin.connId);
     const index = new Map((await store.listSourceIndex(projectId, origin.connId)).map((e) => [e.table, e.docId]));
     const tables: SourceBlock[] = [];
-    for (const table of sourceTablesOf(origin, conn ?? undefined).slice(0, 16)) {
+    for (const table of docTablesOf(sourceTablesOf(origin, conn ?? undefined).slice(0, 16), [...index.keys()])) {
       const docId = index.get(table);
       const rec = docId ? (await store.readSourceDoc(projectId, origin.connId, docId))?.rec : undefined;
       tables.push({
@@ -76,7 +76,8 @@ export function register(): void {
       if (!conn) return { ok: false, error: connectionGone() };
       const res = await connectionRun.listTables(conn.connectorId, conn.values, await loadSecrets(conn.id, getConnector(conn.connectorId)));
       if (!res.ok) return { ok: false, error: res.error };
-      return { ok: true, tables: choiceOrder(res.tables.map((t) => t.name), origin.sql ?? ''), linked: sourceTablesOf(origin, conn) };
+      // schema.name, as a doc, a table import and the web's `qualify` name it, so a link meets its doc
+      return { ok: true, tables: choiceOrder(res.tables.map((t) => (t.schema ? `${t.schema}.${t.name}` : t.name)), origin.sql ?? ''), linked: sourceTablesOf(origin, conn) };
     } catch {
       return { ok: false, error: connectionGone() };
     }

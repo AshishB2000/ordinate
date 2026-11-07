@@ -47,6 +47,11 @@ export async function listVerified(projectId: string): Promise<VerifiedQuestion[
   return (await listTagged(projectId)).map((t) => t.rec);
 }
 
+/** `fn` holding the project's questions (every pod): a key check and the write or restore it guards run as one. */
+export function lockedKeys<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  return recordFs.locked(dirOf(projectId), fn);
+}
+
 /** The record and the tag of what is stored, from ONE read (../app/editConflict). */
 export async function readVerified(projectId: string, id: string): Promise<Tagged<VerifiedQuestion> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;

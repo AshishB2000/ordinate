@@ -107,6 +107,23 @@ function forged(zip: Buffer, bit: number): Buffer {
   ok('a 9,000-character guide is invalid, and its dataset with it', long.invalid.length === 1 && long.invalid[0].path === 'datasets/orders.md' && long.invalid[0].id === F.orders && long.invalid[0].error === (await H.as(H.ORG_A, async () => msg.modelGuideTooLong())) && !long.datasets.some((d) => d.id === F.orders), JSON.stringify(long.invalid));
   ok('NEGATIVE CONTROL: an 8,000-character guide reads', parsedOf(await read(withEntry(files, 'datasets/orders.md', 'x'.repeat(8000)))).invalid.length === 0);
   ok('a guide is trimmed as the store trims it', parsedOf(await read(withEntry(files, 'datasets/orders.md', `${GUIDE}\n`))).guides.get(F.orders) === GUIDE);
+  // As the export writes them: an empty string or list is no key, so a hand-written "" or [] never plans an update.
+  const emptied = parsedOf(await read(edit(edit(files, 'metrics/stock-on-hand.json', (m) => { m.filters = []; m.description = ''; m.timeColumn = ''; }), 'terms/emea.json', (t) => { t.aliases = []; })));
+  const stockBack = emptied.metrics.find((m) => m.id === F.stock);
+  ok('an empty string or list reads as no key', !!stockBack && stockBack.filters === undefined && stockBack.description === undefined && stockBack.timeColumn === undefined && !!emptied.terms[0] && emptied.terms[0].aliases === undefined, JSON.stringify([stockBack, emptied.terms[0]]));
+  ok('NEGATIVE CONTROL: a term\'s filters are always read, even none', Array.isArray(parsedOf(await read(edit(files, 'terms/emea.json', (t) => { t.filters = []; })))?.terms[0]?.filters));
+  ok('a metric description past the store\'s 500 is invalid, never cut', (await invalidOf(edit(files, 'metrics/orders.json', (m) => { m.description = 'x'.repeat(501); })))[0]?.path === 'metrics/orders.json');
+  ok('… and one of 500 reads', (await invalidOf(edit(files, 'metrics/orders.json', (m) => { m.description = 'x'.repeat(500); }))).length === 0);
+  ok('a date column named with 512 characters reads, as the store keeps it', (await invalidOf(edit(files, 'metrics/orders.json', (m) => { m.timeColumn = 'd'.repeat(512); }))).length === 0
+    && (await invalidOf(edit(files, 'metrics/orders.json', (m) => { m.timeColumn = 'd'.repeat(513); })))[0]?.path === 'metrics/orders.json');
+  const twoDocs = await invalidOf(edit(files, 'datasets/orders.json', (d) => { d.fields.push({ ...d.fields[0], description: 'a second copy' }); }));
+  ok('two field docs for one column: the dataset file is invalid', twoDocs[0]?.path === 'datasets/orders.json' && twoDocs[0]?.id === F.orders, JSON.stringify(twoDocs));
+  const deepNest = (n: number): string => `${'['.repeat(n)}${']'.repeat(n)}`;
+  const nested = (n: number) => withEntry(files, 'metrics/stock-on-hand.json', (files.get('metrics/stock-on-hand.json') as string).replace('"definition": {', `"definition": { "x": ${deepNest(n)},`));
+  let deepRead: string;
+  try { deepRead = JSON.stringify(await invalidOf(nested(20_000))); } catch (e) { deepRead = String(e); }
+  ok('a value nested 20,000 deep: that file is invalid, never a crash', deepRead.includes('metrics/stock-on-hand.json') && deepRead.includes(unreadable), deepRead.slice(0, 300));
+  ok('NEGATIVE CONTROL: nested 20 deep reads (the definition\'s own sanitizer drops the key)', (await invalidOf(nested(20))).length === 0);
   ok('a guide with no dataset file is invalid', (await invalidOf(withEntry(files, 'datasets/gone.md', 'x')))[0]?.path === 'datasets/gone.md');
 
   await close();

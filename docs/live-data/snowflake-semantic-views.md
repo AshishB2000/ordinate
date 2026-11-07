@@ -21,8 +21,10 @@ view once the owner creates it (`scripts/fixtures/snowflake-semantic-view.sql`) 
 ## The statement the adapter writes
 
 One statement per question (`src/engine/live/semantic/snowflake.ts`), sent through the
-connection's bound execution (`runBound`: `?` binds, the row cap wrapper, `QUERY_TAG`, the
-timeout and cancel, the SSRF-pinned transport):
+connection's bound execution (`runBound`: `?` binds, the row cap, `QUERY_TAG`, the timeout and
+cancel, the SSRF-pinned transport). The cap is the statement's own last line (`LIMIT n` up to the
+cap, else the cap's), not the `select * from (…) limit n` wrapper a Live statement gets: Snowflake
+keeps a subquery's ORDER BY only inside it, and a value list is read in the layer's order:
 
 ```sql
 SELECT "d0" AS "region", CAST("m0" AS DOUBLE) AS "revenue"
@@ -59,7 +61,7 @@ LIMIT 51
 |---|---|---|
 | `SHOW SEMANTIC VIEWS [IN { ACCOUNT \| DATABASE }] [LIMIT n]` | documented | `SHOW SEMANTIC VIEWS IN DATABASE LIMIT 1000` when the connection names a database (the session's, sent as context: no name is interpolated), else `… IN ACCOUNT LIMIT 1000`. Columns read: `name`, `database_name`, `schema_name`, `comment`. A view whose name parts are not plain identifiers (`IDENT_RE`) is not listed: it could not be quoted safely. |
 | `DESCRIBE SEMANTIC VIEW <name>` → `object_kind, object_name, parent_entity, property, property_value` | documented | One statement gives every dimension (`DATA_TYPE`) and metric (`EXPRESSION`, `ACCESS_MODIFIER`). Kinds read: `DIMENSION`, `METRIC`, `DERIVED_METRIC`; everything else is ignored. |
-| Dimension types | documented (`DATA_TYPE`, e.g. `VARCHAR(25)`) | Through the Live column mapping (`liveColumnType('snowflake', …)`): text, number, date. A type it cannot map is left out and named by the sync. |
+| Dimension types | documented (`DATA_TYPE`, e.g. `VARCHAR(25)`) | Through the Live column mapping (`liveColumnType('snowflake', …)`): text, number, date. A type it cannot map is left out and named by the sync, and so is a `TIMESTAMP_TZ`: its UTC day (a Live table's reading, `CONVERT_TIMEZONE('UTC', x)`) needs the warehouse type, which a semantic record does not keep, and `CAST(x AS DATE)` would bucket each value by its own offset. |
 | Privileges | documented | Query: `SELECT` on the semantic view, and *not* `SELECT` on its tables. Describe and list: any privilege on the view, and one on its database and schema. A view the role cannot describe is a sentence in the app ("Snowflake didn't answer…"); Snowflake's own words go to the server log only. |
 | Warehouse for SHOW / DESCRIBE | not documented | The connection always names a warehouse (a required field), so both run with it. |
 
@@ -67,7 +69,10 @@ LIMIT 51
 
 Read from `DESCRIBE`'s `EXPRESSION` (documented, e.g. `AVG(orders.o_totalprice)`). Additive only
 when the whole expression is one `SUM(…)` or `COUNT(…)`, not `COUNT(DISTINCT …)`, with no other
-aggregate or operator outside it (`additiveExpression`). A derived metric is never additive.
+aggregate or operator outside it (`additiveExpression`). A derived metric is never additive, nor is
+one declared `NON ADDITIVE BY (…)` (a semi-additive metric, a balance; documented in CREATE SEMANTIC
+VIEW): DESCRIBE's property for the clause is not documented, so a metric with any property whose
+name holds `ADDITIVE` (the organization usage view's column is `NON_ADDITIVE_DIMENSIONS`) is not.
 Anything unreadable is `false`: the cost of being wrong is a refused running total, never a wrong
 sum.
 

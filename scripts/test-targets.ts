@@ -133,6 +133,19 @@ async function resolveSection(): Promise<void> {
   ok('NEGATIVE CONTROL: no figure, no status', (await t(rev, THIS_MONTH, null))!.status === 'none');
   ok('a target on Live actuals with an extract plan works', Object.is((await t(revLive, THIS_MONTH))!.value, planNov * (20 / 30)), show(await t(revLive, THIS_MONTH)));
 
+  // A period metric: the base's target over the days its figure covers (the window), added up as the base adds up.
+  const ytd = await saved({ name: 'Revenue YTD', datasetId: D, definition: { base: rev.id, window: { to_date: 'year' } }, target: REV_TARGET });
+  for (const scope of [[], THIS_MONTH, [...THIS_MONTH, eqs('region', 'East')]]) {
+    const [got, want] = [await t(ytd, scope), await t(rev, [...scope.filter((s) => s.column !== 'day'), ...on('2024-01-01', '2024-11-20')])];
+    ok(`a YTD target = the base's target under the window (${scope.length} filters)`, typeof got?.value === 'number' && Object.is(got.value, want?.value), show([got, want]));
+  }
+  ok('NEGATIVE CONTROL: … not the base\'s target for November alone', !Object.is((await t(ytd, THIS_MONTH))!.value, (await t(rev, THIS_MONTH))!.value));
+  const cmp = { name: 'Revenue YoY', datasetId: D, definition: { base: rev.id, window: { to_date: 'year' }, compare: { vs: 'previous_year', show: 'pct_change' } } };
+  const refusedCmp = (await post('metric:save', { projectId: P, input: { ...cmp, target: REV_TARGET } })).value;
+  ok('save refuses a target on a metric that compares periods, beside the target box', refusedCmp.ok === false && refusedCmp.error === tm.targetOnCompare() && refusedCmp.field === 'target', show(refusedCmp));
+  const cmpSaved = await saved(cmp);
+  ok('… and one already stored has none, and why', (await H.as(H.ORG_A, async () => targetResolve.metricTarget(P, { ...(await metricOf(cmpSaved.id)), target: REV_TARGET } as Metric, THIS_MONTH, 1)))?.none === tm.targetOnCompare());
+
   // Saving.
   const trySave = async (patch: Record<string, unknown>, id = rev.id): Promise<Reply> => (await post('metric:update', { projectId: P, id, patch })).value;
   ok('save refuses a sum target with no per', (await trySave({ target: { source: { value: 1 } } })).error === tm.targetNeedsPer(), show(await trySave({ target: { source: { value: 1 } } })));
@@ -182,9 +195,14 @@ async function surfacesSection({ P, D, rev, avg, plain }: Fx): Promise<void> {
   const pub = card ? card.payloads[card.variants[0]] : undefined;
   ok('a published KPI carries the same target', Object.is(pub?.target?.value, tile.target.value) && pub.target.status === tile.target.status, show(pub));
 
-  const sc = await H.as(H.ORG_A, () => scorecards.computeScorecard(P, { id: randomUUID(), name: 's', period: 'month', rows: [{ metricId: rev.id }, { metricId: rev.id, target: 5 }] } as never));
+  const sCard = { id: randomUUID(), name: 's', period: 'month', rows: [{ metricId: rev.id }, { metricId: rev.id, target: 5 }] };
+  const sc = await H.as(H.ORG_A, () => scorecards.computeScorecard(P, sCard as never));
   ok('scorecard: the metric\'s target for the month in progress, pro-rated', Object.is(sc.rows[0].target, planNov * (20 / 30)), show(sc.rows[0]));
   ok('scorecard: a row\'s own target wins', sc.rows[1].target === 5);
+  const det = await H.as(H.ORG_A, () => scorecards.scorecardDetail(P, sCard as never, rev.id, 0));
+  ok('scorecard detail: the row\'s target, attainment and status', typeof det.target === 'number' && Object.is(det.target, sc.rows[0].target) && Object.is(det.attainment, sc.rows[0].attainment) && det.status === sc.rows[0].status, show([det.target, det.attainment, det.status, sc.rows[0]]));
+  const own = await H.as(H.ORG_A, () => scorecards.scorecardDetail(P, { ...sCard, rows: [{ metricId: rev.id, target: 5 }] } as never, rev.id, 0));
+  ok('NEGATIVE CONTROL: … and a row\'s own target still wins there', own.target === 5, show(own.target));
 
   const mv = await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P, transport: 'mcp', cwd: '', headless: true, progress: () => undefined } as never, 'Revenue')) as Reply;
   ok('metric_value carries the target: an additive metric has no period there, so its sentence', mv.target?.none === tm.targetPickPeriod(), show(mv));

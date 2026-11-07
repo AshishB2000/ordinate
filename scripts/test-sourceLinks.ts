@@ -173,10 +173,55 @@ async function channels(): Promise<void> {
   ok('contracts: all write, scoped by projectId', names.every((n) => contracts[n]?.access === 'write' && contracts[n].project({ projectId: P }) === P));
 }
 
+/** A connector that lists a schema (Postgres, SQL Server, Oracle, MySQL with no database): the picker names `schema.name`, as a doc and an import do. */
+async function schemas(): Promise<void> {
+  const { ORG_A } = H;
+  const store: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+  const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
+  registry.registerTestConnector({
+    id: 'links-schemas', label: 'Schemas', family: 'links-test', category: 'Databases', readOnly: true, fields: [],
+    async listTables() { return { ok: true, tables: [{ schema: 'public', name: 'orders' }, { schema: 'staging', name: 'orders' }, { name: 'flat' }] }; },
+    async run() { return { ok: false, error: 'not here' }; },
+  });
+  const s = await H.as(ORG_A, async () => {
+    const P = (await H.projects.createProject('Schema links')).id;
+    const conn = await H.connections.saveConnection(P, { name: 'Shop DB', connectorId: 'links-schemas', values: {} });
+    if (!conn) throw new Error('connection not saved');
+    const cols = [{ name: 'id', type: 'number' as const }];
+    const query = async (name: string, origin: object) => (await H.datasets.saveDataset(P, { name, sourceKind: 'postgres', columns: cols, rows: [['1']], origin: { kind: 'connection', connId: conn.id, sql: 'select * from public.orders', ...origin } }))!.id;
+    const doc = await store.createSourceDoc(P, conn.id, 'public.orders', { owner: 'Data platform' });
+    if (!doc.ok) throw new Error(doc.error);
+    return { P, C: conn.id, Q: await query('Orders query', {}), D: doc.docId };
+  });
+  const { P, Q, D } = s;
+  const c = (await post('dataset:sourceTableChoices', { projectId: P, datasetId: Q })).value;
+  ok('schemas: the choices are schema.name, as the doc and an import name them, one per table', c.ok === true && c.tables.join() === 'public.orders,staging.orders,flat' && new Set(c.tables).size === 3, JSON.stringify(c));
+  await post('dataset:setSourceTables', { projectId: P, datasetId: Q, tables: [c.tables[0]] });
+  const block = (await post('sourceTable:forDataset', { projectId: P, datasetId: Q })).value.tables[0];
+  ok('schemas: the linked choice meets its doc', block?.table === 'public.orders' && block.docId === D && block.owner === 'Data platform', JSON.stringify(block));
+  const row = (await post('sourceTable:list', { projectId: P })).value.connections[0].rows;
+  ok('schemas: one row for the table, with the dataset, no phantom', row.length === 1 && row[0].docId === D && row[0].datasetIds.join() === Q, JSON.stringify(row));
+
+  // A link the picker stored before it named schemas ("orders"): it meets the one documented schema.name ending in it.
+  const L = await H.as(ORG_A, async () => {
+    const id = (await H.datasets.saveDataset(P, { name: 'Old link', sourceKind: 'postgres', columns: [{ name: 'id', type: 'number' }], rows: [['1']], origin: { kind: 'connection', connId: s.C, sql: 'select 1' } }))!.id;
+    await setReadsTables(P, id, ['orders', 'public.orders']);
+    return id;
+  });
+  const old = (await post('sourceTable:forDataset', { projectId: P, datasetId: L })).value.tables;
+  ok('schemas: a bare link meets the one documented table it names, once', old.length === 1 && old[0].docId === D && old[0].table === 'public.orders', JSON.stringify(old));
+  ok('schemas: …and is listed on that table\'s row and in its lineage', ((r: Reply[]) => r.length === 1 && r[0].datasetIds.includes(L))((await post('sourceTable:list', { projectId: P })).value.connections[0].rows)
+    && (await post('sourceTable:lineage', { projectId: P, connId: s.C, docId: D })).value.nodes.some((n: Reply) => n.id === `dataset:${L}`));
+  await H.as(ORG_A, async () => { await setReadsTables(P, L, ['orders']); await store.createSourceDoc(P, s.C, 'staging.orders', {}); });
+  const two = (await post('sourceTable:forDataset', { projectId: P, datasetId: L })).value.tables;
+  ok('NEGATIVE CONTROL: two schemas document "orders": no guess, the bare link meets neither', two.length === 1 && two[0].table === 'orders' && two[0].docId === undefined, JSON.stringify(two));
+}
+
 (async () => {
   pure();
   await linking();
   await channels();
+  await schemas();
   await close();
   finish();
 })().catch((err: unknown) => { console.error(err); process.exit(1); });

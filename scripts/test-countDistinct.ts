@@ -38,6 +38,7 @@ const trace: typeof import('../src/engine/residentTrace') = require('../src/engi
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each handler's reply is narrowed where it is read
 const { countDistinct }: typeof import('../src/analysis/countDistinct') = require('../src/analysis/countDistinct');
 const pendingMsg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
+const { kpiMeasure }: typeof import('../src/publish/publishMessages') = require('../src/publish/publishMessages');
 
 type Cell = string | number | null;
 type Kind = 'text' | 'number' | 'date';
@@ -57,6 +58,9 @@ void (async () => {
   ok('JS: a non-number cell in a number column is not a value', countDistinct(['1', 1], 'number') === 1);
   ok('JS: NaN and ±Infinity are not values', countDistinct([NaN, Infinity, -Infinity, 1], 'number') === 1);
   ok('JS: an impossible date is not a day', countDistinct(['2024-02-30', '2024-02-29'], 'date') === 1);
+  // A published KPI tile's subtitle says what it counts, never the bare column name.
+  ok('words: a published KPI over a distinct count says so', kpiMeasure('countd', 'customer_id') === 'Distinct count of customer_id', kpiMeasure('countd', 'customer_id'));
+  ok('NEGATIVE CONTROL: a plain count keeps its own words', kpiMeasure('count', 'customer_id') === 'Count of customer_id', kpiMeasure('count', 'customer_id'));
 
   // ── resident: the twin, in place, on ≥ 1,000-row datasets ───────────────────
   await projects.init();

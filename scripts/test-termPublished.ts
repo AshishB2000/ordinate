@@ -93,6 +93,38 @@ async function main(): Promise<void> {
   ok('story: a block of only the term metric says the term\'s sentence', blocks[0]?.kind === 'broken' && blocks[0].reason === sentence, show(blocks[0]));
   ok('story: a row leaves the term metric out and keeps the plain one\'s figure', blocks[1]?.kind === 'metrics' && show(blocks[1].metrics!.map((m) => [m.name, m.value])) === show([['All sales', 60]]), show(blocks[1]));
   ok('NEGATIVE CONTROL: a plain metric block carries its figure', blocks[2]?.kind === 'metrics' && Object.is(blocks[2].metrics![0].value, 60), show(blocks[2]));
+
+  // ── the same note wherever that chart goes: a story block pinned to the term, a report page, a subscription ──
+  require('../src/ipc/visuals').register();
+  require('../src/ipc/reports').register(); // reports:caption
+  require('../src/ipc/analysesServer').register(); // analysis:tiles
+  require('../src/ipc/dashboards').register(); // dashboard:metric
+  const { pageDeps }: typeof import('../src/ipc/reportsServer') = require('../src/ipc/reportsServer');
+  const { buildReportPages, storyVisual }: typeof import('../src/analysis/reportPages') = require('../src/analysis/reportPages');
+  const { resolveFigures }: typeof import('../src/ipc/subscriptionFigures') = require('../src/ipc/subscriptionFigures');
+  const { viewScope }: typeof import('../src/analysis/savedViews') = require('../src/analysis/savedViews');
+  const pinned = [{ type: 'term', term: east.id }];
+  const termStory = (await stories.saveStory(P, { name: 'Term story', blocks: [{ kind: 'visual', visualId: vOther.id, filters: pinned }, { kind: 'visual', visualId: vOwn.id, filters: pinned }] }))!;
+  const sb = ((await buildStory(P, termStory.id))?.blocks ?? []) as Array<{ kind: string; data?: { labels?: unknown[]; note?: string } }>;
+  ok('published story: a block over an unrelated dataset keeps its figures and carries the note', sb[0]?.kind === 'chart' && show(sb[0].data?.labels) === show(['East', 'West']) && sb[0].data?.note === NOTE, show(sb[0]));
+  ok('NEGATIVE CONTROL: the block the term applies to is filtered, with no note', show(sb[1]?.data?.labels) === show(['East']) && sb[1]?.data?.note === undefined, show(sb[1]));
+  const storyPage = sanitize.sanitizePage({ kind: 'story', story: { name: 'S', blocks: sb } }) as { story: { blocks: Array<{ data: { note?: string } }> } };
+  ok('…and the story page sanitizer keeps it, as a string', storyPage.story.blocks[0].data.note === NOTE, show(storyPage.story.blocks[0]));
+  const deps = pageDeps({}, P, false);
+  const inApp = await storyVisual({ visualId: vOther.id, filters: pinned as never }, deps, P);
+  ok('in-app story: the figure carries the note beside its chart', !!inApp?.chart && inApp.note === NOTE, show(inApp));
+  ok('NEGATIVE CONTROL: …and none where the term applies', (await storyVisual({ visualId: vOwn.id, filters: pinned as never }, deps, P))?.note === undefined);
+  const board = (await analysis.getAnalysis(P, scoped.id))!;
+  const tileId = board.sheets[0].cards[1].id;
+  const report = { id: randomUUID(), projectId: P, analysisId: scoped.id, name: 'R', pages: [{ kind: 'sheet', sheetIdx: 0, layout: 'full' }, { kind: 'tile', cardId: tileId, layout: 'full' }, { kind: 'tile', cardId: board.sheets[0].cards[0].id, layout: 'full' }], cover: {}, includeFilters: false } as never;
+  const rp = await buildReportPages(report, board as never, viewScope(null, board as never), pageDeps({}, P));
+  ok('report: the sheet page says the tile the term leaves out', String(rp[0]?.caption).includes(`By region: ${NOTE}`), show(rp[0]?.caption));
+  ok('report: that tile\'s page says it after its caption', String(rp[1]?.caption).endsWith(NOTE) && !!rp[1]?.chart, show(rp[1]));
+  ok('report: the sheet page says the KPI the term leaves out, with its figure', String(rp[0]?.caption).includes(`Sum · amount: ${NOTE}`) && show(rp[0]?.kpis) === show([{ label: 'Sum · amount', value: '3' }]), show(rp[0]));
+  ok('NEGATIVE CONTROL: the tile the term applies to says no note', !String(rp[2]?.caption).includes(NOTE), show(rp[2]?.caption));
+  const sent = (await resolveFigures(P, board, null, null)).visuals;
+  ok('subscription: the unrelated chart keeps its figures and says the note', show(sent[1]?.data?.labels) === show(['East', 'West']) && String(sent[1]?.caption).endsWith(NOTE), show(sent[1]));
+  ok('NEGATIVE CONTROL: …the chart the term applies to does not', show(sent[0]?.data?.labels) === show(['East']) && !String(sent[0]?.caption ?? '').includes(NOTE), show(sent[0]));
 }
 
 main()

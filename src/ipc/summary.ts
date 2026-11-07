@@ -44,7 +44,11 @@ import {
 import type { QualityFact, SummaryCandidates, SummarySentence } from '../analysis/summaryCard';
 import { driversFor } from './drivers';
 import { listInsights } from './insights';
-import { resolveMetric } from './metrics';
+import { resolveMetric, type MetricRead } from './metrics';
+import { ruleReads } from '../analysis/alertMetric';
+import { kpiHidden } from '../publish/kpiPolicy';
+import type { Outgoing } from '../publish/dashboardData';
+import { isSharePath, type SharePath } from '../app/privacyStore';
 import { getMetric, isExternalDefinition } from '../analysis/metrics';
 import { metricDate } from '../analysis/metricTimeScope';
 import { computeCardMetric } from './dashboards';
@@ -150,6 +154,14 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
   }
 }
 
+/** Every column the head KPI's figure is totalled from, as its tile's are (publish/dashboardData): its metric's, else its column. */
+async function kpiReads(projectId: string, m: NonNullable<Card['metric']>, filters: FilterStep[], params: ParamValues): Promise<MetricRead[]> {
+  const reads: MetricRead[] = [];
+  const r = m.metricId ? await resolveMetric(projectId, m.metricId, { filters, params, reads }) : null;
+  if (!r || !r.ok) reads.push({ datasetId: m.datasetId, column: m.column, aggregation: m.aggregation });
+  return reads;
+}
+
 /** No second period to compare: the level alone, from the card's own resolver. */
 async function kpiLevel(projectId: string, card: Card, m: NonNullable<Card['metric']>, filters: FilterStep[], params: ParamValues): Promise<SummarySentence | null> {
   if (m.metricId) {
@@ -235,6 +247,13 @@ async function alertFact(projectId: string, ids: string[], analysisId: string, t
       if (await closedToCaller(projectId, e.datasetId)) continue;
       await gateRows(projectId, e.datasetId);
     }
+    const rule = file.rules.find((r) => r.id === e.ruleId);
+    // Leaving by a share path, it quotes the rule's figure: withheld as the rule's own post is (alertPosts). Not said when it
+    // cannot be judged: the rule is gone, or its figure cannot be read (a Live rule's warehouse down, its daily cap).
+    if (scope.share) {
+      const reads = rule ? await ruleReads(projectId, rule).catch(() => null) : null;
+      if (!reads || (await kpiHidden(projectId, reads, scope.share))) continue;
+    }
     ev = e;
     break;
   }
@@ -256,6 +275,11 @@ export interface SummaryScope {
    * the model): drop any that quote values of a column marked sensitive.
    */
   outbound?: boolean;
+  /**
+   * The share path they leave by — a path, or a page's Outgoing hook: a KPI, driver or alert sentence whose figure
+   * the Share policy withholds on it is not said, as its tile says nothing either (publish/kpiPolicy).
+   */
+  share?: SharePath | Outgoing;
   /** The caller's own inbox (src/server/alertInbox.ts) — their card in the app, never a page that leaves it. */
   seen?: (e: AlertEvent) => boolean;
 }
@@ -269,14 +293,16 @@ export async function computeSummary(projectId: string, rawPages: unknown, scope
   for (const id of ids) await gateRows(projectId, id);
   const steps = resolveFilterParams(scope.filters, scope.params).steps;
   const head = cards.find((c) => c.type === 'metric' && c.metric);
-  const { kpi, driver } = head ? await kpiAndDriver(projectId, head, steps, scope.params) : { kpi: null, driver: null };
+  let { kpi, driver } = head ? await kpiAndDriver(projectId, head, steps, scope.params) : { kpi: null, driver: null };
+  const hm = head?.metric;
+  if (scope.share && hm && (kpi || driver) && (await kpiHidden(projectId, await kpiReads(projectId, hm, steps, scope.params), scope.share))) kpi = driver = null;
   let out = composeSummary({
     kpi, driver,
     insights: await insightFacts(projectId, ids, tiles),
     quality: await qualityFact(projectId, ids, tiles),
     alert: await alertFact(projectId, ids, scope.analysisId || '', tiles, scope),
   });
-  if (scope.outbound) {
+  if (scope.outbound || scope.share) {
     const kept: SummarySentence[] = [];
     for (const s of out) {
       const withheld = s.datasetId && s.column ? await sharePolicy.withheldColumns(projectId, s.datasetId) : null;
@@ -294,6 +320,8 @@ function scopeOf(req: any, outbound = false): SummaryScope {
     filters: sanitizeDashboardFilters(req.filters),
     params: paramValues(req.params),
     outbound: outbound || req.outbound === true,
+    // Only a server caller (a report) names one: the contract has no such field.
+    ...(isSharePath(req.share) && req.share !== 'bundle' ? { share: req.share } : {}),
   };
 }
 

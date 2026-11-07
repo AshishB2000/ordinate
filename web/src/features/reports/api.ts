@@ -168,7 +168,9 @@ export interface StorySummary {
   updatedAt: string;
 }
 export type VisualFigure = { title: string; visualId: string; datasetId: string; chart: PageChart | null; caption: string; note?: string } | { missing: true };
-export type MetricFigure = { figures: Array<{ name: string; display: string; value: number | null }>; caption: string };
+/** A metric block, or its typed refusal (a layer's metric the server could not ask, part 7 b3): drawn as the server's sentence. */
+export type MetricFigure = { figures: Array<{ name: string; display: string; value: number | null }>; caption: string } | MetricRefusal;
+export type MetricRefusal = { ok: false; code: string; reason?: string; error: string };
 
 export function useStories(projectId: string) {
   return useQuery({

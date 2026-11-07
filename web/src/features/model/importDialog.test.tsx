@@ -120,6 +120,7 @@ describe('The Data model: Import…', () => {
     expect(await d.findByText('Applied 6 of 7 changes.')).toBeTruthy();
     expect(d.getByText('Stock on hand')).toBeTruthy();
     expect(d.getByText(TAKEN)).toBeTruthy();
+    expect(d.getByText(/except a field whose sensitivity mark it raised: an import never lowers one/)).toBeTruthy();
     fireEvent.click(d.getByRole('button', { name: 'Download the model as it was before' }));
     expect(startDownload).toHaveBeenCalledWith('before-1');
   });
@@ -284,6 +285,29 @@ describe('The Data model: Import… a dbt semantic manifest', () => {
     const d = within(await pick('semantic_manifest.json', 'application/json'));
     expect(await d.findByText('A copy: dbt stays the source of truth only through a live dbt connection.')).toBeTruthy();
     for (const [, words] of F2_WORDS) expect(d.getByText(words)).toBeTruthy();
+  });
+
+  it('says where an imported metric\'s figure can differ from dbt\'s, on its line', async () => {
+    const items = DBT_PLAN.items.map((i) => (i.key === 'metric:r' ? { ...i, differs: ['empty_text'] } : i.key === 'metric:o' ? { ...i, differs: ['whole_division'] } : i));
+    serve({ 'model:importPlan': { body: { ok: true, plan: { ...DBT_PLAN, items } } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    expect(await d.findByText("a text cell that is '' or only spaces is empty here, where dbt counts it")).toBeTruthy();
+    expect(d.getByText('link to dbt, date · it divides with decimals here, where dbt on Postgres, Redshift or Trino divides whole numbers as whole numbers')).toBeTruthy();
+  });
+
+  it('says when the project\'s datasets could not be loaded, and Try again asks again', async () => {
+    let down = true;
+    const calls = serve({ 'model:importPlan': { body: { ok: true, plan: DBT_PLAN } }, 'dataset:list': () => (down ? { status: 500, body: { error: 'down' } } : { body: [] }) });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    const datasets = d.getByRole('region', { name: 'Datasets' });
+    expect(await within(datasets).findByText("This project's datasets could not be loaded, so a semantic model can't be pointed at one.")).toBeTruthy();
+    const before = calls.filter((c) => c.channel === 'dataset:list').length;
+    down = false;
+    await act(async () => fireEvent.click(within(datasets).getByRole('button', { name: 'Try again' })));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'dataset:list').length).toBeGreaterThan(before));
+    await waitFor(() => expect(within(datasets).queryByRole('alert')).toBeNull());
   });
 
   it('a model zip shows no Datasets section and no copy notice', async () => {

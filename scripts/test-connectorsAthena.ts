@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
   const viaTable = await connectionRun.runConnectionText('amazon-athena', ctxFor().values, ctxFor().secrets, { table: 'sales.orders' }, { rowLimit: 5 });
   const tableSql = sent.filter((s) => s.action === 'StartQueryExecution').pop()?.body.QueryString;
-  ok('a picked table is quoted, limited and wrapped', viaTable.ok && tableSql === 'select * from (\nselect * from "sales"."orders" limit 5\n) limit 6', tableSql);
+  ok('a picked table is quoted, limited and wrapped', viaTable.ok && tableSql === 'select * from (\nselect * from "sales"."orders" limit 6\n) limit 6', tableSql);
 
   // ── 4. failures ─────────────────────────────────────────────────────────────
   query({ final: 'FAILED', reason: 'COLUMN_NOT_FOUND: line 1:8: Column \'x\' cannot be resolved', columns: [], pages: [] });

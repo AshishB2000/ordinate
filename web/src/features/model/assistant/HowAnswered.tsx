@@ -1,7 +1,7 @@
 // Beside a test answer: how it was found (semantic part 3 D11). Worded here from the turn's `guidance`, which holds
-// ids and counts only: a verified question (no model), or the model with N instructions and these examples. Then the
-// stored spec in words and, folded, as JSON. A turn with no guidance (a chip, a follow-up, an older turn) says
-// nothing about how, but its spec is still there.
+// ids and counts only: a verified question (no model call, or a model that only narrated it), or the model with N
+// instructions and these examples. Then the stored spec in words and, folded, as JSON. A turn with no guidance (a
+// chip, a follow-up, an older turn) says nothing about how, but its spec is still there.
 
 import type { Turn } from '../../assistant/api';
 import { specWords } from './specWords';
@@ -19,7 +19,7 @@ export function HowAnswered({ turn, verified, terms }: { turn: Turn; verified: r
     <div className={t.how} data-testid="how-answered">
       {g?.verifiedId && (
         <p className={t.howLine}>
-          <strong>A verified question — no model call.</strong>
+          <strong>{g.narrated ? 'A verified question — the app drew it; a model only wrote the words.' : 'A verified question — no model call.'}</strong>
           <span>{byId(g.verifiedId) ?? 'a verified question since removed'}</span>
         </p>
       )}

@@ -82,7 +82,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'geo:boundarySources': 'META',
   'geo:resolvePlace': 'META',
   'geo:spatialPreview': 'NET',
-  'home:overview': 'DOOR+',
+  'home:overview': 'DOOR+', // standsOut's cards through the doors; its datasets redacted as dataset:list's (summariesFor)
   'incremental:get': 'REDACT',
   'input:load': 'NET',
   'input:lookups': 'META',
