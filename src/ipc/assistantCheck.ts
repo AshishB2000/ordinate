@@ -126,14 +126,19 @@ async function askOne(projectId: string, facts: string, q: VerifiedQuestion): Pr
 async function runCheck(projectId: string, run: CheckRun, questions: VerifiedQuestion[], jc: jobs.JobContext): Promise<void> {
   try {
     const facts = (await buildFacts(projectId, {})).text; // the project inventory, once per run
+    // A beat before each model call and after it: what a slow call leaves stale is that call alone, never the inventory too.
+    const beat = async (): Promise<void> => {
+      run.heartbeatAt = new Date().toISOString();
+      if (!(await writeMine(projectId, run))) throw new jobs.JobCancelled(); // taken over: stop, write nothing
+    };
     for (const q of questions) {
       jc.checkCancelled();
+      await beat();
       const r = await askOne(projectId, facts, q);
       run.results.push(r);
       run.asked++;
       if (r.outcome === 'match') run.matched++;
-      run.heartbeatAt = new Date().toISOString();
-      if (!(await writeMine(projectId, run))) throw new jobs.JobCancelled(); // taken over: stop, write nothing
+      await beat();
       jc.progress(run.asked / run.total);
     }
     run.state = 'done';
