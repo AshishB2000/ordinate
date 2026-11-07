@@ -16,7 +16,7 @@
 // Refused, typed: Databricks (`calcDialect`); an input the warehouse dropped (`columnMissing`, only for the
 // statements that read the calc); a calc that no longer compiles, whose type moved, or whose name a
 // warehouse column now has ignoring case (`calculated` — never skipped as an unknown column); over
-// MAX_CALC_SQL of derived tables (`calcTooLarge`).
+// MAX_CALC_SQL of derived tables, or past the connector's MAX_LIVE_PARAMS bound values (`calcTooLarge`).
 
 import { compile } from '../../formula/formula';
 import type { LiveCalc } from '../../data/liveCalcs';
@@ -27,6 +27,8 @@ import type { LiveColumn, LiveFilter, LiveRefusal } from './liveSpec';
 import { isRefusal, refuse } from './liveSpec';
 import { MAX_CALC_SQL, compileCalcSql } from './formulaSql';
 import { calcsRefusedOn } from './liveCalcCheck';
+import { boundCount } from './sqlParams';
+import { MAX_LIVE_PARAMS } from '../../connectors/liveParams';
 
 /**
  * Does a statement over these column names read a calculated field? Ignoring case, as BigQuery and
@@ -114,7 +116,7 @@ export function calcFrom(c: Ctx, src: LiveSource, names: readonly string[], inne
     const cols = [...pass(keep[k], available), `${r.sql} AS ${ident(calc.name)}`];
     sql = `SELECT ${cols.join(', ')} FROM (${sql}) AS ${SRC}`;
     available.add(calc.name);
-    if (sql.length > MAX_CALC_SQL) return refuse('calcTooLarge');
+    if (sql.length > MAX_CALC_SQL || boundCount(sql) > MAX_LIVE_PARAMS) return refuse('calcTooLarge');
   }
   return `(${sql}) AS ${SRC}`;
 }

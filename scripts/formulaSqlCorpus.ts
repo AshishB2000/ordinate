@@ -8,11 +8,13 @@ import type { Cell, ParityEngine, StoredColumn } from './liveParityFixture';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
 import type { LiveSource } from '../src/engine/live/compile';
 import type { SqlDialect } from '../src/engine/live/dialect';
+import type { SqlTerm } from '../src/engine/live/formulaSql';
 import type { FValue } from '../src/formula/formula';
 import { compile } from '../src/formula/formula';
 import { compileCalcSql, SqlFormulaBuilder } from '../src/engine/live/formulaSql';
 import { DIALECT_IDS, dialectFor } from '../src/engine/live/dialects';
-import { ParamSink } from '../src/engine/live/sqlParams';
+import { ParamSink, boundCount } from '../src/engine/live/sqlParams';
+import { MAX_LIVE_PARAMS } from '../src/connectors/liveParams';
 import { SRC } from '../src/engine/live/compileFilter';
 
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
@@ -188,12 +190,39 @@ function messageOf(e: unknown): string {
   return e instanceof Error ? e.message.slice(0, 300) : String(e);
 }
 
+/** One statement's budget: the connector's parameter gate, and under ClickHouse's default 256 KiB max_query_size. */
+const BATCH = { exprs: 100, params: MAX_LIVE_PARAMS, chars: 200_000 };
+
+/** `exprs` in order, cut into runs that each fit BATCH (an expression alone over it is a run of its own). */
+function batches(exprs: string[], d: SqlDialect, columns: LiveColumn[], B: typeof SqlFormulaBuilder): string[][] {
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let params = 0;
+  let chars = 0;
+  for (const expr of exprs) {
+    const r = compileCalcSql(expr, { d, b: new ParamSink(), columns, earlier: [] }, B);
+    const [p, c] = r.ok ? [boundCount(r.sql), r.sql.length] : [0, 0];
+    if (cur.length && (cur.length >= BATCH.exprs || params + p > BATCH.params || chars + c > BATCH.chars)) {
+      out.push(cur);
+      cur = [];
+      params = 0;
+      chars = 0;
+    }
+    cur.push(expr);
+    params += p;
+    chars += c;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
 /**
  * Each expression's projected Live value on every row of `rows` (loaded as `table`), [expr][row];
- * a refusal or a warehouse error is a problem, and its values are absent. One statement per 100
- * expressions; a statement the warehouse refuses is retried one expression at a time, to name it.
+ * a refusal or a warehouse error is a problem, and its values are absent. As many expressions to a
+ * statement as fit its budget (BATCH: a billed account pays per statement); a statement the warehouse
+ * refuses is retried one expression at a time, to name it.
  */
-export async function liveValues(engine: ParityEngine, table: string, rows: Cell[][], exprs: string[], B: typeof SqlFormulaBuilder = SqlFormulaBuilder, per = 100):
+export async function liveValues(engine: ParityEngine, table: string, rows: Cell[][], exprs: string[], B: typeof SqlFormulaBuilder = SqlFormulaBuilder):
   Promise<{ values: Map<string, Cell[]>; problems: string[] }> {
   const source = await engine.load(table, STORED, rows);
   const columns = CALC_COLUMNS.map((c, i) => ({ ...c, sourceType: engine.typeName(STORED[i].store) }));
@@ -223,7 +252,7 @@ export async function liveValues(engine: ParityEngine, table: string, rows: Cell
     if (out.length !== rows.length || out.some((r, i) => r[0] !== rows[i][0])) { problems.push(`${table}: rows came back out of rid order`); return; }
     kept.forEach((expr, k) => values.set(expr, out.map((r) => r[k + 1])));
   };
-  for (let at = 0; at < exprs.length; at += per) await run(exprs.slice(at, at + per));
+  for (const batch of batches(exprs, d, columns, B)) await run(batch);
   return { values, problems };
 }
 
@@ -239,6 +268,20 @@ export function copyValues(maps: Record<string, FValue>[], expr: string): Cell[]
   if (!c.ok) return `does not compile on the copy: ${c.error}`;
   return maps.map((row) => copyCell(c.fn.evaluate(row)));
 }
+
+/** The corpus seed every engine runs (test-formulaSqlDiff on DuckDB, step 05's runners on the real ones). */
+export const CALC_SEED = 20261104;
+
+/** The negative control for round(): the engine's own ROUND, which splits ties away from zero or to even, never JS's +∞. */
+export class WithRound extends SqlFormulaBuilder {
+  round(x: SqlTerm, n: SqlTerm | null, at: number): SqlTerm {
+    const v = this.need(x, 'number', 'round()', at).sql;
+    return { sql: n?.literal ? `ROUND(${v}, ${String(n.literal.value)})` : `ROUND(${v})`, type: 'number' };
+  }
+}
+
+/** A few statements' worth of round() over the tie rows (±0.5, 1.5, ±2.5, −7.25), for WithRound on a billed engine. */
+export const ROUND_TIES: string[] = ['round([n])', 'round([m])', 'round([n], 1)', 'round([m], 1)'];
 
 /** Every disagreement between the copy and Live over CALC_ROWS (empty = agree), the first row each. */
 export async function calcDiff(engine: ParityEngine, exprs: string[], B: typeof SqlFormulaBuilder = SqlFormulaBuilder): Promise<string[]> {

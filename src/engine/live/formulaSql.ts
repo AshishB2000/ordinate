@@ -24,7 +24,8 @@ import type { LiveColumn } from './liveSpec';
 import { columnOf } from './liveSpec';
 import type { SqlDialect } from './dialect';
 import { isTextSourceType } from './dialect';
-import { ParamSink, hasNul } from './sqlParams';
+import { ParamSink, boundCount, hasNul } from './sqlParams';
+import { MAX_LIVE_PARAMS } from '../../connectors/liveParams';
 import { colRef, dateOf, numberOf, textOf } from './compileFilter';
 import { dialectFor } from './dialects';
 import { SPELL, liveFn } from './formulaSqlFunctions';
@@ -40,6 +41,8 @@ export interface CalcCtx { d: SqlDialect; b: ParamSink; columns: LiveColumn[]; e
 
 /** The longest SQL one formula may build. CASE spellings repeat their operands, so nesting multiplies: this stops it early. */
 export const MAX_CALC_SQL = 256 * 1024;
+/** The most values one formula may bind: half of what the connector takes a statement, the rest left to its filters and other calcs. */
+export const MAX_CALC_PARAMS = MAX_LIVE_PARAMS / 2;
 
 /** A refusal raised while building: a FormulaError at the token it is about. */
 export class CalcError extends FormulaError {
@@ -70,9 +73,10 @@ export class SqlFormulaBuilder implements FormulaBuilder<SqlTerm> {
   }
 
   /** Every built term passes here, so no formula grows past MAX_CALC_SQL. */
-  out<R extends { sql: string }>(t: R, at: number): R {
+  out<R extends { sql: string; type?: CalcValueType }>(t: R, at: number): R {
     if (t.sql.length > MAX_CALC_SQL) this.fail('tooLong', m.calcTooLong(), at);
-    return t;
+    // Always NULL, so spelled NULL: Postgres types a CASE of NULLs as text and BigQuery as INT64, then refuse to mix it.
+    return t.type === 'null' ? { ...t, sql: 'NULL' } : t;
   }
 
   /** `t` as a `type` operand; a NULL becomes that type's NULL. Anything else is refused. */
@@ -284,6 +288,8 @@ export function compileCalcSql(expression: string, ctx: CalcCtx, B: typeof SqlFo
     const b = new B(ctx);
     const { root, refs } = parseTokens(tokens, b);
     const p = b.project(root, 0);
+    // Past the connector's gate (liveParams) every statement over the calc would fail: refused here, at save, instead.
+    if (boundCount(p.sql) > MAX_CALC_PARAMS) b.fail('tooLong', m.calcTooLong(), 0);
     return { ok: true, sql: p.sql, type: p.type, result: root.type, refs };
   } catch (e) {
     return refusalOf(e, tokens, expression);

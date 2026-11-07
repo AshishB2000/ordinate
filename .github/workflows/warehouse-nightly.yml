@@ -7,7 +7,10 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse)
 # BigQuery read-only scope spike in the run's summary. Each warehouse then runs
 # the live-parity matrix (L2.8): every compiled statement through its runBound,
 # compared with the extract path — over a fixture held in literals, so the
-# accounts are never written.
+# accounts are never written — and then the Live calculated fields: 400
+# formulas row by row against the formula engine, and the calc matrix at the
+# same stride (semantic layer part 8, step 05). Each prints a `calcs:` line
+# into the run's summary.
 #
 # The `clickhouse` job runs the same matrix against a ClickHouse server in a
 # service container (scripts/test-liveParityClickhouse.ts); it needs no secret.
@@ -43,8 +46,8 @@ jobs:
   live:
     name: Snowflake + BigQuery (real accounts)
     runs-on: ubuntu-latest
-    # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse.
-    timeout-minutes: 60
+    # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse, its calculated fields ~400 more.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

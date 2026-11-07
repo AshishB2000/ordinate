@@ -20,7 +20,7 @@ import { ParamSink } from '../src/engine/live/sqlParams';
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const cx: typeof import('./formulaSqlCorpus') = require('./formulaSqlCorpus');
 
-const SEED = 20261104;
+const SEED = cx.CALC_SEED;
 const CORPUS = cx.calcCorpus(SEED, 2_000);
 
 // ── The negative controls: each drops one of D5's spellings ──
@@ -39,12 +39,6 @@ class NoNullifProjection extends SqlFormulaBuilder {
   project(t: SqlTerm, at: number): ReturnType<SqlFormulaBuilder['project']> {
     const p = super.project(t, at);
     return t.type === 'text' ? { ...p, sql: t.sql } : p; // a '' the formula made, kept
-  }
-}
-class WithRound extends SqlFormulaBuilder {
-  round(x: SqlTerm, n: SqlTerm | null, at: number): SqlTerm {
-    const digits = n?.literal ? String(n.literal.value) : '0';
-    return { sql: `ROUND(${this.need(x, 'number', 'round()', at).sql}, ${digits})`, type: 'number' }; // ties away from zero
   }
 }
 
@@ -93,7 +87,7 @@ async function main(): Promise<void> {
     ['no null fold in <', NoNullFold, /[<>]/],
     ["no NULLIF('') on a text column", NoNullifRead, /\[[tu]\]/],
     ["no NULLIF('') at the projection", NoNullifProjection, /trim\(|concat\(/],
-    ['ROUND instead of the FLOOR CASE', WithRound, /round\(/],
+    ['ROUND instead of the FLOOR CASE', cx.WithRound, /round\(/],
   ] as const) {
     const caught = await cx.calcDiff(fx.duckEngine, using(re), B);
     ok(`NEGATIVE CONTROL: ${name} is caught`, caught.length > 0 && caught.every((p) => !/refused/.test(p)), caught.slice(0, 2).join(' | '));
@@ -110,12 +104,7 @@ async function main(): Promise<void> {
   const drop = await liveValue("concat([t], '\\'; DROP TABLE calc_one; --')", nullRow({ 3: 'x' }));
   ok("a quote and a DROP in a literal are text on the warehouse, too", drop === "x'; DROP TABLE calc_one; --", show(drop));
 
-  // ── PIN: an overflow is ±Infinity in JS and NULL on Live (the corpus keeps magnitudes below it) ──
-  // (Divided, not multiplied by 1e300: the bench binds a whole JS number past 2^63 as a BIGINT and fails.)
-  const js = compile('[n] / 1e-300');
-  const jsV = js.ok ? cx.copyCell(js.fn.evaluate({ n: -1e10 })) : 'no compile';
-  const liveV = await liveValue('[n] / 1e-300', nullRow({ 1: -1e10 }));
-  ok('PIN: an overflow is ±Infinity in JS and NULL on Live', Object.is(jsV, -Infinity) && liveV === null, `${String(jsV)} ${show(liveV)}`);
+  // Step 03's overflow and casing pins run on every engine now: scripts/liveParityPins.ts, PINs 10 and 11.
 
   // ── PIN: concat past 1,000,000 characters is null in JS (formulaBudget.MAX_FORMULA_TEXT); SQL has no cap ──
   const long = 'x'.repeat(600_000);
@@ -123,16 +112,6 @@ async function main(): Promise<void> {
   const cl = await liveValue('concat([t], [t])', nullRow({ 3: long }));
   ok('PIN: concat past 1,000,000 characters is null in JS and the whole text on Live',
     cj.ok && cj.fn.evaluate({ t: long }) === null && typeof cl === 'string' && cl.length === 1_200_000, show(typeof cl === 'string' ? cl.length : cl));
-
-  // ── PIN: why lower() and upper() are refused on Live (F6): DuckDB's case maps are not JS's ──
-  const duck = dialectFor('duckdb');
-  for (const [s, f] of [['ß', 'upper'], ['İ', 'lower'], ['ΑΣ', 'lower']] as const) {
-    const b = new ParamSink();
-    const q = b.finish(`SELECT ${duck[f](b.bind('text', s))} AS v`, duck, ['v']);
-    const [[live]] = await fx.runDuck(q);
-    const want = f === 'upper' ? s.toUpperCase() : s.toLowerCase();
-    ok(`PIN (lower/upper refused): ${f}(${JSON.stringify(s)}) is ${JSON.stringify(want)} in JS, ${JSON.stringify(live)} on DuckDB`, live !== want, show(live));
-  }
 }
 
 const show = cx.show;

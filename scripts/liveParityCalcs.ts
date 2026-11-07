@@ -1,6 +1,7 @@
 // Live calculated fields in the parity matrix (semantic layer part 8, step 04; docs/semantic-layer/08-engine.md
-// Tests "Matrix") — helper for scripts/test-liveParity.ts (DuckDB, in full) and scripts/test-liveParityPostgres.ts
-// (CI's Postgres, thinned).
+// Tests "Matrix") — helper for scripts/test-liveParity.ts (DuckDB, in full), and through `calcEngineCase` (step 05)
+// for every real engine: scripts/test-liveParityPostgres.ts (CI's Postgres), test-liveParityClickhouse.ts (the
+// nightly's container) and warehouseLiveParity.ts (Snowflake and BigQuery, thinned to every 8th case).
 //
 // The fixture is saved again as an EXTRACT whose Prepare steps are CALC_STEPS (Prepare computes them in JS,
 // `transforms.stepCalculatedField`), and the warehouse twin is asked through the same formulas as Live calcs
@@ -22,6 +23,7 @@ import type { LiveStep } from '../src/engine/live/evaluate';
 import type { LiveRows } from '../src/engine/live/shape';
 import type { LiveCalc } from '../src/data/liveCalcs';
 import type { Extract, Ok } from './liveParityMatrix';
+import type { ParityEngine } from './liveParityFixture';
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const liveCalcs: typeof import('../src/data/liveCalcs') = require('../src/data/liveCalcs');
@@ -30,6 +32,10 @@ const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/e
 const formulaSql: typeof import('../src/engine/live/formulaSql') = require('../src/engine/live/formulaSql');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
+const cx: typeof import('./formulaSqlCorpus') = require('./formulaSqlCorpus');
+const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 
 const show = (v: unknown): string => JSON.stringify(v);
 const { M, F } = mx;
@@ -70,12 +76,13 @@ function moved(steps: FilterStep[]): FilterStep[] {
   return steps.map((f) => (f.column === 'cat' ? { ...f, column: 'Band' } : f.column === 'amt' ? { ...f, column: 'Margin' } : f));
 }
 
-export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveStep) => Promise<LiveRows>, typed: CompileEnv, ok: Ok, opts: { stride?: number; label?: string } = {}): Promise<void> {
+/** Returns how many chart and KPI cases it compared (0 when the copy could not be set up, which fails a check). */
+export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveStep) => Promise<LiveRows>, typed: CompileEnv, ok: Ok, opts: { stride?: number; label?: string } = {}): Promise<number> {
   const stride = Math.max(1, Math.floor(opts.stride ?? 1));
   const label = (s: string): string => (opts.label ? `${opts.label}: ${s}` : s);
   const ds = await datasets.saveDataset(x.pid, { name: 'Fixture with calcs', sourceKind: 'csv', ...fx.importTyped(fx.COLUMNS, x.rows) });
   const stepped = ds ? await datasets.updateSteps(x.pid, ds.id, CALC_STEPS.map((c) => ({ type: 'calculated_field', ...c }))) : null;
-  if (!ds || !stepped || stepped.output.warnings.length) { ok(label('calcs: the copy with Prepare steps saved'), false, show(stepped?.output.warnings)); return; }
+  if (!ds || !stepped || stepped.output.warnings.length) { ok(label('calcs: the copy with Prepare steps saved'), false, show(stepped?.output.warnings)); return 0; }
   const copy: Extract = { ...x, did: ds.id, stored: { columns: stepped.dataset.columns, rows: stepped.dataset.rows } };
   const calcs = typedCalcs(typed.columns);
   const env = withCalcs(typed, calcs);
@@ -107,8 +114,10 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
 
   // Every filter op, moved onto a calc, on a chart and two KPIs — at any stride, and under the lock.
   let fbad = 0;
+  let fn = 0;
   for (const f of mx.FILTERS) {
     for (const steps of [moved(f), [...moved(f), LOCK]]) {
+      fn += 3;
       const p = (await kit.chartProblems({ category: 'region', values: [M('Margin', 'sum'), M('Band', 'count')] }, steps, env))
         .concat(await kit.metricProblems({ column: 'Margin', aggregation: 'sum' }, steps, env))
         .concat(await kit.metricProblems({ column: 'Band', aggregation: 'count' }, steps, env));
@@ -149,7 +158,7 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
   const bds = await datasets.saveDataset(x.pid, { name: 'Fixture with base filters and calcs', sourceKind: 'csv', ...fx.importTyped(fx.COLUMNS, x.rows) });
   const bStepped = bds ? await datasets.updateSteps(x.pid, bds.id, [...BASE_P, ...CALC_STEPS.map((c) => ({ type: 'calculated_field' as const, ...c }))]) : null;
   const b = liveBase.liveBaseOf(BASE_P, typed.columns);
-  if (!bds || !bStepped || bStepped.output.warnings.length || !b.ok) { ok(label('calcs under base: the copy saved and the base adapts'), false, show([bStepped?.output.warnings, b])); return; }
+  if (!bds || !bStepped || bStepped.output.warnings.length || !b.ok) { ok(label('calcs under base: the copy saved and the base adapts'), false, show([bStepped?.output.warnings, b])); return n + mn; }
   const bKit = mx.parityKit({ ...x, did: bds.id, stored: { columns: bStepped.dataset.columns, rows: bStepped.dataset.rows } }, run);
   const bEnv: CompileEnv = { ...env, base: b.base };
   let bn = 0;
@@ -173,4 +182,37 @@ export async function calcCase(x: Extract, run: (q: CompiledQuery, step: LiveSte
   ok(label(`calcs under base: ${bn} charts and KPIs agree with the copy stepped [...BASE_P, ...calcs] (plain, locked, filtered)`), bn > 0 && bbad === 0, `${bbad} disagree`);
   ok(label('calcs under base NEGATIVE CONTROL: the same questions without the base disagree with that copy'),
     (await bKit.chartProblems({ category: 'Band', values: [M('Margin', 'sum')] }, [], env)).length > 0);
+  return n + fn + mn + bn;
+}
+
+/** The declared columns a chart's statement reads outside its source's own text: the calc layers' projections. */
+function readsOf(env: CompileEnv, enc: VizEncoding): string[] {
+  const a = spec.fromVizEncoding(enc, [], env.columns, { weekCal: null });
+  const r = a.ok ? compile.compileChart(a.ir, { kind: 'text' }, env) : a;
+  if (!r.ok) return [`refused ${r.code}`];
+  const d = typeof env.dialect === 'string' ? dialects.dialectFor(env.dialect) : env.dialect;
+  const src = env.source;
+  const own = src.kind === 'sql' ? src.sql : src.parts.map((p) => d.ident(p)).join('.');
+  const rest = r.query.sql.split(own).join('');
+  return fx.COLUMNS.map((c) => c.name).filter((n) => rest.includes(d.ident(n)));
+}
+
+/**
+ * Part 8 step 05 on one engine (docs/semantic-layer/08-engine.md Tests "Matrix"): step 03's expression
+ * differential over `exprs` seeded expressions and its ROUND negative control; the calc layers' projection over
+ * this engine's own source (literals on a cloud account, which bills what a layer reads); then step 04's matrix
+ * at `stride`. Returns the runner's summary words.
+ */
+export async function calcEngineCase(x: Extract, engine: ParityEngine, typed: CompileEnv, ok: Ok, opts: { exprs: number; stride: number }): Promise<string> {
+  const bad = await cx.calcDiff(engine, cx.calcCorpus(cx.CALC_SEED, opts.exprs));
+  ok(`${engine.name}: every v1 expression agrees with JS, row by row (${opts.exprs} expressions)`, bad.length === 0, `${bad.length} problems: ${bad.slice(0, 5).join(' | ')}`);
+  const round = await cx.calcDiff(engine, cx.ROUND_TIES, cx.WithRound);
+  ok(`NEGATIVE CONTROL: on ${engine.name}, ROUND instead of the FLOOR CASE is caught`, round.some((p) => !/refused/.test(p)), round.join(' | '));
+  const env = withCalcs(typed, typedCalcs(typed.columns));
+  const reads = readsOf(env, { category: 'Band', values: [M('Margin', 'sum')] } as VizEncoding);
+  ok(`${engine.name}: over a ${typed.source.kind} source, the calc layers read only amt and qty for Band by sum(Margin)`, show(reads) === '["amt","qty"]', show(reads));
+  ok(`NEGATIVE CONTROL: on ${engine.name}, the same check sees a column the question names`,
+    readsOf(env, { category: 'region', values: [M('Margin', 'sum')] } as VizEncoding).includes('region'));
+  const cases = await calcCase(x, engine.run, typed, ok, { stride: opts.stride, label: engine.name });
+  return `calcs: ${opts.exprs} expressions, ${cases} matrix cases`;
 }

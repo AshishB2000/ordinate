@@ -22,12 +22,18 @@
 //   9. A calculated field's TYPE (part 8 step 04): Prepare types a calc column by its values, so a text
 //      formula whose every value reads as a number is a number on a copy; Live types it by its formula
 //      (text). Its figures as text agree; a copy may bin it where Live groups it as text.
+//  10. A formula that overflows a double (step 03, re-proved per engine in step 05): ±Infinity in JS; on Live
+//      NULL where the engine gives ±Infinity (the projection keeps finite values only), and a warehouse
+//      ERROR — the executor's typed `live_failed`, never a number — where it raises (Postgres, BigQuery).
+//  11. Why lower() and upper() are refused on Live on EVERY dialect (step 03's F6, D4's one list): the
+//      engines' case maps for ß, İ and a final Σ, each engine's own outputs recorded beside JS's.
 
 import type { FilterStep } from '../src/data/transforms';
 import type { LiveIR } from '../src/engine/live/liveSpec';
 import type { CompileEnv } from '../src/engine/live/compile';
 import type { LiveOutcome } from '../src/engine/live/evaluate';
 import type { ParityEngine, Store } from './liveParityFixture';
+import type { CompileDialectId } from '../src/engine/live/dialect';
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -40,6 +46,10 @@ const transforms: typeof import('../src/data/transforms') = require('../src/data
 const formulaSql: typeof import('../src/engine/live/formulaSql') = require('../src/engine/live/formulaSql');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
+const cx: typeof import('./formulaSqlCorpus') = require('./formulaSqlCorpus');
+const formula: typeof import('../src/formula/formula') = require('../src/formula/formula');
+const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
+const sqlParams: typeof import('../src/engine/live/sqlParams') = require('../src/engine/live/sqlParams');
 
 type Ok = (label: string, cond: boolean, extra?: unknown) => void;
 type Live = (ir: LiveIR, env: CompileEnv) => Promise<LiveOutcome>;
@@ -169,4 +179,41 @@ export async function run(c: Ctx): Promise<void> {
   ok('PIN 9 (calc types): a text calc whose every value reads as a number is a number on a copy (Prepare types by values) and text on Live',
     copyType === 'number' && liveType === 'text', show([copyType, liveType]));
   ok('PIN 9 NEGATIVE CONTROL: a text calc with a word in it is text on both', show(typeOn("IF [amt] > 10 THEN '1' ELSE 'two' END")) === '["text","text"]');
+
+  await calcPins(c, ok);
+}
+
+/** PIN 10's live side per engine: NULL, or a warehouse error. Snowflake's is not yet recorded (no run here). */
+const OVERFLOW: Partial<Record<CompileDialectId, 'null' | 'raises'>> = { duckdb: 'null', clickhouse: 'null', redshift: 'raises', bigquery: 'raises' };
+/** PIN 11's recorded outputs per engine, for upper('ß'), lower('İ'), lower('ΑΣ'). Postgres is the C-collated scratch database. */
+const CASING: Partial<Record<CompileDialectId, string[]>> = { duckdb: ['ẞ', 'i', 'ασ'], redshift: ['ß', 'İ', 'ΑΣ'] };
+const CASES = [['upper', 'ß'], ['lower', 'İ'], ['lower', 'ΑΣ']] as const;
+
+/** Step 03's pins on the engine under test: one statement each. */
+async function calcPins(c: Ctx, ok: Ok): Promise<void> {
+  const expr = '[n] / 1e-300';
+  const js = formula.compile(expr);
+  const jsV = js.ok ? cx.copyCell(js.fn.evaluate({ n: -1e10 })) : 'no compile';
+  const row = cx.CALC_ROWS[0].map((v, i) => (i === 1 ? -1e10 : v));
+  const r = await cx.liveValues(c.engine, 'pin_overflow', [row], [expr]);
+  const got = r.values.has(expr) ? (r.values.get(expr)?.[0] === null ? 'null' : `the number ${cx.show(r.values.get(expr)?.[0])}`)
+    : r.problems.some((p) => p.includes('the warehouse refused it')) ? 'raises' : r.problems.join(' | ');
+  const want = OVERFLOW[c.engine.dialect];
+  ok(`PIN 10 (overflow): ${expr} is ${String(jsV)} in JS and ${got === 'raises' ? 'a warehouse error (the typed live_failed)' : got} on Live${want ? '' : ' (not yet recorded for this engine)'}`,
+    Object.is(jsV, -Infinity) && (want ? got === want : got === 'null' || got === 'raises'), r.problems.join(' | '));
+
+  const d = dialects.dialectFor(c.engine.dialect);
+  const b = new sqlParams.ParamSink();
+  const q = b.finish(`SELECT ${CASES.map(([f, s], i) => `${d[f](b.bind('text', s))} AS v${i}`).join(', ')}`, d, CASES.map((_x, i) => `v${i}`));
+  const [live] = await c.engine.run(q, 'metric');
+  const jsCase = CASES.map(([f, s]) => (f === 'upper' ? s.toUpperCase() : s.toLowerCase()));
+  const rec = CASING[c.engine.dialect];
+  const refusal = (e: string): string | undefined => {
+    const v = formulaSql.compileCalcSql(e, { d, b: new sqlParams.ParamSink(), columns: cx.CALC_COLUMNS, earlier: [] });
+    return v.ok ? undefined : v.code;
+  };
+  const refused = refusal('lower([t])') === 'function' && refusal('upper([t])') === 'function';
+  ok(`PIN 11 (casing): upper("ß"), lower("İ"), lower("ΑΣ") are ${show(jsCase)} in JS and ${show(live)} on Live${rec ? '' : ' (recorded here, not yet asserted)'}; lower() and upper() stay refused`,
+    refused && (rec ? show(live) === show(rec) : live.length === 3 && live.every((v) => typeof v === 'string')), show(live));
+  ok('PIN 11 NEGATIVE CONTROL: trim(), spelled beside them, compiles on this dialect', refusal('trim([t])') === undefined);
 }

@@ -19,15 +19,17 @@
 import type { ParityEngine } from './liveParityFixture';
 import type { SnowflakeConfig } from './warehouseLiveSnowflake';
 import type { BigqueryConfig } from './warehouseLiveBigquery';
-import { ok, say } from './warehouseLiveHarness';
+import { ok, say, summary } from './warehouseLiveHarness';
 
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
 const pins: typeof import('./liveParityPins') = require('./liveParityPins');
 const eng: typeof import('./liveParityEngines') = require('./liveParityEngines');
 const literal: typeof import('./liveParityLiteral') = require('./liveParityLiteral');
 
-/** Every 8th chart, KPI and answer case: ~500 statements a warehouse, a few minutes each night. */
+/** Every 8th chart, KPI and answer case: ~500 statements a warehouse, a few minutes each night (and ~400 more for calcs). */
 const STRIDE = 8;
+/** The calc differential's expressions on a billed account: 100 to a statement, so 4 statements (2,000 on the free engines). */
+const CALC_EXPRS = 400;
 
 async function runOn(engine: ParityEngine, seen: import('./liveParityEngines').Observed): Promise<void> {
   const today = process.env.ORDINATE_TODAY;
@@ -43,8 +45,11 @@ async function runOn(engine: ParityEngine, seen: import('./liveParityEngines').O
     ok(`NEGATIVE CONTROL: on ${engine.name}, the same statements without the '' → NULL fold disagree with the extract (two blank rows)`,
       unfolded.stripped > 0 && unfolded.problems.length >= 3, `${unfolded.stripped} statements unfolded: ${unfolded.problems.join(' | ')}`);
     await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, engine.run).live, env: report.envs.typed, stored: x.stored, engine });
+    // Live calculated fields (part 8 step 05): 400 expressions (a few statements), the matrix at the same stride.
+    const calcs = await (require('./liveParityCalcs') as typeof import('./liveParityCalcs')).calcEngineCase(x, engine, report.envs.typed, ok, { exprs: CALC_EXPRS, stride: STRIDE });
     say(`${engine.name}: ${seen.statements} statements through runBound in ${Math.round((Date.now() - t0) / 1000)} s; chart rows in rank order as sent ` +
-      `in ${seen.rankOrdered} of ${seen.charts} (the shaping re-sorts either way); −0 in ${seen.negZero} cells`);
+      `in ${seen.rankOrdered} of ${seen.charts} (the shaping re-sorts either way); −0 in ${seen.negZero} cells; ${calcs}`);
+    summary(`- ${engine.name} live parity: ${seen.statements} statements; ${calcs}`);
   } finally {
     if (today === undefined) delete process.env.ORDINATE_TODAY;
     else process.env.ORDINATE_TODAY = today;

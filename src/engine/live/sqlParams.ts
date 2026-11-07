@@ -49,6 +49,11 @@ export class ParamSink implements Binder {
   }
 }
 
+/** How many parameters `sql` (built with a ParamSink, not yet finished) will send: one per marker in its text. */
+export function boundCount(sql: string): number {
+  return sql.match(MARKER)?.length ?? 0;
+}
+
 /** True when a string can be spliced into a statement next to the markers. */
 export function hasNul(s: string): boolean {
   return s.includes('\u0000');

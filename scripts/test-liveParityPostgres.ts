@@ -98,7 +98,7 @@ async function main(adminUrl: string): Promise<void> {
         unfolded.stripped > 0 && unfolded.problems.length >= 3, `${unfolded.stripped} statements unfolded: ${unfolded.problems.join(' | ')}`);
       await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, p.engine.run).live, env: report.envs.typed, stored: x.stored, engine: p.engine });
       await (require('./liveParityBase') as typeof import('./liveParityBase')).baseFilterCase(x, p.engine.run, report.envs.typed, ok);
-      await (require('./liveParityCalcs') as typeof import('./liveParityCalcs')).calcCase(x, p.engine.run, report.envs.typed, ok, { stride: 4, label: p.engine.name });
+      const calcs = await (require('./liveParityCalcs') as typeof import('./liveParityCalcs')).calcEngineCase(x, p.engine, report.envs.typed, ok, { exprs: 2_000, stride: 1 });
       const pgPins: typeof import('./liveParityPgPins') = require('./liveParityPgPins');
       await pgPins.run({ ok, pid: x.pid, pg: p, bound });
 
@@ -140,7 +140,7 @@ async function main(adminUrl: string): Promise<void> {
         !eng.inRankOrder([[2, 'b'], [1, 'a']], ['o_cr', 'o_g']) && eng.inRankOrder([[1, 'a', 2], [1, 'a', 3], [2, 'b', 1]], ['o_cr', 'o_g', 'o_sr']));
       ok(`PIN R4 (−0): Postgres returned −0 in ${s.negZero} cells, and every figure still matched the extract (shaping reports +0)`, s.negZero > 0, JSON.stringify(s));
       console.log(`  postgres (redshift dialect): ${s.statements} statements through runBound, whole run ${Date.now() - t0} ms ` +
-        `(matrix ${report.ms} ms: ${report.charts} charts, ${report.metrics} metrics, ${report.answers} answers; literal twin ${lit.ms} ms: ${lit.statements} statements)`);
+        `(matrix ${report.ms} ms: ${report.charts} charts, ${report.metrics} metrics, ${report.answers} answers; literal twin ${lit.ms} ms: ${lit.statements} statements); ${calcs}`);
     } finally {
       await p.close();
     }
