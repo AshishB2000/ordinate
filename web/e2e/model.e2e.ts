@@ -16,6 +16,8 @@
 //   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
 //      empty state); one written with Enter is stored by the server and still there after a reload, and a
 //      figure-like one is flagged. With no model, Check the Assistant is off and says why.
+//   Import… (part 7, a3): the project's own export is a dry run with nothing to apply; one description edited in the
+//      zip is one update, applied through the server, and shown on the Datasets tab.
 //
 //   npm --prefix web run e2e -- model
 
@@ -24,6 +26,12 @@ import path from 'node:path';
 import type { Page } from 'playwright';
 import { csrfToken, e2e, SCREENS, screens, screensInPlace, settled, type Session } from './fixtures.ts';
 import { phoneFits } from './phoneFits.ts';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { readZip, writeZip } = require('../../src/app/bundle.js') as { readZip(b: Buffer): { name: string; data: Buffer }[]; writeZip(e: { name: string; data: Buffer }[], when: Date): Buffer };
+const { modelJson, MODEL_ZIP_TIME } = require('../../src/app/modelFormat.js') as { modelJson(v: unknown): string; MODEL_ZIP_TIME: Date };
 
 /** The loading skeleton in both themes: `channel` is held unanswered while each theme loads. */
 async function loadingShots(page: Page, url: string, channel: string, label: string, name: string): Promise<void> {
@@ -193,6 +201,56 @@ e2e('data model: lineage, used by, and the ask before removing what feeds a metr
   const metrics = (await post(s, 'metric:list', { projectId: pid })).metrics as { id: string; name: string }[];
   await post(s, 'metric:delete', { projectId: pid, id: metrics.find((m) => m.name === 'Total margin')!.id });
   for (const l of s.rpc.loads) assert.ok(l.rpcs <= 25, `${l.url} made ${l.rpcs} calls`);
+});
+
+e2e('data model: import', async ({ page, server, rpc }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/model/${pid}`);
+  await settled(page);
+  await page.getByRole('button', { name: 'Export' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Model files' }).click();
+  const exported = readFileSync(await (await download).path());
+
+  // The project's own export: every object unchanged, nothing to apply.
+  await page.getByRole('button', { name: 'Import…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Import model files' });
+  await dialog.getByRole('heading', { name: 'Choose model files' }).waitFor();
+  await screensInPlace(page, 'model-import-pick');
+  const choose = (buffer: Buffer) => dialog.getByLabel('Model files', { exact: true }).setInputFiles({ name: 'sample-model.zip', mimeType: 'application/zip', buffer });
+  await choose(exported);
+  const nothing = dialog.getByRole('button', { name: 'Nothing to apply' });
+  await nothing.waitFor();
+  assert.ok(await nothing.isDisabled(), 'Apply is disabled when nothing would change');
+  const rows = await dialog.locator('section h3').allTextContents();
+  assert.ok(rows.length === 1 && /^\d+ unchanged$/.test(rows[0]), `one row, every object unchanged: ${rows.join(' | ')}`);
+  await screensInPlace(page, 'model-import-unchanged');
+
+  // One description edited in the zip, as git would: one update, applied.
+  const entries = readZip(exported);
+  const at = entries.findIndex((e) => e.name.startsWith('datasets/') && e.name.endsWith('.json') && (JSON.parse(e.data.toString('utf8')) as { name?: string }).name === 'Shipments');
+  assert.ok(at >= 0, 'the export has a Shipments file');
+  const shipments = JSON.parse(entries[at].data.toString('utf8')) as Record<string, unknown>;
+  entries[at] = { name: entries[at].name, data: Buffer.from(modelJson({ ...shipments, description: 'Every parcel we sent, from the model files' }), 'utf8') };
+  await dialog.getByRole('button', { name: 'Choose another file' }).waitFor();
+  await choose(writeZip(entries, MODEL_ZIP_TIME));
+  await dialog.getByRole('heading', { name: '1 updated' }).waitFor();
+  await dialog.getByText('Shipments', { exact: true }).waitFor();
+  await screensInPlace(page, 'model-import-preview');
+  const [load, sent] = [rpc.loads.length, rpc.loads.at(-1)?.rpcs ?? 0];
+  await dialog.getByRole('button', { name: 'Apply 1 change' }).click();
+  await dialog.getByRole('heading', { name: 'Applied 1 change.' }).waitFor();
+  await page.waitForLoadState('networkidle');
+  // The apply, then only the reads one table doc changes (catalog:getTable and the Data model's summary): a refetch of
+  // every query on the page was 13 more, and the load went over its budget of 25.
+  const applied = (rpc.loads.at(-1)?.rpcs ?? 0) - sent;
+  assert.ok(rpc.loads.length === load && applied <= 5, `the apply and its refetches made ${applied} calls`);
+  await dialog.getByRole('button', { name: 'Download the model as it was before' }).waitFor();
+  await screensInPlace(page, 'model-import-done');
+  await dialog.getByRole('button', { name: 'Close' }).last().click();
+  await page.getByRole('link', { name: 'Shipments', exact: true }).click();
+  await page.getByRole('region', { name: 'About Shipments' }).getByText('Every parcel we sent, from the model files').waitFor();
+  for (const l of rpc.loads) assert.ok(l.rpcs <= 25, `${l.url} made ${l.rpcs} calls`);
 });
 
 e2e('data model: metrics', async ({ page, server }) => {

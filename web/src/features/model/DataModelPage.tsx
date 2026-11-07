@@ -26,6 +26,7 @@ import { useNavigation } from './navigation';
 import { useTopicPick } from './topics/rememberTopic';
 import { TopicPicker } from './topics/TopicPicker';
 import { ExportMenu } from './ExportMenu';
+import { ImportDialog } from './ImportDialog';
 
 const TABS = ['datasets', 'sources', 'metrics', 'glossary', 'relationships', 'assistant'] as const;
 type TabId = (typeof TABS)[number];
@@ -46,6 +47,7 @@ function Section({ projectId }: { projectId: string }) {
   const nav = useNavigation(projectId);
   const [pick, setPick] = useTopicPick(projectId);
   const topic = nav.data?.topics?.find((t) => t.id === pick); // a pick that names no topic (deleted, another project's) is All
+  const [importing, setImporting] = useState(false);
   const asked = params.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   const setTab = (v: string) =>
@@ -73,6 +75,9 @@ function Section({ projectId }: { projectId: string }) {
           {canEdit && (
             <>
               <ExportMenu projectId={projectId} />
+              <Button icon="upload" onClick={() => setImporting(true)}>
+                Import…
+              </Button>
               <Button icon="plus" onClick={() => setNewTerm(true)}>
                 New term
               </Button>
@@ -127,6 +132,7 @@ function Section({ projectId }: { projectId: string }) {
       </Tabs>
       {newMetric && canEdit && <MetricEditor projectId={projectId} existing={{}} onClose={() => setNewMetric(false)} onSaved={metricSaved} />}
       {newTerm && canEdit && <TermDialog projectId={projectId} onClose={() => setNewTerm(false)} onSaved={() => setTab('glossary')} />}
+      {importing && canEdit && <ImportDialog projectId={projectId} onClose={() => setImporting(false)} />}
     </Page>
   );
 }

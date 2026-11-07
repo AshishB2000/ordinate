@@ -19,7 +19,8 @@ import * as projects from './projects';
 import * as recordFs from './recordFs';
 import { listFullTerms } from '../analysis/terms';
 import { listRelationships } from '../analysis/relationships';
-import { loadStrict, type ColumnDoc } from './catalog';
+import { loadStrict, type CatalogFile, type ColumnDoc } from './catalog';
+import type { Relationship } from '../analysis/relationships';
 import { getCalendar } from '../analysis/dateIntel';
 import { restrictedOn } from '../data/rowAccess';
 import { projectDir } from './recordKinds';
@@ -42,7 +43,8 @@ export class ModelExportRefused extends Error {}
 /** A key only when it holds something: a project that filled in nothing exports `{ base, id, name }`. */
 const some = <T>(v: T | undefined | null | '' | readonly unknown[]): T | undefined => (v === '' || v == null || (Array.isArray(v) && v.length === 0) ? undefined : (v as T));
 
-function fieldOf(name: string, d: ColumnDoc): ModelField | null {
+/** A field doc as the files hold it, or null when it says nothing but its name (the apply compares one under the catalog's lock). */
+export function fieldOf(name: string, d: ColumnDoc): ModelField | null {
   const f: ModelField = {
     name,
     description: some(d.description),
@@ -53,6 +55,24 @@ function fieldOf(name: string, d: ColumnDoc): ModelField | null {
     values: some(d.values),
   };
   return Object.values(f).filter((v) => v !== undefined).length > 1 ? f : null;
+}
+
+/** A dataset's table doc and description as the files hold them (the apply compares them under the catalog's lock). */
+export function tableDocOf(catalog: CatalogFile, datasetId: string): Pick<ModelDataset, 'description' | 'role' | 'key' | 'grain'> & { guide?: string } {
+  const doc = catalog.tables?.[datasetId];
+  return { description: some(catalog.records[`dataset:${datasetId}`]?.description), role: some(doc?.role), key: some(doc?.key), grain: some(doc?.grain), guide: some(doc?.guide) };
+}
+
+/** A relationship as the files hold it, with its base. */
+export function relationshipOf(r: Relationship): ModelRelationship {
+  const out: Omit<ModelRelationship, 'base'> = {
+    id: r.id,
+    from: { dataset: r.from.datasetId, column: r.from.column },
+    to: { dataset: r.to.datasetId, column: r.to.column },
+    cardinality: r.cardinality,
+    label: r.label,
+  };
+  return { ...out, base: objectBase(out) };
 }
 
 const byName = (a: { name: string }, b: { name: string }): number => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -84,21 +104,11 @@ export async function exportModel(projectId: string): Promise<ModelExport> {
     const meta = await datasets.getDatasetMeta(projectId, d.id);
     if (meta?.live?.baseFiltersUnreadable) throw new ModelExportRefused(modelFiltersUnreadable(d.name));
     if (meta?.live?.calculated?.length || meta?.live?.calculatedUnreadable) notCarried.add('liveCalcs');
-    const doc = catalog.tables?.[d.id];
-    if (doc?.hierarchies?.length) notCarried.add('hierarchies');
+    if (catalog.tables?.[d.id]?.hierarchies?.length) notCarried.add('hierarchies');
     const cols = catalog.columns[d.id] ?? {};
     const fields = Object.keys(cols).map((n) => fieldOf(n, cols[n])).filter((f): f is ModelField => !!f).sort(byName);
-    const out: Omit<ModelDataset, 'base'> = {
-      id: d.id,
-      name: d.name,
-      description: some(catalog.records[`dataset:${d.id}`]?.description),
-      role: some(doc?.role),
-      key: some(doc?.key),
-      grain: some(doc?.grain),
-      fields: some(fields),
-      baseFilters: some(meta?.live?.baseFilters),
-    };
-    const guide = doc?.guide ?? '';
+    const { guide = '', ...table } = tableDocOf(catalog, d.id);
+    const out: Omit<ModelDataset, 'base'> = { id: d.id, name: d.name, ...table, fields: some(fields), baseFilters: some(meta?.live?.baseFilters) };
     const slug = dsSlugs.get(d.id) as string;
     // The guide travels as its own file, and the base covers it: an edit to either is an edit to the dataset.
     put(`datasets/${slug}.json`, { ...out, base: objectBase({ ...out, ...(guide && { guide }) }) });
@@ -129,16 +139,7 @@ export async function exportModel(projectId: string): Promise<ModelExport> {
     put(`terms/${tSlugs.get(t.id)}.json`, { ...out, base: objectBase(out) });
   }
 
-  const relationships = [...rels].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((r): ModelRelationship => {
-    const out: Omit<ModelRelationship, 'base'> = {
-      id: r.id,
-      from: { dataset: r.from.datasetId, column: r.from.column },
-      to: { dataset: r.to.datasetId, column: r.to.column },
-      cardinality: r.cardinality,
-      label: r.label,
-    };
-    return { ...out, base: objectBase(out) };
-  });
+  const relationships = [...rels].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map(relationshipOf);
   if (relationships.length) put('relationships.json', { relationships });
 
   if (catalog.status && Object.keys(catalog.status).length) notCarried.add('status');

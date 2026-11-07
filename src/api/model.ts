@@ -16,4 +16,12 @@ export const model = {
   // object unchanged, updated, renamed, new, in conflict, skipped with why, or only here, and the plan's hash. Writes nothing. An editor's:
   // the plan shows term values and value labels, so a caller row access rules restrict is refused (part 7 D7).
   'model:importPlan': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, fileToken: FileToken }), project: byProjectId }),
+  // invoke('model:importApply', { projectId, fileToken, planHash, choices? }) — apply the dry run of the same zip, uploaded again (src/ipc/modelFiles.ts,
+  // src/app/modelApply.ts): refused whole when the plan's hash moved, else each object through its editor's own save; `choices` picks a side
+  // per conflict (absent: this project's). Replies what was written, what failed, and a download of the model as it was. An editor's, as the plan.
+  'model:importApply': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, fileToken: FileToken, planHash: z.string().max(64), choices: z.record(z.string().max(400), z.enum(['file', 'here'])).optional() }),
+    project: byProjectId,
+  }),
 } as const;

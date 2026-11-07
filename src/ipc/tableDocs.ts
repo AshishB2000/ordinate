@@ -96,7 +96,7 @@ function failure(err: unknown, fallback: string): { ok: false; error: string } {
 }
 
 /** A new key's count, stored before the reply. A count that throws does not undo the save that already happened: the saved doc stands and "Check now" retries. */
-async function countedAfterSave(projectId: string, datasetId: string, saved: TableDoc): Promise<TableDoc> {
+export async function countedAfterSave(projectId: string, datasetId: string, saved: TableDoc): Promise<TableDoc> {
   try {
     const checked = await runKeyCheck(projectId, datasetId);
     return checked.ok ? checked.table : saved;

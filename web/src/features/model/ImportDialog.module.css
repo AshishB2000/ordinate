@@ -1,0 +1,253 @@
+/* Import… on the Data model: the dry run as one row per status (docs/semantic-layer/07-portability.md
+   "What you will see"), a side per conflict, and what an apply did. Theme tokens only. */
+
+.fileBar {
+  flex: none; /* the dialog's body is a column that scrolls: this keeps its height */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  min-height: var(--ctl-sm);
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+  font-size: var(--t-13);
+  color: var(--text-dim);
+}
+.fileName {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fileFrom {
+  flex: 0 1000 auto; /* gives way before the file's name does */
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── One row per status ─────────────────────────────────────────────── */
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.row {
+  display: grid;
+  grid-template-columns: 24px 112px minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+}
+.row + .row {
+  border-top: 1px solid var(--border-hairline);
+}
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.row[data-status='updated'] .mark,
+.row[data-status='renamed'] .mark {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.row[data-status='new'] .mark,
+.row[data-status='unchanged'] .mark {
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+.row[data-status='conflict'] .mark {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+.row[data-status='conflict'] {
+  background: color-mix(in srgb, var(--warn-soft) 40%, transparent);
+}
+.title {
+  margin: 0;
+  line-height: 24px;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding-top: 3px;
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+}
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  min-height: 20px;
+}
+.text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.name {
+  color: var(--text);
+}
+.detail {
+  margin-left: var(--sp-8);
+  color: var(--muted);
+}
+.side {
+  flex: none;
+  width: 176px;
+}
+.carried {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+/* ── The plan moved since the dry run ───────────────────────────────── */
+.stale {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  font-size: var(--t-13);
+}
+.staleText {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── What an apply did ──────────────────────────────────────────────── */
+.done {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.doneIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-full);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+.done[data-tone='warn'] .doneIcon {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+.doneBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+  flex: 1;
+  font-size: var(--t-13);
+}
+.doneTitle {
+  margin: 0;
+  line-height: 36px;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.before {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--border-hairline);
+}
+
+/* ── Loading ────────────────────────────────────────────────────────── */
+.skIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+}
+.skTitle {
+  width: 88px;
+  height: 12px;
+  margin-top: 6px;
+}
+.skLine {
+  width: 70%;
+  height: 12px;
+  margin-top: 6px;
+}
+
+@media (max-width: 599px) {
+  .fileBar {
+    flex-wrap: wrap;
+    padding: var(--sp-8) var(--sp-12);
+  }
+  .file {
+    flex-basis: 100%;
+  }
+  .row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    row-gap: var(--sp-4);
+  }
+  .body {
+    grid-column: 2;
+    padding-top: 0;
+  }
+  .line {
+    flex-wrap: wrap;
+  }
+}

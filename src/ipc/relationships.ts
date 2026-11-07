@@ -290,7 +290,8 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
   return { ok: true, candidates: ranked, best: best ? { ...best, stats, cardinality: stats ? inferCardinality(stats) : null } : null };
 }
 
-async function save(projectId: string, raw: any): Promise<any> {
+/** `relationship:save`'s body, the reply: `verified` and `warning` counted from the tables, never the caller's (a model import saves through it too). */
+export async function saveRelationshipChecked(projectId: string, raw: any): Promise<any> {
   const rel = rels.sanitizeRelationship(raw);
   if (!rel) return { ok: false, error: 'Pick two different datasets and a column on each.' };
   const clash = rels.labelClash(await rels.listRelationships(projectId), rel);
@@ -335,7 +336,7 @@ export function register(): void {
   });
   ipcMain.handle('relationship:save', async (_e, { projectId, relationship }: any = {}) => {
     try {
-      return await save(projectId, relationship);
+      return await saveRelationshipChecked(projectId, relationship);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not save the relationship' };
     }
