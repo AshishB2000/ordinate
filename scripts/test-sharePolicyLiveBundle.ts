@@ -24,6 +24,7 @@ const store: typeof import('../src/app/privacyStore') = require('../src/app/priv
 const bundle: typeof import('../src/app/bundle') = require('../src/app/bundle');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
 const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
+const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
 const files: typeof import('../src/server/files') = require('../src/server/files');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply is narrowed by its check
 require('../src/ipc/projects').register({});
@@ -75,6 +76,17 @@ async function main(): Promise<void> {
     const back = imported.ok && imported.project ? (await datasets.listDatasets(imported.project.id))[0] : null;
     const backBase = back ? (await datasets.getDatasetMeta(imported.project!.id, back.id))?.live?.baseFilters : null;
     ok(`${action}: the shaped bundle still imports, its Live dataset keeping the steps as they travelled`, show(backBase) === show(rec.baseFilters), show([imported, backBase]));
+    // A step that travelled without its value must refuse like a value-less `in`, never compare against blank.
+    const cols = [{ name: 'email', type: 'text' }, { name: 'region', type: 'text' }, { name: 'amount', type: 'number' }] as any; // any: LiveColumn rows
+    const refusal = (s: unknown): string => show(liveBase.liveBaseOf([s as any], cols)); // any: a stored step
+    const inRefusal = refusal({ type: 'filter', column: 'email', op: 'in' });
+    ok(`${action}: the value-less \`in\` step refuses`, inRefusal.includes('"baseFilter"'), inRefusal);
+    for (const op of ['=', '!=', '>', '<', '>=', '<=', 'contains']) {
+      ok(`${action}: a value-less \`${op}\` step refuses as \`in\` does, never compared to blank`, refusal({ type: 'filter', column: 'email', op }) === inRefusal, refusal({ type: 'filter', column: 'email', op }));
+    }
+    ok(`${action}: the imported Live dataset's own shaped list refuses`, !!backBase && (liveBase.liveBaseOf(backBase as any, cols) as { ok: boolean }).ok === false, show(backBase)); // any: stored steps
+    ok(`${action}: NEGATIVE CONTROL: a step with its value, and a value-less \`is_empty\`, still compile`,
+      (liveBase.liveBaseOf([BASE[0]] as any, cols) as { ok: boolean }).ok === true && (liveBase.liveBaseOf([{ type: 'filter', column: 'email', op: 'is_empty' }] as any, cols) as { ok: boolean }).ok === true); // any: stored steps
   }
   const twice = { baseFilters: BASE.map((st) => ({ ...st })) };
   const base: typeof import('../src/data/liveBaseFilters') = require('../src/data/liveBaseFilters');
