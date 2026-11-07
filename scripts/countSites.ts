@@ -43,6 +43,7 @@ export const COUNT_SITES: Readonly<Record<string, { count: number; how: CountSit
   'src/engine/geoResident.ts': { count: 1, how: 'countOnly' },
   'src/analysis/mapData.ts': { count: 1, how: 'countOnly' },
   'src/app/sharePolicy.ts': { count: 1, how: 'countOnly' },
+  'src/app/ossieExport.ts': { count: 1, how: 'countOnly' }, // a count, beside a countd, of a text field is reported, not mapped: COUNT counts the blanks Ordinate does not
   // rebuild: its aggregations are PLAIN_AGGREGATIONS
   'src/analysis/rebuildMatch.ts': { count: 2, how: 'countOnly' },
   'web/src/features/analyses/rebuild/RebuildTile.tsx': { count: 1, how: 'countOnly' },
