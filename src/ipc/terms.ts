@@ -8,7 +8,8 @@
 
 import { ipcMain } from './bus';
 import * as terms from '../analysis/terms';
-import { withStatus } from '../analysis/statusStore';
+import { statusFor, withStatus } from '../analysis/statusStore';
+import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import type { Term } from '../analysis/terms';
 import * as datasets from '../data/datasets';
 import * as versions from '../app/versions';
@@ -48,15 +49,21 @@ export async function listForCaller(projectId: string) {
  * The glossary terms of `datasetId` as the Assistant's FACTS state them (../ai/termFacts termLines): a value is
  * written as "…" for a caller row access rules restrict, and for a column marked personal or financial.
  */
-export async function termFactsFor(projectId: string, datasetId: string): Promise<FactTerm[]> {
+export async function termFactsFor(projectId: string, datasetId: string, question?: string): Promise<FactTerm[]> {
   const own = (await terms.listFullTerms(projectId)).filter((t) => t.datasetId === datasetId);
   if (!own.length) return [];
   const hideAll = await restrictedOn(projectId);
   const withheld = withheldColumns(await assistantColumnDocs(projectId, datasetId));
-  return own.map((t) => ({
-    name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}),
-    definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)),
+  const status = statusFor(projectId); // once per request (part 4)
+  const facts = await Promise.all(own.map(async (t): Promise<FactTerm> => {
+    const st = await status(`term:${t.id}`);
+    return {
+      name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}),
+      definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)),
+      ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}),
+    };
   }));
+  return vocabularyOrder(facts, (f) => namedIn(question, [f.name, ...f.aliases]));
 }
 
 export function register(): void {

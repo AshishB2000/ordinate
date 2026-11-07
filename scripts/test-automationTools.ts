@@ -185,6 +185,22 @@ async function main(): Promise<void> {
   const tl = await call('list_terms', {});
   ok('list_terms: the term, its other names, its dataset and its filter in words', tl.length === 1 && tl[0].id === westT.id && tl[0].aliases[0] === 'Westside'
     && tl[0].dataset === ds.name && tl[0].definition === 'region = West', JSON.stringify(tl));
+  // Status (semantic part 4): certified first with who and when; a retired metric still computes and names its replacement.
+  const stStore: typeof import('../src/analysis/statusStore') = require('../src/analysis/statusStore');
+  const { pinOf }: typeof import('../src/analysis/statusPin') = require('../src/analysis/statusPin');
+  const stBefore = JSON.stringify([await call('list_metrics', {}), await call('list_terms', {}), await call('list_datasets', {})]);
+  const retiredM = mList.find((m: any) => m.id !== margin.id);
+  await stStore.certify(pid, `metric:${margin.id}`, (await pinOf(pid, `metric:${margin.id}`))!, '');
+  await stStore.retire(pid, `metric:${retiredM.id}`, `metric:${margin.id}`, '');
+  const stList = await call('list_metrics', {});
+  ok('list_metrics: certified first with who and when', stList[0].id === margin.id && stList[0].status === 'certified' && typeof stList[0].certifiedBy === 'string' && typeof stList[0].certifiedAt === 'string', JSON.stringify(stList[0]));
+  ok('list_metrics: a retired one names its replacement', stList.find((m: any) => m.id === retiredM.id).replacedBy === margin.name);
+  const stV = await call('metric_value', { metric: retiredM.id });
+  const stR = (await mets.resolveMetric(pid, retiredM.id, {}))!;
+  ok('metric_value on a retired metric: the figure, plus what replaces it', Object.is(stV.value, stR.value) && stV.status === 'retired' && stV.replacedBy === margin.name, JSON.stringify(stV));
+  await stStore.clearStatus(pid, `metric:${margin.id}`);
+  await stStore.clearStatus(pid, `metric:${retiredM.id}`);
+  ok('NEGATIVE CONTROL: a project without status lists exactly as before', JSON.stringify([await call('list_metrics', {}), await call('list_terms', {}), await call('list_datasets', {})]) === stBefore);
   const found = await call('insights', { dataset: ds.name });
   ok('insights: the same findings the app ranks', found.length === (await ins.insightsForDataset(pid, ds.id)).length && found.length > 0);
   const dash = await call('list_dashboards', {});

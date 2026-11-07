@@ -45,6 +45,9 @@ import type { Ctx } from './registry';
 import * as sharePolicy from '../app/sharePolicy';
 import * as privacyStore from '../app/privacyStore';
 import { metricDate } from '../analysis/metricTimeScope';
+import { statusFor, withStatus } from '../analysis/statusStore';
+import { vocabularyOrder } from '../analysis/statusNotes';
+import { statusFields } from './statusFields';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
@@ -71,7 +74,8 @@ export async function projectsList(ctx?: Ctx): Promise<unknown> {
 }
 
 export async function datasetsList(ctx: Ctx): Promise<unknown> {
-  return (await datasets.listDatasets(ctx.projectId)).map((d) => ({
+  return vocabularyOrder(await withStatus(ctx.projectId, 'dataset', await datasets.listDatasets(ctx.projectId)), () => true).map((d) => ({
+    ...statusFields(d.status),
     id: d.id,
     name: d.name,
     source: d.sourceKind,
@@ -104,6 +108,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
   return {
     id: meta.id,
     name: meta.name,
+    ...statusFields(await statusFor(ctx.projectId)(`dataset:${meta.id}`)),
     source: meta.sourceKind,
     origin: meta.origin ? meta.origin.kind : null,
     mode: meta.mode === 'live' ? 'live' : 'extract',
@@ -197,7 +202,13 @@ export async function query(ctx: Ctx, sql: string, limit: number): Promise<unkno
 export async function metricsList(ctx: Ctx): Promise<unknown> {
   const names = new Map((await datasets.listDatasets(ctx.projectId)).map((d) => [d.id, d.name]));
   const byName = await metrics.metricsByName(ctx.projectId);
-  return Promise.all((await metrics.listMetrics(ctx.projectId)).map(async (m) => ({
+  const status = statusFor(ctx.projectId);
+  const rows = await Promise.all((await metrics.listMetrics(ctx.projectId)).map(async (m) => ({ row: await metricRow(ctx, m, names, byName), status: (await status(`metric:${m.id}`)) ?? undefined })));
+  return vocabularyOrder(rows, () => true).map(({ row, status: s }) => ({ ...row, ...statusFields(s) })); // certified first; a retired one names its replacement
+}
+
+async function metricRow(ctx: Ctx, m: Awaited<ReturnType<typeof metrics.listMetrics>>[number], names: Map<string, string>, byName: Awaited<ReturnType<typeof metrics.metricsByName>>): Promise<Record<string, unknown>> {
+  return ({
     id: m.id,
     name: m.name,
     dataset: names.get(m.datasetId) || null,
@@ -206,7 +217,7 @@ export async function metricsList(ctx: Ctx): Promise<unknown> {
     adds_up: await metricAdditivity(ctx.projectId, m.id, byName),
     counts_by: (await metricDate(ctx.projectId, m)) || null, // D9: the date its periods are on; a column that is gone counts as none
     snapshot: (metrics.isSimpleDefinition(m.definition) && m.definition.snapshot) || null, // D8: one day's rows, never a sum over dates
-  })));
+  });
 }
 
 export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promise<unknown> {
@@ -221,12 +232,13 @@ export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promi
   // (./creators): one totalled from a column the policy drops is refused, typed; under mask it passes, as a total does.
   const hidden = await kpiHidden(ctx.projectId, reads, 'export');
   if (hidden) throw new AutomationError('runtime', `${hidden}: a column this metric reads is marked sensitive.`);
-  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText };
+  return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText, ...statusFields(await statusFor(ctx.projectId)(`metric:${r.id}`)) };
 }
 
 /** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */
 export async function termsList(ctx: Ctx): Promise<unknown> {
-  return (await termList(ctx.projectId)).map((t) => ({
+  return vocabularyOrder(await withStatus(ctx.projectId, 'term', await termList(ctx.projectId)), () => true).map((t) => ({
+    ...statusFields(t.status),
     id: t.id, name: t.name, aliases: t.aliases, description: t.description || '', dataset: t.datasetName, definition: t.definition,
   }));
 }

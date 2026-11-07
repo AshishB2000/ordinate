@@ -5,6 +5,7 @@
 import { CHART_TYPE_IDS, type PlanContext } from './analysisPlan';
 import { GEO_LEVEL_LABELS } from './geoHits';
 import { columnNoteLines, tableNoteLines, type FactColumnDoc, type FactTableDoc } from '../ai/copilotFacts';
+import { statusClause } from '../ai/termFacts';
 import { answersText, kindText, type DraftAsk } from './planClarify';
 
 /**
@@ -36,6 +37,9 @@ export interface PlanFactMetric {
   definitionText: string;
   /** What the metric means, in the user's words (Metric.description). */
   description?: string;
+  /** Governance (part 4): certified or retired (a draft keeps a retired one with its replacement). */
+  status?: { state: 'certified' | 'needs_review' | 'retired' };
+  replacedBy?: string;
 }
 
 /**
@@ -110,7 +114,7 @@ function userNoteLines(ctx: PlanContext, extras: PlanFactExtras): string[] {
   const nameOf = new Map(ctx.datasets.map((d) => [d.id, d.name]));
   const defined = (extras.metrics || []).filter((m) => nameOf.has(m.datasetId)).map((m) => {
     const means = note(m.description);
-    return `- "${note(m.name)}" on "${nameOf.get(m.datasetId)}" = ${note(m.definitionText)}.` + (means ? ` Means: ${means}` : '');
+    return `- "${note(m.name)}"${statusClause(m)} on "${nameOf.get(m.datasetId)}" = ${note(m.definitionText)}.` + (means ? ` Means: ${means}` : '');
   });
   if (!tableNotes.length && !notes.length && !defined.length) return [];
 

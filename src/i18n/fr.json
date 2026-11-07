@@ -584,6 +584,8 @@
   "semanticMessages.this_question_needs_the_latest_date": "Cette question a besoin de la date la plus récente ou des valeurs enregistrées de {dataset}, que {layer} ne peut pas consulter.",
   "semanticMessages.your_access_to_is_limited_to": "Votre accès à {dataset} est limité à certaines lignes, et {layer} ne peut pas appliquer exactement cette limite, donc aucun chiffre n’est affiché.",
   "statusMessages.an_item_cannot_replace_itself_pick": "Un élément ne peut pas se remplacer lui-même. Choisissez-en un autre.",
+  "statusMessages.is_retired": "{name} est retiré.",
+  "statusMessages.is_retired_replaces_it": "{name} est retiré ; {replacement} le remplace.",
   "statusMessages.is_retired_too_pick_a_replacement": "{name} est aussi retiré. Choisissez un remplacement qui n’est pas retiré.",
   "statusMessages.is_the_replacement_for_another_item": "{name} remplace un autre élément. Faites d’abord pointer cet élément ailleurs.",
   "statusMessages.pick_a_replacement_of_the_same": "Choisissez un remplacement du même type : une métrique pour une métrique, un terme pour un terme, un jeu de données pour un jeu de données.",

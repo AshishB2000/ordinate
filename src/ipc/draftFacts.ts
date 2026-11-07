@@ -13,6 +13,8 @@
 // (role, grain, key, guide: app/tableDocs `tableFacts`) ride along with the column notes.
 
 import type { PlanContext } from '../analysis/analysisPlan';
+import { statusFor } from '../analysis/statusStore';
+import { vocabularyOrder } from '../analysis/statusNotes';
 import type { PlanFactExtras, PlanFactMetric } from '../analysis/planFacts';
 import * as metrics from '../analysis/metrics';
 import { describeDefinition, describeDefinitionShort } from '../analysis/metricFormat';
@@ -45,9 +47,11 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
     }
 
     const inContext = new Set(ctx.datasets.map((d) => d.id));
-    const listed = (await metrics.listMetrics(projectId)).filter((s) => inContext.has(s.datasetId)).slice(0, MAX_DRAFT_METRICS);
+    const statusOf = statusFor(projectId); // once per request (part 4): certified first, so the cap drops the unreviewed
+    const inScope = await Promise.all((await metrics.listMetrics(projectId)).filter((s) => inContext.has(s.datasetId)).map(async (s) => ({ s, status: (await statusOf(`metric:${s.id}`)) ?? undefined })));
+    const listed = vocabularyOrder(inScope, () => true).slice(0, MAX_DRAFT_METRICS);
     const defined: PlanFactMetric[] = [];
-    for (const s of listed) {
+    for (const { s, status } of listed) {
       // The summary has no filters, and they are part of what the metric means.
       const m = await metrics.getMetric(projectId, s.id);
       if (!m) continue;
@@ -68,6 +72,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
           ? `${describeDefinitionShort(m.definition)}, filtered on a column whose values are withheld`
           : describeDefinition(m),
         description: m.description,
+        ...(status ? { status, ...(status.replacedBy ? { replacedBy: status.replacedBy.name } : {}) } : {}),
       });
     }
     return { columnDocs, tables, metrics: defined };

@@ -72,6 +72,8 @@ import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
 import { pendingMeasureRefusal, unofferedMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
+import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
+import { statusFor, type StatusState } from '../analysis/statusStore';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -157,7 +159,9 @@ export async function computeCard(projectId: string, asked: AnswerSpec, loose = 
   // A glossary term is expanded FIRST (a refusal THROWS, typed 'term'), before the lock and the Live split; the card keeps the reference.
   const x = await expandAnswerTerms(projectId, asked);
   const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock) => computeCardWith(projectId, x.spec, loose, lock, x));
-  return x.terms.length && 'card' in built ? withTermRefs(built, x) : built;
+  const out = x.terms.length && 'card' in built ? withTermRefs(built, x) : built;
+  if ('card' in out) out.card.notes.push(...await retiredNotes(projectId, asked.measures.flatMap((m) => m.metricId ? [`metric:${m.metricId}`] : []))); // a retired metric still computes (D6); the card says what replaces it
+  return out;
 }
 
 /** The card as asked: each term back in its spec (and its chips'), its steps holding the reference in place of the expansion, so a save keeps it. */
@@ -287,10 +291,16 @@ export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
     .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]), shown: shownNames(m.columns, docs[m.id]) }));
 }
 
+const statusField = async (status: ReturnType<typeof statusFor>, ref: string): Promise<{ status?: { state: StatusState } }> => {
+  const st = await status(ref);
+  return st ? { status: { state: st.state } } : {};
+};
+
 /** The saved metrics a spec may name. Exported for scripts/test-snapshot.ts. */
 export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
+    const status = statusFor(projectId);
     for (const s of await metrics.listMetrics(projectId)) {
       if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s)) continue; // part 5's shapes, and a layer's metric (no column measure): not named by a model on this release
       const full = await metrics.getMetric(projectId, s.id);
@@ -300,10 +310,11 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
         // A snapshot is not a plain total either: named, it is that metric, never a bare column measure.
         hasFilters: !!(full && (full.filters.length || (metrics.isSimpleDefinition(full.definition) && full.definition.snapshot))),
         ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
+        ...await statusField(status, `metric:${s.id}`),
       });
     }
   } catch (_) { /* no metric vocabulary — the spec must name columns */ }
-  return out;
+  return vocabularyOrder(out, () => true); // certified first; the validator keeps a retired one, which still computes
 }
 
 /** The glossary terms a spec may name (semantic D10): names and aliases only, no filter value. */

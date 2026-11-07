@@ -32,3 +32,13 @@ export function wouldChain(name: string): string {
 export function notFound(): string {
   return t('statusMessages.this_item_is_gone_it_may');
 }
+
+/** An answer card's note when it reads a retired item that names its replacement. */
+export function retiredUse(name: string, replacement: string): string {
+  return t('statusMessages.is_retired_replaces_it', { name, replacement });
+}
+
+/** The same, when the retired item names no replacement. */
+export function retiredBare(name: string): string {
+  return t('statusMessages.is_retired', { name });
+}
