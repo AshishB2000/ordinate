@@ -30,12 +30,16 @@ export type SetBaseFiltersReply =
   | { ok: true; baseFilters: FilterStep[]; epoch: number }
   | { ok: false; code?: 'not_live' | 'live_refused'; reason?: string; error: string };
 
+/** A step's keys and values in any key order, its period aside: the sanitizer only fills that one's defaults. */
+const shapeOf = (step: unknown): string => queryCache.stableStringify({ ...(step as object), period: undefined });
+
 /** The list as it will be stored, or the editor's refusal: checked the way every question will read it (the header). A model import asks it too. */
 export function baseFiltersRefusal(meta: { columns: datasets.DatasetMeta['columns'] }, filters: unknown): { steps: FilterStep[] } | { ok: false; code: 'live_refused'; reason: string; error: string } {
   const asked = Array.isArray(filters) ? filters : [];
   const steps = sanitizeBaseFilters(asked);
-  // A step the stored form would drop (an unknown operator, a radius, too many values) is refused, never saved short.
-  if (steps.length !== asked.length) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
+  // A step the stored form would drop (an unknown operator, a radius, too many values) or change (a `via`, `lock`,
+  // `context` or `datasetId` it strips: a model file's step has no contract) is refused, never saved short or narrowed.
+  if (steps.length !== asked.length || steps.some((st, i) => shapeOf(st) !== shapeOf(asked[i]))) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
   // The declared columns only: a base filter runs before any calculated field exists (part 8 step 04).
   const base = liveBaseOf(steps, declaredColumns(meta));
   if (!base.ok) {
