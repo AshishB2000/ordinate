@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, serveRpc } from '../test-utils';
 
+// Its waits allow 15 s for a lazy route chunk, so a test needs longer than Vitest's 5 s default.
+vi.setConfig({ testTimeout: 30_000 });
+
 const P = '11111111-1111-4111-8111-111111111111';
 const LAZY = { timeout: 15_000 };
 const DATASET = { id: 'd1', name: 'Orders', sourceKind: 'csv', rowCount: 5, columnCount: 2, updatedAt: '' };
