@@ -333,7 +333,7 @@ npm run lint               # lint (must be zero findings)
 
 <div align="center">
 
-[MIT](LICENSE) © Ordinate contributors
+[MIT](LICENSE) © Ordinate contributors · Made by [Ashish Beerelli](https://ashishbeerelli.com)
 
 <sub><b>Open source.</b> <b>Self-hosted.</b> <b>AI-powered.</b></sub>
 
