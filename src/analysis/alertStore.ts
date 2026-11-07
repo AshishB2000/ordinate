@@ -44,6 +44,7 @@ import { metricWatch } from './alertMetric';
 import { ruleTarget } from './alertTarget';
 import type { MetricSnapshot } from './snapshot';
 import { getMetric } from './metrics';
+import type { MetricFormat } from './metrics';
 import { rewriteControlPeriods } from './metricTime';
 import { metricScope } from './metricTimeScope';
 import { sanitizeDashboardFilters } from './dashboards';
@@ -455,6 +456,10 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
 
+/** The format of the metric a rule watches, for its sentence's figures (alerts.fmtMetric); none for a column's rule. */
+const formatOf = async (projectId: string, rule: AlertRule): Promise<MetricFormat | undefined> =>
+  typeof rule.metric.metricId === 'string' ? (await getMetric(projectId, rule.metric.metricId))?.format : undefined;
+
 /**
  * Where a fired change came from (ipc/alertDiagnosis). Required lazily — that
  * module reaches back here through ipc/drivers — and best-effort: an event is
@@ -504,7 +509,7 @@ export async function evaluateProject(
         const { value, previous, period, skip, target } = await metricFor(projectId, rule);
         if (skip) return null;
         const r = alerts.evaluateRule({
-          rule, value, previous, period, target,
+          rule, value, previous, period, target, format: await formatOf(projectId, rule),
           anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
           now,
           eventId: randomUUID(),
@@ -569,7 +574,7 @@ export async function testRule(projectId: string, raw: any): Promise<{
   // "does this dataset have anomalies", not "are any of them new since a run the
   // user has not made yet".
   const probe: AlertRule = rule.compare === 'anomaly' ? { ...rule, anomalyKeys: undefined } : rule;
-  const out = alerts.wouldFire(probe, value, previous, anomalies, read.target);
+  const out = alerts.wouldFire(probe, value, previous, anomalies, read.target, await formatOf(projectId, rule));
   return { ok: true, fire: out.fire, message: out.message, value, previous };
 }
 
