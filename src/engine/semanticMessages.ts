@@ -1,0 +1,92 @@
+import { t } from '../app/i18n';
+// What a person reads when a semantic layer cannot answer a question (semantic layer part 7, b1;
+// docs/semantic-layer/07-portability.md D16, D17) — MAIN, through the catalog. Its own file, beside
+// ./liveRefusals.ts, so the i18n extractor (scripts/i18n-extract.ts MAIN_FILES) scans only these
+// sentences; ./live/semantic/semanticRefusals.ts types them. Names arrive as written: the dataset's,
+// the layer's (Snowflake, Cube, dbt), the metric's and the field's. No figure, value or row-rule
+// value ever appears here.
+
+/** A layer whose backend this server has no name for. */
+export function anotherTool(): string {
+  return t('semanticMessages.another_tool');
+}
+
+// ── Needs rows: refused on every Live dataset, here naming the layer ─────────
+
+export function layerPivot(dataset: string, layer: string): string {
+  return t('semanticMessages.a_pivot_table_can_t_be', { dataset, layer });
+}
+
+export function layerCohort(dataset: string, layer: string): string {
+  return t('semanticMessages.a_cohort_chart_can_t_be', { dataset, layer });
+}
+
+export function layerFunnel(dataset: string, layer: string): string {
+  return t('semanticMessages.an_event_funnel_can_t_be', { dataset, layer });
+}
+
+export function layerDrivers(dataset: string, layer: string): string {
+  return t('semanticMessages.key_drivers_can_t_be_worked', { dataset, layer });
+}
+
+export function layerFacet(dataset: string, layer: string): string {
+  return t('semanticMessages.small_multiples_can_t_be_drawn', { dataset, layer });
+}
+
+export function layerMap(dataset: string, layer: string): string {
+  return t('semanticMessages.a_map_can_t_be_drawn', { dataset, layer });
+}
+
+export function layerRaw(dataset: string, layer: string): string {
+  return t('semanticMessages.single_points_can_t_be_drawn', { dataset, layer });
+}
+
+export function layerRelated(dataset: string, layer: string): string {
+  return t('semanticMessages.a_field_from_a_related_dataset', { dataset, layer });
+}
+
+// ── Needs our arithmetic on the layer's figures ──────────────────────────────
+
+export function layerBins(dataset: string, layer: string, column: string): string {
+  return t('semanticMessages.can_t_be_grouped_into_number', { column, dataset, layer });
+}
+
+export function layerWeekRollup(dataset: string, layer: string): string {
+  return t('semanticMessages.retail_calendar_periods_can_t_be', { dataset, layer });
+}
+
+export function layerAutoGrain(dataset: string, layer: string, column: string): string {
+  return t('semanticMessages.choose_a_grain_that_lists_for', { layer, column, dataset });
+}
+
+export function layerNonAdditiveCalc(layer: string, metric: string): string {
+  return t('semanticMessages.can_t_be_added_up_so', { metric, layer });
+}
+
+export function layerFormulaOverLayer(layer: string, metric: string): string {
+  return t('semanticMessages.a_formula_can_t_use_computes', { metric, layer });
+}
+
+export function layerColumnOnLayer(dataset: string, layer: string, column: string): string {
+  return t('semanticMessages.is_a_field_of_not_a', { column, dataset, layer });
+}
+
+export function layerMetricOnTable(metric: string): string {
+  return t('semanticMessages.is_a_metric_from_a_semantic', { metric });
+}
+
+export function layerMetricMissing(layer: string, metric: string): string {
+  return t('semanticMessages.is_no_longer_defined_in', { metric, layer });
+}
+
+export function layerRowPolicy(dataset: string, layer: string): string {
+  return t('semanticMessages.your_access_to_is_limited_to', { dataset, layer });
+}
+
+export function layerLookup(dataset: string, layer: string): string {
+  return t('semanticMessages.this_question_needs_the_latest_date', { dataset, layer });
+}
+
+export function layerFilter(dataset: string, layer: string, column: string): string {
+  return t('semanticMessages.can_t_apply_this_filter_on', { layer, column, dataset });
+}

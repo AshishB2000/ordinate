@@ -21,6 +21,7 @@
 //      warehouse is how a local-first app becomes someone's surprise bill.
 
 import type { ColumnType } from '../data/parse';
+import type { DateGrain } from '../analysis/categoryKey';
 import type { PinnedHost } from './ssrf';
 
 /** One input on the connection form. Rendered generically by the renderer. */
@@ -189,6 +190,31 @@ export interface ConnectorLive {
   optIn?: string;
 }
 
+/**
+ * A semantic layer's backend id (semantic layer part 7, D14): `/^[a-z][a-z0-9-]{0,31}$/` — the shipped ones are
+ * `snowflake`, `cube` and `dbt`, the tests' `fake`. The layer's name in a sentence is `layerLabel(backend)`.
+ */
+export type SemanticBackendId = string;
+
+/**
+ * A connector's semantic-layer capability (part 7, D14): it lists a layer's models, describes one (its dimensions,
+ * typed as the layer reports them, and its metrics), and answers one encoded question. Like `live`, a property,
+ * never a second kind of connector. `run` is called only by ./semanticRun `runSemanticBound`, through the one Live
+ * door (test-liveUsage); its rows are named by the layer's members.
+ */
+export interface ConnectorSemantic {
+  backend: SemanticBackendId;
+  /** `lookups`: it answers a dimension's distinct values (the latest date, stored spellings). `binaryCompare`: it compares a row lock's values exactly (D17). */
+  caps: { lookups: boolean; binaryCompare: boolean };
+  listModels(ctx: ConnectorContext): Promise<{ ok: true; models: Array<{ name: string; label?: string; description?: string }> } | ConnectorError>;
+  describeModel(ctx: ConnectorContext, model: string): Promise<{
+    ok: true;
+    dimensions: Array<{ name: string; type: ColumnType; grains?: DateGrain[] }>;
+    metrics: Array<{ name: string; additive: boolean; description?: string }>;
+  } | ConnectorError>;
+  run(ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError>;
+}
+
 export interface ConnectorDef {
   /** Stable id, kebab-case. Persisted on connection records — NEVER rename one
    *  without a migration; an existing project stores this string. */
@@ -236,6 +262,8 @@ export interface ConnectorDef {
    * is a property, never a second kind of connector.
    */
   live?: ConnectorLive;
+  /** OPTIONAL. A connector that can ask a semantic layer (part 7, D14). */
+  semantic?: ConnectorSemantic;
 }
 
 /**

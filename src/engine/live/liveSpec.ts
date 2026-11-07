@@ -65,9 +65,16 @@ export const LIVE_AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 /** The aggregations that need a number column — `answerSpec.NUMERIC_AGGS`. */
 export const NUMERIC_AGGS: ReadonlySet<string> = new Set<string>(NUMBER_AGGREGATIONS);
 
-export interface LiveMeasure {
+export interface LiveColumnMeasure {
   column: string;
   aggregation: LiveAgg;
+}
+
+/** A column aggregated here, or (semantic layer part 7, D12) a semantic layer's own metric, by its name there. */
+export type LiveMeasure = LiveColumnMeasure | { metric: string };
+
+export function isMetricMeasure(m: LiveMeasure): m is { metric: string } {
+  return !!m && typeof (m as { metric?: unknown }).metric === 'string';
 }
 
 /**
@@ -126,7 +133,12 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'distinctByWeekCalendar' | 'semanticPending';
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'distinctByWeekCalendar' | 'semanticPending' | LayerRefusalCode;
+
+/** What a semantic layer cannot answer (part 7, D16): sentences in ./semantic/semanticRefusals.ts, naming the layer. */
+export type LayerRefusalCode =
+  | 'bins' | 'weekRollup' | 'autoGrain' | 'nonAdditiveCalc' | 'formulaOverLayer' | 'columnOnLayer' | 'metricOnTable'
+  | 'metricMissing' | 'layerRowPolicy' | 'layerLookup' | 'layerFilter';
 
 /**
  * A question live cannot answer, said in a catalog sentence (`message`, through
@@ -149,7 +161,7 @@ interface Sentence {
   text: (arg: string) => string;
 }
 
-const MESSAGES: Record<LiveRefusalCode, Sentence> = {
+const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   pivot: { key: 'liveRefusals.a_pivot_table_cannot_be_drawn', text: () => msg.livePivotRefused() },
   cohort: { key: 'liveRefusals.a_cohort_chart_cannot_be_drawn', text: () => msg.liveCohortRefused() },
   funnel: { key: 'liveRefusals.an_event_funnel_cannot_be_drawn', text: () => msg.liveFunnelRefused() },
@@ -186,7 +198,7 @@ const MESSAGES: Record<LiveRefusalCode, Sentence> = {
   semanticPending: { key: 'liveRefusals.this_dataset_asks_another_tool_s', text: () => msg.liveSemanticPending() },
 };
 
-export function refuse(code: LiveRefusalCode, arg = ''): LiveRefusal {
+export function refuse(code: Exclude<LiveRefusalCode, LayerRefusalCode>, arg = ''): LiveRefusal {
   const m = MESSAGES[code];
   return { ok: false, code, key: m.key, params: m.param ? { [m.param]: arg } : {}, message: m.text(arg) };
 }
@@ -216,7 +228,7 @@ export function columnOf(columns: LiveColumn[], name: unknown): LiveColumn | nul
 }
 
 /** A measure the stored schema can answer, or why not. */
-export function checkMeasure(columns: LiveColumn[], m: { column: unknown; aggregation: unknown }): LiveMeasure | LiveRefusal {
+export function checkMeasure(columns: LiveColumn[], m: { column: unknown; aggregation: unknown }): LiveColumnMeasure | LiveRefusal {
   const agg = String(m.aggregation);
   if (!LIVE_AGGS.has(agg)) return refuse('unknownAggregation', agg);
   const col = columnOf(columns, m.column);
@@ -336,7 +348,7 @@ function chartCore(encoding: VizEncoding, columns: LiveColumn[], opts: AdaptOpts
   const hasSplit = typeof encoding.series === 'string' && encoding.series.length > 0;
   if (!hasSplit && values.every((v) => v && v.aggregation === 'none')) return refuse('raw');
 
-  const measures: LiveMeasure[] = [];
+  const measures: LiveColumnMeasure[] = [];
   for (const v of hasSplit ? values.slice(0, 1) : values) {
     // An aggregated build sums a 'none' measure and labels it "sum of x" (vizData.ts).
     const m = checkMeasure(columns, { column: v && v.column, aggregation: v && v.aggregation === 'none' ? 'sum' : v && v.aggregation });

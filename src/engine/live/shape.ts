@@ -29,7 +29,7 @@ import {
 import { bucketStartOf, unitOfGrain, weekLabel } from '../../analysis/retailCalendar';
 import type { WeekCal } from '../../analysis/retailCalendar';
 import type { LiveColumn, LiveIR, LiveMeasure, LiveRefusal } from './liveSpec';
-import { columnOf, refuse } from './liveSpec';
+import { columnOf, isMetricMeasure, refuse } from './liveSpec';
 import type { CompiledQuery, LiveKey, Part } from './compile';
 import { partsOf } from './compile';
 
@@ -76,7 +76,7 @@ function finiteOrNull(n: number | null): number | null {
 }
 
 function emptyParts(): Parts {
-  return { s: null, c: null, n: null, x: null, d: null };
+  return { s: null, c: null, n: null, x: null, d: null, v: null };
 }
 
 /** Folding a part into a running total: counts and sums add, min/max stay min/max. */
@@ -91,6 +91,7 @@ function addPart(acc: Parts, p: Part, v: number | null): void {
 
 /** One measure's figure from its parts — `transforms.aggregate`'s formula, applied to totals. */
 export function measureValue(m: LiveMeasure, parts: Parts): number | null {
+  if (isMetricMeasure(m)) return parts.v; // the layer's own figure, never recomputed here
   switch (m.aggregation) {
     case 'sum': return parts.s;
     case 'count': return parts.c === null ? 0 : parts.c;
@@ -103,6 +104,7 @@ export function measureValue(m: LiveMeasure, parts: Parts): number | null {
 
 /** `vizData.measureLabel`, over a measure already coerced from 'none' to 'sum'. */
 export function measureName(m: LiveMeasure): string {
+  if (isMetricMeasure(m)) return m.metric;
   return m.aggregation === 'count' ? m.column : `${m.aggregation} of ${m.column}`;
 }
 

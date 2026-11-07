@@ -20,8 +20,9 @@
 //                 through the real route — and nowhere else. NEGATIVE CONTROL:
 //                 a signed-in request at maxCacheAgeSec 0 asks the warehouse
 //                 every time, even with a public answer fresh in the cache
-//   one door      runLiveBound is called from warehouse() (liveWarehouse.ts) and
-//                 nowhere else in src/ (NEGATIVE CONTROL: a planted caller is
+//   one door      runLiveBound and runSemanticBound (a semantic layer's
+//                 question, part 7) are called from warehouse() (liveWarehouse.ts)
+//                 and nowhere else in src/ (NEGATIVE CONTROL: a planted caller is
 //                 found), so a later profile or DISTINCT is limited and counted
 //   fail closed   a count that cannot be written (Postgres down) sends nothing:
 //                 the stale answer, else a typed failure, the reason logged
@@ -373,11 +374,21 @@ function oneDoor(): void {
   const body = files.get('src/engine/live/liveWarehouse.ts') ?? '';
   const door = body.slice(body.indexOf('export async function warehouse('), body.indexOf('\n}\n', body.indexOf('export async function warehouse(')));
   ok('one door: …inside warehouse(), after the slot and the daily check', /acquire\([\s\S]*checkDaily\([\s\S]*runLiveBound\(/.test(door));
+  const RUN_SEMANTIC = /(?<!function )\brunSemanticBound\(/g;
+  const SEMANTIC_RUN = /\bsemantic\??!?\.run\(/g;
+  const sem = callers(files, RUN_SEMANTIC);
+  ok('one door: runSemanticBound is called once in src/, from warehouse(), after the slot and the daily check',
+    sem.size === 1 && sem.get('src/engine/live/liveWarehouse.ts') === 1 && /acquire\([\s\S]*checkDaily\([\s\S]*runSemanticBound\(/.test(door), show([...sem]));
+  const semRaw = callers(files, SEMANTIC_RUN);
+  ok('one door: a connector\'s semantic.run is called from semanticRun.ts alone', semRaw.size === 1 && semRaw.get('src/connectors/semanticRun.ts') === 1, show([...semRaw]));
   ok('one door: warehouse() is exported from the executor, for L2.4\'s lookups and L2.5\'s profile', lq.warehouse === require('../src/engine/live/liveWarehouse').warehouse && typeof lq.LiveCallError === 'function');
   const planted = new Map(files);
   planted.set('src/engine/live/profile.ts', 'export async function sample() { return runLiveBound(def, values, secrets, sql, [], opts); }');
   planted.set('src/ipc/distinct.ts', 'const r = await def.live!.runBound(ctx, sql, params);');
   ok('one door NEGATIVE CONTROL: a statement sent around the executor is found', callers(planted, RUN_LIVE).has('src/engine/live/profile.ts') && callers(planted, RUN_BOUND).has('src/ipc/distinct.ts'));
+  planted.set('src/engine/live/semantic/x.ts', 'const r = await runSemanticBound(d, v, s, r, o);');
+  planted.set('src/ipc/models.ts', 'const r = await def.semantic!.run(ctx, body);');
+  ok('one door NEGATIVE CONTROL: a layer question sent around the executor is found', callers(planted, RUN_SEMANTIC).size === 2 && callers(planted, SEMANTIC_RUN).has('src/ipc/models.ts'));
 }
 
 async function bigqueryBytes(): Promise<void> {

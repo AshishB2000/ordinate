@@ -19,9 +19,14 @@
 //                            to the statement's usage row when it settles
 //
 // `runLiveBound` is called here and nowhere else in src/, and it is the only
-// caller of a connector's `live.runBound`: test-liveUsage fails otherwise.
+// caller of a connector's `live.runBound`: test-liveUsage fails otherwise. A
+// semantic layer's question (part 7, D18) takes the same door: `warehouse()`
+// sends a `SemanticRequest` through `runSemanticBound` (connectors/semanticRun),
+// the only caller of a connector's `semantic.run`, held to the same scan.
 
 import { runLiveBound } from '../../connectors/liveRun';
+import type { SemanticRequest } from '../../connectors/semanticRun';
+import { isSemanticRequest, runSemanticBound } from '../../connectors/semanticRun';
 import type { ConnectorError, ConnectorRows } from '../../connectors/types';
 import { safeError } from '../../connectors/types';
 import { liveQueryTimeoutMs } from '../../server/liveEnv';
@@ -29,6 +34,9 @@ import * as budget from './liveBudget';
 import type { CompiledQuery } from './compile';
 import type { LiveRows } from './shape';
 import type { LiveTarget } from './liveTarget';
+import type { LiveRefusal } from './liveSpec';
+import { refuse } from './liveSpec';
+import { alignRows } from './semantic/semanticQuery';
 import { logger } from '../../app/logger';
 
 /** Why one statement did not answer. */
@@ -100,16 +108,20 @@ function untilAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T | typeof A
  * @param t       the resolved target (./liveTarget `liveTarget`): org,
  *                connection, dialect, the connector and its secrets
  * @param query   one compiled statement: SQL text plus its bind parameters
- *                (values are ALWAYS parameters, never SQL text)
+ *                (values are ALWAYS parameters, never SQL text) — or one
+ *                semantic layer's question, already encoded by its backend
  * @param shared  aborting it cancels the statement (in the warehouse too)
- * @returns       the rows, positional to `query.columns`
+ * @returns       the rows, positional to `query.columns`; for a layer's
+ *                question a reply missing one of them is refused `rowShape`
  * @throws        LiveCallError — `cancelled` (shared fired), `timeout`,
  *                `failed` (the warehouse, the secrets, or a usage count that
  *                could not be written: fail closed), `tooLarge` (past the
  *                row cap) or `daily` (LIVE_DAILY_QUERY_LIMIT; `detail` is the
  *                catalog sentence). Logged once here; a hang-up is not logged.
  */
-export async function warehouse(t: LiveTarget, query: CompiledQuery, shared: AbortSignal): Promise<LiveRows> {
+export function warehouse(t: LiveTarget, query: CompiledQuery, shared: AbortSignal): Promise<LiveRows>;
+export function warehouse(t: LiveTarget, query: SemanticRequest, shared: AbortSignal): Promise<LiveRows | LiveRefusal>;
+export async function warehouse(t: LiveTarget, query: CompiledQuery | SemanticRequest, shared: AbortSignal): Promise<LiveRows | LiveRefusal> {
   let release: () => void;
   try {
     release = await budget.acquire(t.org, t.datasetId, shared);
@@ -140,7 +152,8 @@ export async function warehouse(t: LiveTarget, query: CompiledQuery, shared: Abo
   let call: Promise<ConnectorRows | ConnectorError>;
   try {
     const secrets = await t.secrets();
-    call = runLiveBound(t.def, t.values, secrets, query.sql, query.params, { signal, timeoutMs: ms });
+    const opts = { signal, timeoutMs: ms };
+    call = isSemanticRequest(query) ? runSemanticBound(t.def, t.values, secrets, query, opts) : runLiveBound(t.def, t.values, secrets, query.sql, query.params, opts);
   } catch (err: unknown) {
     release();
     throw failed(t, 'failed', safeError(err));
@@ -153,5 +166,7 @@ export async function warehouse(t: LiveTarget, query: CompiledQuery, shared: Abo
   if (res === ABORTED) throw failed(t, shared.aborted ? 'cancelled' : 'timeout');
   if (!res.ok) throw failed(t, shared.aborted ? 'cancelled' : timer.aborted ? 'timeout' : 'failed', res.error);
   if (res.truncated) throw new LiveCallError('tooLarge');
-  return res.rows;
+  if (!isSemanticRequest(query)) return res.rows;
+  // A layer names its reply's columns by member: read back in the order asked, never guessed at.
+  return alignRows(res.columns.map((c) => c.name), res.rows, query.columns) ?? refuse('rowShape');
 }
