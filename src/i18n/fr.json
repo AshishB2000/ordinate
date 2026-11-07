@@ -360,6 +360,7 @@
   "joinMessages.has_no_column": "{join} n’a pas de colonne « {column} ».",
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate redémarre. Réessayez dans une minute.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate a redémarré pendant l’exécution. Relancez-le.",
+  "liveMessages.a_copy_can_t_be_made": null,
   "liveMessages.a_live_calculated_field_shows_no": "Un champ calculé en direct n’affiche aucune ligne d’aperçu : vérifier une formule n’interroge jamais l’entrepôt de données. Enregistrez-le et utilisez-le dans un graphique pour voir ses chiffres.",
   "liveMessages.calculated_fields_can_t_run_on": "Les champs calculés ne peuvent pas encore s’exécuter sur une table Databricks en direct : leurs chiffres n’ont pas été vérifiés avec Databricks. Faites une copie et ajoutez-y le champ comme étape de préparation.",
   "liveMessages.give_the_calculated_field_a_name": "Donnez au champ calculé un nom de 1 à 200 caractères.",

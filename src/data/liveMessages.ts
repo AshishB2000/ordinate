@@ -134,3 +134,8 @@ export function liveCalcDatabricksMessage(): string {
 export function liveCalcNoPreviewMessage(): string {
   return t('liveMessages.a_live_calculated_field_shows_no');
 }
+
+/** "Make a copy" or "Copy the data instead" of a Live dataset with always-applied filters, whose source passed the import row cap. `count` is the cap, formatted. */
+export function liveCopyCappedMessage(count: string): string {
+  return t('liveMessages.a_copy_can_t_be_made', { count });
+}

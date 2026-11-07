@@ -14,6 +14,8 @@
 //    from before it; an empty sample under a base is retried LIMIT-only; a sync sampled under other
 //    filters stores no figures; a base column the warehouse dropped refuses every question, typed,
 //    while the sync still syncs the columns. (scripts/test-liveBaseCompile.ts holds the pure builders.)
+// 5. Copies keep the base filters as Prepare steps. A fetch the import row cap cut refuses both copies
+//    typed (`copyCapped`). NEGATIVE CONTROLS: a table that just fits copies whole; no base filters, cut + warned.
 //
 //   npm run build:ts && node scripts/test-liveBaseFilters.js
 
@@ -33,6 +35,7 @@ const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/e
 const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+const liveMsg: typeof import('../src/data/liveMessages') = require('../src/data/liveMessages');
 const { isLive } = H.liveDataset;
 
 const { fake, ORG_A } = H;
@@ -370,10 +373,30 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   const kpi = async (d: string, column: string, aggregation: string): Promise<Reply> => (await post('dashboard:metric', { projectId: P, datasetId: d, column, aggregation })).value;
   const liveCount = await kpi(L, 'qty', 'count');
   const liveSum = await kpi(L, 'amt', 'sum');
+  // Over the import row cap, the base filters would keep their part of an arbitrary first N rows, not what the
+  // Live dataset answers over: both copies refuse, typed, and save nothing (the cap lowered to 300 of N rows).
+  const cap = connectionRun as { ROW_LIMIT: number };
+  const realCap = cap.ROW_LIMIT;
+  const atCap = async (rows: number, channel: string, payload: Reply): Promise<Reply> => {
+    cap.ROW_LIMIT = rows;
+    try { return (await post(channel, payload)).value; } finally { cap.ROW_LIMIT = realCap; }
+  };
+  const capped = liveMsg.liveCopyCappedMessage('300');
+  const n3 = await count();
+  for (const [label, channel, extra] of [['Make a copy', 'dataset:copyLive', {}], ['Copy the data instead', 'dataset:setMode', { mode: 'extract' }]] as [string, string, Reply][]) {
+    const r = await atCap(300, channel, { projectId: P, datasetId: L, ...extra });
+    ok(`over the row cap: ${label} of a dataset with base filters refuses typed (copyCapped), saves nothing, stays Live`,
+      r.ok === false && r.code === 'live_refused' && r.reason === 'copyCapped' && r.error === capped && (await count()) === n3 && isLive(await meta()), show(r));
+  }
+  ok('the sentence names the cap and what to do', /300/.test(capped) && /query/.test(capped), capped);
+  const cutPlain = await atCap(300, 'dataset:copyLive', { projectId: P, datasetId: second.liveId });
+  ok('NEGATIVE CONTROL: over the cap with no base filters, the copy is made, cut, and says so (as any import)',
+    cutPlain.ok === true && cutPlain.dataset.rowCount === 300 && cutPlain.warnings.some((w: string) => /truncated at 300 rows/.test(w)), show(cutPlain));
   const writes: Reply[] = [];
   const realPersist = H.datasets.persist;
   (H.datasets as { persist: typeof realPersist }).persist = (projectId, ds, progress) => { writes.push({ id: ds.id, steps: ds.steps }); return realPersist(projectId, ds, progress); };
-  const copy = (await post('dataset:copyLive', { projectId: P, datasetId: L })).value;
+  // NEGATIVE CONTROL for the refusal: a table that just fits the cap is copied whole, so the copy is the Live dataset.
+  const copy = await atCap(N, 'dataset:copyLive', { projectId: P, datasetId: L });
   (H.datasets as { persist: typeof realPersist }).persist = realPersist;
   const copyMeta = await metaOf(copy.dataset.id);
   ok('Make a copy: the copy carries the base filters as its Prepare steps', copy.ok === true && show(copyMeta.steps) === show(BASE), show(copy));

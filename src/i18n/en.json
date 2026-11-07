@@ -357,6 +357,7 @@
   "joinMessages.has_no_column": "{join} has no column \"{column}\".",
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate is restarting. Try again in a minute.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate restarted while this was running. Run it again.",
+  "liveMessages.a_copy_can_t_be_made": "A copy can't be made: the source has more than {count} rows, the most a copy reads, and this dataset's always-applied filters would then keep only part of the rows it answers over. To copy it, import a query that filters the rows at the source.",
   "liveMessages.a_live_calculated_field_shows_no": "A Live calculated field shows no preview rows: checking a formula never asks the warehouse. Save it and chart it to see its figures.",
   "liveMessages.calculated_fields_can_t_run_on": "Calculated fields can't run on a Databricks Live table yet: their figures have not been checked against Databricks. Make a copy and add the field as a Prepare step instead.",
   "liveMessages.give_the_calculated_field_a_name": "Give the calculated field a name of 1 to 200 characters.",

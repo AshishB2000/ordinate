@@ -360,6 +360,7 @@
   "joinMessages.has_no_column": "{join} hat keine Spalte „{column}“.",
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate wird neu gestartet. Versuche es in einer Minute erneut.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate wurde neu gestartet, während dies lief. Führe es erneut aus.",
+  "liveMessages.a_copy_can_t_be_made": null,
   "liveMessages.a_live_calculated_field_shows_no": "Ein berechnetes Live-Feld zeigt keine Vorschauzeilen: Das Prüfen einer Formel fragt nie das Data Warehouse ab. Speichern Sie es und verwenden Sie es in einem Diagramm, um seine Zahlen zu sehen.",
   "liveMessages.calculated_fields_can_t_run_on": "Berechnete Felder können noch nicht auf einer Live-Tabelle in Databricks laufen: Ihre Zahlen wurden noch nicht mit Databricks abgeglichen. Erstellen Sie eine Kopie und fügen Sie das Feld dort als Vorbereitungsschritt hinzu.",
   "liveMessages.give_the_calculated_field_a_name": "Geben Sie dem berechneten Feld einen Namen mit 1 bis 200 Zeichen.",

@@ -360,6 +360,7 @@
   "joinMessages.has_no_column": "{join} no tiene la columna \"{column}\".",
   "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate se está reiniciando. Vuelve a intentarlo en un minuto.",
   "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate se reinició mientras esto se ejecutaba. Vuelve a ejecutarlo.",
+  "liveMessages.a_copy_can_t_be_made": null,
   "liveMessages.a_live_calculated_field_shows_no": "Un campo calculado en vivo no muestra filas de vista previa: comprobar una fórmula nunca consulta el almacén de datos. Guárdelo y úselo en un gráfico para ver sus cifras.",
   "liveMessages.calculated_fields_can_t_run_on": "Los campos calculados aún no pueden ejecutarse en una tabla en vivo de Databricks: sus cifras no se han comprobado con Databricks. Haga una copia y añada el campo como paso de preparación.",
   "liveMessages.give_the_calculated_field_a_name": "Dé al campo calculado un nombre de 1 a 200 caracteres.",
