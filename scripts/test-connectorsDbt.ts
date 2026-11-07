@@ -84,7 +84,23 @@ async function main(): Promise<void> {
     d.ok && show(d.dimensions) === show([{ name: 'metric_time', type: 'date', grains: ['day', 'week', 'month', 'quarter', 'year'] }, { name: 'customer__customer_type', type: 'text' }]), show(d));
   ok('describe: additive only for a SIMPLE metric whose one measure is SUM (order_total); a COUNT_DISTINCT and a DERIVED metric are not',
     d.ok && show(d.metrics) === show([{ name: 'order_total', additive: true, description: 'Sum of the order total' }, { name: 'food_order_amount', additive: false, description: 'Sum of the food in an order' }, { name: 'order_gross_profit', additive: false, description: 'Revenue less cost' }]), show(d));
-  ok('…the measures asked only for the simple metrics', show(fake.requests.slice(n0).map((r) => r.op)) === show(['savedQuery', 'dimensions', 'metrics', 'measures', 'measures']), show(fake.requests.slice(n0).map((r) => r.op)));
+  ok('…the measures asked only for the simple metrics: with a non-additive dimension once, then (today\'s API refuses that field) without',
+    show(fake.requests.slice(n0).map((r) => r.op)) === show(['savedQuery', 'dimensions', 'metrics', 'measuresSemi', 'measures', 'measures']), show(fake.requests.slice(n0).map((r) => r.op)));
+  // A semi-additive measure (MetricFlow's non_additive_dimension: a balance) adds up over no time: not additive.
+  const semi = (nad: unknown, error?: string) => async () => {
+    fake.hook = (op, v) => {
+      if (op !== 'measuresSemi' && op !== 'measures') return answers[op] ? { status: 200, json: answers[op] } : undefined;
+      if (error && op === 'measuresSemi') return { status: 200, json: { errors: [{ message: error }], data: null } };
+      const name = (v.metrics as Array<{ name: string }>)[0].name;
+      const one = { ...measure.data.measures[0], name, agg: name === 'order_total' ? 'SUM' : 'COUNT_DISTINCT' };
+      return { status: 200, json: { data: { measures: [op === 'measuresSemi' ? { ...one, nonAdditiveDimension: nad } : one] } } };
+    };
+    const r = await layer.describeModel(ctx, 'new_customer_orders');
+    return r.ok ? r.metrics.find((m) => m.name === 'order_total')?.additive : undefined;
+  };
+  ok('a SUM measure with a non-additive dimension is not additive', (await semi({ name: 'metric_time' })()) === false);
+  ok('NEGATIVE CONTROL: …one whose non-additive dimension is null is', (await semi(null)()) === true);
+  ok('…and when the field is asked and dbt fails for another reason, not additive (no fallback that could hide it)', (await semi(undefined, 'Internal server error')()) === false);
   fake.hook = null;
   fake.measures = false;
   const noMeasures = await layer.describeModel(ctx, 'orders');

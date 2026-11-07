@@ -42,6 +42,8 @@ export const DOCS = {
   dimensions: 'query Dimensions($environmentId: BigInt!, $metrics: [MetricInput!]!, $pageNum: Int!) { dimensionsPaginated(environmentId: $environmentId, metrics: $metrics, pageNum: $pageNum, pageSize: 500) { items { name description type queryableGranularities } pageNum totalPages } }',
   metrics: 'query Metrics($environmentId: BigInt!, $pageNum: Int!) { metricsPaginated(environmentId: $environmentId, pageNum: $pageNum, pageSize: 500) { items { name description type } pageNum totalPages } }',
   measures: 'query Measures($environmentId: BigInt!, $metrics: [MetricInput!]!) { measures(environmentId: $environmentId, metrics: $metrics) { name agg } }',
+  // MetricFlow's non_additive_dimension (a semi-additive measure, a balance); the SDK's Measure has no such field today.
+  measuresSemi: 'query Measures($environmentId: BigInt!, $metrics: [MetricInput!]!) { measures(environmentId: $environmentId, metrics: $metrics) { name agg nonAdditiveDimension { name } } }',
   createQuery: 'mutation CreateQuery($environmentId: BigInt!, $metrics: [MetricInput!], $groupBy: [GroupByInput!], $where: [WhereInput!], $orderBy: [OrderByInput!], $limit: Int) { createQuery(environmentId: $environmentId, metrics: $metrics, groupBy: $groupBy, where: $where, orderBy: $orderBy, limit: $limit) { queryId } }',
   query: 'query QueryResult($environmentId: BigInt!, $queryId: String!, $pageNum: Int!) { query(environmentId: $environmentId, queryId: $queryId, pageNum: $pageNum) { status error totalPages jsonResult(encoded: false) } }',
   cancelQuery: 'mutation CancelQuery($environmentId: BigInt!, $queryId: String!) { cancelQuery(environmentId: $environmentId, queryId: $queryId) { queryId } }',

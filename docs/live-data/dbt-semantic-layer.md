@@ -50,7 +50,7 @@ are the dataset.
 | What | Status | Decision |
 |---|---|---|
 | The page's `MetricTypeParams` (dbt v1.12) has no aggregation; the page never mentions a measure | documented | — |
-| `measures(environmentId, metrics) { name agg }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT`, asked per simple metric. `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API) are **not additive**: a refused running total, never a wrong sum. |
+| `measures(environmentId, metrics) { name agg }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT` and has no `nonAdditiveDimension` (MetricFlow's `non_additive_dimension`, a semi-additive measure such as a balance), asked per simple metric. The SDK's `Measure` has no such field today, so the field is asked once a describe and, when the API refuses it by name, the measures are asked without it: on such an API a semi-additive measure cannot be told apart and reads additive. `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API) are **not additive**: a refused running total, never a wrong sum. |
 
 ## Asking a question: create, then poll
 

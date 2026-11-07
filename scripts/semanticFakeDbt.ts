@@ -367,6 +367,8 @@ export function startFakeDbt(opts: { models: FakeSavedQuery[]; token: string; en
         }
         case 'metrics':
           return reply({ data: { metricsPaginated: { items: Object.keys(semFake.FAKE_METRICS).map((name) => ({ name, description: `The ${name.replace('_', ' ')}`, type: 'SIMPLE' })), pageNum: v.pageNum, pageSize: 500, totalItems: 4, totalPages: 1 } } });
+        case 'measuresSemi': // today's API, per the SDK's Measure model: no such field
+          return reply({ errors: [{ message: "Cannot query field 'nonAdditiveDimension' on type 'Measure'." }], data: null });
         case 'measures': {
           if (!self.measures) return reply({ errors: [{ message: "Cannot query field 'measures' on type 'Query'." }], data: null });
           const name = String((v.metrics as Array<{ name: string }> | undefined)?.[0]?.name ?? '');
