@@ -52,6 +52,7 @@ import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
 import { hasMetricMeasure, withLeafMeasures } from '../analysis/metricMeasures';
 import { withoutSamples } from '../data/liveProfile';
 import { withoutBaseValues } from '../data/liveBaseFilters';
+import { FilterValueRefusal, filterValueHits } from './bundleFilterValues';
 
 export type SensitiveLevel = 'personal' | 'financial';
 export const HIDDEN_BY_POLICY = 'Hidden by the share policy';
@@ -354,18 +355,13 @@ const DS_JSON = /^datasets\/([0-9a-f-]{36})\.json$/i;
  * marked column, masked in Prepare or not: a withheld entry is simpler to
  * reason about than a token that happens to be harmless.
  */
-async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise<boolean> {
+function dropMarkedColors(entries: ZipEntry[], marked: ReadonlySet<string>): boolean {
   const pj = entries.find((x) => x.name === 'project.json');
   if (!pj) return false;
   let rec: Record<string, unknown>;
   try { rec = JSON.parse(pj.data.toString('utf8')); } catch (_) { return false; }
   const map = rec && rec.colorMap && typeof rec.colorMap === 'object' ? (rec.colorMap as Record<string, unknown>) : null;
   if (!map) return false;
-  const marked = new Set<string>();
-  for (const e of entries) {
-    const m = DS_JSON.exec(e.name);
-    if (m) (await withheldColumns(projectId, m[1])).forEach((c) => marked.add(c));
-  }
   const drop = Object.keys(map).filter((c) => marked.has(c));
   if (!drop.length) return false;
   drop.forEach((c) => { delete map[c]; });
@@ -417,6 +413,15 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
   if (action === 'include') return bytes;
   // Our own freshly exported bytes, inflated off the main thread (libuv's pool).
   let entries: ZipEntry[] = await readZipAsync(bytes);
+  // Every column marked in ANY of the bundle's datasets: a filter's literal on one refuses the bundle
+  // (./bundleFilterValues.ts, cutting it would match blank on import), and its colours stay home.
+  const marked = new Set<string>();
+  for (const e of entries) {
+    const m = DS_JSON.exec(e.name);
+    if (m) (await withheldColumns(projectId, m[1])).forEach((c) => marked.add(c));
+  }
+  const hits = filterValueHits(entries, marked);
+  if (hits.length) throw new FilterValueRefusal(hits);
   const removed = { parquet: 0, versions: 0 };
   const scratch = path.join(projectDir(projectId), 'privacy', 'tmp-' + randomUUID());
   let changed = false;
@@ -471,7 +476,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
   } finally {
     await fs.promises.rm(scratch, { recursive: true, force: true });
   }
-  if (await dropMarkedColors(projectId, entries)) changed = true;
+  if (dropMarkedColors(entries, marked)) changed = true;
   if (await dropMarkedLabels(projectId, entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');
