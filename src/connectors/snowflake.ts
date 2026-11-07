@@ -46,6 +46,7 @@ import { snowflakeFetch, SfAbortError, type SfHttpResponse, type SfTransport } f
 import { connectorColumns, shapeFirst, shapePartition, statusOf, type Cell, type ShapeMode } from './snowflakeShape';
 import { buildBindings, cappedStatement, countPlaceholders, type SfBinding } from './snowflakeSql';
 import { IDENT_RE, snowflakeTableFacts } from './snowflakeFacts';
+import { snowflakeSemantic } from './snowflakeSemantic';
 import { safeError } from './types';
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, ConnectorSchema, ConnectorTables, LiveParam } from './types';
 
@@ -450,5 +451,6 @@ export const CONNECTORS: ConnectorDef[] = [
     describeTable,
     tableFacts,
     live: { dialect: 'snowflake', runBound },
+    semantic: snowflakeSemantic({ catalog: (ctx, sql) => execute(ctx, sql, 'extract'), runBound }), // semantic views (part 7 c1)
   },
 ];

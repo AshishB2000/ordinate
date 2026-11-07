@@ -370,7 +370,9 @@ function oneDoor(): void {
   const live = callers(files, RUN_LIVE);
   ok('one door: runLiveBound is called once in src/, from warehouse() (liveWarehouse.ts)', live.size === 1 && live.get('src/engine/live/liveWarehouse.ts') === 1, show([...live]));
   const raw = callers(files, RUN_BOUND);
-  ok('one door: a connector\'s live.runBound is called from liveRun.ts alone', raw.size === 1 && raw.get('src/connectors/liveRun.ts') === 1, show([...raw]));
+  // …and from Snowflake's semantic capability (c1), its own bound execution, which only `semantic.run` reaches (held below).
+  ok('one door: a connector\'s live.runBound is called from liveRun.ts, and Snowflake\'s semantic run, alone',
+    raw.size === 2 && raw.get('src/connectors/liveRun.ts') === 1 && raw.get('src/connectors/snowflakeSemantic.ts') === 1, show([...raw]));
   const body = files.get('src/engine/live/liveWarehouse.ts') ?? '';
   const door = body.slice(body.indexOf('export async function warehouse('), body.indexOf('\n}\n', body.indexOf('export async function warehouse(')));
   ok('one door: …inside warehouse(), after the slot and the daily check', /acquire\([\s\S]*checkDaily\([\s\S]*runLiveBound\(/.test(door));

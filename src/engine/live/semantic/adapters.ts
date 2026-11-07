@@ -9,18 +9,23 @@ import type { SemanticBackendId } from '../../../connectors/types';
 import type { SemanticRequest } from '../../../connectors/semanticRun';
 import * as queryCache from '../../queryCache';
 import { isRefusal } from '../liveSpec';
+import type { LiveColumn } from '../liveSpec';
 import type { LiveTarget } from '../liveTarget';
 import { warehouse } from '../liveWarehouse';
 import type { SemanticRunner } from './evaluateSemantic';
 import type { SemanticQuery } from './semanticQuery';
+import { snowflakeAdapter } from './snowflake';
 
 export interface SemanticAdapter {
-  /** The layer's request for one question; `columns` are `answerColumns(q)`, the names its rows come back under. */
-  encode(q: SemanticQuery, model: string): SemanticRequest;
+  /**
+   * The layer's request for one question; `columns` are `answerColumns(q)`, the names its rows come back under.
+   * `dimensions` are the dataset's declared ones (their types), for a backend that reads each by its type.
+   */
+  encode(q: SemanticQuery, model: string, dimensions?: readonly LiveColumn[]): SemanticRequest;
 }
 
-/** The shipped backends' encoders. Empty until c1, e1 and d1 land: a semantic dataset of an unknown backend is unavailable. */
-export const ADAPTERS: Partial<Record<SemanticBackendId, SemanticAdapter>> = {};
+/** The shipped backends' encoders (c1 Snowflake; e1 and d1 add theirs): a semantic dataset of an unknown backend is unavailable. */
+export const ADAPTERS: Partial<Record<SemanticBackendId, SemanticAdapter>> = { snowflake: snowflakeAdapter };
 
 const TEST_ONLY = new Map<SemanticBackendId, SemanticAdapter>();
 
@@ -43,7 +48,7 @@ export function semanticRunner(t: LiveTarget, shared: AbortSignal, seen: (ms: nu
   const adapter = t.semantic ? adapterFor(t.semantic.backend) : null;
   return async (q) => {
     if (!adapter || !t.semantic) throw new Error('no adapter for this semantic layer'); // liveTarget refused it first
-    const req = adapter.encode(q, t.semantic.model);
+    const req = adapter.encode(q, t.semantic.model, t.semantic.env.columns);
     const rows = await warehouse(t, req, shared);
     seen(queryCache.now());
     return isRefusal(rows) ? rows : { columns: req.columns.slice(), rows };

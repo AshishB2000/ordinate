@@ -10,7 +10,10 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse)
 # accounts are never written — and then the Live calculated fields: 400
 # formulas row by row against the formula engine, and the calc matrix at the
 # same stride (semantic layer part 8, step 05). Each prints a `calcs:` line
-# into the run's summary.
+# into the run's summary. With SNOWFLAKE_SEMANTIC_VIEW set (the view
+# scripts/fixtures/snowflake-semantic-view.sql makes, once, by hand), Snowflake
+# also runs the semantic parity matrix against that semantic view (semantic
+# layer part 7, c1); without it, that part prints its skip.
 #
 # The `clickhouse` job runs the same matrix against a ClickHouse server in a
 # service container (scripts/test-liveParityClickhouse.ts); it needs no secret.
@@ -69,6 +72,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+          SNOWFLAKE_SEMANTIC_VIEW: ${{ secrets.SNOWFLAKE_SEMANTIC_VIEW }}
           BIGQUERY_PROJECT: ${{ secrets.BIGQUERY_PROJECT }}
           BIGQUERY_KEY_JSON: ${{ secrets.BIGQUERY_KEY_JSON }}
           BIGQUERY_DATASET: ${{ secrets.BIGQUERY_DATASET }}

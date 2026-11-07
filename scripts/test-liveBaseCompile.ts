@@ -9,7 +9,8 @@
 // 3. The inventory, by source scan (the test-liveUsage pattern): every file under src/ that makes a
 //    ParamSink builds statements, and every builder function in one ends its statement through
 //    `whereOf` (the compiler) or `sampledFrom` (the profile) — the two places the base is AND-ed in —
-//    or is on the exempt list (it reads no rows). A new builder fails here until it carries the base.
+//    or is on the exempt list (it reads no rows, or the base reached it another way). A new builder fails here until
+//    it carries the base.
 //    NEGATIVE CONTROL: a planted builder without either is found.
 //
 //   npm run build:ts && node scripts/test-liveBaseCompile.js
@@ -96,8 +97,12 @@ function srcFiles(): Map<string, string> {
   walk('src');
   return out;
 }
-/** Statements need no base: they read the catalog, not rows (plan's inventory #8). */
-const EXEMPT = new Set(['compileSamplingKeyProbe']);
+/**
+ * Statements that need no base of their own: they read the catalog, not rows (plan's inventory #8); or (by file) a
+ * semantic layer's statement, whose question already holds the base filters ahead of its own (semanticPlan's whereOf
+ * puts `env.base` first, part 7 c1), so the encoder binds them as it binds any filter.
+ */
+const EXEMPT = new Set(['compileSamplingKeyProbe', 'src/engine/live/semantic/snowflake.ts:encode']);
 /** Per builder file (one that makes a ParamSink): its `.finish(` count, and the builder functions that reach neither door. */
 function builders(files: Map<string, string>): { finishers: [string, number][]; unbased: string[] } {
   const finishers: [string, number][] = [];
@@ -107,16 +112,17 @@ function builders(files: Map<string, string>): { finishers: [string, number][]; 
     finishers.push([file, (text.match(/\.finish\(/g) ?? []).length]);
     for (const chunk of text.split(/\n(?=(?:export )?function )/)) {
       const name = /^(?:export )?function (\w+)/.exec(chunk)?.[1];
-      if (name && /\.finish\(/.test(chunk) && !/\b(whereOf|sampledFrom)\(/.test(chunk) && !EXEMPT.has(name)) unbased.push(`${file}:${name}`);
+      if (name && /\.finish\(/.test(chunk) && !/\b(whereOf|sampledFrom)\(/.test(chunk) && !EXEMPT.has(name) && !EXEMPT.has(`${file}:${name}`)) unbased.push(`${file}:${name}`);
     }
   }
   return { finishers, unbased };
 }
 const found = builders(srcFiles());
 // compile.ts ×7: PR 01's compileKeyCheck is the seventh. formulaSql.ts (release A, p8-03) makes a ParamSink to check a
-// formula at save and finishes no statement: counted, with 0, so a statement it starts to finish fails here.
-ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0 and profileSql.ts ×2',
-  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2]]), show(found.finishers));
+// formula at save and finishes no statement: counted, with 0, so a statement it starts to finish fails here. The
+// Snowflake semantic encoder (c1) finishes one SEMANTIC_VIEW statement.
+ok('inventory: the builders are exactly compile.ts ×7, formulaSql.ts ×0, profileSql.ts ×2 and semantic/snowflake.ts ×1',
+  show(found.finishers) === show([['src/engine/live/compile.ts', 7], ['src/engine/live/formulaSql.ts', 0], ['src/engine/live/profileSql.ts', 2], ['src/engine/live/semantic/snowflake.ts', 1]]), show(found.finishers));
 ok('inventory: every builder function ends its statement through whereOf or sampledFrom', found.unbased.length === 0, show(found.unbased));
 const planted = new Map([...srcFiles(), ['src/engine/live/keyCheckSql.ts', "const b = new ParamSink();\nexport function compileKeyCheck(): unknown {\n  return b.finish('SELECT 1', d, []);\n}\n"]]);
 const caught = builders(planted);
