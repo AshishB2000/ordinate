@@ -172,7 +172,7 @@ function Done({ plan, applied, asked }: { plan: ImportPlan; applied: Applied; as
         )}
         {applied.before && (
           <div className={s.before}>
-            <p className={s.note}>The model as it was before is a download: importing it puts back what this import changed. Anything new stays.</p>
+            <p className={s.note}>The model as it was before is a download: importing it puts back what this import changed, except a field whose sensitivity mark it raised: an import never lowers one, so that field stays as it is now. Anything new stays.</p>
             <Button size="sm" icon="download" onClick={() => startDownload((applied.before as { downloadToken: string }).downloadToken)}>
               Download the model as it was before
             </Button>

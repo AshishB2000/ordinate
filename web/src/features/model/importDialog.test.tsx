@@ -120,6 +120,7 @@ describe('The Data model: Import…', () => {
     expect(await d.findByText('Applied 6 of 7 changes.')).toBeTruthy();
     expect(d.getByText('Stock on hand')).toBeTruthy();
     expect(d.getByText(TAKEN)).toBeTruthy();
+    expect(d.getByText(/except a field whose sensitivity mark it raised: an import never lowers one/)).toBeTruthy();
     fireEvent.click(d.getByRole('button', { name: 'Download the model as it was before' }));
     expect(startDownload).toHaveBeenCalledWith('before-1');
   });
