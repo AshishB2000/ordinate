@@ -50,6 +50,10 @@ export function ossieWhy_metricSettings(): string {
   return (t('ossieMessages.ossie_has_no_number_format_direction'));
 }
 
+export function ossieWhy_calculated(): string {
+  return t('ossieMessages.ossie_fields_are_the_source_table');
+}
+
 export function ossieWhy_cardinality(): string {
   return (t('ossieMessages.ossie_has_no_one_to_one'));
 }
@@ -75,6 +79,7 @@ export const ossieWhy = {
   metricSnapshot: ossieWhy_metricSnapshot,
   metricDate: ossieWhy_metricDate,
   metricSettings: ossieWhy_metricSettings,
+  calculated: ossieWhy_calculated,
   cardinality: ossieWhy_cardinality,
   relationship: ossieWhy_relationship,
   calendar: ossieWhy_calendar,

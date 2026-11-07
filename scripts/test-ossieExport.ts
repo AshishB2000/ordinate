@@ -117,6 +117,9 @@ void (async () => {
   ids6.set('Live revenue', await metric(F.live, 'Live revenue', { column: 'amount', aggregation: 'sum' }));
   ids6.set('N total', await metric(B.id, 'N total', { column: 'n', aggregation: 'sum' }));
   for (const [name, column, aggregation] of [['Tags', 'tag', 'count'], ['Distinct tags', 'tag', 'countd'], ['Ns', 'n', 'count'], ['Distinct ns', 'n', 'countd']]) ids6.set(name, await metric(B.id, name, { column, aggregation }));
+  // A calculated field on Blanks: Ordinate computes it, the warehouse table has no such column.
+  if (!(await H.as(H.ORG_A, () => H.liveDataset.setLiveCalcs(F.P, B.id, [{ name: 'Double', expression: '[n] * 2', type: 'number' }])))) throw new Error('calc not saved');
+  ids6.set('Double total', await metric(B.id, 'Double total', { column: 'Double', aggregation: 'sum' }));
   // `amount` is already marked financial; `customer_id` is marked personal here.
   await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'amount', patch: { example: '1234.56 PAYROLL_CANARY' } });
   await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'customer_id', patch: { sensitivity: 'personal', example: 'c1', values: [{ value: 'c1', label: 'PERSONAL_CANARY' }] } });
@@ -124,6 +127,10 @@ void (async () => {
   const doc6 = JSON.parse(six.text);
   const metricsOf = (n: string) => (doc6.datasets.find((d: { name: string }) => d.name === n)?.metrics ?? []) as { name: string; expression: { sql: string } }[];
   const rep6 = (kind: string, name: string) => six.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
+  const fieldsOf = (n: string) => JSON.stringify(doc6.datasets.find((d: { name: string }) => d.name === n).fields.map((f: { name: string }) => f.name));
+  ok('a Live calculated field is not a warehouse field: it, and a metric over it, are reported', !fieldsOf('blanks').includes('Double') && rep6('calculated', 'Double')
+    && rep6('metric', 'Double total') && !metricsOf('blanks').some((m) => m.name === 'Double total'), fieldsOf('blanks'));
+  ok('NEGATIVE CONTROL: the declared columns are its fields', fieldsOf('blanks') === '["tag","n"]', fieldsOf('blanks'));
   ok('a metric on a Live dataset with base filters is reported, never exported as the whole table\'s total', rep6('metric', 'Live revenue') && !metricsOf('live').length, JSON.stringify(metricsOf('live')));
   const fieldOf = (d: string, f: string) => doc6.datasets.find((x: { name: string }) => x.name === d).fields.find((x: { name: string }) => x.name === f);
   ok('a field marked personal or financial exports no example and no value labels', !fieldOf('orders', 'amount').ai_context?.examples && !fieldOf('orders', 'customer_id').ai_context?.examples
@@ -135,13 +142,14 @@ void (async () => {
   const ordinate = async (name: string): Promise<unknown> => (await must('metric:values', { projectId: F.P, ids: [ids6.get(name)] }))[0]?.value;
   const blanks = doc6.datasets.find((d: { name: string }) => d.name === 'blanks');
   const overSource = async (sql: string): Promise<number> => Number((await H.as(H.ORG_A, () => duck.queryAsync(`SELECT ${sql} AS v FROM ${blanks.source}`)))[0].v);
+  const overSourceOrNaN = (sql: string): Promise<number> => overSource(sql).catch(() => NaN); // a column the table lacks disagrees, never throws
   ok('a count and a distinct count of a text column with blanks are reported, not exported', rep6('metric', 'Tags') && rep6('metric', 'Distinct tags')
     && !metricsOf('blanks').some((m) => m.name === 'Tags' || m.name === 'Distinct tags'), JSON.stringify(metricsOf('blanks')));
   const [tags, countTag] = [await ordinate('Tags'), await overSource('COUNT(tag)')];
   ok('…because COUNT(tag) counts the blanks Ordinate does not', tags === 3 && countTag === 5, `${String(tags)} vs ${countTag}`);
   const mapped = metricsOf('blanks');
   const agree: string[] = [];
-  for (const m of mapped) if (!Object.is(await ordinate(m.name), await overSource(m.expression.sql))) agree.push(m.name);
+  for (const m of mapped) if (!Object.is(await ordinate(m.name), await overSourceOrNaN(m.expression.sql))) agree.push(m.name);
   ok('NEGATIVE CONTROL: a count, a distinct count and a sum of a number column map, and their SQL gives Ordinate\'s figure (Object.is)',
     ['N total', 'Ns', 'Distinct ns'].every((n) => mapped.some((m) => m.name === n)) && agree.length === 0, `${JSON.stringify(mapped)} disagree: ${agree.join()}`);
 

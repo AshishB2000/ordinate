@@ -66,16 +66,19 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
         dimension: timeCols.has(c.name) ? { is_time: true } : undefined,
       };
     });
+    for (const n of inputs.calcs.get(d.id) ?? []) miss('calculated', n, ossieWhy.calculated());
     const taken = new Set(fields.map((f) => f.name));
     const dm: Json[] = [];
     for (const m of metrics.filter((x) => x.dataset === d.id).sort(byName)) {
       const def = isSimpleDefinition(m.definition) && AGG_SQL[m.definition.aggregation] ? m.definition : undefined;
+      const col = def && colsOf(d).find((c) => c.name === def.column);
       const why = !def ? ossieWhy.metricFormula()
         : def.snapshot ? ossieWhy.metricSnapshot()
         : m.filters?.length ? ossieWhy.metricFilters()
         : d.baseFilters?.length ? ossieWhy.metricBaseFilters() // `source` is the whole table: the figure would be another number
+        : !col ? ossieWhy.calculated() // a Live calculated field: the source table has no such column
         // COUNT(x) counts '' and '  '; NULLIF(TRIM(x), '') is no fix, as TRIM's whitespace set varies by dialect.
-        : (def.aggregation === 'count' || def.aggregation === 'countd') && colsOf(d).find((c) => c.name === def.column)?.type === 'text' ? ossieWhy.metricCountText()
+        : (def.aggregation === 'count' || def.aggregation === 'countd') && col.type === 'text' ? ossieWhy.metricCountText()
         : undefined;
       if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields

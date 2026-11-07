@@ -41,6 +41,7 @@ const OSSIE = {
       { kind: 'term', name: 'Big orders', reason: 'Ossie has no named filters; the term is kept in the ordinate extension.' },
       { kind: 'valueLabels', name: 'region', reason: 'Ossie has no value labels; they are kept in the ordinate extension.' },
       { kind: 'metric', name: 'Avg basket', reason: 'Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported.' },
+      { kind: 'calculated', name: 'Margin', reason: "Ossie fields are the source table's columns, so a calculated field, and a metric over one, is not exported." },
     ],
   },
 };
@@ -105,6 +106,7 @@ describe('The Data model: Export ▾', () => {
     expect(dialog.textContent).toContain('EMEA, Big orders');
     expect(dialog.textContent).toContain('Value labels on 1 field');
     expect(dialog.textContent).toContain('1 metric');
+    expect(dialog.textContent).toContain('1 calculated field');
     expect(dialog.textContent).toContain('Customers, Orders');
     expect(dialog.textContent).not.toContain('Everything mapped.');
   });

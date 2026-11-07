@@ -548,6 +548,7 @@
   "ossieMessages.a_metric_on_a_dataset_with": null,
   "ossieMessages.ordinate_counts_only_text_that_is": null,
   "ossieMessages.ossie_does_not_say_which_date": "Ossie no indica por qué fecha cuenta una métrica; el campo de fecha se marca como tiempo.",
+  "ossieMessages.ossie_fields_are_the_source_table": null,
   "ossieMessages.ossie_has_no_always_applied_filters": "Ossie no tiene filtros siempre aplicados; se conservan en la extensión ordinate.",
   "ossieMessages.ossie_has_no_calendar_settings": "Ossie no tiene ajustes de calendario.",
   "ossieMessages.ossie_has_no_fact_or_dimension": "Ossie no tiene rol de hechos o dimensión.",
