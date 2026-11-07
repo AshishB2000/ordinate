@@ -90,8 +90,8 @@ export interface CommentsReply {
 export interface PageDeps {
   visual(id: string): Promise<VisualRec | null>;
   /** `visual:data` ON THE SHARE PATH 'report' — the Share policy decides what may leave. */
-  vizData(v: VisualRec, filters: FilterStep[], params: Params): Promise<{ ok: boolean; data?: any; error?: string; hiddenByPolicy?: boolean }>; // any: a visual:data reply
-  metric(m: any, filters: FilterStep[], params: Params): Promise<{ value: number | null; display?: string; name?: string }>; // any: a card's metric
+  vizData(v: VisualRec, filters: FilterStep[], params: Params): Promise<{ ok: boolean; data?: any; error?: string; hiddenByPolicy?: boolean; notes?: string[] }>; // any: a visual:data reply
+  metric(m: any, filters: FilterStep[], params: Params): Promise<{ value: number | null; display?: string; name?: string; note?: string }>; // any: a card's metric; `note`: a dashboard term it leaves out
   metricValue(id: string, filters: FilterStep[]): Promise<{ name: string; display: string; value: number | null } | null>;
   caption(input: Record<string, unknown>): Promise<string>;
   sensitivity(analysisId: string): Promise<string[]>;
@@ -136,7 +136,8 @@ export function filterLine(a: PageAnalysis): string {
   return parts.length ? t('common.filtered', { p0: parts.join(' · ') }) : '';
 }
 
-interface Tile { title: string; chart: PageChart | null; caption: string; note?: string }
+/** `note`: why there is no chart. `said`: a dashboard term the drawn chart leaves out (its sentence, as the tile's in the app). */
+interface Tile { title: string; chart: PageChart | null; caption: string; note?: string; said?: string }
 
 /**
  * Resolve a report's pages under `filters` / `params`, in order, skipping the
@@ -168,26 +169,28 @@ export async function buildReportPages(
       projectId: report.projectId, datasetId: v.datasetId, overrides: v.overrides || null,
     });
     const grid = GRID_TYPES.has(type);
+    const said = termNotes(res);
     return {
       title,
       chart: grid ? null : { type, data, overrides: v.overrides || {}, datasetId: v.datasetId },
-      caption,
+      caption: joinSaid(caption, said),
       ...(grid ? { note: t('reportPages.this_table_prints_once_pivot_and') } : {}),
+      ...(said ? { said } : {}),
     };
   };
   const tileFor = (card: AnyCard): Promise<Tile | null> => {
     if (!cache.has(card.id)) cache.set(card.id, resolveTile(card).catch(() => null));
     return cache.get(card.id) as Promise<Tile | null>;
   };
-  const kpisOf = async (sheet: { cards: AnyCard[] }): Promise<Array<{ label: string; value: number | null; text: string }>> => {
-    const out: Array<{ label: string; value: number | null; text: string }> = [];
+  const kpisOf = async (sheet: { cards: AnyCard[] }): Promise<Array<{ label: string; value: number | null; text: string; note?: string }>> => {
+    const out: Array<{ label: string; value: number | null; text: string; note?: string }> = [];
     for (const card of sheet.cards || []) {
       if (!card || card.type !== 'metric' || !card.metric) continue;
       const m = card.metric;
-      const r = await deps.metric(m, markScopeTerms(scope.filters), scope.params).catch(() => ({ value: null }) as { value: number | null; display?: string; name?: string });
+      const r = await deps.metric(m, markScopeTerms(scope.filters), scope.params).catch(() => ({ value: null }) as { value: number | null; display?: string; name?: string; note?: string });
       const label = substituteText(m.label || r.name || `${AGG[m.aggregation] || m.aggregation} · ${m.column || ''}`, values);
       const value = typeof r.value === 'number' ? r.value : null;
-      out.push({ label, value, text: r.display ?? (value === null ? '—' : formatValue(value, m.format || 'auto')) });
+      out.push({ label, value, text: r.display ?? (value === null ? '—' : formatValue(value, m.format || 'auto')), ...(r.note ? { note: `${label}: ${r.note}` } : {}) });
     }
     return out;
   };
@@ -205,6 +208,7 @@ export async function buildReportPages(
       allKpis.push(...kpis);
       const kc = await kpiCaption(kpis);
       if (kc) allCaptions.push(kc);
+      for (const k of kpis) if (k.note) allCaptions.push(k.note);
       for (const card of sheet.cards || []) {
         if (!card || card.type !== 'visual') continue;
         const tv = await tileFor(card);
@@ -246,13 +250,15 @@ export async function buildReportPages(
         const sheet = sheets[Number(page.sheetIdx) || 0];
         if (!sheet) return null;
         const tiles: PageTile[] = [];
+        const said: string[] = [];
         for (const card of sheet.cards || []) {
           if (!card || card.type !== 'visual') continue;
           const tv = await tileFor(card);
           if (tv) tiles.push({ title: tv.title, chart: tv.chart, ...(tv.note ? { note: tv.note } : {}) });
+          if (tv && tv.said) said.push((tv.title ? tv.title + ': ' : '') + tv.said); // a sheet's tiles carry no caption of their own
         }
         const kpis = await kpisOf(sheet);
-        const caption = page.caption || (await kpiCaption(kpis));
+        const caption = joinSaid(page.caption || (await kpiCaption(kpis)), [...kpis.flatMap((k) => (k.note ? [k.note] : [])), ...said].join(' '));
         return { kind: 'sheet', layout: page.layout, title: sheet.name || t('common.sheet'), kpis: kpis.map((k) => ({ label: k.label, value: k.text })), tiles, caption };
       }
       case 'tile': {
@@ -260,7 +266,7 @@ export async function buildReportPages(
         if (!card) return { kind: 'tile', layout: page.layout, title: t('common.tile'), body: t('reportRender.this_tile_is_no_longer_on') };
         const tv = await tileFor(card);
         if (!tv) return { kind: 'tile', layout: page.layout, title: t('common.tile'), body: t('reportRender.this_tile_could_not_be_drawn') };
-        return { kind: 'tile', layout: page.layout, title: tv.title || t('common.tile'), chart: tv.chart, ...(tv.note ? { note: tv.note } : {}), caption: page.caption || tv.caption };
+        return { kind: 'tile', layout: page.layout, title: tv.title || t('common.tile'), chart: tv.chart, ...(tv.note ? { note: tv.note } : {}), caption: page.caption ? joinSaid(page.caption, tv.said) : tv.caption };
       }
       case 'notes':
         return { kind: 'notes', layout: page.layout, title: t('common.notes'), body: page.notes || '' };
@@ -363,7 +369,8 @@ export async function storyReportPages(name: string, blocks: StoryBlock[], deps:
         const fig = await storyVisual(b, deps, projectId);
         if (!fig) continue;
         const own = typeof b.caption === 'string' && b.caption.trim() ? b.caption : '';
-        pics.push({ title: fig.title, chart: fig.chart, png: null, caption: fig.note || own || fig.caption, ...(fig.note ? { note: fig.note } : {}) });
+        if (fig.chart) pics.push({ title: fig.title, chart: fig.chart, png: null, caption: joinSaid(own || fig.caption, fig.note) }); // its note: a term it leaves out
+        else pics.push({ title: fig.title, chart: fig.chart, png: null, caption: fig.note || own || fig.caption, ...(fig.note ? { note: fig.note } : {}) });
       } else if (b.kind === 'image' && b.src) {
         pics.push({ title: b.caption || b.alt || '', chart: null, png: b.src, caption: b.caption || '' });
       }
@@ -398,6 +405,13 @@ export async function storyVisual(
     title: v.name || '', visualId: v.id, datasetId: v.datasetId,
     chart: grid ? null : { type, data, overrides: v.overrides || {}, datasetId: v.datasetId },
     caption: typeof caption === 'string' ? caption : '',
-    ...(grid ? { note: t('reportPages.this_table_prints_once_pivot_and') } : {}),
+    ...(grid ? { note: t('reportPages.this_table_prints_once_pivot_and') } : termNotes(res) ? { note: termNotes(res) } : {}),
   };
 }
+
+/** The dashboard terms a chart left out, as one sentence ('' for none): the note its tile shows in the app. */
+function termNotes(res: { notes?: string[] } | null | undefined): string {
+  return res && Array.isArray(res.notes) ? res.notes.join(' ') : '';
+}
+
+const joinSaid = (caption: string, said: string | undefined): string => [caption, said].filter(Boolean).join(' ');

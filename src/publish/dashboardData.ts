@@ -359,7 +359,7 @@ async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: U
 }
 
 /** A tile's line for the dashboard's glossary terms its figure left out (analysis/termExpand), when there are any. */
-const noteOf = (notes: string[] | undefined): { note?: string } => (notes && notes.length ? { note: notes.join(' ') } : {});
+export const noteOf = (notes: string[] | undefined): { note?: string } => (notes && notes.length ? { note: notes.join(' ') } : {});
 
 /** The plan without computing a single tile — for the dialog's summary line. `outgoing`: the Share policy, for the option labels. */
 export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}, outgoing?: Outgoing) {
