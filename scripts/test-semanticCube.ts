@@ -280,7 +280,6 @@ async function matrixSection(): Promise<void> {
   const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
   const fake: typeof import('./semanticFake') = require('./semanticFake');
   const pm: typeof import('./semanticParityMatrix') = require('./semanticParityMatrix');
-  const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
   const TABLE = 'cube_fixture';
   const x = await mx.setupExtract(ok);
   if (!x) return;
@@ -324,13 +323,8 @@ async function matrixSection(): Promise<void> {
   // top-51 cut holds none of the 10; the extract ranks them first.
   const nullRows: import('./liveParityFixture').Cell[][] = [...Array.from({ length: 60 }, (_v, i) => [`n${String(i).padStart(2, '0')}`, null]), ...Array.from({ length: 10 }, (_v, i) => [`v${i}`, i + 1])]
     .map(([many, amt], i) => [many, 'Alpha', i % 2 ? 'North' : 'South', amt, 1, 1, '2024-01-01', fx.BIG[0]]);
-  const imported = fx.importTyped(fx.COLUMNS, nullRows);
-  const saved = await datasets.saveDataset(x.pid, { name: 'Nulls', sourceKind: 'csv', columns: imported.columns, rows: imported.rows });
-  const back = saved && await datasets.getDataset(x.pid, saved.id);
-  if (!saved || !back) { ok('saved the NULL-revenue extract', false); return; }
-  const nx = { pid: x.pid, did: saved.id, rows: nullRows, stored: { columns: back.columns, rows: back.rows } };
-  const nsource = await fx.duckEngine.load('cube_nulls', layout, fx.warehouseCells(fx.COLUMNS, nullRows));
-  const nb: import('./semanticParityMatrix').Bench = { x: nx, env, typed: fx.env(nsource, columns), kit: mx.parityKit(nx, fx.runDuck), ask: (log) => ask(log, 'cube_nulls') };
+  const nb = await pm.benchOver(b, 'cube_nulls', nullRows, (table) => (log) => ask(log, table));
+  if (!nb) { ok('saved the NULL-revenue extract', false); return; }
   for (const c of [{ name: '70 categories, 60 of them NULL revenue', metrics: ['revenue'], enc: { category: 'many' } }, { name: '…split by region', metrics: ['revenue'], enc: { category: 'many', series: 'region' } }]) {
     const r = await pm.chartCase(nb, c);
     ok(`Cube: ${c.name}: the 10 with a value ranked first, every cell as the extract (Object.is)`, r.problems.length === 0, r.problems.join(' | '));
