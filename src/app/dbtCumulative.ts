@@ -51,7 +51,7 @@ const COUNTS: ReadonlySet<string> = new Set(['count', 'countd']);
 const dbtCalendar = (grain: string, cal: CalendarPrefs): boolean => grain !== 'week' && (!cal.calendarType || cal.calendarType === 'gregorian') && (grain === 'month' || cal.fiscalYearStart === 1);
 
 /** The Ordinate window that sums the rows dbt's does each day, from `cumulative_type_params` (else an older manifest's top-level fields), or why there is none; `period_agg` other than `last` reads periods otherwise. */
-export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { window: MetricWindow } | { skip: 'cumulative' | 'all_time' | 'window_unit' | 'calendar_differs' | 'period_agg' } {
+export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { window: MetricWindow } | { skip: 'cumulative' | 'unreadable' | 'all_time' | 'window_unit' | 'calendar_differs' | 'period_agg' } {
   const ctp = own(typeParams, 'cumulative_type_params');
   const both = (k: string): { v: unknown; clash: boolean } => {
     const inner = own(ctp, k);
@@ -60,11 +60,12 @@ export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { win
   };
   const w = both('window');
   const g = both('grain_to_date');
-  if (w.clash || g.clash || (given(w.v) && given(g.v))) return { skip: 'cumulative' };
+  if (w.clash || g.clash) return { skip: 'unreadable' }; // two copies that disagree
+  if (given(w.v) && given(g.v)) return { skip: 'cumulative' };
   let window: MetricWindow;
   if (given(w.v)) {
     const count = own(w.v, 'count');
-    if (!Number.isInteger(count) || (count as number) < 1) return { skip: 'cumulative' };
+    if (!Number.isInteger(count) || (count as number) < 1) return { skip: 'unreadable' };
     const unit = own(UNIT_DAYS, String(own(w.v, 'granularity'))) as number | undefined;
     if (!unit || (count as number) * unit > MAX_DAYS) return { skip: 'window_unit' };
     window = { last: (count as number) * unit, unit: 'day' };

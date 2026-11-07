@@ -65,6 +65,15 @@ function DbtDatasets({ projectId, plan, onPick, busy }: { projectId: string; pla
       <h3 className={s.title}>Datasets</h3>
       <div className={s.body}>
         <p className={s.note}>A copy: dbt stays the source of truth only through a live dbt connection.</p>
+        {list.isError && (
+          <div className={s.stale} role="alert">
+            <Icon name="alert" size={16} />
+            <span className={s.staleText}>This project&apos;s datasets could not be loaded, so a semantic model can&apos;t be pointed at one.</span>
+            <Button size="sm" icon="refresh" onClick={() => void list.refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
         <ul className={s.lines}>
           {dbtModels(plan).map((m) => (
             <li key={m.key} className={s.line}>

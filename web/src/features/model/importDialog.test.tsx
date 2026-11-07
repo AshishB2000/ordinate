@@ -295,6 +295,20 @@ describe('The Data model: Import… a dbt semantic manifest', () => {
     expect(d.getByText('link to dbt, date · it divides with decimals here, where dbt on Postgres, Redshift or Trino divides whole numbers as whole numbers')).toBeTruthy();
   });
 
+  it('says when the project\'s datasets could not be loaded, and Try again asks again', async () => {
+    let down = true;
+    const calls = serve({ 'model:importPlan': { body: { ok: true, plan: DBT_PLAN } }, 'dataset:list': () => (down ? { status: 500, body: { error: 'down' } } : { body: [] }) });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    const datasets = d.getByRole('region', { name: 'Datasets' });
+    expect(await within(datasets).findByText("This project's datasets could not be loaded, so a semantic model can't be pointed at one.")).toBeTruthy();
+    const before = calls.filter((c) => c.channel === 'dataset:list').length;
+    down = false;
+    await act(async () => fireEvent.click(within(datasets).getByRole('button', { name: 'Try again' })));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'dataset:list').length).toBeGreaterThan(before));
+    await waitFor(() => expect(within(datasets).queryByRole('alert')).toBeNull());
+  });
+
   it('a model zip shows no Datasets section and no copy notice', async () => {
     serve();
     renderApp(`/model/${P}`);

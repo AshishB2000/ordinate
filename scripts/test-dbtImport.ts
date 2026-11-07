@@ -96,7 +96,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   for (let i = 0; i < 200_000; i++) deep = [deep];
   let nested: string;
   try { nested = JSON.stringify(cumulativeWindow({ window: deep, cumulative_type_params: { window: deep, period_agg: 'last' } }, DEFAULT_CALENDAR)); } catch (e) { nested = String(e); }
-  ok('a window nested 200,000 deep: a skip, never a crash', nested === '{"skip":"cumulative"}', nested);
+  ok('a window nested 200,000 deep: a skip, never a crash', nested === '{"skip":"unreadable"}', nested);
   ok('every metric in the manifest is either translated or named in skipped', allMetricNames(MANIFEST).every((n) => !!m(n) || skipped.some((s) => s.name === n && s.kind === 'metric')));
   ok('… and never both', allMetricNames(MANIFEST).every((n) => !(m(n) && skipped.some((s) => s.name === n))));
   ok('fifteen translated, ten skipped', model.metrics.length === 15 && skipped.filter((s) => s.kind === 'metric').length === 10, show([model.metrics.map((x) => x.name), skipped]));

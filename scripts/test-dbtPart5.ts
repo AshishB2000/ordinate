@@ -52,13 +52,14 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
     [ctp({ window: { count: 1, granularity: 'month' } }), 'window_unit'], // RF 2
     [ctp({ window: { count: 367, granularity: 'day' } }), 'window_unit'], [ctp({ window: { count: 53, granularity: 'week' } }), 'window_unit'],
     [ctp({ window: { count: 12, granularity: 'hour' } }), 'window_unit'], [ctp({ grain_to_date: 'day' }), 'window_unit'], [ctp({ grain_to_date: 'fiscal_quarter' }), 'window_unit'],
-    [ctp({ window: { count: 0, granularity: 'day' } }), 'cumulative'], [ctp({ window: { count: 1.5, granularity: 'day' } }), 'cumulative'], [ctp({ window: '7 days' }), 'cumulative'],
+    // A window Ordinate can't read, or two copies that disagree: unreadable ('cumulative' says a balance, or a window and a grain).
+    [ctp({ window: { count: 0, granularity: 'day' } }), 'unreadable'], [ctp({ window: { count: 1.5, granularity: 'day' } }), 'unreadable'], [ctp({ window: '7 days' }), 'unreadable'],
     [{ cumulative_type_params: { window: { count: 7, granularity: 'day' } } }, 'period_agg'], // RF 1: dbt's default is first
     [ctp({ window: { count: 7, granularity: 'day' }, period_agg: 'first' }), 'period_agg'], [ctp({ window: { count: 7, granularity: 'day' }, period_agg: 'average' }), 'period_agg'],
     [{ window: { count: 7, granularity: 'day' } }, 'period_agg'], // an older manifest: top-level window, no period_agg
     [ctp({}), 'all_time'], [ctp({ window: { count: 7, granularity: 'day' }, grain_to_date: 'month' }), 'cumulative'],
-    [{ window: { count: 7, granularity: 'day' }, cumulative_type_params: { window: { count: 8, granularity: 'day' }, period_agg: 'last' } }, 'cumulative'],
-    [{ grain_to_date: 'year', cumulative_type_params: { grain_to_date: 'month', period_agg: 'last' } }, 'cumulative'],
+    [{ window: { count: 7, granularity: 'day' }, cumulative_type_params: { window: { count: 8, granularity: 'day' }, period_agg: 'last' } }, 'unreadable'],
+    [{ grain_to_date: 'year', cumulative_type_params: { grain_to_date: 'month', period_agg: 'last' } }, 'unreadable'],
     [ctp({ grain_to_date: 'week' }), 'calendar_differs'], // MetricFlow's week is its warehouse's date_trunc: not in dbt's docs
     [null, 'all_time'], ['x', 'all_time'],
   ] as const) ok(`skip ${why}: ${JSON.stringify(tp)}`, skipOf(W(tp)) === why, show(W(tp)));
