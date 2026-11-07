@@ -193,6 +193,8 @@ export interface LiveSchemaView {
   missing: MissingColumn[];
   /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
   baseFilters: FilterStep[];
+  /** The stored list could not be read in full here (a newer pod's): `live:setBaseFilters` refuses until it can. */
+  baseFiltersUnreadable: boolean;
   /** The calculated fields (part 8 step 04, ./liveCalcs): names and types only to a caller row access restricts. */
   calculated: CalculatedView;
   /** A semantic dataset's grains per date dimension, as its layer lists them (part 7). */
@@ -237,6 +239,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     }),
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
     baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
+    baseFiltersUnreadable: meta.live.baseFiltersUnreadable === true,
     calculated: await liveCalculated(projectId, meta, closed),
     ...(meta.live.semantic ? { grains: meta.live.semantic.grains } : {}),
   };

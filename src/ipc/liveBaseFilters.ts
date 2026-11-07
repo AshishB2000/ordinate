@@ -20,6 +20,7 @@ import * as msg from '../data/liveMessages';
 import { liveBaseOf } from '../engine/live/liveBase';
 import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
+import { liveBaseFiltersUnreadable } from '../engine/liveRefusals';
 import * as queryCache from '../engine/queryCache';
 import { layerBaseFilter } from '../engine/semanticMessages';
 import { layerLabel } from '../engine/live/semantic/semanticRefusals';
@@ -58,6 +59,8 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
   if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
   // A semantic dataset's layer applies its own rules; one of ours would be skipped there (cross-part check 14: refused).
   if (meta.live?.semantic) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: layerBaseFilter(layerLabel(meta.live.semantic.backend)) };
+  // A list this pod cannot read in full is a newer pod's: saving over it would drop what it cannot see.
+  if (meta.live?.baseFiltersUnreadable) return { ok: false, code: 'live_refused', reason: 'baseFilterUnreadable', error: liveBaseFiltersUnreadable() };
   const checked = baseFiltersRefusal(meta, p.filters);
   if ('ok' in checked) return checked;
   const { steps } = checked;

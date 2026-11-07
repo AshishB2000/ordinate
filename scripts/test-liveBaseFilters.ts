@@ -7,7 +7,8 @@
 //    `setBaseFilters` writes it with an epoch bump and drops the figures sampled under the old ones;
 //    `liveBaseOf` adapts it, and a step that cannot be applied refuses, never skips.
 // 3. A stored list this pod cannot read in full refuses every door, the case-fix lookup and both
-//    copies, typed (`baseFilterUnreadable`), with no warehouse call. NEGATIVE CONTROL: 20 steps read.
+//    copies, typed (`baseFilterUnreadable`), with no warehouse call; the Schema reply flags it and a save
+//    refuses while it is set (an older pod never overwrites a newer list). NEGATIVE CONTROL: 20 steps read.
 // 4. The doors: every statement each Live entry point sends binds the base filter (the canary).
 //    NEGATIVE CONTROL: the same doors on a Live dataset without base filters bind none. A period base
 //    moves at midnight (the resolved range is in the key); a base change never serves the stale answer
@@ -197,6 +198,13 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ok(`${what}: Copy the data instead refuses typed; the record stays Live`,
       toExtract.ok === false && toExtract.code === 'live_refused' && toExtract.reason === 'baseFilterUnreadable' && (await meta()).mode === 'live', show(toExtract));
     ok(`${what}: none of it spent a warehouse call`, fake.calls.length === calls0, show(fake.calls.length - calls0));
+    // An older pod reading a newer pod's list: the Schema reply says so, and a save would overwrite what it cannot read.
+    const view = (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value;
+    ok(`${what}: the Schema reply flags the list unreadable`, view.ok === true && view.baseFiltersUnreadable === true, show(view.baseFiltersUnreadable));
+    const e = (await meta()).live.epoch;
+    const saved = (await post('live:setBaseFilters', { projectId: P, datasetId: L, filters: [F('region', '!=', 'y')] })).value;
+    ok(`${what}: live:setBaseFilters refuses typed while it is set, and writes nothing`,
+      saved.ok === false && saved.code === 'live_refused' && saved.reason === 'baseFilterUnreadable' && saved.error === unreadable && (await meta()).live.epoch === e && (await meta()).live.baseFiltersUnreadable === true, show(saved));
     return replies;
   }
 
@@ -222,7 +230,9 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   await plant(Array.from({ length: base.MAX_BASE_FILTERS }, (_, i) => F('region', '!=', `v${i}`)));
   ok('NEGATIVE CONTROL: exactly 20 valid steps are read in full, not marked unreadable', (await meta()).live.baseFilters.length === 20 && (await meta()).live.baseFiltersUnreadable === undefined);
   await plant(BASE);
-  ok('NEGATIVE CONTROL: a readable list is not marked unreadable', (await meta()).live.baseFiltersUnreadable === undefined);
+  // (A save over a readable list is test-liveBaseChannel's "saves"; one here would queue a sync into section 4's counts.)
+  ok('NEGATIVE CONTROL: a readable list is not marked unreadable, nor flagged in the Schema reply',
+    (await meta()).live.baseFiltersUnreadable === undefined && (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.baseFiltersUnreadable === false);
 
   // ── 4. The doors: every statement a Live question sends binds the base filter ──
   const M = (column: string, aggregation: string) => ({ column, aggregation });
