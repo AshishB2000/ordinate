@@ -228,8 +228,9 @@ export interface FakeModel {
 const AGG: Record<string, string> = { revenue: 'sum', orders: 'count', avg_amount: 'avg', max_amount: 'max' };
 
 export function metaOf(models: readonly FakeModel[]): unknown {
+  // A view's member names the cube it comes from (aliasMember); the fake's view is over one cube, its table.
   const member = (m: FakeModel, name: string, extra: Record<string, unknown>, hidden: string[] = []) =>
-    ({ name: `${m.name}.${name}`, title: name, shortTitle: name, ...extra, isVisible: !hidden.includes(name), public: !hidden.includes(name) });
+    ({ name: `${m.name}.${name}`, title: name, shortTitle: name, ...extra, ...(m.type === 'view' ? { aliasMember: `${m.table}.${name}` } : {}), isVisible: !hidden.includes(name), public: !hidden.includes(name) });
   return {
     cubes: models.map((m) => ({
       name: m.name, type: m.type ?? 'cube', title: m.title ?? m.name, ...(m.description ? { description: m.description } : {}),

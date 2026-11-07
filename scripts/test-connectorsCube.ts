@@ -81,6 +81,17 @@ async function main(): Promise<void> {
     odd.ok && show(odd.dimensions) === '[{"name":"ok","type":"text"}]' && show(odd.metrics.map((m) => [m.name, m.additive])) === '[["running",false],["users",false],["ratio",false],["n",true]]', show(odd));
   const oddList = await layer.listModels(ctx);
   ok('…and a model whose name could not be written into a query is not listed', oddList.ok && show(oddList.models.map((m) => m.name)) === '["m"]');
+  // A view joins cubes: a measure grouped by another cube's dimension can count a row in two groups (one-to-many).
+  const alias = (view: string, members: Array<[string, string, string?]>, aggType?: string) => members.map(([n, type, from]) => ({ name: `${view}.${n}`, type, ...(aggType ? { aggType } : {}), ...(from ? { aliasMember: from } : {}) }));
+  stub.hook = (p) => (p.endsWith('/meta') ? { status: 200, json: { cubes: [
+    { name: 'v', type: 'view', dimensions: alias('v', [['city', 'string', 'customers.city'], ['status', 'string', 'orders.status']]), measures: alias('v', [['n', 'number', 'orders.count']], 'count') },
+    { name: 'w', type: 'view', dimensions: alias('w', [['status', 'string', 'orders.status'], ['at', 'time', 'orders.created_at']]), measures: alias('w', [['n', 'number', 'orders.count']], 'count') },
+    { name: 'u', type: 'view', dimensions: alias('u', [['status', 'string']]), measures: alias('u', [['n', 'number']], 'count') },
+  ] } } : undefined);
+  const additiveIn = async (view: string) => { const r = await layer.describeModel(ctx, view); return r.ok ? r.metrics[0]?.additive : undefined; };
+  ok("a view's count is not additive when the view also holds another cube's dimension (aliasMember)", (await additiveIn('v')) === false);
+  ok('NEGATIVE CONTROL: …a view whose dimensions are all the measure\'s own cube\'s keeps it additive', (await additiveIn('w')) === true);
+  ok('…and a view member without aliasMember is not additive (failing safe)', (await additiveIn('u')) === false);
   stub.hook = null;
   const missing = await layer.describeModel(ctx, 'nope');
   ok('describe: a model Cube does not list is an error', !missing.ok);
