@@ -273,6 +273,7 @@
   "externalMetricMessages.it_is_defined_in_another_tool": "別のツールのセマンティックレイヤーで定義されているため、このサーバーではメンバーに分割できません。",
   "fanOutMessages.counted_on_their_own_table_s": "各自のテーブルの行で集計: {names}。",
   "fanOutMessages.is_not_on_the_path_shares": "「{field}」は {dataset} が {primary} と共有するパス上にないため、{dataset} のメジャーにはこのフィールドによる一意の答えがありません。{primary} のフィールド、またはそこからつながるテーブルのフィールドを選んでください。",
+  "fanOutMessages.is_on_and_on_chart_one": "「{column}」は {first} と {second} の両方にあります。代わりにどちらか一方でグラフを作成してください。",
   "fanOutMessages.measures_from_several_tables_can_only": "複数のテーブルのメジャーは、1つのカテゴリで集計したグラフとしてのみ描画できます。ピボット、コホート、ファネル、スモールマルチプル、マップ、主要因、集計なしの点としては描画できません。",
   "fanOutMessages.measures_from_several_tables_cannot_be": "複数のテーブルのメジャーは、ビンに分けたカテゴリや「Other」にまとめたカテゴリでは揃えられません。値が50個以下のカテゴリを選んでください。",
   "fanOutMessages.narrows_none_of_these_measures": "「{column}」はこれらのメジャーのどれも絞り込みません。",

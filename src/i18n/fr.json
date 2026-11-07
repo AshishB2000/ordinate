@@ -273,6 +273,7 @@
   "externalMetricMessages.it_is_defined_in_another_tool": "Elle est définie dans la couche sémantique d’un autre outil ; ce serveur ne peut donc pas la répartir en membres.",
   "fanOutMessages.counted_on_their_own_table_s": "Calculé sur les lignes de sa propre table : {names}.",
   "fanOutMessages.is_not_on_the_path_shares": "« {field} » n’est pas sur le chemin que {dataset} partage avec {primary}, donc les mesures de {dataset} n’ont pas de réponse unique selon ce champ. Choisissez un champ de {primary} ou d’une table vers laquelle il mène.",
+  "fanOutMessages.is_on_and_on_chart_one": "« {column} » se trouve dans {first} et dans {second}. Construisez plutôt le graphique sur l’une d’elles.",
   "fanOutMessages.measures_from_several_tables_can_only": "Les mesures de plusieurs tables ne peuvent être dessinées que comme un graphique agrégé par une catégorie : pas en tableau croisé, cohorte, entonnoir, petits multiples, carte, facteurs clés ni points bruts.",
   "fanOutMessages.measures_from_several_tables_cannot_be": "Les mesures de plusieurs tables ne peuvent pas être alignées sur une catégorie découpée en classes ou regroupée dans « Other ». Choisissez une catégorie d’au plus 50 valeurs.",
   "fanOutMessages.narrows_none_of_these_measures": "« {column} » ne filtre aucune de ces mesures.",

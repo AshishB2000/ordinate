@@ -317,6 +317,11 @@
 .asOf {
   margin-left: auto;
 }
+/* The server's notes about the figures, under the chart. */
+.chartNotes {
+  display: grid;
+  gap: var(--sp-4);
+}
 .area {
   flex: 1 1 auto;
   min-height: 300px;

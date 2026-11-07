@@ -273,6 +273,7 @@
   "externalMetricMessages.it_is_defined_in_another_tool": "Está definida en la capa semántica de otra herramienta, así que este servidor no puede dividirla en miembros.",
   "fanOutMessages.counted_on_their_own_table_s": "Calculado con las filas de su propia tabla: {names}.",
   "fanOutMessages.is_not_on_the_path_shares": "“{field}” no está en la ruta que {dataset} comparte con {primary}, así que las medidas de {dataset} no tienen una única respuesta por ese campo. Elija un campo de {primary} o de una tabla a la que lleve.",
+  "fanOutMessages.is_on_and_on_chart_one": "“{column}” está en {first} y en {second}. Cree el gráfico sobre una de ellas.",
   "fanOutMessages.measures_from_several_tables_can_only": "Las medidas de varias tablas solo se pueden dibujar como un gráfico agregado por una categoría: no como tabla dinámica, cohorte, embudo, múltiplos pequeños, mapa, factores clave ni puntos sin agregar.",
   "fanOutMessages.measures_from_several_tables_cannot_be": "Las medidas de varias tablas no se pueden alinear sobre una categoría agrupada en intervalos o reunida en “Other”. Elija una categoría con 50 valores como máximo.",
   "fanOutMessages.narrows_none_of_these_measures": "“{column}” no filtra ninguna de estas medidas.",

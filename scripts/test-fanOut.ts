@@ -6,6 +6,11 @@
 //   § answers  each case three ways — resident-forced, JS-forced and a brute-force loop over the fixture
 //              arrays (no engine code) — all Object.is; each series equals its own table's chart; orphans
 //              fall under the blank label; the door (`visual:data`) answers the same, with its notes
+//   § names    (step 07) the many sides' column lists and a bare name's one many-side owner
+//   § kpi      (step 07) a KPI on Customers over a many-side column is that table's KPI, filtered by D11,
+//              against a brute-force sum; a KPI over its own or a forward column is today's reply
+//   § formula  (step 07) a formula metric naming a many-side column, as a KPI and as a chart measure: each
+//              leaf on its own table, lined up by label, against a brute-force loop
 //
 //   npm run build:ts && node scripts/test-fanOut.js
 
@@ -27,9 +32,15 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const ipcRels: typeof import('../src/ipc/relationships') = require('../src/ipc/relationships');
+const dashboardsIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dashboards');
+const metricsIpc: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const metricCheckIpc: typeof import('../src/ipc/metricCheck') = require('../src/ipc/metricCheck');
+const { compileMetricFormula }: typeof import('../src/analysis/metricFormula') = require('../src/analysis/metricFormula');
 const fan: typeof import('../src/ipc/vizFanOut') = require('../src/ipc/vizFanOut');
 const terms: typeof import('../src/analysis/terms') = require('../src/analysis/terms');
 const termMsg: typeof import('../src/data/termMessages') = require('../src/data/termMessages');
+const analysesIpc: typeof import('../src/ipc/analysesServer') = require('../src/ipc/analysesServer');
 const jp: typeof import('../src/analysis/joinPlan') = require('../src/analysis/joinPlan');
 const js: typeof import('../src/analysis/joinJs') = require('../src/analysis/joinJs');
 const jr: typeof import('../src/engine/joinResident') = require('../src/engine/joinResident');
@@ -110,10 +121,161 @@ async function main(): Promise<void> {
   ok('the sentences differ, and none is findPath\'s', new Set(REFUSED.map((x) => x[2])).size === 3 && REFUSED.every((x) => !/inflated/.test(x[2])));
 
   await answers();
+  await names();
+  await kpis();
+  await formulas();
 
   fx.removeFixture();
   fs.rmSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true, force: true });
   finish();
+}
+
+/** One local project holding the fixture and its relationships, for the doors; ids swapped in by `swap`. */
+let door: Promise<{ P: string; saved: Map<string, string>; swap: <T>(v: T) => T }> | null = null;
+function doorProject(): Promise<{ P: string; saved: Map<string, string>; swap: <T>(v: T) => T }> {
+  door ??= (async () => {
+    await projects.init();
+    const P = (await projects.createProject('Fan-out')).id;
+    const saved = new Map<string, string>();
+    for (const f of fx.ALL) saved.set(f.id, (await datasets.saveDataset(P, { name: f.name, sourceKind: 'csv', columns: f.columns, rows: f.rows }))!.id);
+    const swap = <T>(v: T): T => JSON.parse([...saved].reduce((s, [a, b]) => s.split(a).join(b), JSON.stringify(v)));
+    for (const r of RELS) await rels.saveRelationship(P, swap(r));
+    return { P, saved, swap };
+  })();
+  return door;
+}
+
+// ── § names (step 07) ───────────────────────────────────────────────────────
+
+async function names(): Promise<void> {
+  ok('Customers: Orders and Returns are its many sides', show(fp.manySideColumnGroups(C, RELS, infos).map((g) => g.name)) === '["Orders","Returns"]', show(fp.manySideColumnGroups(C, RELS, infos)));
+  const amount = fp.manySideOwner(C, 'amount', RELS, infos);
+  const both = fp.manySideOwner(C, 'customer_id', RELS, infos);
+  ok('amount is owned by Orders; customer_id by both, so refused naming both',
+    !!amount && amount.ok && amount.datasetId === O && !!both && !both.ok && /Orders and on Returns/.test(both.error), show([amount, both]));
+  ok('an own column, a forward one and a column no table has have no many-side owner',
+    fp.manySideOwner(C, 'segment', RELS, infos) === null && fp.manySideOwner(C, 'zone', RELS, infos) === null && fp.manySideOwner(C, 'nope', RELS, infos) === null);
+  ok('NEGATIVE CONTROL: from Orders, Customers is forward, never a many side (Returns is one, through Customers)',
+    show(fp.manySideColumnGroups(O, RELS, infos).map((g) => g.name)) === '["Returns"]');
+  const { P, swap } = await doorProject();
+  ok('relatedColumnNames is unchanged: forward only', show(await ipcRels.relatedColumnNames(P, swap(C))) === '["region","zone"]');
+  ok('manySideColumnNames: Orders\' then Returns\' columns', show(await ipcRels.manySideColumnNames(P, swap(C))) === show([...ORDERS.columns, ...RETURNS.columns].map((c) => c.name)));
+  if (!handlers.has('relationship:related')) ipcRels.register();
+  const related = await handlers.get('relationship:related')!(null, { projectId: P, datasetId: swap(C) });
+  ok('relationship:related: the forward groups as before, and manyGroups beside them',
+    related.ok === true && show(related.groups.map((g: { name: string }) => g.name)) === '["Regions"]' && show(related.manyGroups.map((g: { datasetId: string }) => g.datasetId)) === show([swap(O), swap(R)]), show(related));
+  ok('Regions: every table that rolls up to it, nearest first (Customers and Orders by one hop, Returns by two)',
+    show(fp.manySideColumnGroups(G, RELS, infos).map((g) => g.name)) === '["Customers","Orders","Returns"]', show(fp.manySideColumnGroups(G, RELS, infos).map((g) => g.name)));
+  const lonely = (await datasets.saveDataset(P, { name: 'Lonely', sourceKind: 'csv', columns: [{ name: 'x', type: 'text' }], rows: [['a']] }))!.id;
+  const alone = await handlers.get('relationship:related')!(null, { projectId: P, datasetId: lonely });
+  ok('NEGATIVE CONTROL: a dataset with no many side gets today\'s reply, with no manyGroups key', show(alone) === show({ ok: true, groups: [] }), show(alone));
+}
+
+// ── § kpi (step 07) ─────────────────────────────────────────────────────────
+
+async function kpis(): Promise<void> {
+  const { P, swap } = await doorProject();
+  if (!handlers.has('dashboard:metric')) dashboardsIpc.register();
+  type Kpi = { ok: boolean; value?: number | null; notes?: string[]; error?: string };
+  const kpi = (d: string, spec: { column: string; aggregation: string }, filters: FilterStep[]): Promise<Kpi> =>
+    handlers.get('dashboard:metric')!(null, { projectId: P, datasetId: swap(d), ...spec, filters: swap(filters) });
+  const sum = { column: 'amount', aggregation: 'sum' };
+  const segmentOf = (o: Cell[]): Cell => custOf(o[1])?.[COL.segment] ?? null;
+  const bruteSum = (keepIt: (o: Cell[]) => boolean = () => true): number => ORDERS.rows.filter(keepIt).reduce((a, o) => a + (o[4] as number), 0);
+  const ownRows = msg.fanOutOwnRows('“sum of amount”');
+
+  const v = await kpi(C, sum, [F('segment', '=', 'SMB')]);
+  ok('a KPI on Customers over amount is Orders\' sum for SMB customers', v.ok && Object.is(v.value, bruteSum((o) => segmentOf(o) === 'SMB')), show(v));
+  const onOrders = await kpi(O, sum, [{ ...F('segment', '=', 'SMB'), via: R_OC }]);
+  ok('…and equals the same KPI asked on Orders with the pinned filter', Object.is(v.value, onOrders.value) && onOrders.notes === undefined, show(onOrders));
+  ok('…and says its measure counts Orders\' own rows', show(v.notes) === show([ownRows]), show(v.notes));
+  const all = await kpi(C, sum, []);
+  ok('unfiltered: every order, the orphans too', Object.is(all.value, bruteSum()), show(all));
+  const dated = await kpi(C, sum, [F('order_date', '>=', '2024-01-01')]);
+  ok('an order_date control narrows sum(amount), with no note about it', Object.is(dated.value, bruteSum((o) => String(o[5]) >= '2024-01-01')) && show(dated.notes) === show([ownRows]), show(dated));
+  const refund = await kpi(C, sum, [F('refund', '>', 1)]);
+  ok('a filter no table on Orders\' side has is skipped, as a dashboard filter is today', Object.is(refund.value, bruteSum()) && show(refund.notes) === show([ownRows]), show(refund));
+  // On Orders, Returns is the many side and meets Orders' tree at Customers: Orders' own columns are off its path.
+  const refunds = (keepIt: (r: Cell[]) => boolean = () => true): number => RETURNS.rows.filter(keepIt).reduce((a, r) => a + (r[1] as number), 0);
+  const offPath = await kpi(O, { column: 'refund', aggregation: 'sum' }, [F('order_date', '>=', '2024-01-01')]);
+  ok('a filter off the many side\'s path (Orders\' own order_date, for Returns) leaves the KPI unaffected, and the tile says so',
+    Object.is(offPath.value, refunds()) && show(offPath.notes) === show([msg.fanOutOwnRows('“sum of refund”'), msg.fanOutNarrowsNone('order_date')]), show(offPath));
+  const smbRefunds = await kpi(O, { column: 'refund', aggregation: 'sum' }, [F('segment', '=', 'SMB')]);
+  ok('…while Customers\' segment reaches Returns through Customers', Object.is(smbRefunds.value, refunds((r) => custOf(r[0])?.[COL.segment] === 'SMB')), show(smbRefunds));
+  const both = await kpi(C, { column: 'customer_id', aggregation: 'count' }, []);
+  ok('a column on two many sides: no figure, and the sentence names both', both.ok && both.value === null && /Orders and on Returns/.test(String(both.notes)), show(both));
+  // A dashboard term the KPI leaves out (an Orders term, part 1 05b): its note after the fan-out's, neither replacing the other.
+  const paid = (await terms.saveTerm(P, { name: 'Paid orders', datasetId: swap(O), filters: [F('amount', '>', 0)] }))!;
+  const scoped = await kpi(C, sum, [{ type: 'term', term: paid.id, fromControl: true } as unknown as FilterStep]);
+  ok('a dashboard term the KPI leaves out: its note after the fan-out\'s, the figure unfiltered', Object.is(scoped.value, all.value)
+    && show(scoped.notes) === show([ownRows, termMsg.termNotApplied('Paid orders', 'Customers')]), show(scoped));
+  // A dashboard's tiles (analysis:tiles, which 05b gave notes): the KPI and its chart each carry the fan-out's note.
+  if (!handlers.has('analysis:tiles')) analysesIpc.register();
+  if (!handlers.has('visual:data')) visualsIpc.register();
+  const tiles = await handlers.get('analysis:tiles')!(null, { projectId: P, items: swap([
+    { kind: 'metric', datasetId: C, ...sum, filters: [F('segment', '=', 'SMB')] },
+    { kind: 'visual', datasetId: C, encoding: { category: 'segment', values: [M('amount', 'sum', O)] }, filters: [] },
+  ]) }) as Kpi[];
+  ok('analysis:tiles: the KPI tile carries its figure and the fan-out\'s note, and so does its chart', Object.is(tiles[0]?.value, v.value)
+    && show(tiles[0]?.notes) === show([ownRows]) && tiles[1]?.ok === true && show(tiles[1]?.notes) === show([ownRows]), show(tiles));
+  const reads = await ipcRels.metricReads(P, swap(C), 'amount', swap([F('zone', '=', 'W')]));
+  ok('metricReads: Orders and the Regions its pinned filter joins (never Customers itself)', sorted(reads) === sorted([swap(O), swap(G)]), show(reads));
+
+  // Old content: a KPI over Customers' own or forward column is today's reply, byte for byte.
+  const own = await kpi(C, { column: 'id', aggregation: 'count' }, []);
+  ok('NEGATIVE CONTROL: count(id) under the order_date control is today\'s reply (the filter skipped, no notes)',
+    own.ok && own.value === CUSTOMERS.rows.length && show(await kpi(C, { column: 'id', aggregation: 'count' }, [F('order_date', '>=', '2024-01-01')])) === show(own), show(own));
+  const zone = await kpi(C, { column: 'zone', aggregation: 'count' }, []);
+  ok('NEGATIVE CONTROL: a forward column resolves as before (each Regions row reached, once), with no notes', zone.ok && zone.value === new Set(CUSTOMERS.rows.map((r) => r[COL.region]).filter((x) => regionOf(x))).size && zone.notes === undefined, show(zone));
+  ok('NEGATIVE CONTROL: Orders\' own amount on Orders is not fanned out', show(await ipcRels.metricReads(P, swap(O), 'amount', [])) === '[]');
+}
+
+const sorted = (xs: string[]): string => JSON.stringify([...xs].sort());
+
+// ── § formula (step 07) ─────────────────────────────────────────────────────
+
+async function formulas(): Promise<void> {
+  const { P, swap } = await doorProject();
+  if (!handlers.has('metric:save')) metricsIpc.register();
+  if (!handlers.has('metric:check')) metricCheckIpc.register();
+  const save = async (name: string, formula: string): Promise<string> => {
+    const r = await handlers.get('metric:save')!(null, { projectId: P, input: { name, datasetId: swap(C), definition: { formula } } });
+    if (!r.ok) throw new Error(`metric "${name}" not saved: ${show(r)}`);
+    return r.metric.id as string;
+  };
+  const chart = (encoding: VizEncoding): Promise<Reply> => handlers.get('visual:data')!(null, { projectId: P, datasetId: swap(C), encoding: swap(encoding) });
+  const perCustomer = await save('Revenue per customer', 'sum(amount) / count(id)');
+  const amountOf = (keepIt: (o: Cell[]) => boolean): number | null => ((rs) => (rs.length ? rs.reduce((a, o) => a + (o[4] as number), 0) : null))(ORDERS.rows.filter(keepIt));
+
+  const value = await handlers.get('metric:value')!(null, { projectId: P, id: perCustomer });
+  ok('KPI: the formula over two tables (every order over every customer row)', value.ok && Object.is(value.value, (amountOf(() => true) as number) / CUSTOMERS.rows.length), show(value));
+
+  const c = await chart({ category: 'segment', values: [{ column: 'Revenue per customer', aggregation: 'sum', metricId: perCustomer }] });
+  // Brute force: per segment label, the orders of customers with it (first row per id; orphans under ''), over its customer rows.
+  const segOf = (o: Cell[]): string => String(custOf(o[1])?.[COL.segment] ?? '');
+  const labels = [...new Set([...CUSTOMERS.rows.map((r) => String(r[COL.segment])), ...ORDERS.rows.map(segOf)])];
+  const brute = new Map(labels.map((l) => {
+    const n = CUSTOMERS.rows.filter((r) => String(r[COL.segment]) === l).length;
+    const a = amountOf((o) => segOf(o) === l);
+    return [l, a === null || n === 0 ? null : a / n] as const;
+  }));
+  const drawn = c.ok ? new Map(c.data.labels.map((l, k) => [String(l), c.data.series[0].values[k]] as const)) : new Map();
+  ok('chart: per segment, each leaf on its own table, lined up', c.ok && drawn.size === brute.size && [...brute].every(([l, v]) => drawn.has(l) && Object.is(drawn.get(l), v)), show([c, [...brute]]));
+  ok('the blank segment: no customer count, so the formula is null, never Infinity', c.ok && drawn.has('') && drawn.get('') === null && amountOf((o) => segOf(o) === '') !== null, show(c));
+  ok('Gov (the repeated c1 that no order reaches): a count and no amount, so null', c.ok && drawn.get('Gov') === null, show(c));
+
+  const zoneShare = await save('Zones counted', 'count(zone)');
+  const viaFormula = await chart({ category: 'segment', values: [{ column: 'Zones counted', aggregation: 'sum', metricId: zoneShare }] });
+  const plainZone = await chart({ category: 'segment', values: [M('zone', 'count', G)] });
+  ok('a forward column in a formula draws, and equals the same measure charted plainly', viaFormula.ok && plainZone.ok
+    && show(viaFormula.data.labels) === show(plainZone.data.labels) && viaFormula.data.series[0].values.every((v, k) => Object.is(v, plainZone.data.series[0].values[k])), show([viaFormula, plainZone]));
+  const twoOwners = await chart({ category: 'segment', values: [{ column: 'Ambiguous', aggregation: 'sum', metricId: await save('Ambiguous', 'count(customer_id)') }] });
+  ok('a formula naming a column two many sides have: refused, naming both', !twoOwners.ok && /Orders and on Returns/.test(twoOwners.error), show(twoOwners));
+
+  const check = await handlers.get('metric:check')!(null, { projectId: P, datasetId: swap(C), expression: 'sum(amount) / count(id)' });
+  ok('metric:check accepts sum(amount) on Customers, and previews the KPI', check.valid === true && check.preview?.value === value.value, show(check));
+  const own = compileMetricFormula('sum(amount) / count(id)', CUSTOMERS.columns.map((x) => x.name));
+  ok('NEGATIVE CONTROL: with own columns only (today), the formula does not compile', !own.ok && /Unknown function/.test(own.error), show(own));
 }
 
 // ── § answers ───────────────────────────────────────────────────────────────
@@ -292,12 +454,7 @@ async function answers(): Promise<void> {
   ok('a text axis folded into "Other" across questions is refused with its sentence', !folded.ok && folded.error === msg.fanOutOneAxis(), show(folded));
 
   // ── the door ──
-  await projects.init();
-  const P = (await projects.createProject('Fan-out')).id;
-  const saved = new Map<string, string>();
-  for (const f of fx.ALL) saved.set(f.id, (await datasets.saveDataset(P, { name: f.name, sourceKind: 'csv', columns: f.columns, rows: f.rows }))!.id);
-  const swap = <T>(v: T): T => JSON.parse([...saved].reduce((s, [a, b]) => s.split(a).join(b), JSON.stringify(v)));
-  for (const r of RELS) await rels.saveRelationship(P, swap(r));
+  const { P, saved, swap } = await doorProject();
   if (!handlers.has('visual:data')) visualsIpc.register();
   const post = (enc: VizEncoding, filters: FilterStep[]): Promise<Reply> => handlers.get('visual:data')!(null, { projectId: P, datasetId: saved.get(C), encoding: swap(enc), filters: swap(filters) });
   const door = await post(CASES[2].enc, CASES[2].filters);

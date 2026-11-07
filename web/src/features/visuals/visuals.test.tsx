@@ -194,6 +194,40 @@ describe('the builder', () => {
     expect([enc.category, enc.categoryDatasetId, enc.categoryVia]).toEqual(['month', REL, VIA]);
   });
 
+  it('offers a many side\'s measures as counting their own rows, and never as the category or the split (part 8)', async () => {
+    const ORD = '88888888-8888-4888-8888-888888888888';
+    const orders = { datasetId: ORD, name: 'Shipments', columns: [{ name: 'paid', type: 'number' }, { name: 'ship_region', type: 'text' }] };
+    const calls = serve(base({ 'relationship:related': { body: { ok: true, groups: [], manyGroups: [orders] } }, 'visual:list': { body: [] } }));
+    renderApp(`/visuals/${PID}/new?dataset=${DID}`);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:preview')).toBe(true));
+    const close = async () => {
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    };
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Category' }));
+    expect(await screen.findByRole('option', { name: 'region' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Shipments/ })).toBeNull();
+    await close();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Split by' }));
+    expect(await screen.findByRole('option', { name: 'None' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Shipments/ })).toBeNull();
+    await close();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Measure column' }));
+    expect(screen.queryByRole('option', { name: /ship_region/ })).toBeNull(); // a measure is a number, as a forward one is
+    fireEvent.click(await screen.findByRole('option', { name: 'paid · Shipments · counts its own rows' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:preview' && (c.payload as { encoding: { values: { datasetId?: string }[] } }).encoding.values[0]?.datasetId === ORD)).toBe(true));
+    const enc = calls.filter((c) => c.channel === 'visual:preview').map((c) => (c.payload as { encoding: { values: unknown[] } }).encoding).pop()!;
+    expect(enc.values[0]).toEqual({ column: 'paid', aggregation: 'sum', datasetId: ORD });
+  });
+
+  it('draws each sentence of the reply\'s notes under the chart', async () => {
+    const notes = ['Counted on their own table’s rows: “sum of paid”.', '“order_date” narrows only “sum of paid”.'];
+    serve(base({ 'visual:preview': { body: { ...TABLE_REPLY, notes } }, 'visual:list': { body: [] } }));
+    renderApp(`/visuals/${PID}/new?dataset=${DID}`);
+    expect(await screen.findByText(notes[0])).toBeTruthy();
+    expect(screen.getByText(notes[1])).toBeTruthy();
+  });
+
   it('previews the default encoding, recomputes on an edit, and saves with a name', async () => {
     const calls = serve(base({ 'visual:save': { body: { ...summary(), encoding: {}, overrides: {}, filters: [] } }, 'visual:list': { body: [] } }));
     renderApp(`/visuals/${PID}/new?dataset=${DID}`);

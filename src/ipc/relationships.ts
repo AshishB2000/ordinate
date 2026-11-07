@@ -31,6 +31,8 @@ import { isValidId } from '../app/ids';
 import { getTableDoc } from '../app/tableDocs';
 import { closedToCaller } from '../data/rowAccess';
 import { fanOutReads } from './vizFanOut';
+import { fanOutMetricReads } from './metricFanOut';
+import { manySideColumnGroups } from '../analysis/fanOutPlan';
 
 type Infos = Map<string, DsInfo>;
 
@@ -164,13 +166,10 @@ async function metricJoin(projectId: string, datasetId: string, column: string, 
   return planned ? { infos, planned } : null;
 }
 
-/** The dataset a metric's bare column is read from, as joinedMetricFor reads it (planMetricJoin's owner): its own, else the nearest related one that has it. */
-export async function metricColumnOwner(projectId: string, datasetId: string, column: string): Promise<string> {
-  return (await columnOwner(projectId, datasetId, column)) || datasetId;
-}
-
 /** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
 export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
+  const fanned = await fanOutMetricReads(projectId, datasetId, column, filters); // a many-side column: its table's KPI (./metricFanOut)
+  if (fanned) return fanned;
   const mj = await metricJoin(projectId, datasetId, column, filters);
   return mj && mj.planned.ok ? planReads(mj.planned.value.plan) : [];
 }
@@ -220,6 +219,12 @@ export async function relatedColumnNames(projectId: string, datasetId: string): 
   if (list.length === 0) return [];
   const infos = await modelInfos(projectId, datasetId, list);
   return relatedColumnGroups(datasetId, live(list, infos), infos).flatMap((g) => g.columns.map((c) => c.name));
+}
+
+/** Column names a metric on `datasetId` may name from its MANY sides (analysis/fanOutPlan): totalled on their own table, never joined in. */
+export async function manySideColumnNames(projectId: string, datasetId: string): Promise<string[]> {
+  const { rels: list, infos } = await projectModel(projectId, datasetId);
+  return list.length ? manySideColumnGroups(datasetId, list, infos).flatMap((g) => g.columns.map((c) => c.name)) : [];
 }
 
 interface SideRef { parquetPath: string; index: number; type: 'text' | 'number' | 'date' }
@@ -354,7 +359,8 @@ export function register(): void {
       const all = relatedColumnGroups(datasetId, live(list, infos), infos);
       // A labelled join's group goes apart, so `groups` stays as it was and an older tab never lists it without its via.
       const viaGroups = all.filter((g) => g.via);
-      return { ok: true, groups: all.filter((g) => !g.via), ...(viaGroups.length > 0 && { viaGroups }) };
+      const manyGroups = manySideColumnGroups(datasetId, live(list, infos), infos); // totalled on their own table (analysis/fanOutPlan)
+      return { ok: true, groups: all.filter((g) => !g.via), ...(viaGroups.length > 0 && { viaGroups }), ...(manyGroups.length > 0 && { manyGroups }) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read relationships' };
     }

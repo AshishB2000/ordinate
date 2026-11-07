@@ -6,12 +6,24 @@
 // public link, an HTML export and a signed embed reach readers no Share policy
 // shapes words for. So a formula metric says nothing here, and neither does a
 // measure column the Share policy marks (withheldColumns: masked or not) on the
-// table the KPI totals it from — a forward join's, not only the card's.
+// table the KPI totals it on — a forward join's or a many side's, not only the card's.
 
 import * as metrics from '../analysis/metrics';
+import * as datasets from '../data/datasets';
 import { withheldColumns } from '../app/sharePolicy';
-import { metricColumnOwner } from '../ipc/relationships';
+import { resolveColumnOwner } from '../analysis/joinPlan';
+import { manySideOwner } from '../analysis/fanOutPlan';
+import { projectModel } from '../ipc/relationships';
 import { kpiMeasure } from './publishMessages';
+
+/** The table a KPI's bare column is on, as its door reads it (ipc/metricFanOut): its own, a forward join's, its one many side's; null when two many sides have it. */
+export async function tableOf(projectId: string, datasetId: string, column: string): Promise<string | null> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta || meta.columns.some((c) => c.name === column)) return datasetId;
+  const { rels, infos } = await projectModel(projectId, datasetId);
+  const many = manySideOwner(datasetId, column, rels, infos);
+  return resolveColumnOwner(datasetId, column, rels, infos) ?? (!many ? datasetId : many.ok ? many.datasetId : null);
+}
 
 /**
  * "Sum of revenue", or '' — for the card's own column, or, when the figure came
@@ -31,7 +43,8 @@ export async function kpiSubtitle(
     datasetId = metric.datasetId;
     ({ column, aggregation } = metric.definition);
   }
-  if (!column || (await withheldColumns(projectId, await metricColumnOwner(projectId, datasetId, column))).has(column)) return '';
+  const table = column ? await tableOf(projectId, datasetId, column) : null;
+  if (!table || (await withheldColumns(projectId, table)).has(column)) return '';
   const sub = kpiMeasure(aggregation, column);
   return sub.toLowerCase() === title.trim().toLowerCase() ? '' : sub;
 }

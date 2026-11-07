@@ -36,7 +36,7 @@ import type { DriversEncoding } from '../analysis/driverScope';
 import { contentTag } from '../app/editConflict';
 import type { SaveKind } from '../analysis/recordDiff';
 import { isValidId } from '../app/ids';
-import { chartReads, metricReads, relatedColumnNames } from './relationships';
+import { chartReads, manySideColumnNames, metricReads, relatedColumnNames } from './relationships';
 import { expandTerms } from '../analysis/termExpand';
 import type { TermExpansion } from '../analysis/termExpand';
 import { isTermNotExpandedError, termRefusal } from '../data/termStep';
@@ -60,8 +60,12 @@ function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[
 /** Does anything in the question name a relationship (`via`)? Its step reads that relationship's table, whatever its column. */
 const viaIn = (v: unknown): boolean => (Array.isArray(v) ? v.some(viaIn) : !!v && typeof v === 'object' && typeof (v as { via?: unknown }).via === 'string');
 
-/** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
-async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
+/**
+ * Does the question reach another dataset? Conservative: any name a relationship would supply counts. A KPI's
+ * `measure` also counts when a many side has it (D14): that is the many side's KPI (./metricFanOut), which run
+ * inside this lock's scope would read this dataset as open.
+ */
+async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown, measure?: string): Promise<boolean> {
   if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length || viaIn(rest)) return true;
   // A glossary term's step on another table (semantic D11) reads that table: its column name alone would not say so.
   const otherTable = (v: unknown): boolean => (Array.isArray(v) ? v.some(otherTable) : typeof (v as FilterStep | null)?.datasetId === 'string' && (v as FilterStep).datasetId !== datasetId);
@@ -71,7 +75,8 @@ async function reachesOther(projectId: string, datasetId: string, encoding: VizE
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
   if (!foreign.length) return false;
   const related = new Set(await relatedColumnNames(projectId, datasetId));
-  return foreign.some((n) => related.has(n));
+  if (foreign.some((n) => related.has(n))) return true;
+  return manySideGate && measure !== undefined && foreign.includes(measure) && (await manySideColumnNames(projectId, datasetId)).includes(measure);
 }
 
 // Test seam: the related-dataset gate's negative control turns it off (scripts/test-rowPolicyLabels).
@@ -83,6 +88,11 @@ export function setRelatedGateForTest(on: boolean): void {
 let namedValues = true;
 export function setNamedDatasetsCheckForTest(on: boolean): void {
   namedValues = on;
+}
+// Test seam: D14's KPI negative control drops the many-side measure from the check (scripts/test-rowPolicyFanOutJoins).
+let manySideGate = true;
+export function setManySideGateForTest(on: boolean): void {
+  manySideGate = on;
 }
 
 /**
@@ -208,7 +218,7 @@ export async function lockedMetric<S extends { column: string }, P, R>(
       if (why) throw new RowPolicyError(why);
       return withNotes(await body(projectId, datasetId, spec, steps, params), expanded.notes);
     }
-    if (await reachesOther(projectId, datasetId, null, [spec.column, steps])) throw new RowPolicyError('related');
+    if (await reachesOther(projectId, datasetId, null, [spec.column, steps], spec.column)) throw new RowPolicyError('related');
     return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, steps), params)), expanded.notes);
   });
 }

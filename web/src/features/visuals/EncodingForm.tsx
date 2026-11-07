@@ -2,7 +2,8 @@
 // date columns, numbers under "Bin numeric…" — the server bins those into ten
 // ranges), the date grain and the period overlay for a date category, the
 // measures, Split by and Map regions. Columns of related datasets join each
-// picker as "From <dataset>" groups. Controlled: it reads an encoding and
+// picker as "From <dataset>" groups; a many side's join the measures only,
+// counted on its own rows. Controlled: it reads an encoding and
 // reports a new one; what an edit MEANS (recompute, save) is the builder's.
 //
 // A measure is a column with an aggregation, or a saved METRIC of this dataset —
@@ -44,12 +45,13 @@ function relatedOptions(related: readonly RelatedCol[], keep: (c: RelatedCol) =>
   for (const c of related) {
     if (!keep(c)) continue;
     const group = fieldKey('', c.datasetId, c.via);
+    const name = c.many ? `${c.group} · counts its own rows` : c.group;
     if (group !== at) {
       at = group;
-      out.push(heading(`From ${c.group}`, group));
+      out.push(heading(`From ${name}`, group));
     }
     // The dataset rides in the text too: the closed control shows the option, not its group.
-    out.push({ value: c.key, label: `${c.column} · ${c.group}` });
+    out.push({ value: c.key, label: `${c.column} · ${name}` });
   }
   return out;
 }
@@ -96,7 +98,7 @@ export function EncodingForm({
   const catOptions: SelectOption[] = [
     ...dims.map((c) => ({ value: c.name, label: c.name })),
     ...(nums.length ? [heading('Bin numeric…', 'bin'), ...nums.map((c) => ({ value: c.name, label: c.name }))] : []),
-    ...relatedOptions(related, () => true),
+    ...relatedOptions(related, (c) => !c.many), // a one-side row would sit in several groups (D13)
   ];
   const isDate = categoryType(encoding, cols, related) === 'date';
   const own = (metrics.data ?? []).filter((m) => m.datasetId === datasetId);
@@ -110,7 +112,7 @@ export function EncodingForm({
   const seriesOpts: SelectOption[] = [
     { value: '', label: 'None' },
     ...dims.map((c) => ({ value: c.name, label: c.name })),
-    ...relatedOptions(related, (c) => c.type !== 'number' && !c.via), // the series shelf has no via (plan 09)
+    ...relatedOptions(related, (c) => c.type !== 'number' && !c.via && !c.many), // the series shelf has no via (plan 09)
   ];
 
   // The dimension moved: the grain belonged to the old column and the overlay to a date.
