@@ -40,12 +40,19 @@ void (async () => {
   ok('a date column is a time dimension', ds('orders').fields.find((f: { name: string }) => f.name === 'day').dimension?.is_time === true);
   ok('aliases are synonyms', JSON.stringify(ds('orders').fields.find((f: { name: string }) => f.name === 'amount').ai_context.synonyms) === '["Amount","net"]');
   ok('the guide is the dataset ai_context instructions', ds('orders').ai_context.instructions.includes('One row per order line'));
-  const ms = ds('orders').metrics as { name: string; expression: { sql: string } }[];
-  ok('a distinct count maps', ms.some((m) => m.name === 'Orders' && m.expression.sql === 'COUNT(DISTINCT order_id)'));
+  const ms = (ds('orders').metrics ?? []) as { name: string; expression: { sql: string } }[];
   ok('a relationship maps from the many side', JSON.stringify(doc.relationships.map((r: { from: string; to: string; from_columns: string[]; to_columns: string[] }) => [r.from, r.to, r.from_columns, r.to_columns])) === '[["orders","customers",["customer_id"],["id"]]]');
   const rep = (kind: string, name: string) => out.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
   ok('a metric with a filter is reported, not exported without it', rep('metric', 'Revenue') && !ms.some((m) => m.name === 'Revenue'));
   ok('a snapshot, a period and a formula metric are reported', rep('metric', 'Stock on hand') && rep('metric', 'Revenue MTD') && rep('metric', 'Avg basket'));
+  ok('a distinct count of a text column is reported, not exported (section 6 has the figures)', rep('metric', 'Orders') && !ms.some((m) => m.name === 'Orders'));
+  type Kept = { dataset: string; name?: string; filters?: { term?: string }[]; definition?: { base?: string } };
+  const kept = JSON.parse(doc.custom_extensions[0].data) as Record<string, Kept[]>;
+  const keptOf = (n: string) => kept.metrics.find((m) => m.name === n);
+  ok('a kept record names what it refers to, never by an id the file does not hold', !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(doc.custom_extensions[0].data)
+    && keptOf('Revenue')?.filters?.[0]?.term === 'EMEA' && keptOf('Revenue MTD')?.definition?.base === 'Revenue', doc.custom_extensions[0].data.slice(0, 400));
+  const keptSets = ['metrics', 'terms', 'baseFilters', 'valueLabels'].flatMap((k) => kept[k].map((r) => r.dataset));
+  ok('…and the dataset by its name in the document', keptSets.length > 0 && keptSets.every((n) => !!ds(n)), keptSets.join());
   ok('terms and value labels are reported', rep('term', 'EMEA') && rep('valueLabels', 'region'));
   ok('role and sensitivity are reported; a default calendar is not', rep('role', 'Orders') && rep('sensitivity', 'amount') && !rep('calendar', 'Calendar'));
   ok('every unmapped definition is kept in the ordinate extension', doc.custom_extensions[0].vendor_name === 'ordinate' && /EMEA/.test(doc.custom_extensions[0].data));
@@ -97,6 +104,74 @@ void (async () => {
   const { ossieBytes }: typeof import('../src/ipc/modelFiles') = require('../src/ipc/modelFiles');
   const sent = await H.as(H.ORG_A, () => ossieBytes(F.P));
   ok('the file the route offers is the export, named for the project', sent.bytes.toString('utf8') === out.text && sent.name === 'Retail model-ossie.json', sent.name);
+
+  // ── 6. A metric is in the document only where its SQL over the source gives Ordinate's figure ──
+  // After every check above, which read the fixture as built. `Blanks`: a Live dataset over a warehouse table, no base filter.
+  const must = async (channel: string, payload: unknown) => {
+    const res = await post(channel, payload);
+    if (res.status !== 200 || res.value?.ok === false) throw new Error(`${channel}: ${res.body.slice(0, 300)}`);
+    return res.value;
+  };
+  const metric = async (datasetId: string, name: string, definition: unknown): Promise<string> => {
+    const v = await must('metric:save', { projectId: F.P, input: { datasetId, name, definition } });
+    return (v.metric?.id ?? v.id) as string;
+  };
+  // `ts` is a TIMESTAMP with times of day: Ordinate reads a date field by its day.
+  const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+  const BCOLS = [{ name: 'tag', type: 'text' as const }, { name: 'n', type: 'number' as const }, { name: 'ts', type: 'date' as const, sourceType: 'TIMESTAMP' }];
+  await H.as(H.ORG_A, async () => {
+    await duck.execAsync('CREATE OR REPLACE TABLE "blanks" ("tag" VARCHAR, "n" DOUBLE, "ts" TIMESTAMP)');
+    await duck.execAsync(`INSERT INTO "blanks" VALUES ('EU', 1, '2024-01-01 08:00:00'), ('', 2, '2024-01-01 17:30:00'), ('  ', 2, '2024-01-02 09:00:00'),
+      (NULL, NULL, NULL), ('ME', 3, '2024-01-02 09:00:00'), ('EU', 1, '2024-01-03 00:00:00')`);
+  });
+  const B = await H.as(H.ORG_A, () => liveRecord.saveLiveRecord(F.P, { name: 'Blanks', columns: BCOLS, origin: { kind: 'connection', connId: F.connId, table: 'blanks' } }));
+  if (!B) throw new Error('Blanks not saved');
+  const ids6 = new Map<string, string>();
+  ids6.set('Live revenue', await metric(F.live, 'Live revenue', { column: 'amount', aggregation: 'sum' }));
+  ids6.set('N total', await metric(B.id, 'N total', { column: 'n', aggregation: 'sum' }));
+  for (const [name, column, aggregation] of [['Tags', 'tag', 'count'], ['Distinct tags', 'tag', 'countd'], ['Ns', 'n', 'count'], ['Distinct ns', 'n', 'countd'],
+    ['Days', 'ts', 'countd'], ['Count ts', 'ts', 'count'], ['First ts', 'ts', 'min'], ['Last ts', 'ts', 'max'], ['First tag', 'tag', 'min']]) ids6.set(name, await metric(B.id, name, { column, aggregation }));
+  // A calculated field on Blanks: Ordinate computes it, the warehouse table has no such column.
+  if (!(await H.as(H.ORG_A, () => H.liveDataset.setLiveCalcs(F.P, B.id, [{ name: 'Double', expression: '[n] * 2', type: 'number' }])))) throw new Error('calc not saved');
+  ids6.set('Double total', await metric(B.id, 'Double total', { column: 'Double', aggregation: 'sum' }));
+  // `amount` is already marked financial; `customer_id` is marked personal here.
+  await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'amount', patch: { example: '1234.56 PAYROLL_CANARY' } });
+  await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'customer_id', patch: { sensitivity: 'personal', example: 'c1', values: [{ value: 'c1', label: 'PERSONAL_CANARY' }] } });
+  const six = await H.as(H.ORG_A, () => ossieExport(F.P));
+  const doc6 = JSON.parse(six.text);
+  const metricsOf = (n: string) => (doc6.datasets.find((d: { name: string }) => d.name === n)?.metrics ?? []) as { name: string; expression: { sql: string } }[];
+  const rep6 = (kind: string, name: string) => six.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
+  const fieldsOf = (n: string) => JSON.stringify(doc6.datasets.find((d: { name: string }) => d.name === n).fields.map((f: { name: string }) => f.name));
+  ok('a Live calculated field is not a warehouse field: it, and a metric over it, are reported', !fieldsOf('blanks').includes('Double') && rep6('calculated', 'Double')
+    && rep6('metric', 'Double total') && !metricsOf('blanks').some((m) => m.name === 'Double total'), fieldsOf('blanks'));
+  ok('NEGATIVE CONTROL: the declared columns are its fields', fieldsOf('blanks') === '["tag","n","ts"]', fieldsOf('blanks'));
+  ok('a metric on a Live dataset with base filters is reported, never exported as the whole table\'s total', rep6('metric', 'Live revenue') && !metricsOf('live').length, JSON.stringify(metricsOf('live')));
+  const fieldOf = (d: string, f: string) => doc6.datasets.find((x: { name: string }) => x.name === d).fields.find((x: { name: string }) => x.name === f);
+  ok('a field marked personal or financial exports no example and no value labels', !fieldOf('orders', 'amount').ai_context?.examples && !fieldOf('orders', 'customer_id').ai_context?.examples
+    && !/PAYROLL_CANARY|PERSONAL_CANARY/.test(six.text + JSON.stringify(six.report)) && rep6('sensitivity', 'customer_id') && !rep6('valueLabels', 'customer_id'), JSON.stringify([fieldOf('orders', 'amount'), fieldOf('orders', 'customer_id')]));
+  ok('NEGATIVE CONTROL: an unmarked field keeps its example and value labels', JSON.stringify(fieldOf('orders', 'region').ai_context?.examples) === '["EU"]' && /Middle East/.test(six.text) && rep6('valueLabels', 'region'));
+  ok('NEGATIVE CONTROL: a metric on a Live dataset without base filters maps', metricsOf('blanks').some((m) => m.name === 'N total' && m.expression.sql === 'SUM(n)'), JSON.stringify(metricsOf('blanks')));
+  // Ordinate's figure (metric:values) against the exported SQL run over the document's source, in the same warehouse.
+  const ordinate = async (name: string): Promise<unknown> => (await must('metric:values', { projectId: F.P, ids: [ids6.get(name)] }))[0]?.value;
+  const blanks = doc6.datasets.find((d: { name: string }) => d.name === 'blanks');
+  const overSource = async (sql: string): Promise<number> => Number((await H.as(H.ORG_A, () => duck.queryAsync(`SELECT ${sql} AS v FROM ${blanks.source}`)))[0].v);
+  const overSourceOrNaN = (sql: string): Promise<number> => overSource(sql).catch(() => NaN); // a column the table lacks disagrees, never throws
+  ok('a count and a distinct count of a text column with blanks are reported, not exported', rep6('metric', 'Tags') && rep6('metric', 'Distinct tags')
+    && !metricsOf('blanks').some((m) => m.name === 'Tags' || m.name === 'Distinct tags'), JSON.stringify(metricsOf('blanks')));
+  const [tags, countTag] = [await ordinate('Tags'), await overSource('COUNT(tag)')];
+  ok('…because COUNT(tag) counts the blanks Ordinate does not', tags === 3 && countTag === 5, `${String(tags)} vs ${countTag}`);
+  const [days, distinctTs] = [await ordinate('Days'), await overSource('COUNT(DISTINCT ts)')];
+  ok('a distinct count of a date field is reported: Ordinate counts its days, COUNT(DISTINCT ts) each timestamp', rep6('metric', 'Days')
+    && !metricsOf('blanks').some((m) => m.name === 'Days') && days === 3 && distinctTs === 4, `${String(days)} vs ${distinctTs}`);
+  const noFigure = ['First ts', 'Last ts', 'First tag'];
+  const figures = await Promise.all(noFigure.map(ordinate));
+  ok('a minimum or maximum of a date or text field is reported: Ordinate gives it no figure', noFigure.every((n) => rep6('metric', n) && !metricsOf('blanks').some((m) => m.name === n))
+    && figures.every((v) => v == null), JSON.stringify(figures));
+  const mapped = metricsOf('blanks');
+  const agree: string[] = [];
+  for (const m of mapped) if (!Object.is(await ordinate(m.name), await overSourceOrNaN(m.expression.sql))) agree.push(m.name);
+  ok('NEGATIVE CONTROL: a count, a distinct count and a sum of a number column, and a count of a date column, map, and their SQL gives Ordinate\'s figure (Object.is)',
+    ['N total', 'Ns', 'Distinct ns', 'Count ts'].every((n) => mapped.some((m) => m.name === n)) && agree.length === 0, `${JSON.stringify(mapped)} disagree: ${agree.join()}`);
 
   await close();
   finish();

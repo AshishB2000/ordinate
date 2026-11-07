@@ -32,7 +32,7 @@ function tokens(s: string): Tok[] {
       let v = '';
       let j = 1;
       for (; j < rest.length; j += 1) {
-        if (rest[j] === "'" && rest[j + 1] === "'") { v += "'"; j += 1; } else if (rest[j] === "'") break; else v += rest[j];
+        if (rest[j] === "'") break; else v += rest[j]; // '' is no escape: Databricks reads two literals, BigQuery an error
       }
       if (j >= rest.length) { out.push({ t: 'raw', v: rest }); break; } // an unterminated quote
       out.push({ t: 'str', v });
@@ -322,6 +322,8 @@ export interface FakeDbt {
   upper: boolean;
   /** false: the SDK's `measures` query is unknown (a newer API). */
   measures: boolean;
+  /** true: an API whose Measure has `nonAdditiveDimension` (null here); false, the default: today's, which refuses it. */
+  nonAdditive: boolean;
   /** A test's own answer to an operation (status + JSON), before the fake's. */
   hook: ((op: string, variables: Record<string, unknown>) => { status: number; json: unknown } | undefined) | null;
   ops(op: string): number;
@@ -332,7 +334,7 @@ export function startFakeDbt(opts: { models: FakeSavedQuery[]; token: string; en
   let next = 1;
   const reply = (json: unknown, status = 200): HttpResult => ({ status, body: JSON.stringify(json), truncated: false });
   const self: FakeDbt = {
-    requests: [], waits: 0, pageSize: 1024, upper: false, measures: true, hook: null,
+    requests: [], waits: 0, pageSize: 1024, upper: false, measures: true, nonAdditive: false, hook: null,
     ops: (op) => self.requests.filter((r) => r.op === op).length,
     transport: async (req) => {
       if (req.signal?.aborted) throw new Error('Cancelled');
@@ -369,8 +371,9 @@ export function startFakeDbt(opts: { models: FakeSavedQuery[]; token: string; en
           return reply({ data: { metricsPaginated: { items: Object.keys(semFake.FAKE_METRICS).map((name) => ({ name, description: `The ${name.replace('_', ' ')}`, type: 'SIMPLE' })), pageNum: v.pageNum, pageSize: 500, totalItems: 4, totalPages: 1 } } });
         case 'measures': {
           if (!self.measures) return reply({ errors: [{ message: "Cannot query field 'measures' on type 'Query'." }], data: null });
+          if (!self.nonAdditive) return reply({ errors: [{ message: "Cannot query field 'nonAdditiveDimension' on type 'Measure'." }], data: null }); // the SDK's Measure
           const name = String((v.metrics as Array<{ name: string }> | undefined)?.[0]?.name ?? '');
-          return reply({ data: { measures: AGG[name] ? [{ name, agg: AGG[name] }] : [] } });
+          return reply({ data: { measures: AGG[name] ? [{ name, agg: AGG[name], nonAdditiveDimension: null }] : [] } });
         }
         case 'createQuery': {
           const groupBy = (v.groupBy ?? []) as DbtBody['groupBy'];

@@ -68,6 +68,16 @@ export function modelExternalMetric(name: string): string {
   return t('modelFileMessages.is_defined_in_another_tool_s', { name });
 }
 
+/** Two (or more) objects in the files taking each other's names: no order of saves lands them. */
+export function modelNameSwap(name: string): string {
+  return t('modelFileMessages.takes_a_name_another_object_in', { name });
+}
+
+/** A metric whose definition, format or target the store would cut or drop on save (metric:save's contract refuses it). */
+export function modelMetricOutOfBounds(name: string): string {
+  return t('modelFileMessages.can_t_be_imported_as_the', { name });
+}
+
 // ── Applying an import (a3) ──────────────────────────────────────────────────
 
 /** The plan's hash moved since the dry run: nothing is written. */
@@ -78,6 +88,11 @@ export function modelPlanChanged(): string {
 /** One object was edited in this project after the dry run: it is not written, the rest are. */
 export function modelObjectMoved(): string {
   return t('modelFileMessages.this_was_changed_in_the_project');
+}
+
+/** A new object this one names failed in the same apply: written, it would name nothing. */
+export function modelDependencyNotWritten(): string {
+  return t('modelFileMessages.this_names_something_the_import_could');
 }
 
 /** One object's write failed for a reason that is not its own (the log has it): the rest are written. */

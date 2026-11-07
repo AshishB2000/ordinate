@@ -14,6 +14,7 @@ import { ipcMain } from './bus';
 import { aggWord } from '../data/aggregations';
 import * as stories from '../analysis/stories';
 import * as metrics from '../analysis/metrics';
+import { layerFieldMetric } from './metricSave';
 import { buildPlanRecords } from '../analysis/planBuild';
 import { draftAnalysisPlan } from './analyses';
 import type { StoryBlock } from '../analysis/storyModel';
@@ -31,6 +32,7 @@ async function metricFor(projectId: string, m: any): Promise<string | null> {
   const same = all.find((x) => x.datasetId === m.datasetId && metrics.isSimpleDefinition(x.definition)
     && x.definition.column === m.column && x.definition.aggregation === m.aggregation && !x.definition.snapshot);
   if (same) return same.id;
+  if (await layerFieldMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation })) return null; // a semantic dataset's KPIs are its mirrors
   const saved = await metrics.saveMetric(projectId, {
     name: typeof m.label === 'string' && m.label.trim() ? m.label.trim() : `${aggWord(m.aggregation)} of ${m.column}`,
     datasetId: m.datasetId,

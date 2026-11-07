@@ -47,6 +47,14 @@ function register(): void {
     },
   });
   registry.registerTestConnector({ ...base('facts-describe'), describeTable });
+  registry.registerTestConnector({
+    ...base('facts-clip'),
+    // The secret starts just before each cap (comment 2,000, name and type 256), so a clip before the redaction would keep a prefix.
+    async tableFacts(ctx) {
+      const pw = ctx.secrets.password;
+      return { ok: true, comment: 'x'.repeat(2000 - 6) + pw, columns: [{ name: 'n'.repeat(256 - 5) + pw, type: 't'.repeat(256 - 7) + pw, comment: 'c'.repeat(2000 - 4) + pw }] };
+    },
+  });
   registry.registerTestConnector(base('facts-none'));
   registry.registerTestConnector({
     ...base('facts-host', true),
@@ -58,12 +66,16 @@ async function door(): Promise<void> {
   const r = await readTableFacts('facts-both', {}, S, 't');
   ok('the reader wins: describeTable never runs', r!.ok && calls.tableFacts === 1 && calls.describe === 0);
   ok('a secret in any string is redacted', !JSON.stringify(r).includes(S.password) && JSON.stringify(r).includes('***'), JSON.stringify(r));
+  const clip = JSON.stringify(await readTableFacts('facts-clip', {}, S, 't'));
+  const prefix = [...Array(S.password.length - 2).keys()].map((i) => S.password.slice(0, i + 3)).find((p) => clip.includes(p));
+  ok('a secret across a cap leaves no prefix of 3+ characters (redacted before clipped)', prefix === undefined && clip.includes('x'.repeat(1994) + '***'), prefix);
+  ok('NEGATIVE CONTROL: the strings around it still reach the facts', clip.includes('"type":"' + 't'.repeat(249)) && clip.includes('"name":"' + 'n'.repeat(251)), clip.slice(0, 80));
   const boom = await readTableFacts('facts-both', {}, S, 'boom');
   ok('…and in an error', boom!.ok === false && !boom!.error.includes(S.password) && boom!.error.includes('***'), JSON.stringify(boom));
   const thrown = await readTableFacts('facts-both', {}, S, 'throws');
   ok('…and in a thrown one, with the credentials of a URL', thrown!.ok === false && !thrown!.error.includes(S.password), JSON.stringify(thrown));
   const none = await readTableFacts('facts-both', {}, S, 'nocolumns');
-  ok('a reply with no columns list is an error, not facts', none!.ok === false);
+  ok('a reply with no columns list is an error, not facts, in the catalog\'s sentence', none!.ok === false && none!.error === 'The source returned no columns for this table.', JSON.stringify(none));
   ok('no reader: describeTable\'s columns and estimate', JSON.stringify(await readTableFacts('facts-describe', {}, {}, 't')) === '{"ok":true,"facts":{"columns":[{"name":"a","type":"int"}],"rowEstimate":5}}');
   ok('neither: null, not an error', (await readTableFacts('facts-none', {}, {}, 't')) === null);
   ok('an unknown connector is an error', ((x) => x!.ok === false && /Unknown connector/.test(x!.error))(await readTableFacts('nope', {}, {}, 't')));

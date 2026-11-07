@@ -244,7 +244,9 @@ export function paramsOf(bindings: unknown): LiveParam[] {
   });
 }
 
-const CAPPED = /^select \* from \(\n([\s\S]*)\n\) limit (\d+)$/;
+/** A semantic statement is capped by its own last line (the connector's wrapper would drop its ORDER BY): LIMIT 100001 is the cap's. */
+const CAPPED = /\nLIMIT (\d+)$/;
+const CAP_LINE = 100_001;
 const epochDay = (iso: string): string => String(Math.round(Date.parse(`${iso}T00:00:00Z`) / 86_400_000));
 
 /** Every statement `FakeSnowflake` saw that asked a view a question, decoded: the view and the question. */
@@ -274,11 +276,13 @@ export function semanticAnswer(views: FakeView[], hook?: (statement: string) => 
       if (!v) return sqlApiFailure(`Semantic view '${d[3]}' does not exist or not authorized.`);
       return sqlApiResult([['object_kind', 'text'], ['object_name', 'text'], ['parent_entity', 'text'], ['property', 'text'], ['property_value', 'text']], describeRows(v));
     }
-    const capped = CAPPED.exec(statement) ?? bad('a statement that is not capped');
+    const capped = CAPPED.exec(statement) ?? bad('a statement that is not capped by its own last line');
+    if (/^select \* from \(/.test(statement)) bad('a statement wrapped, its ORDER BY lost');
+    const sql = Number(capped[1]) === CAP_LINE ? statement.slice(0, capped.index) : statement;
     const { model, query } = (() => {
-      const v0 = views.find((x) => capped[1].includes(`"${x.name.split('.').join('"."')}"`));
+      const v0 = views.find((x) => sql.includes(`"${x.name.split('.').join('"."')}"`));
       if (!v0) return bad('a view the fake does not hold');
-      return decodeSnowflake(capped[1], paramsOf(json.bindings), v0.columns);
+      return decodeSnowflake(sql, paramsOf(json.bindings), v0.columns);
     })();
     const view = views.find((x) => x.name === model)!;
     asked.push({ model, query });
@@ -286,7 +290,7 @@ export function semanticAnswer(views: FakeView[], hook?: (statement: string) => 
     const a = await fake.runFake(view.table, view.columns, query);
     const kinds = [...query.dimensions.map((x) => view.columns.find((c) => c.name === x.name)!.type), ...query.metrics.map(() => 'number' as const)];
     const cols = a.columns.map((name, i): [string, string] => [name, kinds[i] === 'text' ? 'text' : kinds[i] === 'date' ? 'date' : 'real']);
-    const data = a.rows.slice(0, Number(capped[2])).map((r) => r.map((v, i) => {
+    const data = a.rows.slice(0, Number(capped[1])).map((r) => r.map((v, i) => {
       if (v === null || v === undefined) return null;
       if (kinds[i] === 'date') return epochDay(String(v));
       return Object.is(v, -0) ? '-0' : String(v);

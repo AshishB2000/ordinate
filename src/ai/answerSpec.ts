@@ -90,6 +90,8 @@ export interface SpecMetric {
   timeColumn?: string;
   /** Governance (part 4): only orders the vocabulary; a retired metric still computes. */
   status?: { state: 'certified' | 'needs_review' | 'retired' };
+  /** A layer's metric (part 7 mirror): no column; a measure of it on its own semantic dataset names it by id. */
+  external?: true;
 }
 
 /**
@@ -213,6 +215,7 @@ function resolveMeasure(
     // column metric on THIS dataset can become a chart measure.
     const name = typeof colName === 'string' ? colName.trim().toLowerCase() : '';
     const m = metrics.find((x) => x.datasetId === datasetId && x.name.trim().toLowerCase() === name);
+    if (m?.external) return { column: '', aggregation: 'sum', metricId: m.id }; // a layer's metric: the layer computes it
     if (m && m.column && !m.hasFilters && resolveColumn(m.column, columns)) {
       const agg = parseAgg(m.aggregation) || 'sum';
       return { column: resolveColumn(m.column, columns)!.name, aggregation: agg, metricId: m.id };

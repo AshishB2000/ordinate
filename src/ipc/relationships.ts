@@ -16,7 +16,7 @@ import type { Relationship } from '../analysis/relationships';
 import { findPath, planMetricJoin, planReads, relatedColumnGroups, resolveColumnOwner, resolveVizJoin } from '../analysis/joinPlan';
 import { TermNotExpandedError, termRefusal } from '../data/termStep';
 import { termNoJoinHere } from '../data/termMessages';
-import { labelTaken } from '../analysis/joinMessages';
+import { labelTaken, relationshipColumnGone, relationshipDatasetGone, relationshipEndsRefused, relationshipNotSaved } from '../analysis/joinMessages';
 import type { DsInfo, JoinPlan } from '../analysis/joinPlan';
 import { joinRateJs, joinedMetricJs, joinedVizDataJs, keyStatsJs } from '../analysis/joinJs';
 import type { KeyStats } from '../analysis/joinJs';
@@ -262,7 +262,7 @@ export async function keyStats(projectId: string, from: DsInfo, fromCol: string,
 async function suggest(projectId: string, fromId: string, toId: string): Promise<any> {
   const from = await infoFor(projectId, fromId);
   const to = await infoFor(projectId, toId);
-  if (!from || !to) return { ok: false, error: 'Dataset not found' };
+  if (!from || !to) return { ok: false, error: relationshipDatasetGone() };
   const fromSrc = isResident() ? await datasets.residentSource(projectId, fromId) : null;
   const toSrc = isResident() ? await datasets.residentSource(projectId, toId) : null;
   let fromRows: any[][] | null = null;
@@ -293,22 +293,22 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
 /** `relationship:save`'s body, the reply: `verified` and `warning` counted from the tables, never the caller's (a model import saves through it too). */
 export async function saveRelationshipChecked(projectId: string, raw: any): Promise<any> {
   const rel = rels.sanitizeRelationship(raw);
-  if (!rel) return { ok: false, error: 'Pick two different datasets and a column on each.' };
+  if (!rel) return { ok: false, error: relationshipEndsRefused() };
   const clash = rels.labelClash(await rels.listRelationships(projectId), rel);
   if (clash) return { ok: false, error: labelTaken(clash) };
   const from = await infoFor(projectId, rel.from.datasetId);
   const to = await infoFor(projectId, rel.to.datasetId);
-  if (!from || !to) return { ok: false, error: 'Dataset not found' };
+  if (!from || !to) return { ok: false, error: relationshipDatasetGone() };
   if (!from.columns.some((c) => c.name === rel.from.column) || !to.columns.some((c) => c.name === rel.to.column)) {
-    return { ok: false, error: 'That column no longer exists.' };
+    return { ok: false, error: relationshipColumnGone() };
   }
   const stats = await keyStats(projectId, from, rel.from.column, to, rel.to.column);
-  if (!stats) return { ok: false, error: 'That column no longer exists.' };
+  if (!stats) return { ok: false, error: relationshipColumnGone() };
   rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
   rel.warning = rels.relWarning(stats, (await getTableDoc(projectId, rel.to.datasetId)).key, rel.to.column); // always fresh: never the caller's
   // A label that IS sent, even empty, is the user's (an empty one clears it); only an absent one keeps the edge's own.
   const saved = await rels.saveRelationship(projectId, raw && typeof raw === 'object' && 'label' in raw ? { ...rel, label: rel.label ?? '' } : rel);
-  if (!saved) return { ok: false, error: 'Could not save the relationship.' };
+  if (!saved) return { ok: false, error: relationshipNotSaved() };
   return { ok: true, relationship: withMatchPct(saved), stats };
 }
 

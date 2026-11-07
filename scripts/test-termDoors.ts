@@ -324,6 +324,9 @@ const ANSWER_F0 = { column: 'qty', op: '>', value: 0 };
   const mv = (id: string) => post('analysis:tiles', tile({ kind: 'metric', datasetId: EXTRACT.id, column: '', aggregation: 'sum', metricId: id, filters: [F0] }));
   const [a, b] = [await mv(mT), await mv(mInline)];
   ok('metric:value of a metric whose filters hold a term equals the inline metric', a.value?.[0]?.ok === true && Object.is(a.value[0].value, b.value?.[0]?.value), `${a.text.slice(0, 200)} | ${b.text.slice(0, 200)}`);
+  const said = async (id: string) => String((await post('metric:get', { projectId: P, id })).value?.definitionText);
+  ok('a metric filtered by a term names the term in its definition', (await said(mT)) === 'sum of sales, where Metric pair', await said(mT));
+  ok('NEGATIVE CONTROL: the inline metric words its own filters', !(await said(mInline)).includes('Metric pair') && (await said(mInline)).startsWith('sum of sales, where '), await said(mInline));
 
   // ── § lock: the refusal is before the lock, so a kept step never reaches withLockSteps ──
   const rowDoors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');

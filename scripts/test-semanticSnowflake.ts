@@ -132,6 +132,7 @@ async function listingSection(): Promise<void> {
       ['DIMENSION', 'AMOUNT', 'ORDERS', 'DATA_TYPE', 'NUMBER(12,2)'],
       ['DIMENSION', 'ORDER_DATE', 'ORDERS', 'DATA_TYPE', 'DATE'],
       ['DIMENSION', 'SHIPPED_AT', 'ORDERS', 'DATA_TYPE', 'TIMESTAMP_NTZ(9)'],
+      ['DIMENSION', 'PAID_AT', 'ORDERS', 'DATA_TYPE', 'TIMESTAMP_TZ(9)'],
       ['DIMENSION', 'NAME', 'ORDERS', 'DATA_TYPE', 'VARCHAR'],
       ['DIMENSION', 'NAME', 'CUSTOMERS', 'DATA_TYPE', 'VARCHAR'],
       ['DIMENSION', 'secret note', 'ORDERS', 'DATA_TYPE', 'VARCHAR'],
@@ -140,6 +141,9 @@ async function listingSection(): Promise<void> {
       ['METRIC', 'REVENUE', 'ORDERS', 'COMMENT', 'Gross sales'],
       ['METRIC', 'ORDER_COUNT', 'ORDERS', 'EXPRESSION', 'count(orders.order_id)'],
       ['METRIC', 'AVG_ORDER', 'ORDERS', 'EXPRESSION', 'AVG(orders.amount)'],
+      // NON ADDITIVE BY (a balance): DESCRIBE's property for it is undocumented; the organization usage view names it so.
+      ['METRIC', 'BALANCE', 'ORDERS', 'EXPRESSION', 'SUM(orders.balance)'],
+      ['METRIC', 'BALANCE', 'ORDERS', 'NON_ADDITIVE_DIMENSIONS', '["ORDER_DATE"]'],
       ['METRIC', 'MARGIN', 'ORDERS', 'EXPRESSION', 'SUM(orders.profit) / SUM(orders.amount)'],
       ['METRIC', 'HIDDEN', 'ORDERS', 'EXPRESSION', 'SUM(orders.cost)'],
       ['METRIC', 'HIDDEN', 'ORDERS', 'ACCESS_MODIFIER', 'PRIVATE'],
@@ -165,12 +169,17 @@ async function listingSection(): Promise<void> {
   ok('…dimensions typed through the Live mapping, a date or timestamp at every grain, a shared name qualified by its table, a name that is no identifier left out',
     d.ok && show(d.dimensions) === show([
       { name: 'REGION', type: 'text' }, { name: 'AMOUNT', type: 'number' }, { name: 'ORDER_DATE', type: 'date', grains: all },
-      { name: 'SHIPPED_AT', type: 'date', grains: all }, { name: 'ORDERS.NAME', type: 'text' }, { name: 'CUSTOMERS.NAME', type: 'text' },
+      { name: 'SHIPPED_AT', type: 'date', grains: all }, { name: 'PAID_AT', type: null }, { name: 'ORDERS.NAME', type: 'text' }, { name: 'CUSTOMERS.NAME', type: 'text' },
     ]), show(d));
-  ok('…metrics say whether they add up (SUM, COUNT yes; AVG, a ratio, a derived metric no), a private one is left out, a comment is the description',
+  // A TIMESTAMP_TZ's day is the UTC day only through CONVERT_TIMEZONE, which needs the type the record keeps for no
+  // semantic dataset: CAST(x AS DATE) would bucket by each value's own offset, so it is left out, named unmapped.
+  const read = d.ok ? (require('../src/engine/live/semantic/semanticSync') as typeof import('../src/engine/live/semantic/semanticSync')).readModel(d, 'snowflake', 'SALES.PUBLIC.ORDERS_SV', '2026-11-06T00:00:00.000Z') : null;
+  ok('…a TIMESTAMP_TZ dimension is no column of the dataset, named unmapped by the sync; a TIMESTAMP_NTZ one is a date',
+    !!read && show(read.unmapped) === '["PAID_AT"]' && !read.columns.some((c) => c.name === 'PAID_AT') && read.columns.some((c) => c.name === 'SHIPPED_AT' && c.type === 'date'), show(read));
+  ok('…metrics say whether they add up (SUM, COUNT yes; AVG, a ratio, a derived metric, a SUM NON ADDITIVE BY a dimension no), a private one is left out, a comment is the description',
     d.ok && show(d.metrics) === show([
       { name: 'REVENUE', additive: true, description: 'Gross sales' }, { name: 'ORDER_COUNT', additive: true }, { name: 'AVG_ORDER', additive: false },
-      { name: 'MARGIN', additive: false }, { name: 'REVENUE_PER_ORDER', additive: false },
+      { name: 'BALANCE', additive: false }, { name: 'MARGIN', additive: false }, { name: 'REVENUE_PER_ORDER', additive: false },
     ]), show(d));
   const n = fake.statements().length;
   const badName = await layer.describeModel(CTX(), 'SALES.PUBLIC."x"');
@@ -180,7 +189,7 @@ async function listingSection(): Promise<void> {
   const ADDS: Array<[string, boolean]> = [
     ['SUM(amount)', true], ['count(order_id)', true], ['COUNT(*)', true], ['sum( orders.amount * orders.qty )', true], ['SUM(IFF(x > 0, x, 0))', true],
     ['SUM(a)/SUM(b)', false], ['AVG(a)', false], ['COUNT(DISTINCT a)', false], ['count( distinct a)', false], ['SUM(a) + 1', false], ['MAX(a)', false],
-    ['SUM(AVG(a))', false], ['SUM(a) OVER (PARTITION BY b)', false], ['1 + SUM(a)', false], ['', false], ['SUM(a', false], ['SUM(\'(\')', true],
+    ['SUM(AVG(a))', false], ['SUM(a) OVER (PARTITION BY b)', false], ['1 + SUM(a)', false], ['', false], ['SUM(a', false], ['SUM(\'(\')', true], ['SUM(a) NON ADDITIVE BY (d)', false],
   ];
   const wrong = ADDS.filter(([e, want]) => sem.additiveExpression(e) !== want);
   ok(`additiveExpression: ${ADDS.length} expressions read as the rule says`, wrong.length === 0, show(wrong));
@@ -191,9 +200,17 @@ async function listingSection(): Promise<void> {
   const req = sfSem.snowflakeAdapter.encode(q, 'SALES.PUBLIC.ORDERS_SV', COLS);
   const ran = await layer.run(CTX(), req.body);
   const sent = fake.of('submit').at(-1)?.json as { statement?: string; bindings?: Record<string, { type: string; value: string }> } | undefined;
-  ok('run: the encoder\'s statement inside the row cap, its value a TEXT binding, never text',
-    ran.ok && String(sent?.statement).startsWith('select * from (\nSELECT ') && String(sent?.statement).endsWith('\n) limit 100001')
+  // The connector's `select * from (…) limit n` would drop the statement's ORDER BY (Snowflake keeps a subquery's
+  // order only inside it): a semantic statement is capped by its own last line instead.
+  ok('run: the encoder\'s statement capped by its own last line (no wrapper), its value a TEXT binding, never text',
+    ran.ok && String(sent?.statement) === `${(req.body as { sql: string }).sql}\nLIMIT 100001`
       && show(sent?.bindings) === show({ 1: { type: 'TEXT', value: 'Zanzibar' } }) && !String(sent?.statement).includes('Zanzibar'), show(sent));
+  const ranks = sfSem.snowflakeAdapter.encode(shapes().find(([, sq]) => sq.limit === 51)![1], 'SALES.PUBLIC.ORDERS_SV', COLS);
+  await layer.run(CTX(), ranks.body);
+  const top = String((fake.of('submit').at(-1)?.json as { statement?: string } | undefined)?.statement);
+  ok('…a statement with its own LIMIT under the cap is sent as written, its ORDER BY last but the LIMIT', top === (ranks.body as { sql: string }).sql && /\nORDER BY [^\n]+\nLIMIT 51$/.test(top), top);
+  const sfSql: typeof import('../src/connectors/snowflakeSql') = require('../src/connectors/snowflakeSql');
+  ok('…one whose own LIMIT is past the cap gets the cap\'s', sfSql.orderedCap('SELECT 1\nORDER BY 1\nLIMIT 500', 100) === 'SELECT 1\nORDER BY 1\nLIMIT 101');
   const notOurs = await layer.run(CTX(), { sql: 'select 1' });
   ok('run: a body that is not { sql, params } is refused before any statement', !notOurs.ok);
 

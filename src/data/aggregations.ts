@@ -2,7 +2,7 @@
 // new one reaches them all at once; scripts/test-aggregationList.ts forbids a list of its own anywhere else in src/.
 // No imports: the engines, the stores and the contracts all read it.
 
-/** What a stored measure may say. `countd` (distinct non-empty values) is kept by every store; this release computes none. */
+/** What a stored measure may say. `countd` counts distinct non-empty values (analysis/countDistinct, its resident and Live SQL twins). */
 export const AGGREGATIONS = ['sum', 'avg', 'count', 'min', 'max', 'countd'] as const;
 export type Aggregation = (typeof AGGREGATIONS)[number];
 

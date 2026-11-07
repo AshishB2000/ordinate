@@ -19,6 +19,6 @@ export async function verifiedMark(projectId: string, spec: AnswerSpec): Promise
   // The comparison first, on the records alone: the metadata check runs only for a card that matches one.
   const q = (await listVerified(projectId)).find((v) => sameChart({ ...v.spec, chartType: '' }, drawn));
   if (!q || verifiedProblem(q, await verifiedEnv(projectId)) !== null) return {};
-  if (hasValueFilter(q.spec) && (await closedToCaller(projectId, q.spec.datasetId))) return {};
+  if (hasValueFilter(q.spec) && (await closedToCaller(projectId, q.spec.datasetId, { rowsOnly: true }))) return {};
   return { verified: { id: q.id, question: q.question, by: q.verifiedBy, at: q.verifiedAt } };
 }

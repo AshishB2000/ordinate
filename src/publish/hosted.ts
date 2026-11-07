@@ -50,6 +50,8 @@ export interface HostedSite {
   readonly access: Access;
   readonly publishedBy: string;
   readonly publishedAt: string;
+  /** When its build began: column rules newer than it stop the site (a rule saved mid-build may land after the build's check). Absent before. */
+  readonly buildStartedAt?: string;
   readonly bytes: number;
   readonly combos: number;
   readonly pages: HostedPage[];
@@ -93,17 +95,19 @@ export async function getSite(id: string): Promise<HostedSite | null> {
 /**
  * May `site` still be served (docs/row-policy D10)? Not once a dataset its build read has row access
  * rules (or is built from one), nor once one has column rules set after it was published (semantic layer
- * part 4, D17: it was built for an audience the rules have narrowed since; a republish builds it under them).
+ * part 4, D17: it was built for an audience the rules have narrowed since; a republish builds it under them) —
+ * judged from when its build began, so a rule saved mid-build that landed after the build's own check stops it too.
  * A site published before builds were recorded has its datasets worked out ONCE from the dashboards it was
  * published with, and kept (round 2, #10); one that cannot be (a story or scorecard, no stored definitions)
  * is not served while its project has any such dataset, or column rules newer than it.
  */
 export async function servable(site: HostedSite): Promise<boolean> {
   try {
+    const since = site.buildStartedAt ?? site.publishedAt;
     const ids = Array.isArray(site.datasetIds) ? site.datasetIds : await backfillDatasets(site);
-    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId)) && !(await anyColumnRulesSince(site.projectId, site.publishedAt));
+    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId)) && !(await anyColumnRulesSince(site.projectId, since));
     for (const id of ids) if (await policyClosed(site.projectId, id)) return false;
-    return !(await columnRulesSince(site.projectId, ids, site.publishedAt));
+    return !(await columnRulesSince(site.projectId, ids, since));
   } catch {
     return false; // rules that cannot be read: not served
   }
@@ -221,6 +225,7 @@ export async function publishHosted(
       access: opts.access ?? now?.access ?? 'org',
       publishedBy: by,
       publishedAt,
+      buildStartedAt: started,
       bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
       combos,
       pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),

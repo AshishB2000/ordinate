@@ -6,6 +6,22 @@ const KINDS: Record<string, Field['kind']> = { region: 'dimension', segment: 'di
 const kindOf = (n: string) => KINDS[n];
 const Q = (over: Partial<Question['encoding']> = {}, chartType = '', filters: Question['filters'] = []): Question => ({ chartType, encoding: { category: '', values: [], ...over }, filters });
 
+describe('a layer\'s metric (a semantic dataset\'s mirror)', () => {
+  const MIRROR: Field = { name: 'Revenue', kind: 'measure', type: 'number', aggregation: 'sum', metricId: '7d2c1f4e-1111-4222-8333-444455556666' };
+  it('a click adds it by its id, the link keeps the id, and the title is its own name', () => {
+    const q = withField(Q({ category: 'region' }), MIRROR, kindOf);
+    expect(q.encoding.values).toEqual([{ column: 'Revenue', aggregation: 'sum', metricId: MIRROR.metricId }]);
+    expect(decodeQuestion(encodeQuestion(q))).toEqual(q);
+    expect(questionTitle(q.encoding)).toBe('Revenue by region');
+    expect(withField(q, MIRROR, kindOf).encoding.values).toEqual([]);
+  });
+  it('CONTROL: a column measure keeps its aggregate word and carries no id', () => {
+    const q = withField(Q({ category: 'region' }), F('revenue', 'measure', 'sum'), kindOf);
+    expect(q.encoding.values).toEqual([{ column: 'revenue', aggregation: 'sum' }]);
+    expect(questionTitle(q.encoding)).toBe('Total revenue by region');
+  });
+});
+
 describe('the question in the URL', () => {
   it('round-trips: chart type, encoding, filters — and a column name in any script', () => {
     const q = Q({ category: 'région 東京 🌍', grain: 'month', series: 'segment', values: [{ column: 'Umsatz €', aggregation: 'avg' }] }, 'line', [

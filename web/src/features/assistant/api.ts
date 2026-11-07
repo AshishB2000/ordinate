@@ -67,7 +67,7 @@ export interface Turn {
   /** The Visual this answer was saved as ("Save as visual"): its card links there instead of offering to save again. */
   savedVisualId?: string;
   /** How the answer was guided: ids and counts only (src/ai/turnGuidance.ts). None on a chip, a follow-up or an older turn. */
-  guidance?: { verifiedId?: string; instructions: number; examples: string[] };
+  guidance?: { verifiedId?: string; instructions: number; examples: string[]; narrated?: boolean };
 }
 
 export interface ThreadSummary {

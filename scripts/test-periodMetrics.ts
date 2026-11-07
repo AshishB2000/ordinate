@@ -142,6 +142,20 @@ void (async () => {
   ok('a formula over a period metric: the base keeps its own scope (the memo trap)', Object.is(await kpi(diff, [OCT]), (await kpi(ytd, [OCT]))! - (await kpi(REV, [OCT]))!) && (await kpi(diff, [OCT])) !== 0, show(await kpi(diff, [OCT])));
   const ytdShare = await save('Per sale YTD', { base: SHARE.id, window: { to_date: 'year' } });
   ok('a formula base: each part under the window', Object.is(await kpi(ytdShare, [OCT]), (await kpi(SHARE, [ON('2024-01-01', '2024-10-31')]))), show([await kpi(ytdShare, [OCT]), await kpi(SHARE, [ON('2024-01-01', '2024-10-31')])]));
+  // A base with a part on another dataset: that part counts the window on its own date, as under a date control (D9).
+  const V = (await H.as(H.ORG_A, () => H.datasets.saveDataset(P, { name: 'Visits', sourceKind: 'csv', ...H.fx.importTyped([{ name: 'vday', type: 'date' }, { name: 'n', type: 'number' }], Array.from({ length: DAYS }, (_, n) => [iso(n), (n % 9) + 1])) })))!.id;
+  await saved({ name: 'Visits', datasetId: V, definition: { column: 'n', aggregation: 'sum' }, timeColumn: 'vday' });
+  const RPV = await saved({ name: 'Revenue per visit', definition: { formula: '[Revenue] / [Visits]' }, timeColumn: 'day' });
+  const rpvYtd = await save('Revenue per visit YTD', { base: RPV.id, window: { to_date: 'year' } });
+  const rpvYoy = await save('Revenue per visit YoY', { base: RPV.id, window: { to_date: 'year' }, compare: { vs: 'previous_year', show: 'pct_change' } });
+  const CTL = (from: string, to: string): FilterStep => ({ ...ON(from, to), fromControl: true }) as FilterStep;
+  for (const scope of [[], [OCT]]) {
+    const to = scope.length ? '2024-10-31' : '2024-11-03';
+    const [got, want] = [await kpi(rpvYtd, scope), await kpi(RPV, [CTL('2024-01-01', to)])];
+    ok(`a base with a part on another dataset, ${label(scope)}: that part over the window on its own date`, typeof got === 'number' && Object.is(got, want), show([got, want]));
+  }
+  ok('… a compare too', Object.is(await kpi(rpvYoy, [OCT]), pm.pctChange(await kpi(RPV, [CTL('2024-01-01', '2024-10-31')]), await kpi(RPV, [CTL('2023-01-01', '2023-10-31')]))), show(await kpi(rpvYoy, [OCT])));
+  ok('NEGATIVE CONTROL: … never that part over all time', !Object.is(await kpi(rpvYtd, [OCT]), await kpi(RPV, [ON('2024-01-01', '2024-10-31')])));
   const cmpOnly = await save('Revenue vs LY', { base: REV, compare: { vs: 'previous_year', show: 'change' } });
   ok('compare with no window and no period: null, and why', (await kpi(cmpOnly, [])) === null && (await resolved(cmpOnly, [])).notes?.[0] === msg.pickPeriodToCompare(), show(await resolved(cmpOnly, [])));
   ok('NEGATIVE CONTROL: … with a period in scope it is the change on last year', Object.is(await kpi(cmpOnly, [OCT]), (await kpi(REV, [OCT]))! - (await kpi(REV, [ON('2023-10-01', '2023-10-31')]))!) && (await resolved(cmpOnly, [OCT])).notes === undefined);
@@ -183,6 +197,16 @@ void (async () => {
   ok('MCP list_metrics: a period metric in words, counting by its base\'s date', listed.find((m) => m.id === ytd.id)?.definition === 'Revenue, year to date' && listed.find((m) => m.id === ytd.id)?.counts_by === 'day', show(listed.find((m) => m.id === ytd.id)));
   const mv = (await H.as(H.ORG_A, () => handlers.metricValue({ projectId: P } as never, 'Revenue YTD'))) as Reply;
   ok('MCP metric_value: the tile\'s figure', typeof mv.value === 'number' && Object.is(mv.value, await kpi(ytd, [])), show(mv));
+  // /p/: the tile keeps the line saying which days, two ISO days through the publish whitelist and nothing else.
+  const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const { buildDashboard }: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
+  const { sanitizePayload }: typeof import('../src/publish/sanitize') = require('../src/publish/sanitize');
+  const board = (await H.as(H.ORG_A, () => analysisStore.saveAnalysis(P, { name: 'YTD', sheets: [{ id: '7a1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f', name: 'Main', cards: [{ id: '8a1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f', type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: D, column: '', aggregation: 'sum', metricId: ytd.id } }] }] } as never)))!;
+  const built = await H.as(H.ORG_A, () => buildDashboard(P, board.id, 4)) as Reply;
+  const card = built?.sheets[0].cards.find((c: Reply) => c.kind === 'metric');
+  const pub = sanitizePayload(card?.payloads[card.variants[0]]) as Reply;
+  ok('/p/: a period KPI keeps its days', same(pub?.periodRange, (await resolved(ytd, [])).periodRange) && Object.keys(pub.periodRange).length === 2, show(pub));
+  ok('NEGATIVE CONTROL: … only two ISO days pass the whitelist', !('periodRange' in (sanitizePayload({ value: 1, display: '1', periodRange: { from: '<b>', to: '2024-11-03' } }) as Reply)) && show((sanitizePayload({ value: 1, display: '1', periodRange: { from: '2024-01-01', to: '2024-11-03', sql: 'x' } }) as Reply).periodRange) === show({ from: '2024-01-01', to: '2024-11-03' }));
 
   // ── surfaces ──────────────────────────────────────────────────────────────
   const scorecards: typeof import('../src/ipc/scorecards') = require('../src/ipc/scorecards');

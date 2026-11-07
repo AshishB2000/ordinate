@@ -19,7 +19,9 @@ So each item is marked **documented**, **source** (read in Cube's code, not prom
 every one is **unverified on a deployment**. `scripts/fixtures/cube/` starts one (Postgres seeded with the live-parity
 fixture, the pinned Cube image, the model `scripts/cubeFixture.ts` writes), and the warehouse nightly's `cube` job runs
 the whole semantic parity matrix against it (`scripts/test-semanticCubeLive.ts`). Until that run is green, treat this
-page as a plan, not as facts.
+page as a plan, not as facts. Even then, parity is proven on a **Postgres-backed Cube only**: `equals`, `notEquals` and
+the order compare in the warehouse's collation, so on a case-insensitive one (MySQL, SQL Server) a filter or "Other" can
+match `west` with `West` where an extract does not.
 
 ## The request Ordinate sends
 
@@ -71,7 +73,7 @@ sends it through `httpShared.httpRequest`: the SSRF check and pin, the byte ceil
 | `cubes[]`: `name`, `type` (`cube` or `view`), `title`, `description`, `isVisible`, `public`, `measures`, `dimensions` | documented + source | Every cube and view is a model; `title` is its label. One not public, or not visible, is not listed. A name that is not a plain identifier is not listed. |
 | Members are named `cube.member` | documented | A model's member is stored by its part after `cube.`; the encoder writes `<model>.<name>` back. A member that is not public or not visible is left out (the meta lists it with `isVisible: false`, source). |
 | Dimension `type`: `string`, `number`, `time`, `boolean`, `geo` | documented | `string` → text, `number` → number, `time` → date at every grain below; `boolean` and `geo` are not read. |
-| Measure `aggType` is the model's own type (`sum`, `count`, `countDistinct`, `avg`, `min`, `max`, `number`, …) | source | **Additive** only for `sum` and `count`, and never when `cumulative` (a rolling window). Anything else, or anything unreadable, cannot be added up: a refused running total, never a wrong sum. |
+| Measure `aggType` is the model's own type (`sum`, `count`, `countDistinct`, `avg`, `min`, `max`, `number`, …) | source | **Additive** only for `sum` and `count`, and never when `cumulative` (a rolling window). In a view, only when every dimension the view lists comes from the measure's own cube (each member's `aliasMember`, `cube.member`, in Cube's OpenAPI spec for `/v1/meta`): grouped by a joined cube's dimension (one-to-many), a row can count in two groups. Anything else, or anything unreadable, cannot be added up: a refused running total, never a wrong sum. |
 | Granularities `day`, `week`, `month`, `quarter`, `year` on every time dimension | documented | All five are offered. |
 | Week start | inferred | Cube truncates with the warehouse's week; on Postgres `date_trunc('week')` is the ISO (Monday) week, which is ours. On a warehouse whose week starts elsewhere, the bucket is not a Monday and b1's reader refuses the answer (`rowShape`): no week is relabelled. |
 
@@ -106,7 +108,7 @@ date as its ISO day). **The encoding,** exact for every row, or refused `layerFi
 | in list (a blank or a NULL in it matches both) | `equals [...]`, with `or […, notSet]` when a blank is in the list | `equals [...]` of its finite numbers | refused |
 | not in list | `notEquals [...]`, with `and […, set]` when a blank is in the list | `notEquals [...]` | refused |
 | contains | refused (Cube's is case-insensitive) | refused (as on any Live dataset) | refused |
-| empty / not empty | refused: Cube cannot tell a whitespace-only cell from text (Ordinate's empty is null, `''` or whitespace); **except** a value list's own "not empty", which drops the blank values from the list here (exact: each row is one value) | `notSet` / `set` | `notSet` / `set` |
+| empty / not empty | refused: Cube cannot tell a whitespace-only cell from text (Ordinate's empty is null, `''` or whitespace); **except** a value list's own "not empty", which drops the blank values from the list here (exact: each row is one value; a full reply the drop left short is asked again whole) | `notSet` / `set` | `notSet` / `set` |
 | a period (from, to) | — | — | `and [afterOrOnDate [from], beforeDate [to + 1 day]]` |
 | "Other" (all but the kept categories) | the not-in form, wrapped in its own `and` | — | — |
 
@@ -118,10 +120,10 @@ compares it (Ordinate reads it as no number): named here, not tested, since a mo
 | What | Status | Decision |
 |---|---|---|
 | `order` as an array of `[member, "asc" \| "desc"]` | documented | The plan's order, in priority. |
-| No NULL placement in `order` | documented (none exists) | The warehouse decides (Postgres puts a NULL first on `desc`). Ordinate ranks a NULL last, so a question cut by its limit is checked: when an order column holds a NULL before a value, the cut may have kept the wrong rows, and the same question is asked again with the 50,000-row limit, ranked here. Exact either way. |
+| No NULL placement in `order` | documented (none exists) | The warehouse decides (Postgres puts a NULL first on `desc`). Ordinate ranks a NULL last, so a question cut by its limit is checked: when an order column holds a NULL before a value, or its rows open with a NULL (all NULL, say), the cut may have kept the wrong rows, and the same question is asked again with the 50,000-row limit, ranked here. Exact either way. |
 | Default limit 10,000; an explicit limit may not pass `CUBEJS_DB_QUERY_LIMIT` (50,000) | documented | **Always an explicit limit:** the plan's (51 for a text axis's ranks, a value list's, 1 for the latest day), else **50,000**; a reply that fills 50,000 is refused (`tooManyGroups`, as Live SQL refuses a reply past its cap). The plan's `LIVE_ROW_LIMIT + 1` (100,001) would exceed Cube's default maximum. |
 | A query with dimensions and no measures lists their values | documented | **Lookups: yes** (`caps.lookups: true`): value pickers, the Assistant's spellings, the latest day for "last quarter". |
-| `''` and NULL are two groups | inferred | Cube groups by the dimension's SQL. Ordinate keeps one blank group (an import stores `''` as null), and folding two of Cube's figures into one is arithmetic on the layer's figures. So **a reply with both a `''` and a NULL in one dimension is refused**; a model makes them one with `sql: NULLIF(col, '')` (the fixture model does). |
+| `''` and NULL are two groups | inferred | Cube groups by the dimension's SQL. Ordinate keeps one blank group (an import stores `''` as null), and folding two of Cube's figures into one is arithmetic on the layer's figures. So **a reply with both a `''` and a NULL in one dimension is refused**, and a reply cut by its limit with either in a text dimension is asked again whole (the other may be past the cut); a model makes them one with `sql: NULLIF(col, '')` (the fixture model does). |
 | A byte-exact comparison | — (none) | `equals` compares in the warehouse's collation: **`caps.binaryCompare: false`**, so a viewer restricted by a row access rule is refused on every Cube dataset (D17). |
 
 ## The image

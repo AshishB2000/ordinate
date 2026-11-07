@@ -118,7 +118,7 @@ export interface ResolveContext {
   /** How main bucketed the category axis (analysis/categoryKey). */
   category?: CategoryInfo | null;
   /** metricId → its figure under the chart's scope, resolved by the metrics layer. */
-  metrics?: Map<string, { name: string; value: number | null }>;
+  metrics?: Map<string, { name: string; value: number | null; refused?: string }>;
 }
 
 // ── sanitize (untrusted renderer / stored input) ─────────────────────────────
@@ -410,6 +410,11 @@ function resolveOne(data: ChartData, ov: Overlay, ctx: ResolveContext): Resolved
   if (ov.color) base.color = ov.color;
   const s = data.series[si];
   const fail = (label: string, warning: string): ResolvedOverlay => ({ ...base, label: base.label || label, warning });
+  // A metric refused under access rules (part 4, D19) says why, never "no value".
+  for (const src of ov.kind === 'reference' || ov.kind === 'target' ? [ov.value] : ov.kind === 'band' && !ov.sd ? [ov.from, ov.to] : []) {
+    const refused = src && src.type === 'metric' ? ctx.metrics?.get(src.metricId)?.refused : undefined;
+    if (src && refused) return fail(sourceName(src, ctx), refused);
+  }
   if (!s || !Array.isArray(s.values) || (s as { role?: string }).role === 'overlay') return fail(ov.kind, 'That series is not on this chart');
   const values: unknown[] = s.values;
   const axis = axisOf(data, ctx);

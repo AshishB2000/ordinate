@@ -68,6 +68,7 @@ export function refineSpec(
 
   const carried = (m: VizMeasure): unknown => {
     const metric = m.metricId ? metrics.find((x) => x.id === m.metricId) : undefined;
+    if (metric?.external && metric.datasetId === dataset.id) return { metric: metric.name }; // a layer's metric: it has no column to carry
     const byName = !!metric && !metric.hasFilters && metric.column === m.column && (parseAgg(metric.aggregation) || 'sum') === m.aggregation
       && !resolveColumn(metric.name, dataset.columns)
       && metrics.find((x) => x.datasetId === dataset.id && x.name.trim().toLowerCase() === metric.name.trim().toLowerCase()) === metric;

@@ -87,7 +87,8 @@ async function preRefusal(projectId: string, meta: DatasetMeta, names: string[],
 /** `vizDataFor`'s question on a Live dataset: the chart, dated by the warehouse — or a typed failure, never an empty chart. */
 export async function liveChart(projectId: string, meta: DatasetMeta, encoding: VizEncoding, filters: FilterStep[]): Promise<VizDataReply> {
   const enc = encoding || ({} as VizEncoding);
-  const names = [enc.category, enc.series, ...(enc.values || []).map((v) => v && v.column), ...(filters || []).map((f) => f && f.column)];
+  // A semantic dataset's mirror measure is read by its id; its `column` is only its name (Explore's label), no field.
+  const names = [enc.category, enc.series, ...(enc.values || []).map((v) => v && !(meta.live?.semantic && v.metricId) ? v.column : ''), ...(filters || []).map((f) => f && f.column)];
   const pre = await preRefusal(projectId, meta, names.filter((n): n is string => typeof n === 'string'),
     async () => !!(await fxVizContext(projectId, meta.id, encoding, filters)));
   if (pre) return meta.live?.semantic && pre.reason === 'related' ? layerFailure(meta, 'related') : pre;

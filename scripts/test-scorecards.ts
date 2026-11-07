@@ -33,6 +33,7 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const copilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const audit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 
 const close = (a: unknown, b: number, eps = 1e-9): boolean => typeof a === 'number' && Math.abs(a - b) <= eps;
 const CAL = { weekStart: 1, fiscalYearStart: 1 };
@@ -233,6 +234,33 @@ async function storeChecks(): Promise<void> {
 
   const bundleRules: typeof import('../src/app/bundleRules') = require('../src/app/bundleRules');
   ok('bundle: scorecards travel in a project bundle', bundleRules.ruleFor(`scorecards/${U(1)}.json`)?.count === 'scorecards');
+  await crossDateChecks(pid, ds.id, revenue.id);
+}
+
+// D9: a formula with a part on another dataset counts the scorecard's period on that part's own date, as under a date control.
+async function crossDateChecks(pid: string, salesId: string, revenueId: string): Promise<void> {
+  const staff = await datasets.saveDataset(pid, {
+    name: 'Staff', sourceKind: 'csv', columns: [{ name: 'sday', type: 'date' }, { name: 'heads', type: 'number' }] as any,
+    rows: [1, 2, 3, 4, 5, 6].map((m) => [`2024-0${m}-20`, 5 + m]),
+  });
+  const save = (name: string, datasetId: string, definition: unknown, timeColumn: string) => metrics.saveMetric(pid, { name, datasetId, definition, timeColumn } as any);
+  const staffHeads = await save('Staff heads', staff!.id, { column: 'heads', aggregation: 'sum' }, 'sday');
+  const perHead = await save('Rev per head', salesId, { formula: '[Revenue] / [Staff heads]' }, 'day');
+  const margin = await save('Rev per cost', salesId, { formula: '[Revenue] / [Cost]' }, 'day');
+  ok('cross-date fixture saved', !!staffHeads && !!perHead && !!margin && !!revenueId);
+  if (!staffHeads || !perHead || !margin) return;
+  const card = { id: U(500), projectId: pid, name: 'Cross', period: 'month', rows: [{ metricId: perHead.id }, { metricId: margin.id }], createdAt: '', updatedAt: '', schemaVersion: 1 } as any;
+  const res = await ipc.computeScorecard(pid, card, 0);
+  const JUNE = { type: 'filter', column: 'day', op: 'period', period: { preset: 'custom', from: '2024-06-01', to: '2024-06-30' } } as any;
+  const kpi = async (id: string, filters: any[]) => (await ipcMetrics.resolveMetric(pid, id, { filters }))?.value ?? null;
+  const want = await kpi(perHead.id, [{ ...JUNE, fromControl: true }]);
+  ok('cross-date: the row is the KPI under a date control on its period (June: 900 / 11)', Object.is(res.rows[0].value, want) && close(want, 900 / 11), JSON.stringify([res.rows[0].value, want]));
+  ok('cross-date: … and so is its sparkline\'s last point', Object.is(res.rows[0].spark[11], want), JSON.stringify(res.rows[0].spark));
+  ok('NEGATIVE CONTROL: a formula on one dataset is unchanged (June: 900 / 120)', Object.is(res.rows[1].value, await kpi(margin.id, [JUNE])) && close(res.rows[1].value, 900 / 120), JSON.stringify(res.rows[1]));
+  const det = await ipc.scorecardDetail(pid, card, perHead.id, 0);
+  const EAST = { type: 'filter', column: 'region', op: '=', value: 'East' } as any;
+  const east = det.breakdown ? det.breakdown.values[det.breakdown.labels.indexOf('East')] : undefined;
+  ok('cross-date: detail\'s breakdown (metric:series) is the KPI under the marked period and the label', det.ok && Object.is(det.value, want) && Object.is(east, await kpi(perHead.id, [{ ...JUNE, fromControl: true }, EAST])), JSON.stringify([det.value, det.breakdown]));
 }
 
 void (async () => {

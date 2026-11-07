@@ -4,7 +4,7 @@ import { pageWithoutHidden } from './columnDoors';
 import { RowPolicyError, closedToCaller, hiddenColumnsFor, isRowPolicyError, withLockSteps } from '../data/rowAccess';
 import { markHidden } from '../data/columnAccess';
 import { semanticKey } from '../data/datasetSummary';
-import { seesSourceNames } from '../data/sourceNames';
+import { summariesFor } from '../data/sourceNames';
 import { distinctFor } from './distinctFor';
 import { narrowSteps } from './distinctNarrow';
 import { distinctWithLabels } from './valueLabelReplies';
@@ -367,23 +367,8 @@ export function register() {
   });
 
   // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
-  ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
-    const list = await withStatus(projectId, 'dataset', await datasets.listDatasets(projectId));
-    if (await seesSourceNames(projectId)) return list; // the one rule "can open the connection": an editor's reply is untouched
-    // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
-    // refresh's text and the anomaly keys an alert last told of, which can quote a value, are not theirs to read (N2, #16).
-    // A viewer never reads a warehouse driver's refresh error either: it quotes the relation it could not find (D13).
-    return Promise.all(list.map(async (d) => {
-      if (!(await closedToCaller(projectId, d.id))) {
-        if (!d.originConnId) return d;
-        const { lastRefreshError: _e1, ...open } = d;
-        return open;
-      }
-      const { lastRefreshError: _e2, ...rest } = d;
-      const auto = rest.autoRefresh ? (({ lastAnomalyKeys: _k, ...a }) => a)(rest.autoRefresh) : undefined;
-      return { ...rest, ...(auto ? { autoRefresh: auto } : {}), scoped: true as const };
-    }));
-  });
+  ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) =>
+    summariesFor(projectId, await withStatus(projectId, 'dataset', await datasets.listDatasets(projectId))));
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));
 

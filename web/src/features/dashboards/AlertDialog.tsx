@@ -33,10 +33,10 @@ export interface AlertSubject {
   cardId?: string;
 }
 
-/** A KPI card as the dialog's subject; null when it has nothing to watch. */
+/** A KPI card as the dialog's subject; null when it has nothing to watch. A period or funnel metric's card has no column: its metric is watched. */
 export function subjectOf(card: Card, filters: Step[], analysisId: string): AlertSubject | null {
   const m = card.metric;
-  if (!m || !m.datasetId || !m.column) return null;
+  if (!m || !m.datasetId || (!m.column && !m.metricId)) return null;
   return { datasetId: m.datasetId, column: m.column, aggregation: m.aggregation, label: m.label, metricId: m.metricId, filters, analysisId, cardId: card.id };
 }
 
@@ -59,16 +59,17 @@ const DIRS = [
 export function AlertDialog({ projectId, subject, onClose }: { projectId: string; subject: AlertSubject; onClose: () => void }) {
   const alerts = useAlerts(projectId);
   // The rule on the same number, if one exists: edit it rather than add a second (alertMeFromCard).
-  const existing = alerts.data?.rules.find((r) => r.datasetId === subject.datasetId && r.metric.column === subject.column && r.metric.aggregation === subject.aggregation && !r.fromWatch);
+  const existing = alerts.data?.rules.find((r) => r.datasetId === subject.datasetId && r.metric.column === subject.column && r.metric.aggregation === subject.aggregation && (!!subject.column || r.metric.metricId === subject.metricId) && !r.fromWatch);
   const label = subject.label || subject.column;
   // The figure as the card shows it: a saved metric's own display string, else the column's value (alerts.ts alFillSummary).
   const current = useQuery({
     queryKey: ['alert:figure', projectId, subject],
     queryFn: async () => {
-      const r = (await rpc('dashboard:metric', { projectId, datasetId: subject.datasetId, column: subject.column, aggregation: subject.aggregation, filters: subject.filters })) as { ok: boolean; value: number | null };
       const shown = subject.metricId
-        ? ((await rpc('metric:values', { projectId, ids: [subject.metricId], filters: subject.filters })) as { ok: boolean; display?: string }[])[0]
+        ? ((await rpc('metric:values', { projectId, ids: [subject.metricId], filters: subject.filters })) as { ok: boolean; value?: number | null; display?: string }[])[0]
         : undefined;
+      if (!subject.column) return { ok: !!shown?.ok, value: shown?.value ?? null, display: shown?.ok ? shown.display : undefined }; // no copy: the metric is the figure
+      const r = (await rpc('dashboard:metric', { projectId, datasetId: subject.datasetId, column: subject.column, aggregation: subject.aggregation, filters: subject.filters })) as { ok: boolean; value: number | null };
       return { ok: r.ok, value: r.value, display: shown?.ok ? shown.display : undefined };
     },
   });

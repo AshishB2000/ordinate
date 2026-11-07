@@ -41,7 +41,9 @@ export const DOCS = {
   savedQuery: 'query SavedQuery($environmentId: BigInt!, $savedQueryName: String!) { savedQuery(environmentId: $environmentId, savedQueryName: $savedQueryName) { name queryParams { metrics { name } groupBy { name grain datePart } where { whereSqlTemplate } } } }',
   dimensions: 'query Dimensions($environmentId: BigInt!, $metrics: [MetricInput!]!, $pageNum: Int!) { dimensionsPaginated(environmentId: $environmentId, metrics: $metrics, pageNum: $pageNum, pageSize: 500) { items { name description type queryableGranularities } pageNum totalPages } }',
   metrics: 'query Metrics($environmentId: BigInt!, $pageNum: Int!) { metricsPaginated(environmentId: $environmentId, pageNum: $pageNum, pageSize: 500) { items { name description type } pageNum totalPages } }',
-  measures: 'query Measures($environmentId: BigInt!, $metrics: [MetricInput!]!) { measures(environmentId: $environmentId, metrics: $metrics) { name agg } }',
+  // With MetricFlow's non_additive_dimension (a semi-additive measure, a balance). The SDK's Measure has no such field
+  // today: an API that refuses it answers no measure, so no metric is additive (fail safe).
+  measures: 'query Measures($environmentId: BigInt!, $metrics: [MetricInput!]!) { measures(environmentId: $environmentId, metrics: $metrics) { name agg nonAdditiveDimension { name } } }',
   createQuery: 'mutation CreateQuery($environmentId: BigInt!, $metrics: [MetricInput!], $groupBy: [GroupByInput!], $where: [WhereInput!], $orderBy: [OrderByInput!], $limit: Int) { createQuery(environmentId: $environmentId, metrics: $metrics, groupBy: $groupBy, where: $where, orderBy: $orderBy, limit: $limit) { queryId } }',
   query: 'query QueryResult($environmentId: BigInt!, $queryId: String!, $pageNum: Int!) { query(environmentId: $environmentId, queryId: $queryId, pageNum: $pageNum) { status error totalPages jsonResult(encoded: false) } }',
   cancelQuery: 'mutation CancelQuery($environmentId: BigInt!, $queryId: String!) { cancelQuery(environmentId: $environmentId, queryId: $queryId) { queryId } }',
@@ -126,7 +128,10 @@ export function finishRows(body: DbtBody, rows: Cell[][], limit: number, cap: nu
   const columns = keys.map(({ name }) => ({ name, type: '' }));
   if (rows.length > cap) return { ok: true, columns, rows: rows.slice(0, cap), truncated: true };
   const order = body.orderBy.map((o) => keys.findIndex((k) => ('metric' in o ? k.metric && k.name === o.metric.name : !k.metric && k.name === o.groupBy.name)));
-  if (rows.length >= limit && limit <= cap && !cutIsExact(rows, order)) return { recut: true };
+  const cut = rows.length >= limit && limit <= cap;
+  if (cut && !cutIsExact(rows, order)) return { recut: true };
+  // One blank form in a cut may hide the other past it (the check above needs both, and "Other" drops both): re-ask.
+  if (cut && body.groupBy.some((g, i) => !g.grain && rows.some((r) => r[i] === '' || r[i] === null))) return { recut: true };
   let out = rows;
   const drop = (body.nonBlank ?? []).map((n) => keys.findIndex((k) => !k.metric && k.name === n));
   if (drop.length) out = out.filter((r) => !drop.some((i) => blank(r[i])));

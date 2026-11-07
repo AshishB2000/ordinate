@@ -111,6 +111,25 @@ async function channels(): Promise<void> {
   ok('a doc that is gone gets the sentence', gone.ok === false && typeof gone.error === 'string');
   const contracts = api.contracts as unknown as Record<string, { access: string; project(i: unknown): unknown }>;
   ok('contracts: both write, scoped by projectId', ['catalog:suggestions', 'catalog:dismissSuggestion'].every((n) => contracts[n]?.access === 'write' && contracts[n].project({ projectId: P }) === P));
+
+  // The cap: one doc keeps 500 datasets' dismissals. A dataset no longer listed loses its own first; still full is a sentence, never a silent ok.
+  const others = Array.from({ length: 500 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+  const plant = () => H.as(ORG_A, () => store.updateSourceDoc(P, C, D, (d) => ({ ...d, dismissed: { ...d.dismissed, ...Object.fromEntries(others.map((id) => [id, { table: 'AbCdEf012345' }])) } })));
+  const dismissed = async (): Promise<Record<string, Reply>> => JSON.parse(await docText()).dismissed;
+  const dismiss = async (datasetId: string, kind = 'table') => (await post('catalog:dismissSuggestion', { projectId: P, datasetId, connId: C, docId: D, kind, hash: 'AbCdEf012345' })).value;
+  await plant();
+  const pruned = await dismiss(L2);
+  ok('dismiss cap: the dismissals of datasets that are gone go, so a new one fits', pruned.ok === true && ((d) => L2 in d && L in d && !others.some((id) => id in d))(await dismissed()), JSON.stringify(pruned));
+  const realList = H.datasets.listDatasets;
+  (H.datasets as { listDatasets: unknown }).listDatasets = async (p: string) => [...(await realList(p)), ...others.map((id) => ({ id }))];
+  try {
+    await plant();
+    const full = await dismiss(L3);
+    ok('dismiss cap: full of listed datasets: the sentence, nothing stored', full.ok === false && full.error === 'These notes already keep dismissed suggestions for 500 datasets.' && !(L3 in (await dismissed())), JSON.stringify(full));
+    ok('NEGATIVE CONTROL: a dataset already on the full doc can still dismiss', (await dismiss(L, 'key')).ok === true && (await dismissed())[L].key === 'AbCdEf012345');
+  } finally {
+    (H.datasets as { listDatasets: unknown }).listDatasets = realList;
+  }
 }
 
 (async () => {

@@ -120,6 +120,35 @@ function plans(): void {
   ok('…none asked when the question has no data-relative period', (() => { const r = plan.planLatest(chart(), SENV); return r.ok && r.queries.length === 0; })());
 }
 
-ir1();
-plans();
-finish();
+/** Each question that can be checked is checked before any is asked: a split's series ranks first, its "Other" before its cells. */
+async function checkedFirst(): Promise<void> {
+  const es: typeof import('../src/engine/live/semantic/evaluateSemantic') = require('../src/engine/live/semantic/evaluateSemantic');
+  const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
+  type Q = import('../src/engine/live/semantic/semanticQuery').SemanticQuery;
+  const env: Env = { ...SENV, columns: [...SENV.columns, { name: 'seg', type: 'text' }] };
+  const split = chart({ series: 'seg' });
+  const refused = sr.refuseLayer('layerFilter', { dataset: 'Sales', layer: 'Cube', column: 'seg' });
+  const evaluate = async (refuses: (q: Q) => boolean): Promise<{ code: string | undefined; asked: number }> => {
+    let asked = 0;
+    const run: import('../src/engine/live/semantic/evaluateSemantic').SemanticRunner = async (q) => {
+      if (refuses(q)) return refused;
+      asked += 1;
+      const ranks = q.dimensions.length === 1 && q.dimensions[0].name === 'region';
+      return { columns: sq.answerColumns(q), rows: ranks ? Array.from({ length: 60 }, (_v, i) => [`r${String(i).padStart(2, '0')}`, 60 - i]) : [] };
+    };
+    run.check = (q) => (refuses(q) ? refused : null);
+    const r = await es.evaluateSemantic(split, env, run);
+    return { code: code(r), asked };
+  };
+  const seriesRanks = (q: Q): boolean => q.dimensions.length === 1 && q.dimensions[0].name === 'seg' && !q.exclude;
+  ok('a split whose series ranks the layer refuses is refused before any question is asked', show(await evaluate(seriesRanks)) === show({ code: 'layerFilter', asked: 0 }), show(await evaluate(seriesRanks)));
+  ok('…one whose "Other" it refuses, after the ranks only (its cells not asked)', show(await evaluate((q) => !!q.exclude)) === show({ code: 'layerFilter', asked: 1 }), show(await evaluate((q) => !!q.exclude)));
+  ok('NEGATIVE CONTROL: …refusing nothing, the four questions are asked', show(await evaluate(() => false)) === show({ code: undefined, asked: 4 }), show(await evaluate(() => false)));
+}
+
+void (async () => {
+  ir1();
+  plans();
+  await checkedFirst();
+  finish();
+})();
