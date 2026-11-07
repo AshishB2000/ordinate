@@ -10,6 +10,8 @@
 //               NEGATIVE CONTROL: an extract's measures are still its number columns.
 //   § plans     an AI plan's metric step and a story's KPI refuse a column metric there (columnOnLayer); NEGATIVE
 //               CONTROL: the same step on the extract saves.
+//   § verified  a follow-up of an answer over a mirror, and of a chart Explore saved, keeps the mirror; as verified
+//               questions both run. NEGATIVE CONTROL: one whose mirror is gone says it changed or was deleted.
 //   § gone      a mirror whose semantic dataset was deleted reads as any metric whose dataset was deleted does.
 //
 //   npm run build:ts && node scripts/test-semanticAssistant.js
@@ -71,6 +73,23 @@ void (async () => {
   ok('…and a suggestion draws', drawn?.ok === true, show(drawn));
   const extract = (await post('explore:suggest', { projectId: P, datasetId: s.extractId })).value;
   ok('NEGATIVE CONTROL: an extract\'s measures are still its number columns', extract.ok === true && extract.measures.length > 0 && extract.measures.every((m: Reply) => !m.metricId), show(extract.measures));
+
+  // ── § follow-ups and verified questions ── over a mirror: by the Assistant's spec, and by a chart Explore saved.
+  const refine: typeof import('../src/ai/answerRefine') = require('../src/ai/answerRefine');
+  const vs: typeof import('../src/ipc/verifiedState') = require('../src/ipc/verifiedState');
+  const vmsg: typeof import('../src/analysis/verifiedMessages') = require('../src/analysis/verifiedMessages');
+  const onD = sets.find((x) => x.id === D)!;
+  const tile = answers.tileSpec({ datasetId: D, encoding: sug.suggestions[0].encoding, filters: [], chartType: 'column', name: 'Saved from Explore' });
+  const venv = await as(() => vs.verifiedEnv(P));
+  for (const [what, base] of [['the Assistant\'s answer', v.ok ? v.spec : null], ['a chart Explore saved ("ask about this chart")', tile]] as const) {
+    if (!base) { ok(`${what}: a spec`, false); continue; }
+    const next = spec.validateAnswerSpec(refine.refineSpec(base, { category: 'cat' }, onD, vocab), sets, { metrics: vocab });
+    const nextCard = next.ok ? await as(() => answers.computeCard(P, next.spec)) : null;
+    ok(`a follow-up of ${what} over a mirror ("by cat") keeps the mirror and draws`, next.ok && next.spec.measures[0]?.metricId === base.measures[0]?.metricId && !!nextCard && 'card' in nextCard, show([next, nextCard && !('card' in nextCard) ? nextCard : 'card']));
+    ok(`…and as a verified question it runs`, vs.verifiedProblem({ spec: base } as never, venv) === null, show(vs.verifiedProblem({ spec: base } as never, venv)));
+  }
+  const lostMirror = v.ok ? { ...v.spec, measures: [{ column: '', aggregation: 'sum' as const, metricId: '00000000-0000-4000-8000-000000000001' }] } : null;
+  ok('NEGATIVE CONTROL: a verified question whose mirror is gone says the metric changed or was deleted', !!lostMirror && vs.verifiedProblem({ spec: lostMirror } as never, venv) === await as(async () => vmsg.verifiedMetricChanged()));
 
   // ── § plans ── an AI plan's metric step and a story plan's KPI save through the store: a column metric there is refused.
   const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
