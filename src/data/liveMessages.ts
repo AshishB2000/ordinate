@@ -82,3 +82,13 @@ export function liveCopyReadFailedMessage(): string {
 export function liveCopySaveFailedMessage(): string {
   return t('liveMessages.the_copy_could_not_be_saved');
 }
+
+/** Always-applied (base) filters asked of a dataset that is not Live: a copy keeps such rows out with a Prepare step. */
+export function liveBaseFiltersNotLiveMessage(): string {
+  return t('liveMessages.only_a_live_dataset_has_always');
+}
+
+/** An always-applied filter this dataset cannot take: a column it lacks, an operator a Live dataset cannot run, an empty or oversized list. */
+export function liveBaseFilterInvalidMessage(): string {
+  return t('liveMessages.these_filters_can_t_be_always');
+}

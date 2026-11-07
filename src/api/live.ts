@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from './contract';
+import { Cell } from './datasets';
 
 /**
  * A Live dataset's cache age, seconds: 0 (always ask the warehouse) to 30
@@ -8,6 +9,16 @@ import { byProjectId, rpc, Uuid } from './contract';
  * holds the two together, since this file imports nothing but zod.
  */
 export const MaxCacheAgeSec = z.number().int().min(0).max(30 * 24 * 60 * 60);
+
+/** One always-applied filter as the editor sends it: a plain filter step, no term, lock, context or radius. */
+export const BaseFilterStep = z.strictObject({
+  type: z.literal('filter'),
+  column: z.string().min(1).max(1_000),
+  op: z.string().max(40),
+  value: Cell.optional(),
+  values: z.array(Cell).max(1_000).optional(),
+  period: z.unknown().optional(),
+});
 
 export const live = {
   // The dataset's mode (src/ipc/liveDatasets.ts): extract → live drops the
@@ -62,6 +73,15 @@ export const live = {
   'dataset:copyLive': rpc({
     access: 'write',
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
+  // A Live dataset's always-applied filters (src/ipc/liveBaseFilters.ts, semantic layer D13): plain
+  // filter steps put into every statement Ordinate sends for it. At most 20, a list of at most 1,000
+  // values; the handler refuses, in a sentence, a step this dataset's columns cannot take. `write`:
+  // it changes every figure on the dataset, as a Prepare step does on a copy.
+  'live:setBaseFilters': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, filters: z.array(BaseFilterStep).max(20) }),
     project: byProjectId,
   }),
 } as const;

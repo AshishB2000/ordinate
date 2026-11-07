@@ -481,6 +481,33 @@ Publish dialog says so before anything is written. A column that has gone from t
 dataset, and any chart, KPI or answer that still uses it says "column missing" until it is changed or
 the column comes back.
 
+## Always-applied filters
+
+A Live dataset can carry **always-applied filters**: plain filters, such as `tenant = acme` or
+`status ≠ test`, that Ordinate puts into **every** statement it sends for that dataset. An editor
+sets them on the dataset's Schema tab, under **Always applied** (`live:setBaseFilters`). On a copy
+the same job is a Prepare filter step.
+
+- **Every statement carries them**: each chart, KPI, answer and alert, the period lookup behind
+  "last quarter", the spelling lookup behind a typed filter value, and the schema sync's sample. So a
+  value picker only lists values the filters keep. The values travel as bound parameters, like
+  every value Ordinate sends.
+- **They never skip.** A chart filter on a column the dataset lacks is skipped with a warning. An
+  always-applied filter that cannot be applied (its column has gone from the warehouse, say) makes
+  every question on the dataset refuse, in a sentence, until an editor changes it. The schema sync
+  still syncs the columns and skips the sample.
+- **At most 20 filters, at most 1,000 values each.** Saving checks each one against the dataset's
+  columns and refuses one it cannot apply.
+- **A change asks the warehouse again**: it resets the dataset's cache and queues a schema sync.
+  Until the sync lands, the value pickers say the column has not been sampled yet, rather than list
+  values sampled under the old filters. The sync's statement counts against `LIVE_DAILY_QUERY_LIMIT`
+  like any other.
+- **Copies keep them.** "Make a copy" and "Copy the data instead" fetch the rows and keep the
+  filters as the copy's Prepare steps, so the copy answers what the Live dataset answers. A copy
+  whose rows lack a filter's column is refused instead.
+- **A viewer that row access rules restrict** sees each filter's column and operator on the Schema
+  tab, never its values.
+
 ## Refresh URL
 
 A refresh URL lets a pipeline tell Ordinate that new data has landed. A dbt run or an Airflow DAG

@@ -44,11 +44,11 @@
 // its sample clause.
 
 import type { CompileEnv, LiveSource } from './compile';
-import type { SamplePlan, SqlDialect } from './dialect';
+import type { SamplePlan } from './dialect';
 import { sqlInt } from './dialect';
 import { dialectFor } from './dialects';
-import { emptyOf, nullsLast, numberOf, textOf, type Ctx } from './compileFilter';
-import type { LiveColumn, LiveRefusal } from './liveSpec';
+import { emptyOf, nullsLast, numberOf, predicates, textOf, type Ctx } from './compileFilter';
+import type { LiveColumn, LiveFilter, LiveRefusal } from './liveSpec';
 import { isRefusal, refuse } from './liveSpec';
 import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
@@ -90,24 +90,42 @@ function badName(name: unknown): boolean {
 /**
  * The sample as a FROM item: the declared columns of the table under the
  * engine's sample clause, or of the defining query (on its own lines, rule
- * F3), then LIMIT. Throws when a size is not a checked literal.
+ * F3), then LIMIT. With base filters the engine samples, then the rows are
+ * filtered and capped: `(SELECT … FROM (<sample>) AS lv_src WHERE <base> LIMIT n)`.
+ * Throws when a size is not a checked literal.
  */
-function sampledFrom(d: SqlDialect, src: LiveSource, columns: LiveColumn[], plan: SamplePlan): string | LiveRefusal {
-  const cols = columns.map((c) => d.ident(c.name)).join(', ');
+function sampledFrom(c: Ctx, src: LiveSource, plan: SamplePlan, base: readonly LiveFilter[] | undefined): string | LiveRefusal {
+  const d = c.d;
+  const cols = c.columns.map((col) => d.ident(col.name)).join(', ');
   const limit = `LIMIT ${sqlInt(plan.rows)}`;
+  const preds = predicates(c, base);
+  if (isRefusal(preds)) return preds;
+  const where = preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
   if (src && src.kind === 'table') {
     if (!Array.isArray(src.parts) || src.parts.length === 0) return refuse('badSource');
     if (src.parts.some(badName)) return refuse('badIdentifier');
     const clause = plan.limitOnly ? null : d.tableSample(plan);
-    return `(SELECT ${cols} FROM ${src.parts.map((p) => d.ident(p)).join('.')}${clause ? ` ${clause}` : ''} ${limit}) AS lv_src`;
+    const table = `${src.parts.map((p) => d.ident(p)).join('.')}${clause ? ` ${clause}` : ''}`;
+    if (where) return `(SELECT ${cols} FROM (SELECT ${cols} FROM ${table}) AS lv_src${where} ${limit}) AS lv_src`;
+    return `(SELECT ${cols} FROM ${table} ${limit}) AS lv_src`;
   }
   if (src && src.kind === 'sql' && typeof src.sql === 'string') {
     const sql = src.sql.replace(/[\s;]+$/, '');
     if (sql.trim() === '') return refuse('badSource');
     if (hasNul(sql)) return refuse('badIdentifier');
-    return `(SELECT ${cols} FROM (\n${sql}\n) AS lv_q ${limit}) AS lv_src`;
+    return `(SELECT ${cols} FROM (\n${sql}\n) AS ${where ? 'lv_src' : 'lv_q'}${where} ${limit}) AS lv_src`;
   }
   return refuse('badSource');
+}
+
+/**
+ * The columns a profile reads (at most PROFILE_MAX_COLUMNS): the base filters' columns first, so a
+ * filter on a column past the cap can still be applied to the sample, then the rest in schema order.
+ */
+export function profiledColumns<C extends LiveColumn>(columns: C[], base: readonly LiveFilter[] | undefined): C[] {
+  const named = new Set((base ?? []).map((f) => f.column));
+  const first = columns.filter((c) => named.has(c.name));
+  return [...first, ...columns.filter((c) => !named.has(c.name))].slice(0, PROFILE_MAX_COLUMNS);
 }
 
 /** Whether the engine's own sample clause applies — what the profile reports as its method. */
@@ -144,7 +162,7 @@ export function compileProfile(env: CompileEnv, plan: SamplePlan): ProfileCompil
   const c: Ctx = { d, b: new ParamSink(), columns };
   let from: string | LiveRefusal;
   try {
-    from = sampledFrom(d, env.source, columns, plan);
+    from = sampledFrom(c, env.source, plan, env.base);
   } catch {
     return refuse('badQuery'); // a sample size that is not a checked literal
   }

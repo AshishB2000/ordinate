@@ -13,7 +13,11 @@
 //     after: a failed delete leaves orphan files (reclaimed with the dataset),
 //     never a Live record pointing at nothing or an extract with no table;
 //   • Live → extract goes through `datasets.persist`, the one door every
-//     table write takes (the answer cache hears it, the search index is built).
+//     table write takes (the answer cache hears it, the search index is built);
+//   • an extract made from a Live dataset — "Copy the data instead" or "Make a
+//     copy" — keeps the dataset's base filters as its Prepare steps (D13), in
+//     its FIRST write: never a moment, or after a crash a copy, wider than the
+//     dataset allows.
 
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
@@ -29,6 +33,8 @@ import { datasetFilePath, datasetsDir, parquetPath, serialized, sourceParquetPat
 import { removeAll as removeSnapshots } from './snapshots';
 import { removeIndex } from '../engine/dataSearchResident';
 import { isLive, liveColumnsOf, newLiveSettings } from './liveDataset';
+import { applyPipelineAsync } from './regexOffThread';
+import type { FilterStep, TableData } from './transforms';
 
 /** Create a Live dataset from a connection selection. Null when the project or the origin is not usable. */
 export async function saveLiveRecord(
@@ -92,32 +98,68 @@ export async function toLiveRecord(projectId: string, id: string, columns: Parse
   return true;
 }
 
+/** A fetched table as an extract's data: under base filters, the rows they keep, with the table as the Prepare source. */
+export type ExtractData = Pick<Dataset, 'columns' | 'rows' | 'rowCount' | 'steps' | 'source' | 'stepCounts'>;
+
+/**
+ * `table` with a Live dataset's base filters as its Prepare steps — or the column of a step the fold
+ * would SKIP (it is not in the fetched rows): that copy would hold rows the dataset leaves out, so the
+ * caller refuses it. No steps: the table as fetched, as today.
+ */
+export async function extractData(table: TableData, steps: FilterStep[]): Promise<{ ok: true; data: ExtractData } | { ok: false; column: string }> {
+  if (!steps.length) return { ok: true, data: { columns: table.columns, rows: table.rows, rowCount: table.rows.length, steps: [] } };
+  const out = await applyPipelineAsync(table, steps); // plain filter steps: no salt, no other dataset
+  if (out.warnings.length) return { ok: false, column: (steps.find((s) => !table.columns.some((c) => c.name === s.column)) ?? steps[0]).column };
+  return { ok: true, data: { columns: out.columns, rows: out.rows, rowCount: out.rowCount, steps, source: table, stepCounts: out.stepCounts } };
+}
+
+/** The Prepare part of an extract record: nothing when there are no steps (today's record). */
+function prepared(data: ExtractData): Partial<Dataset> {
+  return data.source ? { source: data.source, stepCounts: data.stepCounts } : {};
+}
+
 /**
  * Turn a Live dataset back into an extract with the rows a normal import just
- * fetched. The record keeps its id, name, origin and catalog-facing fields;
- * `mode`/`live` go, and the table is written like any refresh's.
+ * fetched (`extractData`). The record keeps its id, name, origin and
+ * catalog-facing fields; `mode`/`live` go (and the top-level `baseFilters` with
+ * them: they are the steps now), and the table is written like any refresh's.
  */
-export async function toExtractRecord(
-  projectId: string,
-  id: string,
-  table: { columns: ParsedColumn[]; rows: (string | number | null)[][] },
-): Promise<Dataset | null> {
+export async function toExtractRecord(projectId: string, id: string, data: ExtractData): Promise<Dataset | null> {
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta || !isLive(meta)) return null;
   const { resident: _r, sourceColumns: _s, storageVersion: _v, mode: _m, live: _l, ...rest } = meta;
   const now = new Date().toISOString();
   const ds: Dataset = {
     ...rest,
-    columns: table.columns,
-    rows: table.rows,
-    rowCount: table.rows.length,
+    columns: data.columns,
+    rows: data.rows,
+    rowCount: data.rowCount,
     schemaVersion: 2,
-    steps: [],
+    steps: data.steps,
+    ...prepared(data),
     updatedAt: now,
     lastRefreshedAt: now,
     lastRefreshStatus: 'ok',
     lastRefreshError: null,
   };
+  await datasets.persist(projectId, ds);
+  return ds;
+}
+
+/**
+ * "Make a copy" of a Live dataset with base filters: `datasets.saveDataset`'s new record, born with
+ * the filters as its Prepare steps in one write (a save then `updateSteps` would not be).
+ */
+export async function saveFilteredCopy(projectId: string, input: { name: string; sourceKind: Dataset['sourceKind']; origin: unknown }, data: ExtractData): Promise<Dataset | null> {
+  const origin = sanitizeOrigin(input.origin);
+  if (!isValidId(projectId) || !origin || !(await projects.getProject(projectId))) return null;
+  const now = new Date().toISOString();
+  const ds: Dataset = {
+    id: randomUUID(), projectId, name: input.name, sourceKind: input.sourceKind,
+    columns: data.columns, rows: data.rows, rowCount: data.rowCount, createdAt: now, updatedAt: now, schemaVersion: 2, steps: data.steps, ...prepared(data),
+    origin, lastRefreshedAt: now, lastRefreshStatus: 'ok', lastRefreshError: null,
+  };
+  await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await datasets.persist(projectId, ds);
   return ds;
 }

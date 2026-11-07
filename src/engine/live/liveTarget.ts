@@ -23,15 +23,16 @@ import type { ConnectorDef, LiveDialectId } from '../../connectors/types';
 import { loadSecrets } from '../../ipc/connectionSecrets';
 import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
-import { hasBaseFilters } from '../../data/liveBaseFilters';
 import { hasLiveCalcs } from '../../data/liveCalcs';
 import type { LiveSettings } from '../../data/liveDataset';
+import type { FilterStep } from '../../data/transforms';
 import * as liveMsg from '../../data/liveMessages';
 import * as msg from '../liveQueryMessages';
 import { ctx } from '../../server/context';
 import type { CompileEnv, LiveSource } from './compile';
 import type { LiveColumn, LiveRefusal } from './liveSpec';
 import { refuse } from './liveSpec';
+import { baseOfLive } from './liveBase';
 
 export interface LiveTarget {
   projectId: string;
@@ -44,7 +45,10 @@ export interface LiveTarget {
   columns: LiveColumn[];
   dialect: LiveDialectId;
   source: LiveSource;
+  /** `env.base` holds the dataset's base filters, adapted (./liveBase) — unless the caller asked to skip them. */
   env: CompileEnv;
+  /** The stored base filters (data/liveBaseFilters), for a caller that adapts them itself (the schema sync, against new columns). */
+  baseFilters: FilterStep[];
   def: ConnectorDef;
   values: Record<string, unknown>;
   /** The connection's secrets, loaded once, on the first warehouse call. */
@@ -75,15 +79,17 @@ export function liveSourceOf(origin: { sql?: unknown; table?: unknown }, def: Co
   return quotedTable(def.family, table) === null ? null : { kind: 'table', parts: table.split('.') };
 }
 
-/** Everything one Live question needs, or why it cannot be asked. */
-export async function liveTarget(projectId: string, datasetId: string): Promise<{ ok: true; target: LiveTarget } | TargetProblem> {
+/**
+ * Everything one Live question needs, or why it cannot be asked. The dataset's base filters are
+ * adapted here, once, into `env.base` — a step that cannot be applied refuses the question
+ * (`baseFilter`), never skips. `base: 'skip'` leaves them to the caller: the schema sync adapts them
+ * against the columns it has just read.
+ */
+export async function liveTarget(projectId: string, datasetId: string, opts: { base?: 'skip' } = {}): Promise<{ ok: true; target: LiveTarget } | TargetProblem> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, kind: 'unavailable', error: msg.liveDatasetMissing() };
   if (!isLive(meta) || !meta.live) return { ok: false, kind: 'unavailable', error: msg.liveNotLive() };
-  // 08a: this pod stores the filters but cannot apply them yet. Every question, sync and sample would
-  // answer WITHOUT them, so none is asked. Dropped when the pod learns to compile them.
-  if (hasBaseFilters(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('baseFilter', meta.live.baseFilters?.[0]?.column) };
-  // 00a: the same for calculated fields (part 8): this pod can't compute them, so a question would answer wider or skip a filter on one.
+  // 00a: this pod can't compute a Live dataset's calculated fields (part 8), so a question would answer wider or skip a filter on one.
   if (hasLiveCalcs(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;
   if (!origin || origin.kind !== 'connection') return { ok: false, kind: 'refused', refusal: refuse('badSource') };
@@ -104,6 +110,12 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
     const sourceType = sourceTypes.get(c.name);
     return sourceType ? { name: c.name, type: c.type, sourceType } : { name: c.name, type: c.type };
   });
+  const env: CompileEnv = { dialect, source, columns };
+  if (opts.base !== 'skip') {
+    const b = baseOfLive(meta.live, columns);
+    if (!b.ok) return { ok: false, kind: 'refused', refusal: b, dialect };
+    if (b.base.length) env.base = b.base;
+  }
   let secrets: Promise<Record<string, string>> | null = null;
   return {
     ok: true,
@@ -116,7 +128,8 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
       columns,
       dialect,
       source,
-      env: { dialect, source, columns },
+      env,
+      baseFilters: meta.live.baseFilters ?? [],
       def,
       values: conn.values,
       secrets: () => (secrets ??= loadSecrets(conn.id, def)),

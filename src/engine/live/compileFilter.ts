@@ -169,3 +169,14 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
       return refuse('badQuery');
   }
 }
+
+/** Every filter as a predicate, in order, or the first refusal: a statement's WHERE (base filters first). */
+export function predicates(c: Ctx, filters: readonly LiveFilter[] | undefined): string[] | LiveRefusal {
+  const out: string[] = [];
+  for (const f of filters ?? []) {
+    const s = predicate(c, f);
+    if (typeof s !== 'string') return s;
+    out.push(s);
+  }
+  return out;
+}

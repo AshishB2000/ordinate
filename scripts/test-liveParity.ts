@@ -74,6 +74,7 @@ async function main(): Promise<void> {
     split.some((p) => /label count/.test(p)), split.join(' | '));
 
   await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, fx.runDuck).live, env: report.envs.typed, stored: x.stored, engine: fx.duckEngine });
+  await (require('./liveParityBase') as typeof import('./liveParityBase')).baseFilterCase(x, fx.duckEngine.run, report.envs.typed, ok);
 }
 
 main()

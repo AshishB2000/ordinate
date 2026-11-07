@@ -50,6 +50,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
 import { hasMetricMeasure, withLeafMeasures } from '../analysis/metricMeasures';
 import { withoutSamples } from '../data/liveProfile';
+import { withoutBaseValues } from '../data/liveBaseFilters';
 
 export type SensitiveLevel = 'personal' | 'financial';
 export const HIDDEN_BY_POLICY = 'Hidden by the share policy';
@@ -407,8 +408,10 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       let record: Record<string, unknown>;
       try { record = JSON.parse(e.data.toString('utf8')); } catch (_) { continue; }
       if (record.mode === 'live') {
-        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5): a marked column's go.
-        if (withoutSamples(record.live, await withheldColumns(projectId, id))) {
+        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5) and its base filters the
+        // values they keep or leave out (part 1 08): a marked column's go, its steps keeping their column and operator.
+        const withheld = await withheldColumns(projectId, id);
+        if ([withoutSamples(record.live, withheld), withoutBaseValues(record, withheld)].some(Boolean)) { // both run
           e.data = Buffer.from(JSON.stringify(record, null, 2), 'utf8');
           changed = true;
         }

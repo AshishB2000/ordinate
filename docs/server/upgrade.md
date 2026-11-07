@@ -194,7 +194,8 @@ write. Each item says what a pod older than this release does, and what this rel
 - **Always-applied filters on a [Live dataset](live-data.md).** An older pod ignores them and
   answers every question without them. This release refuses every question, schema sync, "Make a
   copy" and "Copy the data instead" on that dataset ("Ask your admin to finish upgrading
-  Ordinate").
+  Ordinate"). The release that adds the filters applies them; on its pods, a stored list it cannot
+  read in full still refuses this way.
 - **Calculated fields on a [Live dataset](live-data.md).** A later release lets a Live dataset define
   its own calculated fields. An older pod ignores them. It skips a filter on one ("Filter skipped:
   unknown column"), so the figure is wider than the filter says, and its "Make a copy" and "Copy the

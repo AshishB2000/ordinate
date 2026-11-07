@@ -35,7 +35,7 @@ import * as datasets from '../../data/datasets';
 import type { ParsedColumn } from '../../data/parse';
 import { isLive, writeSchemaSync } from '../../data/liveDataset';
 import type { LiveColumnProfile, LiveProfile, SampleSkip } from '../../data/liveProfile';
-import { PROFILE_MAX_COLUMNS, sampleMatrix } from '../../data/liveProfile';
+import { sampleMatrix } from '../../data/liveProfile';
 import type { DeclaredColumn } from '../../data/liveSchema';
 import { announceRefreshed } from '../../data/refreshEvents';
 import { scanDataset } from '../../app/privacyStore';
@@ -56,7 +56,9 @@ import { LiveCallError, runStatement } from './liveQuery';
 import type { LiveTarget } from './liveTarget';
 import { liveTarget } from './liveTarget';
 import type { ProfileFigures } from './profileSql';
-import { compileProfile, compileSamplingKeyProbe, samplePercent, sampleRowsFor, samples, shapeProfile } from './profileSql';
+import { compileProfile, compileSamplingKeyProbe, profiledColumns, samplePercent, sampleRowsFor, samples, shapeProfile } from './profileSql';
+import type { LiveFilter } from './liveSpec';
+import { baseOfLive } from './liveBase';
 import { logger } from '../../app/logger';
 
 /** Why the sample was not read — typed as a live question's failure is. `error` is a catalog sentence. */
@@ -181,16 +183,23 @@ async function attempt(t: LiveTarget, env: CompileEnv, plan: SamplePlan, signal:
  *   - a BLOCK sample came back EMPTY: BigQuery's TABLESAMPLE SYSTEM picks
  *     whole storage blocks, so on a table of few blocks a small percent often
  *     picks none although the catalog counts rows — never stored as "every
- *     column empty".
+ *     column empty";
+ *   - a sample came back EMPTY under the dataset's base filters: the engine
+ *     sampled first, and a selective filter can keep none of those rows.
+ *
+ * The base filters are the dataset's (D13), adapted against the columns just
+ * read; their columns are always among those profiled (`profiledColumns`).
  */
 async function sampleProfile(
   t: LiveTarget,
   columns: DeclaredColumn[],
+  base: LiveFilter[],
   rowEstimate: number | undefined,
   signal: AbortSignal,
 ): Promise<{ outcome: SampleOutcome; figures?: ProfileFigures }> {
-  const cols = columns.slice(0, PROFILE_MAX_COLUMNS).map((c) => ({ name: c.name, type: c.type, sourceType: c.sourceType }));
+  const cols = profiledColumns(columns.map((c) => ({ name: c.name, type: c.type, sourceType: c.sourceType })), base);
   const env: CompileEnv = { dialect: t.dialect, source: t.source, columns: cols };
+  if (base.length) env.base = base;
   let plan: SamplePlan = { rows: sampleRowsFor(cols.length) };
   try {
     if (t.source.kind === 'table') {
@@ -212,8 +221,8 @@ async function sampleProfile(
       plan = limitOnly; // the engine refused its own sample clause here (logged where it failed)
       got = await attempt(t, env, plan, signal);
     }
-    if ('figures' in got && got.figures.rows === 0 && plan.percent !== undefined) {
-      plan = limitOnly; // the block sample missed every block
+    if ('figures' in got && got.figures.rows === 0 && (plan.percent !== undefined || (base.length > 0 && samples(env, plan)))) {
+      plan = limitOnly; // the block sample missed every block, or the base filters kept none of the sample
       got = await attempt(t, env, plan, signal);
     }
     if (!('figures' in got)) return got;
@@ -289,9 +298,16 @@ function diffColumns(before: ParsedColumn[], after: ParsedColumn[]): { added: st
   };
 }
 
-/** Sync one Live dataset's schema and profile. Call it through ./schemaSyncJob (one at a time per dataset). Never throws. */
-export async function syncLiveSchema(projectId: string, datasetId: string, signal: AbortSignal = new AbortController().signal): Promise<SyncReply> {
-  const found = await liveTarget(projectId, datasetId);
+/** The base filters a Live block holds, as one comparable value. */
+const baseKey = (live: LiveTarget['live']): string => JSON.stringify([live.baseFilters ?? [], live.baseFiltersUnreadable === true]);
+
+/**
+ * Sync one Live dataset's schema and profile. Call it through ./schemaSyncJob (one at a time per dataset). Never throws.
+ * `again`: when the base filters changed while it read (an editor saved them, and the sync they queued found this one
+ * running), it reads once more under the new ones — its own figures were not stored (`sampledUnder`).
+ */
+export async function syncLiveSchema(projectId: string, datasetId: string, signal: AbortSignal = new AbortController().signal, again = true): Promise<SyncReply> {
+  const found = await liveTarget(projectId, datasetId, { base: 'skip' }); // adapted below, against the columns the sync reads
   if (!found.ok) {
     return found.kind === 'unavailable'
       ? { ok: false, code: 'live_unavailable', error: found.error }
@@ -311,8 +327,13 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
   const next = read.columns;
   const diff = diffColumns(meta.columns, next);
 
-  // 2. The sample.
-  const sampled = await sampleProfile(t, next, read.rowEstimate, signal);
+  // 2. The sample, under the base filters. One that cannot be applied to these columns refuses the
+  // sample, typed (the last sync's figures are kept), and the columns still sync.
+  const based = baseOfLive(t.live, next);
+  if (!based.ok) trace.recordLive(opOf(t), 'refused');
+  const sampled = based.ok
+    ? await sampleProfile(t, next, based.base, read.rowEstimate, signal)
+    : { outcome: { ok: false as const, code: 'live_refused' as const, reason: based.code, error: based.message } };
   if (signal.aborted) return { ok: false, code: 'live_cancelled', error: qmsg.liveCancelled() };
   const now = new Date().toISOString();
   const profile = nextProfile(next, sampled, meta.live.profile, meta.columns, now);
@@ -323,12 +344,14 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
 
   // 4. One write; the cache key moves with it.
   const changed = diff.added.length + diff.removed.length + diff.retyped.length > 0;
-  if (!(await writeSchemaSync(projectId, datasetId, { columns: next, profile, missingColumns: missing, syncedAt: now, changed }))) {
+  if (!(await writeSchemaSync(projectId, datasetId, { columns: next, profile, missingColumns: missing, syncedAt: now, changed, sampledUnder: t.baseFilters }))) {
     return { ok: false, code: 'live_unavailable', error: qmsg.liveNotLive() };
   }
   queryCache.invalidateDataset(datasetId, projectId);
   const declared: ParsedColumn[] = next.map((c) => ({ name: c.name, type: c.type }));
   await scanDataset(projectId, { id: datasetId, columns: declared, rows: sampleMatrix(declared, profile) });
   if (changed) announceRefreshed({ projectId, datasetId, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
+  const after = await datasets.getDatasetMeta(projectId, datasetId);
+  if (again && !signal.aborted && after?.live && baseKey(after.live) !== baseKey(t.live)) return syncLiveSchema(projectId, datasetId, signal, false);
   return { ok: true, schemaSyncedAt: now, columns: next.length, ...diff, missing, sample: sampled.outcome };
 }

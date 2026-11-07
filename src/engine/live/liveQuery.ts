@@ -234,7 +234,7 @@ function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal 
 /** Cache → flight → warehouse → shape, for one adapted question. */
 async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
   const op = opOf(t.dialect);
-  const key = keyOf(t, { ir, source: t.source, dialect: t.dialect });
+  const key = keyOf(t, { ir, source: t.source, dialect: t.dialect, base: t.env.base }); // no base: undefined, dropped — today's key
   const ages = agesOf(t);
   const fresh = queryCache.get<Answered>('live', key, { maxAgeMs: ages.lookupMs });
   if (fresh) {

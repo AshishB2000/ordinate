@@ -68,6 +68,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/dashboards/ControlsExtras.tsx': { count: 1, how: 'keeps' },
   'web/src/features/dashboards/tileActions.tsx': { count: 5, how: 'keeps' },
   'web/src/features/dashboards/useViewer.ts': { count: 1, how: 'keeps' },
+  // the Live dataset's Always applied: saved through liveFilters, which keeps a term step (the server's contract refuses one)
+  'web/src/features/data/BaseFiltersPanel.tsx': { count: 1, how: 'keeps' },
   'web/src/features/explore/Answer.tsx': { count: 1, how: 'keeps' },
   'web/src/features/explore/AnswerActions.tsx': { count: 1, how: 'keeps' },
   'web/src/features/explore/spec.ts': { count: 1, how: 'keeps' },
@@ -88,6 +90,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/fxResident.ts': { count: 2, how: 'throws' },
   'src/engine/geoResident.ts': { count: 1, how: 'throws' },
   'src/engine/joinResident.ts': { count: 3, how: 'throws' },
+  // liveBaseOf: a base filter through adaptFilter, which throws on a term (a base list is sanitized to plain filters first)
+  'src/engine/live/liveBase.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveQuery.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveSpec.ts': { count: 8, how: 'throws' },
   'src/engine/lodResident.ts': { count: 1, how: 'throws' },
