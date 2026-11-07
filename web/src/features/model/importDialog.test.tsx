@@ -286,6 +286,15 @@ describe('The Data model: Import… a dbt semantic manifest', () => {
     for (const [, words] of F2_WORDS) expect(d.getByText(words)).toBeTruthy();
   });
 
+  it('says where an imported metric\'s figure can differ from dbt\'s, on its line', async () => {
+    const items = DBT_PLAN.items.map((i) => (i.key === 'metric:r' ? { ...i, differs: ['empty_text'] } : i.key === 'metric:o' ? { ...i, differs: ['whole_division'] } : i));
+    serve({ 'model:importPlan': { body: { ok: true, plan: { ...DBT_PLAN, items } } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    expect(await d.findByText("a text cell that is '' or only spaces is empty here, where dbt counts it")).toBeTruthy();
+    expect(d.getByText('link to dbt, date · it divides with decimals here, where dbt on Postgres, Redshift or Trino divides whole numbers as whole numbers')).toBeTruthy();
+  });
+
   it('a model zip shows no Datasets section and no copy notice', async () => {
     serve();
     renderApp(`/model/${P}`);

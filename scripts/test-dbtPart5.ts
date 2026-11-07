@@ -183,7 +183,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
       if (!Object.is(got.get(n), EXPECTED.byDay[n][d] ?? null) && !PINNED.has(`${n}:${d}`)) dayMiss.push(`${n} ${d}: ${got.get(n)} vs ${EXPECTED.byDay[n][d] ?? null}`);
     }
   }
-  ok(`each window, by day, sums dbt's rows: equal to MetricFlow on every day, no figure on a day it leaves out (${days} figures)`, dayMiss.length === 0 && days === HELD.length * 547, show(dayMiss.slice(0, 12)));
+  ok(`each window, by day, sums dbt's rows: equal to expected.json (pending MetricFlow) on every day, no figure on a day it leaves out (${days} figures)`, dayMiss.length === 0 && days === HELD.length * 547, show(dayMiss.slice(0, 12)));
 
   const periodsOf = (grain: string): Array<[string, string]> => {
     const out: Array<[string, string]> = [];
@@ -213,8 +213,8 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
       }
     }
   }
-  ok(`at every ended week, month, quarter and year it equals MetricFlow but where its last window holds no row (${periods} figures)`, periodMiss.length === 0 && periods > 500, show(periodMiss.slice(0, 12)));
-  ok('NEGATIVE CONTROL: there it has no figure and MetricFlow an earlier day\'s, at 14 periods: period_agg_last is load-bearing', parted.length === 14, show(parted));
+  ok(`at every ended week, month, quarter and year it equals expected.json (pending MetricFlow) but where its last window holds no row (${periods} figures)`, periodMiss.length === 0 && periods > 500, show(periodMiss.slice(0, 12)));
+  ok('NEGATIVE CONTROL: there it has no figure and expected.json (pending MetricFlow) an earlier day\'s, at 14 periods: period_agg_last is load-bearing', parted.length === 14, show(parted));
 
   // ── § controls: each skip is load-bearing ──────────────────────────────────
   const someDiffers = async (pairs: Record<string, number>, get: (k: string) => Promise<number | null>): Promise<boolean> => {
@@ -236,7 +236,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('a year compare differs from dbt\'s offset in leap February 2024 (RF 5)', typeof lyFeb === 'number' && !Object.is(lyFeb, EXPECTED.controls.revenue_ly['2024-02']), show([await tile(prior, '2024-02-01', '2024-02-29'), EXPECTED.controls.revenue_ly['2024-02']]));
   const counted = await hand('orders 7d', { base: idOf('orders'), window: { last: 7, unit: 'day' } });
   const quiet = Object.keys(EXPECTED.controls.revenue_rolling_month).find((d) => EXPECTED.byDay.orders_7d[d] === undefined) as string; // a day whose window holds no order
-  ok('a count over a window with no row is 0 here, where MetricFlow has no figure: count_window is load-bearing', !!quiet && (await tile(counted, quiet, quiet)) === 0, show([quiet, await tile(counted, quiet, quiet)]));
+  ok('a count over a window with no row is 0 here, where expected.json (pending MetricFlow) has no figure: count_window is load-bearing', !!quiet && (await tile(counted, quiet, quiet)) === 0, show([quiet, await tile(counted, quiet, quiet)]));
   const funnel = await hand('hand funnel', { funnel: { entity: 'user_id', event: 'event', time: 'ts', steps: ['visit', 'buy'], window: { n: 7, unit: 'days' } }, show: 'rate' }, S.ds.events);
   const funnelRate = ((await post('metric:values', { projectId: S.P, ids: [funnel] })).value as unknown as Reply[])[0]?.value ?? null;
   ok('a funnel differs from dbt\'s conversion with a repeat visitor (RF 5)', typeof funnelRate === 'number' && !Object.is(funnelRate, EXPECTED.controls.visit_to_buy), show([funnelRate, EXPECTED.controls.visit_to_buy]));

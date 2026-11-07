@@ -215,6 +215,8 @@ export interface PlanItem {
   because?: string;
   /** The editor's own sentence, for `invalid`. */
   error?: string;
+  /** src/app/dbtImport.ts DbtNote: where a dbt metric's figure can differ from dbt's (imported, and said). */
+  differs?: Array<'empty_text' | 'whole_division'>;
 }
 
 export interface ImportPlan {

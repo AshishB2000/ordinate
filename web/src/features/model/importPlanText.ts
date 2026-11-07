@@ -85,6 +85,16 @@ const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
 };
 
 
+/** Where an imported dbt metric's figure can differ from dbt's (the server's DbtNote), in words. */
+const DIFFERS: Record<NonNullable<PlanItem['differs']>[number], string> = {
+  empty_text: "a text cell that is '' or only spaces is empty here, where dbt counts it",
+  whole_division: 'it divides with decimals here, where dbt on Postgres, Redshift or Trino divides whole numbers as whole numbers',
+};
+const withDiffers = (line: PlanLine, i: PlanItem): PlanLine => {
+  const said = (i.differs ?? []).map((d) => DIFFERS[d]).filter(Boolean);
+  return said.length ? { ...line, detail: [line.detail, ...said].filter(Boolean).join(' · ') } : line;
+};
+
 function skippedLine(i: PlanItem, under: PlanItem[]): PlanLine {
   const more = under.length ? `and ${dependents(under)} on it` : undefined;
   const dbt = i.reason ? DBT_WORDS[i.reason] : undefined;
@@ -167,7 +177,7 @@ export function planSections(plan: ImportPlan): PlanSection[] {
     }
     if (status === 'onlyHere') return { status, title, lines: [], note: 'Not in the files. An import never deletes.' };
     if (status === 'skipped') return { status, title, lines: skippedLines(plan.items) };
-    return { status, title, lines: plan.items.filter((i) => i.status === status).map(lineOf) };
+    return { status, title, lines: plan.items.filter((i) => i.status === status).map((i) => withDiffers(lineOf(i), i)) };
   });
 }
 

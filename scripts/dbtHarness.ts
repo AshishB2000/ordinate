@@ -52,12 +52,13 @@ type Translation = { model: ParsedModel; skipped: Array<{ dbt: string; reason: s
 
 /**
  * `t` without the skipped entries `golden` skipped for one of the four kinds (whatever `t` says of them now), and
- * without `dbt.inputs`: the golden predates it (a formula's inputs, read as references since the review pass).
+ * without `dbt.inputs` and `dbt.notes`: the golden predates them (a formula's inputs, read as references, and where a
+ * figure can differ from dbt's, both since the review pass).
  */
 export function withoutFourKinds<T extends Translation>(t: T, golden: Translation): T {
   const gone = new Set(golden.skipped.filter((s) => FOUR.has(s.reason)).map((s) => s.dbt));
   const keep = <S extends { dbt: string }>(list: S[]): S[] => list.filter((s) => !gone.has(s.dbt));
-  const { inputs: _inputs, ...src } = t.model.dbt ?? ({} as Partial<NonNullable<ParsedModel['dbt']>>);
+  const { inputs: _inputs, notes: _notes, ...src } = t.model.dbt ?? ({} as Partial<NonNullable<ParsedModel['dbt']>>);
   const dbt = t.model.dbt ? { ...src, skipped: keep(t.model.dbt.skipped) } : undefined;
   return { ...t, skipped: keep(t.skipped), model: { ...t.model, ...(dbt && { dbt }) } };
 }

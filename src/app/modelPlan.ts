@@ -32,7 +32,7 @@ import type { Relationship } from '../analysis/relationships';
 import type { DatasetMeta } from '../data/datasets';
 import { modelDatasetMoved, modelNameSwap } from './modelFileMessages';
 import { dbtItems, formulaNames, keepHere, withImportTags } from './dbtPlan';
-import type { DbtSkip } from './dbtImport';
+import type { DbtNote, DbtSkip } from './dbtImport';
 
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
 export const PLAN_STATUSES: readonly PlanStatus[] = ['unchanged', 'updated', 'renamed', 'new', 'conflict', 'skipped', 'onlyHere'];
@@ -58,6 +58,8 @@ export interface PlanItem {
   because?: string;
   /** The editor's own sentence, for `invalid`. */
   error?: string;
+  /** A dbt metric's figure can differ from dbt's here, and how (./dbtImport.ts DbtNote): imported, and said. */
+  differs?: DbtNote[];
   fileHash: string;
   hereHash: string;
 }
@@ -371,6 +373,11 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       }
     }
     if (!fell) break;
+  }
+
+  for (const item of items) {
+    const notes = item.kind === 'metric' && item.status !== 'skipped' ? file.dbt?.notes.get(item.key.slice('metric:'.length)) : undefined;
+    if (notes) item.differs = notes;
   }
 
   // ── Unreadable files: one skipped item each ──

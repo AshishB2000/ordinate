@@ -50,8 +50,19 @@ export interface DbtSkipped {
 
 /** Which dataset a semantic model landed on, and how; no `datasetId`: none here. */
 export interface DbtModelMatch { name: string; datasetId?: string; how?: 'map' | 'exact' | 'name' }
-/** `inputs`: each ratio or derived metric's file id → its inputs' file ids (it names them by name, so a2 reads them as references). */
-export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[]; inputs: Map<string, string[]> }
+/**
+ * Where an imported metric's figure can differ from dbt's, kept and said (the owner's ruling): `empty_text`, Ordinate
+ * reads a text cell that is '' or spaces as empty where dbt counts it (a count, `!=`, `NOT IN`, `IS [NOT] NULL` on
+ * text); `whole_division`, a derived metric that divides is computed with decimals, where dbt on Postgres, Redshift or
+ * Trino divides two whole numbers as whole numbers.
+ */
+export type DbtNote = 'empty_text' | 'whole_division';
+
+/**
+ * `inputs`: each ratio or derived metric's file id → its inputs' file ids (it names them by name, so a2 reads them as
+ * references). `notes`: a metric's file id → where its figure can differ from dbt's.
+ */
+export interface DbtSource { models: DbtModelMatch[]; skipped: DbtSkipped[]; inputs: Map<string, string[]>; notes: Map<string, DbtNote[]> }
 export interface DbtDataset { id: string; name: string; columns: ParsedColumn[]; live?: boolean }
 
 type Obj = Record<string, unknown>;
@@ -90,7 +101,7 @@ const MAX_FORMULA = 2_000;
 
 interface Dim { column: ParsedColumn | null; time: boolean }
 interface Model { name: string; ds?: DbtDataset; entity?: string; defaultTime?: string; dims: Map<string, Dim> }
-type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean; inputs?: string[] } | { skip: DbtSkip; model?: string; because?: string };
+type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean; inputs?: string[]; notes?: DbtNote[] } | { skip: DbtSkip; model?: string; because?: string };
 
 const aliasOf = (i: Obj): string => String(name(own(i, 'alias')) ?? own(i, 'name'));
 
@@ -259,9 +270,11 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     const filters = texts[0] && texts[1] ? where([...new Set([...texts[0], ...texts[1]])], model) : null; // one condition twice is once
     if (!filters) return { skip: 'filter_shape', ...at };
     const definition = sanitizeDefinition({ column: column.name, aggregation: agg, ...(snapshot && { snapshot }) });
+    const onText = (c: string): boolean => ds.columns.some((x) => x.name === c && x.type === 'text');
+    const empties = ((agg === 'count' || agg === 'countd') && onText(column.name)) || filters.some((s) => (s.op === 'not_empty' || s.op === 'is_empty') && onText(s.column));
     return {
       metric: { ...shell(n, m, ds), definition, ...(filters.length && { filters }), format: sanitizeFormat(formatFor(column.name, agg)), ...(timeColumn && { timeColumn }) },
-      model: model.name, measure: own(inp, 'name') as string, filtered: filters.length > 0,
+      model: model.name, measure: own(inp, 'name') as string, filtered: filters.length > 0, ...(empties && { notes: ['empty_text' as const] }),
     };
   };
 
@@ -317,6 +330,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
         const expr = own(tp, 'expr');
         const inputs = nodes(own(tp, 'metrics')).map(input);
         r = typeof expr === 'string' && inputs.every((x) => x) ? formula(n, m, inputs as Obj[], (refs) => derivedFormula(expr, refs)) : { skip: 'unreadable' };
+        if ('metric' in r && typeof expr === 'string' && expr.includes('/')) r = { ...r, notes: ['whole_division'] };
         break;
       }
       case 'cumulative':
@@ -352,11 +366,13 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
 
   const metrics: ModelMetric[] = [];
   const inputs = new Map<string, string[]>();
+  const notes = new Map<string, DbtNote[]>();
   for (const [n, m] of raw) {
     const r = translate(n);
     if ('metric' in r) {
       metrics.push(r.metric);
       if (r.inputs) inputs.set(r.metric.id, r.inputs);
+      if (r.notes) notes.set(r.metric.id, r.notes);
     } else skipped.push({ name: nameOf(m) || n, kind: 'metric', reason: r.skip, dbt: n, ...(r.model && { model: r.model }), ...(r.because && { because: r.because }) });
   }
 
@@ -368,7 +384,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     terms: [],
     relationships: [],
     invalid: [],
-    dbt: { models: [...matches.values()], skipped, inputs },
+    dbt: { models: [...matches.values()], skipped, inputs, notes },
   };
   return { model, skipped };
 }

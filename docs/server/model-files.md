@@ -140,6 +140,13 @@ semantic model is. Datasets are never created.
 | Filters: `{{ Dimension('<entity>__<dimension>') }}` with `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`, `IS [NOT] NULL`, joined by `AND` | filter steps; `!=` and `NOT IN` also leave out an empty cell, as SQL leaves out NULL |
 | Ratio; derived (`+ − × ÷`, brackets, numbers) over metrics on one semantic model | a formula metric (`[Revenue] / [Orders]`) |
 
+**Where a figure can differ from dbt's, imported and said.** Ordinate reads a text cell that is `''` or only spaces
+as empty, as it reads NULL; dbt counts such a cell as a value. So where the data holds `''` or spaces, a count of a
+text column and `!=`, `NOT IN` and `IS [NOT] NULL` on text give another figure than dbt's (over `paid`, `''`, `'  '`,
+`refunded` and NULL, dbt counts 4 statuses and Ordinate 2). A derived metric that divides is computed with decimals,
+where dbt on Postgres, Redshift or Trino divides two whole numbers as whole numbers (7 / 2 is 3 there). Both are
+imported; the dry run says it on each such metric.
+
 A metric's name is its `label`, else its dbt name. Each carries where it came from, so importing the file again
 updates it, even after a rename here (the dry run shows the rename back). An import changes only what dbt says:
 a table's role, grain, description and guide, a field's other names and value labels, and a metric's format,
@@ -167,9 +174,10 @@ on a calendar unlike dbt's; `period_agg` `first` or `average`; `fill_nulls_with`
 simple metric with a date on its measure; over a count (0 here where dbt has no figure); a filter of another shape;
 else `period_agg: last`. A ratio or derived metric over one falls with it.
 
-The translation is held, figure by figure, to dbt's on checked-in projects (`scripts/fixtures/dbt/` with
-`scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`; each README says how the
-figures were recorded).
+The translation is held, figure by figure, to recorded figures on checked-in projects (`scripts/fixtures/dbt/` with
+`scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`). Those figures are
+**pending MetricFlow**: they were computed with DuckDB SQL written as MetricFlow's, and MetricFlow itself has not run on
+them yet (each README says how to record its figures).
 
 ## The loop in CI
 

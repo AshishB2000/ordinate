@@ -14,6 +14,7 @@
 //              table's role, grain and guide, a field's other names) never cleared by a copy.
 // § figures    every imported metric over the seed, by total, region and month, equals expected.json (Object.is), and a
 //              group with no figure there has none here. NEGATIVE CONTROL: `!=` without its `not_empty` step differs.
+//              expected.json is pending MetricFlow (scripts/fixtures/dbt/README.md): DuckDB SQL written as MetricFlow's.
 //
 //   npm run build:ts && node scripts/test-dbtImport.js
 
@@ -35,6 +36,8 @@ const { stableStringify }: typeof import('../src/engine/queryCache') = require('
 const { isValidId }: typeof import('../src/app/ids') = require('../src/app/ids');
 const msg: typeof import('../src/app/modelFileMessages') = require('../src/app/modelFileMessages');
 const { formatFor }: typeof import('../src/analysis/metricAuto') = require('../src/analysis/metricAuto');
+const { applyPipeline }: typeof import('../src/data/transforms') = require('../src/data/transforms');
+const { computeMetric }: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 
 const { DEFAULT_CALENDAR }: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
 const MANIFEST = F1_MANIFEST;
@@ -87,6 +90,31 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   days.semantic_models[0].measures.push({ name: 'order_days', agg: 'count_distinct', expr: 'order_date' }, { name: 'buyers', agg: 'count_distinct', expr: 'customer_id' });
   days.metrics.push({ name: 'order_days', label: 'Order days', type: 'simple', type_params: { measure: 'order_days' } }, { name: 'buyers', label: 'Buyers', type: 'simple', type_params: { measure: 'buyers' } });
   const daysT = translateDbt(days, DATASETS, {});
+  // Ordinate reads a text cell that is '' or spaces as empty where dbt counts it, and divides a derived metric with
+  // decimals: kept, and said (docs/server/model-files.md). Over the cells below dbt's count(status) is 4 and its sum
+  // where status != 'refunded' is 60; Ordinate's are pinned here.
+  const EMPTY_COLS: ParsedColumn[] = [{ name: 'id', type: 'text' }, { name: 'status', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'ts', type: 'date' }];
+  const EMPTY_ROWS = [['o1', 'paid', 10, '2024-01-01'], ['o2', '', 20, '2024-01-01'], ['o3', '  ', 30, '2024-01-02'], ['o4', 'refunded', 40, '2024-01-02'], ['o5', null, 50, '2024-01-03']];
+  const blank = translateDbt({
+    semantic_models: [{ name: 'orders', defaults: { agg_time_dimension: 'ts' }, entities: [{ name: 'order', type: 'primary', expr: 'id' }], dimensions: [{ name: 'status', type: 'categorical' }, { name: 'ts', type: 'time' }],
+      measures: [{ name: 'status_count', agg: 'count', expr: 'status' }, { name: 'total', agg: 'sum', expr: 'amount' }] }],
+    metrics: [
+      { name: 'statuses', type: 'simple', type_params: { measure: 'status_count' } },
+      { name: 'not_refunded', type: 'simple', type_params: { measure: 'total' }, filter: { where_filters: [{ where_sql_template: "{{ Dimension('order__status') }} != 'refunded'" }] } },
+      { name: 'total', type: 'simple', type_params: { measure: 'total' } },
+      { name: 'per_status', type: 'derived', type_params: { expr: 'total / statuses', metrics: ['total', 'statuses'] } },
+      { name: 'ratio', type: 'ratio', type_params: { numerator: 'total', denominator: 'statuses' } },
+    ],
+  }, [{ id: ORDERS, name: 'orders', columns: EMPTY_COLS }], {});
+  const figure = (n: string): number | null => {
+    const x = metricNamed(blank.model, n);
+    const t = applyPipeline({ columns: EMPTY_COLS, rows: EMPTY_ROWS }, x.filters ?? []);
+    return computeMetric(t.columns, t.rows, x.definition as never) as number | null;
+  };
+  const noteOf = (n: string) => blank.model.dbt?.notes.get(metricNamed(blank.model, n)?.id);
+  ok("a count of text over '', '  ', null and two values: 2 here (dbt counts 4), and said", Object.is(figure('statuses'), 2) && isDeepStrictEqual(noteOf('statuses'), ['empty_text']), show([figure('statuses'), noteOf('statuses')]));
+  ok("… != 'refunded' over them: 10 here (dbt sums 60), and said", Object.is(figure('not_refunded'), 10) && isDeepStrictEqual(noteOf('not_refunded'), ['empty_text']), show([figure('not_refunded'), noteOf('not_refunded')]));
+  ok('a derived metric that divides is said; a ratio and a plain sum are not', isDeepStrictEqual(noteOf('per_status'), ['whole_division']) && noteOf('ratio') === undefined && noteOf('total') === undefined, show([...(blank.model.dbt?.notes ?? [])]));
   ok('count_distinct over a date column is skipped, not_a_column; over text it is countd', daysT.skipped.some((s) => s.dbt === 'order_days' && s.reason === 'not_a_column') && !metricNamed(daysT.model, 'Order days')
     && (metricNamed(daysT.model, 'Buyers')?.definition as { aggregation?: string })?.aggregation === 'countd', show(daysT.skipped));
 
@@ -224,6 +252,7 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('… one matched exactly is not', items.some((i) => i.kind === 'dataset' && i.name === 'visits' && i.targetId === S.visits && !i.changes));
   ok('every translated metric is new', model.metrics.every((x) => itemFor(plan, x.importedFrom?.name as string)?.status === 'new'), show(items.filter((i) => i.kind === 'metric' && i.status !== 'skipped' && i.status !== 'new')));
   ok('the key and the field docs are updates', items.some((i) => i.kind === 'table' && i.status === 'updated' && i.changes?.[0]?.field === 'key') && items.some((i) => i.kind === 'field' && i.name === 'Orders · region' && i.status === 'updated'));
+  ok('a metric whose figure can differ from dbt\'s says so on its item; one that cannot says nothing', isDeepStrictEqual(itemFor(plan, 'not_refunded')?.differs, ['empty_text']) && itemFor(plan, 'revenue')?.differs === undefined, show([itemFor(plan, 'not_refunded'), itemFor(plan, 'revenue')]));
   ok('the source says dbt; nothing only here a dbt file never names', plan.plan?.source?.kind === 'dbt' && !items.some((i) => i.status === 'onlyHere'));
   ok('the reply names no path or token', !/staging|fileToken|semantic_manifest/.test(JSON.stringify(plan)));
 
@@ -330,18 +359,18 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   const monthKey = (label: string): string => (/^\d{4}-\d{2}/.test(label) ? label.slice(0, 7) : `${label.slice(-4)}-${MONTHS[label.slice(0, 3)] ?? '??'}`);
   for (const [metric, group, key, want] of EXPECTED) {
     const got = (await figureOf(metric, group)).get(key);
-    ok(`${metric} by ${group || 'total'}${key ? ` ${key}` : ''}: equals MetricFlow (Object.is)`, Object.is(got ?? null, want) || PINNED.has(`${metric}:${group}:${key}`), show([got, want]));
+    ok(`${metric} by ${group || 'total'}${key ? ` ${key}` : ''}: equals expected.json, pending MetricFlow (Object.is)`, Object.is(got ?? null, want) || PINNED.has(`${metric}:${group}:${key}`), show([got, want]));
   }
   for (const [k, got] of figures) {
     const [metric, group] = k.split(':');
     for (const [key, value] of got) {
-      if (!EXPECTED.some((e) => e[0] === metric && e[1] === group && e[2] === key)) ok(`${metric} by ${group} ${key}: no figure where MetricFlow has none`, value === null, show(value));
+      if (!EXPECTED.some((e) => e[0] === metric && e[1] === group && e[2] === key)) ok(`${metric} by ${group} ${key}: no figure where expected.json has none (pending MetricFlow)`, value === null, show(value));
     }
   }
   ok('every imported metric is held to a figure', model.metrics.every((x) => EXPECTED.some((e) => e[0] === x.name)));
   const bare = (await post('metric:save', { projectId: S.P, input: { name: 'Bare !=', datasetId: S.orders, definition: { column: 'amount', aggregation: 'sum' }, filters: [{ type: 'filter', column: 'status', op: '!=', value: 'refunded' }] } })).value;
   const bareTotal = ((await post('metric:values', { projectId: S.P, ids: [bare.metric?.id] })).value as unknown as Reply[])[0]?.value;
-  ok('NEGATIVE CONTROL: != without its not_empty step is a different figure from MetricFlow\'s', !Object.is(bareTotal, EXPECTED.find((e) => e[0] === 'Not refunded' && e[1] === '')?.[3]), show(bareTotal));
+  ok('NEGATIVE CONTROL: != without its not_empty step is a different figure from expected.json\'s (pending MetricFlow)', !Object.is(bareTotal, EXPECTED.find((e) => e[0] === 'Not refunded' && e[1] === '')?.[3]), show(bareTotal));
 
   await close();
   finish();
