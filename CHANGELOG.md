@@ -121,6 +121,9 @@ All notable changes to Ordinate are documented here. Format based on
 - **Data model has a Source tables tab for editors:** the warehouse tables datasets are built from, their
   notes, and what the warehouse says about them, read on a click. Connections links to it with
   "Document in Data model".
+- **Suggested meanings from the warehouse.** A dataset built from a documented warehouse table gets the
+  warehouse's column comments, table comment and primary key as suggestions in Data model → Fields. Nothing
+  changes until an editor clicks Use.
 
 ### Snapshot metrics
 

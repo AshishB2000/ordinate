@@ -213,3 +213,40 @@ e2e('source tables: lineage and the dataset guide', async (s) => {
   assert.equal(await notes.getByRole('link', { name: /Open in Source tables/ }).getAttribute('href'), `/model/${P}?tab=sources&conn=${C}&doc=${docId}`);
   await screens(page, 'model-dataset-source-notes');
 });
+
+/** The column notes hold the meaning Use wrote: a field's value, not page text. */
+const meaning = (page: Page) =>
+  page.waitForFunction(() => [...document.querySelectorAll('textarea, input')].some((e) => (e as HTMLInputElement).value === 'Order amount in USD'));
+
+e2e('source tables: a suggested meaning', async (s) => {
+  const { page } = s;
+  const { P } = ids(s);
+  const liveId = s.server.sample.live?.datasetId;
+  assert.ok(liveId, 'the server was seeded with the Live dataset');
+  assert.ok(docId, 'test 1 started the notes and read the table');
+  const at = `/model/${P}?dataset=${liveId}&panel=fields`;
+  await page.goto(at);
+  await ready(page);
+  const region = page.getByRole('region', { name: 'Suggested by the warehouse' });
+  await region.getByText('The warehouse says: "Order amount in USD"').waitFor();
+  assert.ok(await region.getByText(`from ${TABLE}`).count() >= 1);
+  await screens(page, 'model-suggestions');
+
+  // Nothing is the dataset's until Use: the catalog says nothing about the column yet.
+  await region.locator('li', { hasText: 'amount' }).getByRole('button', { name: 'Use' }).click();
+  await region.getByText('The warehouse says: "Order amount in USD"').waitFor({ state: 'detached' });
+  await ready(page);
+  await meaning(page);
+  await screens(page, 'model-suggestions-used');
+
+  // Dismiss keeps the table comment away across a reload.
+  await region.locator('li', { hasText: 'Orders, one row per line' }).getByRole('button', { name: 'Dismiss' }).click();
+  await ready(page);
+  await screens(page, 'model-suggestions-dismissed');
+  await page.reload();
+  await ready(page);
+  assert.equal(await page.getByText('Orders, one row per line').count(), 0, 'a dismissed comment stays away');
+  assert.equal(await page.getByText('The warehouse says: "Order amount in USD"').count(), 0, 'a used meaning does not return');
+  await meaning(page);
+  await screens(page, 'model-suggestions-none');
+});

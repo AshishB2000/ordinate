@@ -11,6 +11,7 @@ import { connectionHead, docView, sourceList, usedTables } from '../app/sourceTa
 import * as store from '../app/sourceTables';
 import { register as registerRead } from './sourceTableRead';
 import { register as registerLinks } from './sourceTableLinks';
+import { register as registerSuggestions } from './sourceSuggestions';
 
 interface Ids { projectId: string; connId: string; docId: string }
 interface SavePayload { projectId: string; connId: string; docId?: string; table?: string; patch: store.SourcePatch; base?: string }
@@ -53,4 +54,5 @@ export function register(): void {
 
   registerRead();
   registerLinks();
+  registerSuggestions();
 }

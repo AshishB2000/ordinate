@@ -79,6 +79,17 @@ describe('the strip', () => {
     expect(chips).toEqual(['Set a key on Orders', 'Revenue changed since certified', 'Gross revenue is retired, used by 6']);
   }, 30_000);
 
+  it('draws the gaps, then the review items, then the suggested meanings chip (part 2)', async () => {
+    serve('admin', {
+      'model:overview': { body: { ok: true, tables: [{ datasetId: D, role: 'fact', key: '', keyState: '', description: '', alwaysApplied: { kind: 'prepare', steps: [] }, calculated: [] }], todo: [{ datasetId: D, kind: 'no_key' }], more: 0, review: [{ ref: 'metric:m1', name: 'Revenue', kind: 'needs_review' }] } },
+      'catalog:suggestions': { body: { ok: true, suggestions: [{ connId: D, docId: D, table: 'ANALYTICS.ORDERS', datasetId: D, kind: 'column', column: 'amt', text: 'Order amount', hash: 'AbCdEf012345' }], total: 2, datasets: 1 } },
+    });
+    renderApp(`/model/${P}`);
+    const strip = await screen.findByRole('region', { name: 'To fill in next' }, LAZY);
+    await within(strip).findByRole('button', { name: '2 suggested meanings' }, LAZY);
+    expect(within(strip).getAllByRole('button').map((b) => b.textContent)).toEqual(['Set a key on Orders', 'Revenue changed since certified', '2 suggested meanings']);
+  }, 30_000);
+
   it('opens the Metrics tab from a review chip (the shared chip strip routes it)', async () => {
     serve('admin', {
       'model:overview': { body: { ok: true, tables: [{ datasetId: D, role: 'fact', key: '', keyState: '', description: '', alwaysApplied: { kind: 'prepare', steps: [] }, calculated: [] }], todo: [{ datasetId: D, kind: 'no_key' }], more: 0, review: [{ ref: 'metric:m1', name: 'Revenue', kind: 'needs_review' }] } },

@@ -37,4 +37,13 @@ export const sourceTables = {
   'dataset:setSourceTables': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, tables: z.array(Table).max(16) }), project: byProjectId }),
   // The link picker: the connection's tables, read from the warehouse on this call.
   'dataset:sourceTableChoices': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // A dataset's (or the project's) suggested meanings from its source tables' facts: records only, nothing applied.
+  'catalog:suggestions': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid.optional() }), project: byProjectId }),
+  // Keep one away until the warehouse's text changes: stores its 12-character hash in the doc, never the text.
+  'catalog:dismissSuggestion': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, connId: Uuid, docId: Uuid, kind: z.enum(['column', 'table', 'key']), column: z.string().min(1).max(256).optional(), hash: z.string().regex(/^[A-Za-z0-9_-]{12}$/) })
+      .refine((i) => (i.kind === 'column') === (i.column !== undefined), { message: 'A column suggestion names its column; the others do not.' }),
+    project: byProjectId,
+  }),
 } as const;

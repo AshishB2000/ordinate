@@ -13,6 +13,8 @@ import { useMe } from '../../auth/api';
 import { useCanEdit } from '../../projects/api';
 import { todoPanel, useModelOverview, type ModelTable, type ReviewItem, type TodoItem } from '../api';
 import { StatusBadge } from '../status/StatusBadge';
+import { formatNumber } from '../../data/format';
+import { useSuggestions } from '../sources/suggestApi';
 import { DatasetPanel } from './DatasetPanel';
 import { TodoStrip } from './TodoStrip';
 import m from '../Model.module.css';
@@ -89,14 +91,16 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
   const ov = useModelOverview(projectId);
   const canEdit = useCanEdit(projectId);
   const [params, setParams] = useSearchParams();
+  const sug = useSuggestions(projectId, undefined, canEdit).data;
 
-  const open = (item: TodoItem) =>
+  const go = (datasetId: string, panel: string) =>
     setParams((p) => {
       const q = new URLSearchParams(p);
-      q.set('dataset', item.datasetId);
-      q.set('panel', todoPanel(item.kind));
+      q.set('dataset', datasetId);
+      q.set('panel', panel);
       return q;
     }, { replace: true });
+  const open = (item: TodoItem) => go(item.datasetId, todoPanel(item.kind));
   // A review chip opens the item where an admin acts on it: a dataset here, a metric or term on its tab.
   const openReview = (item: ReviewItem) => {
     const [kind, id = ''] = item.ref.split(':');
@@ -154,7 +158,17 @@ export function DatasetsTab({ projectId }: { projectId: string }) {
     const names = new Map(all.map((d) => [d.id, d.name]));
     body = (
       <>
-        {canEdit && <TodoStrip todo={ov.data.todo} review={ov.data.review} more={ov.data.more} nameOf={(id) => names.get(id)} onOpen={open} onReview={openReview} />}
+        {canEdit && (
+          <TodoStrip
+            todo={ov.data.todo}
+            review={ov.data.review}
+            more={ov.data.more}
+            nameOf={(id) => names.get(id)}
+            onOpen={open}
+            onReview={openReview}
+            extra={sug?.total && sug.suggestions[0] ? { text: `${formatNumber(sug.total)} suggested ${sug.total === 1 ? 'meaning' : 'meanings'}`, onPick: () => go(sug.suggestions[0].datasetId, 'fields') } : undefined}
+          />
+        )}
         <div className={m.split}>
           <DatasetList list={all} tables={tables} picked={dataset.id} hrefOf={hrefOf} />
           <DatasetPanel key={dataset.id} projectId={projectId} dataset={dataset} table={tables.get(dataset.id)} />

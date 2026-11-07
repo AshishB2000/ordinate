@@ -38,15 +38,19 @@ export function ChipStrip({ items, more, onPick }: { items: StripItem[]; more: n
   );
 }
 
-/** The Datasets tab's strip: the server's gaps, then what an admin should review (part 4). */
-export function TodoStrip({ todo, review = [], more, nameOf, onOpen, onReview }: { todo: TodoItem[]; review?: ReviewItem[]; more: number; nameOf: (id: string) => string | undefined; onOpen: (item: TodoItem) => void; onReview?: (item: ReviewItem) => void }) {
+const EXTRA = '*suggested';
+
+/** The Datasets tab's strip: the server's gaps, then what an admin should review (part 4); `extra` is one more chip after the server's. */
+export function TodoStrip({ todo, review = [], more, nameOf, onOpen, onReview, extra }: { todo: TodoItem[]; review?: ReviewItem[]; more: number; nameOf: (id: string) => string | undefined; onOpen: (item: TodoItem) => void; onReview?: (item: ReviewItem) => void; extra?: { text: string; onPick: () => void } }) {
   const key = (item: TodoItem) => `${item.datasetId}:${item.kind}`;
   const items = todo.flatMap((item): StripItem[] => {
     const name = nameOf(item.datasetId);
     return name === undefined ? [] : [{ id: key(item), text: todoText(item, name), warn: item.kind === 'key_repeats' }]; // gone from the list since the server ranked it
   });
   for (const item of review) items.push({ id: `review:${item.ref}`, text: reviewText(item), warn: item.kind === 'needs_review', icon: item.kind === 'needs_review' ? 'alert' : 'archive' });
+  if (extra) items.push({ id: EXTRA, text: extra.text });
   return <ChipStrip items={items} more={more} onPick={(id) => {
+    if (id === EXTRA) return extra?.onPick();
     const r = review.find((x) => `review:${x.ref}` === id);
     if (r) return onReview?.(r);
     const item = todo.find((t) => key(t) === id);
