@@ -786,6 +786,7 @@
   "tableDocMessages.the_key_could_not_be_counted": "The key could not be counted. Try again.",
   "targetMessages.a_glossary_term_in_this_filter": "A glossary term in this filter doesn't apply to the plan, so there is no target for it.",
   "targetMessages.a_metric_can_t_be_its": "A metric can't be its own plan.",
+  "targetMessages.a_metric_that_compares_periods_has": "A metric that compares periods has no target: its figure is a change or last period's, not an amount for a plan.",
   "targetMessages.a_target_for_a_metric_that": "A target for a metric that adds up over time needs the period one figure covers.",
   "targetMessages.a_target_for_each_period_needs": "A target for each period needs the metric to count by a date.",
   "targetMessages.for_all_of": "{full} for all of {period}",

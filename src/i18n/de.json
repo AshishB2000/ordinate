@@ -789,6 +789,7 @@
   "tableDocMessages.the_key_could_not_be_counted": "Der Schlüssel konnte nicht gezählt werden. Versuchen Sie es erneut.",
   "targetMessages.a_glossary_term_in_this_filter": "Ein Glossarbegriff in diesem Filter gilt nicht für den Plan, daher gibt es dafür kein Ziel.",
   "targetMessages.a_metric_can_t_be_its": "Eine Metrik kann nicht ihr eigener Plan sein.",
+  "targetMessages.a_metric_that_compares_periods_has": null,
   "targetMessages.a_target_for_a_metric_that": "Ein Ziel für eine Metrik, die sich über die Zeit aufsummiert, braucht den Zeitraum, den eine Zahl abdeckt.",
   "targetMessages.a_target_for_each_period_needs": "Ein Ziel je Zeitraum setzt voraus, dass die Metrik nach einem Datum zählt.",
   "targetMessages.for_all_of": "{full} für ganz {period}",
