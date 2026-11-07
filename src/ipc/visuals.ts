@@ -415,7 +415,7 @@ export type VizDataReply =
       geoSuggest?: { level: 'us_state' | 'country' };
       /** The date a dashboard date control's period was moved onto: the date the chart's metrics count by (analysis/metricTimeScope). */
       periodOn?: string;
-      notes?: string[]; // the dashboard's glossary terms this chart left out (analysis/termExpand termNotApplied)
+      notes?: string[]; // glossary terms this chart left out (analysis/termExpand termNotApplied); a fan-out's (./vizFanOut)
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply; a layer's metric.
   | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE | 'external_metric'; reason?: string };

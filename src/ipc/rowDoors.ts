@@ -53,7 +53,7 @@ function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
 /** The datasets the question names by id: its category's, its series', its measures' — other than its own. */
 function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[] {
   if (!encoding) return [];
-  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
+  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(namedValues && Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
   return [...new Set(ids.filter((o): o is string => typeof o === 'string' && !!o && o !== datasetId))];
 }
 
@@ -78,6 +78,11 @@ async function reachesOther(projectId: string, datasetId: string, encoding: VizE
 let relatedGate = true;
 export function setRelatedGateForTest(on: boolean): void {
   relatedGate = on;
+}
+// Test seam: D14's negative control drops the measures' dataset ids from the check (scripts/test-rowPolicyFanOutJoins).
+let namedValues = true;
+export function setNamedDatasetsCheckForTest(on: boolean): void {
+  namedValues = on;
 }
 
 /**
@@ -144,10 +149,13 @@ export async function expandedOrRefusal(projectId: string, datasetId: string, fi
   }
 }
 
-/** An `ok` reply with the notes of the dashboard terms its figure left out (termExpand); every other reply as it is, the same object. */
+/**
+ * An `ok` reply with the notes of the dashboard terms its figure left out (termExpand), after the reply's own (a
+ * fan-out's, ./vizFanOut and ./metricFanOut), each once; every other reply, or no term note, as it is, the same object.
+ */
 export function withNotes<R>(reply: R, notes: readonly string[]): R {
   const ok = !!reply && typeof reply === 'object' && (reply as { ok?: unknown }).ok !== false;
-  return ok && notes.length ? { ...reply, notes: [...notes] } : reply;
+  return ok && notes.length ? { ...reply, notes: Array.from(new Set([...((reply as { notes?: string[] }).notes ?? []), ...notes])) } : reply;
 }
 
 /** `vizDataFor` under the rules: the body as before, or locked, or a typed refusal reply. */

@@ -30,6 +30,7 @@ import * as trace from '../engine/residentTrace';
 import { isValidId } from '../app/ids';
 import { getTableDoc } from '../app/tableDocs';
 import { closedToCaller } from '../data/rowAccess';
+import { fanOutReads } from './vizFanOut';
 
 type Infos = Map<string, DsInfo>;
 
@@ -63,6 +64,13 @@ async function modelInfos(projectId: string, primary: string, list: Relationship
 function live(list: Relationship[], infos: Infos): Relationship[] {
   const has = (e: rels.RelEnd): boolean => !!infos.get(e.datasetId)?.columns.some((c) => c.name === e.column);
   return list.filter((r) => has(r.from) && has(r.to));
+}
+
+/** The model a planner over `primary` reads: the live relationships and every dataset they name (analysis/fanOutPlan). */
+export async function projectModel(projectId: string, primary: string): Promise<{ rels: Relationship[]; infos: Infos }> {
+  const list = await rels.listRelationships(projectId);
+  const infos = await modelInfos(projectId, primary, list);
+  return { rels: live(list, infos), infos };
 }
 
 async function residentSources(projectId: string, plan: JoinPlan): Promise<JoinSource[] | null> {
@@ -114,7 +122,7 @@ export async function columnOwner(projectId: string, datasetId: string, column: 
 /** The OTHER datasets a chart's question reads — its join plan's tables (row access rules gate exactly these). */
 export async function chartReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
   const j = await vizJoin(projectId, datasetId, encoding, filters);
-  return j && j.join.ok ? planReads(j.join.value.plan) : [];
+  return j && j.join.ok ? planReads(j.join.value.plan) : j ? fanOutReads(projectId, datasetId, encoding, filters) : []; // refused: a fan-out's questions read each table
 }
 
 export async function joinedVizDataFor(

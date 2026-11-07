@@ -28,7 +28,6 @@
 
 import type { VizEncoding, VizMeasure } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
-import { keyOf } from '../analysis/vizData';
 import { evaluateOperand } from '../analysis/metricMeasures';
 import type { MeasurePlan, PlanResult } from '../analysis/metricMeasures';
 import { mergeFx } from '../analysis/fx';
@@ -36,9 +35,9 @@ import * as msg from '../analysis/metricCheckMessages';
 import type { MetricSnapshot } from '../analysis/snapshot';
 import type { VizDataReply } from './visuals';
 import { snapshotAnswer } from './snapshotDoors';
+import { lineUp } from './lineUp';
+import type { Ok, Series } from './lineUp';
 
-type Ok = Extract<VizDataReply, { ok: true }>;
-type Series = Ok['data']['series'][number];
 type Ask = (encoding: VizEncoding, filters: FilterStep[]) => Promise<VizDataReply>;
 
 /** One question for the door, and which leaves its series answer (in order, after `plain`). */
@@ -102,26 +101,8 @@ export async function metricMeasureData(plan: MeasurePlan, encoding: VizEncoding
     return { ok: false, error: msg.measureNeedsOneAxis(Array.from(plan.formulas.values())[0].name) };
   }
 
-  // The axis: every label any reply drew, in first-seen order.
-  const labels: (string | number)[] = [];
-  const seen = new Set<string>();
-  const rowOf = replies.map((r) => {
-    const at = new Map<string, number>();
-    r.data.labels.forEach((l, i) => {
-      const k = keyOf(l);
-      at.set(k, i);
-      if (seen.has(k)) return;
-      seen.add(k);
-      labels.push(l);
-    });
-    return at;
-  });
-  const keys = labels.map((l) => keyOf(l));
-  const cell = (reply: number, series: Series | undefined, key: string): number | null => {
-    const row = rowOf[reply].get(key);
-    const v = series && row !== undefined ? series.values[row] : null;
-    return typeof v === 'number' ? v : null;
-  };
+  // The axis: every label any reply drew, in first-seen order (./lineUp).
+  const { labels, keys, cell } = lineUp(replies);
 
   let series: Series[];
   if (split) {
