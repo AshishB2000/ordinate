@@ -9,6 +9,7 @@ import { ossieWhy } from './ossieMessages';
 import { sanitizeCalendar } from '../analysis/dateIntel';
 import { stableStringify } from '../engine/queryCache';
 import { isSimpleDefinition } from '../analysis/metrics';
+import { isCountLike } from '../data/aggregations';
 
 export const OSSIE_SPEC_VERSION = '0.2.0.dev0';
 
@@ -47,6 +48,8 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
   const names = new Map([...slugsFor(dsets)].map(([id, s]) => [id, s.replace(/-/g, '_')]));
   const slugOf = (id: string): string => names.get(id) as string;
   const fileSlugs = slugsFor(dsets);
+  // A kept record refers to a term or metric by id, which the file does not hold: it reads that one's name instead.
+  const named = new Map([...metrics, ...terms].map((x) => [x.id, x.name]));
   const colsOf = (d: ModelDataset) => inputs.columns.get(d.id) ?? [];
   const datasets: Json[] = [];
 
@@ -56,8 +59,9 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     const fields = colsOf(d).map((c) => {
       const f: ModelField | undefined = docs.get(c.name);
       const syn = [f?.displayName, ...(f?.aliases ?? [])].filter((s): s is string => !!s);
-      const ai: Json = { synonyms: some(syn), examples: f?.example ? [f.example] : undefined };
-      if (f?.values?.length) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: d.name, field: c.name, values: f.values }); }
+      // A marked field's stored values (its example, its value labels) stay out, as Ordinate's own AI never sees them.
+      const ai: Json = { synonyms: some(syn), examples: f?.example && !f.sensitivity ? [f.example] : undefined };
+      if (f?.values?.length && !f.sensitivity) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: slugOf(d.id), field: c.name, values: f.values }); }
       if (f?.sensitivity) miss('sensitivity', c.name, ossieWhy.sensitivity());
       return {
         name: c.name, expression: { sql: ident(c.name) }, description: f?.description, datatype: TYPE[c.type],
@@ -65,22 +69,36 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
         dimension: timeCols.has(c.name) ? { is_time: true } : undefined,
       };
     });
+    for (const n of inputs.calcs.get(d.id) ?? []) miss('calculated', n, ossieWhy.calculated());
     const taken = new Set(fields.map((f) => f.name));
     const dm: Json[] = [];
     for (const m of metrics.filter((x) => x.dataset === d.id).sort(byName)) {
-      const def = m.definition;
-      if (!isSimpleDefinition(def) || !AGG_SQL[def.aggregation]) { miss('metric', m.name, ossieWhy.metricFormula()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
-      if (def.snapshot) { miss('metric', m.name, ossieWhy.metricSnapshot()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
-      if (m.filters?.length) { miss('metric', m.name, ossieWhy.metricFilters()); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
+      const given = m.definition;
+      const def = isSimpleDefinition(given) && AGG_SQL[given.aggregation] ? given : undefined;
+      const col = def && colsOf(d).find((c) => c.name === def.column);
+      const why = !def ? ossieWhy.metricFormula()
+        : def.snapshot ? ossieWhy.metricSnapshot()
+        : m.filters?.length ? ossieWhy.metricFilters()
+        : d.baseFilters?.length ? ossieWhy.metricBaseFilters() // `source` is the whole table: the figure would be another number
+        : !col ? ossieWhy.calculated() // a Live calculated field: the source table has no such column
+        // COUNT(x) counts '' and '  '; NULLIF(TRIM(x), '') is no fix, as TRIM's whitespace set varies by dialect.
+        : isCountLike(def.aggregation) && col.type === 'text' ? ossieWhy.metricCountText()
+        // Ordinate's distinct key of a date is its day (dateOf); COUNT(DISTINCT ts) counts each timestamp.
+        : def.aggregation === 'countd' && col.type === 'date' ? ossieWhy.metricCountdDate()
+        // Ordinate gives SUM/AVG/MIN/MAX of a text or date field no figure (Live refuses, an extract shows none).
+        : !isCountLike(def.aggregation) && col.type !== 'number' ? ossieWhy.metricNotNumber()
+        : undefined;
+      if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: slugOf(d.id) }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields
       while (taken.has(name)) name += ' (metric)';
       taken.add(name);
+      named.set(m.id, name);
       dm.push({ name, expression: { sql: AGG_SQL[def.aggregation](ident(def.column)) }, description: m.description });
       if (m.timeColumn) miss('metricDate', m.name, ossieWhy.metricDate());
       if (m.direction || m.target || m.format.kind !== 'number' || m.format.prefix || m.format.suffix) { miss('metricSettings', m.name, ossieWhy.metricSettings()); keep('metricSettings', { metric: m.name, format: m.format, direction: m.direction, target: m.target }); }
     }
-    for (const t of terms.filter((x) => x.dataset === d.id).sort(byName)) { miss('term', t.name, ossieWhy.term()); keep('terms', { ...strip(t), dataset: d.name }); }
-    if (d.baseFilters?.length) { miss('baseFilters', d.name, ossieWhy.baseFilters()); keep('baseFilters', { dataset: d.name, filters: d.baseFilters }); }
+    for (const t of terms.filter((x) => x.dataset === d.id).sort(byName)) { miss('term', t.name, ossieWhy.term()); keep('terms', { ...strip(t), dataset: slugOf(d.id) }); }
+    if (d.baseFilters?.length) { miss('baseFilters', d.name, ossieWhy.baseFilters()); keep('baseFilters', { dataset: slugOf(d.id), filters: d.baseFilters }); }
     if (d.role) miss('role', d.name, ossieWhy.role());
     const source = inputs.sources.get(d.id);
     if (!source) report.noSource.push(d.name);
@@ -116,7 +134,7 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     name: manifest.project.name || 'Ordinate project',
     datasets,
     relationships: some(relationships.sort(byName)),
-    custom_extensions: [{ vendor_name: 'ordinate', data: JSON.stringify(JSON.parse(modelJson(ext))) }],
+    custom_extensions: [{ vendor_name: 'ordinate', data: JSON.stringify(JSON.parse(modelJson(ext), (_k, v: unknown) => (typeof v === 'string' ? named.get(v) ?? v : v))) }],
   };
   return { text: modelJson(doc), report };
 }
