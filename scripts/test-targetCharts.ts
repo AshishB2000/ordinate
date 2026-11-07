@@ -158,7 +158,9 @@ async function alertsSection(): Promise<void> {
   ok('and below again fires again', (await evaluate(NOW + 10_800_000)).length === 1);
 
   const probe = { ...rule, id: randomUUID() };
-  ok('NEGATIVE CONTROL: no period in scope, no target, never fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, { ...probe, metric: { ...rule.metric, filters: [] } }))).fire === false);
+  const noPeriod = await H.as(H.ORG_A, () => alertStore.testRule(P, { ...probe, metric: { ...rule.metric, filters: [] } }));
+  ok('NEGATIVE CONTROL: no period in scope, no target, never fires', noPeriod.fire === false);
+  ok('… and the Test button says why', noPeriod.message === tm.targetPickPeriod(), show(noPeriod));
   ok('the Test button says it would fire for the period in scope', (await H.as(H.ORG_A, () => alertStore.testRule(P, probe))).fire === true);
   const plainRule = { ...rule, id: randomUUID(), metric: { ...rule.metric, metricId: units.id } };
   ok('NEGATIVE CONTROL: a metric with no target never fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, plainRule))).fire === false);
