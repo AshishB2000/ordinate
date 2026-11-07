@@ -8,6 +8,7 @@ import { modelStatus } from '../ai/byok';
 import { resolveUpload, type Upload } from '../server/files';
 import type { ParsedColumn } from '../data/parse';
 import { logger } from '../app/logger';
+import { runQualityChecks } from '../analysis/qualityRun';
 
 // Capture → dataset IPC — turns a capture's `extractedTable` into a saved,
 // reusable dataset (sourceKind 'capture') and supports recapture (replace/append).
@@ -186,6 +187,7 @@ export function register(deps: CaptureDeps = {}) {
             projectId, datasetId, { columns: cols, rows: coerced.slice(0, MAX_ROWS) }, capture,
           );
           if (!updated) return { ok: false, error: 'Could not update the dataset' };
+          await runQualityChecks(projectId, datasetId); // the data-quality hook, which also re-checks the declared key; never throws
           return { ok: true, dataset: updated, warnings };
         }
         // APPEND — align incoming to the existing columns by name, concatenate.
@@ -203,6 +205,7 @@ export function register(deps: CaptureDeps = {}) {
           capture,
         );
         if (!updated) return { ok: false, error: 'Could not update the dataset' };
+        await runQualityChecks(projectId, datasetId); // as above
         return { ok: true, dataset: updated, warnings: aligned.warnings };
       }
 

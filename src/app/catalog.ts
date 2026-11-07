@@ -285,6 +285,8 @@ function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promise<T> 
     return result;
   });
 }
+/** The same locked read-modify-write for the other stores that keep their docs in catalog.json (./tableDocs). */
+export { mutate as mutateCatalog };
 
 /** Who is editing, for `updatedBy`: the signed-in user on the server, else the OS account (which throws on some locked-down accounts). */
 export function osUser(): string {

@@ -26,8 +26,8 @@
 // Their counts stay; they are aggregates.
 
 import type { CopilotFacts } from './copilot';
-import type { FactColumnDoc, FactMetric } from './copilotFacts';
-import { GUARD_LINE, WITHHELD, columnNoteLines, metricLines, num, sealLedger } from './copilotFacts';
+import type { FactColumnDoc, FactMetric, FactTableDoc } from './copilotFacts';
+import { GUARD_LINE, WITHHELD, columnNoteLines, metricLines, num, sealLedger, tableNoteLines } from './copilotFacts';
 import type { LedgerEntry } from './numberAudit';
 import type { ParsedColumn } from '../data/parse';
 import type { LiveColumnProfile, LiveProfile } from '../data/liveProfile';
@@ -68,6 +68,8 @@ export interface LiveFactsInput {
   /** Columns whose VALUES a model is never shown. */
   withheld: ReadonlySet<string>;
   docs?: Record<string, FactColumnDoc>;
+  /** The user's notes on the table itself (role, grain, key, guide). */
+  table?: FactTableDoc;
   /** The dataset's defined metrics, each figure the warehouse's (L2.4) — in the ledger like any other. */
   metrics?: FactMetric[];
 }
@@ -165,6 +167,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   if (budget.unlisted) lines.push(`(Sample values of ${budget.unlisted} more columns are not listed, to keep this short.)`);
   const hidden = input.columns.filter((c) => input.withheld.has(c.name) && byName.get(c.name)?.values?.length).map((c) => c.name);
   if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked, or detected, as personal or financial data.)`);
+  tableNoteLines(lines, input.table);
   columnNoteLines(lines, input.docs || {}, input.columns.map((c) => c.name)); // current columns only, as the resolver reads them
   metricLines(lines, ledger, input.metrics || []);
   lines.push('');

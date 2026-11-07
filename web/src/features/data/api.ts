@@ -170,6 +170,8 @@ export interface Relationship {
   cardinality: 'many_to_one' | 'one_to_one';
   verified: { matched: number; unmatchedFrom: number };
   matchPct: number;
+  /** What is wrong with the lookup side as a "one" (src/analysis/relationships.ts RelWarning). Absent for a caller row access rules restrict. */
+  warning?: { kind: 'repeats'; repeats: number } | { kind: 'not_key'; key: string };
 }
 export interface KeyCandidate {
   from: string;
@@ -192,9 +194,9 @@ export interface DataHit {
   rows: number;
 }
 
-type Fail = { ok: false; error?: string };
+export type Fail = { ok: false; error?: string };
 /** A handler's `{ ok: false, error }` as a query error, so the screen's error state shows it. */
-function okOr<T extends { ok: boolean }>(r: T | Fail, what: string): T {
+export function okOr<T extends { ok: boolean }>(r: T | Fail, what: string): T {
   if (!r.ok) throw new Error((r as Fail).error || `${what} could not be read.`);
   return r as T;
 }

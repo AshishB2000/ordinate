@@ -567,7 +567,7 @@ export function registerHandlers(): void {
     (require(mod) as { register: () => void }).register();
   }
   // The Data section (T2.3): catalog, lineage, relationships, search inside the data, and the browser's dataset views.
-  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews']) {
+  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);

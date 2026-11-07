@@ -9,7 +9,8 @@
 // nothing here resolves one — `describeDefinition` words the stored record, the
 // same function `resolveMetric` words its own `definitionText` with.
 //
-// Record reads only: no table is hydrated and no engine is asked anything.
+// Record reads only: no table is hydrated and no engine is asked anything. The table notes
+// (role, grain, key, guide: app/tableDocs `tableFacts`) ride along with the column notes.
 
 import type { PlanContext } from '../analysis/analysisPlan';
 import type { PlanFactExtras, PlanFactMetric } from '../analysis/planFacts';
@@ -18,6 +19,7 @@ import { describeDefinition, describeDefinitionShort } from '../analysis/metricF
 // The POLICY's reading of the catalog, not the catalog: a sensitivity mark is
 // carried across a later rename, so a marked column stays marked under its new name.
 import { assistantColumnDocs } from '../app/sharePolicy';
+import { tableFacts } from '../app/tableDocs';
 
 /** The most metrics a draft is told about, first by name: about what fills the
  *  facts' metric block (planFacts.USER_BLOCK_MAX) at ordinary lengths, and the
@@ -35,7 +37,12 @@ const MAX_DRAFT_METRICS = 60;
 export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promise<PlanFactExtras> {
   try {
     const columnDocs: NonNullable<PlanFactExtras['columnDocs']> = {};
-    for (const d of ctx.datasets) columnDocs[d.id] = await assistantColumnDocs(projectId, d.id);
+    const tables: NonNullable<PlanFactExtras['tables']> = {};
+    for (const d of ctx.datasets) {
+      columnDocs[d.id] = await assistantColumnDocs(projectId, d.id);
+      const table = await tableFacts(projectId, d.id);
+      if (table) tables[d.id] = table;
+    }
 
     const inContext = new Set(ctx.datasets.map((d) => d.id));
     const listed = (await metrics.listMetrics(projectId)).filter((s) => inContext.has(s.datasetId)).slice(0, MAX_DRAFT_METRICS);
@@ -63,7 +70,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
         description: m.description,
       });
     }
-    return { columnDocs, metrics: defined };
+    return { columnDocs, tables, metrics: defined };
   } catch (_) {
     return {}; // the notes must never cost the user their draft
   }

@@ -10,8 +10,11 @@
 //   compileChart        the chart itself — categories, series, measures
 //   compileMetric       one number
 //
-// …and one lookup an AI answer asks before them (L2.4): compileCaseMatches,
-// the stored spellings of the text values a question names.
+// …and two lookups asked on their own:
+//
+//   compileCaseMatches  the stored spellings of the text values a question names
+//                       (an AI answer asks it before the five above, L2.4)
+//   compileKeyCheck     a declared key's rows, empties and repeats ("Check now", spec D2)
 //
 // THE RULES (copied from the resident layer so live and extract mean the same):
 //   - Identifiers come ONLY from the declared schema, quoted per dialect; a name
@@ -48,6 +51,7 @@ import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
 import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate } from './compileFilter';
+import { keyOf } from './profileSql';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -452,4 +456,28 @@ export function compileCaseMatches(column: string, keys: string[], env: CompileE
   if (isRefusal(locked)) return locked;
   const sql = `SELECT DISTINCT ${c.d.label(v)} AS o_v FROM ${p.from} WHERE ${c.d.caseKey(v, c.b)} IN (${asked})${locked ? ` AND ${locked.slice(' WHERE '.length)}` : ''} ORDER BY o_v LIMIT ${CASE_FIX_LIMIT * distinct.length}`;
   return { ok: true, query: c.b.finish(sql, c.d, ['o_v']) };
+}
+
+// ── The key check (spec D2) ──────────────────────────────────────────────────
+
+/**
+ * The key check as one statement: a declared key's rows, empty rows and repeated keys —
+ * `analysis/keyCheck.keyCheckJs` on the warehouse. The key is the profile's: NULL when empty
+ * (`emptyOf`), else a number's finite value or the cell's text. The key is computed in a
+ * derived table and grouped by its alias, because a bound value in the expression would not
+ * match its twin in a `GROUP BY` (each marker becomes its own parameter). The three counts
+ * are `SUM`s, NULL over no rows; `keyCheckFromRow` reads that as 0.
+ */
+export function compileKeyCheck(column: string, env: CompileEnv): Compiled {
+  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: [], order: 'natural', weekCal: null };
+  const p = prepare(probe, env);
+  if (isRefusal(p)) return p;
+  const { c } = p;
+  const col = columnOf(c.columns, column)!;
+  const sql =
+    `SELECT ${c.d.toDouble('SUM(lv_n)')} AS k_rows, ` +
+    `${c.d.toDouble('SUM(CASE WHEN lv_k IS NULL THEN lv_n ELSE 0 END)')} AS k_empty, ` +
+    `${c.d.toDouble('SUM(CASE WHEN lv_k IS NOT NULL AND lv_n > 1 THEN 1 ELSE 0 END)')} AS k_repeated ` +
+    `FROM (SELECT lv_k, COUNT(*) AS lv_n FROM (SELECT ${keyOf(c, col)} AS lv_k FROM ${p.from}) lv_s GROUP BY lv_k) lv_g`;
+  return { ok: true, query: c.b.finish(sql, c.d, ['k_rows', 'k_empty', 'k_repeated']) };
 }

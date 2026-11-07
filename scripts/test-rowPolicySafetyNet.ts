@@ -196,6 +196,40 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       && (q.body.rules as { kind: string; args: unknown }[]).every((r) => r.kind && JSON.stringify(r.args) === '{}'), q.text.slice(0, 200));
     ok('NEGATIVE CONTROL: the editor reads the run and the rules\' args', qEd.body?.latest !== null && qEd.text.includes(`${H.W_CANARY}_0`) && /"max":100/.test(JSON.stringify(qEd.body)));
 
+    // A declared key's check counts every row of the table (126), so east, who reads only East's, gets the table notes without it.
+    const keyed = await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { role: 'fact', key: 'customer', guide: 'One row per order.' } });
+    const counted = await W.call('boss', 'catalog:checkKey', { projectId: P, datasetId: orders });
+    ok('setup: the key is declared and checked over every row', keyed.body?.ok === true && counted.body?.ok === true && counted.body.table.keyCheck?.rows === 126, `${keyed.text.slice(0, 120)} | ${counted.text.slice(0, 160)}`);
+    const tEast = await W.call('east', 'catalog:getTable', { projectId: P, datasetId: orders });
+    const tEd = await W.call('ed', 'catalog:getTable', { projectId: P, datasetId: orders });
+    eastReplies.push(tEast.text);
+    ok('redact: catalog:getTable — east gets no keyCheck', tEast.body?.ok === true && !('keyCheck' in tEast.body.table), tEast.text.slice(0, 200));
+    ok('…and still gets the key and the guide, which are words, not counts', tEast.body.table.key === 'customer' && tEast.body.table.guide === 'One row per order.');
+    ok('NEGATIVE CONTROL: the editor gets it', tEd.body?.ok === true && tEd.body.table.keyCheck?.rows === 126, tEd.text.slice(0, 200));
+    // …and so do the two other readers of the same doc: the Assistant's facts and the MCP reply carry the key and the guide, never the counts.
+    const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
+    const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+    const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };
+    const factsOf = (who: string) => W.as(who, () => tableDocs.tableFacts(P, orders));
+    const describedBy = (who: string) => W.as(who, () => automation.datasetsDescribe(mcpCtx, orders)) as Promise<{ table: { key: string; guide: string; keyCheck?: unknown } }>;
+    const [fEast, fEd, mEast, mEd] = [await factsOf('east'), await factsOf('ed'), await describedBy('east'), await describedBy('ed')];
+    ok('redact: the Assistant\'s table facts — east gets the key and the guide, no keyState', fEast?.key === 'customer' && fEast.guide === 'One row per order.' && !('keyState' in fEast), JSON.stringify(fEast));
+    ok('NEGATIVE CONTROL: the editor\'s table facts carry the key state', fEd?.keyState !== undefined, JSON.stringify(fEd));
+    ok('redact: describe_dataset — east gets the key and the guide, no keyCheck', mEast.table.key === 'customer' && mEast.table.guide === 'One row per order.' && !('keyCheck' in mEast.table), JSON.stringify(mEast.table));
+    ok('NEGATIVE CONTROL: the editor\'s describe_dataset carries the keyCheck', JSON.stringify(mEd.table.keyCheck).includes('"rows":126'), JSON.stringify(mEd.table));
+    // A relationship's stored warning counts every row of its TO dataset (`repeats`): east, closed to Orders, gets the edge without it.
+    const edge = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: east, column: 'customer' }, to: { datasetId: orders, column: 'customer' }, cardinality: 'many_to_one' } });
+    const relEast = await W.call('east', 'relationship:list', { projectId: P });
+    const relEd = await W.call('ed', 'relationship:list', { projectId: P });
+    eastReplies.push(relEast.text);
+    ok('setup: an edge into Orders carries a repeats warning', edge.body?.ok === true && edge.body.relationship.warning?.kind === 'repeats', edge.text.slice(0, 200));
+    ok('redact: relationship:list — east gets the edge without its warning', relEast.body?.ok === true && relEast.body.relationships.length === 1 && !('warning' in relEast.body.relationships[0]) && relEast.body.relationships[0].to.datasetId === orders, relEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor gets the warning', relEd.body?.ok === true && relEd.body.relationships[0]?.warning?.kind === 'repeats', relEd.text.slice(0, 240));
+    await W.call('boss', 'relationship:delete', { projectId: P, id: edge.body.relationship.id });
+    ok('write: east gets 403 from catalog:setTable and catalog:checkKey',
+      (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
+        && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);
+
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
     await W.as('boss', () => alertStore.recordEvents(P, [{ id: crypto.randomUUID(), ruleId: crypto.randomUUID(), ruleName: 'Sales watch', datasetId: orders, at: new Date().toISOString(),

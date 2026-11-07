@@ -138,6 +138,8 @@ export async function runQualityChecks(
   opts: { deliver?: boolean } = {},
 ): Promise<AlertEvent[]> {
   try {
+    // The declared key rides this hook: the rows changed, so its count and the relationships into the dataset are redone (never throws).
+    await (require('../ipc/tableDocs') as typeof import('../ipc/tableDocs')).afterTableData(projectId, datasetId);
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta || !meta.quality || !meta.quality.rules.length) return [];
     const results = await evaluateRules(projectId, datasetId, meta.quality.rules);

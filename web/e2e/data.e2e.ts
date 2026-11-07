@@ -14,6 +14,8 @@
 //      name refused at the field, another saved and still there after a reload.
 //   4. Catalog: details saved from the popover; Relationships: a relationship
 //      from the suggested key, drawn and listed with its match rate.
+//   4b. About: a table's role, key, grain and guide, its key counted by the
+//      server; a key that is not the relationship's lookup column is warned about.
 //   5. Empty states (a new project) and the import placeholder.
 //   Throughout: NO reply the browser receives carries the planted key.
 //
@@ -97,7 +99,7 @@ const noCanary = (bodies: string[]) => {
   assert.equal(leaks.length, 0, `the planted key reached the browser:\n${leaks.map((l) => l.slice(0, 200)).join('\n')}`);
 };
 
-e2e('the Data section: list, search, dataset page, quality, columns, catalog, relationships', async (s) => {
+e2e('the Data section: list, search, dataset page, quality, columns, catalog, relationships, about', async (s) => {
   const { page } = s;
   const ids = seed(s);
   const pid = s.server.sample.projectId;
@@ -269,6 +271,68 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   assert.match((await relRow.textContent()) ?? '', /4,585 \(91\.7%\)415$/, 'matched rows, the server\'s rate, and the unmatched (Northeast)');
   await page.getByRole('button', { name: /many to one, 91\.7% matched/ }).waitFor();
   await screens(page, 'data-relationships');
+
+  // ── 4b. About: role, key, grain and a guide; the key counted by the server; the relationship's warning ──
+  const saveOf = (channel: string) => page.waitForResponse((r) => r.url().endsWith(`/api/rpc/catalog%3A${channel}`) && r.status() === 200);
+  const aboutUrl = `/data/${pid}/${ids.regionsId}?tab=about`;
+  await page.goto(aboutUrl);
+  await settled(page);
+  await page.getByRole('group', { name: 'Role' }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'No guide yet' }).count(), 1, 'nothing is written yet: the guide invites one');
+  await screens(page, 'dataset-about-empty');
+  // …loading, and a read that failed (an older pod has no such channel): each has its own state.
+  await loadingShots(page, aboutUrl, 'catalog:getTable', 'Loading the table notes', 'dataset-about-loading');
+  const unread = '**/api/rpc/catalog%3AgetTable';
+  await page.route(unread, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'The table notes could not be read.' }) }));
+  await page.goto(aboutUrl);
+  await page.getByRole('alert').filter({ hasText: 'The table notes could not be read.' }).waitFor();
+  await screens(page, 'dataset-about-error');
+  await page.unroute(unread);
+  await page.goto(aboutUrl);
+  await settled(page);
+  await page.getByRole('group', { name: 'Role' }).waitFor();
+  let stored = saveOf('setTable');
+  await page.getByRole('radio', { name: 'Dimension' }).check();
+  await stored;
+  // The key is counted over every row before the reply: Regions has four, all different.
+  const keyBox = page.getByRole('combobox', { name: 'Key' });
+  stored = saveOf('setTable');
+  await keyBox.click();
+  await page.getByRole('option', { name: 'region', exact: true }).click();
+  await stored;
+  await page.getByText(/^Key region · unique/).waitFor();
+  const grain = page.getByRole('textbox', { name: 'Grain' });
+  assert.equal(await grain.getAttribute('placeholder'), 'One row per region', 'the key, said back as the grain\'s hint');
+  stored = saveOf('setTable');
+  await grain.fill('One row per sales region');
+  await page.keyboard.press('Enter');
+  await stored;
+  await page.getByRole('button', { name: 'Write a guide' }).click();
+  stored = saveOf('setTable');
+  await page.getByRole('textbox', { name: 'Guide' }).fill('## Reading Regions\n\nOne row per **sales region**, with its manager and yearly target.\n\n- `region` is the key: the orders table looks it up here.\n- Targets are in dollars, set once a year.');
+  await page.getByRole('button', { name: 'Save guide' }).click();
+  await stored;
+  await page.getByRole('heading', { name: 'Reading Regions' }).waitFor();
+  // "Check now" counts again, and says what it found.
+  stored = saveOf('checkKey');
+  await page.getByRole('button', { name: 'Check now' }).click();
+  await stored;
+  await page.getByText(/^Key region · unique/).waitFor();
+  await screens(page, 'dataset-about'); // reloads: all of it is what the server kept, in both themes
+  assert.equal(await page.getByRole('radio', { name: 'Dimension' }).isChecked(), true);
+  assert.equal(await grain.inputValue(), 'One row per sales region');
+  await page.getByRole('heading', { name: 'Reading Regions' }).waitFor();
+  // A key that is another column than the one the relationship looks up by: said under the relationship.
+  stored = saveOf('setTable');
+  await keyBox.click();
+  await page.getByRole('option', { name: 'manager' }).click();
+  await stored;
+  await page.getByText(/^Key manager · unique/).waitFor();
+  await page.goto(`/data/${pid}`);
+  await settled(page);
+  await page.getByRole('tab', { name: 'Relationships' }).click();
+  await page.getByText("Regions' key is manager; this relationship looks rows up by region.").waitFor();
+  await screens(page, 'data-relationships-warning');
 
   noCanary(bodies);
   void ids;

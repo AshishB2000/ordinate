@@ -139,6 +139,13 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   const recs = { live: await mk(seed.live), extract: await mk(seed.extract), gone: await mk(seed.gone) };
   ok('a metric can be DEFINED on a Live dataset (a definition is metadata)', /^[0-9a-f-]{36}$/.test(recs.live.metricId), JSON.stringify(recs.live));
 
+  // The key check counts one declared column: a key is set on each dataset first. A save never asks the warehouse (D2), so the
+  // Live ones store it unchecked; the extract's is counted in the save.
+  for (const d of [seed.live, seed.extract, seed.gone]) {
+    const key = await post('catalog:setTable', { projectId: P, datasetId: d, patch: { key: 'region' } });
+    ok(`a key can be declared on ${d === seed.extract ? 'the extract' : 'a Live dataset'} (${d.slice(0, 4)})`, key.status === 200 && key.value?.ok === true, key.body.slice(0, 240));
+  }
+
   const enc = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
   /** Every channel that reads a dataset's rows, enumerated from the src/api contracts that take a dataset. */
   const ROW_READERS = (d: string, other: string, metricId: string): [string, string, unknown][] => [
@@ -208,6 +215,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['snapshots: restore', 'snapshots:restore', { projectId: P, datasetId: d, stamp: '2024-01-01T00-00-00-000Z' }],
     ['snapshots: diff', 'snapshots:diff', { projectId: P, datasetId: d, stamp: '2024-01-01T00-00-00-000Z' }],
     ['snapshots: keep', 'snapshots:setKeep', { projectId: P, datasetId: d, keep: 3 }],
+    // the declared key's count: the one statement a Live dataset's table notes ever send (catalog:checkKey, "Check now")
+    ['key check (catalog:checkKey)', 'catalog:checkKey', { projectId: P, datasetId: d }],
   ];
 
   /**
@@ -217,7 +226,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
     'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual',
-    'alert test: threshold']);
+    'alert test: threshold', 'key check (catalog:checkKey)']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {
     if (Array.isArray(v)) return v.length > 0 && v.every(answered);
@@ -234,6 +243,11 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     if (ROUTED.has(label)) ok(`Live → ${label} (${channel}) ANSWERS from the warehouse (L2.4)`, r.status === 200 && answered(r.value), `${r.status} ${r.body.slice(0, 240)}`);
     else ok(`Live → ${label} (${channel}) refuses, typed`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
+  // …and the Live answer is the warehouse's count of the declared key (120 rows, 5 regions, each repeated), stored with its time.
+  const liveKey = await post('catalog:checkKey', { projectId: P, datasetId: seed.live });
+  const liveCheck = (liveKey.value?.table as { keyCheck?: { rows: number; empty: number; repeatedKeys: number; checkedAt: string } } | undefined)?.keyCheck;
+  ok('Live → Check now counts the key in the warehouse: 120 rows, 0 empty, 5 repeated keys, stamped with the warehouse\'s time',
+    liveCheck?.rows === 120 && liveCheck.empty === 0 && liveCheck.repeatedKeys === 5 && !Number.isNaN(Date.parse(liveCheck.checkedAt)), liveKey.body.slice(0, 240));
   ok('every routed door was exercised', ROW_READERS(seed.live, seed.extract, '').filter(([l]) => ROUTED.has(l)).length === ROUTED.size);
   // The canary Live dataset (its connection gone): EVERY reader — routed or not — a typed failure.
   for (const [label, channel, payload] of ROW_READERS(seed.gone, seed.extract, recs.gone.metricId)) {

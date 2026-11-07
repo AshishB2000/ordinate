@@ -39,6 +39,7 @@ import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } f
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
+import { tableFacts } from '../app/tableDocs';
 import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
 import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
@@ -217,7 +218,7 @@ export async function buildFacts(
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs);
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id));
     }
   }
 
@@ -245,7 +246,7 @@ export async function buildFacts(
       for (const rid of [v.encoding.categoryDatasetId, v.encoding.seriesDatasetId]) {
         if (rid && rid !== v.datasetId && !relatedDocs[rid]) relatedDocs[rid] = await catalogColumns(projectId, rid);
       }
-      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs);
+      return copilot.visualFacts(v, ds ? ds.name : '(missing dataset)', viz, columnDocs, overlays, relatedDocs, await tableFacts(projectId, v.datasetId));
     }
   }
 
@@ -378,7 +379,7 @@ export async function buildFacts(
     visuals: vList.map((x) => x.name),
     dashboards: dashList.map((x) => x.name),
   }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
-    name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id),
+    name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id), table: await tableFacts(projectId, m!.id),
     // A Live dataset's profile and sample values (L2.5) — none from a dataset with row access rules the caller may not read whole.
     notes: (await closedToCaller(projectId, m!.id)) ? undefined : await liveInventoryNotes(projectId, m!),
   }))));

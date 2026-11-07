@@ -6,6 +6,7 @@
 //   Schema     the last sync: columns, a sample's profile, columns gone — and
 //              "Sync schema" (./SchemaPanel)
 //   Columns    the column notes, as on any dataset
+//   About      the table's role, key, grain and guide; "Check now" is its one warehouse query
 //   Quality · Insights · Snapshots   off in v1, each saying why, with "Make a copy"
 //
 // Nothing here calls a row-reading channel: the off tabs are words and a button.
@@ -13,12 +14,13 @@
 import type { DatasetColumns } from '../../api/datasets';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { LiveOff } from '../live/LiveOff';
+import { AboutTab } from './AboutTab';
 import { ColumnsTab } from './ColumnsTab';
 import { LiveNotice } from './LiveMode';
 import { SchemaPanel } from './SchemaPanel';
 import { RowAccessTab } from './RowAccessTab';
 
-export const LIVE_TABS = ['data', 'schema', 'columns', 'quality', 'insights', 'snapshots', 'access'] as const;
+export const LIVE_TABS = ['data', 'schema', 'columns', 'quality', 'insights', 'snapshots', 'access', 'about'] as const;
 export type LiveTabId = (typeof LIVE_TABS)[number];
 
 export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAgeSec, admin = false }: {
@@ -44,6 +46,9 @@ export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAge
         <Tab value="columns" icon="columns">
           Columns
         </Tab>
+        <Tab value="about" icon="info">
+          About
+        </Tab>
         <Tab value="quality" icon="circle-check">
           Quality
         </Tab>
@@ -67,6 +72,9 @@ export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAge
       </TabPanel>
       <TabPanel value="columns">
         <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} live />
+      </TabPanel>
+      <TabPanel value="about">
+        <AboutTab projectId={projectId} datasetId={datasetId} header={header} live />
       </TabPanel>
       <TabPanel value="quality">
         <LiveOff projectId={projectId} datasetId={datasetId} feature="quality" heading={3} />

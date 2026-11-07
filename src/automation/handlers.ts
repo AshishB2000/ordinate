@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
+import { readableTableDoc } from '../app/tableDocs';
 import * as datasets from '../data/datasets';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import { viewColumns } from '../engine/datasetView';
@@ -85,7 +86,7 @@ export async function datasetsList(ctx: Ctx): Promise<unknown> {
 }
 
 /**
- * Columns, declared types and the names SQL sees. `origin` is its KIND only:
+ * Columns, declared types, the names SQL sees and the table notes (role, key, grain, guide). `origin` is its KIND only:
  * the path, URL, connection id or query behind it is withheld — a tool that
  * wants to know where data came from is told what sort of source it is.
  */
@@ -95,6 +96,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
   if (!meta) throw new AutomationError('not_found', `Dataset "${ref}" could not be read.`);
   const cat = (await sqlDatasets.projectCatalog(ctx.projectId)).find((e) => e.id === d.id);
   const sqlCols = viewColumns(meta.columns);
+  const table = await readableTableDoc(ctx.projectId, d.id); // the user's own notes; a restricted caller gets no key counts
   return {
     id: meta.id,
     name: meta.name,
@@ -113,6 +115,7 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     updatedAt: meta.updatedAt,
     lastRefreshedAt: meta.lastRefreshedAt || null,
     lastRefreshStatus: meta.lastRefreshStatus || null,
+    table: { role: table.role, key: table.key, grain: table.grain, guide: table.guide, ...(table.keyCheck && { keyCheck: table.keyCheck }) },
   };
 }
 
