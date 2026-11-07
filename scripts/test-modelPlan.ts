@@ -249,11 +249,31 @@ const show = (p: ImportPlan | PlanItem): string => JSON.stringify(p).slice(0, 15
     ok(`${what}: skipped with the editor's sentence`, sentence.length > 0 && i.status === 'skipped' && i.reason === 'invalid' && i.error === sentence, `${show(i)} / ${sentence}`);
   }
   const ordersMetric = jsonAt(filesG, 'metrics/orders.json');
-  const twoNew = await plan(F.P, put(put(filesG, 'metrics/margin-a.json', { ...ordersMetric, id: fid(41), name: 'Margin' }), 'metrics/margin-b.json', { ...ordersMetric, id: fid(42), name: 'Margin' }));
+  // What the store would cut or drop (a formula past 2,000 characters, a funnel past 8 steps, a window past 366 days) is
+  // refused as metric:save's contract refuses it, never stored as another definition.
+  const { timeColumn: _date, ...undated } = ordersMetric; // a period metric counts by its base's date
+  const bounded = async (n: number, name: string, definition: Json): Promise<PlanItem> => itemOf(await plan(F.P, put(filesG, `metrics/bound-${n}.json`, { ...undated, id: fid(n), name, definition })), `metric:${fid(n)}`);
+  const funnelOf = (steps: number): Json => ({ funnel: { entity: 'customer_id', event: 'region', time: 'day', steps: Array.from({ length: steps }, (_, i) => `s${i}`), window: { n: 7, unit: 'days' } }, show: 'rate' });
+  const lastOf = (days: number): Json => ({ base: F.revenue, window: { last: days, unit: 'day' }, compare: { vs: 'previous_year', show: 'pct_change' } });
+  const outOfBounds = await H.as(H.ORG_A, async () => msg.modelMetricOutOfBounds('Bound'));
+  for (const [n, what, def] of [[60, 'a formula of 2,010 characters', { formula: `[Orders]${' + [Orders]'.repeat(182)}` }], [61, 'a 9-step funnel', funnelOf(9)], [62, 'a 400-day window beside a compare', lastOf(400)]] as const) {
+    const i = await bounded(n, 'Bound', def);
+    ok(`${what}: skipped invalid with the sentence, never stored cut`, i.status === 'skipped' && i.reason === 'invalid' && i.error === outOfBounds, show(i));
+  }
+  ok('NEGATIVE CONTROL: a formula of 1,999 characters, an 8-step funnel and a 366-day window are new', (await bounded(63, 'Bound', { formula: `[Orders]${' + [Orders]'.repeat(181)}` })).status === 'new'
+    && (await bounded(64, 'Bound', funnelOf(8))).status === 'new' && (await bounded(65, 'Bound', lastOf(366))).status === 'new');
+  const badFormat = itemOf(await plan(F.P, put(filesG, 'metrics/bound-66.json', { ...ordersMetric, id: fid(66), name: 'Bound', format: { kind: 'number', prefix: 'way too long' } })), `metric:${fid(66)}`);
+  const badTarget = itemOf(await plan(F.P, put(filesG, 'metrics/bound-67.json', { ...ordersMetric, id: fid(67), name: 'Bound', target: { source: { value: 'ten' } } })), `metric:${fid(67)}`);
+  ok('a format or a target the store would change is refused too', badFormat.error === outOfBounds && badTarget.error === outOfBounds, JSON.stringify([badFormat, badTarget]));
+  const twoNew =await plan(F.P, put(put(filesG, 'metrics/margin-a.json', { ...ordersMetric, id: fid(41), name: 'Margin' }), 'metrics/margin-b.json', { ...ordersMetric, id: fid(42), name: 'Margin' }));
   const taken = await H.as(H.ORG_A, async () => require('../src/ipc/metrics').nameTakenMessage('Margin') as string);
   ok('two new metrics with one name: both skipped with the editor\'s sentence', [41, 42].every((n) => itemOf(twoNew, `metric:${fid(n)}`).error === taken), show(twoNew));
   const swapped = await plan(F.P, edit(edit(filesG, 'metrics', F.stock, (m) => { m.name = 'Orders'; }), 'metrics', jsonAt(filesG, 'metrics/orders.json').id, (m) => { m.name = 'Stock on hand'; }));
-  ok('two metrics swapping names: both plan, against the names after the import', itemOf(swapped, `metric:${F.stock}`).status === 'renamed' && itemOf(swapped, `metric:${ordersMetric.id}`).status === 'renamed', show(swapped));
+  const swapSaid = await H.as(H.ORG_A, async () => [msg.modelNameSwap('Orders'), msg.modelNameSwap('Stock on hand')]);
+  ok('two metrics swapping names: both skipped with the sentence (no order of writes lands either)', itemOf(swapped, `metric:${F.stock}`).reason === 'invalid' && itemOf(swapped, `metric:${F.stock}`).error === swapSaid[0]
+    && itemOf(swapped, `metric:${ordersMetric.id}`).error === swapSaid[1], show(swapped));
+  const chained = await plan(F.P, put(edit(filesG, 'metrics', F.stock, (m) => { m.name = 'Zz stock'; }), 'metrics/new-stock.json', { ...ordersMetric, id: fid(68), name: 'Stock on hand' }));
+  ok('NEGATIVE CONTROL: a rename and a new metric taking its old name both plan', itemOf(chained, `metric:${F.stock}`).status === 'renamed' && itemOf(chained, `metric:${fid(68)}`).status === 'new', show(chained));
   const pending = await plan(F.P, put(put(filesG, 'metrics/units.json', { ...ordersMetric, id: fid(43), name: 'Units', definition: { column: 'units', aggregation: 'sum' }, timeColumn: 'day' }), 'metrics/units-mtd.json', { ...jsonAt(filesG, 'metrics/revenue-mtd.json'), id: fid(44), name: 'Units MTD', definition: { base: fid(43), window: { to_date: 'month' } } }));
   ok('a period metric over a new base metric is new: its base is checked when it is written', itemOf(pending, `metric:${fid(44)}`).status === 'new' && itemOf(pending, `metric:${fid(43)}`).status === 'new', show(pending));
   let withSkip = put(filesG, 'datasets/returns.json', { id: fid(45), name: 'Returns', base: BASE });

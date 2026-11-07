@@ -357,6 +357,10 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
     measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('amt', 'count')], [M('amt', 'min')], [M('qty', 'max')], [M('amt', 'countd')]],
     stride,
   });
+  // A folded text axis (60 values, "Other" past 50) split by a number holding 0 and NULL, counted distinct: every engine, every case.
+  n += await charts(kit, ok, label('a folded axis split by a number, counted distinct'), TYPED, {
+    categories: [{ category: 'many' }], measures: [[M('cat', 'countd')], [M('amt', 'countd'), M('amt', 'sum')]], series: ['qty'],
+  });
 
   // Every filter op, on a chart and on two KPI tiles — at any stride.
   let fbad = 0;

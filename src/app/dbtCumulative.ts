@@ -40,7 +40,8 @@ export interface CumulativeCtx {
   calendar: CalendarPrefs;
 }
 
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+/** Two copies of a window or a grain say the same, in what is read of them (a window's count and unit): never a whole nested value. */
+const sameRead = (a: unknown, b: unknown): boolean => (isObj(a) && isObj(b) ? Object.is(own(a, 'count'), own(b, 'count')) && Object.is(own(a, 'granularity'), own(b, 'granularity')) : Object.is(a, b));
 const UNIT_DAYS: Readonly<Record<string, number>> = { day: 1, days: 1, week: 7, weeks: 7 }; // singular or plural: dbt's docs do not say which the manifest writes
 const MAX_DAYS = 366;
 const TO_DATE: ReadonlySet<string> = new Set(['week', 'month', 'quarter', 'year']);
@@ -50,21 +51,22 @@ const COUNTS: ReadonlySet<string> = new Set(['count', 'countd']);
 const dbtCalendar = (grain: string, cal: CalendarPrefs): boolean => grain !== 'week' && (!cal.calendarType || cal.calendarType === 'gregorian') && (grain === 'month' || cal.fiscalYearStart === 1);
 
 /** The Ordinate window that sums the rows dbt's does each day, from `cumulative_type_params` (else an older manifest's top-level fields), or why there is none; `period_agg` other than `last` reads periods otherwise. */
-export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { window: MetricWindow } | { skip: 'cumulative' | 'all_time' | 'window_unit' | 'calendar_differs' | 'period_agg' } {
+export function cumulativeWindow(typeParams: unknown, cal: CalendarPrefs): { window: MetricWindow } | { skip: 'cumulative' | 'unreadable' | 'all_time' | 'window_unit' | 'calendar_differs' | 'period_agg' } {
   const ctp = own(typeParams, 'cumulative_type_params');
   const both = (k: string): { v: unknown; clash: boolean } => {
     const inner = own(ctp, k);
     const top = own(typeParams, k);
-    return { v: given(inner) ? inner : top, clash: given(inner) && given(top) && !sameJson(inner, top) };
+    return { v: given(inner) ? inner : top, clash: given(inner) && given(top) && !sameRead(inner, top) };
   };
   const w = both('window');
   const g = both('grain_to_date');
-  if (w.clash || g.clash || (given(w.v) && given(g.v))) return { skip: 'cumulative' };
+  if (w.clash || g.clash) return { skip: 'unreadable' }; // two copies that disagree
+  if (given(w.v) && given(g.v)) return { skip: 'cumulative' };
   let window: MetricWindow;
   if (given(w.v)) {
     const count = own(w.v, 'count');
-    if (!Number.isInteger(count) || (count as number) < 1) return { skip: 'cumulative' };
-    const unit = UNIT_DAYS[String(own(w.v, 'granularity'))];
+    if (!Number.isInteger(count) || (count as number) < 1) return { skip: 'unreadable' };
+    const unit = own(UNIT_DAYS, String(own(w.v, 'granularity'))) as number | undefined;
     if (!unit || (count as number) * unit > MAX_DAYS) return { skip: 'window_unit' };
     window = { last: (count as number) * unit, unit: 'day' };
   } else if (given(g.v)) {

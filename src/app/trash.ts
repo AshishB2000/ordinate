@@ -9,6 +9,8 @@
 //   · Restoring a VISUAL whose dataset is still in the trash restores that
 //     dataset too (only the dataset — its other visuals stay where the user
 //     can see them), and says so: `restored` lists everything that came back.
+//   · A VERIFIED question whose question or a phrasing a live one now holds is
+//     refused and stays in the trash: two questions with one key cannot be edited.
 //   · An ALERT rule lives inside alerts.json, so alertStore.deleteRule stashes
 //     it itself and alertStore.restoreRule puts it back. A rule mirrored from a
 //     dataset's "watch for anomalies" toggle is not a record the user wrote and
@@ -29,6 +31,9 @@ import * as versions from './versions';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
 import * as recordFs from './recordFs';
+import { listVerified, lockedKeys } from '../analysis/verifiedQuestions';
+import { keyClash } from '../analysis/verifiedRules';
+import { verifiedRestoreTaken } from '../analysis/verifiedMessages';
 
 export const RETENTION_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -161,12 +166,21 @@ export async function restore(
   type: RecordType,
   id: string,
 ): Promise<{ ok: boolean; error?: string; restored: Restored[] }> {
-  const restored: Restored[] = [];
   if (!isRecordType(type) || !isValidId(projectId) || !isValidId(id)) {
-    return { ok: false, error: 'Unknown record.', restored };
+    return { ok: false, error: 'Unknown record.', restored: [] };
   }
+  // A verified question's key is checked and it moves back under the save's own lock: no two questions share a key.
+  return type === 'verified' ? lockedKeys(projectId, () => restoreNow(projectId, type, id)) : restoreNow(projectId, type, id);
+}
+
+async function restoreNow(projectId: string, type: RecordType, id: string): Promise<{ ok: boolean; error?: string; restored: Restored[] }> {
+  const restored: Restored[] = [];
   const rec = await store.readEntry(projectId, type, id);
   if (!rec) return { ok: false, error: 'That item is no longer in the trash.', restored };
+  if (type === 'verified') {
+    const taken = keyClash(await listVerified(projectId), [rec.question, ...(Array.isArray(rec.phrasings) ? rec.phrasings : [])]);
+    if (taken !== null) return { ok: false, error: verifiedRestoreTaken(taken), restored }; // it stays in the Trash
+  }
 
   // A visual cannot draw without its dataset: bring the dataset back first.
   let datasetBack: Restored | null = null;

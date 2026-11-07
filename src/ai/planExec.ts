@@ -46,6 +46,7 @@ import { commitSteps } from '../ipc/datasets';
 import { writeBack } from '../ipc/versions';
 import { parseAsJob } from '../ipc/datasetImport';
 import { resolveMetric } from '../ipc/metrics';
+import { layerFieldMetric } from '../ipc/metricSave';
 import { checkVisual } from '../automation/creators';
 import { dispatch, parseFirstObject } from './analyze';
 import { checkStep, ctxFactsText, resolveRef } from './planCheck';
@@ -166,9 +167,10 @@ async function runPrepare(run: PlanRun, step: Extract<PlanStep, { kind: 'step' |
 async function runMetric(run: PlanRun, step: Extract<PlanStep, { kind: 'metric' }>, ctx: PlanCtx): Promise<StepOutcome> {
   const pid = run.projectId;
   const ds = must(ctx.datasets, step.dataset, 'dataset');
-  const m = await metrics.saveMetric(pid, {
-    name: step.name, datasetId: ds.id, definition: { column: step.column, aggregation: step.aggregation }, filters: [],
-  });
+  const definition = { column: step.column, aggregation: step.aggregation };
+  const onLayer = await layerFieldMetric(pid, ds.id, definition); // a semantic dataset measures its layer's metrics only
+  if (onLayer) return { ok: false, error: onLayer };
+  const m = await metrics.saveMetric(pid, { name: step.name, datasetId: ds.id, definition, filters: [] });
   if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
   await versions.record(pid, 'metric', m);
   const kpi = await kpiOf(pid, m.id);

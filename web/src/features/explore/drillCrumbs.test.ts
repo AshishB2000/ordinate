@@ -20,6 +20,11 @@ describe('drill crumbs', () => {
     expect(crumbsOf(deep, [GEO3])!.map((c) => c.label)).toEqual(['Geography', 'East', 'Ohio']);
     expect(crumbsOf(deep, [GEO3])![1].to).toEqual(upTo(deep, GEO3, 1));
   });
+  it('a crumb shows the value label the drill was told (crumb.label), else the stored value', () => {
+    const labelOf = (column: string, value: string) => (column === 'region' && value === 'East' ? 'Eastern region' : value);
+    expect(crumbsOf(Q, [GEO], labelOf)!.map((c) => c.label)).toEqual(['Geography', 'Eastern region']);
+    expect(crumbsOf({ ...Q, filters: [eq('region', 'West')] }, [GEO], labelOf)!.map((c) => c.label)).toEqual(['Geography', 'West']); // NEGATIVE CONTROL
+  });
   it('NEGATIVE CONTROL: no crumbs when the filters do not hold one step per level above', () => {
     expect(crumbsOf({ ...Q, filters: [TERM] }, [GEO])).toBeNull();
     expect(crumbsOf({ ...Q, filters: [...Q.filters, eq('region', 'West')] }, [GEO])).toBeNull();

@@ -182,8 +182,8 @@ function encode(q: SemanticQuery, model: string, columns: readonly LiveColumn[] 
   });
   const body: CubeBody = { query };
   if (q.limit !== undefined) {
-    if (nonBlank.length) body.limit = q.limit; // the cut comes after the blanks are dropped
-    else query.limit = q.limit;
+    query.limit = q.limit;
+    if (nonBlank.length) body.limit = q.limit; // cut again after the blanks are dropped (a short cut is asked again whole)
   }
   if (nonBlank.length) body.nonBlank = nonBlank;
   return { kind: 'semantic', body, columns: asked };

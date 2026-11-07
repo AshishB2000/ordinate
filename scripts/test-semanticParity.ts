@@ -77,6 +77,11 @@ async function otherIsAsked(b: Bench): Promise<void> {
   ok('…and a reply naming its columns in another order is read by name', permuted.problems.length === 0, permuted.problems.join(' | '));
   const missing = await chartCase(b, TEXT60, runner(b, [], { a: (a) => ({ columns: a.columns.slice(0, 1), rows: a.rows.map((row) => row.slice(0, 1)) }) }));
   ok('a reply without a metric it was asked for is refused (rowShape), never guessed at', !missing.sem.ok && missing.sem.code === 'rowShape');
+  const twice = await chartCase(b, { name: 'r', metrics: ['revenue'], enc: { category: 'region' } }, runner(b, [], { a: (a) => ({ ...a, rows: [...a.rows, a.rows[0]] }) }));
+  ok('a reply holding one category twice is refused (rowShape), never one overwritten by the other', !twice.sem.ok && twice.sem.code === 'rowShape', show(twice.sem));
+  const splitCase = MATRIX.find((c) => c.name.startsWith('split: 60 categories × region (avg'))!;
+  const cellTwice = await chartCase(b, splitCase, runner(b, [], { a: (a) => (a.columns.length === 3 ? { ...a, rows: [...a.rows, a.rows[0]] } : a) }));
+  ok('…and a split reply holding one cell twice', !cellTwice.sem.ok && cellTwice.sem.code === 'rowShape', show(cellTwice.sem));
   const midMonth = await chartCase(b, { name: 'm', metrics: ['revenue'], enc: { category: 'd', grain: 'month' } }, runner(b, [], { a: (a) => ({ ...a, rows: a.rows.map((row) => [typeof row[0] === 'string' ? row[0].replace(/-01$/, '-15') : row[0], row[1]]) }) }));
   ok('a date that is not its grain\'s first day is refused (rowShape), never relabelled', !midMonth.sem.ok && midMonth.sem.code === 'rowShape');
 
@@ -125,6 +130,28 @@ async function refusals(b: Bench): Promise<void> {
   ok('NEGATIVE CONTROL: without it the layer answers wider', ext.ok && unbased.ok && unbased.kind === 'chart' && cellsAgree(ext.data, unbased.chart.data, ['avg_amount'], false).length > 0);
 }
 
+/** A category named "Other" in the top 50, past 50 categories: the extract folds the rest into it (one bar). */
+async function realOther(b: Bench): Promise<void> {
+  const rows: import('./liveParityFixture').Cell[][] = [];
+  const row = (many: string, region: string, amt: number): void => { rows.push([many, 'Alpha', region, amt, 1, 1, '2024-01-01', fx.BIG[0]]); };
+  for (let i = 0; i < 60; i++) { row(`c${String(i).padStart(2, '0')}`, 'North', 100 - i); row(`c${String(i).padStart(2, '0')}`, 'South', 7 + (i % 5)); }
+  row('Other', 'North', 98.5); row('Other', 'South', 104); row('Other', 'East', 3);
+  const ob = await pm.benchOver(b, 'semantic_other', rows, (table) => (log) => async (q, step) => {
+    const a = await fake.runFake(table, b.env.columns, q);
+    log.push({ q, step, rows: a.rows.length });
+    return a;
+  });
+  if (!ob) { ok('saved the "Other" extract', false); return; }
+  for (const c of [
+    { name: 'a real "Other" in the top 50 × revenue', metrics: ['revenue'], enc: { category: 'many' } },
+    { name: '…× avg_amount (the layer averages the merged group)', metrics: ['avg_amount'], enc: { category: 'many' } },
+    { name: '…split by region', metrics: ['revenue'], enc: { category: 'many', series: 'region' } },
+  ]) {
+    const r = await chartCase(ob, c);
+    ok(`${c.name}: one "Other" bar, every cell as the extract (Object.is)`, r.problems.length === 0, r.problems.join(' | '));
+  }
+}
+
 async function main(): Promise<void> {
   const x = await mx.setupExtract(ok);
   if (!x) return;
@@ -140,6 +167,7 @@ async function main(): Promise<void> {
   const b: Bench = { x, env, typed: fx.env(source, columns), kit: mx.parityKit(x, fx.runDuck), ask: (log) => runner(b, log) };
   await pm.matrix(b, ok);
   await otherIsAsked(b);
+  await realOther(b);
   await refusals(b);
 }
 

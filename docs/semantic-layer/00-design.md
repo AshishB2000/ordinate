@@ -288,6 +288,10 @@ This covers any chart measure, not only saved metrics, because it follows from t
 It is enforced where the app adds up figures it has already computed:
 - table calculations that sum across cells (`running_total`, `percent_of_total`, `moving_sum` in
   `tableCalc.ts`) over a measure that can't be added that way;
+- the chart figures that add a measure up (`chartShapes.ts`): a waterfall's running level and a
+  Pareto's cumulative share along the axis, a 100%-stacked chart's shares across the split. Refused
+  with the same sentence by the same doors (`refuseNonAdditiveCalcs` with the chart type, and
+  `figureRefusal` for an answer card), so `avg`, `min`, `max` and `countd` are never drawn summed;
 - a metric tree `sum` relation over a child that can't be added.
 - the period overlay caption (`periodScope.overlayCaption`), which adds up the current and prior
   buckets to write "Revenue is up 12% vs the same months last year". Over a measure that can't be

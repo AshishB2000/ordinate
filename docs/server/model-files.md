@@ -117,6 +117,9 @@ refuses if the project changed since ("This project changed since the dry run. C
 - **Never a delete.** An object only the project has stays.
 - A column's sensitivity may be raised, never lowered.
 - Every object goes through the same checks as the editor's save (names, formulas, term cycles, caps).
+- A rename (a metric's or term's name, a relationship's label) and a new object taking the old name both land:
+  the rename is written first. Two objects swapping names or labels are refused: rename one to a free name,
+  import, then rename it.
 
 ## From dbt
 
@@ -138,6 +141,13 @@ semantic model is. Datasets are never created.
 | Filters: `{{ Dimension('<entity>__<dimension>') }}` with `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`, `IS [NOT] NULL`, joined by `AND` | filter steps; `!=` and `NOT IN` also leave out an empty cell, as SQL leaves out NULL |
 | Ratio; derived (`+ − × ÷`, brackets, numbers) over metrics on one semantic model | a formula metric (`[Revenue] / [Orders]`) |
 
+**Where a figure can differ from dbt's, imported and said.** Ordinate reads a text cell that is `''` or only spaces
+as empty, as it reads NULL; dbt counts such a cell as a value. So where the data holds `''` or spaces, a count of a
+text column and `!=`, `NOT IN` and `IS [NOT] NULL` on text give another figure than dbt's (over `paid`, `''`, `'  '`,
+`refunded` and NULL, dbt counts 4 statuses and Ordinate 2). A derived metric that divides is computed with decimals,
+where dbt on Postgres, Redshift or Trino divides two whole numbers as whole numbers (7 / 2 is 3 there). Both are
+imported; the dry run says it on each such metric.
+
 A metric's name is its `label`, else its dbt name. Each carries where it came from, so importing the file again
 updates it, even after a rename here (the dry run shows the rename back). An import changes only what dbt says:
 a table's role, grain, description and guide, a field's other names and value labels, and a metric's format,
@@ -147,7 +157,7 @@ direction and target stay this project's.
 conversions, Ordinate's funnel counts people from their first); a derived input with `offset_window` or
 `offset_to_grain` (dbt shifts each day, then adds the days up); inputs on more than one semantic model;
 `window_groupings` (how dbt groups it by other fields is not documented); `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
-one column; a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
+one column; `count_distinct` over a date column (Ordinate counts distinct days, dbt distinct timestamps); a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
 an ordering comparison on text), or on a ratio or derived metric; `fill_nulls_with` (dbt shows 0 where there are
 no rows, Ordinate shows no figure); a snapshot on a Live dataset; a metric type Ordinate does not read; and a
 ratio or derived metric whose input was skipped, listed under that input. Foreign entities are not imported. One
@@ -165,9 +175,10 @@ on a calendar unlike dbt's; `period_agg` `first` or `average`; `fill_nulls_with`
 simple metric with a date on its measure; over a count (0 here where dbt has no figure); a filter of another shape;
 else `period_agg: last`. A ratio or derived metric over one falls with it.
 
-The translation is held, figure by figure, to dbt's on checked-in projects (`scripts/fixtures/dbt/` with
-`scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`; each README says how the
-figures were recorded).
+The translation is held, figure by figure, to recorded figures on checked-in projects (`scripts/fixtures/dbt/` with
+`scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`). Those figures are
+**pending MetricFlow**: they were computed with DuckDB SQL written as MetricFlow's, and MetricFlow itself has not run on
+them yet (each README says how to record its figures).
 
 ## The loop in CI
 

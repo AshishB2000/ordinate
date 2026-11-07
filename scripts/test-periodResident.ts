@@ -9,7 +9,8 @@
 // so is every SHIFTED scope a KPI Compare or a chart overlay issues — the
 // comparison figure is only as right as the second query that computes it.
 // The fixture's date cells are the adversarial set: ISO and US shapes, single
-// digits, a time suffix, a non-date (Feb 30), prose, NBSP/tab/empty, a number.
+// digits, a time suffix, a non-date (Feb 30), NBSP/tab/empty, a number; prose
+// (which only the fold reads) has its own decline block at the end.
 //
 //   npm run build:ts && node scripts/test-periodResident.js
 
@@ -25,6 +26,7 @@ import * as vizData from '../src/analysis/vizData';
 import { applyPipeline } from '../src/data/transforms';
 import { runResidentPipeline } from '../src/engine/pipelineDuck';
 import { setCalendar, PERIOD_PRESETS, N_PRESETS } from '../src/analysis/dateIntel';
+import { PERIOD_DECLINE } from '../src/engine/periodSql';
 import type { PeriodSpec } from '../src/analysis/dateIntel';
 import { compareScope, overlayFilters } from '../src/analysis/periodScope';
 import type { ParsedColumn } from '../src/data/parse';
@@ -65,7 +67,7 @@ const ROWS: Cell[][] = [];
       }
     }
   }
-  for (const junk of ['2024-02-30', 'Jan 5, 2024', '', ' ', '\t', null, '2024-3-5', ' 2024-03-05', '2024-10-15T23:59:59Z']) {
+  for (const junk of ['2024-02-30', '', ' ', '\t', null, '2024-3-5', '2024-10-15T23:59:59Z', 'soon', 'n/a']) { // prose with a digit: its own block below
     ROWS.push([id, junk, 'East', 1]);
     id += 1;
   }
@@ -164,6 +166,26 @@ for (const run of RUNS) {
     ok(`group by region under ${spec.preset}: labels agree`, !!got && JSON.stringify(got.labels) === JSON.stringify(want.labels));
     ok(`group by region under ${spec.preset}: values agree (Object.is)`, !!got && got.series[0].values.every((v, i) => Object.is(v, want.series[0].values[i])));
   }
+}
+
+// A cell of neither shape ("Jan 5, 2024", " 2024-03-05"): the fold reads it as a date axis does (parseDateCell), SQL
+// cannot, so the resident paths decline (the predicate raises) and never answer differently.
+{
+  process.env.ORDINATE_TODAY = '2024-10-15';
+  setCalendar({ weekStart: 1, fiscalYearStart: 1 });
+  const proseFile = path.join(dir, 'prose.parquet');
+  pqSync.writeTable(proseFile, COLS, [[1, 'Jan 5, 2024', 'East', 2], [2, ' 2024-03-05', 'East', 3], [3, '2024-01-09', 'West', 5], [4, 'n/a', 'West', 7]]);
+  const prose = pqSync.readTable(proseFile, COLS)!;
+  const q1: FilterStep[] = [{ type: 'filter', column: 'd', op: 'period', period: { preset: 'custom', from: '2024-01-01', to: '2024-03-31' } }];
+  const kept = applyPipeline({ columns: prose.columns, rows: prose.rows }, q1).rows.map((r) => r[0]);
+  ok('prose: the fold keeps the rows a date axis puts in the range', JSON.stringify(kept) === '[1,2,3]', JSON.stringify(kept));
+  ok('prose: the resident figure declines (null), never a different answer', (await rq.computeMetricResident({ parquetPath: proseFile, columns: COLS }, { column: 'v', aggregation: 'sum' }, q1)) === null);
+  ok('prose: the prepare-pipeline SQL declines too', (await runResidentPipeline(proseFile, COLS, q1)) === null);
+  const params: duck.DuckValue[] = [];
+  let raised = '';
+  try { duck.query(`SELECT count(*) AS n FROM ${pq.relationSql(proseFile)} WHERE ${rq.filterPredicates(COLS, q1, params).join(' AND ')};`, params); } catch (e) { raised = String((e as Error).message); }
+  ok('prose: the predicate raises the decline', raised.includes(PERIOD_DECLINE), raised);
+  ok('NEGATIVE CONTROL: empty, Feb 30, timed and digit-free cells (SQL reads them as JS does) → the resident answers', (await rq.computeMetricResident(src, { column: 'v', aggregation: 'sum' }, q1)) !== null);
 }
 
 delete process.env.ORDINATE_TODAY;

@@ -63,7 +63,7 @@ import type { LiveRows } from './shape';
 import type { LiveTarget, TargetProblem } from './liveTarget';
 import { liveTarget } from './liveTarget';
 import { answerNames, encodingNames, metricNames, missingRefusal } from './liveMissing';
-import { failed, LiveCallError, opOf, timeoutMs, warehouse } from './liveWarehouse';
+import { dialectOf, failed, LiveCallError, opOf, timeoutMs, warehouse } from './liveWarehouse';
 import { evaluateSemantic } from './semantic/evaluateSemantic';
 import { adapterFor, semanticRunner } from './semantic/adapters';
 import { liveNotOfferedMessage } from '../../data/liveMessages';
@@ -216,7 +216,7 @@ async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared
 
 /** A failed ask → the stale answer, or the typed failure. Never an empty result. */
 function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal | undefined): Asked {
-  const op = opOf(t.dialect);
+  const op = opOf(dialectOf(t));
   const e = err instanceof LiveCallError ? err : new LiveCallError('failed', safeError(err));
   if (e.kind === 'cancelled' || signal?.aborted) {
     trace.recordLive(op, 'cancelled');
@@ -244,7 +244,7 @@ function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal 
 
 /** Cache → flight → warehouse → shape, for one adapted question. */
 async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
-  const op = opOf(t.dialect);
+  const op = opOf(dialectOf(t));
   const key = keyOf(t, t.semantic ? { ir, semantic: { backend: t.semantic.backend, model: t.semantic.model, base: t.semantic.env.base } } // D18
     : { ir, source: t.source, dialect: t.dialect, base: t.env.base }); // no base: undefined, dropped — today's key
   const ages = agesOf(t);
@@ -261,7 +261,7 @@ async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
     return fallBack(t, key, err, signal);
   }
   const { outcome, at } = asked.value;
-  if (!outcome.ok) return refused(t.dialect, outcome);
+  if (!outcome.ok) return refused(dialectOf(t), outcome);
   // An asker who joined a flight already in the air made no warehouse call of its own.
   trace.recordLive(op, asked.owner ? 'warehouse' : 'hit');
   return { ok: true, outcome, asOf: { at, mode: 'live' } };
@@ -273,7 +273,7 @@ async function layerRefusal(t: LiveTarget): Promise<LiveFailure | null> {
   // No encoder for its backend on this server (c1, e1, d1 add theirs): nothing to ask.
   if (!adapterFor(t.semantic.backend)) return unavailable({ ok: false, kind: 'unavailable', error: liveNotOfferedMessage() });
   // D17: a caller from whom a column rule hides any of a layer's fields is refused, whatever the backend compares.
-  if ((await hiddenColumnsFor(t.projectId, t.datasetId)).size) return refused(t.dialect, refuseLayer('layerRowPolicy', t.semantic.env));
+  if ((await hiddenColumnsFor(t.projectId, t.datasetId)).size) return refused(dialectOf(t), refuseLayer('layerRowPolicy', t.semantic.env));
   return null;
 }
 
@@ -294,11 +294,11 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
   const t = found.target;
   // A column the warehouse dropped (L2.5) is said as exactly that, before the adapter could skip or misname it.
   const gone = missingRefusal(t.live.missingColumns, names);
-  if (gone) return refused(t.dialect, gone);
+  if (gone) return refused(dialectOf(t), gone);
   const layer = await layerRefusal(t);
   if (layer) return layer;
   const a = adapt(t);
-  if (!a.ok) return refused(t.dialect, a);
+  if (!a.ok) return refused(dialectOf(t), a);
   return { asked: await ask(t, a.ir), warnings: a.warnings, t };
 }
 
@@ -310,7 +310,7 @@ export async function liveVizData(projectId: string, datasetId: string, encoding
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
-  if (o.kind !== 'chart') return refused(r.t.dialect, refuse('badQuery'));
+  if (o.kind !== 'chart') return refused(dialectOf(r.t), refuse('badQuery'));
   return {
     ok: true,
     data: o.chart.data,
@@ -334,7 +334,7 @@ export async function liveMetric(
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
-  if (o.kind !== 'metric') return refused(r.t.dialect, refuse('badQuery'));
+  if (o.kind !== 'metric') return refused(dialectOf(r.t), refuse('badQuery'));
   return { ok: true, value: o.value, warnings: r.warnings.concat(o.warnings), asOf: r.asked.asOf };
 }
 
@@ -344,7 +344,7 @@ export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: Adap
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
-  if (o.kind !== 'chart') return refused(r.t.dialect, refuse('badQuery'));
+  if (o.kind !== 'chart') return refused(dialectOf(r.t), refuse('badQuery'));
   const warnings = r.warnings.concat(o.warnings);
   const notes = o.chart.category.note ? warnings.concat(o.chart.category.note) : warnings.slice();
   return {
@@ -373,10 +373,13 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   const layer = await layerRefusal(t);
   if (layer) return layer;
   const c = build(t);
-  if (!c.ok) return refused(t.dialect, c);
+  if (!c.ok) return refused(dialectOf(t), c);
   // A statement is never sent to a semantic layer: a lookup that only knows SQL (a key check) is the layer's to refuse.
-  if (t.semantic && !('semantic' in c)) return refused(t.dialect, refuseLayer('layerLookup', t.semantic.env));
-  const op = opOf(t.dialect);
+  if (t.semantic && !('semantic' in c)) return refused(dialectOf(t), refuseLayer('layerLookup', t.semantic.env));
+  // A filter the backend cannot write (its encoder's typed refusal) is said before anything is asked, never a failure.
+  const unsaid = 'semantic' in c ? semanticRunner(t, new AbortController().signal, () => undefined).check?.(c.semantic) : null;
+  if (unsaid) return refused(dialectOf(t), unsaid);
+  const op = opOf(dialectOf(t));
   const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params });
   const ages = agesOf(t);
   const at = (ms: number): string => new Date(ms).toISOString();

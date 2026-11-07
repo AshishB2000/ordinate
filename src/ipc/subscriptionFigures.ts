@@ -149,9 +149,11 @@ export async function resolveFigures(projectId: string, a: Analysis, cardIds: st
     const data = r.data || { labels: [], series: [] };
     const caption = await call('reports:caption', { input: { chartType, data, geo: data.geo || null, pivot: data.pivot || null, projectId, datasetId: v.datasetId, overrides: v.overrides || null } });
     const format = (v.overrides as { numberFormat?: unknown } | undefined)?.numberFormat;
+    // A dashboard term this chart leaves out is said after its caption, as its tile says it in the app (a section's note is "no chart").
+    const said = [typeof caption === 'string' ? caption : '', ...(Array.isArray(r.notes) ? r.notes : [])].filter(Boolean).join(' ');
     out.push({
       title, chartType, data: shownChart(data), // a message is text: value labels said, the caption above read them from the pairs
-      ...(typeof caption === 'string' && caption ? { caption } : {}),
+      ...(said ? { caption: said } : {}),
       ...(typeof format === 'string' ? { format } : {}),
       ...(typeof r.recommendedShape === 'string' ? { shape: r.recommendedShape } : {}),
     });

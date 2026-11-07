@@ -401,6 +401,7 @@ export const MAIN_FILES = [
   'src/data/columnAccessMessages.ts',
   'src/analysis/targetMessages.ts',
   'src/app/modelFileMessages.ts',
+  'src/ipc/metricSaveMessages.ts',
   'src/app/ossieMessages.ts',
 ];
 

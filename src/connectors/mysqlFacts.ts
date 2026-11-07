@@ -20,7 +20,8 @@ const COLUMNS_SQL = `SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_COMMEN
    AND TABLE_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
  ORDER BY TABLE_SCHEMA, ORDINAL_POSITION LIMIT ${FACTS_ROWS}`;
 // UNVERIFIED: InnoDB's TABLE_ROWS is a sample; a view has TABLE_COMMENT 'VIEW' and no sizes.
-const TABLES_SQL = `SELECT TABLE_COMMENT, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH, UPDATE_TIME
+// UPDATE_TIME is a DATETIME in the server's zone, so it is asked for as Unix seconds: no zone has to be guessed.
+const TABLES_SQL = `SELECT TABLE_COMMENT, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH, UNIX_TIMESTAMP(UPDATE_TIME)
   FROM information_schema.TABLES WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ? LIMIT 1`;
 const STATISTICS_SQL = `SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE, INDEX_TYPE
   FROM information_schema.STATISTICS WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
@@ -58,9 +59,9 @@ async function readFacts(q: FactsQuery, schemaGiven: string, name: string): Prom
     if (estimate !== undefined) facts.rowEstimate = Math.round(estimate);
     const bytes = figure(table[2]);
     if (bytes !== undefined) facts.bytes = bytes;
-    // dateStrings: 'YYYY-MM-DD HH:MM:SS' in the server's zone. A 'T' makes it parse everywhere; the zone is not ours to invent.
-    const modified = str(table[3]).replace(' ', 'T');
-    if (modified) facts.lastModified = modified;
+    const seconds = figure(table[3]); // NULL where the engine keeps no time
+    const modified = new Date((seconds ?? 0) * 1000);
+    if (seconds && !Number.isNaN(modified.getTime())) facts.lastModified = modified.toISOString();
   }
 
   const stats = await attempt(q, STATISTICS_SQL, bound);

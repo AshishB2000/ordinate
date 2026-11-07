@@ -5,9 +5,10 @@
 // parameter, so a value is written into text. This closed encoder writes only what it can write exactly and refuses
 // the rest; the caller turns a refusal into `layerFilter`, never a dropped filter:
 //
-//   text     1–200 characters, each a letter, a mark, a digit, a space or one of _ . , : ; / & ( ) # @ + % -, or '
-//            (doubled), quoted with '. Nothing in the class opens a Jinja tag ({ is out), escapes (\ is out: BigQuery
-//            and Databricks read it), ends the quote, or breaks a line; quote look-alikes are outside it.
+//   text     1–200 characters, each a letter, a mark, a digit, a space or one of _ . , : ; / & ( ) # @ + % -, quoted
+//            with '. Nothing in the class opens a Jinja tag ({ is out), escapes (\ is out: BigQuery and Databricks read
+//            it), ends the quote (' is out: Databricks reads '' as two literals run together, BigQuery as an error), or
+//            breaks a line; quote look-alikes are outside it.
 //   date     an ISO day that is a real day, quoted.
 //   number   finite, `String(n)` only when it reads ^-?\d+(\.\d+)?$ (no exponent).
 //   NULL     never a literal: only IS NULL / IS NOT NULL.
@@ -25,7 +26,7 @@ import { refuseLayer } from './semanticRefusals';
 import type { SemanticFilter } from './semanticQuery';
 
 // Letters include modifier apostrophes and primes (U+02B9–U+02C1, U+02C8–U+02CB): quote look-alikes, kept out.
-const TEXT = /^(?:(?![\u02b9-\u02c1\u02c8-\u02cb])[\p{L}\p{M}\p{N} _.,:;/&()#@+%-]|'){1,200}$/u; // 1–200 code points
+const TEXT = /^(?:(?![\u02b9-\u02c1\u02c8-\u02cb])[\p{L}\p{M}\p{N} _.,:;/&()#@+%-]){1,200}$/u; // 1–200 code points
 const NUMBER = /^-?\d+(\.\d+)?$/;
 /** A dbt dimension name as the filter may write it. */
 export const DBT_NAME_RE = /^[a-z_][a-z0-9_]*(__[a-z0-9_]+)*$/;
@@ -42,7 +43,7 @@ export function literal(value: Cell, type: ColumnType): Literal {
   const s = String(value);
   if (type === 'date') return isoDay(s) ? { ok: true, text: `'${s}'` } : { ok: false };
   if (!TEXT.test(s)) return { ok: false };
-  return { ok: true, text: `'${s.replace(/'/g, "''")}'` };
+  return { ok: true, text: `'${s}'` };
 }
 
 /** The template reference to a synced dimension (a date one at the day grain), or null. */

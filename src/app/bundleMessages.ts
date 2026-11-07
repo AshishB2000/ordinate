@@ -97,3 +97,21 @@ export function backupTooLarge(): string {
 export function recordTooLargeToExport(name: string): string {
   return t('bundleMessages.is_over_32_mb_more_than', { name });
 }
+
+/** One record of a shaped bundle's refusal (./bundleFilterValues.ts). */
+export function filtersByValue(name: string, column: string): string {
+  return t('bundleMessages.filters_by_value', { name, column });
+}
+
+export function versionFiltersByValue(name: string, column: string): string {
+  return t('bundleMessages.a_saved_version_of_filters_by', { name, column });
+}
+
+export function andMore(list: string, count: number): string {
+  return t('bundleMessages.and_more', { list, count });
+}
+
+/** The Share policy cannot cut a filter's value out (a value-less filter matches blank on import), so it refuses. */
+export function bundleFilterValues(list: string): string {
+  return t('bundleMessages.this_project_cannot_be_exported_under', { list });
+}

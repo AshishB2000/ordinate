@@ -59,6 +59,8 @@ export class LiveCallError extends Error {
 
 /** The residentTrace op of a dialect: `live:<dialect>`. */
 export const opOf = (dialect: string | undefined): string => `live:${dialect ?? 'unknown'}`;
+/** What a target is counted and logged under: its dialect, or a semantic layer's backend (its dialect is a placeholder). */
+export const dialectOf = (t: { dialect: string; semantic?: { backend: string } }): string => (t.semantic ? `semantic-${t.semantic.backend}` : t.dialect);
 
 /** LIVE_QUERY_TIMEOUT_MS, re-read per statement (env.ts refused a bad value at startup). */
 export function timeoutMs(): number {
@@ -73,7 +75,7 @@ export function timeoutMs(): number {
 export function failed(t: LiveTarget, kind: CallKind, detail = ''): LiveCallError {
   const e = new LiveCallError(kind, detail);
   // The server log's line: dataset id, step kind, the connector's (redacted) words.
-  if (kind !== 'cancelled') logger.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${kind}${detail ? `: ${detail}` : ''}`);
+  if (kind !== 'cancelled') logger.warn(`[live] ${opOf(dialectOf(t))} dataset ${t.datasetId}: ${kind}${detail ? `: ${detail}` : ''}`);
   return e;
 }
 

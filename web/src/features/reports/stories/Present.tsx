@@ -73,11 +73,14 @@ export function Present({ projectId, name, blocks, figures, onExit }: { projectI
                     <div className={`${s.chart} ${s.chartPresent}`}>
                       {f.chart ? <DrawnVisual type={f.chart.type} data={f.chart.data} overrides={f.chart.overrides} label={f.title || 'Chart'} projectId={projectId} /> : <p className={s.figNote}>{f.note}</p>}
                     </div>
+                    {f.chart && f.note && <p className={s.figNote}>{f.note}</p>}
                     {cap && <p className={pr.presentCaption}>{cap}</p>}
                   </figure>
                 );
               }
-              const f = figures[b.id] as MetricFigure | undefined;
+              const got = figures[b.id] as MetricFigure | undefined;
+              if (got && !('figures' in got)) return <p key={j} className={pr.presentCaption}>{got.error}</p>; // refused: the server's sentence
+              const f = got;
               return (
                 <div key={j}>
                   <div className={b.kind === 'metric' ? `${s.metrics} ${s.metricsOne}` : s.metrics}>

@@ -33,7 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
-import { carriersOf } from '../data/columnAccess';
+import { carriersOf, mentionsHidden, metaShape } from '../data/columnAccess';
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
@@ -52,6 +52,7 @@ import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
 import { hasMetricMeasure, withLeafMeasures } from '../analysis/metricMeasures';
 import { withoutSamples } from '../data/liveProfile';
 import { withoutBaseValues } from '../data/liveBaseFilters';
+import { FilterValueRefusal, filterValueHits } from './bundleFilterValues';
 
 export type SensitiveLevel = 'personal' | 'financial';
 export const HIDDEN_BY_POLICY = 'Hidden by the share policy';
@@ -77,20 +78,19 @@ export interface PolicySummary {
 /**
  * column → level for every column the user marked, CARRIED to every column a
  * later step computes from it: a rename, a formula, a step writing columns it
- * does not name (data/columnAccess carriersOf, the one carrier rule; part 4,
- * D22). A catalog key is the column's name when it was marked; a policy that
- * only looked names up would let `bonus = [salary] * 0.1` leave unmasked.
+ * does not name, a Live dataset's calculated field (data/columnAccess carriersOf
+ * over metaShape, the one carrier rule; part 4, D22). A catalog key is the
+ * column's name when it was marked; a policy that only looked names up would
+ * let `bonus = [salary] * 0.1` leave unmasked.
  */
-async function markedLevels(projectId: string, datasetId: string, meta: Pick<datasets.DatasetMeta, 'steps' | 'columns' | 'sourceColumns'> | null): Promise<Map<string, SensitiveLevel>> {
+async function markedLevels(projectId: string, datasetId: string, meta: Parameters<typeof metaShape>[0] | null): Promise<Map<string, SensitiveLevel>> {
   const docs = await catalog.getColumns(projectId, datasetId, true);
   const out = new Map<string, SensitiveLevel>();
   for (const k of Object.keys(docs)) {
     const s = docs[k].sensitivity;
     if (s === 'personal' || s === 'financial') out.set(k, s);
   }
-  const steps = Array.isArray(meta?.steps) ? meta.steps : [];
-  const final = (meta?.columns ?? []).map((c) => c.name);
-  const source = (meta?.sourceColumns ?? meta?.columns ?? []).map((c) => c.name);
+  const { steps, source, final } = meta ? metaShape(meta) : { steps: [], source: [], final: [] }; // a Live record's calcs too (part 8)
   for (const [marked, level] of out) { // a carrier added here is visited too: its own carriers are already among them
     for (const c of carriersOf(steps, source, final, [marked]).carriers.keys()) if (!out.has(c)) out.set(c, level);
   }
@@ -355,18 +355,13 @@ const DS_JSON = /^datasets\/([0-9a-f-]{36})\.json$/i;
  * marked column, masked in Prepare or not: a withheld entry is simpler to
  * reason about than a token that happens to be harmless.
  */
-async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise<boolean> {
+function dropMarkedColors(entries: ZipEntry[], marked: ReadonlySet<string>): boolean {
   const pj = entries.find((x) => x.name === 'project.json');
   if (!pj) return false;
   let rec: Record<string, unknown>;
   try { rec = JSON.parse(pj.data.toString('utf8')); } catch (_) { return false; }
   const map = rec && rec.colorMap && typeof rec.colorMap === 'object' ? (rec.colorMap as Record<string, unknown>) : null;
   if (!map) return false;
-  const marked = new Set<string>();
-  for (const e of entries) {
-    const m = DS_JSON.exec(e.name);
-    if (m) (await withheldColumns(projectId, m[1])).forEach((c) => marked.add(c));
-  }
   const drop = Object.keys(map).filter((c) => marked.has(c));
   if (!drop.length) return false;
   drop.forEach((c) => { delete map[c]; });
@@ -395,11 +390,38 @@ async function dropMarkedLabels(projectId: string, entries: ZipEntry[]): Promise
   return changed;
 }
 
+/**
+ * A Live record's calcs as a shaped bundle carries them: one the policy withholds, or whose formula names a withheld
+ * column (it can quote its values: `IF [email] = 'ana@…'`), keeps its name and type with its expression emptied, so
+ * the other side reads the list as unreadable and refuses (`calculatedUnreadable`), as a value-less base filter does.
+ */
+function withoutCalcFormulas(record: { calculated?: unknown }, withheld: ReadonlySet<string>): boolean {
+  if (!Array.isArray(record.calculated)) return false;
+  let changed = false;
+  record.calculated = record.calculated.map((c: unknown) => {
+    const { name, expression } = (c && typeof c === 'object' ? c : {}) as { name?: unknown; expression?: unknown };
+    const reads = (typeof name === 'string' && withheld.has(name.trim())) || mentionsHidden(expression, withheld);
+    if (!reads || expression === '') return c;
+    changed = true;
+    return { ...(c as object), expression: '' };
+  });
+  return changed;
+}
+
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
   // Our own freshly exported bytes, inflated off the main thread (libuv's pool).
   let entries: ZipEntry[] = await readZipAsync(bytes);
+  // Every column marked in ANY of the bundle's datasets: a filter's literal on one refuses the bundle
+  // (./bundleFilterValues.ts, cutting it would match blank on import), and its colours stay home.
+  const marked = new Set<string>();
+  for (const e of entries) {
+    const m = DS_JSON.exec(e.name);
+    if (m) (await withheldColumns(projectId, m[1])).forEach((c) => marked.add(c));
+  }
+  const hits = filterValueHits(entries, marked);
+  if (hits.length) throw new FilterValueRefusal(hits);
   const removed = { parquet: 0, versions: 0 };
   const scratch = path.join(projectDir(projectId), 'privacy', 'tmp-' + randomUUID());
   let changed = false;
@@ -411,10 +433,11 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       let record: Record<string, unknown>;
       try { record = JSON.parse(e.data.toString('utf8')); } catch (_) { continue; }
       if (record.mode === 'live') {
-        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5) and its base filters the
-        // values they keep or leave out (part 1 08): a marked column's go, its steps keeping their column and operator.
+        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5), its base filters the
+        // values they keep or leave out (part 1 08) and its calcs' formulas literals (part 8 04): a marked column's go,
+        // its steps keeping their column and operator, its calcs their name and type.
         const withheld = await withheldColumns(projectId, id);
-        if ([withoutSamples(record.live, withheld), withoutBaseValues(record, withheld)].some(Boolean)) { // both run
+        if ([withoutSamples(record.live, withheld), withoutBaseValues(record, withheld), withoutCalcFormulas(record, withheld)].some(Boolean)) { // all run
           e.data = Buffer.from(JSON.stringify(record, null, 2), 'utf8');
           changed = true;
         }
@@ -453,7 +476,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
   } finally {
     await fs.promises.rm(scratch, { recursive: true, force: true });
   }
-  if (await dropMarkedColors(projectId, entries)) changed = true;
+  if (dropMarkedColors(entries, marked)) changed = true;
   if (await dropMarkedLabels(projectId, entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');

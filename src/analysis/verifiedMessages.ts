@@ -16,11 +16,21 @@ export function verifiedTermGone(): string {
   return t('verifiedMessages.a_glossary_term_this_question_uses');
 }
 
+/** A measure named by a metric that was redefined, given filters of its own, or deleted since (a retired one still runs). */
+export function verifiedMetricChanged(): string {
+  return t('verifiedMessages.a_metric_this_question_uses_changed');
+}
+
 // ── Saving one (../ipc/verified) ─────────────────────────────────────────────
 
 /** A question or phrasing whose key another question or phrasing of the project holds (./verifiedRules `keyClash`). */
 export function verifiedTaken(text: string): string {
   return t('verifiedMessages.is_already_a_verified_question_or', { text });
+}
+
+/** A question in the Trash whose question or a phrasing a live question now holds: it stays in the Trash. */
+export function verifiedRestoreTaken(text: string): string {
+  return t('verifiedMessages.it_could_not_be_restored_is', { text });
 }
 
 /** A question that is only punctuation: it has no key, so nobody could ask it. */

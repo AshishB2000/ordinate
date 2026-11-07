@@ -177,6 +177,8 @@ function replySection(): void {
   ok('a dimension answered both as \'\' and as NULL is refused (Ordinate keeps one blank)', !('rows' in twoBlanks) && /blank/.test(show(twoBlanks)));
   ok('…past the row cap the reply is truncated (the door\'s tooManyGroups)', rowsOf(wire.finishRows({ ...body, limit: undefined }, [['a', 'x', 1], ['b', 'x', 2], ['c', 'x', 3]], 3, 2))?.truncated === true);
   ok('a full reply with a NULL first on the order is asked again without the cut', show(wire.finishRows(body, [['z', 'x', null], ['a', 'x', 9], ['b', 'x', 8]], 3, 100)) === '{"recut":true}');
+  ok("a full reply with one blank form in a dimension is asked again without the cut (its '' may be past it)", show(wire.finishRows(body, [['a', 'x', 9], [null, 'x', 8], ['b', 'x', 7]], 3, 100)) === '{"recut":true}');
+  ok('NEGATIVE CONTROL: …a NULL in a date dimension is no blank form, the reply kept', rowsOf(wire.finishRows(body, [['a', 'x', 9], ['b', null, 8], ['c', 'x', 7]], 3, 100))?.rows.length === 3);
   ok('NEGATIVE CONTROL: a full reply with its NULLs last is kept', rowsOf(wire.finishRows(body, [['a', 'x', 9], ['b', 'x', 8], ['z', 'x', null]], 3, 100))?.rows.length === 3);
   const list: DbtBody = { savedQuery: 'orders', metrics: [], groupBy: [{ name: 'many' }], where: [], orderBy: [{ groupBy: { name: 'many' }, descending: false }], nonBlank: ['many'], cut: 2 };
   ok('a value list: whitespace-only values dropped, then the cut', show(rowsOf(wire.finishRows(list, [['\t'], ['  '], ['a'], ['b'], ['c']], 100_001, 100_000))?.rows) === '[["a"],["b"]]');

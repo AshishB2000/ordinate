@@ -7,10 +7,10 @@
 import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as datasets from '../data/datasets';
-import { sourceTablesOf } from '../data/sourceTableOf';
+import { docTablesOf, sourceTablesOf } from '../data/sourceTableOf';
 import { getColumns, getDoc } from '../app/catalog';
 import { getTableDoc } from '../app/tableDocs';
-import { sourceDocGone } from '../app/sourceTableMessages';
+import { dismissalsFull, sourceDocGone } from '../app/sourceTableMessages';
 import * as store from '../app/sourceTables';
 import { suggestionsFor, type Suggestion, type SuggestionKind } from '../analysis/sourceSuggestions';
 
@@ -35,7 +35,7 @@ function reader(projectId: string) {
     const conn = await once(conns, origin.connId, () => connections.getConnection(projectId, origin.connId));
     const index = await once(indexes, origin.connId, async () => new Map((await store.listSourceIndex(projectId, origin.connId)).map((e) => [e.table, e.docId])));
     const found: Doc[] = [];
-    for (const table of sourceTablesOf(origin, conn ?? undefined)) {
+    for (const table of docTablesOf(sourceTablesOf(origin, conn ?? undefined), [...index.keys()])) {
       const docId = index.get(table);
       if (!docId) continue;
       const doc = await once(docs, `${origin.connId}:${docId}`, async () => (await store.readSourceDoc(projectId, origin.connId, docId))?.rec);
@@ -64,11 +64,19 @@ export function register(): void {
   });
 
   ipcMain.handle('catalog:dismissSuggestion', async (_e, p: { projectId: string; datasetId: string; connId: string; docId: string; kind: SuggestionKind; column?: string; hash: string }) => {
+    const listed = new Set((await datasets.listDatasets(p.projectId)).map((d) => d.id));
+    let full = false;
     const saved = await store.updateSourceDoc(p.projectId, p.connId, p.docId, (d) => {
-      const cur = d.dismissed?.[p.datasetId] ?? {};
+      const kept = Object.fromEntries(Object.entries(d.dismissed ?? {}).filter(([id]) => listed.has(id))); // a deleted dataset's dismissals go first
+      if (!(p.datasetId in kept) && Object.keys(kept).length >= store.MAX_DISMISSED_DATASETS) {
+        full = true;
+        return d;
+      }
+      const cur = kept[p.datasetId] ?? {};
       const next = p.kind === 'column' ? { ...cur, columns: { ...cur.columns, [p.column as string]: p.hash } } : { ...cur, [p.kind]: p.hash };
-      return { ...d, dismissed: { ...d.dismissed, [p.datasetId]: next } };
+      return { ...d, dismissed: { ...kept, [p.datasetId]: next } };
     });
+    if (full) return { ok: false, error: dismissalsFull() };
     return saved ? { ok: true } : { ok: false, error: sourceDocGone() };
   });
 }

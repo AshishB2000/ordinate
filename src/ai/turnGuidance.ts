@@ -10,6 +10,7 @@ export interface TurnGuidance {
   verifiedId?: string; // UUID of the verified question the answer followed
   instructions: number; // integer 0..MAX_GUIDANCE_INSTRUCTIONS: how many standing instructions applied
   examples: string[]; // UUIDs, at most MAX_GUIDANCE_EXAMPLES
+  narrated?: true; // a verified answer a model was asked to narrate: the app drew it, but "no model call" would be false
 }
 
 const MAX_GUIDANCE_INSTRUCTIONS = 40; // instructions.ts MAX_INSTRUCTIONS: the count cannot pass the list it counts
@@ -22,5 +23,5 @@ export function sanitizeGuidance(raw: unknown): TurnGuidance | undefined {
   const n = r.instructions;
   if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > MAX_GUIDANCE_INSTRUCTIONS) return undefined;
   const examples = Array.isArray(r.examples) ? r.examples.filter(isValidId).slice(0, MAX_GUIDANCE_EXAMPLES) : [];
-  return { ...(isValidId(r.verifiedId) && { verifiedId: r.verifiedId }), instructions: n, examples };
+  return { ...(isValidId(r.verifiedId) && { verifiedId: r.verifiedId }), instructions: n, examples, ...(r.narrated === true && { narrated: true as const }) };
 }

@@ -71,6 +71,19 @@ export function sqlOrder(live: string[], split: boolean, folded: boolean): strin
   return [...live.filter((l) => l !== ck.OTHER_LABEL), ck.OTHER_LABEL];
 }
 
+/** `b` over other rows (the fixture's columns): saved as an extract beside it, loaded as `table`, the layer asked by `ask(table)`. */
+export async function benchOver(b: Bench, table: string, rows: import('./liveParityFixture').Cell[][], ask: (table: string) => Bench['ask']): Promise<Bench | null> {
+  const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
+  const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+  const imported = fx.importTyped(fx.COLUMNS, rows);
+  const saved = await datasets.saveDataset(b.x.pid, { name: table, sourceKind: 'csv', columns: imported.columns, rows: imported.rows });
+  const back = saved && await datasets.getDataset(b.x.pid, saved.id);
+  if (!saved || !back) return null;
+  const x = { pid: b.x.pid, did: saved.id, rows, stored: { columns: back.columns, rows: back.rows } };
+  const source = await fx.duckEngine.load(table, fx.layout(fx.COLUMNS), fx.warehouseCells(fx.COLUMNS, rows));
+  return { ...b, x, typed: fx.env(source, b.env.columns), kit: mx.parityKit(x, fx.runDuck), ask: ask(table) };
+}
+
 export async function chartCase(b: Bench, c: Case, run?: SemanticRunner): Promise<{ problems: string[]; sem: LiveOutcome; log: Log }> {
   const log: Log = [];
   const enc = { ...c.enc, values: c.metrics.map((m) => AS_COLUMN[m]) } as VizEncoding;
