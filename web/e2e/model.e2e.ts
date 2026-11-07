@@ -324,3 +324,44 @@ e2e('data model: assistant', async (s) => {
   await screensInPlace(page, 'model-verified-phone');
   assert.deepEqual(misfits, []);
 });
+
+// The test chat (part 3 D11), with no model: a verified question answers from the app and says so, a follow-up chip has no
+// "how" line, a good answer is saved as verified, and a reload brings the conversation and its "how" line back.
+e2e('data model: assistant test chat', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  const url = `/model/${pid}?tab=assistant`;
+  await page.goto(url);
+  await settled(page);
+  const chat = page.getByRole('region', { name: 'Try a question' });
+  await chat.getByText('Nothing asked yet').waitFor();
+  await chat.scrollIntoViewIfNeeded(); // the shot is of the chat, not the lists above it
+  await screensInPlace(page, 'model-assistant-chat-empty');
+
+  await chat.getByRole('textbox', { name: 'Question to try' }).fill('revenue by region');
+  await chat.getByRole('button', { name: 'Ask' }).click();
+  await chat.getByText('✓ Verified').waitFor();
+  await chat.getByText('A verified question — no model call.').waitFor();
+  const cards = chat.getByTestId('answer-card');
+  assert.equal(await cards.count(), 1);
+
+  await chat.getByRole('button', { name: 'Split by category' }).first().click();
+  await cards.nth(1).waitFor();
+  assert.equal(await chat.getByTestId('how-answered').filter({ hasText: 'no model call' }).count(), 1); // the chip's turn has no "how" line
+  await cards.nth(1).getByRole('button', { name: 'Save as verified' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Save as a verified question' });
+  await dialog.getByRole('textbox', { name: 'Question' }).fill('Revenue by region and category');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await page.getByRole('region', { name: 'Verified questions' }).getByText('Revenue by region and category', { exact: true }).waitFor();
+
+  // Stored by the server: a reload reads the thread back, both answers and the first one's "how".
+  await page.reload();
+  await settled(page);
+  await cards.nth(1).waitFor();
+  await chat.getByText('A verified question — no model call.').waitFor();
+  assert.equal(await cards.count(), 2);
+  await chat.getByText('Spec:').first().waitFor();
+  await chat.getByRole('heading', { name: 'Try a question' }).scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'model-assistant-chat');
+});

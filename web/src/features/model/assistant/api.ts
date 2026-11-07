@@ -69,7 +69,7 @@ type ListReply = { ok: true; broken: number; questions: VerifiedRow[] } | Fail;
 
 export const verifiedKey = (projectId: string, datasetId?: string) => ['verified:list', projectId, datasetId ?? ''] as const;
 
-export const useVerified = (projectId: string, datasetId?: string, opts: { enabled?: boolean; retry?: boolean; staleTime?: number } = {}) =>
+export const useVerified = (projectId: string, datasetId?: string, opts: { enabled?: boolean; retry?: boolean; refetchOnMount?: boolean; retryOnMount?: boolean; staleTime?: number } = {}) =>
   useQuery({
     queryKey: verifiedKey(projectId, datasetId),
     ...opts,

@@ -19,8 +19,8 @@ export async function verifiedAsk(projectId: string, question: string, threadId:
   if ('ok' in built) return { ok: false as const, error: built.reason };
   const n = await narrate(projectId, built,
     `Narrate this chart answer ("${hit.question}") in two or three sentences, citing only figures from the facts.`, guard);
-  const r = await appendAnswer(projectId, threadId, question, n.text, built, built.card.spec);
   const guidance: TurnGuidance = { verifiedId: hit.id, instructions: 0, examples: [] };
+  const r = await appendAnswer(projectId, threadId, question, n.text, built, built.card.spec, undefined, guidance);
   return {
     ok: true as const, answer: n.text, provenance: built.provenance, turns: r.turns, threadId: r.threadId,
     suggestedAction: NO_ACTION, ledger: built.ledger, numberAudit: n.audit, guidance,

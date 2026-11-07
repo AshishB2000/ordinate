@@ -35,6 +35,7 @@ import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import { DidYouMean, type MeantOption } from './DidYouMean';
 import { RememberName, type CardLearn } from './RememberName';
+import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
 import s from './AnswerCard.module.css';
 
@@ -69,6 +70,7 @@ export function AnswerCard({
   turn,
   savedVisualId,
   narrated,
+  question,
   onFollowUp,
 }: {
   projectId: string;
@@ -79,6 +81,8 @@ export function AnswerCard({
   turn?: { threadId: string; turnId: string };
   savedVisualId?: string;
   narrated: boolean;
+  /** What was asked (the turn before): prefills "Save as verified". */
+  question?: string;
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
 }) {
   const q = useQuery({
@@ -184,6 +188,7 @@ export function AnswerCard({
             {table ? 'Hide table' : 'Show table'}
           </Button>
           <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
+          {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
           {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
         </div>
       )}
