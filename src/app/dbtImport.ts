@@ -240,7 +240,8 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     if (!agg || (own(measure, 'agg_params') !== undefined && own(measure, 'agg_params') !== null)) return { skip: 'unknown_aggregation', ...at };
     const expr = own(measure, 'expr');
     const column = columnOf(ds.columns, typeof expr === 'string' ? expr : String(own(measure, 'name')));
-    if (!column || (NEEDS_NUMBER.has(agg) && column.type !== 'number')) return { skip: 'not_a_column', ...at };
+    // countd over a date column counts distinct days, where dbt counts distinct timestamps: not the same figure.
+    if (!column || (NEEDS_NUMBER.has(agg) && column.type !== 'number') || (agg === 'countd' && column.type === 'date')) return { skip: 'not_a_column', ...at };
     let snapshot: { column: string; take: 'last' | 'first' } | undefined;
     const nad = own(measure, 'non_additive_dimension');
     if (nad !== undefined && nad !== null) {

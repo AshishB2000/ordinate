@@ -81,6 +81,14 @@ const show = (v: unknown): string => JSON.stringify(v)?.slice(0, 600) ?? String(
   ok('every metric in the manifest is either translated or named in skipped', allMetricNames(MANIFEST).every((n) => !!m(n) || skipped.some((s) => s.name === n && s.kind === 'metric')));
   ok('… and never both', allMetricNames(MANIFEST).every((n) => !(m(n) && skipped.some((s) => s.name === n))));
   ok('fifteen translated, ten skipped', model.metrics.length === 15 && skipped.filter((s) => s.kind === 'metric').length === 10, show([model.metrics.map((x) => x.name), skipped]));
+  // A distinct count over a date column: Ordinate counts distinct days, dbt distinct timestamps (two orders one day).
+  // On a copy of the fixture: f1's golden translation (scripts/test-dbtPart5.ts) pins the fixture's own.
+  const days = copy();
+  days.semantic_models[0].measures.push({ name: 'order_days', agg: 'count_distinct', expr: 'order_date' }, { name: 'buyers', agg: 'count_distinct', expr: 'customer_id' });
+  days.metrics.push({ name: 'order_days', label: 'Order days', type: 'simple', type_params: { measure: 'order_days' } }, { name: 'buyers', label: 'Buyers', type: 'simple', type_params: { measure: 'buyers' } });
+  const daysT = translateDbt(days, DATASETS, {});
+  ok('count_distinct over a date column is skipped, not_a_column; over text it is countd', daysT.skipped.some((s) => s.dbt === 'order_days' && s.reason === 'not_a_column') && !metricNamed(daysT.model, 'Order days')
+    && (metricNamed(daysT.model, 'Buyers')?.definition as { aggregation?: string })?.aggregation === 'countd', show(daysT.skipped));
 
   const orders = model.datasets.find((d) => d.id === ORDERS);
   ok('the primary entity becomes the table key', orders?.key === 'id', show(orders));

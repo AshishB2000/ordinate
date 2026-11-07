@@ -149,7 +149,7 @@ direction and target stay this project's.
 conversions, Ordinate's funnel counts people from their first); a derived input with `offset_window` or
 `offset_to_grain` (dbt shifts each day, then adds the days up); inputs on more than one semantic model;
 `window_groupings` (how dbt groups it by other fields is not documented); `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
-one column; a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
+one column; `count_distinct` over a date column (Ordinate counts distinct days, dbt distinct timestamps); a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
 an ordering comparison on text), or on a ratio or derived metric; `fill_nulls_with` (dbt shows 0 where there are
 no rows, Ordinate shows no figure); a snapshot on a Live dataset; a metric type Ordinate does not read; and a
 ratio or derived metric whose input was skipped, listed under that input. Foreign entities are not imported. One
