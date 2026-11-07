@@ -5,6 +5,10 @@
 // kpiHidden; under mask a chart's labels by `Who = IF … ELSE [cat]` are tokens. The Assistant's withheld list
 // and the policy summary's count name the calcs. NEGATIVE CONTROL: with nothing marked every figure is drawn.
 //
+// § layer  a layer's metric (part 7 b2) is read from every column of its semantic dataset, as far as the policy can
+//          tell (analysis/semanticMeasures layerReads): under drop a /p/ KPI and chart over a mirror are hidden once any
+//          column of the dataset is marked; under mask they are drawn. NEGATIVE CONTROL: with nothing marked, drawn.
+//
 //   npm run build:ts && node scripts/test-sharePolicyLiveCalcs.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -22,6 +26,12 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
 const { kpiHidden }: typeof import('../src/publish/kpiPolicy') = require('../src/publish/kpiPolicy');
+const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
+const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const fake: typeof import('./semanticFake') = require('./semanticFake');
+const adapters: typeof import('../src/engine/live/semantic/adapters') = require('../src/engine/live/semantic/adapters');
+const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
 
 const show = (v: unknown): string => String(JSON.stringify(v)).slice(0, 300);
 const HIDDEN = share.HIDDEN_BY_POLICY;
@@ -36,13 +46,13 @@ async function main(): Promise<void> {
   ok('fixture: the calcs are stored', !!(await inApp(() => H.liveDataset.setLiveCalcs(P, L, CALCS.map((c) => ({ ...c }))))));
   const chart = async (category: string, column: string, aggregation: string, sh?: string) =>
     (await post('visual:data', { projectId: P, datasetId: L, encoding: { category, values: [{ column, aggregation }] }, ...(sh ? { share: sh } : {}) })).value;
-  const site = async (): Promise<Record<string, any>> => inApp(async () => { // any: a page tile, read field by field
+  /** A /p/ page of a chart (`ds`, `encoding`) beside KPI cards, each tile's first payload by title. */
+  const page = async (ds: string, title: string, encoding: object, kpis: object[]): Promise<Record<string, any>> => inApp(async () => { // any: a page tile, read field by field
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-livecalc-site-'));
-    const vid = (await visuals.saveVisual(P, { datasetId: L, name: 'Bonus by cat', chartType: 'column', encoding: { category: 'cat', values: [{ column: 'Bonus', aggregation: 'sum' }] } } as never))!.id;
-    const dash = (await analysis.saveAnalysis(P, { name: 'Bonus', sheets: [{ id: randomUUID(), name: 'Main', cards: [
+    const vid = (await visuals.saveVisual(P, { datasetId: ds, name: title, chartType: 'column', encoding } as never))!.id;
+    const dash = (await analysis.saveAnalysis(P, { name: title, sheets: [{ id: randomUUID(), name: 'Main', cards: [
       { id: randomUUID(), type: 'visual', visualId: vid, layout: { x: 0, y: 0, w: 4, h: 4 } },
-      { id: randomUUID(), type: 'metric', metric: { datasetId: L, column: 'Bonus', aggregation: 'sum', label: 'Bonus KPI' }, layout: { x: 4, y: 0, w: 3, h: 2 } },
-      { id: randomUUID(), type: 'metric', metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Qty KPI' }, layout: { x: 4, y: 2, w: 3, h: 2 } },
+      ...kpis.map((metric, i) => ({ id: randomUUID(), type: 'metric', metric, layout: { x: 4, y: i * 2, w: 3, h: 2 } })),
     ] }] } as never))!;
     const cfg = pub.sanitizePublishConfig({ projectId: P, dashboardIds: [dash.id], storyIds: [], outDir: out });
     if ('error' in cfg) throw new Error(cfg.error);
@@ -51,6 +61,8 @@ async function main(): Promise<void> {
     const cards: any[] = m ? JSON.parse(m[1]).dashboard.sheets[0].cards : []; // any: as above
     return Object.fromEntries(cards.map((c) => [c.title, c.payloads[0]]));
   });
+  const site = () => page(L, 'Bonus by cat', { category: 'cat', values: [{ column: 'Bonus', aggregation: 'sum' }] },
+    [{ datasetId: L, column: 'Bonus', aggregation: 'sum', label: 'Bonus KPI' }, { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Qty KPI' }]);
   const BONUS = [{ datasetId: L, column: 'Bonus', aggregation: 'sum' as const }];
 
   // ── nothing marked: every figure is drawn ──
@@ -87,6 +99,32 @@ async function main(): Promise<void> {
   ok('NEGATIVE CONTROL (mask): labels by cat are tokens', byCat.ok === true && byCat.data.labels.every((l: string) => !values.has(l)), show(byCat.data?.labels));
   ok('mask: labels by Who, a text calc over cat, are tokens — the same ones', byWho.ok === true && byWho.data.labels.every((l: string) => !values.has(l))
     && show([...byWho.data.labels].sort()) === show([...byCat.data.labels].sort()), show(byWho.data?.labels));
+
+  // ── § layer: a semantic dataset's mirrors ──
+  fake.registerSemanticFake();
+  adapters.registerTestSemanticAdapter('fake', { encode: (q, model) => ({ kind: 'semantic', body: { table: model, columns: H.fx.COLUMNS, query: q }, columns: sq.answerColumns(q) }) });
+  const SEM = await inApp(async () => {
+    const conn = (await H.connections.saveConnection(P, { name: 'Layer prod', connectorId: fake.SEMANTIC_FAKE_ID, values: {} }))!;
+    return (await liveRecord.saveSemanticRecord(P, { name: 'Orders layer', connId: conn.id, columns: [], semantic: { backend: 'fake', model: 'live_typed', metrics: [], grains: [], syncedAt: '2026-11-01T00:00:00.000Z' } }))!.id;
+  });
+  ok('fixture: the semantic dataset syncs', (await post('dataset:syncLiveSchema', { projectId: P, datasetId: SEM })).value.ok === true);
+  const revenue = (await inApp(() => metrics.listMetrics(P))).find((m) => m.datasetId === SEM && m.name === 'revenue')!.id;
+  const layerPage = () => page(SEM, 'Revenue by region', { category: 'region', values: [{ column: '', aggregation: 'sum', metricId: revenue }] },
+    [{ datasetId: SEM, column: '', aggregation: 'sum', metricId: revenue, label: 'Revenue KPI' }]);
+  const drawn = (p: Record<string, any>): boolean => !p['Revenue by region']?.hidden && (p['Revenue by region']?.labels?.length ?? 0) > 1 && typeof p['Revenue KPI']?.value === 'number'; // any: as above
+  const hidden = (p: Record<string, any>): boolean => p['Revenue by region']?.hidden === HIDDEN && p['Revenue KPI']?.hidden === HIDDEN; // any: as above
+  await inApp(() => store.setPolicy(P, { publish: 'drop', export: 'drop', report: 'drop' }));
+  const ctlLayer = await layerPage();
+  ok('NEGATIVE CONTROL (layer, nothing marked on it, drop): the mirror\'s chart and KPI are drawn on /p/', drawn(ctlLayer), show(ctlLayer));
+  await inApp(() => catalog.setColumn(P, SEM, 'bigid', { sensitivity: 'personal' }));
+  const dropLayer = await layerPage();
+  ok('layer, drop: one marked column on the semantic dataset hides the mirror\'s chart and KPI on /p/', hidden(dropLayer), show(dropLayer));
+  const reads: import('../src/ipc/metrics').MetricRead[] = [];
+  await inApp(() => ipcMetrics.resolveMetric(P, revenue, { reads }));
+  ok('layer, drop: the mirror\'s figure reads every field, so a report or an alert post withholds it', reads.length > 1 && (await inApp(() => kpiHidden(P, reads, 'report'))) === HIDDEN, show(reads));
+  await inApp(() => store.setPolicy(P, { publish: 'mask', export: 'mask', report: 'mask' }));
+  const maskLayer = await layerPage();
+  ok('layer, mask: the mirror\'s figures pass, as every aggregate does', drawn(maskLayer), show(maskLayer));
 }
 
 main().then(async () => { await close(); finish(); }, async (err) => {
