@@ -117,7 +117,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
         const question = t('reportRender.write_exactly_two_short_paragraphs', { p0: captions.map((c) => '- ' + c).join('\n') });
         let timer: ReturnType<typeof setTimeout> | undefined;
         const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), NARRATIVE_MS); });
-        const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question }), late]);
+        const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question, ...(share ? { share: 'report' } : {}) }), late]);
         clearTimeout(timer);
         return r && r.ok !== false && typeof r.answer === 'string' ? r.answer.trim() : '';
       })());

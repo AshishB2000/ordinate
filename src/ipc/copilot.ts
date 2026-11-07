@@ -23,7 +23,9 @@ import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
 import * as metrics from '../analysis/metrics';
 import { metricDate } from '../analysis/metricTimeScope';
-import { resolveMetric } from './metrics';
+import { resolveMetric, type MetricRead } from './metrics';
+import { kpiHidden } from '../publish/kpiPolicy';
+import { isSharePath, type SharePath } from '../app/privacyStore';
 import { resolveChartOverlays } from './visualsAnalytics';
 import * as scorecards from '../analysis/scorecards';
 import { computeScorecard } from './scorecards';
@@ -42,7 +44,7 @@ import * as answers from './answers';
 import { vizDataFor } from './visuals';
 import { isLiveFigureError } from './liveRoute';
 import { isLiveDatasetError } from '../data/liveDataset';
-import { targetField } from './targetResolve';
+import { targetField, targetHidden } from './targetResolve';
 import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } from './copilotCards';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
@@ -165,7 +167,7 @@ function reasonLedger(reason: string): LedgerEntry[] {
  * no metric vocabulary, which is exactly the state every project was in before
  * this layer existed.
  */
-async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope, question?: string): Promise<FactMetric[]> {
+async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope, question?: string, share?: SharePath): Promise<FactMetric[]> {
   try {
     const status = statusFor(projectId); // once per request (part 4)
     const list = await metrics.listMetrics(projectId);
@@ -176,11 +178,13 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       // A layer's metric has no figure here (part 7 b0); one reading a hidden column is not the caller's vocabulary (part 4).
       if ((datasetId && s.datasetId !== datasetId) || metrics.isExternalDefinition(s.definition) || (await metricHidden(projectId, s.id))) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
-      const r = await resolveMetric(projectId, s.id, scope).catch((err: unknown) => {
+      const reads: MetricRead[] = [];
+      const r = await resolveMetric(projectId, s.id, share ? { ...scope, reads } : scope).catch((err: unknown) => {
         if (isLiveFigureError(err)) return null;
         throw err;
       });
       if (!r) continue;
+      if (share && (await kpiHidden(projectId, reads, share))) continue; // leaving by a share path: a figure the policy withholds there is not the model's
       const additivity = (await metricAdditivity(projectId, s.id, byName, scope?.params)) ?? undefined;
       // Its filters are worded as the Assistant is told a chart's: a value of a column marked personal or financial is withheld.
       const stored = await metrics.getMetric(projectId, s.id);
@@ -189,7 +193,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
       const snapshot = metrics.isSimpleDefinition(s.definition) ? s.definition.snapshot : undefined;
       const st = await status(`metric:${s.id}`);
-      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}), ...(await targetField(projectId, s.id, scope?.filters ?? [], r.value)) });
+      out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}), ...(st ? { status: st, ...(st.replacedBy ? { replacedBy: st.replacedBy.name } : {}) } : {}), ...(await targetField(projectId, s.id, scope?.filters ?? [], r.value, await targetHidden(projectId, s.id, share))) });
     }
     return vocabularyOrder(out, (m) => namedIn(question, [m.name]));
   } catch (_) {
@@ -207,6 +211,7 @@ export async function buildFacts(
   context: ContextRef,
   emit: ActivityEmit = NO_ACTIVITY,
   question?: string, // vocabulary: a retired metric or term the question names stays in it (./statusNotes)
+  share?: SharePath, // the facts leave by a share path (a report's narrative): figures the Share policy withholds there are withheld
 ): Promise<copilot.CopilotFacts> {
   const kind = context && typeof context.kind === 'string' ? context.kind : '';
   const id = context && typeof context.id === 'string' ? context.id : '';
@@ -325,8 +330,8 @@ export async function buildFacts(
       const scope = savedScope(a);
       // …and in the dashboard's own currency, as the page asks every tile.
       const { cards, defined } = await inDashboardCurrency(projectId, a.id, async () => ({
-        cards: await metricCardFigures(projectId, a, scope),
-        defined: await factMetrics(projectId, undefined, scope, question),
+        cards: await metricCardFigures(projectId, a, scope, share),
+        defined: await factMetrics(projectId, undefined, scope, question, share),
       }));
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
       if (defined.length) {
@@ -506,7 +511,7 @@ export function register() {
   // Provenance and every activity step are built from app-computed facts BELOW,
   // independent of the reply text — neither derives a chip or a number from a
   // token.
-  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId }: any = {}) => {
+  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -541,7 +546,8 @@ export function register() {
       if (hit) return hit;
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = turns.map((t) => ({ role: t.role, text: t.text }));
-      const facts = await buildFacts(projectId, context || {}, emit, q);
+      // `share`: only a server caller names one (a report's narrative, ./reportsServer): the contract has no such field.
+      const facts = await buildFacts(projectId, context || {}, emit, q, isSharePath(share) && share !== 'bundle' ? share : undefined);
       const guided = await askGuidance(projectId, context || {}, facts.provenance.kind, q); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.

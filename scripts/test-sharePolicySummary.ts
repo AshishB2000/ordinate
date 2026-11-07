@@ -12,6 +12,10 @@
 // NEGATIVE CONTROLS: a Summary led by the hours KPI keeps its sentence; an alert over hours is said in place of the
 // salary one; in the app summary:compute still says the payroll sentences; with nothing marked they leave.
 //
+// The facts a report's narrative page hands the model (copilot:ask, context analysis, with the report's share path:
+// src/ipc/copilot.ts buildFacts) withhold the same figures: a KPI card's and a saved metric's totalled from salary.
+// NEGATIVE CONTROLS: the hours figures stay; the Assistant in the app still reads the payroll figure.
+//
 //   npm run build:ts && node scripts/test-sharePolicySummary.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -30,6 +34,9 @@ const rec: typeof import('../src/data/datasetRecord') = require('../src/data/dat
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const store: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const copilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const reportSpec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
@@ -79,9 +86,14 @@ async function main(): Promise<void> {
       ] }] } as never))!;
       const pay = await board('Payroll board', 'salary', 'Payroll KPI', 1);
       const hrs = await board('Hours board', 'hours', 'Hours KPI', 2);
+      for (const [name, column] of [['Payroll', 'salary'], ['Hours', 'hours']]) {
+        await metrics.saveMetric(P, { name, datasetId: S, definition: { column, aggregation: 'sum' }, format: { kind: 'number', decimals: 0 } } as never);
+      }
       const report = (await reportSpec.saveReport(P, { name: 'Payroll report', analysisId: pay.id, pages: [{ kind: 'summary', include: true, layout: 'full' }] }))!;
+      const narrated = (await reportSpec.saveReport(P, { name: 'Narrated report', analysisId: pay.id, pages: [
+        { kind: 'sheet', sheetIdx: 0, include: true, layout: 'full' }, { kind: 'narrative', include: true, layout: 'full' }] }))!;
       const hrsReport = (await reportSpec.saveReport(P, { name: 'Hours report', analysisId: hrs.id, pages: [{ kind: 'summary', include: true, layout: 'full' }] }))!;
-      return { S, pay: pay.id, hrs: hrs.id, report: report.id, hrsReport: hrsReport.id };
+      return { S, pay: pay.id, hrs: hrs.id, report: report.id, hrsReport: hrsReport.id, narrated: narrated.id };
     });
     // The hours alert fires first, the payroll one later: the newest is the one a Summary names.
     const rule = async (name: string, column: string, label: string) => rpc('alerts:save', { projectId: P, rule: {
@@ -139,6 +151,26 @@ async function main(): Promise<void> {
     ok('NEGATIVE CONTROL (drop): the hours Summary keeps its KPI sentence, on /p/ and in its report', hoursKpi(said(drop.hoursPage)) && hoursKpi(drop.hoursReport), show([said(drop.hoursPage), drop.hoursReport]));
     const app2 = await rpc('summary:compute', { projectId: P, analysisId: fx.pay, pages: (await inApp(() => analysis.getAnalysis(P, fx.pay)))!.sheets });
     ok('NEGATIVE CONTROL (drop): in the app the Summary still says the payroll KPI sentence', app2.ok && app2.sentences.some((s: any) => s.text.startsWith('Payroll KPI rose')), show(app2)); // any: a sentence
+
+    // ── the report narrative's facts, under drop ──
+    const build: (...a: unknown[]) => Promise<{ text: string }> = copilot.buildFacts as never; // loosely typed: it also compiles against buildFacts before it took `share` (the red run)
+    const facts = (board: string, share?: 'report') => inApp(async () => (await build(P, { kind: 'analysis', id: board }, undefined, 'Write two paragraphs', share)).text);
+    const leaked = (text: string): string[] => SALARY_BYTES.filter((b) => text.includes(b));
+    const inAppFacts = await facts(fx.pay);
+    ok('NEGATIVE CONTROL (drop): in the app the Assistant\'s facts carry the payroll KPI and metric figure', leaked(inAppFacts).length > 0 && /Payroll KPI: 1,?122,?756/.test(inAppFacts), inAppFacts);
+    const narr = await facts(fx.pay, 'report');
+    ok('drop: a report narrative\'s facts carry no payroll figure, neither the KPI card\'s nor the saved metric\'s', leaked(narr).length === 0, show([leaked(narr), narr]));
+    ok('drop: …and still name the KPI card (the narrative is not dropped)', /Payroll KPI: /.test(narr), narr);
+    ok('NEGATIVE CONTROL (drop): the hours board\'s narrative facts keep the hours KPI and metric', /Hours KPI: 14,?880/.test(await facts(fx.hrs, 'report')) && /Hours/.test(narr) && narr.includes('14,880'), narr);
+    const real = handlers.get('copilot:ask')!;
+    const asked: any[] = []; // any: the payloads the narrative sends
+    handlers.set('copilot:ask', async (_e, arg) => { asked.push(arg); return { ok: true, answer: 'Two paragraphs.' }; });
+    try {
+      await rpc('report:build', { projectId: P, id: fx.narrated });
+    } finally {
+      handlers.set('copilot:ask', real);
+    }
+    ok('a report\'s narrative asks with the report\'s share path', asked.length === 1 && asked[0].share === 'report' && asked[0].context?.kind === 'analysis', show(asked));
 
     // ── mask: an aggregate passes ──
     const mask = await leave('mask');
