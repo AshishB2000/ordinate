@@ -200,9 +200,17 @@ async function listingSection(): Promise<void> {
   const req = sfSem.snowflakeAdapter.encode(q, 'SALES.PUBLIC.ORDERS_SV', COLS);
   const ran = await layer.run(CTX(), req.body);
   const sent = fake.of('submit').at(-1)?.json as { statement?: string; bindings?: Record<string, { type: string; value: string }> } | undefined;
-  ok('run: the encoder\'s statement inside the row cap, its value a TEXT binding, never text',
-    ran.ok && String(sent?.statement).startsWith('select * from (\nSELECT ') && String(sent?.statement).endsWith('\n) limit 100001')
+  // The connector's `select * from (…) limit n` would drop the statement's ORDER BY (Snowflake keeps a subquery's
+  // order only inside it): a semantic statement is capped by its own last line instead.
+  ok('run: the encoder\'s statement capped by its own last line (no wrapper), its value a TEXT binding, never text',
+    ran.ok && String(sent?.statement) === `${(req.body as { sql: string }).sql}\nLIMIT 100001`
       && show(sent?.bindings) === show({ 1: { type: 'TEXT', value: 'Zanzibar' } }) && !String(sent?.statement).includes('Zanzibar'), show(sent));
+  const ranks = sfSem.snowflakeAdapter.encode(shapes().find(([, sq]) => sq.limit === 51)![1], 'SALES.PUBLIC.ORDERS_SV', COLS);
+  await layer.run(CTX(), ranks.body);
+  const top = String((fake.of('submit').at(-1)?.json as { statement?: string } | undefined)?.statement);
+  ok('…a statement with its own LIMIT under the cap is sent as written, its ORDER BY last but the LIMIT', top === (ranks.body as { sql: string }).sql && /\nORDER BY [^\n]+\nLIMIT 51$/.test(top), top);
+  const sfSql: typeof import('../src/connectors/snowflakeSql') = require('../src/connectors/snowflakeSql');
+  ok('…one whose own LIMIT is past the cap gets the cap\'s', sfSql.orderedCap('SELECT 1\nORDER BY 1\nLIMIT 500', 100) === 'SELECT 1\nORDER BY 1\nLIMIT 101');
   const notOurs = await layer.run(CTX(), { sql: 'select 1' });
   ok('run: a body that is not { sql, params } is refused before any statement', !notOurs.ok);
 

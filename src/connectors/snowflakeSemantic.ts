@@ -27,8 +27,8 @@ import type { ConnectorContext, ConnectorError, ConnectorRows, ConnectorSemantic
 export interface SnowflakeIo {
   /** One catalog statement (SHOW, DESCRIBE): no binds, no row-cap wrapper. */
   catalog(ctx: ConnectorContext, sql: string): Promise<ConnectorRows | ConnectorError>;
-  /** One statement with `?` binds inside the row cap: the connector's live `runBound`. */
-  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError>;
+  /** One statement with `?` binds inside the row cap: the connector's live `runBound` (`ordered`: capped by its own last line, its ORDER BY kept). */
+  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[], ordered?: boolean): Promise<ConnectorRows | ConnectorError>;
 }
 
 const AGGREGATE = /\b(SUM|COUNT|COUNT_IF|AVG|MIN|MAX|MEDIAN|MODE|STDDEV\w*|VAR\w*|APPROX_\w+|LISTAGG|ARRAY_AGG|OBJECT_AGG|ANY_VALUE|PERCENTILE_\w+|KURTOSIS|SKEW|CORR|COVAR_\w+|HLL\w*|BIT\w*_AGG|BOOL\w*_AGG|MIN_BY|MAX_BY)\s*\(|\bOVER\s*\(/i;
@@ -126,7 +126,7 @@ async function describeModel(io: SnowflakeIo, ctx: ConnectorContext, model: stri
 function run(io: SnowflakeIo, ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError> {
   const b = body as { sql?: unknown; params?: unknown } | null;
   if (!b || typeof b.sql !== 'string' || !Array.isArray(b.params)) return Promise.resolve({ ok: false, error: 'Not a semantic-view question' });
-  return io.runBound(ctx, b.sql, b.params as LiveParam[]);
+  return io.runBound(ctx, b.sql, b.params as LiveParam[], true); // a value list is read in the layer's order
 }
 
 /** The `semantic` property of the `snowflake` registry entry, over that connector's execution. */

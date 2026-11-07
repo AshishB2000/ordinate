@@ -21,8 +21,10 @@ view once the owner creates it (`scripts/fixtures/snowflake-semantic-view.sql`) 
 ## The statement the adapter writes
 
 One statement per question (`src/engine/live/semantic/snowflake.ts`), sent through the
-connection's bound execution (`runBound`: `?` binds, the row cap wrapper, `QUERY_TAG`, the
-timeout and cancel, the SSRF-pinned transport):
+connection's bound execution (`runBound`: `?` binds, the row cap, `QUERY_TAG`, the timeout and
+cancel, the SSRF-pinned transport). The cap is the statement's own last line (`LIMIT n` up to the
+cap, else the cap's), not the `select * from (…) limit n` wrapper a Live statement gets: Snowflake
+keeps a subquery's ORDER BY only inside it, and a value list is read in the layer's order:
 
 ```sql
 SELECT "d0" AS "region", CAST("m0" AS DOUBLE) AS "revenue"
