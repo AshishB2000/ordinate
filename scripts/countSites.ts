@@ -43,6 +43,7 @@ export const COUNT_SITES: Readonly<Record<string, { count: number; how: CountSit
   'src/engine/geoResident.ts': { count: 1, how: 'countOnly' },
   'src/analysis/mapData.ts': { count: 1, how: 'countOnly' },
   'src/app/sharePolicy.ts': { count: 1, how: 'countOnly' },
+  'src/app/dbtImport.ts': { count: 1, how: 'countOnly' }, // a dbt count or count_distinct of a text field gets the empty_text note: dbt counts the blanks Ordinate does not
   // rebuild: its aggregations are PLAIN_AGGREGATIONS
   'src/analysis/rebuildMatch.ts': { count: 2, how: 'countOnly' },
   'web/src/features/analyses/rebuild/RebuildTile.tsx': { count: 1, how: 'countOnly' },
