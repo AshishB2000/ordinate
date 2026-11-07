@@ -332,6 +332,65 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const r9b = await applyPlanned(K.P, edit(await exported(K.P), 'metrics', K.revenue, (m) => { m.filters = []; }));
   ok('NEGATIVE CONTROL: a definition the file changes moves the certified metric to needs review', done(r9b).written.length === 1 && (await bKinds()).state === 'needs_review', show([r9b, await bKinds()]));
 
+  // ── 10. Dependents and order within one apply ─────────────────────────────
+  const N = await buildModelFixture();
+  const n0 = await exported(N.P);
+  const nOrders = jsonAt(n0, 'metrics/orders.json');
+  const EU = [{ type: 'filter', column: 'region', op: '=', value: 'EU' }];
+  let nd = put(n0, 'terms/wholesale.json', { ...jsonAt(n0, 'terms/emea.json'), id: fid(80), name: 'Wholesale', aliases: undefined, filters: EU });
+  nd = put(nd, 'metrics/wholesale-orders.json', { ...nOrders, id: fid(81), name: 'Wholesale orders', filters: [{ type: 'term', term: fid(80) }] });
+  const r10 = done(await applyPlanned(N.P, nd, {}, async (key) => {
+    if (key === `term:${fid(80)}`) await post('term:save', { projectId: N.P, input: { name: 'Wholesale', datasetId: N.orders, filters: EU } });
+  }));
+  const notWritten = await as(async () => msg.modelDependencyNotWritten());
+  ok('a new term refused at its write: a metric naming it is not written, and fails under it', r10.failed.some((f) => f.key === `term:${fid(80)}`) && r10.failed.some((f) => f.key === `metric:${fid(81)}` && f.error === notWritten)
+    && !(await as(() => metrics.listMetrics(N.P))).some((m) => m.name === 'Wholesale orders'), show(r10));
+  // A new metric taking the name a rename gives up sorts before it ("Stock on hand" < "Zz stock"): written after it.
+  const n1 = await exported(N.P);
+  const taken = put(edit(n1, 'metrics', N.stock, (m) => { m.name = 'Zz stock'; }), 'metrics/new-stock.json', { ...jsonAt(n1, 'metrics/orders.json'), id: fid(82), name: 'Stock on hand' });
+  const r10b = done(await applyPlanned(N.P, taken));
+  const names10 = (await as(() => metrics.listMetrics(N.P))).map((m) => m.name);
+  // A file that drops a snapshot's per, or the snapshot, clears it (the update sends null, as the editor does).
+  const snapOf = async (): Promise<unknown> => ((await metric(N.P, N.stock))?.definition as { snapshot?: unknown } | undefined)?.snapshot;
+  const r10c = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot.per; })));
+  ok('a file without the snapshot\'s per: written, and the per is gone', r10c.written.includes(`metric:${N.stock}`) && JSON.stringify(await snapOf()) === '{"column":"day","take":"last"}', show([r10c, await snapOf()]));
+  const r10d = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot; })));
+  ok('… and a file without the snapshot: it is gone', r10d.written.includes(`metric:${N.stock}`) && (await snapOf()) === undefined, show([r10d, await snapOf()]));
+  const asWas = edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.base; }); // what a before file holds: the model as it was, no base
+  await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { m.definition.snapshot = { column: 'day', take: 'first' }; }));
+  const added = await snapOf();
+  await applyPlanned(N.P, asWas);
+  ok('importing the before file of an import that added a snapshot removes it', JSON.stringify(added) === '{"column":"day","take":"first"}' && (await snapOf()) === undefined, show([added, await snapOf()]));
+  ok('a rename and a new metric taking its old name: both land, in that order', r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
+
+  // A relationship's label is a name too, one per pair of datasets: a new edge taking the label a relabel gives up
+  // (its id sorts first) lands after it; two edges swapping labels are refused by the plan.
+  const n2 = await exported(N.P);
+  const edge = jsonAt(n2, 'relationships.json').relationships[0];
+  const second = { ...edge, id: fid(0), base: undefined, from: { ...edge.from, column: 'region' }, to: { ...edge.to, column: 'name' }, label: 'Customer' };
+  const relabelled = editAt(n2, 'relationships.json', (o) => { o.relationships[0].label = 'Zz customer'; o.relationships.push(second); });
+  const r10e = done(await applyPlanned(N.P, relabelled));
+  const labels10 = (await as(() => rels.listRelationships(N.P))).map((r) => r.label).sort();
+  ok('a relabel and a new relationship taking its old label: both land, in that order', r10e.failed.length === 0 && r10e.written.join() === `relationship:${edge.id},relationship:${fid(0)}` && labels10.join() === 'Customer,Zz customer', show([r10e, labels10]));
+  const n3 = await exported(N.P);
+  const swapLabels = editAt(n3, 'relationships.json', (o) => { for (const r of o.relationships) r.label = r.label === 'Customer' ? 'Zz customer' : 'Customer'; });
+  const swapPlan = await plan(N.P, swapLabels);
+  const swapItems = swapPlan.items.filter((i) => i.kind === 'relationship');
+  const labelSwapSaid = await as(async () => [msg.modelNameSwap('Zz customer'), msg.modelNameSwap('Customer')]);
+  ok('two relationships swapping labels: both skipped with the sentence, nothing written', swapItems.length === 2 && swapItems.every((i) => i.status === 'skipped' && i.reason === 'invalid' && labelSwapSaid.includes(String(i.error)))
+    && done(await apply(N.P, swapLabels, swapPlan.hash)).written.length === 0, show(swapItems));
+
+  // A format's decimals as the store keeps them (0–6): 8 is refused, never stored as 6 and then a conflict forever.
+  const nOrders2 = jsonAt(await exported(N.P), 'metrics/orders.json');
+  const withDecimals = async (decimals: number): Promise<Files> => edit(await exported(N.P), 'metrics', nOrders2.id, (m) => { m.format = { ...m.format, decimals }; });
+  const eight = await withDecimals(8);
+  const eightItem = itemOf(await plan(N.P, eight), `metric:${nOrders2.id}`);
+  ok('a format with 8 decimals is refused with the sentence', eightItem.reason === 'invalid' && eightItem.error === (await as(async () => msg.modelMetricOutOfBounds('Orders'))), show(eightItem));
+  const six = await withDecimals(6);
+  const r10f = done(await applyPlanned(N.P, six));
+  ok('… and 6 lands as written, then plans unchanged', r10f.written.includes(`metric:${nOrders2.id}`) && (await metric(N.P, nOrders2.id))?.format.decimals === 6
+    && itemOf(await plan(N.P, await exported(N.P)), `metric:${nOrders2.id}`).status === 'unchanged', show(r10f));
+
   await close();
   finish();
 })().catch((err: unknown) => {

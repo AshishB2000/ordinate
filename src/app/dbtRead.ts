@@ -23,7 +23,8 @@ export async function readDbtUpload(file: string): Promise<{ json: unknown } | {
   if ((await fsp.stat(file)).size > MAX_BYTES) return { error: dbtUseSemanticManifest() };
   let json: unknown;
   try {
-    json = await parseBounded(await fsp.readFile(file));
+    const bytes = await fsp.readFile(file);
+    json = await parseBounded(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes); // a UTF-8 BOM, as looksLikeJson reads past it
   } catch (err) {
     if (err instanceof JsonTooComplex) return { error: dbtUseSemanticManifest() };
     if (err instanceof SyntaxError) return { error: dbtNotAManifest() };
