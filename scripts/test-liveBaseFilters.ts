@@ -342,6 +342,50 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
       && resampled.values.includes('North') && !resampled.values.includes('South'), show({ sent: during.sent.length, values: resampled?.values }));
   await setBase(L, BASE);
 
+  // An editor's save that lands after the sync's own re-check, while its job is still letting go: it is told "already
+  // running", so the job samples again once it has, and the panel reads "syncing" until that lands (the live e2e's flake).
+  const schemaSync = require('../src/engine/live/schemaSync') as { syncLiveSchema: (...a: unknown[]) => Promise<Reply> };
+  const { setLiveBaseFilters } = require('../src/ipc/liveBaseFilters') as typeof import('../src/ipc/liveBaseFilters');
+  const realSync = schemaSync.syncLiveSchema;
+  let open = (): void => undefined;
+  const gate = new Promise<void>((r) => { open = r; });
+  const late: { saved: Reply | null } = { saved: null };
+  schemaSync.syncLiveSchema = async (...a) => {
+    const r = await realSync(...a);
+    if (!late.saved) {
+      fake.hook = async () => { await gate; return undefined; }; // holds the next sample until the panel is read
+      // The handler as a served request runs it: an injected request's signal fires as it ends, a real reply's never does.
+      late.saved = await H.as(ORG_A, () => setLiveBaseFilters({ projectId: P, datasetId: L, filters: SOUTH }));
+    }
+    return r;
+  };
+  try {
+    await post('dataset:syncLiveSchema', { projectId: P, datasetId: L });
+  } finally {
+    schemaSync.syncLiveSchema = realSync;
+  }
+  const between = (await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.syncing;
+  open();
+  const settle = async (): Promise<boolean> => {
+    for (let i = 0; i < 100; i++) {
+      if (!(await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.syncing) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  };
+  const quiet = await settle();
+  fake.hook = null;
+  const tail = (await meta()).live.profile.columns.find((c: Reply) => c.name === 'region');
+  ok('a base save as a sync lets go: told already running, it is sampled again under the new filters (no South, North back)',
+    late.saved?.ok === true && quiet && !!tail?.values?.includes('North') && !tail.values.includes('South'), show({ saved: late.saved, quiet, values: tail?.values }));
+  ok('…and the panel reads "syncing" after the first sync is done, until that sample lands', between === true, show({ between }));
+  await setBase(L, BASE);
+  await post('dataset:syncLiveSchema', { projectId: P, datasetId: L });
+  const plain = fake.calls.length;
+  await new Promise((r) => setTimeout(r, 100));
+  ok('NEGATIVE CONTROL: a sync no save landed on samples once, and nothing runs after it',
+    fake.calls.length === plain && !(await post('dataset:liveSchema', { projectId: P, datasetId: L })).value.syncing, show({ before: plain, after: fake.calls.length }));
+
   // A base column the warehouse dropped: every question refuses, the sync still syncs the columns.
   await H.as(ORG_A, () => H.fx.loadWarehouse('live_drop', H.fx.COLUMNS, H.fx.fixtureRows()));
   const third = await H.as(ORG_A, () => H.liveOver(P, { table: 'live_drop' }, H.fx.COLUMNS));

@@ -70,8 +70,9 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
   if (!live) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
   queryCache.invalidateDataset(datasetId, projectId);
   announceRefreshed({ projectId, datasetId, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
-  // Queued before the reply (not waited for): the panel's next read already says a sync is on its way.
-  await startSchemaSync(projectId, datasetId).catch(() => null);
+  // Queued before the reply (not waited for): the panel's next read already says a sync is on its way. One already
+  // running here may be past its own re-check of the filters, so `again` has it sample once more as it lands.
+  await startSchemaSync(projectId, datasetId, { again: true }).catch(() => null);
   return { ok: true, baseFilters: steps, epoch: live.epoch };
 }
 

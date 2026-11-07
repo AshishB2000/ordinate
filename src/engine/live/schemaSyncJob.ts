@@ -18,8 +18,11 @@
 // the cross-pod lock held by another pod (L0.4 `withRefreshLock`, which the
 // job takes) means "already running", and nothing is queued. A scheduled
 // start is stamped first, win or lose (`syncAttemptAt`), so a warehouse that
-// keeps failing is retried hourly, not on every 60-second tick.
+// keeps failing is retried hourly, not on every 60-second tick. A base filter
+// save that finds a start here in flight marks it `again`: the job may be past
+// its own re-check of the filters, so it is started once more as it lands.
 
+import { AsyncResource } from 'node:async_hooks';
 import * as jobs from '../../app/jobs';
 import * as datasets from '../../data/datasets';
 import { isLive, stampSyncAttempt } from '../../data/liveDataset';
@@ -69,6 +72,16 @@ export type SyncStart = { status: 'queued'; jobId: string; done: Promise<SyncRep
 /** Starts on this pod, from the call until its job lands. */
 const starting = new Set<string>();
 
+/** Starts in flight that a base filter save found: started again as they land, as that save's request. */
+const again = new Map<string, () => void>();
+
+const startKey = (projectId: string, id: string): string => orgKey(`schemaSync\u0000${projectId}\u0000${id}`);
+
+/** A start of this dataset's sync is in flight on this pod: the panel's "syncing", with no gap when a save's restart follows a job. */
+export function schemaSyncStarting(projectId: string, id: string): boolean {
+  return starting.has(startKey(projectId, id));
+}
+
 /** Starts in flight on this pod (a test checks none is left behind). */
 export function syncsStarting(): number {
   return starting.size;
@@ -93,9 +106,15 @@ function jobLine(r: SyncReply): string {
  * Queue a schema sync of one Live dataset, unless one is running anywhere.
  * Null when the dataset is not Live (or gone). `done` never rejects.
  */
-export async function startSchemaSync(projectId: string, id: string, opts: { scheduled?: boolean; now?: number } = {}): Promise<SyncStart | null> {
-  const key = orgKey(`schemaSync\u0000${projectId}\u0000${id}`);
-  if (starting.has(key)) return { status: 'already_running' };
+export async function startSchemaSync(projectId: string, id: string, opts: { scheduled?: boolean; now?: number; again?: boolean } = {}): Promise<SyncStart | null> {
+  const key = startKey(projectId, id);
+  if (starting.has(key)) {
+    // Bound here, so the next start runs as the save (its user, its signal), not as whoever started this one.
+    if (opts.again) again.set(key, AsyncResource.bind(() => void startSchemaSync(projectId, id).catch(() => null)));
+    // shortcut: a sync held by ANOTHER pod's lock is not marked again (its own re-check covers all but its unlock); store
+    // the filters a sample was read under on the record if that window ever shows.
+    return { status: 'already_running' };
+  }
   starting.add(key); // before the first await: two starts on this pod cannot both pass
   let handed = false;
   try {
@@ -124,7 +143,14 @@ export async function startSchemaSync(projectId: string, id: string, opts: { sch
       (err: unknown): SyncReply => (err instanceof SyncFailed ? err.reply
         : { ok: false, code: err instanceof jobs.JobCancelled ? 'live_cancelled' : 'live_failed', error: err instanceof Error ? err.message : String(err) }),
     );
-    void done.finally(() => starting.delete(key));
+    void done.finally(() => {
+      starting.delete(key);
+      // No await between the delete and the next start's own add, so the panel never reads a gap. When the job had
+      // already re-read the new filters itself, this is one more sample: at most one per save.
+      const next = again.get(key);
+      again.delete(key);
+      next?.();
+    });
     return { status: 'queued', jobId: job.id, done };
   } finally {
     if (!handed) starting.delete(key);

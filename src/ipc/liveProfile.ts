@@ -39,7 +39,7 @@ import { missingDependents, type MissingColumn } from '../analysis/liveDependent
 import { liveColumnNotes, liveDatasetFacts } from '../ai/liveFacts';
 import type { CopilotFacts } from '../ai/copilot';
 import type { FactMetric } from '../ai/copilotFacts';
-import { startSchemaSync } from '../engine/live/schemaSyncJob';
+import { schemaSyncStarting, startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
 import type { FactTerm } from '../ai/termFacts';
@@ -216,7 +216,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
   return {
     ok: true,
     schemaSyncedAt: meta.live.schemaSyncedAt,
-    syncing: !!(await refreshRunning(projectId, datasetId)),
+    syncing: schemaSyncStarting(projectId, datasetId) || !!(await refreshRunning(projectId, datasetId)),
     sampledAt: prof?.sampledAt ?? null,
     sampleRows: closed ? null : rows ?? null,
     method: prof?.method ?? null,
