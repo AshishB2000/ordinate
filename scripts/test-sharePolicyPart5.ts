@@ -96,7 +96,7 @@ async function period(env: H.Env): Promise<void> {
   await judged(env, 'period', fx,
     { tiles: ['Payroll YTD KPI'], metrics: ['Payroll YTD'], rules: ['Payroll YTD above 1000'], mcp: ['Payroll YTD'] },
     { tiles: ['Hours YTD KPI'], metrics: ['Hours YTD'], rules: ['Hours YTD above 10'], mcp: ['Hours YTD'] },
-    (on) => H.mark(env, P, S, 'salary', on), '15c00e0e7e5dd5dfe1ed507db5e820f621e402fbc6ca97b7f16c3d4574b3af52');
+    (on) => H.mark(env, P, S, 'salary', on), '3d4b26e7f854855e37501677bc6ec9c37058bce9fdfd57ca53668dc237b59e50'); // 15c00e0e… before /p/ kept the tiles' periodRange (the same with it stripped)
 }
 
 /** A period metric charted by month: every point a resolution of its base, so the chart is judged by the base's columns. */
