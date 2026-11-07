@@ -69,6 +69,7 @@ import { ExternalMetricError } from '../analysis/externalMetric';
 import { externalNoDuplicate } from '../analysis/externalMetricMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
+import { baseName, checkPeriodDefinition, periodMetricValue } from './periodMetric';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -86,7 +87,7 @@ const MAX_FORMULA_DEPTH = 10;
 
 /** One resolution's working state: a per-call memo so `[Profit] / [Revenue]`
  *  and a sibling metric that also uses Revenue cost one query, not two. */
-interface ResolveCtx {
+export interface ResolveCtx {
   projectId: string;
   scope: FilterStep[];
   byName: Map<string, Metric> | null;
@@ -104,7 +105,8 @@ interface ResolveCtx {
   /** D9: the scope as it came (a date control's period still marked) and the dataset `scope` was settled for, so a part on another dataset counts by its own date; unset when nothing was marked. */
   marked?: { filters: FilterStep[]; on: string };
   refused?: string; // why there is no figure: a part's dates disagree under a date control
-  notes?: string[]; // the dashboard's glossary terms an operand left out (analysis/termExpand), once each
+  notes?: string[]; // the dashboard's glossary terms an operand left out (analysis/termExpand), once each; a period metric's why (./periodMetric)
+  periodRange?: ResolvedMetric['periodRange']; // the days a period metric's window covered (./periodMetric), at the top only
 }
 
 /** A figure's notes: each operand's, once. */
@@ -116,7 +118,7 @@ function noteOf(ctx: ResolveCtx, notes: string[] | undefined): void {
 export interface MetricRead { datasetId: string; column: string; aggregation: MetricAggregation }
 
 /** The older of two live times: a figure is as old as its oldest operand. */
-function olderAsOf(a: AsOf | undefined, b: AsOf | undefined): AsOf | undefined {
+export function olderAsOf(a: AsOf | undefined, b: AsOf | undefined): AsOf | undefined {
   return !a ? b : !b ? a : b.at < a.at ? b : a;
 }
 
@@ -145,7 +147,7 @@ async function namesFor(ctx: ResolveCtx): Promise<Map<string, Metric>> {
  * apply, metric-first, because "revenue excluding refunds, in the West" is one
  * filtered question and the order does not change the answer.
  */
-async function resolveDefinition(
+export async function resolveDefinition(
   ctx: ResolveCtx,
   datasetId: string,
   definition: MetricDefinition,
@@ -158,6 +160,7 @@ async function resolveDefinition(
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
   if (metrics.isExternalDefinition(definition)) throw new ExternalMetricError('pending', name ?? definition.external); // only its layer can answer it (part 7 b0)
 
+  if (metrics.isPeriodDefinition(definition)) return periodMetricValue(ctx, datasetId, definition, all, depth); // its base under a rewritten scope
   if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
@@ -240,7 +243,7 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
   return value;
 }
 
-function newCtx(projectId: string, scope: FilterStep[], params: ParamValues = new Map()): ResolveCtx {
+export function newCtx(projectId: string, scope: FilterStep[], params: ParamValues = new Map()): ResolveCtx {
   return { projectId, scope, byName: null, memo: new Map(), stack: new Set(), params };
 }
 
@@ -261,7 +264,8 @@ export interface ResolvedMetric {
   /** D9: the date a dashboard date control's period was moved onto (the tile's caption); why there is no figure when dates disagree under one. */
   periodOn?: string;
   refused?: string;
-  notes?: string[]; // the dashboard's glossary terms the figure left out
+  notes?: string[]; // the dashboard's glossary terms the figure left out; why a period metric has none
+  periodRange?: { from?: string; to?: string }; // a period metric's window: the days its figure covers
 }
 
 /**
@@ -294,15 +298,16 @@ export async function resolveMetric(
     id: metric.id,
     name: metric.name,
     value,
-    display: displayOf(value, metric.format, ctx.fx, !isFormulaDefinition(metric.definition)),
+    display: displayOf(value, metric.format, ctx.fx, metrics.isSimpleDefinition(metric.definition)),
     format: metric.format,
-    definitionText: describeDefinition(metric),
+    definitionText: describeDefinition(metric, undefined, await baseName(projectId, metric.definition)),
   };
   if (metric.direction) out.direction = metric.direction;
   if (ctx.fx) out.fx = ctx.fx;
   if (ctx.asOf) out.asOf = ctx.asOf;
   if (s.ok && s.periodOn) out.periodOn = s.periodOn;
   if (ctx.notes) out.notes = ctx.notes;
+  if (ctx.periodRange) out.periodRange = ctx.periodRange;
   const refused = s.ok ? ctx.refused : s.error;
   if (refused) out.refused = refused;
   return out;
@@ -323,10 +328,10 @@ export async function previewDefinition(projectId: string, datasetId: string, de
   return {
     ok: true as const,
     value,
-    display: displayOf(value, metrics.sanitizeFormat(format), ctx.fx, !isFormulaDefinition(def)),
-    ...(ctx.fx ? { fx: ctx.fx } : {}),
+    display: displayOf(value, metrics.sanitizeFormat(format), ctx.fx, metrics.isSimpleDefinition(def)),
+    ...(ctx.fx ? { fx: ctx.fx } : {}), ...(ctx.periodRange ? { periodRange: ctx.periodRange } : {}), ...(ctx.notes && metrics.isPeriodDefinition(def) ? { notes: ctx.notes } : {}),
     ...(ctx.asOf ? { asOf: ctx.asOf } : {}),
-    definitionText: describeDefinition({ definition: def, filters: own }),
+    definitionText: describeDefinition({ definition: def, filters: own }, undefined, await baseName(projectId, def)),
   };
 }
 
@@ -398,7 +403,7 @@ export async function resolveMetricSeries(
   scope: { filters?: FilterStep[]; /** Fewer than SERIES_MAX_POINTS (the metric tree's 12 months). */ points?: number } = {},
 ): Promise<MetricSeries | null> {
   const metric = await metrics.getMetric(projectId, metricId);
-  if (!metric || !byColumn) return null;
+  if (!metric || !byColumn || metrics.isPeriodDefinition(metric.definition)) return null; // shortcut: a period metric's sparkline needs a resolution per bucket (step 06)
   const meta = await datasets.getDatasetMeta(projectId, metric.datasetId);
   const isDate = !!meta && meta.columns.some((c) => c.name === byColumn && c.type === 'date');
   const raw = await distinctValues(projectId, metric.datasetId, byColumn);
@@ -420,7 +425,7 @@ export async function resolveMetricSeries(
     ctx.stack.add(metric.name.toLowerCase());
     const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0, metric.name);
     out.values.push(v);
-    out.display.push(displayOf(v, metric.format, ctx.fx, !isFormulaDefinition(metric.definition)));
+    out.display.push(displayOf(v, metric.format, ctx.fx, metrics.isSimpleDefinition(metric.definition)));
   }
   return out;
 }
@@ -472,7 +477,7 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
     out.push({
       ...s,
       datasetName: ds ? ds.name : null,
-      definitionText: describeDefinition({ definition: s.definition, filters: [] }),
+      definitionText: describeDefinition({ definition: s.definition, filters: [] }, undefined, await baseName(projectId, s.definition)),
       ...((await metricHidden(projectId, s.id)) ? { hidden: true } : {}), // it reads a column hidden from the caller (part 4, D19)
     });
   }
@@ -526,7 +531,7 @@ export function register() {
     const t = await metrics.readMetric(projectId, id);
     if (!t) return { ok: false, error: 'Metric not found' };
     const timeColumnGone = !!t.rec.timeColumn && !(await metricDate(projectId, t.rec)); // counts as unset (./metricTimeScope); the editor says so
-    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec, undefined, await baseName(projectId, t.rec.definition)), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
@@ -535,6 +540,7 @@ export function register() {
       // `field`: which box of the editor the sentence belongs beside.
       const taken = await nameRefusal(projectId, raw.name);
       if (taken) return { ok: false, error: taken, field: 'name' };
+      const per = await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn); if (per) return { ok: false, ...per };
       const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
       if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = await settleOnSave(projectId, raw);
@@ -559,6 +565,7 @@ export function register() {
       const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
       if (taken) return { ok: false, error: taken, field: 'name' };
       const before = await metrics.getMetric(projectId, id);
+      const per = before && (raw.definition !== undefined || raw.timeColumn !== undefined) ? await checkPeriodDefinition(projectId, before.datasetId, raw.definition ?? before.definition, raw.timeColumn) : null; if (per) return { ok: false, ...per };
       const snap = before ? await snapshotProblem(projectId, before.datasetId, raw.definition) : null;
       if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};

@@ -126,3 +126,33 @@ export function pivotOwnDate(name: string): string {
 export function measuresCountByDifferentDates(a: string, aDate: string, b: string, bDate: string): string {
   return t('metricCheckMessages.counts_by_and_by_so_one', { a, aDate, b, bDate });
 }
+
+/** A period metric (part 5, D8) whose base metric is gone: no figure, never a fallback copy. */
+export function periodBaseMissing(): string {
+  return t('metricCheckMessages.its_base_metric_was_deleted_so');
+}
+
+/** A period metric's base is a metric of another dataset. */
+export function periodBaseOtherDataset(): string {
+  return t('metricCheckMessages.the_base_metric_must_be_on');
+}
+
+/** A period metric's base names no date it counts by, so no window can be laid on it. */
+export function periodBaseNoDate(base: string): string {
+  return t('metricCheckMessages.has_no_date_it_counts_by', { base });
+}
+
+/** A period metric built on another period metric. */
+export function periodOfPeriod(): string {
+  return t('metricCheckMessages.a_period_metric_can_t_be');
+}
+
+/** A period metric named a date of its own. */
+export function periodOwnDate(): string {
+  return t('metricCheckMessages.a_period_metric_counts_by_its');
+}
+
+/** A compare with no window and no period in scope: nothing to compare with. */
+export function pickPeriodToCompare(): string {
+  return t('metricCheckMessages.pick_a_period_to_compare');
+}

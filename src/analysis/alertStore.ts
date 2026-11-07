@@ -38,6 +38,7 @@ import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
 import { snapshotMetric } from './snapshotGuards';
 import { alertSkipped } from './pendingKinds';
+import { metricWatch } from './alertMetric';
 import type { MetricSnapshot } from './snapshot';
 import { getMetric } from './metrics';
 import { rewriteControlPeriods } from './metricTime';
@@ -328,11 +329,13 @@ export async function markSeen(projectId: string, eventId?: string): Promise<boo
 export async function metricFor(
   projectId: string,
   rule: AlertRule,
-): Promise<{ value: number | null; previous: number | null; period?: string }> {
+): Promise<{ value: number | null; previous: number | null; period?: string; skip?: true }> {
   const stored = (rule.metric.filters || []) as FilterStep[];
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   const named = typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
   if (named) refuseExternal(named); // a layer's metric: refused, never its stored column's total (part 7 b0)
+  const watch = await metricWatch(projectId, rule); // part 5 (D14): a period or funnel metric is watched through the metric, never a copy
+  if (watch === 'gone') return { value: null, previous: null, skip: true }; // its metric is deleted: left as it is
   // A rule made from a snapshot metric's KPI stores only its column and total: it reads its metric's snapshot (D8), never the plain sum.
   const snap = (await snapshotMetric(projectId, rule.metric.metricId))?.definition as { snapshot?: MetricSnapshot } | undefined;
   const spec = { column: rule.metric.column, aggregation: rule.metric.aggregation, ...(snap?.snapshot ? { snapshot: snap.snapshot } : {}) };
@@ -347,6 +350,7 @@ export async function metricFor(
     if (!periods) return { value: null, previous: null };
     const [prevKey, nowKey] = periods.keys;
     const at = async (key: string): Promise<number | null> => {
+      if (watch) return watch({ column: rule.change!.periodColumn!, key, op: periods.op });
       const res = await computeCardMetric(projectId, rule.datasetId, spec,
         filters.concat([{ type: 'filter', column: rule.change!.periodColumn!, op: periods.op, value: key }] as FilterStep[]));
       return res.ok ? res.value : null;
@@ -354,8 +358,8 @@ export async function metricFor(
     return { value: await at(nowKey), previous: await at(prevKey), period: nowKey };
   }
 
-  const res = await computeCardMetric(projectId, rule.datasetId, spec, filters);
-  const value = res.ok ? res.value : null;
+  const res = watch ? null : await computeCardMetric(projectId, rule.datasetId, spec, filters);
+  const value = watch ? await watch() : res && res.ok ? res.value : null;
   return { value, previous: rule.lastValue ?? null };
 }
 
@@ -478,12 +482,13 @@ export async function evaluateProject(
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled || (await alertSkipped(projectId, rule))) continue; // nor is one a later release writes (part 5): kept, untouched
     const from = JSON.stringify(rule);
-    let res: ReturnType<typeof alerts.evaluateRule>;
+    let res: ReturnType<typeof alerts.evaluateRule> | null;
     try {
       // ONE rule per fan-out scope (docs/row-policy D10, N1): an alert reaches every reader and its channels,
       // so a rule over a dataset with row access rules (or built from one) is not evaluated — the others still are.
       res = (await fanOutScope(async () => {
-        const { value, previous, period } = await metricFor(projectId, rule);
+        const { value, previous, period, skip } = await metricFor(projectId, rule);
+        if (skip) return null;
         const r = alerts.evaluateRule({
           rule, value, previous, period,
           anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
@@ -502,6 +507,7 @@ export async function evaluateProject(
       if (isLiveFigureError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue;
       throw err;
     }
+    if (!res) continue; // untouched: its metric is gone
     results.push({ from, rule: res.rule, event: res.event || null });
   }
   if (!results.length) return [];

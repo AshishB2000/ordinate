@@ -37,6 +37,7 @@ import * as reportSpec from '../analysis/reportSpec';
 import * as publishing from '../publish/publish';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { kpiHidden } from '../publish/kpiPolicy';
+import { baseName } from '../ipc/periodMetric';
 import { insightsForDataset } from '../ipc/insights';
 import { evaluateAndDeliver } from '../ipc/alerts';
 import { AutomationError } from './errors';
@@ -231,7 +232,7 @@ async function metricRow(ctx: Ctx, m: Awaited<ReturnType<typeof metrics.listMetr
     id: m.id,
     name: m.name,
     dataset: names.get(m.datasetId) || null,
-    definition: describeDefinitionShort(m.definition),
+    definition: describeDefinitionShort(m.definition, await baseName(ctx.projectId, m.definition)),
     description: m.description || '',
     adds_up: await metricAdditivity(ctx.projectId, m.id, byName),
     counts_by: (await metricDate(ctx.projectId, m)) || null, // D9: the date its periods are on; a column that is gone counts as none

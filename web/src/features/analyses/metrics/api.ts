@@ -19,7 +19,18 @@ export interface Snapshot {
   column: string;
   take: 'last' | 'first';
 }
-export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null };
+/** A period metric (semantic part 5, D8): its base metric over a window, compared with an earlier period, or both. */
+export type PeriodWindow = { to_date: 'week' | 'month' | 'quarter' | 'year' } | { last: number; unit: 'day' | 'week' | 'month' };
+export interface PeriodCompare {
+  vs: 'previous_period' | 'previous_year';
+  show: 'change' | 'pct_change' | 'prior';
+}
+export interface PeriodDefinition {
+  base: string;
+  window?: PeriodWindow;
+  compare?: PeriodCompare;
+}
+export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null } | PeriodDefinition;
 
 /** `metric:list`'s decorated summary. */
 export interface MetricSummary {
@@ -65,6 +76,15 @@ export function formatBadge(format: MetricFormat | undefined): string {
 }
 
 export const isFormula = (d: Definition): d is { formula: string } => typeof (d as { formula?: unknown }).formula === 'string';
+export const isPeriod = (d: Definition): d is PeriodDefinition => typeof (d as { base?: unknown }).base === 'string';
+
+const RANGE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const utc = (iso: string): number => Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+
+/** The days a period metric's figure covers, as the server resolved them: "Jan 1 – Oct 31, 2024"; '' without both ends. */
+export function periodRangeText(r: { from?: string; to?: string } | undefined): string {
+  return r?.from && r.to ? RANGE.formatRange(utc(r.from), utc(r.to)) : '';
+}
 
 export function useMetricList(projectId: string) {
   return useQuery({

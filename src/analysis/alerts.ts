@@ -315,9 +315,9 @@ export function sanitizeRule(raw: any): AlertRule | null {
   return rule;
 }
 
-/** False for a rule a later release writes and this one keeps but never evaluates (part 5): a target, or no column. */
+/** False for a rule a later release writes and this one keeps but never evaluates (part 5): a target, or no column and no metric (one with a metric is watched through it: alertMetric). */
 export function canEvaluate(rule: AlertRule): boolean {
-  return rule.compare !== 'target' && (!!rule.metric.column || rule.compare === 'anomaly');
+  return rule.compare !== 'target' && (!!rule.metric.column || !!rule.metric.metricId || rule.compare === 'anomaly');
 }
 
 export function sanitizeEvent(raw: any): AlertEvent | null {

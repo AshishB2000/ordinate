@@ -45,6 +45,7 @@ const driverShape: typeof import('../src/analysis/driverShape') = require('../sr
 const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
 const metricFormat: typeof import('../src/analysis/metricFormat') = require('../src/analysis/metricFormat');
 const msg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
+const checkMsg: typeof import('../src/analysis/metricCheckMessages') = require('../src/analysis/metricCheckMessages');
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const { randomUUID }: typeof import('crypto') = require('crypto');
@@ -139,6 +140,8 @@ void (async () => {
   const chartOf = (values: unknown[], more: object = {}) => viz(null, { projectId: P, datasetId: D, encoding: { category: 'day', grain: 'month', values, ...more } });
   for (const x of [funnelM, periodM, perM]) {
     ok(`${x.name}: no KPI figure, never a sum`, (await ipcMetrics.resolveMetric(P, x.id))!.value === null, JSON.stringify(await ipcMetrics.resolveMetric(P, x.id)));
+    // Step 05 computes a period metric: this one's base (U1) is no metric, so it says so.
+    if (x === periodM) ok(`${x.name}: its KPI says its base is gone`, (await ipcMetrics.resolveMetric(P, x.id))!.notes?.[0] === checkMsg.periodBaseMissing());
     const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
     ok(`${x.name}: a chart says why`, c.ok === false && c.error === msg.metricKindPending(x.name), JSON.stringify(c).slice(0, 300));
     const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
@@ -179,7 +182,12 @@ void (async () => {
   const kindCards = (await analysis.getAnalysis(P, board.id))!.sheets[0].cards.filter((c) => c.type === 'metric');
   ok('dashboard: a KPI card of a funnel metric (no column, a metricId, sum) survives', kindCards.length === 1 && kindCards[0].metric!.metricId === funnelM.id && kindCards[0].metric!.column === '', JSON.stringify(kindCards));
   ok('NEGATIVE CONTROL: the same card with an aggregation no store knows is dropped, as today', dashboardModel.sanitizeCards([{ ...kindCard, metric: { ...kindCard.metric, aggregation: 'median' } }]).length === 0 && dashboardModel.sanitizeCards([kindCard]).length === 1);
-  ok('the words say it is newer', metricFormat.describeDefinition(periodM) === 'a newer kind of metric' && metricFormat.describeDefinition(funnelM) === 'a newer kind of metric');
+  ok('the words say it is newer', metricFormat.describeDefinition(funnelM) === 'a newer kind of metric');
+  ok('a period metric has its words (step 05)', metricFormat.describeDefinition(periodM) === 'its base metric, year to date, % change on last year', metricFormat.describeDefinition(periodM));
+  const dated = (await metrics.saveMetric(P, { name: 'Dated revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day' }))!;
+  const datedYtd = (await metrics.saveMetric(P, { name: 'Dated 30 years', datasetId: D, definition: { base: dated.id, window: { last: 366, unit: 'month' } } }))!; // thirty years to last month: the rows' days on any clock from March 2026 to 2056
+  const ytdFigure = (await ipcMetrics.resolveMetric(P, datedYtd.id))!.value;
+  ok('a period metric over a dated base has its figure (step 05): its base over the window', typeof ytdFigure === 'number' && Object.is(ytdFigure, (await ipcMetrics.resolveMetric(P, dated.id, { filters: [{ type: 'filter', column: 'day', op: 'period', period: { preset: 'last_n_months', n: 366 } }] }))!.value), String(ytdFigure));
   const plainKpi = (await ipcMetrics.resolveMetric(P, plain.id))!.value;
   ok('NEGATIVE CONTROL: the plain metric has its figure and its chart', plainKpi === ROWS.reduce((a, r) => a + r[1], 0) && (await chartOf([{ ...V, metricId: plain.id }])).ok === true);
 

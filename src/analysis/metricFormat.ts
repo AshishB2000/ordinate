@@ -18,9 +18,10 @@ import { VALUELESS_OPS, LIST_OPS } from '../data/filterOps';
 import type { Metric, MetricFormat, MetricDefinition } from './metrics';
 import { formatMetric } from '../app/format';
 import { describePeriod, getCalendar } from './dateIntel';
-import { isExternalDefinition, isFormulaDefinition } from './metrics';
+import { isExternalDefinition, isFormulaDefinition, isPeriodDefinition } from './metrics';
 import { isNewerKind } from './pendingKinds';
 import { definedElsewhere } from './externalMetricMessages';
+import { periodWords } from './periodMetric';
 
 /**
  * The ONE rendering of a metric's number — now `app/format.formatMetric`, the
@@ -88,9 +89,10 @@ export function describeFilterHidden(s: FilterStep): string {
 }
 
 /** Just the definition, with no filter clause — what a picker row shows under
- *  a name, where the row is already narrow. */
-export function describeDefinitionShort(definition: MetricDefinition): string {
+ *  a name, where the row is already narrow. `base`: a period metric's base's name. */
+export function describeDefinitionShort(definition: MetricDefinition, base?: string): string {
   if (isFormulaDefinition(definition)) return definition.formula;
+  if (isPeriodDefinition(definition)) return periodWords(definition, base);
   if (isNewerKind(definition)) return 'a newer kind of metric'; // part 5's kinds, kept and not computed here
   if (isExternalDefinition(definition)) return definedElsewhere(); // b2 names the layer
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
@@ -114,8 +116,8 @@ export function describeDefinitionShort(definition: MetricDefinition): string {
  * `filterWords`: how one filter reads. A model is told a filter on a column the
  * user marked personal or financial without its value (ipc/copilotMeasures).
  */
-export function describeDefinition(metric: Pick<Metric, 'definition' | 'filters'>, filterWords: (s: FilterStep) => string = describeFilter): string {
-  const head = describeDefinitionShort(metric.definition);
+export function describeDefinition(metric: Pick<Metric, 'definition' | 'filters'>, filterWords: (s: FilterStep) => string = describeFilter, base?: string): string {
+  const head = describeDefinitionShort(metric.definition, base);
   const filters = Array.isArray(metric.filters) ? metric.filters : [];
   if (!filters.length) return head;
   // "where", not "excluding": a filter states what is KEPT. `status ≠ refunded`
