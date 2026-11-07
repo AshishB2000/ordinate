@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { okOr, type Fail } from '../../data/api';
 import { ago } from '../../data/format';
+import { SUGGESTIONS } from './suggestApi';
 
 /** src/app/sourceTableList.ts SourceTodoKind, in the server's rank. */
 export type SourceTodoKind = 'used_no_doc' | 'never_read' | 'no_owner' | 'no_guide' | 'stale_read';
@@ -111,6 +112,7 @@ export function useReadFacts(projectId: string, connId: string, docId: string) {
       // A read never moves the edit tag (updateSourceDoc), so the open copy keeps it.
       client.setQueryData<SourceGot>([GET, projectId, connId, docId], (old) => old && { ...old, doc });
       void client.invalidateQueries({ queryKey: [LIST, projectId] });
+      void client.invalidateQueries({ queryKey: [SUGGESTIONS, projectId] }); // the suggestions come from the stored facts
     },
   });
 }

@@ -50,6 +50,9 @@ interface FakeState {
   rsClosed: boolean;
   /** The NAME cell of every row, when set (a byte-budget check). */
   cell: string | null;
+  /** How long each execute takes, and the callTimeout each one ran under, in order. */
+  delayMs: number;
+  timeouts: number[];
 }
 
 const state: FakeState = {
@@ -65,6 +68,8 @@ const state: FakeState = {
   fetched: 0,
   rsClosed: false,
   cell: null,
+  delayMs: 0,
+  timeouts: [],
 };
 
 function resetState(): void {
@@ -80,6 +85,8 @@ function resetState(): void {
   state.fetched = 0;
   state.rsClosed = false;
   state.cell = null;
+  state.delayMs = 0;
+  state.timeouts = [];
 }
 
 const fakeConnection = {
@@ -97,6 +104,8 @@ const fakeConnection = {
     state.lastSql = sql;
     state.lastBinds = binds;
     state.lastOptions = options;
+    state.timeouts.push(state.callTimeout);
+    if (state.delayMs) await new Promise((r) => setTimeout(r, state.delayMs));
     if (state.executeError) throw state.executeError;
     // A result set, as the real driver returns one: rows only as getRows asks,
     // so the client-side half of the cap is what stops the read.
@@ -435,7 +444,7 @@ async function main(): Promise<void> {
   ok('oracle facts: indexes keep uniqueness and type, without the index that backs the key', JSON.stringify(of?.indexes) ===
     '[{"name":"ORDERS_REGION","columns":["REGION"],"unique":false,"kind":"BITMAP"},{"name":"ORDERS_RD","columns":["REGION","ORDER_DATE"],"unique":true,"kind":"NORMAL"}]', JSON.stringify(of?.indexes));
   ok('oracle facts: list partitioning', JSON.stringify(of?.partition) === '{"columns":["REGION"],"method":"LIST"}', JSON.stringify(of?.partition));
-  ok('oracle facts: the estimate and the date the optimizer last gathered it (and no size)', JSON.stringify([of?.rowEstimate, of?.lastModified, of && 'bytes' in of]) === '[1200,"2024-05-01T12:00:00.000Z",false]');
+  ok('oracle facts: the estimate, and no size and no date (last_analyzed is when statistics ran, not a change)', JSON.stringify([of?.rowEstimate, of && 'lastModified' in of, of && 'bytes' in of]) === '[1200,false,false]', JSON.stringify(of));
   ok('oracle facts: one connection, asked for once', o.h.opened() === 1);
 
   o = await readFacts(UPPER_ONLY, 'SHOP.ORDERS');
@@ -459,7 +468,7 @@ async function main(): Promise<void> {
   const FULL = Object.keys(of ?? {});
   for (const [view, dropped] of [
     [/all_tab_comments/i, ['comment']], [/all_constraints/i, ['primaryKey']], [/all_indexes/i, ['indexes']],
-    [/all_part_tables/i, ['partition']], [/\ball_tables\b/i, ['rowEstimate', 'lastModified']], [/all_col_comments/i, []],
+    [/all_part_tables/i, ['partition']], [/\ball_tables\b/i, ['rowEstimate']], [/all_col_comments/i, []],
   ] as const) {
     o = await readFacts(refusing(UPPER_ONLY, view));
     ok(`oracle facts: a refused ${view.source.replace(/\\b/g, '')} costs ${dropped.join(' and ') || 'the column comments'} only`,
@@ -478,6 +487,15 @@ async function main(): Promise<void> {
   const wired = await byId('oracle').tableFacts!(ctxFor(), 'SHOP.ORDERS');
   ok('oracle facts, wired: the rows of the driver are the columns', wired.ok && wired.columns.length === 1, JSON.stringify(wired));
   ok('oracle facts, wired: the binds are an array of name, owner and the row limit; the connection is closed', JSON.stringify(state.lastBinds) === '["ORDERS","SHOP",1]' && state.closed && state.rsClosed, JSON.stringify(state.lastBinds));
+  const sentAll = state.timeouts.length;
+  ok('NEGATIVE CONTROL: oracle facts, wired: inside the budget every statement is sent', sentAll >= 4, JSON.stringify(state.timeouts));
+  // ONE budget for the whole read, as factsQuery: each statement runs under what is left, and none starts after it.
+  resetState();
+  state.rowsAvailable = 1;
+  state.delayMs = 40;
+  const slow = await byId('oracle').tableFacts!(ctxFor({ timeoutMs: 100 }), 'SHOP.ORDERS');
+  const ts = state.timeouts;
+  ok('oracle facts, wired: one budget: each statement runs under what is left, the last ones are not sent', slow.ok && ts.length >= 1 && ts.length < sentAll && ts.every((t, i) => t > 0 && t <= 100 && (i === 0 || t < ts[i - 1])), JSON.stringify(ts));
   resetState();
   state.connectError = new Error('ORA-01017: invalid credential (sup3r-s3cret-pw)');
   const down = await byId('oracle').tableFacts!(ctxFor(), 'SHOP.ORDERS').catch((e: Error) => ({ ok: false as const, error: e.message }));

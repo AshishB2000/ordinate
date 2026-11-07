@@ -40,6 +40,7 @@ import { checkHost, guardOn, withPinnedLookups, type PinnedHost } from './ssrf';
 import { walletRefused } from './connectorMessages';
 import { oracleTableFacts } from './oracleFacts';
 import { FACTS_ROWS } from './tableFacts';
+import { withinBudget } from './factsRead';
 
 /**
  * Every host an Oracle connect string can dial: each `(HOST=…)` and
@@ -613,7 +614,10 @@ function defFor(v: OracleVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, q: string) => run(v, ctx, q),
     describeTable: (ctx: ConnectorContext, t: string) => describeTable(v, ctx, t),
-    tableFacts: (ctx: ConnectorContext, t: string) => oracleTableFacts(t, (read) => withConnection(v, ctx, (conn) => read(async (sql, params) => (await execute(conn, sql, params, FACTS_ROWS)).rows))),
+    tableFacts: (ctx: ConnectorContext, t: string) => oracleTableFacts(t, (read) => withConnection(v, ctx, (conn) => read(withinBudget(ctx.timeoutMs, async (sql, params, left) => {
+      conn.callTimeout = left; // each round trip under what is left of the read's budget
+      return (await execute(conn, sql, params, FACTS_ROWS)).rows;
+    })))),
   };
 }
 

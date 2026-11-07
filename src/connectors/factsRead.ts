@@ -22,6 +22,19 @@ export function records(rows: unknown[][] | undefined): Record<string, unknown>[
   return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
 }
 
+/**
+ * A FactsQuery inside ONE budget of `ms` (the read's ctx.timeoutMs), as httpFacts' factsQuery: each statement
+ * runs under what is left (`run`'s `left`, its own timeout), and one that would start after it is spent is not
+ * sent, which costs its field (attempt) or, for the required columns, the read.
+ */
+export function withinBudget(ms: number, run: (sql: string, params: FactParam[], left: number) => Promise<unknown[][]>): FactsQuery {
+  const until = Date.now() + ms;
+  return (sql, params) => {
+    const left = Math.floor(until - Date.now());
+    return left > 0 ? run(sql, params, left) : Promise.reject(new Error(`Request timed out after ${Math.max(1, Math.round(ms / 1000))}s`));
+  };
+}
+
 /** A statement whose failure costs its field, never the read. */
 export async function attempt(q: FactsQuery, sql: string, params: FactParam[]): Promise<unknown[][] | undefined> {
   try {
