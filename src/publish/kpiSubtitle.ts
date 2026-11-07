@@ -11,8 +11,7 @@
 import * as metrics from '../analysis/metrics';
 import * as datasets from '../data/datasets';
 import { withheldColumns } from '../app/sharePolicy';
-import { resolveColumnOwner } from '../analysis/joinPlan';
-import { manySideOwner } from '../analysis/fanOutPlan';
+import { bareColumnTable } from '../analysis/fanOutPlan';
 import { projectModel } from '../ipc/relationships';
 import { kpiMeasure } from './publishMessages';
 
@@ -21,8 +20,7 @@ export async function tableOf(projectId: string, datasetId: string, column: stri
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || meta.columns.some((c) => c.name === column)) return datasetId;
   const { rels, infos } = await projectModel(projectId, datasetId);
-  const many = manySideOwner(datasetId, column, rels, infos);
-  return resolveColumnOwner(datasetId, column, rels, infos) ?? (!many ? datasetId : many.ok ? many.datasetId : null);
+  return bareColumnTable(datasetId, column, rels, infos);
 }
 
 /**
