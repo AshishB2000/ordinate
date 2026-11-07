@@ -1,7 +1,8 @@
 // Can a measure be added up? (semantic layer part 1, D7) Derived from what the measure IS, never typed in.
 // A running total, a percent of total and a moving sum add the measure's values, so they are right only when
 // the values add: a sum of averages is not an average. A snapshot (a stock count) adds across categories but
-// not across time.
+// not across time. A period metric's window (part 5, D10) adds across categories as its base does and never across
+// time (two YTDs overlap); a compare adds across neither.
 //
 //   categories   the values of two members of a dimension (two regions) add to the whole
 //   time         the values of two periods (two days) add to the whole
@@ -13,7 +14,7 @@ import type { ParsedColumn } from '../data/parse';
 import { aggWord } from '../data/aggregations';
 import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
-import { getMetric, isExternalDefinition, isFormulaDefinition, metricsByName } from './metrics';
+import { getMetric, isExternalDefinition, isFormulaDefinition, isPeriodDefinition, metricsByName } from './metrics';
 import { isNewerKind } from './pendingKinds';
 import { metricShape } from './driverShape';
 import { tokenize } from '../formula/formulaTokens';
@@ -43,6 +44,11 @@ export function additivityOf(
   params?: ParamValues,
 ): Additivity {
   const def = m.definition;
+  if (isPeriodDefinition(def)) {
+    const base = baseIn(def.base, byName);
+    const b = base && !isPeriodDefinition(base.definition) ? additivityOf(base, columns, byName, params) : null;
+    return { categories: !!b?.categories && !def.compare, time: false };
+  }
   if (isNewerKind(def)) return { categories: false, time: false }; // part 5's kinds: not computed here, so nothing adds
   if (isExternalDefinition(def)) return { categories: false, time: false }; // the layer's figure, which this pod cannot give (b2 reads `additive`)
   if (!isFormulaDefinition(def)) {
@@ -53,6 +59,9 @@ export function additivityOf(
   const adds = metricShape(m.datasetId, columns, def, m.filters, byName, params, m.name).kind === 'additive';
   return { categories: adds, time: adds };
 }
+
+/** A period metric's base, by id, from the project's metrics by name. */
+const baseIn = (id: string, byName: Map<string, Metric>): Metric | undefined => [...byName.values()].find((b) => b.id === id);
 
 /** Whether this formula, or a metric it follows, names a `[[parameter]]` that `params` does not hold or holds empty (null, or a list, which binds to null). */
 function needsUnknownParam(formula: string, byName: Map<string, Metric>, params: ParamValues | undefined, seen: Set<string>): boolean {
@@ -82,8 +91,9 @@ export async function metricAdditivity(projectId: string, id: string, byName: Ma
   try {
     const m = await getMetric(projectId, id);
     if (!m) return null;
-    if (!isFormulaDefinition(m.definition)) return additivityOf(m, [], byName);
-    if (needsUnknownParam(m.definition.formula, byName, params, new Set([m.name.toLowerCase()]))) return null;
+    const own = isPeriodDefinition(m.definition) ? baseIn(m.definition.base, byName) ?? m : m; // a period metric adds as its base does
+    if (!isFormulaDefinition(own.definition)) return additivityOf(m, [], byName);
+    if (needsUnknownParam(own.definition.formula, byName, params, new Set([own.name.toLowerCase()]))) return null;
     return additivityOf(m, (await getDatasetMeta(projectId, m.datasetId))?.columns ?? [], byName, params);
   } catch {
     return null;
@@ -113,8 +123,8 @@ async function resolveMeasure(
   if (!metric || plotsStored) return stored;
   const def = metric.definition;
   if (!isFormulaDefinition(def) && !isNewerKind(def) && !isExternalDefinition(def) && !def.snapshot) return stored;
-  // The columns and the other metrics are read for a formula only; a snapshot's rule needs neither.
-  const formula = isFormulaDefinition(def);
+  // The columns and the other metrics are read for a formula (or a period metric: its base) only; a snapshot's rule needs neither.
+  const formula = isFormulaDefinition(def) || isPeriodDefinition(def);
   const columns = formula ? (await getDatasetMeta(projectId, dataset))?.columns ?? [] : [];
   const byName = formula ? await metricsByName(projectId) : new Map<string, Metric>();
   return { name: metric.name, additivity: additivityOf(metric, columns, byName, params) };

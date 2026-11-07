@@ -25,12 +25,12 @@ export type DefinitionSiteHow = 'keeps' | 'refuses' | 'words' | 'door';
 
 export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: DefinitionSiteHow }>> = {
   // door
-  'src/analysis/metricMeasures.ts': { count: 22, how: 'door' },
+  'src/analysis/metricMeasures.ts': { count: 25, how: 'door' }, // + a period measure charts alone, on its base (p5-06)
   'src/ipc/metrics.ts': { count: 10, how: 'door' }, // + a period metric resolves its base (p5-05)
   // refuses
   'src/ai/planExec.ts': { count: 1, how: 'refuses' }, // a plan step cannot name it
   'src/ipc/periodMetric.ts': { count: 3, how: 'refuses' }, // a period over an external base: its base's resolution throws ExternalMetricError
-  'src/analysis/additivity.ts': { count: 10, how: 'refuses' }, // adds up nowhere (b2 reads `additive`)
+  'src/analysis/additivity.ts': { count: 14, how: 'refuses' }, // adds up nowhere (b2 reads `additive`); a period over an external base adds as it does
   'src/analysis/driverShape.ts': { count: 3, how: 'refuses' }, // key drivers: no members to split it into
   'src/analysis/metricTreeJs.ts': { count: 6, how: 'refuses' }, // the JS reference throws
   'src/analysis/scenarioResolve.ts': { count: 10, how: 'refuses' }, // behind resolveMetric's refusal; no column a driver moves
@@ -48,7 +48,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/externalMetric.ts': { count: 2, how: 'keeps' }, // the kind and its whitelist
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
   'src/analysis/metrics.ts': { count: 2, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13)
-  'src/analysis/pendingKinds.ts': { count: 8, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
+  'src/analysis/pendingKinds.ts': { count: 9, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
   'src/analysis/statusPin.ts': { count: 3, how: 'keeps' }, // the pin hashes the definition whole; an external one reads no column
   'src/analysis/columnHidden.ts': { count: 2, how: 'keeps' }, // a formula's names, then the definition walked whole for hidden columns
   'src/analysis/metricTimeScope.ts': { count: 7, how: 'keeps' }, // formulas, and a period's base's date: an external one counts by its own dataset

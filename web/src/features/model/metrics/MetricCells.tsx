@@ -39,11 +39,12 @@ export function CountsBy({ m, list = [] }: { m: MetricSummary; list?: MetricSumm
   );
 }
 
-export function AddsUp({ a }: { a: Additivity | null | undefined }) {
+/** `period`: a period metric (part 5), which adds across categories for a different reason than a snapshot. */
+export function AddsUp({ a, period = false }: { a: Additivity | null | undefined; period?: boolean }) {
   if (!a) return <span className={s.muted}>—</span>;
   if (a.categories && a.time) return <Badge tone="ok">Yes</Badge>;
   const [word, why] = a.categories
-    ? ['Not over time', 'A snapshot: it adds up across categories, not across dates.']
+    ? ['Not over time', period ? 'A running window: it adds up across categories, not across dates, since two of its windows overlap.' : 'A snapshot: it adds up across categories, not across dates.']
     : ['No', "It can't be added up, so a total of it would be wrong."];
   return (
     <span title={why}>

@@ -5,6 +5,8 @@
 // PERIOD (p5-05): a period metric whose base totals salary gives east no figure (metric:values, analysis:tiles,
 // metric:preview) and is listed `hidden: true`; NEGATIVE CONTROLS: the editor and hr get its figure, and a period
 // metric over a base on dept answers east Object.is-equal to the editor.
+// PERIOD CHARTS (p5-06): its chart by month (each point a resolution of the base) and by dept give east no figure;
+// NEGATIVE CONTROLS: the editor's has every point, and the dept one draws east's Object.is-equal to the editor's.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -61,6 +63,19 @@ void (async () => {
     const [eastList, hrList] = [await listed('east'), await listed('hr')];
     ok('period: east\'s metric list marks the salary one hidden (its base reads salary), not the dept one', eastList[PAY_YTD] === true && eastList[ROWS_YTD] === false, JSON.stringify(eastList));
     ok('NEGATIVE CONTROL: period: hr\'s marks neither', hrList[PAY_YTD] === false && hrList[ROWS_YTD] === false, JSON.stringify(hrList));
+
+    // ── Period charts (p5-06) ────────────────────────────────────────────────
+    const chart = (who: string, id: string, by: object) => W.call(who, 'visual:data', { projectId: P, datasetId: log, encoding: { ...by, values: [{ column: 'Pay YTD', aggregation: 'count', metricId: id }] } });
+    const pointsOf = (r: H.Reply): unknown => (r.status === 200 && r.body?.ok === true ? r.body.data?.series?.[0]?.values : 'refused');
+    for (const [label, by] of [['by month', { category: 'day', grain: 'month' }], ['by dept', { category: 'dept' }]] as const) {
+      const [east, ed] = [await chart('east', PAY_YTD, by), await chart('ed', PAY_YTD, by)];
+      ok(`period chart ${label}: east gets no figure for the year to date of salary`, pointsOf(east) === 'refused' && !C.leaksHidden(east.text), show(east));
+      const pts = pointsOf(ed);
+      ok(`NEGATIVE CONTROL: period chart ${label}: the editor's has every point`, Array.isArray(pts) && pts.length > 0 && pts.every((v) => typeof v === 'number'), show(ed));
+      const [eastRowsChart, edRowsChart] = [await chart('east', ROWS_YTD, by), await chart('ed', ROWS_YTD, by)];
+      const d = H.diff(pointsOf(eastRowsChart), pointsOf(edRowsChart), {});
+      ok(`NEGATIVE CONTROL: period chart ${label}: the year to date of dept draws east's Object.is-equal to the editor's`, Array.isArray(pointsOf(eastRowsChart)) && d === '', `${d} | ${show(eastRowsChart)}`);
+    }
   } finally {
     await W.close();
   }

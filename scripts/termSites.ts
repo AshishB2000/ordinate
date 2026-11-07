@@ -51,6 +51,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/insights.ts': { count: 1, how: 'keeps' },
   'src/ipc/metricTree.ts': { count: 2, how: 'keeps' },
   'src/ipc/metrics.ts': { count: 7, how: 'keeps' },
+  // a period metric's own filters, params bound (resolveFilterParams keeps a term), asked of the chart door, which expands it
+  'src/ipc/periodChart.ts': { count: 1, how: 'keeps' },
   'src/ipc/periods.ts': { count: 2, how: 'keeps' },
   'src/ipc/scenarios.ts': { count: 2, how: 'keeps' },
   'src/ipc/stats.ts': { count: 2, how: 'keeps' },

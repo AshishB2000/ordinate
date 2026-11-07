@@ -142,12 +142,13 @@ void (async () => {
     ok(`${x.name}: no KPI figure, never a sum`, (await ipcMetrics.resolveMetric(P, x.id))!.value === null, JSON.stringify(await ipcMetrics.resolveMetric(P, x.id)));
     // Step 05 computes a period metric: this one's base (U1) is no metric, so it says so.
     if (x === periodM) ok(`${x.name}: its KPI says its base is gone`, (await ipcMetrics.resolveMetric(P, x.id))!.notes?.[0] === checkMsg.periodBaseMissing());
+    // Step 06 charts a period metric: this one's base is gone, so its chart says so, and a formula over it is not charted yet.
     const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
-    ok(`${x.name}: a chart says why`, c.ok === false && c.error === msg.metricKindPending(x.name), JSON.stringify(c).slice(0, 300));
+    ok(`${x.name}: a chart says why`, c.ok === false && c.error === (x === periodM ? checkMsg.periodBaseMissing() : msg.metricKindPending(x.name)), JSON.stringify(c).slice(0, 300));
     const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
     ok(`${x.name}: a formula over it has no KPI figure`, (await ipcMetrics.resolveMetric(P, f.id))!.value === null);
     const cf = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: f.id }]);
-    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && cf.error === msg.metricKindPending(x.name), JSON.stringify(cf).slice(0, 300));
+    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && cf.error === (x === periodM ? checkMsg.periodInChartFormula(x.name) : msg.metricKindPending(x.name)), JSON.stringify(cf).slice(0, 300));
   }
   // A count distinct is computed from step 02 (scripts/test-countDistinct.ts holds it to the reference): 7 customers, each in both months.
   ok('Customers (countd): its KPI is the distinct count, never a sum', (await ipcMetrics.resolveMetric(P, customers.id))!.value === 7, JSON.stringify(await ipcMetrics.resolveMetric(P, customers.id)));

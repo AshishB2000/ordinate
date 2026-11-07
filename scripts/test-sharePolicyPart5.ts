@@ -3,7 +3,8 @@
 // story export, a send, an alert post and MCP's metric_value (scripts/sharePolicyPart5Harness.ts reads each).
 //
 //   countd   a distinct count over a marked column (p5-04)
-//   period   a year-to-date metric over a base totalled from it, and an alert watched through it (p5-05)
+//   period   a year-to-date metric over a base totalled from it, and an alert watched through it (p5-05);
+//            its chart by month (p5-06)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -16,8 +17,9 @@ import { ok, finish } from './selfcheck';
 import * as H from './sharePolicyPart5Harness';
 
 /** What each surface calls a part's figures: tile titles (dashboard, embed, export, report, send), metric names (story, its export, scorecard, MCP), rule names. */
-interface Names { tiles: string[]; metrics: string[]; rules: string[]; mcp: string[] }
+interface Names { tiles: string[]; metrics: string[]; rules: string[]; mcp: string[]; charts?: string[] }
 const TILE_SURFACES = ['dashboard', 'embed', 'exported', 'reportKpi', 'sendKpi'] as const;
+const CHART_SURFACES = ['dashboard', 'embed', 'exported', 'reportTile', 'sendChart'] as const;
 const METRIC_SURFACES = ['storyMetric', 'exportKpi', 'scoreRow'] as const;
 
 /** Each surface's figure for every name: [surface, name, what it shows]. */
@@ -27,6 +29,7 @@ function shown(o: H.Out, n: Names): Array<[string, string, string]> {
     ...METRIC_SURFACES.flatMap((s) => n.metrics.map((m): [string, string, string] => [s, m, H.figureOn(o, s, m)])),
     ...n.rules.map((r): [string, string, string] => ['posts', r, H.figureOn(o, 'posts', r)]),
     ...n.mcp.map((m): [string, string, string] => ['mcp', m, H.figureOn(o, 'mcp', m)]),
+    ...CHART_SURFACES.flatMap((s) => (n.charts ?? []).map((c): [string, string, string] => [s, c, H.figureOn(o, s, c)])),
   ];
 }
 // A KPI's subtitle never names a marked column, masked or not (publish/kpiSubtitle): mask is compared without it.
@@ -36,7 +39,7 @@ const noSub = (v: unknown): unknown => JSON.parse(JSON.stringify(v ?? null, (key
 async function judged(env: H.Env, part: string, fx: H.Fx, marked: Names, open: Names, setMark: (on: boolean) => Promise<unknown>, pinned: string): Promise<void> {
   const before = await H.leave(env, fx, 'drop');
   ok(`${part} PIN: with nothing marked, every surface is the one this branch published`, H.pin(before) === pinned, `${part}: ${H.pin(before)}`);
-  const gaps = shown(before, { tiles: [...marked.tiles, ...open.tiles], metrics: [...marked.metrics, ...open.metrics], rules: [...marked.rules, ...open.rules], mcp: [...marked.mcp, ...open.mcp] }).filter(([, , s]) => s !== 'shown');
+  const gaps = shown(before, { tiles: [...marked.tiles, ...open.tiles], metrics: [...marked.metrics, ...open.metrics], rules: [...marked.rules, ...open.rules], mcp: [...marked.mcp, ...open.mcp], charts: [...marked.charts ?? [], ...open.charts ?? []] }).filter(([, , s]) => s !== 'shown');
   ok(`${part} fixture: with nothing marked, every figure is shown on every surface`, gaps.length === 0, H.show(gaps));
 
   await setMark(true);
@@ -91,11 +94,27 @@ async function period(env: H.Env): Promise<void> {
     (on) => H.mark(env, P, S, 'salary', on), '15c00e0e7e5dd5dfe1ed507db5e820f621e402fbc6ca97b7f16c3d4574b3af52');
 }
 
+/** A period metric charted by month: every point a resolution of its base, so the chart is judged by the base's columns. */
+async function periodChart(env: H.Env): Promise<void> {
+  const { P, S } = await H.project(env, 'Part 5 period chart');
+  const pay = await H.saveMetric(env, P, S, 'Payroll', { column: 'salary', aggregation: 'sum' }, { timeColumn: 'day' });
+  const hrs = await H.saveMetric(env, P, S, 'Hours', { column: 'hours', aggregation: 'sum' }, { timeColumn: 'day' });
+  const ytdPay = await H.saveMetric(env, P, S, 'Payroll YTD', { base: pay.id, window: { to_date: 'year' } });
+  const ytdHrs = await H.saveMetric(env, P, S, 'Hours YTD', { base: hrs.id, window: { to_date: 'year' } });
+  const byMonth = (m: { id: string; name: string }) => ({ datasetId: S, chartType: 'line', encoding: { category: 'day', grain: 'month', values: [{ column: m.name, aggregation: 'sum', metricId: m.id }] } });
+  const fx = await H.publishable(env, P, [{ title: 'Payroll YTD by month', visual: byMonth(ytdPay) }, { title: 'Hours YTD by month', visual: byMonth(ytdHrs) }], [], [], []);
+  await judged(env, 'period chart', fx,
+    { tiles: [], metrics: [], rules: [], mcp: [], charts: ['Payroll YTD by month'] },
+    { tiles: [], metrics: [], rules: [], mcp: [], charts: ['Hours YTD by month'] },
+    (on) => H.mark(env, P, S, 'salary', on), 'ff21cfbb539a01853d22c817e7e6aeaa636ac59c35d9f2bc140e65aefd550d09');
+}
+
 (async () => {
   const env = await H.start();
   try {
     await countd(env);
     await period(env);
+    await periodChart(env);
   } finally {
     await env.close();
   }

@@ -20,7 +20,7 @@ import { newCtx, olderAsOf, resolveDefinition } from './metrics';
 import type { ResolveCtx } from './metrics';
 
 /** The base, its date column, or the sentence saying why there is no figure. */
-async function baseOf(projectId: string, datasetId: string, def: MetricPeriodDefinition): Promise<{ base: Metric; date: { name: string; type: string } } | { error: string }> {
+export async function baseOf(projectId: string, datasetId: string, def: MetricPeriodDefinition): Promise<{ base: Metric; date: { name: string; type: string } } | { error: string }> {
   const base = await metrics.getMetric(projectId, def.base);
   if (!base) return { error: msg.periodBaseMissing() };
   if (base.datasetId !== datasetId) return { error: msg.periodBaseOtherDataset() };

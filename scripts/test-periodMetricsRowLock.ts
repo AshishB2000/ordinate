@@ -3,7 +3,8 @@
 // its % change on the previous period over Orders equal the boss's same metrics over the physical East subset, with
 // Object.is: the base resolves under the window INSIDE the viewer's lock, never over every row.
 //
-// NEGATIVE CONTROL: the boss's figure over all of Orders is a different one.
+// NEGATIVE CONTROL: the boss's figure over all of Orders is a different one. A period CHART is refused them (step 06),
+// as every chart with a metric measure is (part 1).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-periodMetricsRowLock.js
 
@@ -43,6 +44,18 @@ void (async () => {
       ok(`east: ${k} over Orders is the boss's over the East subset`, typeof mine === 'number' && Object.is(mine, theirs), JSON.stringify([mine, theirs]));
       const boss = await value('boss', all[k]);
       ok(`NEGATIVE CONTROL: the boss's ${k} over every row of Orders is another figure`, typeof boss === 'number' && !Object.is(boss, mine), JSON.stringify([boss, mine]));
+    }
+    // Step 06: the sparkline is a resolution per month, each inside the viewer's lock.
+    const spark = async (who: string, id: string): Promise<unknown> => (await W.call(who, 'metric:table', { projectId: P })).body?.rows?.[id]?.series ?? null; // the Data model's Trend cell
+    const mine = await spark('east', all.qtd);
+    ok('east: the QTD sparkline over Orders is the boss\'s over the East subset', Array.isArray(mine) && mine.length > 0 && JSON.stringify(mine) === JSON.stringify(await spark('boss', sub.qtd)), JSON.stringify([mine, await spark('boss', sub.qtd)]));
+    ok('NEGATIVE CONTROL: the boss\'s over every row of Orders is another', JSON.stringify(await spark('boss', all.qtd)) !== JSON.stringify(mine));
+    // Step 06: a chart with a metric measure is refused a restricted viewer (part 1, rowDoors.reachesOther), a period one too.
+    const chart = (who: string, category: string) => W.call(who, 'visual:data', { projectId: P, datasetId: orders, encoding: { category, grain: 'month', values: [{ column: 'sales', aggregation: 'sum', metricId: all.qtd }] }, filters: AUG });
+    for (const category of ['day', 'region']) {
+      const r = await chart('east', category);
+      ok(`east: a period chart by ${category} is refused, never drawn over every row`, r.body?.ok === false && r.body?.code === 'row_policy', r.text.slice(0, 300));
+      ok(`NEGATIVE CONTROL: the boss draws it by ${category}`, (await chart('boss', category)).body?.ok === true);
     }
   } finally {
     await W.close();

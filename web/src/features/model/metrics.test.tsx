@@ -67,6 +67,18 @@ describe('The Data model: metrics', () => {
     expect(gone[3].textContent).toBe('—'); // NEGATIVE CONTROL: a base that is gone gives no date, never "Any date"
   });
 
+  it('a period metric says whether it adds up (step 06), in its own words, as the server said', async () => {
+    const ytd = metric('m5', 'Revenue YTD', { definition: { base: 'm1', window: { to_date: 'year' } } });
+    const vs = metric('m6', 'Revenue vs LY', { definition: { base: 'm1', compare: { vs: 'previous_year', show: 'pct_change' } } });
+    serve({ 'metric:table': { body: { ok: true, metrics: [...METRICS, ytd, vs], rows: { ...ROWS, m5: row({ categories: true, time: false }), m6: row({ categories: false, time: false }) } } } });
+    renderApp(`/model/${P}?tab=metrics`);
+    const title = within(await rowOf('Revenue YTD')).getByText('Not over time').closest('[title]')?.getAttribute('title');
+    expect(title).toBe('A running window: it adds up across categories, not across dates, since two of its windows overlap.');
+    expect(within(await rowOf('Revenue vs LY')).getByText('No').closest('[title]')?.getAttribute('title')).toBe("It can't be added up, so a total of it would be wrong.");
+    // NEGATIVE CONTROL: a snapshot keeps its own words
+    expect(within(await rowOf('Stock')).getByText('Not over time').closest('[title]')?.getAttribute('title')).toBe('A snapshot: it adds up across categories, not across dates.');
+  });
+
   it('NEGATIVE CONTROL: an older pod sends no additivity, and that reads "—", never "No"', async () => {
     serve();
     renderApp(`/model/${P}?tab=metrics`);
