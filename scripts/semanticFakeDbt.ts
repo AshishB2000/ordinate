@@ -32,7 +32,7 @@ function tokens(s: string): Tok[] {
       let v = '';
       let j = 1;
       for (; j < rest.length; j += 1) {
-        if (rest[j] === "'" && rest[j + 1] === "'") { v += "'"; j += 1; } else if (rest[j] === "'") break; else v += rest[j];
+        if (rest[j] === "'") break; else v += rest[j]; // '' is no escape: Databricks reads two literals, BigQuery an error
       }
       if (j >= rest.length) { out.push({ t: 'raw', v: rest }); break; } // an unterminated quote
       out.push({ t: 'str', v });

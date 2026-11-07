@@ -96,9 +96,9 @@ warehouse's SQL: `{{ Dimension('customer__customer_type') }} = 'new'`, `{{ TimeD
 (documented). **There is no bind parameter**, so a value is written into text. `src/engine/live/semantic/literals.ts`
 is the only way one gets there, and it refuses whatever it cannot write exactly:
 
-- **text:** 1–200 characters, each a letter, a mark, a digit, a space or one of `_ . , : ; / & ( ) # @ + % -`, or `'`
-  (written doubled), quoted with `'`. Refused: `{`, `}` (Jinja), `\` (an escape in BigQuery and Databricks string
-  literals), `"`, NUL, every control, format and line-break character, every quote look-alike (U+2018, U+2019, U+02BC,
+- **text:** 1–200 characters, each a letter, a mark, a digit, a space or one of `_ . , : ; / & ( ) # @ + % -`, quoted
+  with `'`. Refused: `{`, `}` (Jinja), `\` (an escape in BigQuery and Databricks string literals), `'` itself
+  (Databricks reads `'O''Brien'` as two literals run together, `OBrien`, and BigQuery as a syntax error), `"`, NUL, every control, format and line-break character, every quote look-alike (U+2018, U+2019, U+02BC,
   U+FF07), and anything longer. Nothing in the class starts a Jinja tag, closes the quote, or starts a comment.
 - **dates:** an ISO day `YYYY-MM-DD` that is a real day, quoted.
 - **numbers:** finite, written by `String(n)` only when it reads `^-?\d+(\.\d+)?$` (no exponent). **booleans:** `TRUE`,
