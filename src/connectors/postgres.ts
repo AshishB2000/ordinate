@@ -61,6 +61,7 @@ import type {
 } from './types';
 import { safeError } from './types';
 import { queryArray, typeName } from './pgRows';
+import { pgTableFacts } from './pgFacts';
 import { checkParams, isParamError } from './liveParams';
 
 // ── Bounds ───────────────────────────────────────────────────────────────────
@@ -589,7 +590,7 @@ async function run(v: PgVariant, ctx: ConnectorContext, sql: string): Promise<Co
  * to run because a tree node came into view. A failure to read it is not a
  * failure to describe the table, so it is caught separately.
  */
-const COLUMNS_SQL = `select column_name, data_type, is_nullable
+export const COLUMNS_SQL = `select column_name, data_type, is_nullable
                        from information_schema.columns
                       where table_name = $2
                         and ($1::text is null or table_schema = $1::text)
@@ -728,6 +729,7 @@ function define(v: PgVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
     describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
+    tableFacts: (ctx: ConnectorContext, t: string) => pgTableFacts(t, (read) => withClient(v, ctx, (c) => read(async (s, vals) => (await queryArray(c, s, vals)).rows ?? [])), { redshift: v.id === 'amazon-redshift', columnsSql: COLUMNS_SQL, timeoutMs: ctx.timeoutMs }),
     ...(v.live ? { live: { dialect: v.live, runBound: (ctx: ConnectorContext, sql: string, params: LiveParam[]) => runBound(v, ctx, sql, params), ...(v.liveOnReplica ? { optIn: REPLICA_FIELD.key } : {}) } } : {}),
   };
 }

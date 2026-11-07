@@ -627,6 +627,129 @@ async function main(): Promise<void> {
   await byId('cockroachdb').run(makeCtx({ values: { port: 'nonsense' } }), 'select 1');
   ok('a nonsense port falls back rather than reaching the driver', clients[0]?.config.port === 26257, clients[0]?.config.port);
 
+  // ── 12. A table's facts (UNVERIFIED against a real server) ─────────────────
+  //
+  // The catalog queries are written from PostgreSQL's and Redshift's documentation, and answered here by a
+  // recording fake that matches each statement by the catalog it names. What is pinned is THIS side of the
+  // socket: a name is bound or refused before a socket, every statement is limited, a sub-read that fails
+  // costs its field, Redshift is not asked what it does not have. A real server answers in test-pgFacts-db.
+
+  const FAILS = (re: RegExp) => async (text: string): Promise<FakeResult> => { throw new Error(`function does not exist (${text.match(re)?.[0]})`); };
+  /** Rows by catalog, first match wins; a `set` and anything unmatched answers nothing. */
+  function catalog(rows: [RegExp, unknown[][]][], failing?: RegExp): typeof queryImpl {
+    return async (text) => {
+      if (failing?.test(text)) return FAILS(failing)(text);
+      const hit = rows.find(([re]) => re.test(text));
+      return { rows: hit ? hit[1] : [] };
+    };
+  }
+  const PG_ROWS: [RegExp, unknown[][]][] = [
+    [/pg_get_partkeydef/, [['RANGE (order_date)']]],
+    [/pg_total_relation_size/, [['8192']]], // the partition tree's sum, or the relation alone
+    [/pg_index/, [['orders_pkey', true, 'btree', 'line_id', 1, '1'], ['orders_region', false, 'hash', 'region', 3, '3']]],
+    [/pg_constraint/, [['order_date', 2, '{2,1}'], ['line_id', 1, '{2,1}']]],
+    [/information_schema\.columns/, [['line_id', 'bigint', 'NO'], ['region', 'text', 'YES']]],
+    [/pg_attribute/, [['line_id', 'bigint', false, null], ['order_date', 'date', false, null], ['region', 'text', true, 'Discount in USD, after tax']]],
+    [/obj_description/, [[16385, 'public', 'Orders', 1200]]],
+  ];
+  const RS_ROWS: [RegExp, unknown[][]][] = [[/svv_table_info/, [['KEY(customer_id)', 'order_date', 3, 1500]]], ...PG_ROWS];
+  const sent = (): Recorded[] => clients.flatMap((c) => c.queries).filter((q) => !/^\s*set\b/i.test(q.text));
+  const pg = byId('postgres');
+  const rs = byId('amazon-redshift');
+  const facts = async (c: ConnectorDef, t = 'public.orders', ctx = makeCtx()) => {
+    const f = await c.tableFacts!(ctx, t);
+    return f.ok ? f : null;
+  };
+
+  reset();
+  queryImpl = catalog(PG_ROWS);
+  let f = await facts(pg);
+  ok('pg facts: comment, columns with types, nullability and comments, the estimate', f?.comment === 'Orders' && f.rowEstimate === 1200 && JSON.stringify(f.columns.map((c) => [c.name, c.type, c.nullable, c.comment ?? null])) ===
+    '[["line_id","bigint",false,null],["order_date","date",false,null],["region","text",true,"Discount in USD, after tax"]]', JSON.stringify(f));
+  ok('pg facts: the key is in its own order (not the table\'s), enforced, and flags its columns', JSON.stringify(f?.primaryKey) === '{"columns":["order_date","line_id"],"enforced":true}' && f?.columns.map((c) => !!c.key).join() === 'true,true,false', JSON.stringify(f?.primaryKey));
+  ok('pg facts: indexes, partition and size', JSON.stringify([f?.indexes, f?.partition, f?.bytes]) ===
+    '[[{"name":"orders_pkey","columns":["line_id"],"unique":true,"kind":"btree"},{"name":"orders_region","columns":["region"],"unique":false,"kind":"hash"}],{"columns":["order_date"],"method":"RANGE"},8192]', JSON.stringify(f));
+  ok('pg facts: every statement is limited', sent().length >= 6 && sent().every((r) => /\blimit \d+\s*$/i.test(r.text.trim())), sent().map((r) => r.text.slice(-30)).join(' | '));
+  ok('pg facts: the schema and name are bound (the oid after them), never text', sent()[0].values!.join() === 'public,orders' && sent().slice(1).every((r) => r.values!.length === 1 && /^\d+$/.test(String(r.values![0]))) && sent().every((r) => !r.text.includes('orders')), JSON.stringify(sent().map((r) => r.values)));
+  ok('pg facts: an unqualified name binds a null schema', await (async () => { reset(); queryImpl = catalog(PG_ROWS); await facts(pg, 'orders'); return sent()[0].values!.join() === ',orders' && sent()[0].values![0] === null; })());
+
+  reset();
+  await pg.tableFacts!(makeCtx(), 'public.x"; drop table y; --');
+  ok('pg facts: a hostile name is a bound value, never text', sent().length > 0 && sent().every((r) => !/drop table/i.test(r.text)) && sent()[0].values!.includes('x"; drop table y; --'));
+  reset();
+  const refusals = await Promise.all(['a.b.c', '', '.x', 'x.', '  '].map((n) => pg.tableFacts!(makeCtx(), n)));
+  ok('pg facts: three parts, an empty part or no name are refused before a socket', refusals.every((r) => !r.ok && r.error === 'Invalid table name') && clients.length === 0);
+
+  reset();
+  queryImpl = catalog(PG_ROWS, /pg_get_partkeydef/);
+  f = await facts(pg);
+  ok('pg facts: a failing sub-read keeps the rest', f?.columns.length === 3 && !!f.primaryKey && !('partition' in f) && !!f.indexes && f.bytes === 8192 && f.comment === 'Orders', JSON.stringify(f));
+  reset();
+  queryImpl = catalog(PG_ROWS, /pg_constraint|pg_index|pg_total_relation_size/);
+  f = await facts(pg);
+  ok('pg facts: …whichever it is (no key, indexes or size)', f?.columns.length === 3 && !('primaryKey' in f) && !('indexes' in f) && !('bytes' in f) && f.partition?.method === 'RANGE', JSON.stringify(f));
+
+  reset();
+  queryImpl = catalog(PG_ROWS, /pg_partition_tree/);
+  f = await facts(pg);
+  ok('pg facts: before PostgreSQL 12 (no pg_partition_tree) the size is the relation\'s own', f?.bytes === 8192 && sent().filter((q) => /pg_total_relation_size/.test(q.text)).length === 2, JSON.stringify(f));
+  reset();
+  queryImpl = catalog(PG_ROWS, /pg_attribute a\s+where/);
+  f = await facts(pg);
+  ok('pg facts: columns fall back to information_schema, with no comments', f?.columns.map((c) => c.name).join() === 'line_id,region' && f.columns.every((c) => !('comment' in c)) && f.columns[0].nullable === false && f.columns[1].nullable === true, JSON.stringify(f));
+  const fb = sent().find((q) => /information_schema\.columns/.test(q.text));
+  ok('pg facts: …and the fallback is bound and limited too', !!fb && fb.values!.join() === 'public,orders' && /\blimit 2000\s*$/.test(fb.text.trim()), JSON.stringify(fb));
+  reset();
+  queryImpl = catalog(PG_ROWS, /obj_description/);
+  f = await facts(pg);
+  ok('pg facts: with no readable pg_class, the columns still come (information_schema only)', f?.columns.length === 2 && !('comment' in f) && !('primaryKey' in f) && !sent().some((q) => /pg_constraint|pg_index|pg_get_partkeydef/.test(q.text)), JSON.stringify(f));
+  reset();
+  queryImpl = catalog([]);
+  const none = await pg.tableFacts!(makeCtx(), 'public.nothing');
+  ok('pg facts: a table nothing knows is an error, as describeTable says it', !none.ok && none.error === 'No such table: nothing', JSON.stringify(none));
+  reset();
+  const slow = catalog(PG_ROWS);
+  queryImpl = async (t) => { await new Promise((r) => setTimeout(r, 8)); return slow(t); };
+  f = await facts(pg, 'public.orders', makeCtx({ timeoutMs: 1 }));
+  ok('pg facts: past the budget (the default one reads them all, above) the optional reads are skipped, the columns are not', f?.columns.length === 3 && !('primaryKey' in f) && !sent().some((q) => /pg_constraint|pg_index|pg_get_partkeydef|pg_total_relation_size/.test(q.text)), JSON.stringify(f));
+  ok('pg facts: the client is closed', clients.every((c) => c.ends === 1));
+
+  // Redshift is not Postgres: informational keys, no partition key function, its own table view.
+  reset();
+  queryImpl = catalog(RS_ROWS);
+  f = await facts(rs);
+  ok('redshift: distribution, sort key and an informational key', JSON.stringify([f?.distribution, f?.sortKey, f?.primaryKey?.enforced]) === '[{"style":"KEY","columns":["customer_id"]},["order_date"],false]', JSON.stringify(f));
+  ok('redshift: size from svv_table_info (1 MB blocks), the estimate from it too', f?.bytes === 3 * 1_048_576 && f.rowEstimate === 1500, JSON.stringify(f));
+  ok('redshift: it is never asked for what it lacks (partition key, pg_index, relation size)', !sent().some((q) => /pg_get_partkeydef|pg_index|pg_total_relation_size/.test(q.text)) && !('partition' in f!) && !('indexes' in f!));
+  ok('redshift: the table view is read by bound schema and name', ((q) => !!q && q.values!.join() === 'public,orders' && /\blimit \d+\s*$/.test(q.text.trim()))(sent().find((x) => /svv_table_info/.test(x.text))));
+  reset();
+  queryImpl = catalog(PG_ROWS); // svv_table_info leaves out empty tables: no row
+  f = await facts(rs);
+  ok('redshift: an empty table (no svv row) keeps everything else, with no error', f?.columns.length === 3 && !!f.primaryKey && !('distribution' in f) && !('sortKey' in f) && f.rowEstimate === 1200, JSON.stringify(f));
+  reset();
+  queryImpl = catalog([[/svv_table_info/, [['AUTO(ALL)', '', 0, 0]]], ...PG_ROWS]);
+  f = await facts(rs);
+  ok('redshift: AUTO(ALL) names no column, and an empty sort key is none', JSON.stringify(f?.distribution) === '{"style":"AUTO(ALL)","columns":[]}' && !('sortKey' in f!), JSON.stringify(f));
+  reset();
+  queryImpl = catalog(RS_ROWS);
+  await facts(pg);
+  ok('NEGATIVE CONTROL: PostgreSQL itself is asked for the partition key, indexes and relation size, and not for svv_table_info', ['pg_get_partkeydef', 'pg_index', 'pg_total_relation_size'].every((w) => sent().some((q) => q.text.includes(w))) && !sent().some((q) => /svv_table_info/.test(q.text)));
+
+  // The pgwire engines keep whatever answers (UNVERIFIED: none of them was asked).
+  ok('every pgwire variant has tableFacts', CONNECTORS.every((d) => typeof d.tableFacts === 'function'));
+  reset();
+  queryImpl = catalog(PG_ROWS, /pg_attribute|pg_class/);
+  f = await facts(byId('questdb'));
+  ok('pgwire: an engine with neither pg_attribute nor pg_class still gives its columns', f?.columns.length === 2, JSON.stringify(f));
+
+  const { parsePartitionKey, parseDistribution }: typeof import('../src/connectors/pgFacts') = require('../src/connectors/pgFacts');
+  ok('partition key: method and columns, a quoted name unquoted, an expression kept whole', JSON.stringify([parsePartitionKey('RANGE (order_date)'), parsePartitionKey('HASH ("Mixed ""Case""", b)'), parsePartitionKey("LIST (date_trunc('day', ts), region)")]) ===
+    JSON.stringify([{ columns: ['order_date'], method: 'RANGE' }, { columns: ['Mixed "Case"', 'b'], method: 'HASH' }, { columns: ["date_trunc('day', ts)", 'region'], method: 'LIST' }]));
+  ok('partition key: nothing (not partitioned, or not a key) is none', parsePartitionKey('') === undefined && parsePartitionKey('garbage') === undefined && parsePartitionKey('RANGE ()') === undefined);
+  ok('distribution: EVEN, ALL, KEY(col), a quoted column and the AUTO forms', JSON.stringify(['EVEN', 'all', 'KEY(customer_id)', 'KEY("cust id")', 'AUTO(KEY(customer_id))', 'AUTO(EVEN)'].map(parseDistribution)) ===
+    '[{"style":"EVEN","columns":[]},{"style":"ALL","columns":[]},{"style":"KEY","columns":["customer_id"]},{"style":"KEY","columns":["cust id"]},{"style":"AUTO(KEY)","columns":["customer_id"]},{"style":"AUTO(EVEN)","columns":[]}]');
+  ok('distribution: text it does not know is none', parseDistribution('') === undefined && parseDistribution('ROUND_ROBIN') === undefined);
+
   // ── done ───────────────────────────────────────────────────────────────────
 
   if (failureCount() > 0) {

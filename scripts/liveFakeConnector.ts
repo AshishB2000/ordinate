@@ -29,6 +29,7 @@
 // count) — `fake.bytes` is the priced variant's dry-run estimate (L2.5).
 
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from '../src/connectors/types';
+import type { FactColumn, TableFacts } from '../src/connectors/tableFacts';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
@@ -89,7 +90,11 @@ export const fake: {
   rowEstimate: number | undefined;
   /** When set, the bytes every answer reports BILLING (as BigQuery's reply does; L2.7's usage count). Null: none reported. */
   billedBytes: number | null;
-} = { calls: [], hook: null, estimates: [], bytes: 0, rowEstimate: undefined, billedBytes: null };
+  /** Every catalog call it answered: `listTables`, `describeTable` and `tableFacts` (a name `tableFacts` refuses is not one). `calls` counts `runBound` only. */
+  catalogCalls: number;
+  /** A test's say over `tableFacts`: return a reply to answer with it, or undefined to read DuckDB's own catalog. */
+  factsHook: ((ctx: ConnectorContext, table: string) => Promise<({ ok: true } & TableFacts) | ConnectorError | undefined>) | null;
+} = { calls: [], hook: null, estimates: [], bytes: 0, rowEstimate: undefined, billedBytes: null, catalogCalls: 0, factsHook: null };
 
 const CANCELLED: ConnectorError = { ok: false, error: 'Cancelled' };
 const TABLE_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -110,7 +115,10 @@ function raceAbort<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T
 const toDuck = (p: LiveParam): string | number | null => (typeof p.value === 'boolean' ? String(p.value) : p.value);
 
 async function ensureFixture(values: Record<string, unknown>): Promise<void> {
-  if (values.fixture === 'orders') await duck.execAsync(ORDERS_DDL);
+  if (values.fixture !== 'orders') return;
+  await duck.execAsync(ORDERS_DDL);
+  // The comments a real warehouse keeps, for `tableFacts`; COMMENT ON is idempotent.
+  await duck.execAsync(`COMMENT ON TABLE ${ORDERS_TABLE} IS 'Orders, one row per line'; COMMENT ON COLUMN ${ORDERS_TABLE}.amount IS 'Order amount in USD'`);
 }
 
 /** DuckDB rows (objects in SELECT order) → the connector shape: positional, capped, the cap reported. */
@@ -149,6 +157,27 @@ async function describe(sql: string): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [String(r.column_name), String(r.column_type)]));
 }
 
+/** One table's facts out of DuckDB's own catalog, the way a real reader reads its warehouse's: comments, columns, a declared key. */
+async function readFacts(ctx: ConnectorContext, table: string): Promise<{ ok: true } & TableFacts | ConnectorError> {
+  const where = `database_name = current_database() AND schema_name = 'main' AND table_name = $1`;
+  const [t] = await duck.queryAsync(`SELECT comment, estimated_size FROM duckdb_tables() WHERE ${where} LIMIT 1`, [table]);
+  if (!t) return { ok: false, error: `Table ${table} does not exist` };
+  const cols = await duck.queryAsync(`SELECT column_name, data_type, is_nullable, comment FROM duckdb_columns() WHERE ${where} ORDER BY column_index LIMIT ${ctx.rowLimit}`, [table]);
+  const keys = await duck.queryAsync(`SELECT constraint_column_names FROM duckdb_constraints() WHERE ${where} AND constraint_type = 'PRIMARY KEY' LIMIT 1`, [table]);
+  const keyColumns: string[] = keys[0] ? JSON.parse(String(keys[0].constraint_column_names)) : []; // a LIST comes back as JSON text
+  const columns: FactColumn[] = cols.map((c) => {
+    const col: FactColumn = { name: String(c.column_name), type: String(c.data_type), nullable: c.is_nullable === 'true' };
+    if (c.comment) col.comment = String(c.comment);
+    if (keyColumns.includes(col.name)) col.key = true;
+    return col;
+  });
+  const facts: { ok: true } & TableFacts = { ok: true, columns };
+  if (t.comment) facts.comment = String(t.comment);
+  if (keyColumns.length) facts.primaryKey = { columns: keyColumns, enforced: true };
+  if (Number(t.estimated_size) > 0) facts.rowEstimate = Number(t.estimated_size);
+  return facts;
+}
+
 /** live-fake-priced's dry run: records the statement, answers `fake.bytes`. Reads nothing. */
 async function estimate(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<{ ok: true; bytes: number } | ConnectorError> {
   fake.estimates.push({ sql, params, maxBytes: ctx.maxBytes });
@@ -168,6 +197,7 @@ function def(id: string, label: string, withHost: boolean, priced = false): Conn
       { key: 'password', label: 'Password', type: 'password', secret: true },
     ],
     async listTables(ctx) {
+      fake.catalogCalls += 1;
       await ensureFixture(ctx.values);
       const rows = await duck.queryAsync("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name");
       return { ok: true, tables: rows.map((r) => ({ name: String(r.table_name) })) };
@@ -184,10 +214,19 @@ function def(id: string, label: string, withHost: boolean, priced = false): Conn
     },
     async describeTable(ctx, table) {
       if (!TABLE_RE.test(table)) return { ok: false, error: 'Invalid table name' };
+      fake.catalogCalls += 1;
       await ensureFixture(ctx.values);
       const types = await describe(`"${table}"`);
       const columns = [...types].map(([name, type]) => ({ name, type }));
       return fake.rowEstimate === undefined ? { ok: true, columns } : { ok: true, columns, rowEstimate: fake.rowEstimate };
+    },
+    async tableFacts(ctx, table) {
+      if (!TABLE_RE.test(table)) return { ok: false, error: 'Invalid table name' };
+      fake.catalogCalls += 1;
+      const held = fake.factsHook ? await fake.factsHook(ctx, table) : undefined;
+      if (held) return held;
+      await ensureFixture(ctx.values);
+      return readFacts(ctx, table);
     },
     live: priced ? { dialect: 'duckdb', runBound, estimate } : { dialect: 'duckdb', runBound },
   };
@@ -212,6 +251,8 @@ export function resetFake(): void {
   fake.bytes = 0;
   fake.rowEstimate = undefined;
   fake.billedBytes = null;
+  fake.catalogCalls = 0;
+  fake.factsHook = null;
 }
 
 /**

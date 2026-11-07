@@ -586,6 +586,8 @@
   "semanticMessages.your_access_to_is_limited_to": "Ihr Zugriff auf {dataset} ist auf einige Zeilen beschränkt, und {layer} kann diese Beschränkung nicht exakt anwenden, daher wird kein Wert angezeigt.",
   "sourceTableMessages.that_connection_is_gone": "Diese Verbindung gibt es nicht mehr.",
   "sourceTableMessages.this_connection_already_documents_2_000": "Diese Verbindung dokumentiert bereits 2000 Tabellen.",
+  "sourceTableMessages.this_connection_s_tables_were_read": "Die Tabellen dieser Verbindung wurden in der letzten Stunde 60-mal gelesen. Versuche es in {minutes} Min. erneut.",
+  "sourceTableMessages.this_source_has_no_catalog_ordinate": "Diese Quelle hat keinen Katalog, den Ordinate lesen kann. Schreibe ihre Notizen von Hand.",
   "sourceTableMessages.those_notes_are_gone": "Diese Notizen gibt es nicht mehr.",
   "statusMessages.an_item_cannot_replace_itself_pick": "Ein Element kann sich nicht selbst ersetzen. Wählen Sie ein anderes.",
   "statusMessages.is_retired": "{name} ist zurückgezogen.",

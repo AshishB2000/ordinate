@@ -583,6 +583,8 @@
   "semanticMessages.your_access_to_is_limited_to": "Your access to {dataset} is limited to some rows, and {layer} can't apply that limit exactly, so no figure is shown.",
   "sourceTableMessages.that_connection_is_gone": "That connection is gone.",
   "sourceTableMessages.this_connection_already_documents_2_000": "This connection already documents 2,000 tables.",
+  "sourceTableMessages.this_connection_s_tables_were_read": "This connection's tables were read 60 times in the last hour. Try again in {minutes} min.",
+  "sourceTableMessages.this_source_has_no_catalog_ordinate": "This source has no catalog Ordinate can read. Write its notes by hand.",
   "sourceTableMessages.those_notes_are_gone": "Those notes are gone.",
   "statusMessages.an_item_cannot_replace_itself_pick": "An item cannot replace itself. Pick another one.",
   "statusMessages.is_retired": "{name} is retired.",

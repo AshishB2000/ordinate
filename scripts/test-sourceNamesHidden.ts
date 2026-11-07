@@ -28,6 +28,8 @@
 //    and its reply holds no table name. Every channel in the contract file has a viewer case here (a channel a later PR adds
 //    must add its payload). NEGATIVE CONTROL: the editor is answered. The store also runs here on Postgres rows: the doc's lock,
 //    then the index's inside it, one transaction.
+//    `sourceTable:read` (p2-04) is one of them, and its 60-an-hour limit holds across pods: 60 takes through a second pool
+//    (another pod) are counted by the first, which refuses before the warehouse is asked. NEGATIVE CONTROL: another connection.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-sourceNamesHidden.js
 
@@ -48,6 +50,10 @@ const { seesSourceNames }: typeof import('../src/data/sourceNames') = require('.
 const searchMod: typeof import('../src/ipc/search') = require('../src/ipc/search');
 const lineageMod: typeof import('../src/ipc/lineage') = require('../src/ipc/lineage');
 const sourceDocs: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+const counters: typeof import('../src/server/counters') = require('../src/server/counters');
+const { READS_PER_HOUR }: typeof import('../src/ipc/sourceTableRead') = require('../src/ipc/sourceTableRead');
+const { factsReadLimit }: typeof import('../src/app/sourceTableMessages') = require('../src/app/sourceTableMessages');
+const { Pool }: typeof import('pg') = require('pg');
 
 const HOST = 'canary-host-9f3.internal';
 const DATABASE = 'canary_db_9f3';
@@ -263,6 +269,7 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
       'sourceTable:get': { projectId: P, connId, docId },
       'sourceTable:save': { projectId: P, connId, table: TABLE, patch: { guide: 'x' } },
       'sourceTable:delete': { projectId: P, connId, docId },
+      'sourceTable:read': { projectId: P, connId, docId },
     };
     const channels = Object.keys(require('../src/api/sourceTables').sourceTables);
     ok('every source table channel has a viewer case here', channels.every((ch) => ch in PAYLOAD), channels.filter((ch) => !(ch in PAYLOAD)).join());
@@ -279,6 +286,18 @@ const CANARY = /canary[-_](tbl|db|user|host)/;
     ok('sourceTable:save: a stale base is a 409 on Postgres rows, and the doc is unchanged', stale.status === 409 && stale.body.code === 'record_changed' && (await W.call('ed', 'sourceTable:get', PAYLOAD['sourceTable:get'])).body.doc.guide === `Filter on ${TABLE}`, stale.text);
     const next = await W.call('ed', 'sourceTable:save', { projectId: P, connId, docId, patch: { guide: 'second' }, base: edGet.body.tag });
     ok('NEGATIVE CONTROL: the current tag saves, the index follows', next.status === 200 && next.body.tag !== edGet.body.tag && (await W.as('boss', () => sourceDocs.readSourceDoc(P, connId, docId)))?.rec.guide === 'second' && (await W.as('boss', () => sourceDocs.listSourceIndex(P, connId)))[0].hasGuide === true, next.text);
+    // The read's limit is in the shared counters: another pod's 60 reads are this pod's refusal, before any warehouse is asked.
+    const other = await W.call('ed', 'sourceTable:save', { projectId: P, connId: byDb, table: TABLE, patch: {} });
+    const podB = new Pool(W.pool.options);
+    podB.on('error', () => undefined);
+    counters.useCounterDb(podB);
+    for (let i = 0; i < READS_PER_HOUR; i++) await counters.take('acme', [{ key: `sourceRead:${connId}`, limit: READS_PER_HOUR, windowMs: 3_600_000 }]);
+    counters.useCounterDb(W.pool);
+    await podB.end();
+    const limited = await W.call('ed', 'sourceTable:read', PAYLOAD['sourceTable:read']);
+    ok('sourceTable:read: the limit holds across pods, and the refusal names no table', limited.status === 200 && limited.body.ok === false && limited.body.error === factsReadLimit(Math.ceil(limited.body.retryAfterSec / 60)) && /Try again in \d+ min/.test(limited.body.error) && !CANARY.test(limited.text), limited.text);
+    const free = await W.call('ed', 'sourceTable:read', { projectId: P, connId: byDb, docId: other.body.docId });
+    ok('NEGATIVE CONTROL: another connection is not limited (its read goes on to the warehouse and fails there)', free.status === 200 && free.body.ok === false && !/Try again in/.test(free.body.error), free.text);
     const gone = await W.call('ed', 'sourceTable:delete', PAYLOAD['sourceTable:delete']);
     ok('sourceTable:delete: the doc and its entry go together', gone.body.ok === true && (await W.as('boss', () => sourceDocs.listSourceIndex(P, connId))).length === 0 && (await W.as('boss', () => sourceDocs.readSourceDoc(P, connId, docId))) === null, gone.text);
   } finally {

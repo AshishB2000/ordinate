@@ -17,3 +17,13 @@ export function connectionGone(): string {
 export function sourceDocGone(): string {
   return t('sourceTableMessages.those_notes_are_gone');
 }
+
+/** `sourceTable:read` was taken 60 times on one connection in an hour; the wait is rounded up to whole minutes. */
+export function factsReadLimit(minutes: number): string {
+  return t('sourceTableMessages.this_connection_s_tables_were_read', { minutes });
+}
+
+/** The source has neither a table-facts reader nor a column catalog (a SaaS app, Trino, Elasticsearch, …). */
+export function factsNotReadable(): string {
+  return t('sourceTableMessages.this_source_has_no_catalog_ordinate');
+}

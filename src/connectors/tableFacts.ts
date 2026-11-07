@@ -3,6 +3,8 @@
 // text, so a bad field is dropped (never repaired), strings are clipped, and a figure is a finite
 // non-negative number or nothing. Sanitizing twice gives what sanitizing once did.
 
+import type { ConnectorError } from './types';
+
 export interface FactColumn {
   name: string;
   type: string;
@@ -24,6 +26,15 @@ export interface TableFacts {
   bytes?: number;
   lastModified?: string;
 }
+
+/** What a family's reader runs its catalog statements through: bound values, positional rows. Every reader takes this, so none imports its driver module. */
+export type FactsQuery = (sql: string, params: (string | number | null)[]) => Promise<unknown[][]>;
+export type FactsReply = ({ ok: true } & TableFacts) | ConnectorError;
+/** Opens one connection (guarded and closed by the driver module) and hands `read` a query function on it. */
+export type OpenFacts = (read: (q: FactsQuery) => Promise<FactsReply>) => Promise<FactsReply>;
+
+/** The most rows one catalog statement of a facts read may return (the door's bound; a table's columns are its largest answer). */
+export const FACTS_ROWS = 2_000;
 
 export const MAX_FACT_COLUMNS = 2000, MAX_COMMENT = 2000, MAX_INDEXES = 50, MAX_KEY_COLUMNS = 32;
 /** A column's name and type, and a key, index or method name: a table's facts reach about 5 MB at these caps (a record holds 8 MiB). */

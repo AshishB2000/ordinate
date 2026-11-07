@@ -586,6 +586,8 @@
   "semanticMessages.your_access_to_is_limited_to": "Su acceso a {dataset} está limitado a algunas filas y {layer} no puede aplicar ese límite con exactitud, así que no se muestra ninguna cifra.",
   "sourceTableMessages.that_connection_is_gone": "Esa conexión ya no existe.",
   "sourceTableMessages.this_connection_already_documents_2_000": "Esta conexión ya documenta 2000 tablas.",
+  "sourceTableMessages.this_connection_s_tables_were_read": "Las tablas de esta conexión se leyeron 60 veces en la última hora. Vuelve a intentarlo en {minutes} min.",
+  "sourceTableMessages.this_source_has_no_catalog_ordinate": "Esta fuente no tiene un catálogo que Ordinate pueda leer. Escribe sus notas a mano.",
   "sourceTableMessages.those_notes_are_gone": "Esas notas ya no existen.",
   "statusMessages.an_item_cannot_replace_itself_pick": "Un elemento no puede reemplazarse a sí mismo. Elige otro.",
   "statusMessages.is_retired": "{name} está retirado.",

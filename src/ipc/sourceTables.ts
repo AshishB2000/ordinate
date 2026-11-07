@@ -7,8 +7,9 @@
 import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import { connectionGone, sourceDocGone } from '../app/sourceTableMessages';
-import { connectionHead, sourceList, usedTables } from '../app/sourceTableList';
+import { connectionHead, docView, sourceList, usedTables } from '../app/sourceTableList';
 import * as store from '../app/sourceTables';
+import { register as registerRead } from './sourceTableRead';
 
 interface Ids { projectId: string; connId: string; docId: string }
 interface SavePayload { projectId: string; connId: string; docId?: string; table?: string; patch: store.SourcePatch; base?: string }
@@ -25,7 +26,7 @@ export function register(): void {
     const built = (await usedTables(projectId, [conn])).get(connId)?.get(rec.table) ?? [];
     return {
       ok: true,
-      doc: { docId, table: rec.table, owner: rec.owner, refresh: rec.refresh, requiredFilters: rec.requiredFilters, guide: rec.guide, ...(rec.facts ? { facts: rec.facts } : {}), updatedBy: rec.updatedBy, updatedAt: rec.updatedAt },
+      doc: docView(docId, rec),
       tag: found.tag,
       connection: connectionHead(conn),
       datasets: built.map((d) => ({ id: d.id, name: d.name })),
@@ -48,4 +49,6 @@ export function register(): void {
     if (!(await connections.getConnection(projectId, connId))) return { ok: false, error: connectionGone() };
     return (await store.deleteSourceDoc(projectId, connId, docId)) ? { ok: true } : { ok: false, error: sourceDocGone() };
   });
+
+  registerRead();
 }
