@@ -163,22 +163,16 @@ async function describeModel(ctx: ConnectorContext, model: string): Promise<Awai
   });
   const metricOf = new Map(mets.items.map((m) => [asString(prop(m, 'name')), m]));
   const metrics: Array<{ name: string; additive: boolean; description?: string }> = [];
-  // shortcut: an API that refuses nonAdditiveDimension (the SDK's Measure has none) cannot say a measure is semi-additive; asked once a describe, then without
-  let semi = true;
   for (const name of metricNames) {
     const m = metricOf.get(name);
     if (!m) continue;
-    // Additive only for a SIMPLE metric whose one measure aggregates SUM or COUNT (the SDK's `measures`, not on the
-    // API page); every other type, and a measure that cannot be read, cannot be added up.
+    // Additive only for a SIMPLE metric whose one measure aggregates SUM or COUNT with no non-additive dimension (the
+    // SDK's `measures`, not on the API page); every other type, and a measure that cannot be read — an API refusing
+    // nonAdditiveDimension included, which cannot say a balance is one — cannot be added up.
     let additive = false;
     if (prop(m, 'type') === 'SIMPLE') {
-      let ms = semi ? await gql(ctx, DOCS.measuresSemi, { metrics: [{ name }] }, deadline) : null;
-      if (!ms || (!ms.ok && /nonAdditiveDimension/.test(ms.error))) {
-        semi = false;
-        ms = await gql(ctx, DOCS.measures, { metrics: [{ name }] }, deadline);
-      }
+      const ms = await gql(ctx, DOCS.measures, { metrics: [{ name }] }, deadline);
       const list = ms.ok ? asArray(prop(ms.data, 'measures')) : [];
-      // A measure with a non-additive dimension adds up over no time (a balance): not additive.
       additive = list.length === 1 && ['SUM', 'COUNT'].includes(asString(prop(list[0], 'agg'))) && prop(list[0], 'nonAdditiveDimension') == null;
     }
     const description = text(prop(m, 'description'));

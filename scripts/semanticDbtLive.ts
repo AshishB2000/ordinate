@@ -68,7 +68,11 @@ export async function runDbtLive(cfg: DbtLiveConfig, ok: Ok, say: (line: string)
   const d = await semanticRun.describeSemanticModel(def, values, secrets, project.SAVED_QUERY, opts);
   const want = fakeDbt.asDbtTypes(fx.COLUMNS).map((c) => [`${project.PREFIX}${c.name}`, c.type]);
   ok('dbt: its group-bys typed as dbt types them (categorical text, time date)', d.ok && show(d.dimensions.map((x) => [x.name, x.type])) === show(want), d.ok ? show(d.dimensions) : show(d));
-  ok('dbt: …sum and count add up, average and max do not', d.ok && show(d.metrics.map((m) => [m.name, m.additive])) === show([['revenue', true], ['orders', true], ['avg_amount', false], ['max_amount', false]]), d.ok ? show(d.metrics) : '');
+  // Sum and count add up only where the API can say a measure has no non-additive dimension; one that refuses the field
+  // (the SDK's Measure has none) reads every metric as not additive (fail safe). Average and max never add up.
+  const adds = d.ok ? show(d.metrics.map((m) => [m.name, m.additive])) : '';
+  ok('dbt: …sum and count add up (or, on an API without nonAdditiveDimension, nothing does), average and max do not',
+    adds === show([['revenue', true], ['orders', true], ['avg_amount', false], ['max_amount', false]]) || adds === show([['revenue', false], ['orders', false], ['avg_amount', false], ['max_amount', false]]), d.ok ? show(d.metrics) : '');
   if (!d.ok) return { queries: 0 };
   const read = sync.readModel(d, 'dbt', project.SAVED_QUERY, new Date().toISOString());
 

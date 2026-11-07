@@ -43,6 +43,7 @@ const fake = fakeDbt.startFakeDbt({ token: TOKEN, environmentId: ENV, models: [
   { name: 'orders', label: 'Orders', description: 'Every order', table: 'live_typed', columns: COLUMNS },
   { name: 'orders_outside_north', label: 'Orders outside the North', table: 'live_typed', columns: COLUMNS, where: NOT_NORTH },
 ] });
+fake.nonAdditive = true; // an API whose Measure has nonAdditiveDimension, so SUM and COUNT can add up (today's refuses it: ./test-connectorsDbt)
 const TWINS: Array<{ layer: string; def: { column: string; aggregation: string }; tolerant: boolean }> = [
   { layer: 'revenue', def: { column: 'amt', aggregation: 'sum' }, tolerant: true },
   { layer: 'orders', def: { column: 'many', aggregation: 'count' }, tolerant: false },

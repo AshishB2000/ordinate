@@ -7,7 +7,8 @@
 //                environment ID / service token (secret); the three hosts; the semantic capability
 //   § catalog    off the documented fixtures: saved queries listed, one described (categorical → text, time → date at
 //                its grains, an entity and a date part left out), additive only for a SIMPLE metric whose one measure
-//                is SUM or COUNT; and when the SDK's measures query is unknown, nothing is additive
+//                is SUM or COUNT with no non-additive dimension; and when the SDK's measures query is unknown, or the
+//                API refuses nonAdditiveDimension (today's), nothing is additive
 //   § questions  create, then poll (RUNNING twice, then SUCCESSFUL) off the fixtures, the saved query's own filter sent
 //                verbatim beside Ordinate's; FAILED and GraphQL errors as errors; pages to the row cap; columns in any
 //                case; a saved query changed in dbt refused before anything is asked
@@ -84,31 +85,36 @@ async function main(): Promise<void> {
     d.ok && show(d.dimensions) === show([{ name: 'metric_time', type: 'date', grains: ['day', 'week', 'month', 'quarter', 'year'] }, { name: 'customer__customer_type', type: 'text' }]), show(d));
   ok('describe: additive only for a SIMPLE metric whose one measure is SUM (order_total); a COUNT_DISTINCT and a DERIVED metric are not',
     d.ok && show(d.metrics) === show([{ name: 'order_total', additive: true, description: 'Sum of the order total' }, { name: 'food_order_amount', additive: false, description: 'Sum of the food in an order' }, { name: 'order_gross_profit', additive: false, description: 'Revenue less cost' }]), show(d));
-  ok('…the measures asked only for the simple metrics: with a non-additive dimension once, then (today\'s API refuses that field) without',
-    show(fake.requests.slice(n0).map((r) => r.op)) === show(['savedQuery', 'dimensions', 'metrics', 'measuresSemi', 'measures', 'measures']), show(fake.requests.slice(n0).map((r) => r.op)));
+  ok('…the measures (with their non-additive dimension) asked only for the simple metrics',
+    show(fake.requests.slice(n0).map((r) => r.op)) === show(['savedQuery', 'dimensions', 'metrics', 'measures', 'measures']), show(fake.requests.slice(n0).map((r) => r.op)));
   // A semi-additive measure (MetricFlow's non_additive_dimension: a balance) adds up over no time: not additive.
   const semi = (nad: unknown, error?: string) => async () => {
     fake.hook = (op, v) => {
-      if (op !== 'measuresSemi' && op !== 'measures') return answers[op] ? { status: 200, json: answers[op] } : undefined;
-      if (error && op === 'measuresSemi') return { status: 200, json: { errors: [{ message: error }], data: null } };
+      if (op !== 'measures') return answers[op] ? { status: 200, json: answers[op] } : undefined;
+      if (error === 'the fake') return undefined; // the fake's own answer: today's API, refusing the field
+      if (error) return { status: 200, json: { errors: [{ message: error }], data: null } };
       const name = (v.metrics as Array<{ name: string }>)[0].name;
-      const one = { ...measure.data.measures[0], name, agg: name === 'order_total' ? 'SUM' : 'COUNT_DISTINCT' };
-      return { status: 200, json: { data: { measures: [op === 'measuresSemi' ? { ...one, nonAdditiveDimension: nad } : one] } } };
+      return { status: 200, json: { data: { measures: [{ ...measure.data.measures[0], name, agg: name === 'order_total' ? 'SUM' : 'COUNT_DISTINCT', nonAdditiveDimension: nad }] } } };
     };
     const r = await layer.describeModel(ctx, 'new_customer_orders');
     return r.ok ? r.metrics.find((m) => m.name === 'order_total')?.additive : undefined;
   };
   ok('a SUM measure with a non-additive dimension is not additive', (await semi({ name: 'metric_time' })()) === false);
   ok('NEGATIVE CONTROL: …one whose non-additive dimension is null is', (await semi(null)()) === true);
-  ok('…and when the field is asked and dbt fails for another reason, not additive (no fallback that could hide it)', (await semi(undefined, 'Internal server error')()) === false);
+  ok('…and when dbt fails for another reason, not additive', (await semi(undefined, 'Internal server error')()) === false);
+  ok('an API that refuses nonAdditiveDimension (today\'s, per the SDK) cannot say a balance is one: not additive (fail safe)', (await semi(undefined, 'the fake')()) === false);
   fake.hook = null;
   fake.measures = false;
   const noMeasures = await layer.describeModel(ctx, 'orders');
   ok('when the SDK\'s measures query is unknown (a newer API), no metric is additive, and describe still answers', noMeasures.ok && noMeasures.metrics.length === 4 && noMeasures.metrics.every((m) => !m.additive), show(noMeasures));
   fake.measures = true;
+  const today = await layer.describeModel(ctx, 'orders');
+  ok('the fake saved query on today\'s API (nonAdditiveDimension refused): no metric is additive', today.ok && today.metrics.length === 4 && today.metrics.every((m) => !m.additive), show(today));
+  fake.nonAdditive = true;
   const fakeDescribed = await layer.describeModel(ctx, 'orders');
-  ok('the fake saved query: its dimensions as dbt types them, sum and count additive', fakeDescribed.ok && show(fakeDescribed.dimensions.map((x) => [x.name, x.type])) === show(COLUMNS.map((c) => [c.name, c.type]))
+  ok('NEGATIVE CONTROL: …on an API with the field (null): its dimensions as dbt types them, sum and count additive', fakeDescribed.ok && show(fakeDescribed.dimensions.map((x) => [x.name, x.type])) === show(COLUMNS.map((c) => [c.name, c.type]))
     && show(fakeDescribed.metrics.map((m) => [m.name, m.additive])) === show([['revenue', true], ['orders', true], ['avg_amount', false], ['max_amount', false]]), show(fakeDescribed));
+  fake.nonAdditive = false;
   ok('describe: a saved query dbt does not list is an error; a name that is no dbt name is refused before any request',
     !(await layer.describeModel(ctx, 'nope')).ok && await (async () => { const n = fake.requests.length; const r = await layer.describeModel(ctx, "x') }}"); return !r.ok && fake.requests.length === n; })());
   const tables = await def.listTables(ctx);

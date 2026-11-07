@@ -50,7 +50,7 @@ are the dataset.
 | What | Status | Decision |
 |---|---|---|
 | The page's `MetricTypeParams` (dbt v1.12) has no aggregation; the page never mentions a measure | documented | — |
-| `measures(environmentId, metrics) { name agg }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT` and has no `nonAdditiveDimension` (MetricFlow's `non_additive_dimension`, a semi-additive measure such as a balance), asked per simple metric. The SDK's `Measure` has no such field today, so the field is asked once a describe and, when the API refuses it by name, the measures are asked without it: on such an API a semi-additive measure cannot be told apart and reads additive. `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API) are **not additive**: a refused running total, never a wrong sum. |
+| `measures(environmentId, metrics) { name agg nonAdditiveDimension { name } }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT` and has no `nonAdditiveDimension` (MetricFlow's `non_additive_dimension`, a semi-additive measure such as a balance), asked per simple metric. The SDK's `Measure` has no such field today, and an API that refuses it cannot say a measure is not a balance, so there **every metric reads as not additive** (fail safe: its running totals are refused until the API carries the field). `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API, the field refused) are **not additive**: a refused running total, never a wrong sum. |
 
 ## Asking a question: create, then poll
 
@@ -137,7 +137,7 @@ that Snowflake, BigQuery, Databricks, Redshift, Postgres and Trino read alike, w
    document above; the environment id as a JSON number.
 2. `savedQueriesPaginated`, `savedQuery`, `dimensionsPaginated` and `metricsPaginated` with the fields above, and
    whether `Dimension.name` carries the entity path.
-3. `measures(environmentId, metrics) { name agg }` on today's API (else every metric reads as not additive).
+3. `measures(environmentId, metrics) { name agg nonAdditiveDimension { name } }` on today's API (else every metric reads as not additive).
 4. `createQuery` with `orderBy` (not `order`), `GroupByInput.grain` (not `timeGranularity`), and the poll's statuses.
 5. `jsonResult(encoded: false)`: pandas' table orient, column names `metric`, `dimension`, `dimension__grain` (their case
    on Snowflake), ISO timestamps, numbers as JSON numbers, 1024-row pages.
