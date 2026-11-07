@@ -33,7 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
-import { carriersOf, metaShape } from '../data/columnAccess';
+import { carriersOf, mentionsHidden, metaShape } from '../data/columnAccess';
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
@@ -394,6 +394,24 @@ async function dropMarkedLabels(projectId: string, entries: ZipEntry[]): Promise
   return changed;
 }
 
+/**
+ * A Live record's calcs as a shaped bundle carries them: one the policy withholds, or whose formula names a withheld
+ * column (it can quote its values: `IF [email] = 'ana@…'`), keeps its name and type with its expression emptied, so
+ * the other side reads the list as unreadable and refuses (`calculatedUnreadable`), as a value-less base filter does.
+ */
+function withoutCalcFormulas(record: { calculated?: unknown }, withheld: ReadonlySet<string>): boolean {
+  if (!Array.isArray(record.calculated)) return false;
+  let changed = false;
+  record.calculated = record.calculated.map((c: unknown) => {
+    const { name, expression } = (c && typeof c === 'object' ? c : {}) as { name?: unknown; expression?: unknown };
+    const reads = (typeof name === 'string' && withheld.has(name.trim())) || mentionsHidden(expression, withheld);
+    if (!reads || expression === '') return c;
+    changed = true;
+    return { ...(c as object), expression: '' };
+  });
+  return changed;
+}
+
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
@@ -410,10 +428,11 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       let record: Record<string, unknown>;
       try { record = JSON.parse(e.data.toString('utf8')); } catch (_) { continue; }
       if (record.mode === 'live') {
-        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5) and its base filters the
-        // values they keep or leave out (part 1 08): a marked column's go, its steps keeping their column and operator.
+        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5), its base filters the
+        // values they keep or leave out (part 1 08) and its calcs' formulas literals (part 8 04): a marked column's go,
+        // its steps keeping their column and operator, its calcs their name and type.
         const withheld = await withheldColumns(projectId, id);
-        if ([withoutSamples(record.live, withheld), withoutBaseValues(record, withheld)].some(Boolean)) { // both run
+        if ([withoutSamples(record.live, withheld), withoutBaseValues(record, withheld), withoutCalcFormulas(record, withheld)].some(Boolean)) { // all run
           e.data = Buffer.from(JSON.stringify(record, null, 2), 'utf8');
           changed = true;
         }
