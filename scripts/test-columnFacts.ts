@@ -9,6 +9,8 @@
 //   NEGATIVE CONTROL: hr's dataset prompt carries the canary and the salary total.
 // - A copy's sample values (part 3, its value index) skip a hidden column even inside the dataset branch's checked
 //   scope: dept's for east, never ssn's. NEGATIVE CONTROL: hr's list ssn's.
+// - Verified questions (part 3): one over salary is no example in east's prompt and does not answer east word for
+//   word (ipc/verifiedState leaves it out); one over dept does both. NEGATIVE CONTROL: hr gets the salary one.
 // - MCP as east: list_metrics and the terms leave out what reads salary; aggregate over salary and query_sql over
 //   Staff are refused. NEGATIVE CONTROL: hr's list_metrics names Payroll and its aggregate answers.
 //
@@ -100,6 +102,21 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     ok("a filter said as ssn's value label draws no chart for east and is never mapped to its value", byLabel.replies[0].body?.ok === true && byLabel.prompts.length === 1 && !byLabel.replies[0].text.includes(C.SSN_CANARY), byLabel.replies[0].text.slice(0, 300));
     const hrLabel = await promptsAs('hr', [{ kind: 'dataset', id: staff }], BY_LABEL);
     ok("NEGATIVE CONTROL: hr's is mapped to the stored value and drawn", hrLabel.replies[0].text.includes(`${C.SSN_CANARY}_1`) && hrLabel.prompts.length === 2, hrLabel.replies[0].text.slice(0, 300));
+    // Part 3's verified questions (p3-06): one over salary is never an example in east's prompt, nor answers east when
+    // asked word for word; one over dept is both (CONTROL). hr gets the salary one as an example and as the answer.
+    const verify = async (question: string, measures: object[]): Promise<string> => String((await W.call('boss', 'verified:save', { projectId: P,
+      input: { question, spec: { datasetId: staff, category: 'dept', measures, filters: [], chartType: 'column', title: question } } })).body?.question?.id ?? '');
+    const PAY_Q = await verify('Pay by dept PAYQ_CANARY', [{ column: 'salary', aggregation: 'sum' }]);
+    const PEOPLE_Q = await verify('People by dept', [{ column: 'employee_id', aggregation: 'count' }]);
+    const exampled = async (who: string): Promise<string> => (await promptsAs(who, [{ kind: 'dataset', id: staff }])).prompts[0] ?? '';
+    const [exEast, exHr] = [await exampled('east'), await exampled('hr')];
+    ok("verified examples: east's prompt shows People by dept and not the question over salary", !!PAY_Q && exEast.includes('"People by dept" → ') && !exEast.includes('PAYQ_CANARY'), exEast.slice(-500));
+    ok("NEGATIVE CONTROL: hr's prompt shows the question over salary", exHr.includes('PAYQ_CANARY'), exHr.slice(-500));
+    const exact = async (who: string, question: string) => (await W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question })).body;
+    stubModel([], BY_DEPT_SPEC);
+    const [payEast, payHr, peopleEast] = [await exact('east', 'Pay by dept PAYQ_CANARY'), await exact('hr', 'Pay by dept PAYQ_CANARY'), await exact('east', 'People by dept')];
+    ok('verified, word for word: east is not answered by the question over salary', payEast?.guidance?.verifiedId === undefined && !leaksHidden(JSON.stringify(payEast)), JSON.stringify(payEast).slice(0, 200));
+    ok('NEGATIVE CONTROLS: hr is, and east is by People by dept', payHr?.guidance?.verifiedId === PAY_Q && peopleEast?.guidance?.verifiedId === PEOPLE_Q, `${JSON.stringify(payHr).slice(0, 150)} ${JSON.stringify(peopleEast).slice(0, 150)}`);
 
     // ── MCP, as the token's user ─────────────────────────────────────────────
     const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };

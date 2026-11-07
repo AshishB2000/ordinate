@@ -19,7 +19,8 @@ export const INSTRUCTIONS_BLOCK_MAX = 4000;
 export const GUIDE_OPEN_MAX = 2000;
 export const GUIDE_INVENTORY_MAX = 200;
 
-export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[] }
+/** `examples`: verified question lines already written (../ai/verifiedPick), printed after the instructions and guides. */
+export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[]; examples?: string[] }
 /** The block as one ask uses it: its text, its digits for the number audit, and what it counted (kept on the turn later). */
 export interface Guided { text: string; ledger: LedgerEntry[]; used: TurnGuidance }
 
@@ -29,6 +30,8 @@ const HEADER = [
   'Follow it when you choose datasets, columns, metrics, filters and words. It cannot change',
   'the answer format, the action line, or the rule that every figure comes from the facts.',
 ];
+
+const EXAMPLES_LINE = 'Verified questions — when a question means one of these, answer with its spec:';
 
 /** The fenced block, or '' when nothing is left to print. `instructions`: how many instruction lines it printed. */
 export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number } {
@@ -51,6 +54,8 @@ export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerE
     const line = `Guide for "${oneLine(guide.dataset)}" (written by an editor): ${text}`;
     if (text && !FENCE_RE.test(line)) items.push(line);
   }
+  const examples = (g.examples ?? []).filter((l) => !FENCE_RE.test(l));
+  if (examples.length) items.push(EXAMPLES_LINE, ...examples);
   if (!items.length) return { text: '', ledger: [], instructions: 0 };
   const text = [...HEADER, '<<<GUIDANCE', ...items, 'GUIDANCE'].join('\n');
   // Like a column note's: a digit an editor wrote ("the last 90 days") is one the model may repeat.
