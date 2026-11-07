@@ -270,9 +270,15 @@ async function channels(): Promise<void> {
     if (!query) throw new Error('live dataset not saved');
     const docOnly = await store.createSourceDoc(pid, live.connId, 'ANALYTICS.ONLY_DOC', { owner: 'Data' });
     if (!docOnly.ok) throw new Error(docOnly.error);
-    return { P: pid, P2: other, P3: empty, C: live.connId, liveId: live.liveId, sqlLiveId: query.id, C0: legacy.id, C3: unused.id, oldId: old.id, onlyDoc: docOnly.docId };
+    // A Databricks and a ClickHouse connection with one doc each: saved, listed, never contacted.
+    const wake = (await H.projects.createProject('Real engines')).id;
+    const dbx = await H.connections.saveConnection(wake, { name: 'Lakehouse', connectorId: 'databricks-sql', values: {} });
+    const clickhouse = await H.connections.saveConnection(wake, { name: 'Clicks', connectorId: 'clickhouse', values: {} });
+    if (!dbx || !clickhouse) throw new Error('connection not saved');
+    for (const c of [dbx, clickhouse]) if (!(await store.createSourceDoc(wake, c.id, 'sales.orders', { owner: 'Data' })).ok) throw new Error('doc not saved');
+    return { PW: wake, DBX: dbx.id, CH: clickhouse.id, P: pid, P2: other, P3: empty, C: live.connId, liveId: live.liveId, sqlLiveId: query.id, C0: legacy.id, C3: unused.id, oldId: old.id, onlyDoc: docOnly.docId };
   });
-  const { P, P2, P3, C, C0, C3, liveId, sqlLiveId, oldId } = seed;
+  const { P, P2, P3, C, C0, C3, liveId, sqlLiveId, oldId, PW, DBX, CH } = seed;
   const copy = await post('dataset:copyLive', { projectId: P, datasetId: liveId });
   const copyId = String(copy.value?.dataset?.id ?? '');
   ok('setup: a Live view, its copy, a query view, a pre-workbench dataset and a documented table with no dataset', copy.value?.ok === true && copyId !== '', copy.body.slice(0, 200));
@@ -308,6 +314,10 @@ async function channels(): Promise<void> {
   ok('list: the pre-workbench fallback is the connection\'s own table', rowsOf(C0).length === 1 && rowsOf(C0)[0].table === 'public.legacy' && rowsOf(C0)[0].datasetIds.join() === oldId);
   ok('list: a connection with no row is left out, and so is its name', !L.connections.some((c: Reply) => c.connId === C3));
   ok('list: a connection\'s head says what it reads (a fake warehouse can describe a table, wakes nothing)', ((c: Reply) => c.name === 'Legacy DB' && c.connectorId === fakeMod.LIVE_FAKE_ID && c.readsFacts === true && !('factsWake' in c))(L.connections.find((c: Reply) => c.connId === C0)));
+  const W = (await post('sourceTable:list', { projectId: PW })).value;
+  const head = (id: string): Reply => W.connections.find((c: Reply) => c.connId === id);
+  ok('list: Databricks says a read can start the warehouse (so the button can warn)', W.connections.length === 2 && head(DBX).connectorId === 'databricks-sql' && head(DBX).readsFacts === true && head(DBX).factsWake === true, JSON.stringify(W.connections));
+  ok('list: NEGATIVE CONTROL: ClickHouse reads facts and wakes nothing', head(CH).connectorId === 'clickhouse' && head(CH).readsFacts === true && !('factsWake' in head(CH)), JSON.stringify(head(CH)));
   ok('strip: a used table with no doc leads', L.todo[0].kind === 'used_no_doc' && L.todo[0].table === T && L.todo[0].docId === undefined && L.todo[0].connId === C);
   ok('strip: …then the other gaps, by rank', L.todo.map((t: Reply) => t.kind).join() === 'used_no_doc,used_no_doc,never_read,no_guide' && L.more === 0, JSON.stringify(L.todo));
   const none = (await post('sourceTable:list', { projectId: P3 })).value;

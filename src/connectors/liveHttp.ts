@@ -77,7 +77,7 @@ export function clickhouseBoundRequest(
   return { url, headers, body: `${statement}\nFORMAT JSONCompact` };
 }
 
-async function clickhouseRunBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError> {
+export async function clickhouseRunBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError> {
   const req = clickhouseBoundRequest(ctx, sql, params);
   if ('ok' in req) return req;
   const r = await requestJson(ctx, { ...req, method: 'POST', timeoutMs: budgetMs(ctx), signal: ctx.signal });

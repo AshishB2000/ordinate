@@ -63,6 +63,7 @@ import {
   prop, requestJson, rowCap, secret, shapeClickhouse, shapeDatabricks, str, timeoutError, toCell, type Cell, type HttpResult,
 } from './httpShared';
 import { CLICKHOUSE_LIVE, DATABRICKS_LIVE } from './liveHttp';
+import { chQuery, clickhouseTableFacts, databricksTableFacts, dbxQuery } from './httpFacts';
 export { MAX_BYTES, httpRequest, shapeDatabricks } from './httpShared';
 export type { HttpRequestOptions, HttpResult } from './httpShared';
 
@@ -631,6 +632,7 @@ export const CONNECTORS: ConnectorDef[] = [
     ],
     listTables: clickhouseListTables,
     run: clickhouseRun,
+    tableFacts: (ctx, t) => clickhouseTableFacts(t, (read) => read(chQuery(ctx)), { database: str(ctx, 'database', 'default') || 'default' }),
     live: CLICKHOUSE_LIVE, // docs/live-data/00-plan.md D2: ./liveHttp.ts
   },
   {
@@ -649,6 +651,8 @@ export const CONNECTORS: ConnectorDef[] = [
     ],
     listTables: databricksListTables,
     run: databricksRun,
+    tableFacts: (ctx, t) => databricksTableFacts(t, (read) => read(dbxQuery(ctx)), { catalog: str(ctx, 'catalog').trim(), schema: str(ctx, 'schema').trim() }),
+    factsWake: true, // a read runs on the SQL warehouse and can start it
     live: DATABRICKS_LIVE,
   },
   {

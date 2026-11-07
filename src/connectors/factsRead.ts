@@ -1,5 +1,5 @@
 // Small pure helpers the SQL families' facts readers share (mysqlFacts, mssqlFacts, oracleFacts,
-// snowflakeFacts). No driver, no fs, no network: a reader gets its rows from the FactsQuery it is handed.
+// snowflakeFacts, httpFacts). No driver, no fs, no network: a reader gets its rows from the FactsQuery it is handed.
 
 import type { FactsQuery, TableFacts } from './tableFacts';
 import { MAX_INDEXES } from './tableFacts';
@@ -14,6 +14,13 @@ export const flag = (v: unknown): boolean | undefined => {
   const s = str(v).toLowerCase();
   return ['yes', 'y', 'true', 't', '1'].includes(s) ? true : ['no', 'n', 'false', 'f', '0'].includes(s) ? false : undefined;
 };
+
+/** The rows of an answer whose first row is its column names (lower-cased) → one object per row. */
+export function records(rows: unknown[][] | undefined): Record<string, unknown>[] {
+  if (!rows?.length) return [];
+  const head = rows[0].map((h) => str(h).toLowerCase());
+  return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+}
 
 /** A statement whose failure costs its field, never the read. */
 export async function attempt(q: FactsQuery, sql: string, params: FactParam[]): Promise<unknown[][] | undefined> {
