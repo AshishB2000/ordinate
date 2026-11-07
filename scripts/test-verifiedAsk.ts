@@ -2,6 +2,10 @@
 // word as a verified one is answered by the app — no model decides it, and none is needed. Any other question
 // goes to the model, with the project's verified questions beside it as examples.
 //
+// PART 5 (p5-09): a verified question over a period metric can't be answered by a card, so its save refuses, and a
+// stored one (asked, or through MCP answer_verified_question) says the kind can't be shown here yet, never "a newer
+// version of Ordinate". NEGATIVE CONTROL: the same question on the base's column saves and is answered.
+//
 //   npm run build:ts && node scripts/test-verifiedAsk.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -91,6 +95,32 @@ async function main(): Promise<void> {
   ok('a model answer remembers its counts and examples', modelled.ok && mg && mg.instructions === 0 && mg.examples.join() === V && !('verifiedId' in mg), JSON.stringify(mg));
   const rr = await call('answer:rerun', { projectId: pid, threadId: kept.threadId, spec: SPEC, label: 'Again' });
   ok('a chip rerun stores none', rr.ok && !('guidance' in rr.turns.at(-1)) && !('guidance' in (await hist(kept.threadId)).at(-1)));
+
+  // ── Part 5's kinds (p5-09): the card says where it can't be shown, not that Ordinate is old ──────────────
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const pendingMsg: typeof import('../src/analysis/pendingMessages') = require('../src/analysis/pendingMessages');
+  const store: typeof import('../src/analysis/verifiedQuestions') = require('../src/analysis/verifiedQuestions');
+  const tools: typeof import('../src/automation/verifiedTools') = require('../src/automation/verifiedTools');
+  const visits = (await datasets.saveDataset(pid, {
+    name: 'Visits', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'day', type: 'date' }, { name: 'amount', type: 'number' }],
+    rows: [['West', '2024-01-05', 3], ['East', '2024-02-05', 4]],
+  }))!;
+  const base = (await metricsStore.saveMetric(pid, { name: 'Visit amount', datasetId: visits.id, timeColumn: 'day', definition: { column: 'amount', aggregation: 'sum' } }))!;
+  const ytd = (await metricsStore.saveMetric(pid, { name: 'Visit amount YTD', datasetId: visits.id, definition: { base: base.id, window: { to_date: 'year' } } }))!;
+  const KIND = { ...SPEC, datasetId: visits.id, measures: [{ column: 'amount', aggregation: 'sum' as const, metricId: ytd.id }] };
+  const said = pendingMsg.metricKindNotHere(ytd.name);
+  const refused = await verified.saveVerifiedQuestion(pid, { question: 'Visit amount YTD by region', spec: KIND });
+  ok('part 5: a verified question over a period metric is refused at save, saying the kind can\'t be shown here yet', !refused.ok && refused.error.includes(said) && !/newer version/.test(refused.error), JSON.stringify(refused));
+  const planted = await store.writeVerified(pid, { ...saved.q, id: crypto.randomUUID(), question: 'Visit YTD by region', phrasings: [], spec: KIND });
+  if (!planted) throw new Error('fixture: planted verified question');
+  (analyze as any).askCopilot = async () => { calls++; return { ok: false, errorType: 'not_ready' }; };
+  const before5 = calls;
+  const asked = await ask('Visit YTD by region');
+  ok('part 5: asked word for word, the stored one says the same, and no model is asked', asked.ok === false && asked.error === said && calls === before5, JSON.stringify(asked).slice(0, 300));
+  const mcp = await tools.answerVerifiedQuestion({ projectId: pid } as never, 'Visit YTD by region').then(() => 'answered', (e: Error) => e.message);
+  ok('part 5: …and so does MCP answer_verified_question', mcp === said, mcp);
+  const plain = await verified.saveVerifiedQuestion(pid, { question: 'Visit amount by region', spec: { ...KIND, measures: [{ column: 'amount', aggregation: 'sum' as const }] } });
+  ok('NEGATIVE CONTROL: part 5: the same question on the base\'s column saves, and is answered', plain.ok && (await ask('Visit amount by region')).ok === true, JSON.stringify(plain).slice(0, 200));
 
   finish();
 }

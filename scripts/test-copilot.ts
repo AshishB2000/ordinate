@@ -450,6 +450,11 @@ async function main(): Promise<void> {
   ok('topic facts: Orders lists region and revenue only', /- Orders: region \(text\), revenue \(number\)\n/.test(tf) && !/- Orders:[^\n]*status \(/.test(tf), tf);
   ok('topic facts: the "outside this topic" line names the other columns', tf.includes('- Orders also has, outside this topic: status, channel'), tf);
   ok('topic facts: the topic\'s metric and term are present, another metric is not', tf.includes('- Metric Revenue: sum of revenue') && tf.includes('"East side"') && !tf.includes('Elsewhere'), tf);
+  // Part 5 (p5-05): a period metric in a topic is worded by its base's name, as the metric list words it.
+  const ytdM = await metricsMod.saveMetric(tp.id, { name: 'Revenue YTD', datasetId: dOrders.id, definition: { base: rev!.id, window: { to_date: 'year' } } } as never);
+  const ytdTopic = await topicsMod.saveTopic(tp.id, { name: 'Sales YTD', datasets: [{ id: dOrders.id }], metricIds: [ytdM!.id], termIds: [] });
+  const yt = (await ipcCopilot.buildFacts(tp.id, { kind: 'topic', id: ytdTopic!.id })).text;
+  ok('topic facts: a period metric names its base, never "its base metric"', yt.includes('- Metric Revenue YTD: Revenue, year to date') && !yt.includes('its base metric'), yt);
   const inv = (await ipcCopilot.buildFacts(tp.id, {})).text;
   const beyond = [dRegions, dOrders, ...extras].filter((d) => !inv.includes(`- ${d.name}: `)); // what the inventory's first 12 leave out
   const big = await topicsMod.saveTopic(tp.id, { name: 'Tail', datasets: beyond.map((d) => ({ id: d.id })), metricIds: [], termIds: [] });

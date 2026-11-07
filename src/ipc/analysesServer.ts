@@ -163,7 +163,7 @@ export function register(): void {
         if (r && r.refused) return { ok: false, error: r.refused }; // D9: dates that disagree under a date control — nor the stored column's figure
         if (r && r.ok === false && r.code && !it.column) return r; // a funnel or period metric's card has no column to fall back on: its typed failure (Live), never "deleted"
         if (r && r.ok !== false) {
-          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}), ...(r.periodOn ? { periodOn: r.periodOn } : {}), ...(r.notes ? { notes: r.notes } : {}), ...(r.periodRange ? { periodRange: r.periodRange } : {}) };
+          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}), ...(r.periodOn ? { periodOn: r.periodOn } : {}), ...(r.notes ? { notes: r.notes } : {}), ...(r.periodRange ? { periodRange: r.periodRange } : {}), ...(r.target ? { target: r.target } : {}) };
         }
       }
       if (!res) {

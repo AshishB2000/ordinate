@@ -7,6 +7,8 @@
 //            its chart by month (p5-06)
 //   snapshot-per  each team's latest salary, summed: its KPI, its chart by team and an alert on it (p5-07)
 //   funnel   a funnel metric keyed by a marked user column: its KPI, its chart and an alert watched through it (p5-08)
+//   target   a metric's target from a plan totalled from a marked column: the tile keeps its own figure and says the
+//            house wording for its target; the scorecard row is withheld, as a row with a target metric is (p5-09)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -156,6 +158,52 @@ async function funnel(env: H.Env): Promise<void> {
     (on) => H.mark(env, P, E, 'user', on), 'b0612ea0f93e6e4fc4b717edc47a72674e02d65b8205cbd13570db7382bb5a61');
 }
 
+/** A target as a surface carries it: 'hidden' (the house wording, no figure), 'shown' (a figure), or 'absent'. */
+function targetOn(o: H.Out, where: 'dashboard' | 'embed' | 'exported' | 'mcp', name: string): string {
+  const of = (t: any): string => !t ? 'absent' : t.none === H.HIDDEN && t.value === null && t.attainment === null ? 'hidden' : typeof t.value === 'number' ? 'shown' : 'absent'; // any: a TargetResult
+  if (where === 'mcp') return of((o.mcp[name] as { target?: unknown } | undefined)?.target);
+  const ps = H.tile(o[where], name)?.payloads ?? [];
+  const each = ps.map((p: any) => of(p.target)); // any: a payload
+  return each.length && each.every((x: string) => x === each[0]) ? each[0] : 'absent';
+}
+
+async function target(env: H.Env): Promise<void> {
+  const { P, S } = await H.project(env, 'Part 5 target');
+  const avgPay = await H.saveMetric(env, P, S, 'Avg pay', { column: 'salary', aggregation: 'avg' }, { timeColumn: 'day' });
+  const budget = await H.saveMetric(env, P, S, 'Hours budget', { column: 'hours', aggregation: 'max' }, { timeColumn: 'day' });
+  // Averages, so the plan holds over any range and metric_value (no scope) has a target too (ipc/targetResolve).
+  const vsPay = await H.saveMetric(env, P, S, 'Avg hours', { column: 'hours', aggregation: 'avg' }, { timeColumn: 'day', target: { source: { metricId: avgPay.id } } });
+  const vsBudget = await H.saveMetric(env, P, S, 'Avg hours vs budget', { column: 'hours', aggregation: 'avg' }, { timeColumn: 'day', target: { source: { metricId: budget.id } } });
+  const kpi = (m: { id: string }) => ({ datasetId: S, column: 'hours', aggregation: 'avg', metricId: m.id });
+  const fx = await H.publishable(env, P, [{ title: 'Avg hours KPI', metric: kpi(vsPay) }, { title: 'Avg hours vs budget KPI', metric: kpi(vsBudget) }], [vsPay.id, vsBudget.id], [], ['Avg hours', 'Avg hours vs budget']);
+  const handler = (require('../src/server/rpc') as typeof import('../src/server/rpc')).handlers.get('metric:value')!;
+  const value = (id: string, share?: string): Promise<any> => env.inApp(async () => handler({}, { projectId: P, id, ...(share ? { share } : {}) })); // any: metric:value's reply, as a report's tiles ask it
+  const say = (o: H.Out) => ({
+    tiles: (['dashboard', 'embed', 'exported'] as const).flatMap((w) => [[w, targetOn(o, w, 'Avg hours KPI'), H.figureOn(o, w, 'Avg hours KPI')], [w, targetOn(o, w, 'Avg hours vs budget KPI')]]),
+    mcp: [targetOn(o, 'mcp', 'Avg hours'), targetOn(o, 'mcp', 'Avg hours vs budget')],
+    rows: [H.figureOn(o, 'scoreRow', 'Avg hours'), H.figureOn(o, 'scoreRow', 'Avg hours vs budget')],
+  });
+  const before = await H.leave(env, fx, 'drop');
+  ok('target PIN: with nothing marked, every surface is the one this branch published', H.pin(before) === '5d2b82eaa225320cfc3e7c997651a5cbe3a2269b13075ef806b36a7e79877df7', `target: ${H.pin(before)}`);
+  ok('target fixture: with nothing marked, both targets are on every tile, metric_value and scorecard row', H.show(say(before)) === H.show({ tiles: ['dashboard', 'embed', 'exported'].flatMap((w) => [[w, 'shown', 'shown'], [w, 'shown']]), mcp: ['shown', 'shown'], rows: ['shown', 'shown'] }), H.show(say(before)));
+  ok('target fixture: a report\'s metric:value carries both targets', typeof (await value(vsPay.id, 'report')).target?.value === 'number' && typeof (await value(vsBudget.id, 'report')).target?.value === 'number');
+
+  await H.mark(env, P, S, 'salary', true);
+  const drop = await H.leave(env, fx, 'drop');
+  const d = say(drop);
+  ok('target, drop: the tile over hours keeps its figure and says the house wording for its target from Avg pay, on /p/, the embed and the export',
+    d.tiles.filter((t) => t.length === 3).every((t) => t[1] === 'hidden' && t[2] === 'shown'), H.show(d.tiles));
+  ok('target, drop: metric_value answers Avg hours with its target withheld, and the scorecard row is withheld whole', d.mcp[0] === 'hidden' && d.rows[0] === 'hidden', H.show([d.mcp, d.rows]));
+  const asked = await value(vsPay.id, 'report');
+  ok('target, drop: a report\'s metric:value withholds the target, never its figure', asked.target?.none === H.HIDDEN && asked.target.value === null && typeof asked.value === 'number', H.show(asked));
+  ok('NEGATIVE CONTROL (target, drop): the target from the hours budget is shown on every tile, metric_value and its row',
+    d.tiles.filter((t) => t.length === 2).every((t) => t[1] === 'shown') && d.mcp[1] === 'shown' && d.rows[1] === 'shown' && typeof (await value(vsBudget.id, 'report')).target?.value === 'number', H.show(d));
+  ok('NEGATIVE CONTROL (target, drop): in the app metric:value still carries the target from Avg pay', typeof (await value(vsPay.id)).target?.value === 'number');
+  ok('target, mask: every surface publishes every target, as before', H.pin(noSub(await H.leave(env, fx, 'mask'))) === H.pin(noSub(before)));
+  await H.mark(env, P, S, 'salary', false);
+  ok('NEGATIVE CONTROL (target): with salary unmarked again, drop publishes every surface byte for byte as before', H.pin(await H.leave(env, fx, 'drop')) === H.pin(before));
+}
+
 (async () => {
   const env = await H.start();
   try {
@@ -164,6 +212,7 @@ async function funnel(env: H.Env): Promise<void> {
     await periodChart(env);
     await snapshotPer(env);
     await funnel(env);
+    await target(env);
   } finally {
     await env.close();
   }

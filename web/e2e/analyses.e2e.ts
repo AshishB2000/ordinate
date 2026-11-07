@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
-import { e2e, screens, screensInPlace, settled } from './fixtures.ts';
+import { csrfToken, e2e, screens, screensInPlace, settled } from './fixtures.ts';
 
 /** The autosave has written everything (600 ms debounce, then the RPC). */
 async function saved(page: Page): Promise<void> {
@@ -285,3 +285,52 @@ e2e('card kinds: a statistics card recomputed by the server, an uploaded image, 
   await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
 });
 
+
+e2e('a metric’s target: set in the editor, shown on the dashboard KPI with attainment, status and why (part 5, step 09)', async ({ page, server }) => {
+  // "Avg order value" gets a fixed target from the editor (behind: it is 1.5× the figure); a second metric ahead of
+  // its target, a sum with a target but no period (only the sentence), and Revenue with none. Every figure the server's.
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const rpc = async (channel: string, payload: unknown) => (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as Record<string, any>; // any: each channel's reply
+  const list = (await rpc('metric:list', { projectId: pid })).metrics as { id: string; name: string; datasetId: string }[];
+  const find = (name: string) => list.find((m) => m.name === name)!;
+  const aov = find('Avg order value');
+  const figure = ((await rpc('metric:values', { projectId: pid, ids: [aov.id] })) as unknown as { value: number }[])[0].value;
+  assert.ok(figure > 0, `the average order value has a figure, got ${figure}`);
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  await page.getByRole('button', { name: 'Avg order value', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Edit metric' });
+  await dlg.getByRole('radio', { name: 'A figure' }).click();
+  await dlg.getByRole('spinbutton', { name: 'Target figure' }).fill(String(Math.round(figure * 1.5)));
+  await dlg.getByRole('combobox', { name: 'Each figure covers' }).waitFor();
+  await screensInPlace(page, 'analyses-target-editor');
+  await dlg.getByRole('button', { name: 'Save' }).click();
+  await dlg.waitFor({ state: 'detached' });
+
+  const ahead = await rpc('metric:save', { projectId: pid, input: { name: 'Order value (ahead)', datasetId: aov.datasetId, definition: { formula: '[Avg order value]' }, format: { kind: 'currency', decimals: 2 }, direction: 'up_good', target: { source: { value: Math.max(1, Math.round(figure * 0.8)) } } } });
+  assert.equal(ahead.ok, true, JSON.stringify(ahead));
+  const units = find('Units');
+  const set = await rpc('metric:update', { projectId: pid, id: units.id, patch: { timeColumn: 'order_date', target: { source: { value: 1000 }, per: 'month' } } });
+  assert.equal(set.ok, true, JSON.stringify(set));
+  const ids = { behind: aov.id, ahead: ahead.metric.id as string, units: units.id, plain: find('Revenue').id };
+  const card = (metricId: string, label: string, x: number) => ({ type: 'metric', layout: { x, y: 0, w: 3, h: 3 }, metric: { datasetId: aov.datasetId, column: '', aggregation: 'sum', metricId, label } });
+  const board = (await rpc('analysis:create', { projectId: pid, name: 'Targets', sheets: [{ name: 'Sheet 1', cards: [card(ids.behind, 'Avg order value', 0), card(ids.ahead, 'Order value (ahead)', 3), card(ids.units, 'Units', 6), card(ids.plain, 'Revenue', 9)] }] })).id as string;
+  await page.goto(`/analyses/${pid}/${board}`);
+  await settled(page);
+  const behind = page.getByRole('group', { name: 'Avg order value card' });
+  await behind.getByText(/^\d+% of target$/).waitFor();
+  await behind.getByRole('img', { name: /Off track|At risk/ }).waitFor();
+  const aheadCard = page.getByRole('group', { name: 'Order value (ahead) card' });
+  await aheadCard.getByText(/^\d+% of target$/).waitFor();
+  await aheadCard.getByRole('img', { name: 'On track' }).waitFor();
+  await page.getByRole('group', { name: 'Units card' }).getByText('Pick a period to see the target.').waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Revenue card' }).getByText(/of target/).count(), 0, 'a metric with no target shows none');
+  await screens(page, 'analyses-target-tile');
+
+  for (const [channel, id] of [['analysis:delete', board], ['metric:delete', ids.ahead]] as const) await rpc(channel, { projectId: pid, id });
+  await rpc('metric:update', { projectId: pid, id: aov.id, patch: { target: null } });
+  await rpc('metric:update', { projectId: pid, id: units.id, patch: { target: null } });
+});

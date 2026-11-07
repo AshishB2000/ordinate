@@ -95,7 +95,7 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `query` | `query_sql` | read | Run one read-only SQL SELECT over the project's datasets, bounded to --limit rows. |
 | — | `aggregate` | read | Compute chart data (labels and series) for an encoding: the numbers a visual would draw. |
 | `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. Each carries adds_up: {categories, time}, where false means its figures cannot be added up on that side (across groups, or over time), or null when that is unknown (a formula over a parameter). counts_by is the date column it counts by (a dashboard's date range lands on it), or null when it counts by the dashboard's date. snapshot is {column, take} when its figure is only the rows on the latest (take: last) or earliest (first) date of that column in scope, as for a balance or stock; null otherwise. Each item may carry status: certified, needs_review or retired (with certifiedBy, certifiedAt, and replacedBy for a retired one). |
-| `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it. |
+| `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it. A metric with a target also returns it: the target, the attainment and the status, or why there is none (a metric that adds up over time has no period here, so it says so). |
 | — | `list_verified_questions` | read | The project's verified questions: answers the team signed off, each a spec the app computes. Never a stored figure. |
 | — | `answer_verified_question` | read | The answer to a verified question, computed now by the app under your row access rules. Say it is verified, and by whom. |
 | — | `get_instructions` | read | The project's Assistant instructions: what its editors wrote about how to read the data. Follow them when you choose datasets, columns and words. |
@@ -204,7 +204,7 @@ List the project's saved metrics and how each is defined. Each carries adds_up: 
 
 CLI `metrics value <metric> [--terms <terms>]` · MCP tool `metric_value` · read-only
 
-The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it.
+The current value of a saved metric, computed by the app and formatted by the metric. A retired metric still computes and carries status: retired and replacedBy, the name of what replaces it. A metric with a target also returns it: the target, the attainment and the status, or why there is none (a metric that adds up over time has no period here, so it says so).
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

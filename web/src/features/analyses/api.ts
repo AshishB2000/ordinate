@@ -289,8 +289,20 @@ export type StatsTile =
 export type ScenarioReply =
   | { ok: true; scenarioName: string; baseline: number | null; baselineDisplay: string; value: number | null; display: string; delta: number | null; deltaDisplay: string; pct: number | null; tone: 'good' | 'bad' | 'flat' | 'neutral' }
   | { ok: false; error: string };
+/** A metric's target under the tile's scope (src/ipc/targetResolve.ts), every string the server's: attainment and status are graded there. */
+export interface TargetReply {
+  value: number | null;
+  display: string;
+  attainment: number | null;
+  attainmentDisplay: string;
+  status: 'good' | 'warn' | 'off' | 'none';
+  /** How it was worked out ("1.2M for Nov 2024, pro-rated to Nov 20"). */
+  how?: string;
+  /** Why there is no target. */
+  none?: string;
+}
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf; periodOn?: string; notes?: string[]; /** A period metric's days (part 5, D9). */ periodRange?: { from?: string; to?: string } }
+  | { ok: true; value: number | null; display?: string; target?: TargetReply; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf; periodOn?: string; notes?: string[]; /** A period metric's days (part 5, D9). */ periodRange?: { from?: string; to?: string } }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE

@@ -399,6 +399,7 @@ export const MAIN_FILES = [
   'src/analysis/topicMessages.ts',
   'src/analysis/fanOutMessages.ts',
   'src/data/columnAccessMessages.ts',
+  'src/analysis/targetMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

@@ -31,6 +31,8 @@ import type { FactColumnDoc, FactTableDoc } from './columnNotes';
 import { cell, oneLine } from './promptText';
 import { statusClause, termLines, type FactTerm } from './termFacts';
 import type { MetricSnapshot } from '../analysis/snapshot';
+import type { TargetResult } from '../ipc/targetResolve';
+import { STATUS_WORDS } from '../analysis/scorecardModel';
 
 // The column-notes block lives in ./columnNotes (this file is near its size
 // cap); re-exported so its readers keep one import.
@@ -133,6 +135,8 @@ export interface FactMetric {
   /** Governance (part 4): see termFacts `FactTerm.status`. */
   status?: { state: 'certified' | 'needs_review' | 'retired' };
   replacedBy?: string;
+  /** The metric's target under the scope, with the attainment and status the server graded (part 5, D14). */
+  target?: TargetResult;
 }
 
 const snapshotNote = (s?: MetricSnapshot): string => (s ? ` Snapshot: ${s.per ? `each ${s.per}'s own value on its` : 'the value on the'} ${s.take === 'last' ? 'latest' : 'earliest'} ${s.column} in the period, not a sum over dates.` : '');
@@ -144,13 +148,18 @@ function addsUpNote(a?: Additivity): string {
   return ` Can't be added up ${where}.`;
 }
 
+/** The server's target for a metric (part 5, D14), as the Assistant is told it: the figure, attainment and status as graded, or why there is none. */
+const targetNote = (t?: TargetResult): string => (t ? (t.none ? ` No target: ${t.none}` : t.value === null ? '' : ` Target ${t.display}${t.attainment === null ? '' : ` (${t.attainmentDisplay}, ${STATUS_WORDS[t.status]})`}.`) : '');
+
 export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
   if (!metrics.length) return;
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:' + (metrics.some((m) => m.status) ? ' Prefer a certified metric when several fit.' : ''));
   metrics.forEach((m) => {
-    lines.push(`- "${m.name}"${statusClause(m)} = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}${snapshotNote(m.snapshot)}` + (m.timeColumn ? ` Counts by ${m.timeColumn}.` : '') + (m.description ? ` Means: ${m.description}` : ''));
+    lines.push(`- "${m.name}"${statusClause(m)} = ${oneLine(m.definitionText)}. Currently ${m.display}.${addsUpNote(m.additivity)}${snapshotNote(m.snapshot)}` + (m.timeColumn ? ` Counts by ${m.timeColumn}.` : '') + (m.description ? ` Means: ${m.description}` : '') + targetNote(m.target));
     num(ledger, m.name, m.value, 'number', 'metrics');
+    num(ledger, `${m.name} target`, m.target?.value, 'number', 'metrics');
+    num(ledger, `${m.name} attainment`, m.target?.attainment, 'percent', 'metrics');
   });
 }
 

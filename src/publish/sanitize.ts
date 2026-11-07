@@ -140,6 +140,19 @@ function sanitizeFlow(raw: unknown): unknown {
   };
 }
 
+const TARGET_STATUS: ReadonlySet<unknown> = new Set(['good', 'warn', 'off', 'none']);
+/** A KPI's target as the server worked it out (part 5, D14, ipc/targetResolve): its figures and the app's own words. */
+function sanitizeTarget(raw: unknown): Obj {
+  const t = obj(raw);
+  const out: Obj = {
+    value: num(t.value), display: str(t.display, 120), attainment: num(t.attainment), attainmentDisplay: str(t.attainmentDisplay, 40),
+    status: TARGET_STATUS.has(t.status) ? t.status : 'none',
+  };
+  if (typeof t.how === 'string' && t.how) out.how = str(t.how, MAX_LABEL);
+  if (typeof t.none === 'string' && t.none) out.none = str(t.none, MAX_LABEL); // why there is none, the Share policy's words included
+  return out;
+}
+
 /** One tile answer: a chart, a metric, or a said-so error. */
 export function sanitizePayload(raw: unknown): unknown {
   const o = obj(raw);
@@ -150,6 +163,7 @@ export function sanitizePayload(raw: unknown): unknown {
     const kpi: Obj = { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
     if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
     if (typeof o.note === 'string' && o.note) kpi.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
+    if (o.target && typeof o.target === 'object') kpi.target = sanitizeTarget(o.target); // printed under the figure (site/publishTiles)
     return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);

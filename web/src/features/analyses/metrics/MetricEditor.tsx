@@ -32,6 +32,7 @@ import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
 import { KeyHint } from './KeyHint';
 import { PeriodFields, type PeriodDraft } from './PeriodFields';
 import { FunnelFields } from './FunnelFields';
+import { TargetFields, targetBody, targetDraftOf, targetProblem } from './TargetFields';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
@@ -110,6 +111,9 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   // The date it counts by (D9): `''` is the dashboard's date. Set only by a pick or by "Use <column>", never silently.
   const [timeColumn, setTimeColumn] = useState(existing?.timeColumn ?? '');
   const [dateError, setDateError] = useState('');
+  // Its target (part 5, D12): the boxes; sent as the object, or null to clear on an edit.
+  const [target, setTarget] = useState(targetDraftOf(existing?.target));
+  const [targetError, setTargetError] = useState('');
   const [preview, setPreview] = useState<{ display: string; text: string; error?: string; range?: string; notes?: string[] } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
@@ -175,30 +179,35 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
     setWarn({ used: props.used }); // the host's count (the Metrics tab's `Used in`, '' for none); unknown elsewhere, and never blocks a save
   };
 
+  /** The target to send: the object, null to clear on an edit (an old tab sends no key and keeps it), nothing for a new metric with none. */
+  const targetField = (): { target?: ReturnType<typeof targetBody> } => { const t = targetBody(target, direction); return t || editingId ? { target: t } : {}; };
   const save = async () => {
     setWarn(null);
     setError('');
     setDateError('');
     setSnapError('');
     setPeriodError('');
+    setTargetError('');
     if (!name.trim()) return setError('A metric needs a name.');
     if (mode === 'period' && !periodReady) return setError(period.base ? 'Pick a window, a comparison, or both.' : 'Choose a base metric.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
+    const problem = targetProblem(target);
+    if (problem) return setTargetError(problem);
     setSaving(true);
     // The date only when it changed: an edit that leaves it alone lets a formula take its new parts' date (the server's rule). A period metric has none of its own.
     const dated = mode === 'period' || mode === 'funnel' ? { timeColumn: '' } : editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
-    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction, ...dated }, guard);
+    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction, ...dated, ...targetField() }, guard);
     setSaving(false);
     if ('changed' in r) return; // the banner
     // In the dialog, not a toast: the user's work is still in these boxes — a date's refusal beside the date.
-    if ('error' in r) return r.field === 'timeColumn' ? setDateError(r.error) : r.field === 'snapshot' ? setSnapError(r.error) : r.field === 'definition' ? setPeriodError(r.error) : setError(r.error);
+    if ('error' in r) return r.field === 'target' ? setTargetError(r.error) : r.field === 'timeColumn' ? setDateError(r.error) : r.field === 'snapshot' ? setSnapError(r.error) : r.field === 'definition' ? setPeriodError(r.error) : setError(r.error);
     onSaved(r.metric);
     onClose();
   };
   // Save mine as a copy: these boxes as a new metric, which the host then shows (a duplicate name is refused as ever).
   const copy = async () => {
     if (!ds || !definition) throw new Error('Choose a dataset and a column.');
-    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn: mode === 'period' || mode === 'funnel' ? '' : timeColumn });
+    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn: mode === 'period' || mode === 'funnel' ? '' : timeColumn, ...targetField() });
     if ('error' in r) throw new Error(r.error);
     if ('metric' in r) {
       onSaved(r.metric);
@@ -406,6 +415,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
             )}
           </div>
           )}
+          <TargetFields projectId={projectId} selfId={editingId} direction={direction} value={target} error={targetError || undefined} onChange={(next) => { setTarget(next); setTargetError(''); }} />
           <div className={s.group}>
             {ds && <FilterRows projectId={projectId} datasetId={ds} cols={columns} filters={filters} onChange={setFilters} />}
             <span className={s.filterHint}>Filters apply before the aggregation: they are part of what the metric means.</span>

@@ -164,7 +164,7 @@ export async function leave(env: Env, fx: Fx, action: 'mask' | 'drop' | 'include
 export type Out = Awaited<ReturnType<typeof leave>>;
 
 // ── reading a surface ──
-const tile = (block: any, title: string): any => block?.dashboard?.sheets[0].cards.find((c: any) => c.title === title); // any: a page's JSON
+export const tile = (block: any, title: string): any => block?.dashboard?.sheets[0].cards.find((c: any) => c.title === title); // any: a page's JSON
 const named = (rows: any[], name: string): any => rows.find((r: any) => (r.label ?? r.name) === name); // any: a KPI-ish entry
 /** The figure a surface shows for `name` (a tile title, a metric name, a rule name): 'hidden', 'shown', or 'absent'. */
 export function figureOn(o: Out, where: keyof Out | 'reportKpi' | 'exportKpi' | 'sendKpi' | 'storyMetric' | 'scoreRow' | 'reportTile' | 'sendChart', name: string): 'hidden' | 'shown' | 'absent' {

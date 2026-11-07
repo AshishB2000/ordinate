@@ -220,6 +220,25 @@
   font-size: var(--t-11);
   color: var(--warn);
 }
+/* A metric's target (part 5, D14): attainment beside the status dot, the figure, then how it was worked out. */
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.targetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+}
+.targetValue {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.targetFigure {
+  color: var(--muted);
+}
 /* The date a dashboard date control's period was moved onto (D9). */
 .periodOn {
   margin: 0;

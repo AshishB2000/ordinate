@@ -41,6 +41,7 @@ import * as visuals from '../analysis/visuals';
 import * as comments from '../app/comments';
 import { resolveMetric, resolveMetricSeries, type MetricRead } from './metrics';
 import { baseName } from './periodMetric';
+import { metricTarget, planReads } from './targetResolve';
 import { metricDate } from '../analysis/metricTimeScope';
 import { vizDataFor } from './visuals';
 import * as reportSpec from '../analysis/reportSpec';
@@ -326,13 +327,19 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
     const previous = dated && spark.length > 1 ? spark[spark.length - 2] : null;
     let target: number | null = null;
     let targetName: string | undefined;
+    let thresholds = def.thresholds;
+    const ownTarget: MetricRead[] = []; // the columns of the plan behind the metric's own target (D12), when the row is judged
     if (finite(def.target)) target = def.target;
-    else if (def.target && typeof def.target === 'object') {
+    else if (!def.target && m.target) { // D12: the metric's own target, over the window the row is read for
+      target = (await metricTarget(projectId, m, dateCol && current ? [periodFilter(dateCol, current)] : [], value))?.value ?? null;
+      thresholds ??= m.target.thresholds;
+      if (judge) ownTarget.push(...(await planReads(projectId, m))); // judged with the row, as a target metric's columns are
+    } else if (def.target && typeof def.target === 'object') {
       const tm = await metricOf(ctx, def.target.metricId);
       target = tm ? await figure(ctx, tm.id, current) : null;
       targetName = tm ? tm.name : 'Missing metric';
     }
-    const { status, attainment } = rowStatus(value, target, def.thresholds, m.direction);
+    const { status, attainment } = rowStatus(value, target, thresholds, m.direction);
     const change = periodChange(value, previous, m.direction);
     const row: ScoreRow = {
       metricId: m.id, name: m.name, value, display: formatMetricValue(value, m.format),
@@ -354,7 +361,7 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
     const threads = talk.get(m.id);
     if (threads) row.comments = threads;
     const targetId = def.target && typeof def.target === 'object' ? def.target.metricId : '';
-    const hidden = judge ? await judge([...(ctx.reads?.get(m.id) ?? []), ...(targetId ? ctx.reads?.get(targetId) ?? [] : [])]) : '';
+    const hidden = judge ? await judge([...(ctx.reads?.get(m.id) ?? []), ...(targetId ? ctx.reads?.get(targetId) ?? [] : []), ...ownTarget]) : '';
     rows.push(hidden ? withheldRow(row, hidden) : row);
   }
   return {
