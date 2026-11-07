@@ -1,0 +1,372 @@
+/* The Data model's Datasets tab: the "To fill in next" strip, the dataset list and the picked dataset's
+   panel (docs/semantic-layer/00-design.md, the layout the owner picked). Theme tokens only. */
+
+.calendar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: 0 0 var(--sp-12);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+.link {
+  font-weight: 500;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ── The strip ─────────────────────────────────────────────────────── */
+.strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  font-size: var(--t-13);
+}
+.stripHead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-right: var(--sp-8);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 28px;
+  padding: 2px var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  text-align: left;
+  cursor: pointer;
+}
+.chip:hover {
+  border-color: var(--accent-line);
+  color: var(--accent-text);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.chipWarn {
+  color: var(--warn-text);
+}
+.more {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+/* ── The split: the list beside the panel ──────────────────────────── */
+.split {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-8);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.groupCap {
+  padding: var(--sp-4) var(--sp-12) 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  min-height: 36px;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: var(--t-13);
+  font-weight: 600;
+  text-decoration: none;
+}
+.item:hover {
+  background: var(--surface-2);
+}
+.item:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.itemOn,
+.itemOn:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.itemName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.itemName > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The panel ─────────────────────────────────────────────────────── */
+.panel {
+  min-width: 0;
+  padding: var(--sp-16) var(--sp-24) var(--sp-24);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+/* A panel arriving keeps the height of one that has arrived, so the page does not jump. */
+.panelLoading {
+  height: 360px;
+}
+.bodyLoading {
+  height: 280px;
+}
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  margin-bottom: var(--sp-12);
+}
+.panelTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.panelTitle h2 {
+  margin: 0;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.desc {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.muted {
+  color: var(--muted);
+}
+.panelActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+/* ── The Overview: one row per fact, its name on the left ───────────── */
+.rows {
+  margin: 0;
+}
+.row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+  padding: var(--sp-12) 0;
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-13);
+}
+.row:first-child {
+  border-top: 0;
+}
+.row dt {
+  padding-top: 6px;
+  color: var(--muted);
+}
+.row dd {
+  min-width: 0;
+  margin: 0;
+  line-height: var(--lh-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.stepColumn {
+  font-weight: 600;
+}
+.rowBusy {
+  display: inline-block;
+  width: 160px;
+  max-width: 100%;
+}
+.skLine {
+  height: 12px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Fields: what Prepare calculates, above the column notes ────────── */
+.calc {
+  margin-bottom: var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.calcHead {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.calcList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-13);
+}
+.calcList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-12);
+}
+.calcName {
+  font-weight: 600;
+}
+.formula {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  overflow-wrap: anywhere;
+}
+
+/* ── Guide ─────────────────────────────────────────────────────────── */
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.stamp {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* ── Metrics, Glossary and Relationships tabs ──────────────────────── */
+.countsBy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.joins {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-12) var(--sp-16);
+  list-style: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.joins li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.joins li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .panel {
+    padding: var(--sp-16);
+  }
+  .panelHead {
+    flex-direction: column;
+  }
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+  .row dt {
+    padding-top: 0;
+  }
+}

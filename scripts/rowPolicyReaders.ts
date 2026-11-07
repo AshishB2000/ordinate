@@ -103,6 +103,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'metric:values': 'DOOR',
   'metricTree:compute': 'DOOR+',
   'metricTree:suggest': 'META',
+  'model:overview': 'REDACT', // key counts and the values a filter step or formula quotes: withheld from a caller closed to the dataset
   'numbers:follow': 'META', // the caller's own follow list; checks the metric or scorecard exists, returns no figure
   'numbers:get': 'DOOR+', // metric:series / metric:value / scorecard:compute handlers, as metric:table asks them
   'onboarding:set': 'META', // the caller's own fold and hide; returns no row or figure
@@ -182,6 +183,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'template:plan': 'NET',
   'term:get': 'REDACT', // a restricted caller gets no filter value (ipc/terms termForCaller)
   'term:list': 'REDACT', // …and a definition without one
+  'term:usage': 'META', // record names a viewer's own lists show (caller-aware stores); no value, row or figure
   'text:preview': 'NET',
   'text:profile': 'NET',
   'themes:list': 'META',

@@ -566,8 +566,8 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis', '../ipc/connections', '../ipc/trash', '../ipc/versions']) {
     (require(mod) as { register: () => void }).register();
   }
-  // The Data section (T2.3): catalog, lineage, relationships, search inside the data, the browser's dataset views, table docs, glossary terms.
-  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs', '../ipc/terms']) {
+  // The Data section (T2.3): catalog, lineage, relationships, search inside the data, the browser's dataset views, table docs, glossary terms, the data model.
+  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews', '../ipc/tableDocs', '../ipc/terms', '../ipc/modelOverview']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);

@@ -486,6 +486,30 @@ The limits:
   you roll forward, and a join cannot be renamed there.
 - **A browser tab opened before the upgrade** lists only each table's first join until it reloads.
 
+## The Data model section (`10`)
+
+A new section, **Data model** (`/model`, after Data in the navigation), shows what a project's data
+means in one place: its datasets (role, key, guide, description, the filters always applied, calculated
+fields, fields and lineage) under a "To fill in next" strip, and its Metrics, Glossary and Relationships.
+Metrics moved there from Data → Metrics and Relationships from Data's tab; `/data/metrics` and
+`/data/<project>?tab=relationships` redirect and keep the rest of their address. The metrics table says
+the date each metric counts by and whether it can be added up, and the glossary says where each term is
+used. It reads metadata only: no stored field, no migration, nothing to back up.
+
+Three reads are new: `model:overview` (the Datasets tab, one call; a viewer that row access rules close
+off a dataset gets no filter value, formula or key count for it), `term:usage`, and `additivity` on each
+`metric:table` row.
+
+While pods of the previous release still run beside this one:
+
+- **A new browser on an old pod** shows the Datasets tab's error with Retry (Retry reaches a new pod),
+  the glossary with "—" for Used by, and "—" for Adds up. Nothing reads "no" for want of an answer.
+- **A browser tab opened before the upgrade** keeps its Metrics page and Data's Relationships tab, both
+  on channels that still exist, until it reloads.
+
+A rollback removes the section and restores the old pages. Nothing is lost: this release stores nothing
+new.
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the

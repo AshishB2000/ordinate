@@ -13,8 +13,8 @@
 //      failing rows. Columns: a description saved in place; an "Also called"
 //      name refused at the field, another saved and still there after a reload; value labels filled
 //      from the data, two of them saved, "2 labels" after a reload.
-//   4. Catalog: details saved from the popover; Relationships: a relationship
-//      from the suggested key, drawn and listed with its match rate.
+//   4. Catalog: details saved from the popover; Relationships (the Data model's tab): a relationship
+//      from the suggested key, drawn and listed with its match rate; a second, named, and which one charts use.
 //   4b. About: a table's role, key, grain and guide, its key counted by the
 //      server; a key that is not the relationship's lookup column is warned about.
 //   5. Empty states (a new project) and the import placeholder.
@@ -27,7 +27,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
+import { e2e, SCREENS, screens, screensInPlace, settled, type Session } from './fixtures.ts';
 
 const CANARY = 'k3y-E2E-CANARY-91c4';
 const SEED = fileURLToPath(new URL('./seedData.ts', import.meta.url));
@@ -300,7 +300,9 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await catalog.getByText('One row per sales region, with its manager').waitFor();
   await screens(page, 'data-catalog');
 
-  await page.getByRole('tab', { name: 'Relationships' }).click();
+  // Relationships moved to the Data model (step 10).
+  await page.goto(`/model/${pid}?tab=relationships`);
+  await settled(page);
   await page.getByRole('group', { name: 'Data model diagram' }).waitFor();
   await page.getByRole('button', { name: 'New relationship' }).click();
   const dlg = page.getByRole('dialog', { name: 'New relationship' });
@@ -380,9 +382,8 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('option', { name: 'manager' }).click();
   await stored;
   await page.getByText(/^Key manager · unique/).waitFor();
-  await page.goto(`/data/${pid}`);
+  await page.goto(`/model/${pid}?tab=relationships`);
   await settled(page);
-  await page.getByRole('tab', { name: 'Relationships' }).click();
   await page.getByText("Regions' key is manager; this relationship looks rows up by region.").waitFor();
   await screens(page, 'data-relationships-warning');
   // A second join between the same two datasets, on another key pair, named (plan 09).
@@ -404,6 +405,11 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await namedJoin.waitFor();
   assert.match((await namedJoin.textContent()) ?? '', /state/, 'the labelled row is the state → region join');
   await page.getByRole('button', { name: /^Ship state: Retail orders\.state to Regions\.region/ }).waitFor();
+  // Two joins between the same tables: which one a chart that names none goes through (the first listed).
+  const joins = page.getByRole('note', { name: 'Which join charts use' });
+  await joins.getByText('Charts use Regions (region) unless they pick Ship state.').waitFor();
+  await joins.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'model-relationships-joins');
   await screens(page, 'data-relationships-labelled');
 
   noCanary(bodies);
@@ -544,8 +550,12 @@ e2e('empty states: a new project, and the import placeholder', async (s) => {
   await screens(page, 'data-empty');
   await page.getByRole('tab', { name: 'Catalog' }).click();
   await page.getByRole('heading', { name: 'Nothing to catalog yet' }).waitFor();
-  await page.getByRole('tab', { name: 'Relationships' }).click();
+  // The old Relationships tab lands on the Data model's.
+  await page.goto(`/data/${id}?tab=relationships`);
+  await page.waitForURL(`**/model/${id}?tab=relationships`);
   await page.getByRole('heading', { name: 'Relate two datasets' }).waitFor();
+  await page.goto(`/data/${id}`);
+  await settled(page);
   await page.getByRole('tab', { name: 'Captures' }).click();
   await page.getByRole('heading', { name: 'No captures in this project' }).waitFor();
   await page.getByRole('link', { name: 'Upload a screenshot' }).click();

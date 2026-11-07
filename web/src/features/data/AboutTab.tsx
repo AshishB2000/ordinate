@@ -95,7 +95,7 @@ function KeyLine({ table, known, scoped }: { table: TableDoc; known: boolean; sc
 }
 
 /** The grain: a sentence saved on blur or Enter. What it shows after a save is what the server kept (trimmed). */
-function GrainField({ saved, placeholder, problem, onSave }: { saved: string; placeholder: string; problem?: string; onSave: (v: string) => Promise<boolean> }) {
+function GrainInput({ saved, placeholder, problem, onSave, rowLabel }: { saved: string; placeholder: string; problem?: string; onSave: (v: string) => Promise<boolean>; rowLabel?: string }) {
   const [draft, setDraft] = useState<string | null>(null);
   /** The text last sent: Enter and the blur after it are one save, and a refused one is not sent again until the field is come back to. */
   const sent = useRef<string | null>(null);
@@ -116,7 +116,8 @@ function GrainField({ saved, placeholder, problem, onSave }: { saved: string; pl
   };
   return (
     <Input
-      label="Grain"
+      label={rowLabel ? undefined : 'Grain'}
+      aria-label={rowLabel}
       hint="What one row is, in a sentence. The Assistant uses it to word its answers."
       error={problem}
       value={draft ?? saved}
@@ -227,41 +228,74 @@ function Guide({ guide, canEdit, problem, onSave }: { guide: string; canEdit: bo
   );
 }
 
-function Notes({ projectId, datasetId, header, live, table, canEdit }: { projectId: string; datasetId: string; header: DatasetColumns; live: boolean; table: TableDoc; canEdit: boolean }) {
+/** One field's write: what was sent and is not answered yet (shown at once), the server's refusal, and the newest-request guard. */
+function useFieldSave<S extends Slot>(projectId: string, datasetId: string, slot: S) {
   const writes = useTableWrites(projectId, datasetId);
-  /** What was just picked or sent and is not answered yet: shown at once, dropped when the server has said. */
-  const [sent, setSent] = useState<TablePatch>({});
-  const [problems, setProblems] = useState<Partial<Record<Slot, string>>>({});
-  const [checkFailed, setCheckFailed] = useState<Extract<TableReply, { ok: false }> | null>(null);
-  /** The newest request of each slot: an older reply must not clear (or refuse over) what a newer one is still waiting on. */
-  const newest = useRef<Partial<Record<Slot, number>>>({});
-  /** Bumped by every "Check now" and every key save: a check answers only for the key it was asked about. */
-  const checks = useRef(0);
-
-  const save = async (slot: Slot, patch: TablePatch): Promise<boolean> => {
-    const mine = (newest.current[slot] = (newest.current[slot] ?? 0) + 1);
-    if (slot === 'key') {
-      checks.current++;
-      setCheckFailed(null); // a refusal about the old key is not about this one
-    }
-    setSent((p) => ({ ...p, ...patch }));
-    setProblems((p) => ({ ...p, [slot]: undefined }));
+  const [sent, setSent] = useState<TablePatch[S] | undefined>(undefined);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  /** The newest request: an older reply must not clear (or refuse over) what a newer one is still waiting on. */
+  const newest = useRef(0);
+  const save = async (value: TablePatch[S]): Promise<boolean> => {
+    const mine = ++newest.current;
+    setSent(value);
+    setProblem(undefined);
     let ok = false;
     try {
-      const r = await writes.save.mutateAsync({ projectId, datasetId, patch });
+      const r = await writes.save.mutateAsync({ projectId, datasetId, patch: { [slot]: value } });
       ok = r.ok;
-      if (!r.ok && newest.current[slot] === mine) setProblems((p) => ({ ...p, [slot]: r.error || 'This could not be saved.' }));
+      if (!r.ok && newest.current === mine) setProblem(r.error || 'This could not be saved.');
     } catch {
       // the write's own toast says it did not go through
     }
-    if (newest.current[slot] === mine) {
-      setSent((p) => {
-        const rest = { ...p };
-        delete rest[slot];
-        return rest;
-      });
-    }
+    if (newest.current === mine) setSent(undefined);
     return ok;
+  };
+  return { sent, problem, save, writes };
+}
+
+/**
+ * The fields below show `table`, the doc as the screen that places them read it (`useTableDoc`).
+ * `rowLabel`: the screen shows the field's name beside it (the Data model's Overview), so the field draws no label of
+ * its own and is named by that one. A viewer reads each as text.
+ */
+interface FieldProps {
+  projectId: string;
+  datasetId: string;
+  table: TableDoc;
+  rowLabel?: string;
+}
+
+const Unsaid = ({ children }: { children: ReactNode }) => <span className={a.unsaid}>{children}</span>;
+
+export function RoleField({ projectId, datasetId, table, rowLabel }: FieldProps) {
+  const canEdit = useCanEdit(projectId);
+  const { sent, problem, save } = useFieldSave(projectId, datasetId, 'role');
+  if (!canEdit) return table.role ? <>{roleWord(table.role)}</> : <Unsaid>{roleWord('')}</Unsaid>;
+  return (
+    <RadioGroup
+      label={rowLabel ? undefined : 'Role'}
+      aria-label={rowLabel}
+      orientation={rowLabel ? 'horizontal' : 'vertical'}
+      value={sent ?? table.role}
+      options={ROLES}
+      error={problem}
+      onValueChange={(v) => void save(v as TableDoc['role'])}
+    />
+  );
+}
+
+/** The key, the server's verdict on it, and "Check now". */
+export function KeyField({ projectId, datasetId, table, header, live = false, rowLabel }: FieldProps & { header: DatasetColumns; live?: boolean }) {
+  const canEdit = useCanEdit(projectId);
+  const { sent, problem, save, writes } = useFieldSave(projectId, datasetId, 'key');
+  const [checkFailed, setCheckFailed] = useState<Extract<TableReply, { ok: false }> | null>(null);
+  /** Bumped by every "Check now" and every key save: a check answers only for the key it was asked about. */
+  const checks = useRef(0);
+
+  const pick = (v: string) => {
+    checks.current++;
+    setCheckFailed(null); // a refusal about the old key is not about this one
+    void save(v);
   };
   const check = () => {
     const mine = ++checks.current;
@@ -271,14 +305,86 @@ function Notes({ projectId, datasetId, header, live, table, canEdit }: { project
   };
 
   const columns = header.columns.map((c) => c.name);
-  const key = sent.key ?? table.key;
+  const key = sent ?? table.key;
   const known = columns.includes(key);
   // A key just picked is not yet the one the stored count belongs to.
-  const shown: TableDoc = sent.key === undefined ? table : { ...table, key: sent.key, keyCheck: undefined };
-  const counting = !!sent.key && !live; // a new key on an extract is counted before the server replies
-  const scoped = header.scoped === true;
-  const blank = !table.role && !table.key && !table.grain && !table.guide;
+  const shown: TableDoc = sent === undefined ? table : { ...table, key: sent, keyCheck: undefined };
+  const counting = !!sent && !live; // a new key on an extract is counted before the server replies
+  const verdict = counting ? (
+    <p className={a.line} aria-busy="true">
+      <Icon name="refresh" size={16} />
+      <span className={a.sentence}>{`Counting ${key}…`}</span>
+    </p>
+  ) : key ? (
+    <KeyLine table={shown} known={known} scoped={header.scoped === true} />
+  ) : null;
+  if (!canEdit) return verdict ?? <Unsaid>Not said</Unsaid>;
 
+  const keyOptions = [...(table.key ? [{ value: '', label: 'No key' }] : []), ...columns.map((name) => ({ value: name, label: name }))];
+  return (
+    <div className={a.keyField}>
+      <Select
+        label={rowLabel ? undefined : 'Key'}
+        aria-label={rowLabel}
+        hint={
+          live
+            ? 'The column that names one row. Counted in the warehouse only when you press Check now.'
+            : 'The column that names one row. Relationships into this table should look rows up by it.'
+        }
+        error={problem}
+        placeholder="Pick the key column"
+        value={known ? key : null}
+        options={keyOptions}
+        onValueChange={(v) => v !== table.key && pick(v)}
+      />
+      {key && (
+        <div className={a.keyStatus}>
+          {/* Always there once a key is, so what "Check now" finds is announced where it appears. */}
+          <div className={a.verdict} role="status">
+            {verdict}
+          </div>
+          <Button size="sm" icon="refresh" loading={writes.check.isPending} disabled={!known || counting} onClick={check}>
+            Check now
+          </Button>
+        </div>
+      )}
+      {checkFailed &&
+        (liveRefusalOf(checkFailed) !== null ? (
+          <LiveRefusal refusal={checkFailed} projectId={projectId} datasetId={datasetId} liveTitle="The key was not counted" />
+        ) : (
+          <p className={s.rowError} role="alert">
+            {checkFailed.error || 'The key could not be counted.'}
+          </p>
+        ))}
+    </div>
+  );
+}
+
+/** What one row is, in a sentence. */
+export function GrainField({ projectId, datasetId, table, rowLabel }: FieldProps) {
+  const canEdit = useCanEdit(projectId);
+  const { problem, save } = useFieldSave(projectId, datasetId, 'grain');
+  if (!canEdit) return table.grain ? <>{table.grain}</> : <Unsaid>Not said</Unsaid>;
+  return (
+    <GrainInput
+      rowLabel={rowLabel}
+      saved={table.grain}
+      placeholder={table.key ? `One row per ${table.key}` : 'For example, one row per order line'}
+      problem={problem}
+      onSave={(grain) => save(grain)}
+    />
+  );
+}
+
+/** The guide: rendered markdown, and its own editor for an editor. */
+export function TableGuide({ projectId, datasetId, table }: Omit<FieldProps, 'rowLabel'>) {
+  const canEdit = useCanEdit(projectId);
+  const { problem, save } = useFieldSave(projectId, datasetId, 'guide');
+  return <Guide guide={table.guide} canEdit={canEdit} problem={problem} onSave={(guide) => save(guide)} />;
+}
+
+function Notes({ projectId, datasetId, header, live, table, canEdit }: { projectId: string; datasetId: string; header: DatasetColumns; live: boolean; table: TableDoc; canEdit: boolean }) {
+  const blank = !table.role && !table.key && !table.grain && !table.guide;
   if (!canEdit && blank) {
     return (
       <EmptyState icon="info" heading={3} title="Nothing written about this table yet">
@@ -286,91 +392,46 @@ function Notes({ projectId, datasetId, header, live, table, canEdit }: { project
       </EmptyState>
     );
   }
-  const keyOptions = [...(table.key ? [{ value: '', label: 'No key' }] : []), ...columns.map((name) => ({ value: name, label: name }))];
-  const verdict = counting ? (
-    <p className={a.line} aria-busy="true">
-      <Icon name="refresh" size={16} />
-      <span className={a.sentence}>{`Counting ${key}…`}</span>
-    </p>
-  ) : key ? (
-    <KeyLine table={shown} known={known} scoped={scoped} />
-  ) : null;
-
+  const at = { projectId, datasetId, table };
   return (
     <div className={a.layout}>
       <div className={a.card}>
         {canEdit ? (
           <>
             <div className={a.field}>
-              <RadioGroup
-                label="Role"
-                value={sent.role ?? table.role}
-                options={ROLES}
-                error={problems.role}
-                onValueChange={(v) => void save('role', { role: v as TableDoc['role'] })}
-              />
+              <RoleField {...at} />
             </div>
             <div className={a.field}>
-              <Select
-                label="Key"
-                hint={
-                  live
-                    ? 'The column that names one row. Counted in the warehouse only when you press Check now.'
-                    : 'The column that names one row. Relationships into this table should look rows up by it.'
-                }
-                error={problems.key}
-                placeholder="Pick the key column"
-                value={known ? key : null}
-                options={keyOptions}
-                onValueChange={(v) => v !== table.key && void save('key', { key: v })}
-              />
-              {key && (
-                <div className={a.keyStatus}>
-                  {/* Always there once a key is, so what "Check now" finds is announced where it appears. */}
-                  <div className={a.verdict} role="status">
-                    {verdict}
-                  </div>
-                  <Button size="sm" icon="refresh" loading={writes.check.isPending} disabled={!known || counting} onClick={check}>
-                    Check now
-                  </Button>
-                </div>
-              )}
-              {checkFailed &&
-                (liveRefusalOf(checkFailed) !== null ? (
-                  <LiveRefusal refusal={checkFailed} projectId={projectId} datasetId={datasetId} liveTitle="The key was not counted" />
-                ) : (
-                  <p className={s.rowError} role="alert">
-                    {checkFailed.error || 'The key could not be counted.'}
-                  </p>
-                ))}
+              <KeyField {...at} header={header} live={live} />
             </div>
             <div className={a.field}>
-              <GrainField
-                saved={table.grain}
-                placeholder={key ? `One row per ${key}` : 'For example, one row per order line'}
-                problem={problems.grain}
-                onSave={(grain) => save('grain', { grain })}
-              />
+              <GrainField {...at} />
             </div>
           </>
         ) : (
           <dl className={a.facts}>
             <div>
               <dt>Role</dt>
-              <dd className={table.role ? undefined : a.unsaid}>{roleWord(table.role)}</dd>
+              <dd>
+                <RoleField {...at} />
+              </dd>
             </div>
             <div>
               <dt>Key</dt>
-              <dd>{verdict ?? <span className={a.unsaid}>Not said</span>}</dd>
+              <dd>
+                <KeyField {...at} header={header} live={live} />
+              </dd>
             </div>
             <div>
               <dt>Grain</dt>
-              <dd className={table.grain ? undefined : a.unsaid}>{table.grain || 'Not said'}</dd>
+              <dd>
+                <GrainField {...at} />
+              </dd>
             </div>
           </dl>
         )}
       </div>
-      <Guide guide={table.guide} canEdit={canEdit} problem={problems.guide} onSave={(guide) => save('guide', { guide })} />
+      <TableGuide {...at} />
     </div>
   );
 }

@@ -115,6 +115,20 @@ const columns = async (page: Page) => {
   return table;
 };
 
+/** The Data model's Overview of the walk's dataset: its role, key and grain rows. */
+const modelOverview = async (page: Page) => {
+  const tab = page.getByRole('tabpanel', { name: 'Overview' });
+  await tab.getByRole('term').filter({ hasText: 'Used by' }).waitFor();
+  return tab;
+};
+
+/** The Data model's Fields: the same column notes as the dataset's Columns tab. */
+const modelFields = async (page: Page) => {
+  const tab = page.getByRole('tabpanel', { name: 'Fields' });
+  await tab.getByRole('combobox', { name: 'Sensitivity of region' }).waitFor();
+  return tab;
+};
+
 const columnDetails = async (page: Page) => {
   await page.getByRole('button', { name: /^Column details/ }).click();
   const pop = opened(page, 'Details for column region');
@@ -246,4 +260,15 @@ export const ROUTES: readonly RouteCase[] = [
     editor: { role: 'button', name: 'Subscribe' },
     viewer: [{ role: 'button', name: 'Expand' }, { role: 'button', name: 'More dashboard actions' }], // Copy link is in ⋯
   },
+  // The Data model: "To fill in next" is an editor's (the seed's datasets have no key or guide); a dataset's Details popover,
+  // its Overview (role, key and grain edited in place) and its Fields (the column notes) are read-only for a viewer.
+  { pattern: '/model', url: (s) => `/model?project=${s.pid}`, editor: { role: 'region', name: 'To fill in next' } },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}`, editor: { role: 'region', name: 'To fill in next' }, open: details },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}`, editor: { role: 'combobox', name: 'Key' }, open: modelOverview },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=fields`, open: modelFields },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=guide`, editor: { role: 'button', name: 'Write a guide' } },
+  // Its other tabs: New metric and New term are the header's, an editor's on every tab; New relationship is the tab's own.
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=metrics`, editor: { role: 'button', name: 'New metric' } },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=glossary`, editor: { role: 'button', name: 'New term' } },
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=relationships`, editor: { role: 'button', name: 'New relationship' } },
 ];

@@ -2,13 +2,17 @@
 // (T2.2's useCurrentProject: ?project=, this browser's last choice, else the
 // most recently opened) at /data/:projectId.
 
-import { Navigate } from 'react-router';
+import { Navigate, useLocation } from 'react-router';
 import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
 
 export default function DataPage() {
   const cur = useCurrentProject();
+  // The rest of the address goes along (`?tab=relationships` reaches DataSection's redirect); `?project=` has done its job.
+  const q = new URLSearchParams(useLocation().search);
+  q.delete('project');
+  const rest = q.toString();
   if (cur.status === 'pending') return <PageSkeleton />;
   if (cur.status === 'error') {
     return (
@@ -24,5 +28,5 @@ export default function DataPage() {
       </Page>
     );
   }
-  return <Navigate to={`/data/${cur.projectId}`} replace />;
+  return <Navigate to={`/data/${cur.projectId}${rest ? `?${rest}` : ''}`} replace />;
 }

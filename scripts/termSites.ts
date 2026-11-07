@@ -118,6 +118,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/data/stepSanitize.ts': { count: 3, how: 'prepare' },
   'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },
+  'src/ipc/modelOverview.ts': { count: 1, how: 'prepare' }, // reads a copy's Prepare filter steps to show them; a Prepare list takes no term
   'src/ipc/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/ipc/segments.ts': { count: 1, how: 'prepare' },
   // a term's own filter rows (no term inside a term: FilterRows terms={false}); the server refuses one anyway

@@ -53,13 +53,15 @@ export function useTableWrites(projectId: string, datasetId: string) {
   const keep = (r: TableReply) => {
     if (r.ok) client.setQueryData([READ, projectId, datasetId], r.table);
   };
-  // A new key rewrites the warnings on the relationships into this table; counting it again does not.
-  const save = useWrite<'catalog:setTable', TableReply>('catalog:setTable', [READ, 'relationship:list'], { quiet: true, onDone: keep });
+  // A new key rewrites the warnings on the relationships into this table; counting it again does not. The Data model's
+  // overview (what to fill in next) reads the same doc.
+  const save = useWrite<'catalog:setTable', TableReply>('catalog:setTable', [READ, 'relationship:list', 'model:overview'], { quiet: true, onDone: keep });
   const check = useMutation({
     mutationFn: async () => (await rpc('catalog:checkKey', { projectId, datasetId })) as TableReply,
     onSuccess: (r) => {
       keep(r);
       void client.invalidateQueries({ queryKey: [READ] });
+      void client.invalidateQueries({ queryKey: ['model:overview'] });
     },
   });
   return { save, check };

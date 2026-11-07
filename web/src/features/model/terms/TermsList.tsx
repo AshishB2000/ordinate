@@ -1,23 +1,27 @@
 // The Glossary: the project's terms (semantic D10) — each a filter with a name that every chart, KPI and
 // the Assistant can use. Name, other names, dataset and its filters in the server's words (a viewer row
-// access rules restrict reads them without values). Defining, editing and deleting are an editor's.
+// access rules restrict reads them without values), and where each is used (`term:usage`, the server's
+// count). Editing and deleting are an editor's; "New term" is the Data model header's (one door).
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { EmptyState, ErrorState } from '../../../app/blocks';
-import { Button, IconButton } from '../../../ui/Button';
+import { IconButton } from '../../../ui/Button';
 import { Menu } from '../../../ui/Menu';
 import { SkeletonTable } from '../../../ui/Skeleton';
+import { formatNumber } from '../../data/format';
 import { toastMovedToTrash } from '../../projects/trashToast';
-import { useTerms, type TermSummary } from './api';
+import { useTerms, type TermSummary, type TermUsage } from './api';
 import { TermDialog } from './TermDialog';
+import d from '../../data/Data.module.css';
 import s from './Terms.module.css';
 
-export function TermsList({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+/** `usage`: the server's, by term id; absent (an older pod, a failed read) reads "—", never "Not used yet". */
+export function TermsList({ projectId, canEdit, usage }: { projectId: string; canEdit: boolean; usage?: Record<string, TermUsage> }) {
   const q = useTerms(projectId);
   const client = useQueryClient();
-  const [editing, setEditing] = useState<TermSummary | 'new' | null>(null);
+  const [editing, setEditing] = useState<TermSummary | null>(null);
   const remove = async (t: TermSummary) => {
     let reply: { ok?: boolean } | null = null;
     try {
@@ -41,20 +45,10 @@ export function TermsList({ projectId, canEdit }: { projectId: string; canEdit: 
     );
   else if (!q.data.length) {
     body = (
-      <EmptyState
-        icon="list"
-        title="No terms yet"
-        actions={
-          canEdit && (
-            <Button variant="primary" onClick={() => setEditing('new')}>
-              New term
-            </Button>
-          )
-        }
-      >
+      <EmptyState icon="list" heading={3} title="No terms yet">
         A term is a filter with a name — EMEA, Enterprise, Recent order — that every chart and the
         Assistant can use.
-        {canEdit ? '' : ' An editor of this project can define one.'}
+        {canEdit ? ' Use New term to define one.' : ' An editor of this project can define one.'}
       </EmptyState>
     );
   } else {
@@ -67,6 +61,7 @@ export function TermsList({ projectId, canEdit }: { projectId: string; canEdit: 
               <th scope="col">Also called</th>
               <th scope="col">Dataset</th>
               <th scope="col">Filters</th>
+              <th scope="col">Used by</th>
               <th scope="col">
                 <span className={s.srOnly}>Actions</span>
               </th>
@@ -94,6 +89,7 @@ export function TermsList({ projectId, canEdit }: { projectId: string; canEdit: 
                 <td className={s.def} title={t.definition}>
                   {t.definition}
                 </td>
+                <UsedBy u={usage && (usage[t.id] ?? null)} />
                 <td className={s.actions}>
                   {canEdit && (
                     <Menu
@@ -127,31 +123,26 @@ export function TermsList({ projectId, canEdit }: { projectId: string; canEdit: 
     );
   }
 
+  const count = q.data?.length ?? 0;
   return (
-    <section className={s.section} aria-labelledby="glossary-h">
-      <div className={s.head}>
-        <div>
-          <h2 className={s.title} id="glossary-h">
-            Glossary
-          </h2>
-          <p className={s.sub}>
-            Business words defined once as filters, so “EMEA” means the same rows everywhere.
-          </p>
-        </div>
-        {canEdit && !!q.data?.length && (
-          <Button icon="plus" onClick={() => setEditing('new')}>
-            New term
-          </Button>
-        )}
+    <section className={d.section} aria-label="Glossary">
+      <div className={d.listBar}>
+        {count > 0 && <span className={d.muted}>{count === 1 ? '1 term' : `${formatNumber(count)} terms`}</span>}
+        <p className={d.lead}>Business words defined once as filters, so “EMEA” means the same rows everywhere.</p>
       </div>
       {body}
-      {editing && canEdit && (
-        <TermDialog
-          projectId={projectId}
-          term={editing === 'new' ? undefined : editing}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      {editing && canEdit && <TermDialog projectId={projectId} term={editing} onClose={() => setEditing(null)} />}
     </section>
+  );
+}
+
+/** The records that use a term, as the server worded them; their names on hover. Undefined: unknown. */
+function UsedBy({ u }: { u: TermUsage | null | undefined }) {
+  if (u === undefined) return <td className={s.dim}>—</td>;
+  if (!u) return <td className={s.dim}>Not used yet</td>;
+  return (
+    <td className={s.dim} title={u.refs.map((r) => r.name).join(', ')}>
+      {u.summary}
+    </td>
   );
 }

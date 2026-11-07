@@ -7,6 +7,7 @@
 //                 idempotent; a stale base refuses the update (409 record_changed); Trash round-trips;
 //                 the bundle carries `terms/` and a term's history
 //   § contracts   term:list / get / save / update / delete over HTTP; a version is recorded and restored
+//   § usage       term:usage: each record that names a term, once, worded; an inline filter is no use
 // What a row-restricted viewer reads of a term is pinned in scripts/test-rowPolicySafetyNet.ts (its world).
 //
 //   npm run build:ts && node scripts/test-terms.js
@@ -31,6 +32,7 @@ const msg: typeof import('../src/data/termMessages') = require('../src/data/term
 const trash: typeof import('../src/app/trash') = require('../src/app/trash');
 const editConflict: typeof import('../src/app/editConflict') = require('../src/app/editConflict');
 const bundleRules: typeof import('../src/app/bundleRules') = require('../src/app/bundleRules');
+const { termIdsIn }: typeof import('../src/analysis/termUsage') = require('../src/analysis/termUsage');
 
 type Identity = import('../src/server/context').Identity;
 const ADMIN: Identity = { user: { email: 'ana@acme.test', role: 'admin' }, org: { id: 'acme' } };
@@ -141,6 +143,34 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   const inTrash = (await call('trash:list', { projectId: P })).body;
   ok('term:delete moves it to the Trash', del.body?.ok === true && Array.isArray(inTrash) && inTrash.some((e: { type: string; id: string }) => e.type === 'term' && e.id === T), JSON.stringify(inTrash).slice(0, 200));
   ok('term:get of a deleted term says so', (await call('term:get', { projectId: P, id: T })).body?.ok === false);
+
+  // ── § usage ───────────────────────────────────────────────────────────────
+  const termId = async (name: string): Promise<string> => (await call('term:save', { projectId: P, input: { name, datasetId: CUST, filters: [{ type: 'filter', column: 'region', op: '=', value: 'US' }] } })).body?.term?.id ?? '';
+  const W = await termId('West');
+  const UNUSED = await termId('Unused');
+  const byTerm = [{ type: 'term', term: W }];
+  const enc = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
+  const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const reportSpec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');
+  const fx = await as(async () => {
+    const used = await visuals.saveVisual(P, { datasetId: CUST, name: 'West sales', chartType: 'column', encoding: enc, filters: byTerm } as never);
+    const plainVisual = await visuals.saveVisual(P, { datasetId: CUST, name: 'US sales', chartType: 'column', encoding: enc, filters: [{ type: 'filter', column: 'region', op: '=', value: 'West' }] } as never);
+    const dash = await analysis.saveAnalysis(P, { name: 'West board', filters: byTerm, sheets: [{ name: 'Main', cards: [] }] });
+    const report = dash && await reportSpec.saveReport(P, { analysisId: dash.id, name: 'West weekly' });
+    return { used, plainVisual, dash, report };
+  });
+  const westMetric = await call('metric:save', { projectId: P, input: { ...M, name: 'West revenue', filters: byTerm } });
+  ok('fixture: a visual, a dashboard, a report and a metric that use West', !!(fx.used && fx.plainVisual && fx.dash && fx.report) && westMetric.body?.ok === true && !!W && !!UNUSED, westMetric.text.slice(0, 200));
+  const usage = await call('term:usage', { projectId: P });
+  const u = usage.body?.usage ?? {};
+  ok('usage: each record once, worded', usage.body?.ok === true && u[W]?.summary === '1 visual, 1 dashboard, 1 metric and 1 report' && u[W].total === 4, usage.text.slice(0, 400));
+  ok('usage: each ref names its record', JSON.stringify((u[W]?.refs ?? []).map((r: { kind: string; name: string }) => `${r.kind}:${r.name}`)) === '["visual:West sales","dashboard:West board","metric:West revenue","report:West weekly"]');
+  ok('NEGATIVE CONTROL: the same filter written inline is not a use', !(u[W]?.refs ?? []).some((r: { id: string }) => r.id === fx.plainVisual?.id));
+  ok('a term nothing uses is absent', !(UNUSED in u));
+  const T2 = '7d2c1f4e-1111-4222-8333-444455556666';
+  ok('termIdsIn: nested, and never a look-alike', [...termIdsIn({ a: [{ type: 'term', term: W }], b: { type: 'filter', term: T2 }, c: { type: 'term', term: 'x' } })].join() === W);
+  ok('term:usage refuses a bad project id', (await call('term:usage', { projectId: 'nope' })).status === 400);
 
   await app.close();
   fs.rmSync(DATA, { recursive: true, force: true });

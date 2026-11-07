@@ -28,6 +28,13 @@
   min-width: 0;
   padding: var(--sp-16);
 }
+/* The key's picker, its verdict and a failed check, one under the other. */
+.keyField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
 .field + .field {
   border-top: 1px solid var(--border-hairline);
 }

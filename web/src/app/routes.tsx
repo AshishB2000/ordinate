@@ -93,6 +93,9 @@ export const pages: RouteObject[] = [
   page('/data/metrics/:projectId/:metricId/tree', () => import('../features/analyses/metrics/tree/MetricTreePage')),
   // A dashboard opened from the Dashboards page: the editing canvas, read-only for everyone (docs/superpowers/specs).
   page('/dashboards/:projectId/:analysisId', () => import('../features/dashboards/DashboardViewPage')),
+  // The Data model (docs/semantic-layer): what the project's data means — its datasets now, its metrics and terms later.
+  page('/model', () => import('../features/model/DataModelPage')),
+  page('/model/:projectId', () => import('../features/model/DataModelPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

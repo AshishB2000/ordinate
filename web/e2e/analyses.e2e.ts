@@ -12,19 +12,8 @@
 //   npm --prefix web run e2e
 
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, settled } from './fixtures.ts';
-
-/** One screenshot per theme WITHOUT a reload (a dialog or a selection stays up). */
-async function screensInPlace(page: Page, name: string): Promise<void> {
-  for (const theme of ['light', 'dark'] as const) {
-    await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
-    await page.waitForTimeout(250);
-    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
-  }
-  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
-}
+import { e2e, screens, screensInPlace, settled } from './fixtures.ts';
 
 /** The autosave has written everything (600 ms debounce, then the RPC). */
 async function saved(page: Page): Promise<void> {
@@ -296,91 +285,3 @@ e2e('card kinds: a statistics card recomputed by the server, an uploaded image, 
   await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
 });
 
-e2e('metrics: the table from the server, a new metric with a live preview and a filter, delete to Trash', async ({ page, server }) => {
-  const pid = server.sample.projectId;
-  await page.goto(`/data/metrics?project=${pid}`);
-  await settled(page);
-  const table = page.getByRole('table');
-  const revenue = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Revenue', exact: true }) });
-  await revenue.getByRole('cell', { name: '$5.2M' }).waitFor(); // metric:value's display, through metric:table
-  await revenue.getByRole('img', { name: 'Revenue trend' }).waitFor(); // metric:series
-  await revenue.getByText(/card/).waitFor(); // metric:usage — the sample dashboard's KPI uses it
-  await page.getByText('6 metrics').waitFor();
-  await screens(page, 'metrics-table');
-
-  await page.getByRole('button', { name: 'New metric' }).click();
-  const dlg = page.getByRole('dialog', { name: 'New metric' });
-  await dlg.getByLabel('Name').fill('Large orders');
-  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
-  await page.getByRole('option', { name: 'Retail orders' }).click();
-  await dlg.getByRole('combobox', { name: 'Column', exact: true }).click();
-  await page.getByRole('option', { name: 'revenue (number)' }).click();
-  await dlg.getByRole('radio', { name: 'Count' }).click();
-  // The builder's filter rows and typed dialog: a number column is a range, typed on its declared type by the server.
-  await dlg.getByRole('button', { name: 'Add filter' }).click();
-  await dlg.getByRole('combobox', { name: 'Filter column' }).click();
-  await page.getByRole('option', { name: 'revenue', exact: true }).click();
-  await dlg.getByRole('button', { name: 'Edit the filter on revenue' }).click();
-  const fdlg = page.getByRole('dialog', { name: 'Filter: revenue' });
-  await fdlg.getByLabel('Minimum').fill('1000');
-  await fdlg.getByRole('button', { name: 'Apply' }).click();
-  await fdlg.waitFor({ state: 'detached' });
-  // A snapshot (semantic D8): only the rows on the latest order date, so the figure below is the snapshot's.
-  await dlg.getByRole('combobox', { name: 'Snapshot' }).click();
-  await page.getByRole('option', { name: 'Latest order_date only' }).click();
-  const preview = dlg.getByRole('complementary', { name: 'Preview' });
-  await preview.getByText(/on the latest order_date, where revenue/).waitFor(); // the server's own words for the definition, with the snapshot and the filter
-  const figure = (await preview.getByText(/^[\d,.]+[KM]?$/).first().textContent()) ?? '';
-  assert.match(figure, /^\d/, `a figure computed by the server, got ${figure}`);
-  await screensInPlace(page, 'metrics-editor');
-  await dlg.getByRole('button', { name: 'Create metric' }).click();
-  const row = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Large orders' }) });
-  await row.getByRole('cell', { name: figure }).waitFor();
-
-  await page.getByRole('button', { name: 'Actions for Large orders' }).click();
-  await page.getByRole('menuitem', { name: 'Delete' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Delete “Large orders”?' });
-  await confirm.getByText('Nothing uses it yet.').waitFor();
-  await confirm.getByRole('button', { name: 'Delete' }).click();
-  await page.getByText('Moved “Large orders” to Trash').waitFor();
-  await row.waitFor({ state: 'detached' });
-});
-
-e2e('glossary: a term made on the Metrics page, added to a visual’s filters, changes its chart', async ({ page, server }) => {
-  const pid = server.sample.projectId;
-  await page.goto(`/data/metrics?project=${pid}`);
-  await settled(page);
-  const glossary = page.getByRole('region', { name: 'Glossary' });
-  await glossary.getByRole('heading', { name: 'No terms yet' }).waitFor(); // the designed empty state
-  await glossary.getByRole('button', { name: 'New term' }).click();
-  const dlg = page.getByRole('dialog', { name: 'New term' });
-  await dlg.getByLabel('Name').fill('West side');
-  await dlg.getByLabel('Also called').fill('Westerly, The west');
-  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
-  await page.getByRole('option', { name: 'Retail orders' }).click();
-  await dlg.getByRole('button', { name: 'Add filter' }).click();
-  await dlg.getByRole('combobox', { name: 'Filter column' }).click();
-  await page.getByRole('option', { name: 'region', exact: true }).click();
-  await dlg.getByRole('button', { name: 'Edit the filter on region' }).click();
-  const fdlg = page.getByRole('dialog', { name: 'Filter: region' });
-  await fdlg.getByLabel('West', { exact: true }).check();
-  await fdlg.getByRole('button', { name: 'Apply' }).click();
-  await fdlg.waitFor({ state: 'detached' });
-  await dlg.getByRole('button', { name: 'Create term' }).click();
-  const row = glossary.getByRole('row').filter({ has: page.getByRole('button', { name: 'West side' }) });
-  await row.getByText('Westerly, The west').waitFor();
-  await row.getByText(/region/).waitFor(); // the server's words for its filter
-  await screens(page, 'metrics-glossary');
-
-  await page.goto(`/visuals/${pid}`);
-  await settled(page);
-  const first = page.waitForResponse((r) => r.url().endsWith('/api/rpc/visual%3Apreview') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: /^(Average r|R)evenue by category/ }).first().click();
-  const before = JSON.stringify(await (await first).json());
-  await page.getByRole('button', { name: 'Add term' }).click();
-  const after = page.waitForResponse((r) => r.url().endsWith('/api/rpc/visual%3Apreview') && r.request().method() === 'POST');
-  await page.getByRole('menuitem', { name: 'West side' }).click();
-  const filtered = JSON.stringify(await (await after).json());
-  assert.ok(filtered.includes('"ok":true') && filtered !== before, 'the chart recomputed under the term, with other figures');
-  await page.getByText('West side').first().waitFor(); // the filter row names the term
-});

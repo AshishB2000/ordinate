@@ -1,4 +1,4 @@
-/* Glossary terms: the chip a filter list names one with, and the Glossary section of the Metrics page. */
+/* Glossary terms: the chip a filter list names one with, and the Data model's Glossary tab. */
 
 .chip {
   display: inline-flex;
@@ -19,34 +19,7 @@
   white-space: nowrap;
 }
 
-.section {
-  margin-top: 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.title {
-  margin: 0;
-  font-size: var(--t-15);
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
-.sub {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* The table: the Metrics table's own look, so the two lists on one page read as one (../../analyses/metrics). */
+/* The table: the Metrics table's own look, so the two tabs read as one (../../analyses/metrics). */
 .tableWrap {
   overflow-x: auto;
   border: 1px solid var(--border);

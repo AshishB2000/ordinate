@@ -17,7 +17,8 @@ import { liveFilters } from '../../visuals/filters/filterText';
 import { saveTerm, splitAliases, type Term, type TermField, type TermSummary } from './api';
 import s from './Terms.module.css';
 
-export function TermDialog({ projectId, term, onClose }: { projectId: string; term?: TermSummary; onClose: () => void }) {
+/** `onSaved`: after a save lands, before the dialog closes (a cancel calls `onClose` only). */
+export function TermDialog({ projectId, term, onClose, onSaved }: { projectId: string; term?: TermSummary; onClose: () => void; onSaved?: () => void }) {
   const editingId = term?.id ?? '';
   const client = useQueryClient();
   const sets = useDatasets(projectId);
@@ -62,6 +63,7 @@ export function TermDialog({ projectId, term, onClose }: { projectId: string; te
     setSaving(false);
     if ('error' in r) return setErrors({ [r.field ?? 'form']: r.error });
     void client.invalidateQueries({ queryKey: ['term:list', projectId] });
+    onSaved?.();
     onClose();
   };
 

@@ -222,6 +222,16 @@ export async function screens(page: Page, name: string): Promise<string[]> {
   return files;
 }
 
+/** One screenshot per theme WITHOUT a reload (a dialog or a selection stays up). */
+export async function screensInPlace(page: Page, name: string): Promise<void> {
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+  }
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+}
+
 export interface Session {
   readonly page: Page;
   readonly server: Server;

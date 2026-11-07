@@ -55,6 +55,24 @@ export function useTerms(projectId: string | undefined) {
   });
 }
 
+/** `term:usage`'s entry: the records that use a term, counted and worded by the server (src/analysis/termUsage.ts). */
+export interface TermUsage {
+  total: number;
+  summary: string;
+  refs: { kind: 'visual' | 'dashboard' | 'metric' | 'alert' | 'scorecard' | 'report'; id: string; name: string }[];
+}
+
+/** Where each term is used, by id; null when the server answered nothing (an older pod). A failure leaves the glossary readable. */
+export function useTermUsage(projectId: string) {
+  return useQuery({
+    queryKey: ['term:usage', projectId],
+    queryFn: async () => {
+      const r = (await rpc('term:usage', { projectId })) as { ok?: boolean; usage?: Record<string, TermUsage> } | null;
+      return r?.ok && r.usage ? r.usage : null;
+    },
+  });
+}
+
 /** What a term step reads as: its term's name, or why there is none. */
 export function termLabel(list: readonly TermSummary[] | undefined, id: string): string {
   if (!list) return 'Glossary term';

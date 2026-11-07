@@ -167,36 +167,42 @@ function Graph({ projectId, g }: { projectId: string; g: Lineage }) {
 
 const TYPE_WORD: Record<LineageType, string> = { dataset: 'Dataset', visual: 'Visual', dashboard: 'Dashboard', metric: 'Metric', report: 'Report', alert: 'Alert' };
 
-export function LineageDrawer({ projectId, id, name, onClose, type = 'dataset' }: { projectId: string; id: string; name: string; onClose: () => void; type?: LineageType }) {
+/** The graph around one record, with what it is built from and what uses it; drawn in the drawer and in the Data model. */
+export function LineageView({ projectId, id, type = 'dataset' }: { projectId: string; id: string; type?: LineageType }) {
   const q = useLineage(projectId, id, true, type);
   const g = q.data;
+  if (q.isPending) return <SkeletonBlock label="Tracing what this is built from" />;
+  if (q.isError) return <ErrorState compact heading={3} title="The lineage could not be traced" message={q.error.message} onRetry={() => void q.refetch()} />;
+  if (!g || g.nodes.length === 0) {
+    return (
+      <EmptyState compact heading={3} icon="lineage" title="Nothing to trace">
+        This record could not be found. It may have been deleted.
+      </EmptyState>
+    );
+  }
+  return (
+    <>
+      <div className={ms.lnSummary}>
+        <span className={ms.lnChip}>
+          <Icon name="lineage" size={16} />
+          {g.upstream ? `Built from ${formatNumber(g.upstream)} ${g.upstream === 1 ? 'record' : 'records'}` : 'Built from nothing else here'}
+        </span>
+        <span className={ms.lnChip}>
+          <Icon name="chart-bar" size={16} />
+          {usedInText(g.usedIn) || 'Not used by anything yet'}
+        </span>
+        <span className={s.meta}>Hover to follow a path; click to open.</span>
+      </div>
+      <Graph projectId={projectId} g={g} />
+      {g.nodes.length === 1 && <p className={s.note}>Nothing is built from this yet. Visuals, dashboards and reports on it will appear here.</p>}
+    </>
+  );
+}
+
+export function LineageDrawer({ projectId, id, name, onClose, type = 'dataset' }: { projectId: string; id: string; name: string; onClose: () => void; type?: LineageType }) {
   return (
     <Drawer open wide onOpenChange={(o) => !o && onClose()} title={name} description={`Lineage · ${TYPE_WORD[type]}`}>
-      {q.isPending ? (
-        <SkeletonBlock label="Tracing what this is built from" />
-      ) : q.isError ? (
-        <ErrorState compact heading={3} title="The lineage could not be traced" message={q.error.message} onRetry={() => void q.refetch()} />
-      ) : !g || g.nodes.length === 0 ? (
-        <EmptyState compact heading={3} icon="lineage" title="Nothing to trace">
-          This record could not be found. It may have been deleted.
-        </EmptyState>
-      ) : (
-        <>
-          <div className={ms.lnSummary}>
-            <span className={ms.lnChip}>
-              <Icon name="lineage" size={16} />
-              {g.upstream ? `Built from ${formatNumber(g.upstream)} ${g.upstream === 1 ? 'record' : 'records'}` : 'Built from nothing else here'}
-            </span>
-            <span className={ms.lnChip}>
-              <Icon name="chart-bar" size={16} />
-              {usedInText(g.usedIn) || 'Not used by anything yet'}
-            </span>
-            <span className={s.meta}>Hover to follow a path; click to open.</span>
-          </div>
-          <Graph projectId={projectId} g={g} />
-          {g.nodes.length === 1 && <p className={s.note}>Nothing is built from this yet. Visuals, dashboards and reports on it will appear here.</p>}
-        </>
-      )}
+      <LineageView projectId={projectId} id={id} type={type} />
     </Drawer>
   );
 }

@@ -14,7 +14,8 @@ import { ipcMain } from './bus';
 import { handlers } from '../server/rpc';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
-import type { MetricSummary } from '../analysis/metrics';
+import { metricsByName, type MetricSummary } from '../analysis/metrics';
+import { metricAdditivity } from '../analysis/additivity';
 import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
@@ -214,9 +215,11 @@ export function register(): void {
     const listed = await call(e, 'metric:list', { projectId });
     if (!listed || listed.ok === false) return listed;
     const rows: Record<string, unknown> = {};
+    const byName = await metricsByName(projectId).catch(() => null); // unread, every metric's additivity is unknown, not the table
     // Every metric at once (the desktop streamed rows in; one reply must not wait on them in turn).
     await Promise.all((listed.metrics as MetricSummary[]).map(async (m) => {
-      const [value, series] = await Promise.all([call(e, 'metric:value', { projectId, id: m.id }), call(e, 'metric:series', { projectId, id: m.id })]);
+      const [value, series, additivity] = await Promise.all([call(e, 'metric:value', { projectId, id: m.id }), call(e, 'metric:series', { projectId, id: m.id }),
+        byName && metricAdditivity(projectId, m.id, byName).catch(() => null)]); // null: unknown (a `[[parameter]]`), never "no"
       let usage: unknown = null;
       try {
         usage = await metricUsage(projectId, m.id);
@@ -227,6 +230,7 @@ export function register(): void {
         display: value && value.ok !== false ? value.display : null,
         series: series && series.ok !== false && series.series ? series.series.values : null,
         usage,
+        additivity,
       };
     }));
     return { ok: true, metrics: listed.metrics, rows };

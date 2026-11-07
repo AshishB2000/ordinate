@@ -48,7 +48,7 @@
 .table tbody tr:hover {
   background: var(--surface-2);
 }
-.table td:nth-child(6) {
+.trend {
   color: var(--accent);
 }
 .name {

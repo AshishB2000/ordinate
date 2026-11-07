@@ -106,7 +106,9 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch(
 
 export interface RadioGroupProps {
   /** The group's visible name (a <legend>). */
-  label: string;
+  label?: string;
+  /** Its name where none is drawn (the screen names it beside the group). Required when there is no `label`. */
+  'aria-label'?: string;
   value: string;
   onValueChange: (value: string) => void;
   options: readonly { value: string; label: string; hint?: string; disabled?: boolean }[];
@@ -126,6 +128,7 @@ export function RadioGroup({
   orientation = 'vertical',
   disabled,
   error,
+  'aria-label': ariaLabel,
 }: RadioGroupProps) {
   const auto = useId();
   const group = name ?? auto;
@@ -135,8 +138,9 @@ export function RadioGroup({
       disabled={disabled}
       aria-invalid={error ? true : undefined}
       aria-describedby={error ? `${group}-err` : undefined}
+      aria-label={label ? undefined : ariaLabel}
     >
-      <legend className={s.legend}>{label}</legend>
+      {label && <legend className={s.legend}>{label}</legend>}
       <div className={s.options}>
         {options.map((o) => {
           const rid = `${group}-${o.value}`;

@@ -1,9 +1,10 @@
 // /data/:projectId — the Data section (dataSection.ts, dsList.ts, captureList's
-// tab strip): the project's datasets, its captures, the catalog of every
-// record and the relationships between datasets, one tab each (the tab is in
-// the URL). The header's actions belong to Datasets, as on the desktop.
+// tab strip): the project's datasets, its captures and the catalog of every
+// record, one tab each (the tab is in the URL). The header's actions belong to
+// Datasets, as on the desktop. Relationships moved to the Data model: an old
+// `?tab=relationships` link lands there.
 
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router';
 import { useDatasets } from '../../api/datasets';
 import { Page } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
@@ -15,16 +16,14 @@ import { DatasetList } from './DatasetList';
 import { DataSearch } from './DataSearch';
 import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
-import { RelationshipsTab } from './RelationshipsTab';
 
 const TABS = ['datasets', 'captures', 'catalog', 'relationships'] as const;
 type TabId = (typeof TABS)[number];
 
-const SUB: Record<TabId, string> = {
+const SUB: Record<Exclude<TabId, 'relationships'>, string> = {
   datasets: 'Import a file, paste data, or connect a database, warehouse or app. Each saves a structured dataset in this project.',
   captures: 'Screenshots turned into tables. Each one becomes a dataset once you review it.',
   catalog: 'Every dataset, visual, dashboard, metric and report, with its description, tags, owner and use.',
-  relationships: 'Relate datasets once; visuals then use columns from both.',
 };
 
 export default function DataSection() {
@@ -46,14 +45,15 @@ export default function DataSection() {
       return q;
     }, { replace: true });
 
+  if (tab === 'relationships') return <Navigate to={`/model/${projectId}?tab=relationships`} replace />;
   return (
     <Page
       title="Data"
       sub={SUB[tab]}
       actions={
         <>
-          {/* The project's metrics (T2.8): the desktop's Metrics tab under Data, on its own route. */}
-          <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
+          {/* The project's metrics (T2.8): the Data model's Metrics tab. */}
+          <Link className={buttonClass('ghost')} to={`/model/${projectId}?tab=metrics`}>
             <Icon name="target" />
             <span>Metrics</span>
           </Link>
@@ -87,9 +87,6 @@ export default function DataSection() {
           <Tab value="catalog" icon="list">
             Catalog
           </Tab>
-          <Tab value="relationships" icon="link">
-            Relationships
-          </Tab>
         </TabList>
         <TabPanel value="datasets">
           <DatasetList projectId={projectId} />
@@ -99,9 +96,6 @@ export default function DataSection() {
         </TabPanel>
         <TabPanel value="catalog">
           <CatalogTab projectId={projectId} />
-        </TabPanel>
-        <TabPanel value="relationships">
-          <RelationshipsTab projectId={projectId} />
         </TabPanel>
       </Tabs>
     </Page>

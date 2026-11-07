@@ -47,6 +47,7 @@ import { explore } from './explore';
 import { rowPolicy } from './rowPolicy';
 import { notifications } from './notifications';
 import { terms } from './terms';
+import { model } from './model';
 
 export const contracts = {
   ...projects,
@@ -95,6 +96,7 @@ export const contracts = {
   ...rowPolicy,
   ...notifications,
   ...terms,
+  ...model,
 } as const;
 
 export type Channel = keyof typeof contracts;
