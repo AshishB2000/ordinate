@@ -13,7 +13,7 @@ import { RpcError } from '../../api/client';
 import { useServerEvent } from '../../api/events';
 
 /** A whole-document editor's save channel — the server's `SaveKind` (src/analysis/recordDiff.ts SAVE_KEYS): a metric has two, its fields and its tree. */
-export type GuardType = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
+export type GuardType = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario' | 'sourceTable';
 
 /** src/app/editConflict.ts SAVED_CHANNEL. */
 export const SAVED_CHANNEL = 'hub:record-saved';

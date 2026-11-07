@@ -225,7 +225,7 @@ function strip(): void {
   const NOW = Date.parse('2026-11-04T12:00:00Z');
   const iso = (daysAgo: number): string => new Date(NOW - daysAgo * 86_400_000).toISOString();
   const row = (table: string, o: Partial<SourceRow> = {}): SourceRow => ({ docId: randomUUID(), table, owner: 'Data', hasGuide: true, readAt: iso(1), datasetIds: [], ...o });
-  const conn = (rows: SourceRow[], o: Partial<SourceConn> = {}): SourceConn => ({ connId: randomUUID(), name: 'Warehouse', connectorId: 'live-fake', readsFacts: true, rows, ...o });
+  const conn = (rows: SourceRow[], o: Partial<SourceConn> = {}): SourceConn => ({ connId: randomUUID(), name: 'Warehouse', connectorId: 'live-fake', label: 'Fake warehouse (tests)', readsFacts: true, rows, ...o });
   const kinds = (cs: SourceConn[]) => sourceTodoOf(cs, NOW).todo.map((t) => t.kind);
 
   ok('the strip shows 4 and the numbers are the spec\'s', SOURCE_TODO_SHOWN === 4 && STALE_DAYS === 30);
@@ -313,7 +313,7 @@ async function channels(): Promise<void> {
   ok('list: …a documented row carries its doc id, owner and no datasets', ((r) => r.docId === seed.onlyDoc && r.owner === 'Data' && r.hasGuide === false && r.datasetIds.length === 0 && !('readAt' in r))(rowsOf(C)[0]));
   ok('list: the pre-workbench fallback is the connection\'s own table', rowsOf(C0).length === 1 && rowsOf(C0)[0].table === 'public.legacy' && rowsOf(C0)[0].datasetIds.join() === oldId);
   ok('list: a connection with no row is left out, and so is its name', !L.connections.some((c: Reply) => c.connId === C3));
-  ok('list: a connection\'s head says what it reads (a fake warehouse can describe a table, wakes nothing)', ((c: Reply) => c.name === 'Legacy DB' && c.connectorId === fakeMod.LIVE_FAKE_ID && c.readsFacts === true && !('factsWake' in c))(L.connections.find((c: Reply) => c.connId === C0)));
+  ok('list: a connection\'s head says what it reads (a fake warehouse can describe a table, wakes nothing)', ((c: Reply) => c.name === 'Legacy DB' && c.connectorId === fakeMod.LIVE_FAKE_ID && c.label === 'Fake warehouse (tests)' && c.readsFacts === true && !('factsWake' in c))(L.connections.find((c: Reply) => c.connId === C0)));
   const W = (await post('sourceTable:list', { projectId: PW })).value;
   const head = (id: string): Reply => W.connections.find((c: Reply) => c.connId === id);
   ok('list: Databricks says a read can start the warehouse (so the button can warn)', W.connections.length === 2 && head(DBX).connectorId === 'databricks-sql' && head(DBX).readsFacts === true && head(DBX).factsWake === true, JSON.stringify(W.connections));
@@ -331,7 +331,7 @@ async function channels(): Promise<void> {
   ok('get: built from it, in dataset order', g.ok === true && g.datasets.map((d: Reply) => d.id).join() === [liveId, copyId].join() && g.datasets.map((d: Reply) => d.name).join() === 'Live,Live (copy)', JSON.stringify(g.datasets));
   ok('get: rebuilt key by key, no dismissed', JSON.stringify(Object.keys(g.doc).sort()) === '["docId","guide","owner","refresh","requiredFilters","table","updatedAt","updatedBy"]' && g.doc.table === T && g.doc.owner === 'Data' && g.doc.docId === s.docId);
   ok('get: the tag is the stored one, the stamp is the caller', g.tag === s.tag && g.doc.updatedBy === ORG_A.user.email);
-  ok('get: the connection it is on, and what a read can do', JSON.stringify(g.connection) === JSON.stringify({ connId: C, name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, readsFacts: true }));
+  ok('get: the connection it is on, and what a read can do', JSON.stringify(g.connection) === JSON.stringify({ connId: C, name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, label: 'Fake warehouse (tests)', readsFacts: true }));
   const lst = (await post('sourceTable:list', { projectId: P })).value;
   ok('list: the row is now documented and keeps its datasets', ((r) => r.docId === s.docId && r.owner === 'Data' && r.datasetIds.length === 2)(lst.connections.find((c: Reply) => c.connId === C).rows.find((r: Reply) => r.table === T)) && !lst.todo.some((t: Reply) => t.table === T && t.kind === 'used_no_doc'));
 

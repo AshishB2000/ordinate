@@ -13,7 +13,7 @@ import type { ViewerSeed } from './seed-viewer.ts';
 import { encodeQuestion } from '../src/features/explore/spec.ts';
 
 export interface Control {
-  role: 'button' | 'link' | 'heading' | 'textbox' | 'region' | 'navigation' | 'grid' | 'list' | 'menuitem' | 'menuitemradio' | 'combobox';
+  role: 'button' | 'link' | 'heading' | 'textbox' | 'region' | 'navigation' | 'grid' | 'list' | 'menuitem' | 'menuitemradio' | 'combobox' | 'tab';
   name: string | RegExp;
 }
 
@@ -268,6 +268,8 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=fields`, open: modelFields },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?dataset=${s.did}&panel=guide`, editor: { role: 'button', name: 'Write a guide' } },
   // Its other tabs: New metric and New term are the header's, an editor's on every tab; New relationship is the tab's own.
+  // Source tables are an editor's: a viewer's address lands on Datasets, with no such tab.
+  { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=sources`, editor: { role: 'tab', name: 'Source tables' } },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=metrics`, editor: { role: 'button', name: 'New metric' } },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=glossary`, editor: { role: 'button', name: 'New term' } },
   { pattern: '/model/:projectId', url: (s) => `/model/${s.pid}?tab=relationships`, editor: { role: 'button', name: 'New relationship' } },

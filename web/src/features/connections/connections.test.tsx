@@ -385,3 +385,34 @@ describe('the SQL editor', () => {
     expect(el.selectionStart).toBe(3);
   });
 });
+
+describe('Document in Data model', () => {
+  const DOC = '33333333-3333-4333-8333-333333333333';
+  const workbench = (extra: Record<string, Reply> = {}) =>
+    serve(
+      base({
+        'connections:list': { body: [CONN] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'connection:sample': { body: { ok: true, preview: { columns: [{ name: 'region', type: 'text' }], rows: [['North']], rowCount: 1 } } },
+        'dataset:list': { body: [] },
+        ...extra,
+      }),
+    );
+
+  it('the rail links to the connection\'s source tables by id', async () => {
+    workbench();
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    expect(within(rail).getByRole('link', { name: 'Document in Data model' }).getAttribute('href')).toBe(`/model/${PID}?tab=sources&conn=${CID}`);
+  });
+
+  it('with a table shown, it starts the table\'s notes and opens them by id', async () => {
+    const calls = workbench({ 'sourceTable:save': { body: { ok: true, docId: DOC, created: true, tag: 'T0' } } });
+    const router = renderApp(`/connections/${PID}/${CID}?table=public.orders`);
+    const results = await screen.findByRole('region', { name: 'Results' });
+    fireEvent.click(await within(results).findByRole('button', { name: 'Document in Data model' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/model/${PID}`));
+    expect(router.state.location.search).toBe(`?tab=sources&conn=${CID}&doc=${DOC}`);
+    expect(calls.find((c) => c.channel === 'sourceTable:save')?.payload).toEqual({ projectId: PID, connId: CID, table: 'public.orders', patch: {} });
+  });
+});

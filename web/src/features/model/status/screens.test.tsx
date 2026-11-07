@@ -78,6 +78,16 @@ describe('the strip', () => {
     const chips = within(strip).getAllByRole('button').map((b) => b.textContent);
     expect(chips).toEqual(['Set a key on Orders', 'Revenue changed since certified', 'Gross revenue is retired, used by 6']);
   }, 30_000);
+
+  it('opens the Metrics tab from a review chip (the shared chip strip routes it)', async () => {
+    serve('admin', {
+      'model:overview': { body: { ok: true, tables: [{ datasetId: D, role: 'fact', key: '', keyState: '', description: '', alwaysApplied: { kind: 'prepare', steps: [] }, calculated: [] }], todo: [{ datasetId: D, kind: 'no_key' }], more: 0, review: [{ ref: 'metric:m1', name: 'Revenue', kind: 'needs_review' }] } },
+    });
+    renderApp(`/model/${P}`);
+    const strip = await screen.findByRole('region', { name: 'To fill in next' }, LAZY);
+    fireEvent.click(within(strip).getByRole('button', { name: 'Revenue changed since certified' }));
+    expect(await screen.findByRole('tab', { name: 'Metrics', selected: true }, LAZY)).toBeTruthy();
+  }, 30_000);
 });
 
 describe('the Prepare page of a certified dataset', () => {

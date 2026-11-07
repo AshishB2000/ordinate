@@ -1,0 +1,263 @@
+/* The Source tables tab: what Model.module.css's list and panel do not already draw. Theme tokens only. */
+
+.mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* ── The list ──────────────────────────────────────────────────────── */
+.groupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  min-height: 28px;
+  padding-right: var(--sp-4);
+}
+.groupName {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-8);
+  min-width: 0;
+}
+.groupName > .cap {
+  padding: 0;
+}
+.connKind {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.groupHead .groupName {
+  padding: var(--sp-4) 0 0 var(--sp-12);
+}
+.itemBtn {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.meta {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.metaWarn {
+  color: var(--warn-text);
+}
+
+/* ── The panel's head ──────────────────────────────────────────────── */
+.headMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.ident {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.connName {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.readLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 2px 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  max-width: 260px;
+}
+.wake {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--warn-text);
+  text-align: right;
+}
+.wake > svg {
+  display: inline-block;
+  margin-right: var(--sp-4);
+  vertical-align: -1px;
+}
+/* The Overview's values are text, not part 1's controls: each label sits on its value's line. */
+.facts > div > dt {
+  padding-top: 0;
+}
+.intro {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-16);
+}
+
+/* ── Guide and the notes form ─────────────────────────────────────── */
+.guideBody {
+  padding: var(--sp-16) var(--sp-24);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.guideInput {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.formError {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  color: var(--error-text);
+  overflow-wrap: anywhere;
+}
+.footLeft {
+  margin-right: auto;
+}
+
+/* ── Columns ───────────────────────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.cols {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.cols th {
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-2);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cols td {
+  padding: var(--sp-8) var(--sp-12);
+  border-top: 1px solid var(--border-hairline);
+  vertical-align: top;
+  line-height: var(--lh-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.cols tbody tr:first-child td {
+  border-top: 0;
+}
+.cols td:last-child,
+.cols th:last-child {
+  width: 1%;
+  text-align: right;
+}
+.type {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.none {
+  color: var(--muted);
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-12);
+  margin: 0 0 var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.alert > svg {
+  flex-shrink: 0;
+  color: var(--error-text);
+}
+.alertText {
+  flex: 1 1 0;
+  min-width: 12em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  /* A phone: each column is a small block (name and key, then type, then comment), not a squeezed row. */
+  .cols thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .cols tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px var(--sp-8);
+    padding: var(--sp-8) var(--sp-12);
+    border-top: 1px solid var(--border-hairline);
+  }
+  .cols tbody tr:first-child {
+    border-top: 0;
+  }
+  .cols td,
+  .cols tbody tr:first-child td {
+    padding: 0;
+    border: 0;
+  }
+  .cols td:nth-child(2),
+  .cols td:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+  .cols td:last-child {
+    grid-row: 1;
+    grid-column: 2;
+    width: auto;
+  }
+}
+@media (max-width: 900px) {
+  .actions {
+    align-items: flex-start;
+    max-width: none;
+  }
+  .wake {
+    text-align: left;
+  }
+}
