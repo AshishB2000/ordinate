@@ -39,6 +39,14 @@ export async function post(channel: string, payload: unknown): Promise<{ status:
   return { status: r.statusCode, body: r.body, value };
 }
 
+/** One file through POST /api/files, as the web client uploads it: the status and, on a 200, the file token. */
+export async function upload(bytes: Buffer, name: string): Promise<{ status: number; fileToken: string }> {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(bytes)]), name);
+  const r = await app.inject({ method: 'POST', url: '/api/files', headers: withCsrf({}), payload: form });
+  return { status: r.statusCode, fileToken: r.statusCode === 200 ? String((JSON.parse(r.body) as { fileToken?: unknown }).fileToken) : '' };
+}
+
 /** Every id `datasets.getDataset` was asked for since the spy went on. */
 export const hydrated: string[] = [];
 const realGet = H.datasets.getDataset;

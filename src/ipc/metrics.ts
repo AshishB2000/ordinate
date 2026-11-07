@@ -35,7 +35,7 @@ import { withStatus } from '../analysis/statusStore';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
 import { isNewerKind } from '../analysis/pendingKinds';
-import { checkTarget, targetField, targetHidden } from './targetResolve';
+import { targetField, targetHidden } from './targetResolve';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -49,7 +49,6 @@ import * as datasets from '../data/datasets';
 import { periodPlan } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import { manySideColumnNames, relatedColumnNames } from './relationships';
-import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
@@ -61,18 +60,15 @@ import type { AsOf } from '../api/asOf';
 import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
-import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
-import { snapshotProblem } from '../analysis/snapshotGuards';
-import { contentTag, isRecordChanged } from '../app/editConflict';
-import { termHolding } from '../analysis/termNames';
-import { termNameTaken } from '../data/termMessages';
+import { metricDate, metricScope } from '../analysis/metricTimeScope';
 import { ExternalMetricError } from '../analysis/externalMetric';
 import { externalNoDuplicate } from '../analysis/externalMetricMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
-import { baseName, checkPeriodDefinition, periodMetricValue } from './periodMetric';
+import { baseName, periodMetricValue } from './periodMetric';
 import { periodSeries } from './periodChart';
-import { checkFunnelDefinition, funnelMetricValue } from './funnelMetric';
+import { funnelMetricValue } from './funnelMetric';
+import { saveMetricChecked, updateMetricChecked } from './metricSave';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -338,11 +334,6 @@ export async function previewDefinition(projectId: string, datasetId: string, de
   };
 }
 
-/** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
-export function nameTakenMessage(name: unknown): string {
-  return `A metric called "${String(name).trim()}" already exists.`;
-}
-
 /** Distinct values of a column, resident-first. Mirrors alertStore's own
  *  `distinctValues` — same two calls, same "null means we could not read it". */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
@@ -488,27 +479,8 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
   return withStatus(projectId, 'metric', out);
 }
 
-/**
- * Is this name already a metric in this project?
- *
- * A duplicate NAME is refused, not disambiguated: a formula references a metric
- * by name, so two called "Revenue" would make `[Revenue]` mean whichever one
- * sorted first — a figure that changes when a record is renamed somewhere else
- * entirely. Exported for scripts/test-metrics.ts.
- */
-export async function nameTaken(projectId: string, name: unknown, exceptId?: string): Promise<boolean> {
-  return (await nameRefusal(projectId, name, exceptId)) !== null;
-}
-
-/** The sentence a name is refused with — another metric's, or a glossary term's name or alias (semantic D10) — or null. */
-export async function nameRefusal(projectId: string, name: unknown, exceptId?: string): Promise<string | null> {
-  const key = String(name || '').trim().toLowerCase();
-  if (!key) return null;
-  const list = await metrics.listMetrics(projectId);
-  if (list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId)) return nameTakenMessage(name);
-  const term = await termHolding(projectId, String(name));
-  return term ? termNameTaken(String(name).trim(), term) : null;
-}
+// The name checks live beside the save (./metricSave.ts); exported here for the callers that always read them here.
+export { nameRefusal, nameTaken, nameTakenMessage } from './metricSave';
 
 export function register() {
   ipcMain.handle('metric:list', async (_e, { projectId }: any = {}) => {
@@ -538,55 +510,10 @@ export function register() {
     return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec, undefined, await baseName(projectId, t.rec.definition)), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
-  ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
-    try {
-      const raw = input && typeof input === 'object' ? input : {};
-      // `field`: which box of the editor the sentence belongs beside.
-      const taken = await nameRefusal(projectId, raw.name);
-      if (taken) return { ok: false, error: taken, field: 'name' };
-      const per = (await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, raw.datasetId, raw.definition)); if (per) return { ok: false, ...per };
-      const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
-      if (snap) return { ok: false, error: snap, field: 'snapshot' };
-      const when = await settleOnSave(projectId, raw);
-      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
-      const tg = await checkTarget(projectId, { ...raw, id: '', name: String(raw.name), definition: metrics.sanitizeDefinition(raw.definition), ...when }, raw.target); if (tg) return { ok: false, ...tg };
-      const m = await metrics.saveMetric(projectId, {
-        ...raw,
-        filters: sanitizeDashboardFilters(raw.filters),
-        ...when,
-      });
-      if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
-      await versions.record(projectId, 'metric', m);
-      return { ok: true, metric: m };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to save the metric' };
-    }
-  });
+  ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => saveMetricChecked(projectId, input));
 
   // `base`: the editor's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base.
-  ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => {
-    try {
-      const raw = patch && typeof patch === 'object' ? patch : {};
-      const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
-      if (taken) return { ok: false, error: taken, field: 'name' };
-      const before = await metrics.getMetric(projectId, id);
-      const per = before && (raw.definition !== undefined || raw.timeColumn !== undefined) ? (await checkPeriodDefinition(projectId, before.datasetId, raw.definition ?? before.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, before.datasetId, raw.definition ?? before.definition)) : null; if (per) return { ok: false, ...per };
-      const snap = before ? await snapshotProblem(projectId, before.datasetId, raw.definition) : null;
-      if (snap) return { ok: false, error: snap, field: 'snapshot' };
-      const when = before ? await settleOnUpdate(projectId, before, raw) : {};
-      if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
-      const next = { ...raw, ...when };
-      const tg = before && raw.target ? await checkTarget(projectId, { ...before, ...next, definition: next.definition !== undefined ? metrics.sanitizeDefinition(next.definition) : before.definition }, raw.target) : null; if (tg) return { ok: false, ...tg };
-      if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
-      const m = await metrics.updateMetric(projectId, id, next, base);
-      if (!m) return { ok: false, error: 'Metric not found' };
-      await versions.record(projectId, 'metric', m, { before });
-      return { ok: true, metric: m, tag: contentTag('metric', m) };
-    } catch (err: any) {
-      if (isRecordChanged(err)) throw err; // the route's 409
-      return { ok: false, error: err?.message || 'Failed to update the metric' };
-    }
-  });
+  ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => updateMetricChecked(projectId, id, patch, base));
 
   ipcMain.handle('metric:duplicate', async (_e, { projectId, id }: any = {}) => {
     const src = await metrics.getMetric(projectId, id);
