@@ -36,9 +36,9 @@ export interface ShareTargets {
   teams: { id: string; name: string }[];
 }
 
-export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified';
-/** A term's versions are listed by the Glossary (step 10), not this page yet; a verified question keeps none. */
-export type VersionType = Exclude<RecordType, 'alert' | 'term' | 'verified'>;
+export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified' | 'topic';
+/** A term's versions are listed by the Glossary (step 10), not this page yet; a verified question and a topic keep none. */
+export type VersionType = Exclude<RecordType, 'alert' | 'term' | 'verified' | 'topic'>;
 
 /** `trash:list`: one deleted record. */
 export interface TrashItem {

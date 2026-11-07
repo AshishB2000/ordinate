@@ -51,6 +51,7 @@ import { model } from './model';
 import { governance } from './governance';
 import { sourceTables } from './sourceTables';
 import { verified } from './verified';
+import { topics } from './topics';
 
 export const contracts = {
   ...projects,
@@ -103,6 +104,7 @@ export const contracts = {
   ...governance,
   ...sourceTables,
   ...verified,
+  ...topics,
 } as const;
 
 export type Channel = keyof typeof contracts;

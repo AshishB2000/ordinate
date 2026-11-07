@@ -180,6 +180,11 @@ when the chart is saved.
 **Open browser tabs:** reload them after the upgrade. A tab still running the old web app does not
 know the new filters, and it saves a filter list without the ones it cannot show.
 
+**Topics** (a team's short list of datasets, metrics and terms in the Data model) change no figure,
+so an older pod beside a newer one draws every chart as before. A server older than the release that
+adds topics leaves them out of a project bundle it exports, and refuses to import a bundle that holds
+them.
+
 ### Other saved data this release keeps
 
 None of these features exists in this release. It only reads and keeps what a later release will

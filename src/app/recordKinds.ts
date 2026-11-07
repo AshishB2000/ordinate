@@ -1,6 +1,6 @@
 // The record types a project holds, and where each one lives on disk. MAIN.
 //
-// Version history, Trash and the project bundle all walk the same seven kinds of
+// Version history, Trash and the project bundle all walk the same kinds of
 // record, and a fourth copy of "a dashboard lives in analyses/" is how one of
 // them ends up looking in the wrong directory. So the vocabulary lives here once.
 //
@@ -12,10 +12,10 @@ import * as path from 'path';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
 
-export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified';
+export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified' | 'topic';
 export type FileRecordType = Exclude<RecordType, 'alert'>;
 
-export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified'];
+export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified', 'topic'];
 
 export const RECORD_DIR: Record<FileRecordType, string> = {
   dataset: 'datasets',
@@ -25,6 +25,7 @@ export const RECORD_DIR: Record<FileRecordType, string> = {
   report: 'reports',
   term: 'terms', // a glossary term (semantic D10)
   verified: 'verified', // a verified question (semantic part 3 D7): a spec, never a figure
+  topic: 'topics', // a team's short list of the project's data (semantic part 6 D14); no version history
 };
 
 export function isRecordType(v: unknown): v is RecordType {

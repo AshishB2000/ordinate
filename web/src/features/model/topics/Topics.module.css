@@ -1,0 +1,224 @@
+/* Topics in the Data model (semantic layer part 6): the header picker, the line a narrowed tab carries, and the
+   drawer. Theme tokens only. */
+
+/* ── The header picker: "Topic [All ▾]" on one line, beside the header's buttons ── */
+.picker > * {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.picker label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.picker button {
+  min-width: 160px;
+  max-width: 260px;
+}
+.pickerLoading {
+  display: inline-flex;
+  align-items: center;
+}
+.pickerBar {
+  width: 200px;
+  height: var(--ctl-md);
+  border-radius: var(--r-md);
+}
+
+/* ── "Sales · 2 of 5 metrics · Show all" ── */
+.line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--sp-4);
+  margin: 0;
+  padding: 2px var(--sp-12) 2px var(--sp-8);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--t-12);
+  white-space: nowrap;
+}
+.line > svg {
+  color: var(--accent-text);
+}
+.lineName {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.showAll {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.showAll:hover {
+  text-decoration: underline;
+}
+.showAll:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ── The drawer ── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.note,
+.stale {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+}
+.note {
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.note > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.stale {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+.stale > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+  margin: 0;
+  padding: var(--sp-12) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-hairline);
+}
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  float: left; /* a legend sits on the fieldset's border otherwise */
+  width: 100%;
+  padding: 0;
+  color: var(--text-strong);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.legend > svg {
+  color: var(--muted);
+}
+.legend + * {
+  clear: both;
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-13);
+}
+.error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: var(--t-12);
+}
+.ordered {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.orderedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 40px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-8);
+}
+.orderedRow + .orderedRow {
+  border-top: 1px solid var(--border-hairline);
+}
+.rank {
+  flex: 0 0 18px;
+  color: var(--text-faint);
+  font-size: var(--t-11);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pool {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-4) var(--sp-8);
+}
+.deleteBtn {
+  margin-right: auto;
+  color: var(--error-text);
+}
+
+/* ── A dataset's fields ── */
+.fieldsPop {
+  width: min(280px, calc(100vw - var(--sp-32)));
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  padding: var(--sp-12);
+}
+.popHead {
+  margin: 0 0 var(--sp-8);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+.popList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.popCols {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-8) 0 0 var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+
+@media (max-width: 599px) {
+  .picker button {
+    min-width: 120px;
+  }
+  .pool {
+    grid-template-columns: 1fr;
+  }
+}

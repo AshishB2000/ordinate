@@ -10,10 +10,23 @@ import type { DateGrain } from '../../../../src/analysis/categoryKey.ts';
 
 export type { NavHierarchy };
 
+/** A topic as every reader gets it (step 07, src/ipc/modelNavigation.ts NavTopic): gone members left out, in its order. */
+export interface NavTopic {
+  id: string;
+  name: string;
+  description?: string;
+  /** No `fields`: every field. */
+  datasets: { id: string; fields?: string[] }[];
+  metricIds: string[];
+  termIds: string[];
+}
+
 export interface Navigation {
   ok: true;
   tables: { datasetId: string; hierarchies: NavHierarchy[] }[];
   dateLadder: DateGrain[];
+  /** Absent from a pod before step 07: no topics. */
+  topics?: NavTopic[];
 }
 
 export const NAVIGATION = 'model:navigation';

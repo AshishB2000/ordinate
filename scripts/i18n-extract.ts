@@ -396,6 +396,7 @@ export const MAIN_FILES = [
   'src/ipc/assistantCheckMessages.ts',
   'src/app/hierarchyMessages.ts',
   'src/ipc/drillMessages.ts',
+  'src/analysis/topicMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

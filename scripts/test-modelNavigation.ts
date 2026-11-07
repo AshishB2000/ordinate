@@ -6,6 +6,7 @@
 // 2. One reply: the hierarchies of the datasets that have them, in dataset:list order, with the date ladder.
 // 3. Metadata only: no dataset is hydrated and no warehouse statement is sent.
 // 4. A level that is no longer a text column is reported `missing`, still stored; a deleted dataset is absent.
+// 5. Topics (step 07): listed by name, each with its deleted datasets dropped (`topics[0].datasets`).
 //    (The row-restricted caller is covered in scripts/test-rowPolicySafetyNet.ts.)
 //
 //   npm run build:ts && node scripts/test-modelNavigation.js
@@ -56,9 +57,13 @@ const GEO = { id: '5d3b6f0e-6c1f-4a8e-9a3e-0e5a1b2c3d4e', name: 'Geography', lev
   ok('under a 4-5-4 calendar the ladder holds the week', JSON.stringify(wk.dateLadder) === '["year","quarter","month","week","day"]', JSON.stringify(wk.dateLadder));
   await H.as(H.ORG_A, async () => { dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1 }); });
 
+  ok('no topic yet: topics is []', JSON.stringify((await nav()).topics) === '[]');
+  const topic = await post('topic:save', { projectId: P, topic: { name: 'Sales', datasets: [{ id: X }, { id: L, fields: [T1] }], metricIds: [], termIds: [] } });
+  ok('setup: a topic over both datasets', topic.value.ok === true, JSON.stringify(topic.value));
   await post('dataset:delete', { projectId: P, id: X });
   const d = await nav();
   ok('a deleted dataset is absent', d.tables.length === 1 && d.tables[0].datasetId === L, JSON.stringify(d));
+  ok('…and dropped from the topic, in order, the rest kept', JSON.stringify(d.topics?.[0]?.datasets) === JSON.stringify([{ id: L, fields: [T1] }]) && d.topics[0].name === 'Sales', JSON.stringify(d.topics));
   const bad = await post('model:navigation', { projectId: 'not-a-project' });
   ok('a bad project id is refused by the contract', bad.status === 400, `${bad.status} ${bad.body.slice(0, 120)}`);
 

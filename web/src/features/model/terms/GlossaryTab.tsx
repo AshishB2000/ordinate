@@ -3,11 +3,12 @@
 // page header's (DataModelPage).
 
 import { useCanEdit } from '../../projects/api';
+import type { NavTopic } from '../navigation';
 import { useTermUsage } from './api';
 import { TermsList } from './TermsList';
 
-export function GlossaryTab({ projectId }: { projectId: string }) {
+export function GlossaryTab({ projectId, topic }: { projectId: string; topic?: NavTopic }) {
   const canEdit = useCanEdit(projectId);
   const usage = useTermUsage(projectId);
-  return <TermsList projectId={projectId} canEdit={canEdit} usage={usage.data ?? undefined} />;
+  return <TermsList projectId={projectId} canEdit={canEdit} usage={usage.data ?? undefined} topic={topic} />;
 }

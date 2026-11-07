@@ -23,6 +23,9 @@ import { relWarningText } from './tableApi';
 import { RelationshipLabelDialog } from './RelationshipLabelDialog';
 import s from './Data.module.css';
 import ms from './Model.module.css';
+import type { NavTopic } from '../model/navigation';
+import { inOrder } from '../model/topics/api';
+import { TopicLine } from '../model/topics/TopicPicker';
 
 const kindShort = (c: Relationship['cardinality']) => (c === 'one_to_one' ? '1:1' : 'N:1');
 
@@ -206,7 +209,8 @@ function DeleteRel({ projectId, r, name, onClose }: { projectId: string; r: Rela
   );
 }
 
-export function RelationshipsTab({ projectId }: { projectId: string }) {
+/** `topic` (the Data model's, part 6 step 07): its datasets on the diagram, and the relationships with both ends in it. */
+export function RelationshipsTab({ projectId, topic }: { projectId: string; topic?: NavTopic }) {
   const rels = useRelationships(projectId);
   const ds = useDatasets(projectId);
   const [selected, setSelected] = useState('');
@@ -223,7 +227,9 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
     return <ErrorState heading={3} title="The data model could not be loaded" message={err.message} onRetry={() => void Promise.all([rels.refetch(), ds.refetch()])} />;
   }
   const datasets = ds.data;
-  const list = rels.data;
+  const shownSets = topic ? inOrder(datasets, topic.datasets.map((t) => t.id)) : datasets;
+  const inTopic = new Set(shownSets.map((d) => d.id));
+  const list = topic ? rels.data.filter((r) => inTopic.has(r.from.datasetId) && inTopic.has(r.to.datasetId)) : rels.data;
   const name = (id: string) => datasets.find((d) => d.id === id)?.name ?? 'A missing dataset';
   return (
     <section className={s.section} aria-label="Relationships">
@@ -233,7 +239,11 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
             New relationship
           </Button>
         )}
-        <span className={s.muted}>{list.length === 1 ? '1 relationship' : `${formatNumber(list.length)} relationships`}</span>
+        {topic ? (
+          <TopicLine projectId={projectId} topic={topic} shown={list.length} total={rels.data.length} noun="relationship" />
+        ) : (
+          <span className={s.muted}>{list.length === 1 ? '1 relationship' : `${formatNumber(list.length)} relationships`}</span>
+        )}
         <p className={s.lead}>A relationship joins live, at query time: nothing is copied, and every visual can use columns from both sides.</p>
       </div>
       {datasets.length < 2 ? (
@@ -254,7 +264,7 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
             : 'A relationship needs two datasets, say orders and the regions they ship to. An editor of this project can import a second one. You have view-only access.'}
         </EmptyState>
       ) : (
-        <Canvas datasets={datasets} rels={list} selected={selected} onSelect={select} />
+        <Canvas datasets={shownSets} rels={list} selected={selected} onSelect={select} />
       )}
       {list.length === 0 ? (
         <p className={s.muted}>{canEdit ? 'Relationships you add appear here with how many rows matched.' : 'No relationships yet.'}</p>

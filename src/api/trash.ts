@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from './contract';
 
 /** What can sit in the Trash (src/app/recordKinds.ts RECORD_TYPES). */
-const RecordType = z.enum(['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified']);
+const RecordType = z.enum(['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified', 'topic']);
 const Entry = z.strictObject({ projectId: Uuid, type: RecordType, id: Uuid });
 
 // The Trash (T2.2, src/ipc/trash.ts). Deleting a record moves it here (each
