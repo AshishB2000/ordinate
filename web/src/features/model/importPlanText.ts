@@ -63,11 +63,11 @@ function dependents(list: PlanItem[]): string {
 
 /** Why a dbt object was not imported, in words (f1): the shapes the translator does not read exactly. */
 const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
-  cumulative: 'a running total (cumulative): reach it through a live dbt connection',
-  conversion: 'a conversion metric: reach it through a live dbt connection',
-  time_offset: 'compares with an earlier period (offset_window or offset_to_grain)',
+  cumulative: 'not a window over a plain metric: over a balance, or with both a window and a grain',
+  conversion: "dbt pairs each conversion with the closest base event before it and counts conversions; Ordinate's funnel counts people from their first, so the figures differ",
+  time_offset: 'dbt shifts each day and then adds the days up, so its periods don\'t line up with Ordinate\'s "same period last year". Make it here as a change on last year',
   cross_model: 'its inputs are on more than one semantic model',
-  window_groupings: 'a balance kept per entity (window_groupings)',
+  window_groupings: "a balance kept per entity (window_groupings): how dbt groups it by other fields isn't documented, so Ordinate can't match it yet",
   unknown_aggregation: "an aggregation Ordinate doesn't compute exactly (median, percentile, sum_boolean)",
   not_a_column: 'its expr is SQL, not one column of the dataset, or a column of another type',
   filter_shape: "its filter is not one Ordinate reads exactly: comparisons joined by AND, on a simple metric's own dimensions",
@@ -75,7 +75,15 @@ const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
   live_refused: "a balance can't be computed on a Live dataset yet",
   unreadable: "a metric type or definition Ordinate doesn't read",
   no_dataset: 'its semantic model has no dataset here',
+  all_time: 'a running total since the first day: Ordinate\'s windows are "to date" or "last N days"',
+  period_agg: 'dbt reads each week or month at its first day (period_agg: first, its default) or averages its days; Ordinate reads a period at its last day',
+  period_agg_last: "dbt reads each period at its last day whose window holds rows (period_agg: last); Ordinate at the period's last day, which has no figure when that window is empty, so the figures part there",
+  window_unit: "a window in months, quarters, years or hours, or a custom grain: Ordinate's rolling windows count whole days, up to 366",
+  calendar_differs: "a week to date, or a to-date on a calendar unlike dbt's: dbt's weeks are its warehouse's, and its quarters and years start in January",
+  no_base_metric: 'no unfiltered simple metric with a date on its measure to build a window on',
+  count_window: 'a count over a window: with no rows in it, Ordinate counts 0 where dbt shows no figure',
 };
+
 
 function skippedLine(i: PlanItem, under: PlanItem[]): PlanLine {
   const more = under.length ? `and ${dependents(under)} on it` : undefined;

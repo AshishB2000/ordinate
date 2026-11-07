@@ -20,16 +20,19 @@ import type { FilterStep } from '../data/transforms';
 import { NUMBER_AGGREGATIONS, type Aggregation } from '../data/aggregations';
 import { sanitizeDefinition, sanitizeFormat, sanitizeMetricFilters, type MetricDefinition, type MetricFormat } from '../analysis/metrics';
 import { formatFor } from '../analysis/metricAuto';
-import { DEFAULT_CALENDAR } from '../analysis/dateIntel';
+import { DEFAULT_CALENDAR, type CalendarPrefs } from '../analysis/dateIntel';
 import { clip } from './clip';
 import { parseDbtWhere } from './dbtFilter';
+import { cumulativeSkip, type SimpleTranslation } from './dbtCumulative';
 import type { ModelDataset, ModelField, ModelMetric } from './modelFormat';
 import type { ParsedModel } from './modelRead';
 
 /** Why a dbt object is not imported. `no_dataset`: its semantic model has no dataset here (a2 says it as missing). */
 export type DbtSkip =
   | 'cumulative' | 'conversion' | 'time_offset' | 'cross_model' | 'window_groupings' | 'unknown_aggregation'
-  | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset';
+  | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset'
+  // f2 (./dbtCumulative.ts): why a cumulative metric is not a period metric
+  | 'all_time' | 'period_agg' | 'period_agg_last' | 'window_unit' | 'calendar_differs' | 'no_base_metric' | 'count_window';
 export type DbtKind = 'metric' | 'dimension' | 'entity' | 'semanticModel';
 
 export interface DbtSkipped {
@@ -86,7 +89,7 @@ const MAX_FORMULA = 2_000;
 
 interface Dim { column: ParsedColumn | null; time: boolean }
 interface Model { name: string; ds?: DbtDataset; entity?: string; defaultTime?: string; dims: Map<string, Dim> }
-type Result = { metric: ModelMetric; model: string } | { skip: DbtSkip; model?: string; because?: string };
+type Result = { metric: ModelMetric; model: string; measure?: string; filtered?: boolean } | { skip: DbtSkip; model?: string; because?: string };
 
 const aliasOf = (i: Obj): string => String(name(own(i, 'alias')) ?? own(i, 'name'));
 
@@ -129,7 +132,8 @@ function matchModels(sms: Obj[], datasets: readonly DbtDataset[], datasetMap: Re
   return out;
 }
 
-export function translateDbt(json: unknown, datasets: readonly DbtDataset[], datasetMap: Readonly<Record<string, string>>): { model: ParsedModel; skipped: DbtSkipped[] } {
+/** `calendar`: the workspace's, which names why a dbt to-date is skipped (f2). */
+export function translateDbt(json: unknown, datasets: readonly DbtDataset[], datasetMap: Readonly<Record<string, string>>, calendar: CalendarPrefs): { model: ParsedModel; skipped: DbtSkipped[] } {
   const skipped: DbtSkipped[] = [];
   const seenModel = new Set<string>();
   const sms = nodes(own(json, 'semantic_models')).filter((s): s is Obj => {
@@ -142,6 +146,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
   const files: ModelDataset[] = [];
   const models = new Map<string, Model>();
   const measures = new Map<string, { measure: Obj; model: Model }>();
+  const given = (v: unknown): boolean => v !== undefined && v !== null;
 
   for (const sm of sms) {
     const match = matches.get(sm.name as string) as DbtModelMatch;
@@ -254,7 +259,7 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     const definition = sanitizeDefinition({ column: column.name, aggregation: agg, ...(snapshot && { snapshot }) });
     return {
       metric: { ...shell(n, m, ds), definition, ...(filters.length && { filters }), format: sanitizeFormat(formatFor(column.name, agg)), ...(timeColumn && { timeColumn }) },
-      model: model.name,
+      model: model.name, measure: own(inp, 'name') as string, filtered: filters.length > 0,
     };
   };
 
@@ -313,7 +318,13 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
         break;
       }
       case 'cumulative':
-        r = { skip: 'cumulative' };
+        r = cumulativeSkip(m, {
+          input,
+          measure: (k) => { const f = measures.get(k); return f && { model: f.model.name, hasDataset: !!f.model.ds, nonAdditive: given(own(f.measure, 'non_additive_dimension')) }; },
+          simple: simpleTranslations,
+          filters: (inp, metric, model) => { const t = [whereTexts(own(inp, 'filter')), whereTexts(own(metric, 'filter'))]; const mo = models.get(model); return t[0] && t[1] && mo ? where([...new Set([...t[0], ...t[1]])], mo) : null; },
+          calendar,
+        });
         break;
       case 'conversion':
         r = { skip: 'conversion' };
@@ -324,6 +335,17 @@ export function translateDbt(json: unknown, datasets: readonly DbtDataset[], dat
     visiting.delete(n);
     done.set(n, r);
     return r;
+  }
+
+  /** Every simple metric translated, by dbt name in name order: a cumulative metric's base is one of them (f2). */
+  function simpleTranslations(): Map<string, SimpleTranslation> {
+    const out = new Map<string, SimpleTranslation>();
+    for (const k of [...raw.keys()].sort()) {
+      if (own(raw.get(k), 'type') !== 'simple') continue;
+      const r = translate(k);
+      if ('metric' in r) out.set(k, { metric: r.metric, measure: r.measure ?? null, filtered: !!r.filtered });
+    }
+    return out;
   }
 
   const metrics: ModelMetric[] = [];

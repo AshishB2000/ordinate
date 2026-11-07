@@ -1,0 +1,1566 @@
+{
+  "semantic_models": [
+    {
+      "name": "orders",
+      "defaults": {
+        "agg_time_dimension": "order_date"
+      },
+      "description": null,
+      "node_relation": {
+        "alias": "orders",
+        "schema_name": "main",
+        "database": "fixture",
+        "relation_name": "\"fixture\".\"main\".\"orders\""
+      },
+      "primary_entity": null,
+      "entities": [
+        {
+          "name": "order",
+          "description": null,
+          "type": "primary",
+          "role": null,
+          "expr": "order_id",
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "customer",
+          "description": null,
+          "type": "foreign",
+          "role": null,
+          "expr": "customer_id",
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "measures": [
+        {
+          "name": "order_total",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "amount",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": null,
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "order_count",
+          "agg": "count",
+          "description": null,
+          "create_metric": false,
+          "expr": "order_id",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": null,
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "refund_total",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "amount",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": null,
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "dimensions": [
+        {
+          "name": "region",
+          "description": null,
+          "type": "categorical",
+          "is_partition": false,
+          "type_params": null,
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "status",
+          "description": null,
+          "type": "categorical",
+          "is_partition": false,
+          "type_params": null,
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "order_date",
+          "description": null,
+          "type": "time",
+          "is_partition": false,
+          "type_params": {
+            "time_granularity": "day",
+            "validity_params": null
+          },
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "label": null,
+      "metadata": null,
+      "config": {
+        "meta": {}
+      }
+    },
+    {
+      "name": "balances",
+      "defaults": {
+        "agg_time_dimension": "snapshot_date"
+      },
+      "description": null,
+      "node_relation": {
+        "alias": "balances",
+        "schema_name": "main",
+        "database": "fixture",
+        "relation_name": "\"fixture\".\"main\".\"balances\""
+      },
+      "primary_entity": "balance",
+      "entities": [
+        {
+          "name": "account",
+          "description": null,
+          "type": "foreign",
+          "role": null,
+          "expr": "account_id",
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "account_region",
+          "description": null,
+          "type": "foreign",
+          "role": null,
+          "expr": "region",
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "measures": [
+        {
+          "name": "mrr_by_account",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "mrr",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": {
+            "name": "snapshot_date",
+            "window_choice": "max",
+            "window_groupings": [
+              "account"
+            ]
+          },
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "mrr_by_account_region",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "mrr",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": {
+            "name": "snapshot_date",
+            "window_choice": "max",
+            "window_groupings": [
+              "account",
+              "account_region"
+            ]
+          },
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "mrr_first_by_account",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "mrr",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": {
+            "name": "snapshot_date",
+            "window_choice": "min",
+            "window_groupings": [
+              "account"
+            ]
+          },
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "dimensions": [
+        {
+          "name": "region",
+          "description": null,
+          "type": "categorical",
+          "is_partition": false,
+          "type_params": null,
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "snapshot_date",
+          "description": null,
+          "type": "time",
+          "is_partition": false,
+          "type_params": {
+            "time_granularity": "day",
+            "validity_params": null
+          },
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "label": null,
+      "metadata": null,
+      "config": {
+        "meta": {}
+      }
+    },
+    {
+      "name": "events",
+      "defaults": {
+        "agg_time_dimension": "ts"
+      },
+      "description": null,
+      "node_relation": {
+        "alias": "events",
+        "schema_name": "main",
+        "database": "fixture",
+        "relation_name": "\"fixture\".\"main\".\"events\""
+      },
+      "primary_entity": "event_row",
+      "entities": [
+        {
+          "name": "user",
+          "description": null,
+          "type": "foreign",
+          "role": null,
+          "expr": "user_id",
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "measures": [
+        {
+          "name": "visit_count",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "CASE WHEN event = 'visit' THEN 1 ELSE 0 END",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": null,
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "buy_count",
+          "agg": "sum",
+          "description": null,
+          "create_metric": false,
+          "expr": "CASE WHEN event = 'buy' THEN 1 ELSE 0 END",
+          "agg_params": null,
+          "metadata": null,
+          "non_additive_dimension": null,
+          "agg_time_dimension": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "dimensions": [
+        {
+          "name": "event",
+          "description": null,
+          "type": "categorical",
+          "is_partition": false,
+          "type_params": null,
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        },
+        {
+          "name": "ts",
+          "description": null,
+          "type": "time",
+          "is_partition": false,
+          "type_params": {
+            "time_granularity": "day",
+            "validity_params": null
+          },
+          "expr": null,
+          "metadata": null,
+          "label": null,
+          "config": {
+            "meta": {}
+          }
+        }
+      ],
+      "label": null,
+      "metadata": null,
+      "config": {
+        "meta": {}
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "revenue",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "orders",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "order_count",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "order_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "refunds_card",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "refund_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "refund_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": {
+        "where_filters": [
+          {
+            "where_sql_template": "{{ Dimension('order__status') }} = 'refund'"
+          }
+        ]
+      },
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "mrr",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "mrr_by_account",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "mrr_by_account",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "mrr_two",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "mrr_by_account_region",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "mrr_by_account_region",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "mrr_first",
+      "description": null,
+      "type": "simple",
+      "type_params": {
+        "measure": {
+          "name": "mrr_first_by_account",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "mrr_first_by_account",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_7d",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_2w",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 2,
+            "granularity": "week"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_wtd",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": null,
+          "grain_to_date": "week",
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_mtd",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": null,
+          "grain_to_date": "month",
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_qtd",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": null,
+          "grain_to_date": "quarter",
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_ytd",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": null,
+          "grain_to_date": "year",
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "eu_revenue_7d",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": {
+        "where_filters": [
+          {
+            "where_sql_template": "{{ Dimension('order__region') }} = 'EU'"
+          }
+        ]
+      },
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "orders_7d",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_count",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_7d_first",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": {
+          "count": 7,
+          "granularity": "day"
+        },
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "first"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_7d_average",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "average"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_all_time",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": null,
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_rolling_month",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 1,
+            "granularity": "month"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_7d_filled",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "order_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": true,
+          "fill_nulls_with": 0
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "order_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": true,
+            "fill_nulls_with": 0
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "refunds_7d",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "refund_total",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "refund_total",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "mrr_7d",
+      "description": null,
+      "type": "cumulative",
+      "type_params": {
+        "measure": {
+          "name": "mrr_by_account",
+          "filter": null,
+          "alias": null,
+          "join_to_timespine": false,
+          "fill_nulls_with": null
+        },
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": null,
+        "cumulative_type_params": {
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "grain_to_date": null,
+          "period_agg": "last"
+        },
+        "input_measures": [
+          {
+            "name": "mrr_by_account",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "aov_7d",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "revenue_7d / orders_7d",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "revenue_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          },
+          {
+            "name": "orders_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "eu_share_7d",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "eu_revenue_7d / revenue_7d",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "eu_revenue_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          },
+          {
+            "name": "revenue_7d",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_ly",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "revenue_ly",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "revenue",
+            "filter": null,
+            "alias": "revenue_ly",
+            "offset_window": {
+              "count": 1,
+              "granularity": "year"
+            },
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_yoy_change",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "revenue - revenue_ly",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "revenue",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          },
+          {
+            "name": "revenue",
+            "filter": null,
+            "alias": "revenue_ly",
+            "offset_window": {
+              "count": 1,
+              "granularity": "year"
+            },
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "revenue_yoy_growth",
+      "description": null,
+      "type": "derived",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": "(revenue - revenue_ly) / revenue_ly",
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [
+          {
+            "name": "revenue",
+            "filter": null,
+            "alias": null,
+            "offset_window": null,
+            "offset_to_grain": null
+          },
+          {
+            "name": "revenue",
+            "filter": null,
+            "alias": "revenue_ly",
+            "offset_window": {
+              "count": 1,
+              "granularity": "year"
+            },
+            "offset_to_grain": null
+          }
+        ],
+        "conversion_type_params": null,
+        "cumulative_type_params": null,
+        "input_measures": []
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    },
+    {
+      "name": "visit_to_buy",
+      "description": null,
+      "type": "conversion",
+      "type_params": {
+        "measure": null,
+        "numerator": null,
+        "denominator": null,
+        "expr": null,
+        "window": null,
+        "grain_to_date": null,
+        "metrics": [],
+        "conversion_type_params": {
+          "base_measure": {
+            "name": "visit_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          },
+          "conversion_measure": {
+            "name": "buy_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          },
+          "entity": "user",
+          "calculation": "conversion_rate",
+          "window": {
+            "count": 7,
+            "granularity": "day"
+          },
+          "constant_properties": null
+        },
+        "cumulative_type_params": null,
+        "input_measures": [
+          {
+            "name": "visit_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          },
+          {
+            "name": "buy_count",
+            "filter": null,
+            "alias": null,
+            "join_to_timespine": false,
+            "fill_nulls_with": null
+          }
+        ]
+      },
+      "filter": null,
+      "metadata": null,
+      "label": null,
+      "config": {
+        "meta": {}
+      },
+      "time_granularity": null
+    }
+  ],
+  "project_configuration": {
+    "time_spine_table_configurations": [],
+    "metadata": null,
+    "dsi_package_version": {
+      "major_version": "0",
+      "minor_version": "7",
+      "patch_version": "4"
+    },
+    "time_spines": [
+      {
+        "node_relation": {
+          "alias": "metricflow_time_spine",
+          "schema_name": "main",
+          "database": "fixture",
+          "relation_name": "\"fixture\".\"main\".\"metricflow_time_spine\""
+        },
+        "primary_column": {
+          "name": "date_day",
+          "time_granularity": "day"
+        },
+        "custom_granularities": []
+      }
+    ]
+  },
+  "saved_queries": []
+}

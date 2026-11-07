@@ -143,9 +143,10 @@ updates it, even after a rename here (the dry run shows the rename back). An imp
 a table's role, grain, description and guide, a field's other names and value labels, and a metric's format,
 direction and target stay this project's.
 
-**Skipped, each named with why**, never approximated: cumulative and conversion metrics (reach them through a live
-dbt connection); a derived input with `offset_window` or `offset_to_grain`; inputs on more than one semantic model;
-`window_groupings`; `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
+**Skipped, each named with why**, never approximated: every cumulative metric (below); conversion metrics (dbt pairs each conversion with the closest base event and counts
+conversions, Ordinate's funnel counts people from their first); a derived input with `offset_window` or
+`offset_to_grain` (dbt shifts each day, then adds the days up); inputs on more than one semantic model;
+`window_groupings` (how dbt groups it by other fields is not documented); `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
 one column; a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
 an ordering comparison on text), or on a ratio or derived metric; `fill_nulls_with` (dbt shows 0 where there are
 no rows, Ordinate shows no figure); a snapshot on a Live dataset; a metric type Ordinate does not read; and a
@@ -153,8 +154,20 @@ ratio or derived metric whose input was skipped, listed under that input. Foreig
 upload reads at most 500 semantic models and 2,000 metrics. dbt import is in the app only: MCP's `import_model`
 takes model files.
 
-The translation is held, figure by figure, to dbt's on a checked-in project (`scripts/fixtures/dbt/`,
-`scripts/test-dbtImport.ts`; its README says how the figures were recorded).
+**Cumulative metrics.** A day's window in dbt (`N days`, `N weeks` as 7N days, or a month, quarter or year to
+date) sums the same rows as Ordinate's "last N days" or "to date" ending that day. But dbt reads a week, month,
+quarter or year through `period_agg`, and none of its three readings is Ordinate's: `last` takes the period's last
+day whose window holds rows, where Ordinate takes the period's last day and shows no figure when that window is
+empty (orders that stopped mid-month, a Sunday with no order); `first`, the default, and `average` read the period
+otherwise. So none is imported, and each is named with the first thing in the way: no window and no grain; a window
+in months, quarters, years or hours, or a custom grain; a week to date (dbt's week is its warehouse's) or a to-date
+on a calendar unlike dbt's; `period_agg` `first` or `average`; `fill_nulls_with`; over a balance; no unfiltered
+simple metric with a date on its measure; over a count (0 here where dbt has no figure); a filter of another shape;
+else `period_agg: last`. A ratio or derived metric over one falls with it.
+
+The translation is held, figure by figure, to dbt's on checked-in projects (`scripts/fixtures/dbt/` with
+`scripts/test-dbtImport.ts`, `scripts/fixtures/dbt-part5/` with `scripts/test-dbtPart5.ts`; each README says how the
+figures were recorded).
 
 ## The loop in CI
 

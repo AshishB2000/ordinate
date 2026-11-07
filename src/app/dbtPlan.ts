@@ -12,6 +12,7 @@
 import * as datasets from '../data/datasets';
 import { isLive } from '../data/liveDataset';
 import { getMetric } from '../analysis/metrics';
+import { getCalendar } from '../analysis/dateIntel';
 import { objectBase, type ModelDataset, type ModelField, type ModelMetric } from './modelFormat';
 import { translateDbt, type DbtKind, type DbtSkipped } from './dbtImport';
 import type { ModelMatch } from './modelMatch';
@@ -22,7 +23,7 @@ import type { PlanItem, PlanKind } from './modelPlan';
 export async function dbtModel(projectId: string, json: unknown, datasetMap: Readonly<Record<string, string>>): Promise<ParsedModel> {
   const metas = await Promise.all((await datasets.listDatasets(projectId)).map((d) => datasets.getDatasetMeta(projectId, d.id)));
   const list = metas.filter((m) => !!m).map((m) => ({ id: m.id, name: m.name, columns: m.columns, ...(isLive(m) && { live: true }) }));
-  return translateDbt(json, list, datasetMap).model;
+  return translateDbt(json, list, datasetMap, getCalendar()).model; // the calendar decides a to-date (f2)
 }
 
 /** The project's metrics with their stored `importedFrom`: the export never writes it, so a2 reads it here, for a dbt file only. */
