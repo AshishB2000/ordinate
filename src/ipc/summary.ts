@@ -248,8 +248,12 @@ async function alertFact(projectId: string, ids: string[], analysisId: string, t
       await gateRows(projectId, e.datasetId);
     }
     const rule = file.rules.find((r) => r.id === e.ruleId);
-    // Leaving by a share path, it quotes the rule's figure: withheld as the rule's own post is (alertPosts), unjudged when the rule is gone.
-    if (scope.share && (!rule || (await kpiHidden(projectId, await ruleReads(projectId, rule), scope.share)))) continue;
+    // Leaving by a share path, it quotes the rule's figure: withheld as the rule's own post is (alertPosts). Not said when it
+    // cannot be judged: the rule is gone, or its figure cannot be read (a Live rule's warehouse down, its daily cap).
+    if (scope.share) {
+      const reads = rule ? await ruleReads(projectId, rule).catch(() => null) : null;
+      if (!reads || (await kpiHidden(projectId, reads, scope.share))) continue;
+    }
     ev = e;
     break;
   }

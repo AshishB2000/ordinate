@@ -156,6 +156,18 @@ async function main(): Promise<void> {
     ok('NEGATIVE CONTROL (drop): the hours Summary keeps its KPI sentence, on /p/ and in its report', hoursKpi(said(drop.hoursPage)) && hoursKpi(drop.hoursReport), show([said(drop.hoursPage), drop.hoursReport]));
     const app2 = await rpc('summary:compute', { projectId: P, analysisId: fx.pay, pages: (await inApp(() => analysis.getAnalysis(P, fx.pay)))!.sheets });
     ok('NEGATIVE CONTROL (drop): in the app the Summary still says the payroll KPI sentence', app2.ok && app2.sentences.some((s: any) => s.text.startsWith('Payroll KPI rose')), show(app2)); // any: a sentence
+    // An alert's figure that cannot be read (a Live rule's warehouse down, its daily cap): not judged, so not said — the page still builds.
+    const alertMetric: typeof import('../src/analysis/alertMetric') = require('../src/analysis/alertMetric');
+    const realReads = alertMetric.ruleReads;
+    (alertMetric as { ruleReads: unknown }).ruleReads = async () => { throw new Error('warehouse down'); };
+    try {
+      const run = await rpc('publish:run', { projectId: P, dashboardIds: [fx.pay], storyIds: [] });
+      const file = run?.site?.pages?.find((x: any) => x.kind === 'dashboard')?.file; // any: a site page
+      const lines = file ? said(dataBlock(await (await fetch(`${base}/p/${run.site.id}/${file}`)).text())) : [];
+      ok('drop: an alert whose figure cannot be judged is not said, and the page still publishes', !!file && !lines.some((x) => x.startsWith('Alert')), show([run?.error, lines]));
+    } finally {
+      (alertMetric as { ruleReads: unknown }).ruleReads = realReads;
+    }
 
     // ── the report narrative's facts, under drop ──
     const build: (...a: unknown[]) => Promise<{ text: string }> = copilot.buildFacts as never; // loosely typed: it also compiles against buildFacts before it took `share` (the red run)
