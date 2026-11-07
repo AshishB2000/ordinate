@@ -241,6 +241,13 @@ void (async () => {
   const other = await chart({ category: 'counted', grain: 'month', values: [M(stock)] });
   ok('a chart by another date is refused, naming both', other.ok === false && other.error === msg.snapshotOtherDate('Stock', 'day', 'counted'), show(other));
   ok('NEGATIVE CONTROL: the same chart of a plain metric draws', (await chart({ category: 'counted', grain: 'month', values: [M(units)] })).ok === true);
+  // A related table's date of the same name is another date, not the snapshot's own.
+  const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+  const regions = (await datasets.saveDataset(pid, { name: 'Regions', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'day', type: 'date' }], rows: REGIONS.map((r, i) => [r, isoFromDays(START + i)]) } as Any))!.id;
+  await rels.saveRelationship(pid, { from: { datasetId: ds, column: 'region' }, to: { datasetId: regions, column: 'region' }, cardinality: 'many_to_one' } as Any);
+  const joined = await chart({ category: 'day', categoryDatasetId: regions, grain: 'month', values: [M(stock)] });
+  ok('a chart by a related table\'s same-named date is refused, naming it', joined.ok === false && joined.error === msg.snapshotOtherDate('Stock', 'day', 'Regions.day'), show(joined));
+  ok('NEGATIVE CONTROL: …a plain metric draws by it', (await chart({ category: 'day', categoryDatasetId: regions, grain: 'month', values: [M(units)] })).ok === true);
   const piv = await chart({ category: 'region', values: [M(stock)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(stock)] } });
   ok('a pivot is refused', piv.ok === false && piv.error === msg.snapshotInPivot('Stock'), show(piv));
   ok('NEGATIVE CONTROL: the same pivot of a plain metric draws', (await chart({ category: 'region', values: [M(units)], pivot: { rows: [{ column: 'region' }], columns: [], values: [M(units)] } })).ok === true);
