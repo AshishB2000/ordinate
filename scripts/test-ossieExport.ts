@@ -46,6 +46,13 @@ void (async () => {
   ok('a metric with a filter is reported, not exported without it', rep('metric', 'Revenue') && !ms.some((m) => m.name === 'Revenue'));
   ok('a snapshot, a period and a formula metric are reported', rep('metric', 'Stock on hand') && rep('metric', 'Revenue MTD') && rep('metric', 'Avg basket'));
   ok('a distinct count of a text column is reported, not exported (section 6 has the figures)', rep('metric', 'Orders') && !ms.some((m) => m.name === 'Orders'));
+  type Kept = { dataset: string; name?: string; filters?: { term?: string }[]; definition?: { base?: string } };
+  const kept = JSON.parse(doc.custom_extensions[0].data) as Record<string, Kept[]>;
+  const keptOf = (n: string) => kept.metrics.find((m) => m.name === n);
+  ok('a kept record names what it refers to, never by an id the file does not hold', !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(doc.custom_extensions[0].data)
+    && keptOf('Revenue')?.filters?.[0]?.term === 'EMEA' && keptOf('Revenue MTD')?.definition?.base === 'Revenue', doc.custom_extensions[0].data.slice(0, 400));
+  const keptSets = ['metrics', 'terms', 'baseFilters', 'valueLabels'].flatMap((k) => kept[k].map((r) => r.dataset));
+  ok('…and the dataset by its name in the document', keptSets.length > 0 && keptSets.every((n) => !!ds(n)), keptSets.join());
   ok('terms and value labels are reported', rep('term', 'EMEA') && rep('valueLabels', 'region'));
   ok('role and sensitivity are reported; a default calendar is not', rep('role', 'Orders') && rep('sensitivity', 'amount') && !rep('calendar', 'Calendar'));
   ok('every unmapped definition is kept in the ordinate extension', doc.custom_extensions[0].vendor_name === 'ordinate' && /EMEA/.test(doc.custom_extensions[0].data));

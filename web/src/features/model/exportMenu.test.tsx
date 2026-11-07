@@ -107,6 +107,8 @@ describe('The Data model: Export ▾', () => {
     expect(dialog.textContent).toContain('Value labels on 1 field');
     expect(dialog.textContent).toContain('1 metric');
     expect(dialog.textContent).toContain('1 calculated field');
+    expect(dialog.textContent).toContain('the rest of this list is not in the file'); // roles, dates, one-to-one, calcs, marks: not kept
+    expect(dialog.textContent).not.toContain('nothing is lost');
     expect(dialog.textContent).toContain('Customers, Orders');
     expect(dialog.textContent).not.toContain('Everything mapped.');
   });

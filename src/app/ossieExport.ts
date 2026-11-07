@@ -47,6 +47,8 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
   const names = new Map([...slugsFor(dsets)].map(([id, s]) => [id, s.replace(/-/g, '_')]));
   const slugOf = (id: string): string => names.get(id) as string;
   const fileSlugs = slugsFor(dsets);
+  // A kept record refers to a term or metric by id, which the file does not hold: it reads that one's name instead.
+  const named = new Map([...metrics, ...terms].map((x) => [x.id, x.name]));
   const colsOf = (d: ModelDataset) => inputs.columns.get(d.id) ?? [];
   const datasets: Json[] = [];
 
@@ -58,7 +60,7 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
       const syn = [f?.displayName, ...(f?.aliases ?? [])].filter((s): s is string => !!s);
       // A marked field's stored values (its example, its value labels) stay out, as Ordinate's own AI never sees them.
       const ai: Json = { synonyms: some(syn), examples: f?.example && !f.sensitivity ? [f.example] : undefined };
-      if (f?.values?.length && !f.sensitivity) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: d.name, field: c.name, values: f.values }); }
+      if (f?.values?.length && !f.sensitivity) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: slugOf(d.id), field: c.name, values: f.values }); }
       if (f?.sensitivity) miss('sensitivity', c.name, ossieWhy.sensitivity());
       return {
         name: c.name, expression: { sql: ident(c.name) }, description: f?.description, datatype: TYPE[c.type],
@@ -80,16 +82,17 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
         // COUNT(x) counts '' and '  '; NULLIF(TRIM(x), '') is no fix, as TRIM's whitespace set varies by dialect.
         : (def.aggregation === 'count' || def.aggregation === 'countd') && col.type === 'text' ? ossieWhy.metricCountText()
         : undefined;
-      if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
+      if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: slugOf(d.id) }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields
       while (taken.has(name)) name += ' (metric)';
       taken.add(name);
+      named.set(m.id, name);
       dm.push({ name, expression: { sql: AGG_SQL[def.aggregation](ident(def.column)) }, description: m.description });
       if (m.timeColumn) miss('metricDate', m.name, ossieWhy.metricDate());
       if (m.direction || m.target || m.format.kind !== 'number' || m.format.prefix || m.format.suffix) { miss('metricSettings', m.name, ossieWhy.metricSettings()); keep('metricSettings', { metric: m.name, format: m.format, direction: m.direction, target: m.target }); }
     }
-    for (const t of terms.filter((x) => x.dataset === d.id).sort(byName)) { miss('term', t.name, ossieWhy.term()); keep('terms', { ...strip(t), dataset: d.name }); }
-    if (d.baseFilters?.length) { miss('baseFilters', d.name, ossieWhy.baseFilters()); keep('baseFilters', { dataset: d.name, filters: d.baseFilters }); }
+    for (const t of terms.filter((x) => x.dataset === d.id).sort(byName)) { miss('term', t.name, ossieWhy.term()); keep('terms', { ...strip(t), dataset: slugOf(d.id) }); }
+    if (d.baseFilters?.length) { miss('baseFilters', d.name, ossieWhy.baseFilters()); keep('baseFilters', { dataset: slugOf(d.id), filters: d.baseFilters }); }
     if (d.role) miss('role', d.name, ossieWhy.role());
     const source = inputs.sources.get(d.id);
     if (!source) report.noSource.push(d.name);
@@ -125,7 +128,7 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     name: manifest.project.name || 'Ordinate project',
     datasets,
     relationships: some(relationships.sort(byName)),
-    custom_extensions: [{ vendor_name: 'ordinate', data: JSON.stringify(JSON.parse(modelJson(ext))) }],
+    custom_extensions: [{ vendor_name: 'ordinate', data: JSON.stringify(JSON.parse(modelJson(ext), (_k, v: unknown) => (typeof v === 'string' ? named.get(v) ?? v : v))) }],
   };
   return { text: modelJson(doc), report };
 }

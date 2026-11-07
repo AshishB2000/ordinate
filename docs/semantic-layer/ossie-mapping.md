@@ -13,7 +13,9 @@ Interchange until it entered the Apache Incubator). Licence: Apache 2.0.
   and a JSON Schema validator would be a dependency (an owner decision). The test-only check (`scripts/ossieShape.ts`) is
   written from the required keys, types and enums in `spec.md`.
 - **Extensions:** `custom_extensions: [{ vendor_name, data }]`, `data` a string holding JSON. Ordinate writes one entry,
-  `vendor_name: "ordinate"`.
+  `vendor_name: "ordinate"`. A record kept there names its dataset as the document does (`orders`, not `Orders`) and the
+  term or metric it refers to by name (the file holds no ids). Not kept anywhere: roles, which metric counts by a date,
+  one-to-one marks, calculated fields and sensitivity marks; the report dialog says so.
 
 | Ordinate (D9) | Ossie 0.2.0.dev0 | Result |
 |---|---|---|
