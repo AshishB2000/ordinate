@@ -11,6 +11,7 @@ import * as datasets from '../data/datasets';
 import { loadStrict } from '../app/catalog';
 import { closedToCaller, restrictedOn } from '../data/rowAccess';
 import { redactBaseFilters } from '../data/liveBaseFilters';
+import { reviewItems, type ReviewItem } from '../analysis/statusReview';
 import type { TableRole } from '../app/tableDocs';
 import type { FilterStep, TransformStep } from '../data/transforms';
 
@@ -34,7 +35,8 @@ export interface ModelTable {
 
 export interface TodoRow { datasetId: string; role: TableRole; key: string; repeatedKeys: number | null; hasGuide: boolean; description: string }
 
-export type OverviewReply = { ok: true; tables: ModelTable[]; todo: TodoItem[]; more: number } | { ok: false; error: string };
+/** `review` is absent when nothing needs it (part 4); `todo` keeps its part-1 kinds for older browsers. */
+export type OverviewReply = { ok: true; tables: ModelTable[]; todo: TodoItem[]; more: number; review?: ReviewItem[] } | { ok: false; error: string };
 
 export const TODO_SHOWN = 4;
 
@@ -57,7 +59,7 @@ export function todoOf(rows: TodoRow[]): { todo: TodoItem[]; more: number } {
 
 const isFilter = (s: TransformStep): s is FilterStep => s.type === 'filter';
 
-export async function modelOverview(projectId: string): Promise<{ tables: ModelTable[]; todo: TodoItem[]; more: number }> {
+export async function modelOverview(projectId: string): Promise<{ tables: ModelTable[]; todo: TodoItem[]; more: number; review?: ReviewItem[] }> {
   // A catalog that cannot be read fails the read: it must not pass for "nothing written yet".
   const [list, file, restricted] = await Promise.all([datasets.listDatasets(projectId), loadStrict(projectId), restrictedOn(projectId)]);
   const rows: TodoRow[] = [];
@@ -86,7 +88,8 @@ export async function modelOverview(projectId: string): Promise<{ tables: ModelT
   // `rows` was filled as each dataset resolved: put it back in list order before ranking.
   const order = new Map(list.map((d, i) => [d.id, i]));
   rows.sort((a, b) => (order.get(a.datasetId) ?? 0) - (order.get(b.datasetId) ?? 0));
-  return { tables, ...todoOf(rows) };
+  const review = await reviewItems(projectId);
+  return { tables, ...todoOf(rows), ...(review.length && { review }) };
 }
 
 export function register(): void {

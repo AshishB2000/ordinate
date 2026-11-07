@@ -18,6 +18,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { listReports } from '../analysis/reportSpec';
 import * as stories from '../analysis/stories';
 import { storyRefs } from '../analysis/storyModel';
+import { statusFor, type StatusView } from '../analysis/statusStore';
 import * as catalog from './catalog';
 import type { CatalogKind, CatalogFile, RecordDoc, DocPatch } from './catalog';
 
@@ -199,14 +200,18 @@ export interface CatalogRow {
   updatedAt: string;
   usage: number;
   stale: boolean;
+  /** Metrics and datasets only, and only when an admin has said something (analysis/statusStore). */
+  status?: StatusView;
 }
 
 export async function listRows(projectId: string, now = Date.now()): Promise<CatalogRow[]> {
   const [entries, file, usage] = await Promise.all([
     allEntries(projectId, now), catalog.load(projectId), usageCounts(projectId),
   ]);
-  return entries.map((e) => {
+  const status = statusFor(projectId);
+  return Promise.all(entries.map(async (e) => {
     const ref = `${e.kind}:${e.id}`;
+    const st = e.kind === 'metric' || e.kind === 'dataset' ? await status(ref) : null;
     const doc: RecordDoc | undefined = Object.prototype.hasOwnProperty.call(file.records, ref) ? file.records[ref] : undefined;
     const docAt = doc ? doc.updatedAt : '';
     return {
@@ -218,8 +223,9 @@ export async function listRows(projectId: string, now = Date.now()): Promise<Cat
       updatedAt: docAt > String(e.updatedAt || '') ? docAt : String(e.updatedAt || ''),
       usage: usage.get(ref) || 0,
       stale: Boolean(e.stale),
+      ...(st && { status: st }),
     };
-  });
+  }));
 }
 
 // ── Tags ─────────────────────────────────────────────────────────────────────

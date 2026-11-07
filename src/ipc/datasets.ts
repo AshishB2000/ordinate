@@ -35,6 +35,7 @@ import { medianResident } from '../engine/medianResident';
 // same `FilterStep[]` a visual carries, and two sanitisers for one shape is how
 // they drift apart.
 import { sanitizeFilters } from '../analysis/visuals';
+import { withStatus } from '../analysis/statusStore';
 import { explainText, suggestSteps, suggestCalcField } from '../ai/analyze';
 import { buildDatasetSummaryText } from '../ai/datasetPrompt';
 import { withheldColumns } from '../app/sharePolicy';
@@ -363,7 +364,7 @@ export function register() {
 
   // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
   ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
-    const list = await datasets.listDatasets(projectId);
+    const list = await withStatus(projectId, 'dataset', await datasets.listDatasets(projectId));
     if (await seesSourceNames(projectId)) return list; // the one rule "can open the connection": an editor's reply is untouched
     // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
     // refresh's text and the anomaly keys an alert last told of, which can quote a value, are not theirs to read (N2, #16).
