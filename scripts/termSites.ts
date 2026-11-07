@@ -73,7 +73,7 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/visuals/builderState.ts': { count: 1, how: 'keeps' },
   'web/src/features/visuals/filters/filterText.ts': { count: 1, how: 'keeps' },
   // door: the figure entry. Expands a term (expandTerms), or refuses it typed; the row lock keeps one.
-  'src/analysis/termExpand.ts': { count: 1, how: 'door' },
+  'src/analysis/termExpand.ts': { count: 2, how: 'door' },
   // withLockSteps keeps a term; only the door that expanded it may drop it
   'src/data/rowAccess.ts': { count: 2, how: 'door' },
   'src/ipc/rowDoors.ts': { count: 2, how: 'door' },
@@ -108,14 +108,19 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/distinctNarrow.ts': { count: 2, how: 'prepare' },
   // a Live dataset's base filters are a dataset setting: a term is dropped on purpose, like Prepare
   'src/data/liveBaseFilters.ts': { count: 2, how: 'prepare' },
+  // a term's own filters are plain steps: a term inside a term is refused on save (termProblem), dropped on read
+  'src/analysis/terms.ts': { count: 2, how: 'prepare' },
   'src/data/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/data/stepSanitize.ts': { count: 3, how: 'prepare' },
   'src/engine/sqlGen.ts': { count: 2, how: 'prepare' },
   'src/ipc/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/ipc/segments.ts': { count: 1, how: 'prepare' },
+  // a term's own filter rows (no term inside a term: FilterRows terms={false}); the server refuses one anyway
+  'web/src/features/model/terms/TermDialog.tsx': { count: 1, how: 'prepare' },
   'web/src/features/prepare/drafts.ts': { count: 3, how: 'prepare' },
   'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
-  'web/src/features/projects/VersionPreview.tsx': { count: 1, how: 'ignores' },
+  // names a term by its name and any other kept step by its kind, in a version's facts (05b)
+  'web/src/features/projects/VersionPreview.tsx': { count: 2, how: 'ignores' },
 };

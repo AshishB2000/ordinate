@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from './contract';
 
 /** The record types that keep a history (src/app/versions.ts). */
-const VersionType = z.enum(['dataset', 'visual', 'dashboard', 'metric', 'report']);
+const VersionType = z.enum(['dataset', 'visual', 'dashboard', 'metric', 'report', 'term']);
 const Of = { projectId: Uuid, type: VersionType, id: Uuid };
 /** A version's key: its save time with ':' and '.' as '-' (versions.ts KEY_RE checks the full shape). */
 const Key = z.string().max(40);

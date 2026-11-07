@@ -156,7 +156,7 @@ export function computeCardMetric(
   spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot },
   filters: FilterStep[] = [],
   params?: ParamValues,
-): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
+): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf; notes?: string[] }> {
   if (spec.snapshot) return Promise.resolve({ ok: true, value: null }); // shortcut: snapshots are computed from step 07; until then no figure, never a sum over every date
   // D9: a column rollup counts by the control's own column, and no mark reaches an engine or a cache key (no mark: the same array).
   return lockedMetric(projectId, datasetId, spec, rewriteControlPeriods(filters, ''), params, computeCardMetricUnlocked);
@@ -284,7 +284,7 @@ export function register() {
       const res = await computeCardMetric(projectId, datasetId, spec, bound.steps, values);
       if (!res.ok) return { ok: false, error: 'Dataset not found' };
       const fx = res.fx ? { fx: res.fx } : {};
-      const live = res.asOf ? { asOf: res.asOf } : {}; // the warehouse's own time (L2.4), which stampAsOf keeps
+      const live = { ...(res.asOf ? { asOf: res.asOf } : {}), ...(res.notes ? { notes: res.notes } : {}) }; // the warehouse's own time (L2.4), which stampAsOf keeps; the dashboard terms it left out
       // Dated (L0.2, data/figureAsOf) inside the as-of scope: a snapshot view says the snapshot's time.
       return await stampAsOf(bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx, ...live } : { ok: true, value: res.value, ...fx, ...live },
         projectId, [datasetId]);

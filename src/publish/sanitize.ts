@@ -149,6 +149,7 @@ export function sanitizePayload(raw: unknown): unknown {
     // A KPI: its figure, its display, its sentence — and what it measures, when the server wrote that.
     const kpi: Obj = { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
     if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
+    if (typeof o.note === 'string' && o.note) kpi.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
     return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
@@ -162,6 +163,7 @@ export function sanitizePayload(raw: unknown): unknown {
   if (o.pivot) out.pivot = sanitizePivot(o.pivot);
   if (o.geo) out.geo = sanitizeGeo(o.geo);
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
+  if (typeof o.note === 'string' && o.note) out.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
   if (Array.isArray(o.events)) out.events = sanitizeEventMarks(o.events, data.labels.length);
   return out;
 }

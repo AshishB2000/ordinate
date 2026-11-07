@@ -22,6 +22,8 @@ import { ErrorState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
 import type { Encoding, FilterStep } from '../api';
 import { OP_LABELS } from '../filters/filterText';
+import { TermChip } from '../../model/terms/TermChip';
+import { termIdOf } from '../../model/terms/api';
 import s from './Drill.module.css';
 
 export interface DrillTarget {
@@ -141,7 +143,7 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
           <div className={s.chips} aria-label="The filters that define these rows">
             {ready.filters.map((f: FilterStep, i: number) => (
               <span key={i} className={s.chip}>
-                {chip(f)}
+                {termIdOf(f) ? <TermChip projectId={target.projectId} term={termIdOf(f) as string} /> : chip(f)}
               </span>
             ))}
           </div>

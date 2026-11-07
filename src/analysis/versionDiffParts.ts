@@ -24,6 +24,7 @@ export type ChangeKind =
   | 'visual.chartType' | 'visual.category' | 'visual.series' | 'visual.measureAdded' | 'visual.measureRemoved'
   | 'visual.grain' | 'visual.bins' | 'visual.geo' | 'visual.pivot' | 'visual.styling'
   | 'metric.definition' | 'metric.format' | 'metric.direction' | 'metric.tree' | 'metric.timeColumn'
+  | 'term.aliases'
   | 'report.format' | 'report.dashboard' | 'report.pagesAdded' | 'report.pagesRemoved' | 'report.pagesIncluded'
   | 'report.pagesExcluded' | 'report.pagesEdited' | 'report.pagesReordered' | 'report.cover' | 'report.paper'
   | 'report.schedule' | 'report.includeFilters' | 'report.narrative'
@@ -161,6 +162,16 @@ function diffMetric(a: Rec, b: Rec, out: Change[]): void {
   if (!same(a.tree ?? null, b.tree ?? null)) rec('metric.tree', { from: treeShape(a.tree), to: treeShape(b.tree) });
 }
 
+function diffTerm(a: Rec, b: Rec, out: Change[]): void {
+  if ((a.name || '') !== (b.name || '')) out.push({ group: 'record', kind: 'name', params: { from: String(a.name || ''), to: String(b.name || '') } });
+  const names = (x: unknown): string => arr(x).join(', ') || NONE;
+  if (!same(arr(a.aliases), arr(b.aliases))) out.push({ group: 'record', kind: 'term.aliases', params: { from: names(a.aliases), to: names(b.aliases) } });
+  out.push(...diffFilters(arr(a.filters), arr(b.filters)));
+  const da = String(a.description || '');
+  const db = String(b.description || '');
+  if (da !== db) out.push({ group: 'record', kind: 'description', params: {}, words: wordDiff(da, db) });
+}
+
 /** "a product of 2 metrics (1 broken down further)", "a split by region", "no breakdown". */
 function treeShape(t: unknown): string {
   const n: Rec = t && typeof t === 'object' ? (t as Rec) : {};
@@ -240,9 +251,10 @@ function diffDataset(a: Rec, b: Rec, out: Change[]): void {
 }
 
 /** Every change between two contents of a non-dashboard record, in a fixed order. */
-export function diffOther(type: 'visual' | 'metric' | 'report' | 'dataset', a: Rec, b: Rec): Change[] {
+export function diffOther(type: 'visual' | 'metric' | 'report' | 'dataset' | 'term', a: Rec, b: Rec): Change[] {
   const out: Change[] = [];
   if (type === 'visual') diffVisual(a, b, out);
+  else if (type === 'term') diffTerm(a, b, out);
   else if (type === 'metric') diffMetric(a, b, out);
   else if (type === 'report') diffReport(a, b, out);
   else diffDataset(a, b, out);

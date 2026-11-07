@@ -18,7 +18,7 @@ import { t } from '../app/i18n';
 import { computeCardMetric } from './dashboards';
 import { previewDefinition, resolveMetric } from './metrics';
 import { liveCodeOf } from './liveRoute';
-import { gateRows } from '../data/rowAccess';
+import { gateRows, restrictedOn } from '../data/rowAccess';
 
 // What changed between two saved versions (docs/version-diff/00-design.md).
 //
@@ -151,6 +151,7 @@ export function sentence(c: Change): string {
     case 'metric.direction': return M.directionChanged();
     case 'metric.tree': return M.metricTreeChanged(s('from'), s('to'));
     case 'metric.timeColumn': return M.metricTimeColumnChanged(s('from'), s('to'));
+    case 'term.aliases': return M.termAliasesChanged(s('from'), s('to'));
     case 'report.format': return M.reportFormat(s('from'), s('to'));
     case 'report.dashboard': return M.reportDashboard();
     case 'report.pagesAdded': return M.pagesAdded(n('n'));
@@ -193,7 +194,7 @@ export function summaryLine(c: Counts): string {
 }
 
 interface Pair {
-  type: 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
+  type: 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'term';
   projectId: string;
   id: string;
   a: versions.VersionFile;
@@ -211,6 +212,8 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   if (type === 'dataset') await gateRows(projectId, id);
   // A dashboard's history is its draft's: a viewer reads none of it (docs/analysis/00-model.md), as for a missing one.
   if (type === 'dashboard' && (await analysis.readsPublishedOnly(projectId))) return { ok: false, error: M.versionGone() };
+  // A term's versions hold its filter values: a caller row access rules restrict reads none (semantic D12).
+  if (type === 'term' && (await restrictedOn(projectId))) return { ok: false, error: M.versionGone() };
   const keys: [string, string] = [String(input.from || ''), String(input.to || '')];
   const [a, b] = await Promise.all(keys.map((k) => versions.get(projectId, type, id, k)));
   if (!a || !b) return { ok: false, error: M.versionGone() };

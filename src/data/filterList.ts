@@ -7,6 +7,7 @@
 import { sanitizeFilterStep } from './filterStepSanitize';
 import { STEP_TYPES } from './transforms';
 import type { FilterStep } from './transforms';
+import { isTermStep } from './termStep';
 
 /** A kept (unreadable) step is plain JSON this big at most, serialized — a record is untrusted. */
 export const MAX_KEPT_STEP_BYTES = 2048;
@@ -49,4 +50,16 @@ export function sanitizeFilterList(raw: unknown): FilterStep[] {
     if (step) out.push(step as unknown as FilterStep);
   }
   return out;
+}
+
+/**
+ * A dashboard's scope (its filters, controls and selection) with each glossary term marked `fromControl`: a term
+ * that does not apply to a tile there is left out with a note on the tile, where the tile's own term is refused
+ * (../analysis/termExpand). Every other step comes back as it was. Like a date control's mark, no security property.
+ */
+export function markScopeTerms(steps: readonly FilterStep[]): FilterStep[] {
+  return steps.map((s) => {
+    const o: unknown = s;
+    return isTermStep(o) && o.fromControl !== true ? ({ ...o, fromControl: true } as unknown as FilterStep) : s;
+  });
 }

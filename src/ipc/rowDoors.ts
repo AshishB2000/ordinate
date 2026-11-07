@@ -36,6 +36,7 @@ import type { SaveKind } from '../analysis/recordDiff';
 import { isValidId } from '../app/ids';
 import { chartReads, metricReads, relatedColumnNames } from './relationships';
 import { expandTerms } from '../analysis/termExpand';
+import type { TermExpansion } from '../analysis/termExpand';
 import { isTermNotExpandedError, termRefusal } from '../data/termStep';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
@@ -56,6 +57,9 @@ function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
   if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length) return true;
+  // A glossary term's step on another table (semantic D11) reads that table: its column name alone would not say so.
+  const otherTable = (v: unknown): boolean => (Array.isArray(v) ? v.some(otherTable) : typeof (v as FilterStep | null)?.datasetId === 'string' && (v as FilterStep).datasetId !== datasetId);
+  if (otherTable(rest)) return true;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
@@ -124,14 +128,20 @@ async function lockOrRefusal(projectId: string, datasetId: string): Promise<Lock
 
 const isRefusal = (x: unknown): x is Refusal => !!x && typeof x === 'object' && (x as { ok?: unknown }).ok === false;
 
-/** A chart's filters with every term expanded, or the typed refusal of a step this pod cannot apply. */
-export async function expandedOrRefusal(projectId: string, datasetId: string, filters: FilterStep[]): Promise<FilterStep[] | TermRefusal> {
+/** A chart's filters with every term expanded (and the notes of the scope terms left out), or the typed refusal of a step this pod cannot apply. */
+export async function expandedOrRefusal(projectId: string, datasetId: string, filters: FilterStep[]): Promise<TermExpansion | TermRefusal> {
   try {
-    return (await expandTerms(projectId, datasetId, filters)).steps;
+    return await expandTerms(projectId, datasetId, filters);
   } catch (err) {
     if (isTermNotExpandedError(err)) return termRefusal(err);
     throw err;
   }
+}
+
+/** An `ok` reply with the notes of the dashboard terms its figure left out (termExpand); every other reply as it is, the same object. */
+export function withNotes<R>(reply: R, notes: readonly string[]): R {
+  const ok = !!reply && typeof reply === 'object' && (reply as { ok?: unknown }).ok !== false;
+  return ok && notes.length ? { ...reply, notes: [...notes] } : reply;
 }
 
 /** `vizDataFor` under the rules: the body as before, or locked, or a typed refusal reply. */
@@ -145,8 +155,9 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
 ): Promise<R | Refusal | TermRefusal> {
   // A step this pod cannot apply (a glossary term, a newer release's) refuses FIRST: before the lock, which
   // would drop it (withLockSteps), the gates that read the filters, the Live split and the answer cache.
-  const filters = await expandedOrRefusal(projectId, datasetId, asked);
-  if (!Array.isArray(filters)) return filters;
+  const expanded = await expandedOrRefusal(projectId, datasetId, asked);
+  if (!('steps' in expanded)) return expanded;
+  const filters = expanded.steps; // its notes are the caller's: vizDataFor expands first, so none are left here
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
   if (!lock) {
@@ -169,15 +180,16 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   params: P,
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
-  filters = (await expandTerms(projectId, datasetId, filters)).steps; // a step it cannot apply THROWS (typed 'term'), before the lock
+  const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
+  filters = expanded.steps;
   const lock = await rowLockFor(projectId, datasetId);
   if (!lock) {
     const why = await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters));
     if (why) throw new RowPolicyError(why);
-    return body(projectId, datasetId, spec, filters, params);
+    return withNotes(await body(projectId, datasetId, spec, filters, params), expanded.notes);
   }
   if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
-  return withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, filters), params));
+  return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, filters), params)), expanded.notes);
 }
 
 /** Any door whose body takes the lock itself (an answer card, the grid page): the lock, in its scope. */

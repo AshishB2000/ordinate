@@ -7,6 +7,7 @@
 
 import * as msg from './termMessages';
 import { tagRefusals } from './refusalTag';
+import { isValidId } from '../app/ids';
 
 /** A reference to a glossary term, in a `filters` / `liveFilters` list. NOT a Prepare step (`sanitizeSteps` drops it). */
 export interface TermStep {
@@ -31,6 +32,9 @@ export const TERM_CODE = 'term';
 export type TermReason = 'not_expanded' | 'unreadable' | 'deleted' | 'unreachable' | 'column_gone';
 
 let raised = 0;
+/** The sentences this process raised lately, and their reasons: a handler that caught one into `{ok:false, error}` is typed by it. */
+const recent = new Map<string, TermReason>();
+const RECENT_MAX = 256;
 
 /** A refusal: the route answers it 409 `term` with its sentence. Never caught to become a skipped step or an empty answer. */
 export class TermNotExpandedError extends Error {
@@ -41,6 +45,9 @@ export class TermNotExpandedError extends Error {
     this.name = 'TermNotExpandedError';
     this.reason = reason;
     raised++;
+    recent.delete(this.message);
+    recent.set(this.message, reason);
+    if (recent.size > RECENT_MAX) recent.delete(recent.keys().next().value as string);
   }
 }
 
@@ -67,8 +74,18 @@ export function termRaised(): number {
   return raised;
 }
 
-/** Type the refusals a handler caught (./refusalTag): an `{ok:false}` carrying one of the two sentences gets the code and the reason. Mutates and returns. */
-// shortcut: matches the two fixed sentences only; 05b's deleted/unreachable/column_gone messages name their term, so they must be typed where they are thrown
+/**
+ * Type the refusals a handler caught (./refusalTag): an `{ok:false}` carrying a refusal's sentence gets the code and the
+ * reason — the fixed sentences, and the ones naming a term this process raised lately (a deleted, unreachable or
+ * column-gone term). Mutates and returns.
+ */
 export function tagTermRefusals<T>(reply: T, depth = 3): T {
-  return tagRefusals(reply, new Map<string, TermReason>([[msg.termUnreadable(), 'unreadable'], [msg.termNotExpanded(), 'not_expanded']]), TERM_CODE, depth);
+  const by = new Map<string, TermReason>([[msg.termUnreadable(), 'unreadable'], [msg.termNotExpanded(), 'not_expanded'], [msg.termNoJoinHere(), 'unreachable'], ...recent]);
+  return tagRefusals(reply, by, TERM_CODE, depth);
+}
+
+/** A term step as this release writes one: a UUID `term`, and `fromControl: true` when set. Null for anything else. */
+export function sanitizeTermStep(o: unknown): TermStep | null {
+  if (!isTermStep(o) || !isValidId(o.term)) return null;
+  return o.fromControl === true ? { type: 'term', term: o.term, fromControl: true } : { type: 'term', term: o.term };
 }

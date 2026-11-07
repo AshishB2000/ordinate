@@ -212,5 +212,6 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
   }
   // A KPI's sentence only restates its figure; charts get theirs.
   if (payload.caption && card.kind !== 'metric') el.appendChild(pcEl('p', 'pub-caption', payload.caption));
+  if (payload.note) el.appendChild(pcEl('p', 'pub-caption', payload.note)); // a dashboard term this tile leaves out
   return el;
 }

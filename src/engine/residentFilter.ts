@@ -11,7 +11,8 @@
 
 import type { ColumnType, ParsedColumn } from '../data/parse';
 import { RowPolicyError } from '../data/rowPolicyError';
-import { hasTermType, termError } from '../data/termStep';
+import { hasTermType, termError, TermNotExpandedError } from '../data/termStep';
+import { termNoJoinHere } from '../data/termMessages';
 import { coerceValue } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
@@ -62,6 +63,7 @@ export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duc
   if (hasTermType(s)) throw termError(s); // a door expands it; a caller turns this into null and the JS fold throws it again
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return null; // a related table's column: the JS fold skips it with the unknown-column warning (transforms.stepFilter)
+  if (s.datasetId) throw new TermNotExpandedError('unreachable', termNoJoinHere()); // another table's term step: only the join planner applies it
   const ci = colIndex(cols, s.column);
   if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (ci < 0) return null; // "Filter skipped: unknown column"

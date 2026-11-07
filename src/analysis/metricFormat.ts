@@ -78,6 +78,12 @@ export function describeFilter(s: FilterStep): string {
   return `${s.column} ${op} ${s.value == null ? '' : String(s.value)}`.trim();
 }
 
+/** A filter step without its value — "region in …" — for a reader the values are hidden from (a glossary term, semantic D12). */
+export function describeFilterHidden(s: FilterStep): string {
+  if (isKeptStep(s) || VALUELESS_OPS.has(s.op) || s.op === 'period') return describeFilter(s); // no row value in these
+  return `${s.column} ${OP_WORDS[s.op] || s.op} …`;
+}
+
 /** Just the definition, with no filter clause — what a picker row shows under
  *  a name, where the row is already narrow. */
 export function describeDefinitionShort(definition: MetricDefinition): string {

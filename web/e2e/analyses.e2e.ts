@@ -342,3 +342,42 @@ e2e('metrics: the table from the server, a new metric with a live preview and a 
   await page.getByText('Moved “Large orders” to Trash').waitFor();
   await row.waitFor({ state: 'detached' });
 });
+
+e2e('glossary: a term made on the Metrics page, added to a visual’s filters, changes its chart', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/data/metrics?project=${pid}`);
+  await settled(page);
+  const glossary = page.getByRole('region', { name: 'Glossary' });
+  await glossary.getByRole('heading', { name: 'No terms yet' }).waitFor(); // the designed empty state
+  await glossary.getByRole('button', { name: 'New term' }).click();
+  const dlg = page.getByRole('dialog', { name: 'New term' });
+  await dlg.getByLabel('Name').fill('West side');
+  await dlg.getByLabel('Also called').fill('Westerly, The west');
+  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await dlg.getByRole('button', { name: 'Add filter' }).click();
+  await dlg.getByRole('combobox', { name: 'Filter column' }).click();
+  await page.getByRole('option', { name: 'region', exact: true }).click();
+  await dlg.getByRole('button', { name: 'Edit the filter on region' }).click();
+  const fdlg = page.getByRole('dialog', { name: 'Filter: region' });
+  await fdlg.getByLabel('West', { exact: true }).check();
+  await fdlg.getByRole('button', { name: 'Apply' }).click();
+  await fdlg.waitFor({ state: 'detached' });
+  await dlg.getByRole('button', { name: 'Create term' }).click();
+  const row = glossary.getByRole('row').filter({ has: page.getByRole('button', { name: 'West side' }) });
+  await row.getByText('Westerly, The west').waitFor();
+  await row.getByText(/region/).waitFor(); // the server's words for its filter
+  await screens(page, 'metrics-glossary');
+
+  await page.goto(`/visuals/${pid}`);
+  await settled(page);
+  const first = page.waitForResponse((r) => r.url().endsWith('/api/rpc/visual%3Apreview') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: /^(Average r|R)evenue by category/ }).first().click();
+  const before = JSON.stringify(await (await first).json());
+  await page.getByRole('button', { name: 'Add term' }).click();
+  const after = page.waitForResponse((r) => r.url().endsWith('/api/rpc/visual%3Apreview') && r.request().method() === 'POST');
+  await page.getByRole('menuitem', { name: 'West side' }).click();
+  const filtered = JSON.stringify(await (await after).json());
+  assert.ok(filtered.includes('"ok":true') && filtered !== before, 'the chart recomputed under the term, with other figures');
+  await page.getByText('West side').first().waitFor(); // the filter row names the term
+});

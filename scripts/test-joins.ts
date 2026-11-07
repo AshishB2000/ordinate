@@ -206,6 +206,51 @@ async function main(): Promise<void> {
     ok('metric: plans', false);
   }
 
+  // ── A glossary term on a related table filters THAT table (semantic D11) ──────
+  // Orders and Customers both have `region`; Orders' own says where it shipped, Customers' where the buyer is.
+  const ord = fx(ID(20), 'Orders2', [{ name: 'status', type: 'text' }, { name: 'region', type: 'text' }, { name: 'cust', type: 'text' }, { name: 'amount', type: 'number' }],
+    Array.from({ length: 48 }, (_, i) => [['open', 'shipped', 'void'][i % 3], ['EU', 'US', 'ME'][i % 3 === 0 ? 1 : i % 2], `c${i % 6}`, (i * 13) % 37] as Cell[]));
+  const cus = fx(ID(21), 'Customers2', [{ name: 'cust', type: 'text' }, { name: 'region', type: 'text' }],
+    [['c0', 'EU'], ['c1', 'US'], ['c2', 'ME'], ['c3', 'EU'], ['c4', 'AF'], ['c5', 'US']]);
+  const tInfos = new Map<string, jp.DsInfo>([ord, cus].map((f) => [f.id, { id: f.id, name: f.name, columns: f.columns }]));
+  const tTables = new Map<string, TableData>([ord, cus].map((f) => [f.id, { columns: f.columns, rows: f.rows }]));
+  const tRels = [sanitizeRelationship({ id: ID(120), from: { datasetId: ord.id, column: 'cust' }, to: { datasetId: cus.id, column: 'cust' }, cardinality: 'many_to_one' }) as Relationship];
+  const tEnc: VizEncoding = { category: 'status', values: [{ column: 'amount', aggregation: 'sum' }] };
+  const EMEA = { type: 'filter', column: 'region', op: 'in', values: ['EU', 'ME', 'AF'] } as FilterStep;
+  const pinned = { ...EMEA, datasetId: cus.id } as FilterStep;
+  const tSources = [ord, cus].map((f): jr.JoinSource => ({ datasetId: f.id, parquetPath: f.file, columns: f.columns }));
+  const tj = jp.resolveVizJoin(ord.id, tEnc, [pinned], tRels, tInfos);
+  if (tj && tj.ok) {
+    const want = js.joinedVizDataJs(tj.value, tTables, tInfos);
+    const got = await jr.joinedAggregateResident(tSources, tj.value, tInfos);
+    ok('term: the pinned step resolves to Customers, renamed, its datasetId gone', tj.value.filters[0].column === 'Customers2.region' && tj.value.filters[0].datasetId === undefined, JSON.stringify(tj.value.filters));
+    ok('term: an Orders chart by status under a Customers term — SQL === JS on every cell (Object.is)', !!got && JSON.stringify(got.data.labels) === JSON.stringify(want.data.labels)
+      && want.data.series.every((sr, i) => sr.values.every((v, k) => Object.is(v, got.data.series[i].values[k]))), JSON.stringify([got?.data, want.data]));
+    const bare = jp.resolveVizJoin(ord.id, tEnc, [EMEA], tRels, tInfos);
+    const ownData = (require('../src/analysis/vizData') as typeof import('../src/analysis/vizData')).buildVizData(ord.columns, ord.rows, tEnc, [EMEA]).data;
+    ok('NEGATIVE CONTROL: a bare region filter is Orders\' own (no join) and gives different figures', bare === null && JSON.stringify(ownData.series) !== JSON.stringify(want.data.series), JSON.stringify([ownData, want.data]));
+  } else {
+    ok('term: plans', false, JSON.stringify(tj));
+  }
+  const termNoJoin = (require('../src/data/termMessages') as typeof import('../src/data/termMessages')).termNoJoinHere();
+  const pivot = jp.resolveVizJoin(ord.id, { ...tEnc, pivot: { rows: ['status'], columns: [], values: [{ column: 'amount', aggregation: 'sum' }] } } as unknown as VizEncoding, [pinned], tRels, tInfos);
+  ok('term: a pivot of the same chart is refused, never filtered by Orders\' region', !!pivot && !pivot.ok && pivot.error === termNoJoin, JSON.stringify(pivot));
+  const cohort = jp.resolveVizJoin(ord.id, { ...tEnc, cohort: { start: 'status', activity: 'status' } } as unknown as VizEncoding, [pinned], tRels, tInfos);
+  ok('term: a cohort (its shelves name Orders\' own columns) is refused too', !!cohort && !cohort.ok && cohort.error === termNoJoin, JSON.stringify(cohort));
+  const farTerm = jp.resolveVizJoin(ord.id, tEnc, [{ ...EMEA, datasetId: lonely.id } as FilterStep], tRels, new Map([...tInfos, [lonely.id, { id: lonely.id, name: 'Lonely', columns: [{ name: 'region', type: 'text' }] }]]));
+  ok('term: a pinned table the chart cannot reach is refused, never resolved to Orders\' region', !!farTerm && !farTerm.ok && farTerm.error === termNoJoin, JSON.stringify(farTerm));
+  ok('term: resolveColumnOwner pins to exactly the term\'s dataset', jp.resolveColumnOwner(ord.id, 'region', tRels, tInfos, cus.id) === cus.id
+    && jp.resolveColumnOwner(ord.id, 'region', tRels, tInfos) === ord.id);
+  const tf = require('../src/data/transforms') as typeof import('../src/data/transforms');
+  let thrown: unknown = null;
+  try { tf.applyPipeline({ columns: ord.columns, rows: ord.rows }, [pinned]); } catch (e) { thrown = e; }
+  ok('term: the single-table fold refuses a pinned step (typed), never filters Orders\' region', (thrown as { code?: string; reason?: string } | null)?.code === 'term'
+    && (thrown as { reason?: string }).reason === 'unreachable' && (thrown as Error).message === termNoJoin, String(thrown));
+  const rf = require('../src/engine/residentFilter') as typeof import('../src/engine/residentFilter');
+  thrown = null;
+  try { rf.filterPredicate(ord.columns, pinned, []); } catch (e) { thrown = e; }
+  ok('term: the resident predicate refuses it too', (thrown as { reason?: string } | null)?.reason === 'unreachable');
+
   duck.shutdown();
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(failureCount() ? `\n${failureCount()} join check(s) FAILED.` : '\nAll join checks passed.');

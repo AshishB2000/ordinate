@@ -11,6 +11,9 @@ import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../api';
 import type { Column } from '../model';
 import { isKeptStep, KEPT_STEP_WORDS } from '../keptStep';
+import { TermChip } from '../../model/terms/TermChip';
+import { termIdOf } from '../../model/terms/api';
+import { TermPicker } from './TermPicker';
 import { FilterDialog } from './FilterDialog';
 import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
@@ -29,12 +32,15 @@ export function FilterRows({
   cols,
   filters,
   onChange,
+  terms = true,
 }: {
   projectId: string;
   datasetId: string;
   cols: readonly Column[];
   filters: FilterStep[];
   onChange: (next: FilterStep[]) => void;
+  /** Offer the project's glossary terms (false in a term's own filters: no term inside a term). */
+  terms?: boolean;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const cur = editing === null ? null : filters[editing];
@@ -44,7 +50,13 @@ export function FilterRows({
         Filters
       </span>
       {filters.map((f, i) =>
-        isKeptStep(f) ? (
+        termIdOf(f) ? (
+          // A glossary term: named, and removable; the term itself is edited in the Glossary.
+          <div key={i} className={s.row}>
+            <TermChip projectId={projectId} term={termIdOf(f) as string} />
+            <IconButton icon="x" size="sm" label="Remove term" onClick={() => onChange(filters.filter((_, j) => j !== i))} />
+          </div>
+        ) : isKeptStep(f) ? (
           // A step this version cannot edit (a glossary term, a newer release's): kept through every save, shown, and removable.
           <div key={i} className={s.row}>
             <span className={s.kept}>{KEPT_STEP_WORDS}</span>
@@ -77,6 +89,7 @@ export function FilterRows({
       <Button size="sm" icon="plus" className={s.add} disabled={!cols.length} onClick={() => onChange([...filters, { type: 'filter', column: cols[0]?.name ?? '', op: '' }])}>
         Add filter
       </Button>
+      {terms && <TermPicker projectId={projectId} datasetId={datasetId} onPick={(step) => onChange([...filters, step])} />}
       {cur && editing !== null && (
         <FilterDialog
           projectId={projectId}

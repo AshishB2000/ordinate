@@ -435,7 +435,8 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   ok('… although the planner has nothing to follow in it', (await H.as(ORG_A, () => measures.planMetricMeasures(P, X, noneEnc as never))) === null);
 
   // ── 12b. A glossary term in a followed metric's filters refuses the chart; it is never skipped (scripts/termSites.ts) ──
-  const termSentence = (require('../src/data/termMessages') as typeof import('../src/data/termMessages')).termUnreadable();
+  // 05b: a term id no record has is refused as deleted for good (termPurged), as test-termDoors expects; still typed `term`.
+  const termSentence = (require('../src/data/termMessages') as typeof import('../src/data/termMessages')).termPurged();
   const termM = await save('Term qty', X, { column: 'qty', aggregation: 'sum' }, [eq('tier', 3), { type: 'term', term: randomUUID() }]);
   const withTerm = [{ column: 'qty', aggregation: 'sum', metricId: termM }];
   for (const [what, values] of [['alone (one question)', withTerm], ['beside a plain measure (separate questions)', withTerm.concat([{ column: 'amt', aggregation: 'sum' } as never])]] as const) {

@@ -21,6 +21,7 @@ import { substituteText, paramValues } from './params';
 import { plainParagraphs, storyPages, type StoryBlockLike } from './storyText';
 import type { Report, ReportPage } from './reportSpec';
 import type { FilterStep } from '../data/transforms';
+import { markScopeTerms } from '../data/filterList';
 
 /** A chart the browser draws: the server's reply, the visual's chart type and its overrides. */
 export interface PageChart {
@@ -183,7 +184,7 @@ export async function buildReportPages(
     for (const card of sheet.cards || []) {
       if (!card || card.type !== 'metric' || !card.metric) continue;
       const m = card.metric;
-      const r = await deps.metric(m, scope.filters, scope.params).catch(() => ({ value: null }) as { value: number | null; display?: string; name?: string });
+      const r = await deps.metric(m, markScopeTerms(scope.filters), scope.params).catch(() => ({ value: null }) as { value: number | null; display?: string; name?: string });
       const label = substituteText(m.label || r.name || `${AGG[m.aggregation] || m.aggregation} · ${m.column || ''}`, values);
       const value = typeof r.value === 'number' ? r.value : null;
       out.push({ label, value, text: r.display ?? (value === null ? '—' : formatValue(value, m.format || 'auto')) });

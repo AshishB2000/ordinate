@@ -52,6 +52,7 @@ import { embedTileLocked } from '../server/embedMessages';
 import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
+import { markScopeTerms } from '../data/filterList';
 import { kpiHidden } from './kpiPolicy';
 
 export interface PublishedControl {
@@ -338,6 +339,9 @@ async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: U
   return out;
 }
 
+/** A tile's line for the dashboard's glossary terms its figure left out (analysis/termExpand), when there are any. */
+const noteOf = (notes: string[] | undefined): { note?: string } => (notes && notes.length ? { note: notes.join(' ') } : {});
+
 /** The plan without computing a single tile — for the dialog's summary line. `outgoing`: the Share policy, for the option labels. */
 export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}, outgoing?: Outgoing) {
   // A page or an export leaves the app: the published copy (./publishedCopy.ts), or a draft never published.
@@ -358,7 +362,7 @@ export async function planDashboard(projectId: string, analysisId: string, maxCo
 function comboScope(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, key: string, lock?: Lock | null): { filters: FilterStep[]; params: ParamValues } {
   const picks = parseKey(key);
   const params = paramValues((a.parameters || []).map((p) => ({ name: p.name, kind: p.kind, value: p.value, min: p.min, max: p.max })));
-  const filters: FilterStep[] = [...(lock ? lock.steps : []), ...(Array.isArray(a.filters) ? a.filters : [])];
+  const filters: FilterStep[] = [...(lock ? lock.steps : []), ...markScopeTerms(Array.isArray(a.filters) ? a.filters : [])]; // a scope term a tile cannot use: a note
   specs.forEach((s, i) => {
     // The plan may have TRIMMED this control's options; map back by label.
     const label = plan.domains[i] ? plan.domains[i].options[picks[i] ?? 0] : undefined;
@@ -462,7 +466,7 @@ export async function buildDashboard(
           const drawn = await followedEncoding(projectId, v.datasetId, enc, scope.params); // each metric measure as it is defined NOW: what the tile draws
           const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, drawn, bound.steps, { params: scope.params }), projectId, v.datasetId, drawn, scope.params), projectId, v.datasetId, bound.steps);
           const payload = reply.ok
-            ? await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing)
+            ? { ...(await chartPayload(v.datasetId, drawn, v.chartType || 'column', v.overrides, reply.data, outgoing)), ...noteOf(reply.notes) }
             : { error: reply.error || 'Could not compute this tile.' };
           base.variants.push(intern(store, payload));
           done++;
@@ -496,7 +500,7 @@ export async function buildDashboard(
               if (r && r.refused) payload = { error: r.refused }; // D9: dates that disagree under a date control — never the stored column's figure
               else if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
-                payload = { value: r.value, display: r.display };
+                payload = { value: r.value, display: r.display, ...noteOf(r.notes) };
                 viaMetric = true;
               }
             }
@@ -504,7 +508,7 @@ export async function buildDashboard(
               reads.push({ datasetId: m.datasetId, column: m.column, aggregation: m.aggregation });
               const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, bound.steps, scope.params);
               payload = r.ok
-                ? { value: r.value, display: r.value == null ? '—' : formatValue(r.value, m.format || 'auto') }
+                ? { value: r.value, display: r.value == null ? '—' : formatValue(r.value, m.format || 'auto'), ...noteOf(r.notes) }
                 : { error: 'Source removed' };
             }
           } catch (err) {

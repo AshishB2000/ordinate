@@ -32,7 +32,7 @@ import { logger } from './logger';
 
 export const MAX_VERSIONS = 50;
 
-const TYPES: ReadonlySet<string> = new Set(['dataset', 'visual', 'dashboard', 'metric', 'report']);
+const TYPES: ReadonlySet<string> = new Set(['dataset', 'visual', 'dashboard', 'metric', 'report', 'term']);
 export const KEY_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d{1,3})?$/;
 
 export interface VersionFile {

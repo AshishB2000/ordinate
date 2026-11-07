@@ -17,14 +17,15 @@ const TERM = { type: 'term', term: U };
 const FUTURE = { type: 'future_x', a: 1 };
 
 describe('mergeFilters keeps what the web cannot edit', () => {
-  it('a term once, in place, never folded into a filter', () => {
-    expect(mergeFilters([TERM], [TERM, F])).toEqual([TERM, F]);
-    expect(mergeFilters([TERM, F], [F, { ...TERM }, FUTURE])).toEqual([TERM, F, FUTURE]);
+  it('a term once, in place, never folded into a filter; the dashboard\'s is marked, so a tile\'s own same term stays its own', () => {
+    expect(mergeFilters([], [TERM, F, { ...TERM }])).toEqual([TERM, F]);
+    expect(mergeFilters([TERM], [TERM, F])).toEqual([{ ...TERM, fromControl: true }, TERM, F]);
+    expect(mergeFilters([TERM, F], [F, FUTURE])).toEqual([{ ...TERM, fromControl: true }, F, FUTURE]);
   });
 
   it('two different terms are two steps; one term written with its keys the other way round is one', () => {
     expect(mergeFilters([TERM], [{ type: 'term', term: V }])).toHaveLength(2);
-    expect(mergeFilters([{ type: 'term', term: U, a: 1, b: 2 }], [{ b: 2, a: 1, term: U, type: 'term' }])).toHaveLength(1);
+    expect(mergeFilters([], [{ type: 'term', term: U, a: 1, b: 2 }, { b: 2, a: 1, term: U, type: 'term' }])).toHaveLength(1);
   });
 
   it('NEGATIVE CONTROL: a Prepare step or junk in a filter list is still dropped', () => {

@@ -14,6 +14,8 @@ import type { Agg, FilterStep } from '../visuals/api';
 import { FilterDialog } from '../visuals/filters/FilterDialog';
 import { FilterSummary } from '../visuals/filters/FilterRows';
 import { isKeptStep, KEPT_STEP_WORDS } from '../visuals/keptStep';
+import { TermChip } from '../model/terms/TermChip';
+import { termIdOf } from '../model/terms/api';
 import { AGG_LABELS, GRAINS } from '../visuals/model';
 import { FieldList } from './FieldList';
 import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
@@ -224,7 +226,15 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
 
         <Well label="Filters">
           {question.filters.map((f, i) =>
-            isKeptStep(f) ? (
+            termIdOf(f) ? (
+              // A glossary term: named, and removable; never opened in the filter dialog (it is edited in the Glossary).
+              <span key={`term:${i}`} className={s.pill} data-kind="filter">
+                <span className={s.pillKept}>
+                  <TermChip projectId={projectId} term={termIdOf(f) as string} />
+                </span>
+                <Remove label="Remove term" title="Stop applying this term" onClick={() => setFilters(question.filters.filter((_, j) => j !== i))} />
+              </span>
+            ) : isKeptStep(f) ? (
               // A step this version cannot edit (a glossary term, a newer release's): shown and removable, never opened.
               <span key={`kept:${i}`} className={s.pill} data-kind="filter">
                 <span className={s.pillKept}>

@@ -191,6 +191,7 @@ export function MetricBody({ card }: { card: Card }) {
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
       {t.periodOn && <p className={s.periodOn}>Date range applied to {t.periodOn}</p>}
+      {t.notes?.map((n) => <p key={n} role="note" className={s.periodOn}>{n}</p>) /* a dashboard term this KPI leaves out */}
       {why && compare && (
         <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">
           <DriversView

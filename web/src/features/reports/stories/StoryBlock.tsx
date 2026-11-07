@@ -18,6 +18,8 @@ import type { CalloutTone, MetricFigure, Step, StoryBlock as Block, VisualFigure
 import { pickMenu, useSlashPicker, type PickKind } from './BlockPicker';
 import { Markdown } from './Markdown';
 import s from './Story.module.css';
+import { TermChip } from '../../model/terms/TermChip';
+import { termIdOf } from '../../model/terms/api';
 
 const TONE_ICON: Record<CalloutTone, IconName> = { info: 'info', success: 'check', warning: 'alert', danger: 'alert' };
 const TONES: CalloutTone[] = ['info', 'success', 'warning', 'danger'];
@@ -202,9 +204,9 @@ function Body({ props }: { props: BlockProps }) {
             <div className={s.pins}>
               {block.filters.map((f, i) => (
                 <span key={i} className={s.pin}>
-                  {pinText(f)}
+                  {termIdOf(f) ? <TermChip projectId={projectId} term={termIdOf(f) as string} /> : pinText(f)}
                   {!props.readOnly && (
-                    <button type="button" className={s.pinX} aria-label={`Remove the filter ${pinText(f)}`} onClick={() => props.onChange({ ...block, filters: block.filters.filter((_, j) => j !== i) }, 'Remove filter')}>
+                    <button type="button" className={s.pinX} aria-label={termIdOf(f) ? 'Remove the glossary term' : `Remove the filter ${pinText(f)}`} onClick={() => props.onChange({ ...block, filters: block.filters.filter((_, j) => j !== i) }, 'Remove filter')}>
                       <Icon name="x" size={12} />
                     </button>
                   )}

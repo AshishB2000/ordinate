@@ -122,6 +122,8 @@ const FILTERS: ArgSpec = {
   },
 };
 
+const TERMS: ArgSpec = { type: 'array', items: { type: 'string' }, description: 'Glossary term names, aliases or ids; each applies as its filter.' };
+
 const ENCODING: ArgSpec = {
   type: 'object',
   description: 'What to chart: a category column and one or more measures, exactly as a visual stores it.',
@@ -199,7 +201,7 @@ export const COMMANDS: readonly Command[] = [
   {
     tool: 'aggregate', readOnly: true,
     summary: 'Compute chart data (labels and series) for an encoding: the numbers a visual would draw.',
-    args: { dataset: { type: 'string', description: 'Dataset id or exact name.' }, encoding: ENCODING, filters: FILTERS },
+    args: { dataset: { type: 'string', description: 'Dataset id or exact name.' }, encoding: ENCODING, filters: FILTERS, terms: TERMS },
     required: ['dataset', 'encoding'],
     run: (a, ctx) => h.aggregate(ctx, a),
   },
@@ -212,9 +214,15 @@ export const COMMANDS: readonly Command[] = [
   {
     cli: 'metrics value', tool: 'metric_value', readOnly: true,
     summary: 'The current value of a saved metric, computed by the app and formatted by the metric.',
-    args: { metric: { type: 'string', description: 'Metric name (case-insensitive) or id.' } },
+    args: { metric: { type: 'string', description: 'Metric name (case-insensitive) or id.' }, terms: TERMS },
     required: ['metric'], positional: ['metric'],
-    run: (a, ctx) => h.metricValue(ctx, String(a.metric)),
+    run: (a, ctx) => h.metricValue(ctx, String(a.metric), a.terms),
+  },
+  {
+    cli: 'terms list', tool: 'list_terms', readOnly: true,
+    summary: "List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value.",
+    args: {},
+    run: (_a, ctx) => h.termsList(ctx),
   },
   {
     cli: 'insights', tool: 'insights', readOnly: true,

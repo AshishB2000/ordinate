@@ -19,7 +19,7 @@
 // so the strict-number rule is untouched.
 
 import type { FilterStep } from '../data/transforms';
-import { isKeptStep } from '../data/filterList';
+import { isKeptStep, markScopeTerms } from '../data/filterList';
 import { stableStringify } from '../engine/queryCache';
 import { sanitizePeriod } from './dateIntel';
 import type { CardControl, ControlValue } from './dashboards';
@@ -40,7 +40,8 @@ export function stepKey(s: FilterStep): string {
   // `via` too: the same predicate through a relationship reads another table's column (refused until it can be walked).
   // `fromControl` too (D9): a date control's period may move onto a metric's date, a tile's own identical one stays.
   // `lock` too: a row lock is never merged away in favour of the same predicate unlocked (a warehouse compares it byte for byte).
-  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true, s.lock === true]);
+  // `datasetId` too (semantic D11), only when set so every other key is as before: a term's step on another table is another filter.
+  return JSON.stringify([s.column, s.op, s.value ?? null, s.values ?? null, s.period ?? null, s.radius ?? null, s.context === true, s.via ?? null, s.fromControl === true, s.lock === true, ...(s.datasetId ? [s.datasetId] : [])]);
 }
 
 // Merge dashboard-wide filters with a card's own filters into ONE ordered list:
@@ -51,7 +52,7 @@ export function mergeDashboardFilters(
   dashFilters: FilterStep[] | null | undefined,
   cardFilters: FilterStep[] | null | undefined,
 ): FilterStep[] {
-  const dash = Array.isArray(dashFilters) ? dashFilters : [];
+  const dash = markScopeTerms(Array.isArray(dashFilters) ? dashFilters : []); // a scope term that does not apply is a note, not a refusal
   const card = Array.isArray(cardFilters) ? cardFilters : [];
   const out: FilterStep[] = [];
   const seen = new Set<string>();

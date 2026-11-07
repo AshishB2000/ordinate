@@ -143,8 +143,10 @@ async function main(): Promise<void> {
     !!asked && S(asked.answer!.filters) === S(answer.filters), asked && S(asked.answer!.filters));
 
   // ── § merge ────────────────────────────────────────────────────────────────
-  ok('merge keeps a term once and never folds it into a filter', S(mergeDashboardFilters(as([TERM, F0]), as([TERM, F0]))) === S([TERM, F0]));
-  ok('merge: two different terms are two steps, a term and a future step are two', S(mergeDashboardFilters(as([TERM]), as([{ type: 'term', term: D }, FUTURE]))) === S([TERM, { type: 'term', term: D }, FUTURE]));
+  const SCOPED = { ...TERM, fromControl: true }; // 05b: the dashboard's terms are marked (markScopeTerms), so a tile's own same term stays its own
+  ok('merge keeps a term once and never folds it into a filter', S(mergeDashboardFilters(as([TERM, F0]), as([TERM, F0]))) === S([SCOPED, F0, TERM])
+    && S(mergeDashboardFilters(as([]), as([TERM, F0, TERM]))) === S([TERM, F0]));
+  ok('merge: two different terms are two steps, a term and a future step are two', S(mergeDashboardFilters(as([TERM]), as([{ type: 'term', term: D }, FUTURE]))) === S([SCOPED, { type: 'term', term: D }, FUTURE]));
   ok('NEGATIVE CONTROL: merge still drops a non-object and a step with no type', S(mergeDashboardFilters(as([null, 5, { column: 'x' }, F0]), undefined)) === S([F0]));
   const LOCK = { values: { city: ['Paris'] }, steps: [lockStep('city', ['Paris'])], covers: async () => true } as Lock;
   ok('withLockSteps keeps a term after the lock', S(withLockSteps(LOCK, as([TERM]))) === S([...LOCK.steps, TERM]));

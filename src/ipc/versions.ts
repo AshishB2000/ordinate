@@ -6,6 +6,8 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
 import * as reportSpec from '../analysis/reportSpec';
+import * as terms from '../analysis/terms';
+import { restrictedOn } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as inputStore from '../data/inputTable/store';
 import { safetyBackup } from './backups';
@@ -47,6 +49,10 @@ export async function writeBack(projectId: string, type: string, id: string, rec
       timeColumn: rec.timeColumn === undefined ? '' : rec.timeColumn,
     });
   }
+  if (type === 'term') {
+    // '' clears a description the restored version did not have; the dataset never moves.
+    return terms.updateTerm(projectId, id, { name: rec.name, aliases: rec.aliases ?? [], description: rec.description ?? '', filters: rec.filters });
+  }
   if (type === 'report') {
     return reportSpec.updateReport(projectId, id, {
       name: rec.name, format: rec.format, pages: rec.pages, cover: rec.cover, paper: rec.paper,
@@ -76,6 +82,8 @@ export function register(): void {
 
   ipcMain.handle('versions:get', async (_e, { projectId, type, id, key }: any = {}) => {
     if (await draftHistory(projectId, type)) return null;
+    // A term's version holds its filter values: none for a caller row access rules restrict (semantic D12).
+    if (type === 'term' && (await restrictedOn(String(projectId || '')))) return null;
     // An input table's version is its whole table: refused like its rows (row-policy D9).
     if (type === 'dataset') await gateRows(String(projectId || ''), String(id || ''));
     const v = await versions.get(String(projectId || ''), String(type || ''), String(id || ''), String(key || ''));

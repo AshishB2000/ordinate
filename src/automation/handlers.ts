@@ -39,7 +39,8 @@ import { kpiHidden } from '../publish/kpiPolicy';
 import { insightsForDataset } from '../ipc/insights';
 import { evaluateAndDeliver } from '../ipc/alerts';
 import { AutomationError } from './errors';
-import { defaultProject, pick, resolveProject, runJob } from './resolve';
+import { defaultProject, pick, resolveProject, runJob, termSteps } from './resolve';
+import { listForCaller as termList } from '../ipc/terms';
 import type { Ctx } from './registry';
 import * as sharePolicy from '../app/sharePolicy';
 import * as privacyStore from '../app/privacyStore';
@@ -206,18 +207,26 @@ export async function metricsList(ctx: Ctx): Promise<unknown> {
   })));
 }
 
-export async function metricValue(ctx: Ctx, ref: string): Promise<unknown> {
+export async function metricValue(ctx: Ctx, ref: string, terms?: unknown): Promise<unknown> {
   const byName = await metrics.metricsByName(ctx.projectId);
   const m = byName.get(ref.trim().toLowerCase()) || (await metrics.getMetric(ctx.projectId, ref.trim()));
   if (!m) throw new AutomationError('not_found', `No metric called "${ref}".`);
   const reads: MetricRead[] = [];
-  const r = await resolveMetric(ctx.projectId, m.id, { reads });
+  // Glossary terms as its scope: the door expands each (a deleted or unusable one is refused with its sentence).
+  const r = await resolveMetric(ctx.projectId, m.id, { filters: await termSteps(ctx.projectId, terms), reads });
   if (!r) throw new AutomationError('not_found', `No metric called "${ref}".`);
   // A single app-computed figure, like a dashboard KPI, leaving by the Share policy's EXPORT path as `aggregate` does
   // (./creators): one totalled from a column the policy drops is refused, typed; under mask it passes, as a total does.
   const hidden = await kpiHidden(ctx.projectId, reads, 'export');
   if (hidden) throw new AutomationError('runtime', `${hidden}: a column this metric reads is marked sensitive.`);
   return { id: r.id, name: r.name, value: r.value, display: r.display, definition: r.definitionText };
+}
+
+/** The project's glossary terms as the token's user may read them: `term:list`'s, values hidden from a restricted one. */
+export async function termsList(ctx: Ctx): Promise<unknown> {
+  return (await termList(ctx.projectId)).map((t) => ({
+    id: t.id, name: t.name, aliases: t.aliases, description: t.description || '', dataset: t.datasetName, definition: t.definition,
+  }));
 }
 
 export async function insights(ctx: Ctx, ref: string): Promise<unknown> {

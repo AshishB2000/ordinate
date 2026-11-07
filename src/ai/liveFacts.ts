@@ -33,6 +33,8 @@ import type { ParsedColumn } from '../data/parse';
 import type { LiveColumnProfile, LiveProfile } from '../data/liveProfile';
 import { utcLabel } from '../data/figureAsOf';
 import { PROMPT_VALUE_CHARS, quoted } from './promptText';
+import { termLines } from './termFacts';
+import type { FactTerm } from './termFacts';
 
 // The cell printers moved to ./promptText (D3: every builder quotes cells); re-exported for this file's readers.
 export { PROMPT_VALUE_CHARS, quoted };
@@ -72,6 +74,8 @@ export interface LiveFactsInput {
   table?: FactTableDoc;
   /** The dataset's defined metrics, each figure the warehouse's (L2.4) — in the ledger like any other. */
   metrics?: FactMetric[];
+  /** The dataset's glossary terms (./termFacts), values already hidden where they must be. */
+  terms?: FactTerm[];
 }
 
 /** As many of `values` as the budget allows, spent from it, "…" when some were left out; '' when none fit. */
@@ -170,6 +174,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   tableNoteLines(lines, input.table);
   columnNoteLines(lines, input.docs || {}, input.columns.map((c) => c.name)); // current columns only, as the resolver reads them
   metricLines(lines, ledger, input.metrics || []);
+  termLines(lines, input.terms || []);
   lines.push('');
   lines.push('No row-level figures are available for a Live dataset. A question answerable from these columns can be answered ' +
     'with an "answer" action; the app computes it in the warehouse.');

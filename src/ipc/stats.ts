@@ -31,6 +31,7 @@ import { pairLine, statsFigures } from '../analysis/stats/figures';
 import { stampAsOf } from '../data/figureAsOf';
 import { ensureFresh } from '../data/freshOnAsk';
 import { expandTerms } from '../analysis/termExpand';
+import { withNotes } from './rowDoors';
 
 // Statistics workbench IPC — every figure the panel, a dashboard "stats" tile
 // and the Assistant show is computed here, by src/analysis/stats, on vectors
@@ -278,8 +279,11 @@ export function register(): void {
   ipcMain.handle('stats:tile', async (_e, { projectId, spec, filters, params, asOf, share }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
       // Dated by its dataset (L0.2, data/figureAsOf) like every other tile, inside the as-of scope.
-      return await stampAsOf(await computeStatsTile(projectId, spec, tileFilters(filters, params), share === 'export' ? 'export' : undefined),
-        projectId, [spec && typeof spec === 'object' ? spec.datasetId : undefined]);
+      const steps = tileFilters(filters, params);
+      // The dashboard terms it leaves out, said on the tile; a refusal is computeStatsTile's own (it expands again).
+      const left = spec && typeof spec === 'object' ? (await expandTerms(projectId, spec.datasetId, steps).catch(() => null))?.notes ?? [] : [];
+      return withNotes(await stampAsOf(await computeStatsTile(projectId, spec, steps, share === 'export' ? 'export' : undefined),
+        projectId, [spec && typeof spec === 'object' ? spec.datasetId : undefined]), left);
     } catch (err) {
       return fail(err, 'Could not compute this tile.');
     }

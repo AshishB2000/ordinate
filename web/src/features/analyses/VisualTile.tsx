@@ -24,7 +24,7 @@ import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Tiles.module.css';
 import { figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
-import { isKeptStep, keptKey } from '../visuals/keptStep';
+import { isKeptStep, keptKey, markScopeTerms } from '../visuals/keptStep';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
 export function vizGlyph(type: string): IconName {
@@ -38,11 +38,11 @@ export function vizGlyph(type: string): IconName {
 
 export const vizLabel = (type: string): string => VIZ_LABELS[type as VizId] ?? type;
 
-/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters); a `via`, a date control's mark (`fromControl`) or a row lock makes it another filter. A step the web cannot edit (a term) is kept once, whole. */
+/** A dashboard filter list merged in front of a card's own, exact duplicates dropped (dashboardFilters.mergeDashboardFilters); a `via`, a date control's mark (`fromControl`) or a row lock makes it another filter. A step the web cannot edit (a term) is kept once, whole; the dashboard's terms are marked (markScopeTerms). */
 export function mergeFilters(dash: readonly Step[], own: readonly Step[]): Step[] {
   const out: Step[] = [];
   const seen = new Set<string>();
-  for (const st of [...dash, ...own]) {
+  for (const st of [...markScopeTerms(dash), ...own]) { // a scope term a tile cannot use: a note on the tile
     const kept = isKeptStep(st);
     if (!st || (st.type !== 'filter' && !kept)) continue;
     const k = kept ? keptKey(st) : JSON.stringify([st.column, st.op, st.value ?? null, st.values ?? null, st.period ?? null, st.radius ?? null, st.context === true, st.via ?? null, st.fromControl === true, st.lock === true]);
@@ -267,6 +267,7 @@ export function VisualTileBody({
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
       {!thumb && q.data.periodOn && <p className={s.periodOn}>Date range applied to {q.data.periodOn}</p>}
+      {!thumb && q.data.notes?.map((n) => <p key={n} role="note" className={s.periodOn}>{n}</p>) /* a dashboard term this tile leaves out */}
     </div>
   );
 }

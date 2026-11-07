@@ -196,7 +196,7 @@ const ACTION_PROMPT =
   'Name columns EXACTLY as the FACTS list them. A filter is {"column","op","value"} with op one of ' +
   '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +
   '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; leave "column" out to use a metric\'s own date; for "X vs Y" filter the ' +
-  'category with "in". "top" keeps the N largest. The spec NEVER contains a computed number. ' +
+  'category with "in". A glossary term from the FACTS is the filter {"term":"<term name>"}. "top" keeps the N largest. The spec NEVER contains a computed number. ' +
   'When the FACTS end with a PREVIOUS ANSWER and the question CONTINUES it — adds or changes a filter, ' +
   'the split, a measure, the chart type, the period or the top-N — the spec is {"refine":true,…} carrying ' +
   'ONLY what changes: the app keeps the rest, so do not repeat it. A filter in it replaces the one on the ' +

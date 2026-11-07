@@ -302,6 +302,75 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ok(`NEGATIVE CONTROL: ${channel} — the editor gets them`, H.leaks(theirs.text), `${vkeys.length} ${theirs.text.slice(0, 160)}`);
     }
 
+    // A glossary term's filter values can name rows (semantic D12): east reads its names, never its values, nor through a version.
+    const canary = `${H.W_CANARY}_1`;
+    const ts = await W.call('boss', 'term:save', { projectId: P, input: { name: 'EMEA', aliases: ['Europe'], description: 'Big customers', datasetId: W.orders, filters: [{ type: 'filter', column: 'customer', op: 'in', values: [canary, 'c1'] }] } });
+    const TERM: string = ts.body?.term?.id ?? '';
+    ok('fixture: a term naming a West value', /^[0-9a-f-]{36}$/.test(TERM), ts.text.slice(0, 200));
+    await W.call('boss', 'term:update', { projectId: P, id: TERM, patch: { filters: [{ type: 'filter', column: 'customer', op: 'in', values: [canary] }] } });
+    const termEast = await W.call('east', 'term:get', { projectId: P, id: TERM });
+    eastReplies.push(termEast.text);
+    ok('redact: east reads the name, aliases and description, but no value', termEast.body?.term?.name === 'EMEA' && termEast.body.term.aliases[0] === 'Europe' && termEast.body.term.description === 'Big customers'
+      && !termEast.text.includes(H.W_CANARY) && termEast.body.term.valuesHidden === true && termEast.body.term.filters[0].column === 'customer', termEast.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor reads the values', (await W.call('ed', 'term:get', { projectId: P, id: TERM })).text.includes(H.W_CANARY));
+    const eastList = await W.call('east', 'term:list', { projectId: P });
+    eastReplies.push(eastList.text);
+    ok('redact: east\'s list words the definition without a value', eastList.body?.ok === true && eastList.body.terms[0].definition === 'customer in …' && !eastList.text.includes(H.W_CANARY), eastList.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: the editor\'s list words it with the value', (await W.call('ed', 'term:list', { projectId: P })).text.includes(H.W_CANARY));
+    const hist = await W.call('boss', 'versions:list', { projectId: P, type: 'term', id: TERM });
+    const [K1, K0] = (hist.body as { key: string }[]).map((v) => v.key);
+    const vEast = await W.call('east', 'versions:get', { projectId: P, type: 'term', id: TERM, key: K0 });
+    eastReplies.push(vEast.text);
+    ok('east gets no term version content', vEast.status === 200 && vEast.body === null, vEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor gets the version', (await W.call('ed', 'versions:get', { projectId: P, type: 'term', id: TERM, key: K0 })).text.includes(H.W_CANARY));
+    const say: typeof import('../src/analysis/versionDiffMessages') = require('../src/analysis/versionDiffMessages');
+    for (const ch of ['versions:diff', 'versions:figures']) {
+      const r = await W.call('east', ch, { projectId: P, type: 'term', id: TERM, from: K0, to: K1 });
+      eastReplies.push(r.text);
+      ok(`east's ${ch} of a term answers versionGone`, r.body?.ok === false && r.body.error === say.versionGone() && !r.text.includes(H.W_CANARY), r.text.slice(0, 200));
+    }
+    ok('NEGATIVE CONTROL: the editor\'s diff words the values', (await W.call('ed', 'versions:diff', { projectId: P, type: 'term', id: TERM, from: K0, to: K1 })).text.includes(H.W_CANARY));
+
+    const mcpHandlers: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+    const mcpTerms = async (who: string) => JSON.stringify(await W.as(who, () => mcpHandlers.termsList({ projectId: P } as never)));
+    const mcpEast = await mcpTerms('east');
+    eastReplies.push(mcpEast);
+    ok('redact: MCP list_terms as east names the term and holds no value', mcpEast.includes('"EMEA"') && !mcpEast.includes(H.W_CANARY), mcpEast.slice(0, 300));
+    ok('NEGATIVE CONTROL: MCP list_terms as the editor holds the value', (await mcpTerms('ed')).includes(H.W_CANARY));
+    // …and the Assistant's facts word a term without its values for east, on a dataset with no rules too (D12).
+    await W.call('boss', 'term:save', { projectId: P, input: { name: 'Plain pair', datasetId: W.plain, filters: [{ type: 'filter', column: 'customer', op: 'in', values: [`${H.W_CANARY}_7`] }] } });
+    const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+    const datasetFactsOf = (who: string) => W.as(who, () => copilotIpc.buildFacts(P, { kind: 'dataset', id: W.plain }));
+    const factsEast = (await datasetFactsOf('east')).text;
+    eastReplies.push(factsEast);
+    ok('redact: east\'s dataset facts name the term, without its value', factsEast.includes('"Plain pair"') && factsEast.includes('customer in …') && !factsEast.includes(H.W_CANARY), factsEast.slice(-400));
+    ok('NEGATIVE CONTROL: the editor\'s facts word it with its value', (await datasetFactsOf('ed')).text.includes(`${H.W_CANARY}_7`));
+
+    // A term reaches the table it filters (semantic D11): a chart on a dataset without rules, filtered by a term on
+    // Orders (rules), reads Orders through the join — east is refused `related`; by a term on an open table, answered.
+    const relsMod: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+    const dsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const openId = await W.as('boss', async () => (await dsMod.saveDataset(P, { name: 'Open buyers', sourceKind: 'csv', columns: [{ name: 'customer', type: 'text' }, { name: 'region', type: 'text' }], rows: [['c1', 'East'], ['c2', 'North']] }))!.id);
+    const relIds = await W.as('boss', async () => {
+      const ids: string[] = []; // one at a time: each save rewrites the project's one relationships file
+      for (const [from, to] of [[W.plain, orders], [W.plain, openId], [orders, openId]]) ids.push((await relsMod.saveRelationship(P, { from: { datasetId: from, column: 'customer' }, to: { datasetId: to, column: 'customer' }, cardinality: 'many_to_one' }))!.id);
+      return ids;
+    });
+    const termOn = async (d: string, name: string) => String((await W.call('boss', 'term:save', { projectId: P, input: { name, datasetId: d, filters: [{ type: 'filter', column: 'region', op: '=', value: 'East' }] } })).body?.term?.id ?? '');
+    const [closedTerm, openTerm] = [await termOn(orders, 'Orders east'), await termOn(openId, 'Open east')];
+    const chartWith = (who: string, term: string) => W.call(who, 'visual:data', { projectId: P, datasetId: W.plain, encoding: enc, filters: [{ type: 'term', term }] });
+    const closedEast = await chartWith('east', closedTerm);
+    eastReplies.push(closedEast.text);
+    ok('related: east\'s chart whose term reaches Orders (rules) is refused, typed', H.refused(closedEast, 'related'), closedEast.text.slice(0, 200));
+    const openEast = await chartWith('east', openTerm);
+    eastReplies.push(openEast.text);
+    ok('NEGATIVE CONTROL: the same chart by a term on an open table answers east', openEast.body?.ok === true, openEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s chart by the Orders term answers', (await chartWith('ed', closedTerm)).body?.ok === true);
+    const lockedEast = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: [{ type: 'term', term: openTerm }] });
+    ok('related: under a lock (east on Orders), another table\'s term is refused, even an open one\'s', H.refused(lockedEast, 'related'), lockedEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s Orders chart by that term answers', (await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc, filters: [{ type: 'term', term: openTerm }] })).body?.ok === true);
+    await W.as('boss', async () => { for (const id of relIds) await relsMod.deleteRelationship(P, id); });
+
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {
       ok(`admin only: ${who} gets 403 from dataset:rowPolicy and dataset:setRowPolicy`,

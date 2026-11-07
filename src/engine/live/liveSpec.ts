@@ -32,7 +32,8 @@
 
 import type { ParsedColumn } from '../../data/parse';
 import { RowPolicyError } from '../../data/rowPolicyError';
-import { hasTermType, termError } from '../../data/termStep';
+import { hasTermType, termError, TermNotExpandedError } from '../../data/termStep';
+import { termNoJoinHere } from '../../data/termMessages';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -236,6 +237,7 @@ export function adaptFilter(
   if (hasTermType(s)) throw termError(s); // a door expands it; never skipped, never dropped
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   if (s.via) return refuse('related'); // a related table's column: Live joins stay off
+  if (s.datasetId) throw new TermNotExpandedError('unreachable', termNoJoinHere()); // another table's term step: Live joins stay off
   const col = columnOf(columns, s.column);
   if (!col && s.lock === true) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (!col) {

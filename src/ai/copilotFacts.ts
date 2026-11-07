@@ -29,6 +29,8 @@ import type { CopilotFacts } from './copilot';
 import { WITHHELD, columnNameBits, columnNoteLines, tableHeadline, tableNoteLines, withheldColumns } from './columnNotes';
 import type { FactColumnDoc, FactTableDoc } from './columnNotes';
 import { cell, oneLine } from './promptText';
+import { termLines } from './termFacts';
+import type { FactTerm } from './termFacts';
 
 // The column-notes block lives in ./columnNotes (this file is near its size
 // cap); re-exported so its readers keep one import.
@@ -167,6 +169,8 @@ export function datasetFacts(
   columnDocs: Record<string, FactColumnDoc> = {},
   // The user's notes on the table itself (role, grain, key, guide), before the column notes.
   table?: FactTableDoc,
+  // The dataset's glossary terms (./termFacts), values already hidden where they must be. Optional, same reason.
+  terms: FactTerm[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -207,6 +211,7 @@ export function datasetFacts(
   // Only the columns the dataset HAS: a note left under an old name by a rename names nothing a spec could use.
   columnNoteLines(lines, columnDocs, ds.columns.map((c) => c.name));
   metricLines(lines, ledger, metrics);
+  termLines(lines, terms);
   if (issues.length > 0) {
     lines.push('');
     lines.push('Data-quality notes:');

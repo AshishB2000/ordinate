@@ -92,6 +92,7 @@ export function StatsBody({ card }: { card: Card }) {
         </div>
       )}
       {tile.sentence && <p className={s.statsSentence}>{tile.sentence}</p>}
+      {q.data.notes?.map((n) => <p key={n} role="note" className={s.statsSub}>{n}</p>) /* a dashboard term this tile leaves out */}
     </div>
   );
 }

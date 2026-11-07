@@ -15,6 +15,7 @@ import { sanitizeAliases, squash } from '../app/columnNames';
 import { withinOne } from '../analysis/valueMatch';
 import { readMeasure, sanitizeStoredSpec, validateAnswerSpec } from './answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric, SpecMiss } from './answerSpec';
+import type { SpecTerm } from './termFacts';
 
 /** What a refused turn stores: the part that missed, what was said for it, and the options offered. */
 export interface AnswerSuggest { part: SpecMiss['part']; said: string; options: AnswerChip[] }
@@ -106,7 +107,7 @@ export function suggestFixes(
   miss: SpecMiss,
   datasets: SpecDataset[],
   metrics: SpecMetric[] = [],
-  opts: { defaultDatasetId?: string; title?: string } = {},
+  opts: { defaultDatasetId?: string; title?: string; terms?: SpecTerm[] } = {},
 ): AnswerChip[] {
   if (!rawSpec || typeof rawSpec !== 'object' || Array.isArray(rawSpec)) return [];
   const raw = rawSpec as Record<string, unknown>;

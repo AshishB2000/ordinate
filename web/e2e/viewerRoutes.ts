@@ -151,7 +151,7 @@ const olderVersion = async (page: Page) => {
 
 // A scenario's what-ifs and a builder's spec are the viewer's own screen: nothing there is stored for them.
 const SCENARIO = ['Remove Revenue', 'Add driver', 'Remove driver 1'];
-const BUILDER = ['Suggest chart', 'Add measure', 'Remove measure', 'Add filter', 'Add'];
+const BUILDER = ['Suggest chart', 'Add measure', 'Remove measure', 'Add filter', 'Add term', 'Add']; // Add term: a glossary filter on the unsaved chart
 // Explore's wells change only the question in the viewer's own URL.
 const EXPLORE = ['Add measure', 'Remove measure', 'Remove group by', 'Add filter'];
 const EXPLORE_Q = { chartType: 'column', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' as const }] }, filters: [] };

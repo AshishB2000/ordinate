@@ -28,7 +28,7 @@ import { buildPlan } from '../analysis/planBuild';
 import { resolveFilterParams } from '../analysis/params';
 import { vizDataFor } from '../ipc/visuals';
 import { AutomationError } from './errors';
-import { pick, runJob } from './resolve';
+import { pick, runJob, termSteps } from './resolve';
 import type { Args, Ctx } from './registry';
 import * as sharePolicy from '../app/sharePolicy';
 
@@ -99,7 +99,8 @@ export async function aggregate(ctx: Ctx, a: Args): Promise<unknown> {
   const v = await checkVisual(ctx.projectId, String(a.dataset), {
     name: 'aggregate', chartType, encoding: withPivotMirror(chartType, a.encoding), filters: filterSteps(a.filters),
   });
-  const steps = resolveFilterParams(v.filters, new Map()).steps;
+  // Glossary terms after the plain filters: the chart door expands each as its filter.
+  const steps = [...resolveFilterParams(v.filters, new Map()).steps, ...(await termSteps(ctx.projectId, a.terms))];
   const reply = await vizDataFor(ctx.projectId, v.datasetId, v.encoding, steps);
   if (!reply.ok) throw new AutomationError('runtime', reply.error);
   // The Share policy's EXPORT path: labels drawn from a sensitive column leave

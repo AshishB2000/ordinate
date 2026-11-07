@@ -24,6 +24,7 @@ const TYPE: Record<RecordType, { word: string; icon: IconName }> = {
   metric: { word: 'Metric', icon: 'gauge' },
   report: { word: 'Report', icon: 'file-text' },
   alert: { word: 'Alert', icon: 'bell' },
+  term: { word: 'Glossary term', icon: 'list' }, // no `tag` icon in ui/icons/paths.ts
 };
 
 type Ask = { kind: 'purge'; item: TrashItem } | { kind: 'empty' } | null;

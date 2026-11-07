@@ -58,6 +58,8 @@ import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
 import { contentTag, isRecordChanged } from '../app/editConflict';
+import { termHolding } from '../analysis/termNames';
+import { termNameTaken } from '../data/termMessages';
 import { isSharePath } from '../app/privacyStore';
 import { kpiHidden } from '../publish/kpiPolicy';
 
@@ -95,6 +97,12 @@ interface ResolveCtx {
   /** D9: the scope as it came (a date control's period still marked) and the dataset `scope` was settled for, so a part on another dataset counts by its own date; unset when nothing was marked. */
   marked?: { filters: FilterStep[]; on: string };
   refused?: string; // why there is no figure: a part's dates disagree under a date control
+  notes?: string[]; // the dashboard's glossary terms an operand left out (analysis/termExpand), once each
+}
+
+/** A figure's notes: each operand's, once. */
+function noteOf(ctx: ResolveCtx, notes: string[] | undefined): void {
+  for (const n of notes ?? []) if (!(ctx.notes ??= []).includes(n)) ctx.notes.push(n);
 }
 
 /** One total a metric's figure was drawn from: a column (its own dataset's or a related one's) and its aggregation. */
@@ -147,6 +155,7 @@ async function resolveDefinition(
     const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
     ctx.fx = mergeFx(ctx.fx, res.fx);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
+    noteOf(ctx, res.notes);
     return res.ok ? res.value : null;
   }
 
@@ -174,6 +183,7 @@ async function resolveDefinition(
     );
     ctx.fx = mergeFx(ctx.fx, res.fx);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
+    noteOf(ctx, res.notes);
     values.set(agg.ref, res.ok ? res.value : null);
   }
 
@@ -241,6 +251,7 @@ export interface ResolvedMetric {
   /** D9: the date a dashboard date control's period was moved onto (the tile's caption); why there is no figure when dates disagree under one. */
   periodOn?: string;
   refused?: string;
+  notes?: string[]; // the dashboard's glossary terms the figure left out
 }
 
 /**
@@ -281,6 +292,7 @@ export async function resolveMetric(
   if (ctx.fx) out.fx = ctx.fx;
   if (ctx.asOf) out.asOf = ctx.asOf;
   if (s.ok && s.periodOn) out.periodOn = s.periodOn;
+  if (ctx.notes) out.notes = ctx.notes;
   const refused = s.ok ? ctx.refused : s.error;
   if (refused) out.refused = refused;
   return out;
@@ -465,10 +477,17 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
  * entirely. Exported for scripts/test-metrics.ts.
  */
 export async function nameTaken(projectId: string, name: unknown, exceptId?: string): Promise<boolean> {
+  return (await nameRefusal(projectId, name, exceptId)) !== null;
+}
+
+/** The sentence a name is refused with — another metric's, or a glossary term's name or alias (semantic D10) — or null. */
+export async function nameRefusal(projectId: string, name: unknown, exceptId?: string): Promise<string | null> {
   const key = String(name || '').trim().toLowerCase();
-  if (!key) return false;
+  if (!key) return null;
   const list = await metrics.listMetrics(projectId);
-  return list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId);
+  if (list.some((m) => m.name.toLowerCase() === key && m.id !== exceptId)) return nameTakenMessage(name);
+  const term = await termHolding(projectId, String(name));
+  return term ? termNameTaken(String(name).trim(), term) : null;
 }
 
 export function register() {
@@ -503,7 +522,8 @@ export function register() {
     try {
       const raw = input && typeof input === 'object' ? input : {};
       // `field`: which box of the editor the sentence belongs beside.
-      if (await nameTaken(projectId, raw.name)) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const taken = await nameRefusal(projectId, raw.name);
+      if (taken) return { ok: false, error: taken, field: 'name' };
       const when = await settleOnSave(projectId, raw);
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const m = await metrics.saveMetric(projectId, {
@@ -523,7 +543,8 @@ export function register() {
   ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
-      if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
+      const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
+      if (taken) return { ok: false, error: taken, field: 'name' };
       const before = await metrics.getMetric(projectId, id);
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };

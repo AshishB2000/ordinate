@@ -159,7 +159,8 @@ function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[
 }
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
-export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: readonly FilterStep[] = []): Promise<Built | Failure | null> {
+/** `lock`: steps that never skip (a row lock, a glossary term's steps); `termLabels`: those terms' names, for the card's filter line. */
+export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: readonly FilterStep[] = [], termLabels: string[] = []): Promise<Built | Failure | null> {
   const meta = await datasets.getDatasetMeta(projectId, spec && spec.datasetId);
   if (!meta || !isLive(meta)) return null;
   // A column the warehouse dropped (L2.5): said as exactly that, typed — before the case fix asks anything.
@@ -183,14 +184,14 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
   const data: ChartData = withChartFigures({ labels: r.data.labels, series: r.data.series }, figureAsk(chartType));
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, meta.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
-  const filterLabels = cardLabels(spec, meta.columns, r.filterLabels);
+  const filterLabels = [...cardLabels(spec, meta.columns, r.filterLabels), ...termLabels];
   // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
   // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.
   const withheld = await liveWithheld(projectId, meta.id, meta);
   const said = withheldFilters(spec.filters, withheld);
   const facts = cardFacts({
     title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
-    saidFilterLabels: cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), caption, asOf: utcLabel(r.asOf.at),
+    saidFilterLabels: [...cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), ...termLabels], caption, asOf: utcLabel(r.asOf.at),
   }, spec, withheld);
   return {
     card: {

@@ -1,16 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { serveRpc } from '../../../test-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FilterRows } from './FilterRows';
 import type { FilterStep } from '../api';
 
-const TERM = { type: 'term', term: '7d2c1f4e-1111-4222-8333-444455556666' } as unknown as FilterStep;
+const EMEA = '7d2c1f4e-1111-4222-8333-444455556666';
+const TERM = { type: 'term', term: EMEA } as unknown as FilterStep;
+const FUTURE = { type: 'future_x', a: 1 } as unknown as FilterStep;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 const F: FilterStep = { type: 'filter', column: 'city', op: '=', value: 'Paris' };
 
-function draw(filters: FilterStep[], onChange = vi.fn()) {
+function draw(filters: FilterStep[], onChange = vi.fn(), terms = true) {
   render(
-    <QueryClientProvider client={new QueryClient()}>
-      <FilterRows projectId="p" datasetId="d" cols={[{ name: 'city', type: 'text' }]} filters={filters} onChange={onChange} />
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <FilterRows projectId="p" datasetId="d" cols={[{ name: 'city', type: 'text' }]} filters={filters} onChange={onChange} terms={terms} />
     </QueryClientProvider>,
   );
   return onChange;
@@ -18,7 +25,7 @@ function draw(filters: FilterStep[], onChange = vi.fn()) {
 
 describe('a filter this version cannot edit', () => {
   it('is an inert row: named, with a remove and no column select or condition button', () => {
-    const onChange = draw([TERM]);
+    const onChange = draw([FUTURE]);
     expect(screen.getByText('A filter from a newer version')).toBeTruthy();
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Edit the filter/ })).toBeNull();
@@ -27,11 +34,11 @@ describe('a filter this version cannot edit', () => {
   });
 
   it('removing it leaves the filters beside it; removing one of them leaves it', () => {
-    const onChange = draw([F, TERM]);
+    const onChange = draw([F, FUTURE]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove filter from a newer version' }));
     expect(onChange).toHaveBeenLastCalledWith([F]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove filter' }));
-    expect(onChange).toHaveBeenLastCalledWith([TERM]);
+    expect(onChange).toHaveBeenLastCalledWith([FUTURE]);
   });
 
   it('NEGATIVE CONTROL: a plain filter is still an editable row', () => {
@@ -56,5 +63,51 @@ describe('editing a filter a newer release gave a via or fromControl', () => {
 
   it('NEGATIVE CONTROL: a step without them gets neither key', () => {
     expect(edited(F)).toBe(JSON.stringify([F]));
+  });
+});
+
+describe('a glossary term in the filter rows', () => {
+  const LIST = { body: { ok: true, terms: [{ id: EMEA, name: 'EMEA', aliases: [], datasetId: 'd', datasetName: 'Orders', definition: 'region in EU', updatedAt: '' }] } };
+
+  it('reads as its name, with a remove', async () => {
+    serveRpc({ 'term:list': LIST });
+    const onChange = draw([F, TERM]);
+    expect(await screen.findByText('EMEA')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove term' }));
+    expect(onChange).toHaveBeenLastCalledWith([F]);
+  });
+
+  it('asks term:list only when the picker opens, then appends the reference', async () => {
+    const calls = serveRpc({ 'term:list': LIST });
+    const onChange = draw([F]);
+    const add = await screen.findByRole('button', { name: 'Add term' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(calls.some((c) => c.channel === 'term:list')).toBe(false);
+    fireEvent.pointerDown(add, { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'EMEA' }));
+    expect(calls.filter((c) => c.channel === 'term:list')).toHaveLength(1);
+    expect(onChange).toHaveBeenLastCalledWith([F, { type: 'term', term: EMEA }]);
+  });
+
+  it('an empty glossary opens to a designed empty state that points to the Glossary tab', async () => {
+    serveRpc({ 'term:list': { body: { ok: true, terms: [] } }, 'projects:roles': { body: { p: 'editor' } } });
+    draw([F]);
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'Add term' }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText('No glossary terms yet')).toBeTruthy();
+    expect(screen.queryByRole('menuitem')).toBeNull();
+  });
+
+  it('a term step with no picker open still names itself (one term:list from its chip)', async () => {
+    const calls = serveRpc({ 'term:list': LIST });
+    draw([F, TERM]);
+    expect(await screen.findByText('EMEA')).toBeTruthy();
+    expect(calls.filter((c) => c.channel === 'term:list')).toHaveLength(1);
+  });
+
+  it('NEGATIVE CONTROL: a term’s own filters offer no term', async () => {
+    const calls = serveRpc({ 'term:list': LIST });
+    draw([F], vi.fn(), false);
+    expect(screen.queryByRole('button', { name: 'Add term' })).toBeNull();
+    expect(calls.some((c) => c.channel === 'term:list')).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { ipcMain } from './bus';
-import { expandedOrRefusal, lockedViz, storedFigureAsk, visualReplyForCaller } from './rowDoors';
+import { expandedOrRefusal, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
@@ -418,6 +418,7 @@ export type VizDataReply =
       geoSuggest?: { level: 'us_state' | 'country' };
       /** The date a dashboard date control's period was moved onto: the date the chart's metrics count by (analysis/metricTimeScope). */
       periodOn?: string;
+      notes?: string[]; // the dashboard's glossary terms this chart left out (analysis/termExpand termNotApplied)
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply.
   | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE; reason?: string };
@@ -458,10 +459,10 @@ type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean
 /** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body below. */
 export async function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
   const expanded = await expandedOrRefusal(projectId, datasetId, filters);
-  if (!Array.isArray(expanded)) return expanded;
-  const scoped = await chartScope(projectId, datasetId, encoding, expanded); // no mark: the same steps, no read
+  if (!('steps' in expanded)) return expanded;
+  const scoped = await chartScope(projectId, datasetId, encoding, expanded.steps); // no mark: the same steps, no read
   if (!scoped.ok) return { ok: false, error: scoped.error };
-  const reply = await lockedViz(projectId, datasetId, encoding, scoped.filters, opts, vizDataForUnlocked);
+  const reply = withNotes(await lockedViz(projectId, datasetId, encoding, scoped.filters, opts, vizDataForUnlocked), expanded.notes); // the dashboard terms it left out
   return reply.ok && scoped.periodOn ? { ...reply, periodOn: scoped.periodOn } : reply;
 }
 
