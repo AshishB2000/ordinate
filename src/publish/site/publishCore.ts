@@ -101,13 +101,52 @@ function pkPalette(ramp: string[], n: number): string[] {
   return out;
 }
 
-/** `{labels, series}` as a table model: a header row, then one row per label. */
-function pkTableModel(payload: any, categoryName: string): { head: string[]; rows: Array<Array<string | number | null>> } {
+/**
+ * `{labels, series}` as a table model: a header row, then one row per label. `calcs` names each column's table calc
+ * kind ('' for none), so a cell prints a share as 25.0%, as the app's grid does.
+ */
+function pkTableModel(payload: any, categoryName: string): { head: string[]; rows: Array<Array<string | number | null>>; calcs: string[] } {
   const labels: any[] = payload && Array.isArray(payload.labels) ? payload.labels : [];
   const series: any[] = payload && Array.isArray(payload.series) ? payload.series : [];
   const head = [categoryName || ''].concat(series.map((s) => String(s.label || '')));
   const rows = labels.map((l, i) => [l as string | number].concat(series.map((s) => (Array.isArray(s.values) ? s.values[i] ?? null : null))));
-  return { head, rows };
+  return { head, rows, calcs: [''].concat(series.map((s) => s.calc || '')) };
+}
+
+// ── Table calculations: display only ─────────────────────────────────────────
+// The server ran the calc (src/analysis/tableCalc.ts); a series carries only its kind. These mirror the app's
+// calcParts (less the raw figure, which a page never carries) and tcAxisFmt (web/src/charts/format.ts);
+// scripts/test-publishTableCalcs.ts runs pkCalcParts beside calcParts.
+
+const PK_CALC_SUFFIX: Record<string, string> = {
+  running_total: ' running total', pct_of_total: ' of total', diff: ' vs previous', pct_diff: ' vs previous',
+  rank_dense: '', rank_competition: '', percentile: ' percentile', moving_avg: ' moving avg',
+  moving_sum: ' moving sum', yoy: ' YoY', index: ' index',
+};
+const PK_CALC_PCT = ['pct_of_total', 'pct_diff', 'percentile', 'yoy'];
+
+/** A calculated figure for its kind, and what it is: "24.1%" + " of total", "#3" + "", "+1.2K" + " vs previous". */
+function pkCalcParts(kind: string, value: unknown): { value: string; suffix: string } {
+  const suffix = PK_CALC_SUFFIX[kind] ?? '';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return { value: '—', suffix };
+  const v = value;
+  const signed = (text: string): string => (v > 0 ? '+' + text : text);
+  if (kind === 'pct_diff' || kind === 'yoy') return { value: signed(OrdFormat.formatPercent(v, 1)), suffix };
+  if (kind === 'pct_of_total' || kind === 'percentile') return { value: OrdFormat.formatPercent(v, 1), suffix };
+  if (kind === 'rank_dense' || kind === 'rank_competition') return { value: '#' + OrdFormat.formatNumber(v, { maxDecimals: 0 }), suffix };
+  if (kind === 'index') return { value: OrdFormat.formatNumber(v, { decimals: 1 }), suffix };
+  if (kind === 'diff') return { value: signed(OrdFormat.formatCompact(v)), suffix };
+  return { value: OrdFormat.formatCompact(v), suffix };
+}
+
+/** The axis and value-label formatter when EVERY series is calculated alike (percents, ranks, an index); else `fmt` itself. */
+function pkCalcAxis(series: any[], fmt: (v: number) => string): (v: number) => string {
+  const kinds = series.map((s) => (s && s.calc) || '');
+  if (!kinds.length || kinds.some((k) => !k)) return fmt;
+  if (kinds.every((k) => PK_CALC_PCT.indexOf(k) >= 0)) return (v) => OrdFormat.formatPercent(v, 1, { maxOnly: true });
+  if (kinds.every((k) => k === 'rank_dense' || k === 'rank_competition')) return (v) => (Number.isInteger(v) ? '#' + v : '');
+  if (kinds.every((k) => k === 'index')) return (v) => OrdFormat.formatNumber(v, { maxDecimals: 1 });
+  return fmt;
 }
 
 /** Which of the payload's `figures` a chart id draws; without it the chart is not drawn at all. */
@@ -121,17 +160,21 @@ const PK_DOWN = '#e11d48';
  * category's index in the payload's labels (-1: a bar of its own, like a
  * waterfall's closing Total), where the drawn order is not the labels' — or null when the payload
  * lacks the figures that id draws (a page published before they existed): the
- * card then says so, and nothing is worked out here. `fmt` renders a tick /
+ * card then says so, and nothing is worked out here. `pageFmt` renders a tick /
  * tooltip number the workspace's way (OrdFormat in the page); `shown` names the
  * labels as the axis draws them (a month as "Jan 2023").
  */
 function pkChartConfig(
-  chartType: string, payload: any, ramp: string[], fmt: (v: number) => string,
+  chartType: string, payload: any, ramp: string[], pageFmt: (v: number) => string,
   shown: (labels: any[]) => any[] = (l) => l, share: (v: number) => string = (v) => v + '%',
 ): any {
   const raw: any[] = Array.isArray(payload && payload.labels) ? payload.labels : [];
   const labels: any[] = shown(raw);
   const series: any[] = Array.isArray(payload && payload.series) ? payload.series : [];
+  // Ticks and value labels: a calculated chart's kind (a share as 25%), as the app's tcAxisFmt; else the page's own.
+  const fmt = pkCalcAxis(series, pageFmt);
+  // A dataset drawn from a calculated series' own figures carries its kind, for the tooltip.
+  const calcOf = (s: any): any => (s && s.calc ? { pkCalc: s.calc } : {});
   const figures: any = (payload && payload.figures) || {};
   if (PK_FIGURES[chartType] && !figures[PK_FIGURES[chartType]]) return null;
   const colors = pkPalette(ramp, Math.max(series.length, labels.length));
@@ -142,21 +185,25 @@ function pkChartConfig(
   // The app's axes (web/src/charts/scales.ts): no frame, no gridlines down from the categories, a label tilted at most 40°.
   const catAxis = (extra: any = {}): any => ({ grid: { display: false }, border: { display: false }, ticks: { maxRotation: 40 }, ...extra });
   const valAxis = (extra: any = {}): any => ({ border: { display: false }, ticks: tick, ...extra });
-  const tooltip = { callbacks: { label: (c: any) => `${c.dataset.label ? c.dataset.label + ': ' : ''}${fmt(Number(c.raw && typeof c.raw === 'object' ? c.raw.y : c.raw))}` } };
+  const tooltip = { callbacks: { label: (c: any) => {
+    const v = Number(c.raw && typeof c.raw === 'object' ? c.raw.y : c.raw);
+    const p = c.dataset.pkCalc ? pkCalcParts(c.dataset.pkCalc, v) : null; // "25.0% of total", as the app's tooltip names it
+    return `${c.dataset.label ? c.dataset.label + ': ' : ''}${p ? p.value + p.suffix : fmt(v)}`;
+  } } };
   const base = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: series.length > 1 }, tooltip } };
 
   if (chartType === 'pie' || chartType === 'donut') {
     const s = series[0] || { label: '', values: [] };
     return {
       type: chartType === 'donut' ? 'doughnut' : 'pie',
-      data: { labels, datasets: [{ label: s.label, data: s.values, backgroundColor: colors }] },
+      data: { labels, datasets: [{ label: s.label, data: s.values, backgroundColor: colors, ...calcOf(s) }] },
       options: { ...base, plugins: { legend: { display: true, position: 'right' }, tooltip } },
     };
   }
   if (chartType === 'radar') {
     return {
       type: 'radar',
-      data: { labels, datasets: series.map((s, i) => ({ label: s.label, data: s.values, borderColor: colors[i], backgroundColor: colors[i] + '33' })) },
+      data: { labels, datasets: series.map((s, i) => ({ label: s.label, data: s.values, borderColor: colors[i], backgroundColor: colors[i] + '33', ...calcOf(s) })) },
       options: { ...base, scales: { r: { ticks: tick } } },
     };
   }
@@ -170,7 +217,7 @@ function pkChartConfig(
     }));
     return {
       type: chartType,
-      data: { datasets: [{ label: s.label, data: points, backgroundColor: colors[0] + 'aa' }] },
+      data: { datasets: [{ label: s.label, data: points, backgroundColor: colors[0] + 'aa', ...calcOf(s) }] },
       options: { ...base, scales: { x: { ticks: tick }, y: { ticks: tick } } },
     };
   }
@@ -243,6 +290,7 @@ function pkChartConfig(
       pointRadius: chartType === 'line_markers' ? 3 : lineish ? 0 : undefined,
       tension: lineish ? 0.25 : undefined,
       ...(chartType === 'histogram' ? { barPercentage: 1, categoryPercentage: 1 } : {}),
+      ...(pct ? {} : calcOf(s)), // a 100% bar draws the server's share, not the series' figures
     };
   });
   const valueAxis = horizontal ? 'x' : 'y';
