@@ -6,7 +6,8 @@ uses the same definitions and gets the same numbers. A company that already has 
 (dbt, Cube, Snowflake semantic views) connects it in part 7.
 
 Each part is its own design and its own chain of PRs, built in this order. The owner approved all
-eight on 2026-11-03, taking every recommended answer; none is built yet.
+eight on 2026-11-03, taking every recommended answer. All eight are built (PRs #393 to #466), with a
+review pass's fixes in #468 to #482.
 
 | Part | Doc | What it adds |
 |---|---|---|
