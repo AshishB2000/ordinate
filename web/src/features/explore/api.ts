@@ -30,7 +30,7 @@ type SuggestReply =
       ok: true;
       dimensions: { name: string; type: 'text' | 'number' }[];
       dates: { name: string }[];
-      measures: { name: string; aggregation: 'sum' | 'avg' }[];
+      measures: { name: string; aggregation: 'sum' | 'avg'; metricId?: string }[];
       suggestions: Suggestion[];
       hidden?: string[];
     }
@@ -46,7 +46,7 @@ export function useExploreFields(projectId: string, datasetId: string, topicId?:
         fields: [
           ...r.dimensions.map((d): Field => ({ name: d.name, kind: 'dimension', type: d.type })),
           ...r.dates.map((d): Field => ({ name: d.name, kind: 'date', type: 'date' })),
-          ...r.measures.map((m): Field => ({ name: m.name, kind: 'measure', type: 'number', aggregation: m.aggregation })),
+          ...r.measures.map((m): Field => ({ name: m.name, kind: 'measure', type: 'number', aggregation: m.aggregation, ...(m.metricId ? { metricId: m.metricId } : {}) })),
         ],
         suggestions: r.suggestions,
         hidden: r.hidden ?? [],

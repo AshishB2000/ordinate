@@ -320,8 +320,12 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   try {
     const status = statusFor(projectId);
     for (const s of await metrics.listMetrics(projectId)) {
-      // Part 5's shapes and a layer's metric (no column measure) are not named by a model on this release; one
-      // reading a hidden column is not the caller's (part 4).
+      // A layer's metric (part 7 mirror): named, it is a measure of its own semantic dataset, by id.
+      if (metrics.isExternalDefinition(s.definition)) {
+        out.push({ id: s.id, name: s.name, datasetId: s.datasetId, external: true, ...await statusField(status, `metric:${s.id}`) });
+        continue;
+      }
+      // Part 5's shapes are not named by a model on this release; one reading a hidden column is not the caller's (part 4).
       if (!metrics.isSimpleDefinition(s.definition) || pendingMetric(s) || (await metricHidden(projectId, s.id))) continue;
       const full = await metrics.getMetric(projectId, s.id);
       out.push({

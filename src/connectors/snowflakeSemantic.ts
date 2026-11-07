@@ -9,9 +9,10 @@
 //   listModels     SHOW SEMANTIC VIEWS IN DATABASE | ACCOUNT LIMIT 1000 — no name interpolated (the database is
 //                  the session's); a view whose parts are not plain identifiers is not listed
 //   describeModel  DESCRIBE SEMANTIC VIEW "DB"."SCHEMA"."VIEW" — dimensions typed through the Live column mapping
-//                  (a DATE or TIMESTAMP at every grain: the encoder truncates inside the clause), metrics with
-//                  whether they add up (`additiveExpression`, failing safe); private members left out; a name two
-//                  members share stored as TABLE.NAME, so every stored name is unambiguous in a query
+//                  (a DATE or TIMESTAMP at every grain: the encoder truncates inside the clause; a TIMESTAMP_TZ
+//                  unmapped, its day would be its own offset's), metrics with whether they add up
+//                  (`additiveExpression`, failing safe; never one NON ADDITIVE BY a dimension); private members left
+//                  out; a name two members share stored as TABLE.NAME, so every stored name is unambiguous in a query
 //   run            the encoder's `{ sql, params }` through the connector's `runBound`: `?` binds, the row cap
 //
 // The capabilities stay narrow until the warehouse nightly proves more: `binaryCompare: false`, so a viewer
@@ -26,8 +27,8 @@ import type { ConnectorContext, ConnectorError, ConnectorRows, ConnectorSemantic
 export interface SnowflakeIo {
   /** One catalog statement (SHOW, DESCRIBE): no binds, no row-cap wrapper. */
   catalog(ctx: ConnectorContext, sql: string): Promise<ConnectorRows | ConnectorError>;
-  /** One statement with `?` binds inside the row cap: the connector's live `runBound`. */
-  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError>;
+  /** One statement with `?` binds inside the row cap: the connector's live `runBound` (`ordered`: capped by its own last line, its ORDER BY kept). */
+  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[], ordered?: boolean): Promise<ConnectorRows | ConnectorError>;
 }
 
 const AGGREGATE = /\b(SUM|COUNT|COUNT_IF|AVG|MIN|MAX|MEDIAN|MODE|STDDEV\w*|VAR\w*|APPROX_\w+|LISTAGG|ARRAY_AGG|OBJECT_AGG|ANY_VALUE|PERCENTILE_\w+|KURTOSIS|SKEW|CORR|COVAR_\w+|HLL\w*|BIT\w*_AGG|BOOL\w*_AGG|MIN_BY|MAX_BY)\s*\(|\bOVER\s*\(/i;
@@ -100,17 +101,23 @@ async function describeModel(io: SnowflakeIo, ctx: ConnectorContext, model: stri
     return IDENT_RE.test(m.parent) ? `${m.parent}.${m.name}` : null;
   };
   const shown = all.filter((m) => m.props.get('ACCESS_MODIFIER') !== 'PRIVATE');
-  const dimensions = shown.filter((m) => m.kind === 'DIMENSION').flatMap((m) => {
+  type Dimension = Extract<Awaited<ReturnType<ConnectorSemantic['describeModel']>>, { ok: true }>['dimensions'][number];
+  const dimensions = shown.filter((m) => m.kind === 'DIMENSION').flatMap((m): Dimension[] => {
     const name = stored(m);
     if (!name) return [];
-    const type = liveColumnType('snowflake', m.props.get('DATA_TYPE') ?? '');
+    const dataType = m.props.get('DATA_TYPE') ?? '';
+    // shortcut: a TIMESTAMP_TZ's UTC day needs CONVERT_TIMEZONE, so its type, which no semantic record keeps; unmapped until one does
+    if (/TIMESTAMP_TZ/i.test(dataType)) return [{ name, type: null }];
+    const type = liveColumnType('snowflake', dataType);
     return [type === 'date' ? { name, type, grains: DATE_GRAINS.slice() } : { name, type }];
   });
   const metrics = shown.filter((m) => m.kind === 'METRIC' || m.kind === 'DERIVED_METRIC').flatMap((m) => {
     const name = stored(m);
     if (!name) return [];
     const description = m.props.get('COMMENT');
-    return [{ name, additive: m.kind === 'METRIC' && additiveExpression(m.props.get('EXPRESSION') ?? ''), ...(description ? { description } : {}) }];
+    // NON ADDITIVE BY (a balance): DESCRIBE's property for it is undocumented, so any property naming additivity says not.
+    const semi = [...m.props.keys()].some((p) => /ADDITIVE/i.test(p));
+    return [{ name, additive: m.kind === 'METRIC' && !semi && additiveExpression(m.props.get('EXPRESSION') ?? ''), ...(description ? { description } : {}) }];
   });
   return { ok: true, dimensions, metrics };
 }
@@ -119,7 +126,7 @@ async function describeModel(io: SnowflakeIo, ctx: ConnectorContext, model: stri
 function run(io: SnowflakeIo, ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError> {
   const b = body as { sql?: unknown; params?: unknown } | null;
   if (!b || typeof b.sql !== 'string' || !Array.isArray(b.params)) return Promise.resolve({ ok: false, error: 'Not a semantic-view question' });
-  return io.runBound(ctx, b.sql, b.params as LiveParam[]);
+  return io.runBound(ctx, b.sql, b.params as LiveParam[], true); // a value list is read in the layer's order
 }
 
 /** The `semantic` property of the `snowflake` registry entry, over that connector's execution. */

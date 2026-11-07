@@ -74,7 +74,8 @@ export async function mirrorSpec(projectId: string, m: Pick<Metric, 'datasetId' 
  */
 export async function layerFigure(projectId: string, datasetId: string, definition: MetricExternalDefinition, filters: FilterStep[], params: ParamValues | undefined, depth: number, name?: string) {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  if (!meta?.live?.semantic) throw new ExternalMetricError('pending', name ?? definition.external);
+  if (!meta) return computeCardMetric(projectId, datasetId, { metric: definition.external }, filters, params); // its dataset is gone: said as for any metric's
+  if (!meta.live?.semantic) throw new ExternalMetricError('pending', name ?? definition.external);
   if (depth > 0) throw new LiveFigureError(layerFailure(meta, 'formulaOverLayer', { metric: name ?? definition.external }));
   return computeCardMetric(projectId, datasetId, { metric: definition.external }, filters, params);
 }

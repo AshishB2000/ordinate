@@ -31,7 +31,9 @@ export async function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
 export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string | null {
   const ds = env.datasets.find((d) => d.id === q.spec.datasetId);
   if (!ds) return msg.verifiedDatasetGone();
-  const gone = answerNames(q.spec).find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
+  const mirror = (id: string | undefined): boolean => !!id && !!env.metrics.find((s) => s.id === id)?.external; // a layer's metric: its `column` is no field
+  const named = answerNames({ ...q.spec, measures: q.spec.measures.filter((m) => !mirror(m.metricId)) });
+  const gone = named.find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
   if (gone !== undefined) return msg.verifiedColumnGone(gone, ds.name);
   if (q.spec.filters.some((f) => 'term' in f && !env.terms.some((t) => t.id === f.term))) return msg.verifiedTermGone();
   // A measure named by a metric is the metric as verified (refineSpec's carried check): redefined, filtered or deleted,
@@ -39,10 +41,11 @@ export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string |
   const drifted = q.spec.measures.some((m) => {
     if (!m.metricId || env.pending.has(m.metricId)) return false; // a kind this release cannot draw: computeCard says so
     const x = env.metrics.find((s) => s.id === m.metricId);
+    if (x?.external) return x.datasetId !== ds.id; // a layer's metric is the layer's to define: judged by existing on its dataset
     return !x || x.datasetId !== ds.id || !!x.hasFilters || x.column !== m.column || (parseAgg(x.aggregation) || 'sum') !== m.aggregation;
   });
   if (drifted) return msg.verifiedMetricChanged();
-  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds), [ds], { metrics: env.metrics, terms: env.terms }); // a term by its id
+  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds, env.metrics), [ds], { metrics: env.metrics, terms: env.terms }); // a term by its id, a mirror by its name
   return v.ok ? null : v.reason;
 }
 

@@ -148,11 +148,16 @@ async function describeModel(ctx: ConnectorContext, model: string): Promise<Awai
     if (!type) return []; // boolean, geo: not read
     return [type === 'date' ? { name, type, grains: DATE_GRAINS.slice() } : { name, type }];
   });
+  // A view joins cubes: grouped by another cube's dimension (one-to-many), a row can count in two groups. Each view
+  // member names its own cube in `aliasMember` (cube.member); a measure adds up only when every dimension is its cube's.
+  const cubeOf = (x: unknown): string => asString(prop(x, 'aliasMember')).split('.')[0];
+  const read = members('dimensions').filter((x) => TYPES[asString(prop(x, 'type'))]);
+  const ownCube = (x: unknown): boolean => prop(c, 'type') !== 'view' || (!!cubeOf(x) && read.every((d) => cubeOf(d) === cubeOf(x)));
   const metrics = members('measures').map((x) => {
     // Only a plain sum or count adds up (D16); a rolling window, a distinct count, a formula never. `aggType` is Cube's
     // own measure type, not one of Ordinate's aggregations (data/aggregations), so it is compared, not listed.
     const aggType = asString(prop(x, 'aggType'));
-    const additive = (aggType === 'sum' || aggType === 'count') && prop(x, 'cumulative') !== true && prop(x, 'cumulativeTotal') !== true;
+    const additive = (aggType === 'sum' || aggType === 'count') && prop(x, 'cumulative') !== true && prop(x, 'cumulativeTotal') !== true && ownCube(x);
     const name = shortName(asString(prop(x, 'name')));
     const description = titled(prop(x, 'description'), name);
     return { name, additive, ...(description ? { description } : {}) };

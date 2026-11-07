@@ -6,7 +6,8 @@
 // scorecards, the Data model, MCP) gets the layer's metrics with no reader of its own, and the doors ask the layer
 // for `{ metric: external }`. The sync is the only writer of an external definition, after the dataset's one sync
 // write, each through the metric store's own save and a version:
-//   - a name taken in the project (metrics and terms, case-blind) takes ` · <connection name>`;
+//   - a name taken in the project (metrics and terms, case-blind) takes ` · <connection name>`, then
+//     ` · <dataset name>`, then that and a number; one that still cannot be written is named `unmirrored`;
 //   - a mirror in the Trash (same dataset, same layer name) is never recreated;
 //   - a metric the layer no longer lists keeps its mirror, which then refuses `metricMissing`; a layer-side rename
 //     is a missing one plus a new one, never a remap;
@@ -38,7 +39,7 @@ async function trashedOn(projectId: string, datasetId: string): Promise<Set<stri
 }
 
 /** Create or update the mirrors of `s.metrics` on `datasetId`. Idempotent: a second run writes nothing. */
-export async function syncMirrors(projectId: string, datasetId: string, s: SemanticSettings, connectionName: string): Promise<{ created: string[]; updated: string[]; missing: string[] }> {
+export async function syncMirrors(projectId: string, datasetId: string, s: SemanticSettings, connectionName: string, datasetName: string): Promise<{ created: string[]; updated: string[]; missing: string[]; unmirrored: string[] }> {
   const all = await metrics.listMetrics(projectId);
   const mine = new Map<string, (typeof all)[number]>(); // layer name → its mirror
   for (const m of all) if (m.datasetId === datasetId && isExternalDefinition(m.definition) && !mine.has(m.definition.external)) mine.set(m.definition.external, m);
@@ -46,6 +47,7 @@ export async function syncMirrors(projectId: string, datasetId: string, s: Seman
   const taken = new Set([...all.map((m) => m.name.toLowerCase()), ...(await listTerms(projectId)).map((t) => t.name.toLowerCase())]);
   const created: string[] = [];
   const updated: string[] = [];
+  const unmirrored: string[] = [];
   for (const lm of s.metrics) {
     const definition = definitionOf(lm, s.backend);
     const have = mine.get(lm.name);
@@ -59,17 +61,19 @@ export async function syncMirrors(projectId: string, datasetId: string, s: Seman
       continue;
     }
     if (trashed.has(lm.name)) continue;
-    let name = lm.name;
-    if (taken.has(name.toLowerCase())) name = `${lm.name} · ${connectionName}`;
-    // shortcut: a second clash leaves that layer metric without a mirror; number the names when someone meets one
-    if (taken.has(name.toLowerCase())) continue;
+    const tries = [lm.name, ...[connectionName, datasetName].filter((x) => x).map((x) => `${lm.name} · ${x}`)];
+    let name = tries.find((n) => !taken.has(n.toLowerCase()));
+    for (let i = 2; !name; i++) if (!taken.has(`${tries[tries.length - 1]} ${i}`.toLowerCase())) name = `${tries[tries.length - 1]} ${i}`;
     const saved = await metrics.saveMetric(projectId, { name, datasetId, definition, filters: [], ...(lm.description ? { description: lm.description } : {}) });
-    if (!saved) continue;
+    if (!saved) {
+      unmirrored.push(lm.name);
+      continue;
+    }
     taken.add(saved.name.toLowerCase());
     await versions.record(projectId, 'metric', saved);
     created.push(saved.name);
   }
   const listed = new Set(s.metrics.map((m) => m.name));
   const missing = [...mine].filter(([external]) => !listed.has(external)).map(([, m]) => m.name);
-  return { created, updated, missing };
+  return { created, updated, missing, unmirrored };
 }

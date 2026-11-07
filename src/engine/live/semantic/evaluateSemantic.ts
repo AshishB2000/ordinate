@@ -125,11 +125,15 @@ async function chartRows(ir: LiveIR, plan: ChartPlan, run: SemanticRunner, grain
     const folded = text && rows.length > CATEGORY_CAP;
     if (text) rows = byValue(rows, 1).slice(0, CATEGORY_CAP);
     if (folded) {
+      // A category named "Other" among the kept takes the folded rest (one bar, as the extract folds): the layer
+      // computes the two together, so it is not excluded, and its own row gives way to the layer's answer.
+      rows = rows.filter((r) => r[0] !== OTHER_LABEL);
       const other = await ask(run, plan.other!(rows.map((r) => r[0] as Cell)), 'other');
       if (isRefusal(other)) return other;
       if (other.length !== 1) return refuse('rowShape');
       rows = byValue([...rows, [OTHER_LABEL, ...other[0]]], 1); // ranked by its own value, as the SQL path ranks it
     }
+    if (new Set(rows.map((r) => json(r[0]))).size !== rows.length) return refuse('rowShape'); // one key twice: never a silent overwrite
     if (ir.top !== undefined) rows = rows.slice(0, ir.top); // unsplit, the SQL path cuts in the statement
     const nc = folded ? CATEGORY_CAP + 1 : rows.length;
     return { rows: rows.map((r, i) => [...r, i + 1, ...(text ? [nc] : [])]), columns: ['o_g', ...ms, 'o_cr', ...(text ? ['o_nc'] : [])] };
@@ -141,13 +145,17 @@ async function chartRows(ir: LiveIR, plan: ChartPlan, run: SemanticRunner, grain
   const catRank = new Map<string, number>();
   let nc = 0;
   if (text) {
-    const kept = byValue(ranked, 1).slice(0, CATEGORY_CAP).map((r) => r[0]);
+    const folds = ranked.length > CATEGORY_CAP;
+    // A category named "Other" among the kept takes the folded rest, as unsplit: asked with it, not as a kept one.
+    const kept = byValue(ranked, 1).slice(0, CATEGORY_CAP).map((r) => r[0]).filter((k) => !folds || k !== OTHER_LABEL);
     kept.forEach((k, i) => catRank.set(json(k), i + 1));
-    nc = ranked.length > CATEGORY_CAP ? CATEGORY_CAP + 1 : ranked.length;
+    nc = folds ? CATEGORY_CAP + 1 : ranked.length;
+    const unsaid = folds ? run.check?.(plan.other!(kept as Cell[])) : null; // before the cells are asked
+    if (unsaid) return unsaid;
     const c = await ask(run, plan.cells!(kept as Cell[]), 'chart');
     if (isRefusal(c)) return c;
     cells = c;
-    if (ranked.length > CATEGORY_CAP) {
+    if (folds) {
       const o = await ask(run, plan.other!(kept as Cell[]), 'other');
       if (isRefusal(o)) return o;
       other = o.map((r) => [OTHER_LABEL, ...r]);
@@ -168,6 +176,7 @@ async function chartRows(ir: LiveIR, plan: ChartPlan, run: SemanticRunner, grain
     // −0 and 0 are one series (compile.compileChart); JSON writes both as 0.
     [...new Set(all.map((r) => json(r[1])))].map((k) => JSON.parse(k) as unknown).sort(keyCompare).forEach((k, i) => seriesRank.set(json(k), i + 1));
   }
+  if (new Set(all.map((r) => json([r[0], r[1]]))).size !== all.length) return refuse('rowShape'); // one cell twice
   const rows: Rows = [];
   for (const [g, s, v] of all) {
     const cr = catRank.get(json(g));
@@ -191,7 +200,8 @@ export async function evaluateSemantic(ir: LiveIR, env: SemanticEnv, run: Semant
   const asIfResolved = { ...ir, filters: ir.filters.filter((f) => f.kind !== 'latest') };
   const pre = ir.kind === 'metric' ? planMetric(asIfResolved, env) : planChart(asIfResolved, env);
   if (isRefusal(pre)) return pre;
-  const unsaid = run.check?.('query' in pre ? pre.query : pre.ranks); // a filter the backend cannot express (e1)
+  // A filter the backend cannot express (e1), in every question known before the answers (a split's series ranks too).
+  const unsaid = ('query' in pre ? [pre.query] : [pre.ranks, ...(pre.seriesRanks ? [pre.seriesRanks] : [])]).map((x) => run.check?.(x)).find((r) => r);
   if (unsaid) return unsaid;
   const lp = planLatest(ir, env);
   if (isRefusal(lp)) return lp;

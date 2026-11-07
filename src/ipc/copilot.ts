@@ -175,8 +175,8 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const out: FactMetric[] = [];
     const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
-      // A layer's metric has no figure here (part 7 b0); one reading a hidden column is not the caller's vocabulary (part 4).
-      if ((datasetId && s.datasetId !== datasetId) || metrics.isExternalDefinition(s.definition) || (await metricHidden(projectId, s.id))) continue;
+      // A layer's metric is the layer's figure, as a Live one is the warehouse's; one reading a hidden column is not the caller's vocabulary (part 4).
+      if ((datasetId && s.datasetId !== datasetId) || (await metricHidden(projectId, s.id))) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
       const reads: MetricRead[] = [];
       const r = await resolveMetric(projectId, s.id, share ? { ...scope, reads } : scope).catch((err: unknown) => {

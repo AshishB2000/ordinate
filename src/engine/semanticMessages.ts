@@ -127,3 +127,13 @@ export function externalReadOnly(layer: string): string {
 export function semanticNoCopy(dataset: string, layer: string): string {
   return t('semanticMessages.a_copy_can_t_be_made', { dataset, layer });
 }
+
+/** Adding a semantic dataset to a project that is gone. */
+export function addNoProject(): string {
+  return t('semanticMessages.invalid_project_or_the_project_no');
+}
+
+/** Adding a semantic dataset failed for a reason only the log holds. */
+export function addFailed(): string {
+  return t('semanticMessages.could_not_add_the_dataset');
+}

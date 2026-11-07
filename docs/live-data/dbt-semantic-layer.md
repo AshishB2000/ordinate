@@ -50,7 +50,7 @@ are the dataset.
 | What | Status | Decision |
 |---|---|---|
 | The page's `MetricTypeParams` (dbt v1.12) has no aggregation; the page never mentions a measure | documented | — |
-| `measures(environmentId, metrics) { name agg }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT`, asked per simple metric. `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API) are **not additive**: a refused running total, never a wrong sum. |
+| `measures(environmentId, metrics) { name agg nonAdditiveDimension { name } }`, `AggregationType` = `SUM`, `MIN`, `MAX`, `COUNT_DISTINCT`, `SUM_BOOLEAN`, `AVERAGE`, `PERCENTILE`, `MEDIAN`, `COUNT` | SDK | **Additive** only for a `SIMPLE` metric whose one measure aggregates `SUM` or `COUNT` and has no `nonAdditiveDimension` (MetricFlow's `non_additive_dimension`, a semi-additive measure such as a balance), asked per simple metric. The SDK's `Measure` has no such field today, and an API that refuses it cannot say a measure is not a balance, so there **every metric reads as not additive** (fail safe: its running totals are refused until the API carries the field). `RATIO`, `DERIVED`, `CUMULATIVE`, `CONVERSION`, `COUNT_DISTINCT`, anything unknown, and any metric whose measures cannot be read (the query absent on a newer API, the field refused) are **not additive**: a refused running total, never a wrong sum. |
 
 ## Asking a question: create, then poll
 
@@ -83,10 +83,10 @@ query($environmentId: BigInt!, $queryId: String!, $pageNum: Int!) {
 |---|---|---|
 | `GroupByInput { name, grain: TimeGranularity }`, `TimeGranularity` = … `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR` | documented | A date dimension is grouped at `DAY`…`YEAR` when its `queryableGranularities` lists it. (The SDK sends `timeGranularity` as a string and calls the enum deprecated since custom granularities: to verify which one the API takes now.) |
 | `orderBy: [{ metric: { name }, descending } \| { groupBy: { name, grain }, descending }]` | documented (examples; the signature line says `order`) / SDK (`orderBy`) | The plan's order, in priority. |
-| No NULL placement in an order | documented (none exists) | The warehouse decides (Snowflake and Postgres put a NULL first on a descending order). Ordinate ranks a NULL last, so a reply cut by its limit is checked key by key (Cube's `cutIsExact`), and when a NULL came before a value, the same question is asked again without the plan's limit and ranked here. |
+| No NULL placement in an order | documented (none exists) | The warehouse decides (Snowflake and Postgres put a NULL first on a descending order). Ordinate ranks a NULL last, so a reply cut by its limit is checked key by key (Cube's `cutIsExact`), and when a NULL came before a value or opened the rows, the same question is asked again without the plan's limit and ranked here. |
 | `limit: Int` | documented | Always explicit: the plan's (51 for a text axis's ranks, 201 for a value list, 1 for the latest day), else the Live row cap + 1, so a reply past the cap is seen. |
 | A query with group-bys and no metrics lists their values ("Categorical dimension only") | documented | **Lookups: yes** (`caps.lookups: true`): value pickers, the Assistant's spellings, the latest day for "last quarter". |
-| `''` and NULL are two groups | inferred | A reply with both a `''` and a NULL in one dimension is refused (Ordinate keeps one blank group; joining dbt's two figures would be arithmetic on the layer's figures), as for Cube. |
+| `''` and NULL are two groups | inferred | A reply with both a `''` and a NULL in one dimension is refused, and a cut reply holding either is asked again whole (Ordinate keeps one blank group; joining dbt's two figures would be arithmetic on the layer's figures), as for Cube. |
 | A byte-exact comparison | — (none) | The `where` compares in the warehouse's collation: **`caps.binaryCompare: false`**, so a viewer restricted by a row access rule is refused on every dbt dataset (D17). |
 
 ## Filters: template text, written only by a closed encoder
@@ -96,9 +96,9 @@ warehouse's SQL: `{{ Dimension('customer__customer_type') }} = 'new'`, `{{ TimeD
 (documented). **There is no bind parameter**, so a value is written into text. `src/engine/live/semantic/literals.ts`
 is the only way one gets there, and it refuses whatever it cannot write exactly:
 
-- **text:** 1–200 characters, each a letter, a mark, a digit, a space or one of `_ . , : ; / & ( ) # @ + % -`, or `'`
-  (written doubled), quoted with `'`. Refused: `{`, `}` (Jinja), `\` (an escape in BigQuery and Databricks string
-  literals), `"`, NUL, every control, format and line-break character, every quote look-alike (U+2018, U+2019, U+02BC,
+- **text:** 1–200 characters, each a letter, a mark, a digit, a space or one of `_ . , : ; / & ( ) # @ + % -`, quoted
+  with `'`. Refused: `{`, `}` (Jinja), `\` (an escape in BigQuery and Databricks string literals), `'` itself
+  (Databricks reads `'O''Brien'` as two literals run together, `OBrien`, and BigQuery as a syntax error), `"`, NUL, every control, format and line-break character, every quote look-alike (U+2018, U+2019, U+02BC,
   U+FF07), and anything longer. Nothing in the class starts a Jinja tag, closes the quote, or starts a comment.
 - **dates:** an ISO day `YYYY-MM-DD` that is a real day, quoted.
 - **numbers:** finite, written by `String(n)` only when it reads `^-?\d+(\.\d+)?$` (no exponent). **booleans:** `TRUE`,
@@ -137,7 +137,7 @@ that Snowflake, BigQuery, Databricks, Redshift, Postgres and Trino read alike, w
    document above; the environment id as a JSON number.
 2. `savedQueriesPaginated`, `savedQuery`, `dimensionsPaginated` and `metricsPaginated` with the fields above, and
    whether `Dimension.name` carries the entity path.
-3. `measures(environmentId, metrics) { name agg }` on today's API (else every metric reads as not additive).
+3. `measures(environmentId, metrics) { name agg nonAdditiveDimension { name } }` on today's API (else every metric reads as not additive).
 4. `createQuery` with `orderBy` (not `order`), `GroupByInput.grain` (not `timeGranularity`), and the poll's statuses.
 5. `jsonResult(encoded: false)`: pandas' table orient, column names `metric`, `dimension`, `dimension__grain` (their case
    on Snowflake), ISO timestamps, numbers as JSON numbers, 1024-row pages.

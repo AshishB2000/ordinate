@@ -18,7 +18,7 @@ import { TermChip } from '../model/terms/TermChip';
 import { termIdOf } from '../model/terms/api';
 import { AGG_LABELS, GRAINS } from '../visuals/model';
 import { FieldList } from './FieldList';
-import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
+import { EMPTY, groupBy, measureOf, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
 import s from './Question.module.css';
 
 const AGG_OPTIONS = (['sum', 'avg', 'count', 'countd', 'min', 'max'] as const).map((a) => ({ value: a, label: AGG_LABELS[a] }));
@@ -126,6 +126,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
         <Well label="Show">
           {e.values.map((m, i) => (
             <span key={`${m.column}:${i}`} className={s.pill} data-kind="measure">
+              {!m.metricId && ( // a layer's metric is computed by the layer: no aggregate to choose
               <Menu
                 label={`Aggregate of ${m.column}`}
                 trigger={
@@ -144,19 +145,20 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                   },
                 ]}
               />
+              )}
               {picker(
                 'Choose a measure',
                 ['measure'],
                 <button type="button" className={s.pillMain} aria-label={`Measure: ${m.column}`}>
                   <span className={s.pillText}>{m.column}</span>
                 </button>,
-                (f) => onChange(withValues(question, e.values.map((v, j) => (j === i ? { column: f.name, aggregation: f.aggregation ?? 'sum' } : v)))),
+                (f) => onChange(withValues(question, e.values.map((v, j) => (j === i ? measureOf(f) : v)))),
               )}
               <Remove label="Remove measure" title={`Take ${m.column} out`} onClick={() => onChange(withValues(question, e.values.filter((_, j) => j !== i)))} />
             </span>
           ))}
           {picker('Add a measure', ['measure'], <Add label="Add measure" text="Measure" />, (f) =>
-            onChange(withValues(question, [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }])),
+            onChange(withValues(question, [...e.values, measureOf(f)])),
           )}
         </Well>
 

@@ -1,13 +1,15 @@
 // Self-check for the closed literal encoder that writes every value into dbt's filter text (semantic layer part 7, d1;
 // src/engine/live/semantic/literals.ts, docs/live-data/dbt-semantic-layer.md "Filters"). Pure: no dbt, no network.
 //
-//   § literals  text in the class encoded exactly (a quote doubled); braces, backslash, double quote, NUL, controls,
-//               line breaks, format characters, quote look-alikes, the empty string and 201 characters refused;
+//   § literals  text in the class encoded exactly; braces, backslash, the quote itself (Databricks reads '' as two
+//               literals run together), double quote, NUL, controls, line breaks, format characters, quote
+//               look-alikes, the empty string and 201 characters refused;
 //               numbers only as plain decimals; dates only as real ISO days; names only from the synced list
 //   § filters   each Ordinate filter as the one `where` entry the doc's table names (NULL and '' as an extract reads them)
 //   § fuzz      20,000 seeded strings over printable ASCII, the refused set, Unicode punctuation and SQL/Jinja fragments:
 //               each is refused, or the text written for `col = s` (and `col IN (s, t)`) reads back as exactly one
-//               predicate holding exactly s. NEGATIVE CONTROL: a raw inliner breaks out of the template.
+//               predicate holding exactly s. NEGATIVE CONTROL: a raw inliner breaks out of the template, and an
+//               encoder that doubles a quote is read by the fake (as Databricks would) as something else.
 //
 //   npm run build:ts && node scripts/test-semanticLiterals.js
 
@@ -18,6 +20,7 @@ import type { SemanticFilter } from '../src/engine/live/semantic/semanticQuery';
 
 const lit: typeof import('../src/engine/live/semantic/literals') = require('../src/engine/live/semantic/literals');
 const fake: typeof import('./semanticFakeDbt') = require('./semanticFakeDbt');
+const { dbtAdapter }: typeof import('../src/engine/live/semantic/dbt') = require('../src/engine/live/semantic/dbt');
 
 const show = (v: unknown): string => JSON.stringify(v);
 const COLS: LiveColumn[] = [{ name: 'customer__region', type: 'text' }, { name: 'metric_time', type: 'date' }, { name: 'amt', type: 'number' }];
@@ -30,11 +33,10 @@ const where = (f: SemanticFilter): string => {
 };
 
 // ── § literals ──
-for (const v of ["O'Brien", 'Z\u00fcrich', 'S\u00e3o Paulo', 'Sa\u0303o Paulo', '50% off', 'a/b (c)', '\u6771\u4eac', 'a-b_c.d,e:f;g&h#i@j+k', 'x'.repeat(200)]) {
+for (const v of ['Z\u00fcrich', 'S\u00e3o Paulo', 'Sa\u0303o Paulo', '50% off', 'a/b (c)', '\u6771\u4eac', 'a-b_c.d,e:f;g&h#i@j+k', 'x'.repeat(200)]) {
   ok(`encoded exactly: ${v.slice(0, 40)}`, unquote(textOf(lit.literal(v, 'text'))) === v, textOf(lit.literal(v, 'text')));
 }
-ok("a quote is doubled, never escaped: O'Brien \u2192 'O''Brien'", textOf(lit.literal("O'Brien", 'text')) === "'O''Brien'");
-for (const v of ['{{ x }}', '{% if %}', '{# note #}', 'a}b', 'back\\slash', 'nul\u0000', 'line\nbreak', 'cr\rhere', 'tab\t', 'ls\u2028', 'zw\u200bsp', 'bom\ufeff', 'nb\u00a0sp',
+for (const v of ["O'Brien", "it''s", "'", '{{ x }}', '{% if %}', '{# note #}', 'a}b', 'back\\slash', 'nul\u0000', 'line\nbreak', 'cr\rhere', 'tab\t', 'ls\u2028', 'zw\u200bsp', 'bom\ufeff', 'nb\u00a0sp',
   '\u2018quote', '\u2019quote', 'modifier\u02bc', 'prime\u02b9', '\uff07', 'say "hi"', '`tick`', 'x'.repeat(201), '']) {
   ok(`refused: ${show(v).slice(0, 40)}`, !lit.literal(v, 'text').ok);
 }
@@ -85,8 +87,15 @@ const TABLE: Array<[string, SemanticFilter, string]> = [
   ['a row lock', { kind: 'in', column: 'customer__region', values: ['East'], negate: false, binary: true }, 'refused layerRowPolicy'],
 ];
 for (const [name, f, want] of TABLE) ok(`filter ${name}: ${want}`, where(f) === want, where(f));
-const refused = lit.whereText({ kind: 'compare', column: 'customer__region', op: '=', value: 'a"b' }, COLS, NAMES);
-ok('a refusal is layerFilter naming dbt and the field', 'code' in refused && refused.code === 'layerFilter' && /dbt/.test(refused.message) && refused.params?.column === 'customer__region', show(refused));
+const refused = lit.whereText({ kind: 'compare', column: 'customer__region', op: '=', value: "O'Brien" }, COLS, NAMES);
+ok("a refusal (O'Brien) is layerFilter naming dbt and the field", 'code' in refused && refused.code === 'layerFilter' && /dbt/.test(refused.message) && refused.params?.column === 'customer__region', show(refused));
+const enc = (q: Partial<Parameters<typeof dbtAdapter.encode>[0]>): string => {
+  const r = dbtAdapter.encode({ dimensions: [], metrics: ['revenue'], where: [], order: [], ...q }, 'orders', COLS, NAMES);
+  return 'code' in r ? `refused ${r.code}` : 'sent';
+};
+ok("an Other past a kept list holding O'Brien is refused layerFilter", enc({ exclude: { dimension: 'customer__region', values: ["O'Brien", 'Kids'] } }) === 'refused layerFilter');
+ok("\u2026and a split cell over a kept list holding it", enc({ dimensions: [{ name: 'customer__region' }], where: [{ kind: 'in', column: 'customer__region', values: ["O'Brien", 'Kids'], negate: false }] }) === 'refused layerFilter');
+ok('NEGATIVE CONTROL: \u2026the same Other past a kept list without a quote is sent', enc({ exclude: { dimension: 'customer__region', values: ['OBrien', 'Kids'] } }) === 'sent');
 
 // ── § fuzz ──
 function xorshift(seed: number): () => number {
@@ -100,7 +109,7 @@ const ASCII = Array.from({ length: 95 }, (_v, i) => String.fromCharCode(32 + i))
 const REFUSED = ['{', '}', '\\', '"', '\u0000', '\n', '\r', '\t', '\u2028', '\u200b', '\ufeff', '\u00a0', '\u2018', '\u2019', '\u02bc', '\uff07', '\u0007'];
 const UNICODE = ['\u00e9', '\u00df', '\u6771', '\u30a2', '\u0301', '\u00f1', '\u00ab', '\u00bb', '\u2014', '\u2026', '\u3001', '\u3002', '\u00bf', '\u203d', '\u2032', '\u2033', '\u2010', '\u066b', '\u0661', '\u03a9'];
 const CLASS = ['abcXYZ019 _.,:;/&()#@+%-'.split(''), '\u00e9', '\u6771', '\u0301', '\u0661'].flat();
-const CLASS_FRAGMENTS = ["'", "''", "' OR '", "') OR (", '--', ' AND ', "IS NULL'", "'; ", '%', '(', ')'];
+const CLASS_FRAGMENTS = [' OR ', ') OR (', '--', ' AND ', 'IS NULL', '; ', '%', '(', ')'];
 const FRAGMENTS = ["'", "''", "' OR ", ' OR 1=1 --', '--', '/*', '*/', '{{', '}}', '{%', "') }}", ';', ' AND ', 'NULL', ' IS NULL', ')', '('];
 function fuzz(n: number): Array<{ s: string; refused: boolean; roundTrips: boolean }> {
   const rand = xorshift(20261105);
@@ -108,7 +117,7 @@ function fuzz(n: number): Array<{ s: string; refused: boolean; roundTrips: boole
   const out: Array<{ s: string; refused: boolean; roundTrips: boolean }> = [];
   for (let i = 0; i < n; i += 1) {
     const len = rand() < 0.02 ? 195 + Math.floor(rand() * 10) : 1 + Math.floor(rand() * 24);
-    // Half adversarial (anything), half inside the class, where a breakout would have to hide (quotes, OR, comments).
+    // Half adversarial (anything, quotes too), half inside the class, where a breakout would have to hide (OR, comments).
     const inClass = i % 2 === 1;
     let s = '';
     while (Array.from(s).length < len) {
@@ -131,17 +140,20 @@ const runs = fuzz(20_000);
 const bad = runs.filter((r) => !r.refused && !r.roundTrips);
 ok('fuzz: every string is encoded exactly or refused', bad.length === 0, show(bad.slice(0, 3).map((r) => r.s)));
 const kept = runs.filter((r) => !r.refused);
-ok(`\u2026and the fuzz means something: ${kept.length} of 20,000 encoded, ${kept.filter((r) => r.s.includes("'")).length} of them holding a quote`,
-  kept.length > 9_000 && kept.filter((r) => r.s.includes("'")).length > 5_000 && runs.some((r) => r.refused));
+const quoted = runs.filter((r) => r.s.includes("'"));
+ok(`\u2026and the fuzz means something: ${kept.length} of 20,000 encoded, ${quoted.length} holding a quote, every one refused`,
+  kept.length > 9_000 && quoted.length > 2_000 && quoted.every((r) => r.refused));
 ok('\u2026every string holding a refused character, or longer than 200, was refused', runs.filter((r) => REFUSED.some((c) => r.s.includes(c)) || Array.from(r.s).length > 200).every((r) => r.refused));
 
 const rawWhere = (s: string): string => `{{ Dimension('customer__region') }} = '${s}'`;
 ok('NEGATIVE CONTROL: a raw inliner breaks out of the template', fake.parseTemplate(rawWhere("x' OR 1=1 --")).predicates.length > 1, show(fake.parseTemplate(rawWhere("x' OR 1=1 --"))));
-const naive = kept.filter((r) => r.s.includes("'")).filter((r) => {
+const naive = quoted.filter((r) => {
   const p = fake.parseTemplate(rawWhere(r.s)).predicates;
   return !(p.length === 1 && show(p[0]) === show({ ref: { name: 'customer__region', day: false }, op: '=', value: r.s }));
 });
 ok(`NEGATIVE CONTROL: the fuzz's own check fails an encoder that does not double quotes (${naive.length} of its strings)`, naive.length > 1_000);
+const doubled = (s: string): string => `{{ Dimension('customer__region') }} = '${s.replace(/'/g, "''")}'`;
+ok("NEGATIVE CONTROL: \u2026and the fake reads a doubled quote as Databricks does, not as O'Brien", show(fake.parseTemplate(doubled("O'Brien")).predicates) !== show([{ ref: { name: 'customer__region', day: false }, op: '=', value: "O'Brien" }]), show(fake.parseTemplate(doubled("O'Brien"))));
 ok('NEGATIVE CONTROL: \u2026and the encoder writes the same value as one predicate', fake.parseTemplate(where({ kind: 'compare', column: 'customer__region', op: '=', value: "x' OR 1=1 --" })).predicates.length === 1);
 ok('NEGATIVE CONTROL: a raw inliner of a Jinja tag puts it in the text', rawWhere('{{ env_var("DBT_TOKEN") }}').includes('{{ env_var') && !lit.literal('{{ env_var("DBT_TOKEN") }}', 'text').ok);
 

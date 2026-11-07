@@ -122,7 +122,7 @@ export function decodeCube(body: unknown, columns: readonly LiveColumn[], as: 'o
   ];
   const metrics = q.measures.map(nameOf);
   const nonBlank = as === 'ours' ? body.nonBlank ?? [] : [];
-  if ((body.nonBlank?.length ?? 0) > 0 && q.limit !== wire.CUBE_ROW_LIMIT) bad('a value list cut by Cube before its blanks are dropped', body);
+  if ((body.nonBlank?.length ?? 0) > 0 && q.limit !== wire.CUBE_ROW_LIMIT && q.limit !== body.limit) bad('a value list Cube cuts elsewhere than at its own limit', body);
   const where = q.filters.map((f) => decodeFilter(f, column, nonBlank));
   const order = q.order.map(([m, dir]) => (dir === 'asc' || dir === 'desc' ? { by: nameOf(m), desc: dir === 'desc' } : bad('an order direction', dir)));
   const limit = as === 'ours' && body.limit !== undefined ? body.limit : q.limit === wire.CUBE_ROW_LIMIT ? undefined : q.limit;
@@ -228,8 +228,9 @@ export interface FakeModel {
 const AGG: Record<string, string> = { revenue: 'sum', orders: 'count', avg_amount: 'avg', max_amount: 'max' };
 
 export function metaOf(models: readonly FakeModel[]): unknown {
+  // A view's member names the cube it comes from (aliasMember); the fake's view is over one cube, its table.
   const member = (m: FakeModel, name: string, extra: Record<string, unknown>, hidden: string[] = []) =>
-    ({ name: `${m.name}.${name}`, title: name, shortTitle: name, ...extra, isVisible: !hidden.includes(name), public: !hidden.includes(name) });
+    ({ name: `${m.name}.${name}`, title: name, shortTitle: name, ...extra, ...(m.type === 'view' ? { aliasMember: `${m.table}.${name}` } : {}), isVisible: !hidden.includes(name), public: !hidden.includes(name) });
   return {
     cubes: models.map((m) => ({
       name: m.name, type: m.type ?? 'cube', title: m.title ?? m.name, ...(m.description ? { description: m.description } : {}),
