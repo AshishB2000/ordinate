@@ -444,7 +444,7 @@ async function main(): Promise<void> {
   ok('oracle facts: indexes keep uniqueness and type, without the index that backs the key', JSON.stringify(of?.indexes) ===
     '[{"name":"ORDERS_REGION","columns":["REGION"],"unique":false,"kind":"BITMAP"},{"name":"ORDERS_RD","columns":["REGION","ORDER_DATE"],"unique":true,"kind":"NORMAL"}]', JSON.stringify(of?.indexes));
   ok('oracle facts: list partitioning', JSON.stringify(of?.partition) === '{"columns":["REGION"],"method":"LIST"}', JSON.stringify(of?.partition));
-  ok('oracle facts: the estimate and the date the optimizer last gathered it (and no size)', JSON.stringify([of?.rowEstimate, of?.lastModified, of && 'bytes' in of]) === '[1200,"2024-05-01T12:00:00.000Z",false]');
+  ok('oracle facts: the estimate, and no size and no date (last_analyzed is when statistics ran, not a change)', JSON.stringify([of?.rowEstimate, of && 'lastModified' in of, of && 'bytes' in of]) === '[1200,false,false]', JSON.stringify(of));
   ok('oracle facts: one connection, asked for once', o.h.opened() === 1);
 
   o = await readFacts(UPPER_ONLY, 'SHOP.ORDERS');
@@ -468,7 +468,7 @@ async function main(): Promise<void> {
   const FULL = Object.keys(of ?? {});
   for (const [view, dropped] of [
     [/all_tab_comments/i, ['comment']], [/all_constraints/i, ['primaryKey']], [/all_indexes/i, ['indexes']],
-    [/all_part_tables/i, ['partition']], [/\ball_tables\b/i, ['rowEstimate', 'lastModified']], [/all_col_comments/i, []],
+    [/all_part_tables/i, ['partition']], [/\ball_tables\b/i, ['rowEstimate']], [/all_col_comments/i, []],
   ] as const) {
     o = await readFacts(refusing(UPPER_ONLY, view));
     ok(`oracle facts: a refused ${view.source.replace(/\\b/g, '')} costs ${dropped.join(' and ') || 'the column comments'} only`,
