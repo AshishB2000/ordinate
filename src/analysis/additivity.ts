@@ -31,13 +31,14 @@ export interface Additivity { categories: boolean; time: boolean }
 // A new aggregation is not additive until it is added to this list.
 const ADDS: ReadonlySet<string> = new Set(['sum', 'count', 'none']);
 const ADDING: ReadonlySet<TableCalcKind> = new Set<TableCalcKind>(['running_total', 'pct_of_total', 'moving_sum']);
-// The chart types whose drawn figures (./chartShapes) add a measure up: a waterfall's running level and a Pareto's
-// cumulative share add the first series along the axis; a 100% stack's shares add every series across the split.
-const FIGURE_SUMS: Readonly<Record<string, { name: string; split: boolean }>> = {
-  waterfall: { name: 'a waterfall', split: false },
-  pareto: { name: 'a Pareto chart', split: false },
-  pct_stacked_column: { name: 'a 100% stacked chart', split: true },
-  pct_stacked_bar: { name: 'a 100% stacked chart', split: true },
+// The chart types whose drawn figures (./chartShapes) add a measure up, and how many of the measures they add: a
+// waterfall's running level (or its bridge from the first measure to the second) and a Pareto's cumulative share add
+// along the axis; a 100% stack's shares add every series across the split.
+const FIGURE_SUMS: Readonly<Record<string, { name: string; split: boolean; measures: number }>> = {
+  waterfall: { name: 'a waterfall', split: false, measures: 2 },
+  pareto: { name: 'a Pareto chart', split: false, measures: 1 },
+  pct_stacked_column: { name: 'a 100% stacked chart', split: true, measures: Infinity },
+  pct_stacked_bar: { name: 'a 100% stacked chart', split: true, measures: Infinity },
 };
 
 /** `sum`, `count` and `none` (the raw value) add; every other aggregation, an unknown or missing one included, does not. */
@@ -169,7 +170,7 @@ export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?:
   for (const [i, m] of (Array.isArray(values) ? values : []).entries()) {
     const calc = sanitizeTableCalc(m?.calc);
     const adds = !!calc && !!calcNeedsAdditive(calc.kind, false);
-    const sums = !!figure && (figure.split || i === 0);
+    const sums = !!figure && i < figure.measures;
     if (!adds && !sums) continue;
     const { name, additivity, layer } = await resolveMeasure(projectId, datasetId, m, params, !!pivot);
     // The split column's declared type matters only to a measure that adds on one side and not the other.

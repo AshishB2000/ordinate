@@ -305,7 +305,10 @@ async function main(): Promise<void> {
   ok('a split 100% stack of a countd metric → refused, named', (await chart({ category: 'day', grain: 'month', series: 'region', values: [{ ...CD, metricId: regions.id }] }, { chartType: 'pct_stacked_column' })).error === msg.calcNotAdditive('Regions', 'a 100% stacked chart'));
   ok('a waterfall of a snapshot by month → the over-time sentence', (await chart({ category: 'day', grain: 'month', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] }, { chartType: 'waterfall' })).error === msg.calcNotAdditiveOverTime('Stock', 'a waterfall'));
   ok('NEGATIVE CONTROL: …by region it adds, and draws', (await chart({ category: 'region', values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id }] }, { chartType: 'waterfall' })).ok === true);
-  ok('NEGATIVE CONTROL: a waterfall draws its first series only, so a second avg is not judged', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }] }, { chartType: 'waterfall' })).ok === true);
+  const bridge = await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }] }, { chartType: 'waterfall' });
+  ok('a two-measure waterfall bridges to its second measure, so an avg there is refused, named', bridge.ok === false && bridge.error === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(bridge));
+  ok('NEGATIVE CONTROL: a sum-to-sum bridge draws', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'qty', aggregation: 'sum' }] }, { chartType: 'waterfall' })).ok === true);
+  ok('NEGATIVE CONTROL: a waterfall draws two series only, so a third avg is not judged', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }, { column: 'qty', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }] }, { chartType: 'waterfall' })).ok === true);
   ok('NEGATIVE CONTROL: avg as a plain column draws', (await chart({ category: 'region', values: [{ column: 'amount', aggregation: 'avg' }] }, { chartType: 'column' })).ok === true);
   const pareto = (await visuals.saveVisual(pid, { datasetId: ds, name: 'Avg Pareto', chartType: 'pareto', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'avg' }] } } as never))!;
   const shapeDash = (await analysisStore.saveAnalysis(pid, { name: 'Shapes', sheets: [{ id: randomUUID(), name: 'Main', cards: [{ id: randomUUID(), type: 'visual', visualId: pareto.id, layout: { x: 0, y: 0, w: 6, h: 4 } }] }] } as never))!;
@@ -314,6 +317,8 @@ async function main(): Promise<void> {
   const card = await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'avg' }], filters: [], chartType: 'waterfall', title: 'x' } as never);
   ok('an answer card drawn as an avg waterfall → refused with the sentence', 'reason' in card && card.reason === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(card).slice(0, 300));
   ok('NEGATIVE CONTROL: …as a sum it draws', 'card' in (await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'waterfall', title: 'x' } as never)));
+  const cardBridge = await answers.computeCard(pid, { datasetId: ds, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }, { column: 'amount', aggregation: 'avg' }], filters: [], chartType: 'waterfall', title: 'x' } as never);
+  ok('an answer card bridging sum to avg as a waterfall → refused', 'reason' in cardBridge && cardBridge.reason === msg.calcNotAdditive('avg of amount', 'a waterfall'), show(cardBridge).slice(0, 300));
 }
 
 main()
