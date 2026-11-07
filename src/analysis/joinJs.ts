@@ -65,7 +65,7 @@ export function joinTables(
     const toInfo = infos.get(plan.tables[t].datasetId);
     if (!via || !data || !toInfo) continue;
     const toCi = toInfo.columns.findIndex((c) => c.name === via.to.column);
-    const ft = plan.tables.findIndex((x) => x.datasetId === via.from.datasetId);
+    const ft = plan.tables[t].parent; // by index: one dataset can be joined twice
     const fromInfo = infos.get(via.from.datasetId) as DsInfo;
     const fromLocal = fromInfo.columns.findIndex((c) => c.name === via.from.column);
     if (toCi < 0 || ft < 0 || fromLocal < 0) continue;

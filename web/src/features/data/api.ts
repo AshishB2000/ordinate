@@ -170,6 +170,8 @@ export interface Relationship {
   from: { datasetId: string; column: string };
   to: { datasetId: string; column: string };
   cardinality: 'many_to_one' | 'one_to_one';
+  /** What the join is called in charts ("Ship date"); absent when it has no name. */
+  label?: string;
   verified: { matched: number; unmatchedFrom: number };
   matchPct: number;
   /** What is wrong with the lookup side as a "one" (src/analysis/relationships.ts RelWarning). Absent for a caller row access rules restrict. */

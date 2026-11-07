@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configure, fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
-import { accentFor, defaultEncoding, fitEncoding, parseKey, suggestName, fieldKey } from './model';
+import { accentFor, defaultEncoding, fitEncoding, measureFrom, parseKey, suggestName, fieldKey } from './model';
 import { dataToTsv } from './ChartControls';
 
 // Whole-app renders through the router and two lazy chunks: generous under a loaded machine.
@@ -17,6 +17,8 @@ const PID = '11111111-1111-4111-8111-111111111111';
 const DID = '22222222-2222-4222-8222-222222222222';
 const VID = '33333333-3333-4333-8333-333333333333';
 const REL = '44444444-4444-4444-8444-444444444444';
+const VIA = '66666666-6666-4666-8666-666666666666';
+const GONE = '77777777-7777-4777-8777-777777777777';
 const ME = { user: { email: 'dev@local', role: 'admin' }, org: 'default', mode: 'dev', canSignOut: false };
 const COLS = [
   { name: 'region', type: 'text' },
@@ -80,6 +82,22 @@ describe('the model', () => {
     expect(fitted.categoryDatasetId).toBe(REL);
     expect(parseKey(fieldKey('tier', REL))).toEqual({ column: 'tier', datasetId: REL });
     expect(parseKey('plain/col')).toEqual({ column: 'plain/col' });
+  });
+  it('keys a related field by its relationship too, and keeps a via the server still offers (plan 09)', () => {
+    const m = { column: 'amount', aggregation: 'sum' as const };
+    const related = [
+      { key: fieldKey('month', REL), column: 'month', type: 'text', datasetId: REL, group: 'Dates' },
+      { key: fieldKey('month', REL, VIA), column: 'month', type: 'text', datasetId: REL, group: 'Ship date', via: VIA },
+    ];
+    expect(parseKey(fieldKey('month', REL, VIA))).toEqual({ column: 'month', datasetId: REL, via: VIA });
+    expect(parseKey(fieldKey('tier', REL))).toEqual({ column: 'tier', datasetId: REL });
+    expect('via' in parseKey(fieldKey('tier', REL))).toBe(false);
+    expect(fieldKey('tier', REL)).toBe(`@${REL}/tier`);
+    expect(fitEncoding({ category: 'month', categoryDatasetId: REL, categoryVia: VIA, values: [m] }, cols, related).categoryVia).toBe(VIA);
+    expect(fitEncoding({ category: 'month', categoryDatasetId: REL, categoryVia: GONE, values: [m] }, cols, related).categoryVia).toBeUndefined();
+    const viaMeasure = { column: 'month', aggregation: 'count' as const, datasetId: REL, via: VIA };
+    expect(fitEncoding({ category: 'region', values: [viaMeasure] }, cols, related).values).toEqual([viaMeasure]);
+    expect(measureFrom(fieldKey('month', REL, VIA), 'count')).toEqual(viaMeasure);
   });
   it('names a visual from its encoding, and gives a type one stable accent', () => {
     expect(suggestName({ category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, 'column')).toBe('amount by region');
@@ -156,6 +174,26 @@ describe('the gallery', () => {
 });
 
 describe('the builder', () => {
+  it('picks a related field through a labelled relationship, and Split by offers none of those (plan 09)', async () => {
+    const dates = { datasetId: REL, name: 'Dates', columns: [{ name: 'month', type: 'text' }] };
+    const calls = serve(base({
+      'relationship:related': { body: { ok: true, groups: [dates], viaGroups: [{ ...dates, name: 'Ship date', via: VIA }] } },
+      'visual:list': { body: [] },
+    }));
+    renderApp(`/visuals/${PID}/new?dataset=${DID}`);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:preview')).toBe(true));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Split by' }));
+    expect(await screen.findByRole('option', { name: 'month · Dates' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'month · Ship date' })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Category' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'month · Ship date' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:preview' && (c.payload as { encoding: { categoryVia?: string } }).encoding.categoryVia === VIA)).toBe(true));
+    const enc = calls.filter((c) => c.channel === 'visual:preview').map((c) => (c.payload as { encoding: Record<string, unknown> }).encoding).pop()!;
+    expect([enc.category, enc.categoryDatasetId, enc.categoryVia]).toEqual(['month', REL, VIA]);
+  });
+
   it('previews the default encoding, recomputes on an edit, and saves with a name', async () => {
     const calls = serve(base({ 'visual:save': { body: { ...summary(), encoding: {}, overrides: {}, filters: [] } }, 'visual:list': { body: [] } }));
     renderApp(`/visuals/${PID}/new?dataset=${DID}`);

@@ -10,6 +10,8 @@ export interface Measure {
   aggregation: Agg;
   /** A measure from a RELATED dataset (the "from …" groups). */
   datasetId?: string;
+  /** The relationship it is read through, beside `datasetId`; absent = the first one (plan 09). */
+  via?: string;
   metricId?: string;
   calc?: Record<string, unknown>;
   [k: string]: unknown;
@@ -42,6 +44,8 @@ export interface Encoding {
   overlay?: 'previous_year';
   geo?: Geo;
   categoryDatasetId?: string;
+  /** The relationship the category is read through, beside `categoryDatasetId`; absent = the first one. */
+  categoryVia?: string;
   seriesDatasetId?: string;
   [shelf: string]: unknown;
 }

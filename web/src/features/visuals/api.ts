@@ -13,6 +13,7 @@ import { figureAskKey, type FigureAsk } from '../../../../src/analysis/figureAsk
 
 export type { Agg, Encoding, FilterStep, Geo, Measure } from './encoding';
 import type { Encoding, FilterStep } from './encoding';
+import { fieldKey } from './model';
 
 export interface VisualSummary {
   id: string;
@@ -60,12 +61,14 @@ export interface Boundary {
 }
 
 export interface RelatedCol {
-  /** The select value: `@<datasetId>/<column>`. */
+  /** The select value: `@<datasetId>/<column>`, or `@<datasetId>~<relId>/<column>` through a labelled relationship. */
   key: string;
   column: string;
   type: string;
   datasetId: string;
   group: string;
+  /** The relationship this group is read through ("Ship date"); absent for a dataset's first one. */
+  via?: string;
 }
 
 export interface Suggestion {
@@ -240,12 +243,13 @@ export function useRelated(projectId: string, datasetId: string | undefined) {
       datasetId === undefined
         ? skipToken
         : async (): Promise<RelatedCol[]> => {
-            const r = (await rpc('relationship:related', { projectId, datasetId }).catch(() => null)) as {
-              ok: boolean;
-              groups?: { datasetId: string; name: string; columns: { name: string; type: string }[] }[];
-            } | null;
-            return (r && r.ok && r.groups ? r.groups : []).flatMap((g) =>
-              g.columns.map((c) => ({ key: `@${g.datasetId}/${c.name}`, column: c.name, type: c.type, datasetId: g.datasetId, group: g.name })),
+            type Group = { datasetId: string; name: string; columns: { name: string; type: string }[]; via?: string };
+            const r = (await rpc('relationship:related', { projectId, datasetId }).catch(() => null)) as { ok: boolean; groups?: Group[]; viaGroups?: Group[] } | null;
+            // The labelled joins come apart from `groups` (an older tab never lists them without their via).
+            return (r && r.ok ? [...(r.groups ?? []), ...(r.viaGroups ?? [])] : []).flatMap((g) =>
+              g.columns.map((c) => ({
+                key: fieldKey(c.name, g.datasetId, g.via), column: c.name, type: c.type, datasetId: g.datasetId, group: g.name, ...(g.via && { via: g.via }),
+              })),
             );
           },
     staleTime: 60_000,

@@ -385,6 +385,26 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('tab', { name: 'Relationships' }).click();
   await page.getByText("Regions' key is manager; this relationship looks rows up by region.").waitFor();
   await screens(page, 'data-relationships-warning');
+  // A second join between the same two datasets, on another key pair, named (plan 09).
+  await page.getByRole('button', { name: 'New relationship' }).click();
+  const dlg2 = page.getByRole('dialog', { name: 'New relationship' });
+  await dlg2.getByRole('combobox', { name: 'Many side' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await page.getByRole('listbox').waitFor({ state: 'detached' });
+  await dlg2.getByRole('combobox', { name: 'One side' }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('option', { name: 'Regions' }).click();
+  await dlg2.getByRole('radio', { name: /region → region/ }).waitFor(); // the suggested pair lands first; then the pick holds
+  await dlg2.getByRole('combobox', { name: 'Key column' }).click();
+  await page.getByRole('option', { name: 'state · text' }).click();
+  await page.getByRole('listbox').waitFor({ state: 'detached' });
+  await dlg2.getByRole('textbox', { name: 'Label' }).fill('Ship state');
+  await dlg2.getByRole('button', { name: 'Save relationship' }).click();
+  const namedJoin = page.getByRole('table').getByRole('row').filter({ hasText: 'Ship state' });
+  await namedJoin.waitFor();
+  assert.match((await namedJoin.textContent()) ?? '', /state/, 'the labelled row is the state → region join');
+  await page.getByRole('button', { name: /^Ship state: Retail orders\.state to Regions\.region/ }).waitFor();
+  await screens(page, 'data-relationships-labelled');
 
   noCanary(bodies);
   void ids;

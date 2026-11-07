@@ -11,7 +11,10 @@ export const relationships = {
     access: 'write',
     input: z.strictObject({
       projectId: Uuid,
-      relationship: z.strictObject({ id: Uuid.optional(), from: End, to: End, cardinality: z.enum(['many_to_one', 'one_to_one']) }),
+      relationship: z.strictObject({
+        id: Uuid.optional(), from: End, to: End, cardinality: z.enum(['many_to_one', 'one_to_one']),
+        label: z.string().max(60).optional(), // '' clears it; absent keeps the same edge's own
+      }),
     }),
     project: byProjectId,
   }),

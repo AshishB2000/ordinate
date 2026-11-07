@@ -83,47 +83,51 @@ export function defaultEncoding(cols: readonly Column[]): Encoding {
 export function fitEncoding(preset: Encoding | undefined, cols: readonly Column[], related: readonly RelatedCol[]): Encoding {
   const base = defaultEncoding(cols);
   if (!preset) return base;
-  const has = (name: string, dsId?: string) =>
-    dsId ? related.some((r) => r.datasetId === dsId && r.column === name) : cols.some((c) => c.name === name);
+  // A via the server no longer offers is gone, never read through the first relationship instead.
+  const has = (name: string, dsId?: string, via?: string) =>
+    dsId ? related.some((r) => r.datasetId === dsId && r.via === via && r.column === name) : cols.some((c) => c.name === name);
   const out: Encoding = { ...preset };
-  if (!preset.category || !has(preset.category, preset.categoryDatasetId)) {
+  if (!preset.category || !has(preset.category, preset.categoryDatasetId, preset.categoryVia)) {
     out.category = base.category;
     delete out.categoryDatasetId;
+    delete out.categoryVia;
   }
   if (preset.series && !has(preset.series, preset.seriesDatasetId)) {
     delete out.series;
     delete out.seriesDatasetId;
   }
   // A measure that is a saved metric names the metric, not a column (../calc/api.ts metricMeasure).
-  const keep = (preset.values ?? []).filter((v) => v.column && (!!v.metricId || has(v.column, v.datasetId)));
+  const keep = (preset.values ?? []).filter((v) => v.column && (!!v.metricId || has(v.column, v.datasetId, v.via)));
   out.values = keep.length ? keep : base.values;
   return out;
 }
 
-// ── Related columns: one select value, `@<datasetId>/<column>` ──────────────
+// ── Related columns: one select value, `@<datasetId>[~<relId>]/<column>` ────
 
-const REL = /^@([0-9a-f-]{36})\/([\s\S]*)$/i;
+const REL = /^@([0-9a-f-]{36})(?:~([0-9a-f-]{36}))?\/([\s\S]*)$/i;
 
-export function fieldKey(column: string, datasetId?: string): string {
-  return datasetId ? `@${datasetId}/${column}` : column;
+export function fieldKey(column: string, datasetId?: string, via?: string): string {
+  return datasetId ? `@${datasetId}${via ? `~${via}` : ''}/${column}` : column;
 }
 
-export function parseKey(value: string): { column: string; datasetId?: string } {
+export function parseKey(value: string): { column: string; datasetId?: string; via?: string } {
   const m = REL.exec(value);
-  return m ? { datasetId: m[1], column: m[2] } : { column: value };
+  if (!m) return { column: value };
+  return m[2] ? { datasetId: m[1], via: m[2], column: m[3] } : { datasetId: m[1], column: m[3] };
 }
 
 /** A measure picked from a select value. */
 export function measureFrom(value: string, aggregation: Agg, prev?: Measure): Measure {
-  const { column, datasetId } = parseKey(value);
+  const { column, datasetId, via } = parseKey(value);
   const m: Measure = { column, aggregation };
   if (datasetId) m.datasetId = datasetId;
+  if (via) m.via = via;
   if (prev?.calc) m.calc = prev.calc;
   return m;
 }
 
 /** Is the category a date (the grain and the period overlay belong to dates only)? */
 export function categoryType(enc: Encoding, cols: readonly Column[], related: readonly RelatedCol[]): string {
-  if (enc.categoryDatasetId) return related.find((r) => r.datasetId === enc.categoryDatasetId && r.column === enc.category)?.type ?? '';
+  if (enc.categoryDatasetId) return related.find((r) => r.datasetId === enc.categoryDatasetId && r.via === enc.categoryVia && r.column === enc.category)?.type ?? '';
   return cols.find((c) => c.name === enc.category)?.type ?? '';
 }

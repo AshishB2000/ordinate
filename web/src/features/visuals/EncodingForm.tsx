@@ -35,15 +35,16 @@ const heading = (label: string, key: string): SelectOption => ({ value: `__h:${k
 const METRIC = '__m:';
 const NEW = '__new';
 
-/** Related columns as one heading + options per dataset, nearest first (the server's order). */
+/** Related columns as one heading + options per dataset (and per labelled relationship), nearest first (the server's order). */
 function relatedOptions(related: readonly RelatedCol[], keep: (c: RelatedCol) => boolean): SelectOption[] {
   const out: SelectOption[] = [];
   let at = '';
   for (const c of related) {
     if (!keep(c)) continue;
-    if (c.datasetId !== at) {
-      at = c.datasetId;
-      out.push(heading(`From ${c.group}`, c.datasetId));
+    const group = fieldKey('', c.datasetId, c.via);
+    if (group !== at) {
+      at = group;
+      out.push(heading(`From ${c.group}`, group));
     }
     // The dataset rides in the text too: the closed control shows the option, not its group.
     out.push({ value: c.key, label: `${c.column} · ${c.group}` });
@@ -106,13 +107,13 @@ export function EncodingForm({
   const seriesOpts: SelectOption[] = [
     { value: '', label: 'None' },
     ...dims.map((c) => ({ value: c.name, label: c.name })),
-    ...relatedOptions(related, (c) => c.type !== 'number'),
+    ...relatedOptions(related, (c) => c.type !== 'number' && !c.via), // the series shelf has no via (plan 09)
   ];
 
   // The dimension moved: the grain belonged to the old column and the overlay to a date.
   const pickCategory = (v: string) => {
-    const { column, datasetId: from } = parseKey(v);
-    set({ category: column, categoryDatasetId: from, grain: undefined });
+    const { column, datasetId: from, via } = parseKey(v);
+    set({ category: column, categoryDatasetId: from, categoryVia: via, grain: undefined });
   };
   const setMeasure = (i: number, m: Measure) => set({ values: encoding.values.map((x, j) => (j === i ? m : x)) });
   /** Into its slot, or as one more measure. Returns how many measures the chart then has. */
@@ -152,7 +153,7 @@ export function EncodingForm({
       toast(`Added the column “${made.name}” and measured it.`, { kind: 'success' });
     } else {
       // Text or a date is something to group by, not to total.
-      set({ category: made.name, categoryDatasetId: undefined, grain: undefined });
+      set({ category: made.name, categoryDatasetId: undefined, categoryVia: undefined, grain: undefined });
       toast(`Added the column “${made.name}” and grouped the chart by it.`, { kind: 'success' });
     }
   };
@@ -169,7 +170,7 @@ export function EncodingForm({
   return (
     <div className={s.encoding}>
       <div className={s.row}>
-        <Select label="Category" aria-label="Category (dimension)" value={fieldKey(encoding.category, encoding.categoryDatasetId)} options={catOptions} onValueChange={pickCategory} />
+        <Select label="Category" aria-label="Category (dimension)" value={fieldKey(encoding.category, encoding.categoryDatasetId, encoding.categoryVia)} options={catOptions} onValueChange={pickCategory} />
         {isDate && (
           <Select
             aria-label="Date grain"
@@ -217,7 +218,7 @@ export function EncodingForm({
           return (
             <div key={i} className={s.valueRow}>
               <div className={s.grow}>
-                <Select aria-label="Measure column" size="sm" value={asMetric ? METRIC + m.metricId : fieldKey(m.column, m.datasetId)} options={options} onValueChange={(v) => pickMeasure(i, v)} />
+                <Select aria-label="Measure column" size="sm" value={asMetric ? METRIC + m.metricId : fieldKey(m.column, m.datasetId, m.via)} options={options} onValueChange={(v) => pickMeasure(i, v)} />
               </div>
               {asMetric ? (
                 <span className={s.metric} title={metric ? `A saved metric: ${metric.definitionText}` : 'A saved metric'}>

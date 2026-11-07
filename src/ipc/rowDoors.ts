@@ -54,9 +54,12 @@ function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[
   return [...new Set(ids.filter((o): o is string => typeof o === 'string' && !!o && o !== datasetId))];
 }
 
+/** Does anything in the question name a relationship (`via`)? Its step reads that relationship's table, whatever its column. */
+const viaIn = (v: unknown): boolean => (Array.isArray(v) ? v.some(viaIn) : !!v && typeof v === 'object' && typeof (v as { via?: unknown }).via === 'string');
+
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length) return true;
+  if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length || viaIn(rest)) return true;
   // A glossary term's step on another table (semantic D11) reads that table: its column name alone would not say so.
   const otherTable = (v: unknown): boolean => (Array.isArray(v) ? v.some(otherTable) : typeof (v as FilterStep | null)?.datasetId === 'string' && (v as FilterStep).datasetId !== datasetId);
   if (otherTable(rest)) return true;
