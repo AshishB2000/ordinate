@@ -178,3 +178,28 @@ export function periodOtherDate(name: string, date: string, category: string): s
 export function periodInChartFormula(name: string): string {
   return t('metricCheckMessages.a_formula_over_can_t_be', { name });
 }
+
+/** A per-entity snapshot (part 5, D11) with no period in scope: an entity that stopped reporting still counts its last value. */
+export function snapshotPerStale(per: string): string {
+  return t('metricCheckMessages.a_that_stopped_reporting_still_counts', { per });
+}
+
+/** A per-entity snapshot asked with what it does not combine with yet: currency conversion, a parameter replayed in Prepare, a related table. */
+export function snapshotPerUnsupported(per: string): string {
+  return t('metricCheckMessages.a_snapshot_per_can_t_yet', { per });
+}
+
+/** A snapshot's `per` that names no column of its dataset. */
+export function snapshotPerNotColumn(per: string): string {
+  return t('metricCheckMessages.is_not_a_column_of_this', { per });
+}
+
+/** A snapshot's `per` that names its own date: each day would be its own entity. */
+export function snapshotPerIsDate(per: string): string {
+  return t('metricCheckMessages.is_the_snapshot_s_own_date', { per });
+}
+
+/** A per-entity snapshot whose question needs the LOD pass (an LOD expression, a context filter over an LOD field, or a relative LOD field by a chart's dims): the kept rows hold the stored values only. */
+export function snapshotPerLod(per: string): string {
+  return t('metricCheckMessages.a_snapshot_per_can_t_yet_2', { per });
+}

@@ -1,6 +1,6 @@
 // The shapes part 5 writes and this release keeps but cannot compute (semantic layer part 5, step 01): a funnel or
-// period metric, a per-entity snapshot. Every reader asks here, so the release that computes one removes its refusal
-// in one place. KPI doors show no figure; chart and answer doors refuse with a sentence. A count distinct is computed
+// period metric (a per-entity snapshot is computed from step 07, ipc/snapshotPer). Every reader asks here, so the
+// release that computes one removes its refusal in one place. KPI doors show no figure; chart and answer doors refuse with a sentence. A count distinct is computed
 // from step 02 (analysis/countDistinct), but no writer is offered it before step 04 (unofferedMetric).
 
 import * as metrics from './metrics';
@@ -18,10 +18,9 @@ export function isNewerKind(d: MetricDefinition): d is MetricFunnelDefinition | 
   return metrics.isFunnelDefinition(d) || metrics.isPeriodDefinition(d);
 }
 
-/** A funnel or period kind, or a per-entity snapshot: no card writer on this release (a period metric's KPI and alerts are computed from step 05, its charts from step 06: chartPending). */
+/** A funnel or period kind: no card writer on this release (a period metric's KPI and alerts are computed from step 05, its charts from step 06: chartPending). */
 export function pendingMetric(m: Pick<Metric, 'definition'>): boolean {
-  const d = m.definition;
-  return isNewerKind(d) || (metrics.isSimpleDefinition(d) && !!d.snapshot?.per);
+  return isNewerKind(m.definition);
 }
 
 /** pendingMetric, less what a chart draws: a period metric (step 06, ./metricMeasures charts it alone). */

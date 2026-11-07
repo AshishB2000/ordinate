@@ -48,7 +48,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/externalMetric.ts': { count: 2, how: 'keeps' }, // the kind and its whitelist
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
   'src/analysis/metrics.ts': { count: 2, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13)
-  'src/analysis/pendingKinds.ts': { count: 9, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
+  'src/analysis/pendingKinds.ts': { count: 8, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
   'src/analysis/statusPin.ts': { count: 3, how: 'keeps' }, // the pin hashes the definition whole; an external one reads no column
   'src/analysis/columnHidden.ts': { count: 2, how: 'keeps' }, // a formula's names, then the definition walked whole for hidden columns
   'src/analysis/metricTimeScope.ts': { count: 7, how: 'keeps' }, // formulas, and a period's base's date: an external one counts by its own dataset

@@ -41,10 +41,13 @@ export function snapshotDrawn(encoding: VizEncoding | null | undefined): VizEnco
   return Array.isArray(all) ? (encoding.series && !encoding.pivot ? all.slice(0, 1) : all) : [];
 }
 
-/** The sentence refusing a definition whose snapshot names no date column of `datasetId`, or null (none, a date, or no dataset). */
+/** The sentence refusing a definition whose snapshot names no date column of `datasetId`, or a `per` that is no other column of it, or null (none, both fine, or no dataset). */
 export async function snapshotProblem(projectId: string, datasetId: string, def: unknown): Promise<string | null> {
   const snap = sanitizeSnapshot(def && typeof def === 'object' ? (def as { snapshot?: unknown }).snapshot : undefined);
   if (!snap) return null;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  return !meta || meta.columns.some((c) => c.name === snap.column && c.type === 'date') ? null : msg.snapshotNotDate(snap.column);
+  if (!meta) return null;
+  if (!meta.columns.some((c) => c.name === snap.column && c.type === 'date')) return msg.snapshotNotDate(snap.column);
+  if (snap.per === snap.column) return msg.snapshotPerIsDate(snap.per);
+  return !snap.per || meta.columns.some((c) => c.name === snap.per) ? null : msg.snapshotPerNotColumn(snap.per);
 }

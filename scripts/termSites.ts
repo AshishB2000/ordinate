@@ -105,6 +105,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/residentFilter.ts': { count: 4, how: 'throws' },
   'src/engine/residentQuery.ts': { count: 1, how: 'throws' },
   'src/engine/scenarioResident.ts': { count: 2, how: 'throws' },
+  // a per-entity snapshot's kept rows (part 5, D11): the door's expanded filters, compiled by filterPredicates (which throws on a term)
+  'src/engine/snapshotResident.ts': { count: 1, how: 'throws' },
   'src/engine/statsVectors.ts': { count: 1, how: 'throws' },
   // the Prepare fold's dispatch: foldStep rethrows TermNotExpandedError, an unknown step type still skips
   'src/data/transforms.ts': { count: 1, how: 'throws' },

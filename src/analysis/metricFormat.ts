@@ -97,8 +97,8 @@ export function describeDefinitionShort(definition: MetricDefinition, base?: str
   if (isExternalDefinition(definition)) return definedElsewhere(); // b2 names the layer
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
   const head = definition.column ? `${agg} of ${definition.column}` : agg;
-  const snap = definition.snapshot; // semantic D8: only the rows on that day
-  return snap ? `${head}, on the ${snap.take === 'last' ? 'latest' : 'earliest'} ${snap.column}` : head;
+  const snap = definition.snapshot; // semantic D8: only the rows on that day; part 5's `per`: each entity's own
+  return snap ? `${head}, on ${snap.per ? `each ${snap.per}'s` : 'the'} ${snap.take === 'last' ? 'latest' : 'earliest'} ${snap.column}` : head;
 }
 
 /**

@@ -202,6 +202,12 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   const slf = await save('Live double stock', L, { formula: '[Live stock] * 2' });
   const scf = await hydrates(L, () => chart(L, { category: 'region', values: [M('Live double stock', slf)] }));
   ok('Live: a formula over a snapshot is refused the same way', scf.value.ok === false && scf.value.code === 'live_refused' && scf.value.reason === 'snapshot' && !scf.hydrated, show(scf));
+  // A snapshot per entity (part 5, D11) is not planned for Live: part 1's typed refusal, never a figure over the whole scope.
+  const perLive = await save('Live MRR', L, { ...snapDef, snapshot: { ...snapDef.snapshot, per: 'region' } });
+  const pk = await hydrates(L, async () => ((await post('metric:values', { projectId: P, ids: [perLive], filters: [] })).value as unknown as Reply[])[0]);
+  ok('Live per-entity snapshot KPI: the same typed refusal, no hydrate', pk.value.ok === false && pk.value.code === 'live_refused' && pk.value.error === liveRefusals.liveSnapshotRefused() && !pk.hydrated, show(pk));
+  const pc = await hydrates(L, () => chart(L, { category: 'region', values: [M('Live MRR', perLive)] }));
+  ok('Live per-entity snapshot chart: the same typed refusal, no hydrate', pc.value.ok === false && pc.value.code === 'live_refused' && pc.value.reason === 'snapshot' && !pc.hydrated, show(pc));
   ok('NEGATIVE CONTROL: the same definition on the copy has a figure', typeof (await kpi(snapCopy, [])) === 'number');
   ok('NEGATIVE CONTROL: …and draws', (await chart(X, { category: 'region', values: [M('Copy stock', snapCopy)] })).ok === true);
 

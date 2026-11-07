@@ -1,6 +1,7 @@
 // A snapshot metric (semantic layer D8) in the metric editor: the "Snapshot" field offers the dataset's date columns,
 // the definition always says which (an object, or null for every row — how the server tells a clear from an old
-// tab), and a refusal is said beside the field. Each case has its negative control.
+// tab), and a refusal is said beside the field. Each case has its negative control. Part 5 (D11): "For each" keeps each
+// account's own latest rows; the definition always says which (a column, or null for the whole scope).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -20,6 +21,7 @@ const M = '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 const DAY = { name: 'day', type: 'date' };
 const UNITS = { name: 'units', type: 'number' };
 const REGION = { name: 'region', type: 'text' };
+const ACCOUNT = { name: 'account', type: 'text' };
 const STOCK = { id: M, name: 'Stock', datasetId: D, definition: { column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } }, filters: [], format: { kind: 'number' }, updatedAt: '' };
 
 const routes = (columns: unknown[], extra: Record<string, RpcReply> = {}): Record<string, RpcReply> => ({
@@ -60,7 +62,7 @@ describe('the metric editor’s snapshot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create metric' }));
     await waitFor(() => expect(calls.some((c) => c.channel === 'metric:save')).toBe(true));
     const body = calls.find((c) => c.channel === 'metric:save')?.payload as { input: { definition: unknown } };
-    expect(body.input.definition).toEqual({ column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last' } });
+    expect(body.input.definition).toEqual({ column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: null } });
     // The preview asks for the same definition, so its figure is the snapshot's (not the plain total release 1 showed).
     const previewed = () => calls.filter((c) => c.channel === 'metric:preview').map((c) => (c.payload as { definition: unknown }).definition);
     await waitFor(() => expect(previewed()).toContainEqual(body.input.definition), { timeout: 2000 });
@@ -98,6 +100,38 @@ describe('the metric editor’s snapshot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create metric' }));
     expect(await screen.findByText('“day” is not a date column, so it can\'t be a snapshot\'s date.')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull(); // not the dialog-wide error line
+  });
+
+  it('keeps each account\'s own latest rows: "For each" saves per', async () => {
+    const calls = serveRpc(routes([DAY, ACCOUNT, UNITS]));
+    mount(<MetricEditor projectId={P} onSaved={() => {}} onClose={() => {}} />);
+    await pick('Column', 'units (number)');
+    expect(screen.queryByRole('combobox', { name: 'For each' })).toBeNull(); // NEGATIVE CONTROL: not until a snapshot date is chosen
+    await pick('Snapshot', 'Latest day only');
+    expect(screen.getByRole('combobox', { name: 'For each' }).textContent).toBe('The whole scope');
+    await pick('For each', 'account');
+    expect(screen.getByText('Each account’s own latest row counts, even if it stopped reporting earlier. Pick a period to count only recent ones.')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value: 'MRR' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create metric' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'metric:save')).toBe(true));
+    const body = calls.find((c) => c.channel === 'metric:save')?.payload as { input: { definition: unknown } };
+    expect(body.input.definition).toEqual({ column: 'units', aggregation: 'sum', snapshot: { column: 'day', take: 'last', per: 'account' } });
+    const previewed = () => calls.filter((c) => c.channel === 'metric:preview').map((c) => (c.payload as { definition: unknown }).definition);
+    await waitFor(() => expect(previewed()).toContainEqual(body.input.definition), { timeout: 2000 });
+  });
+
+  it('opens an existing per on its column, and "The whole scope" clears it with null', async () => {
+    const calls = serveRpc(routes([DAY, ACCOUNT, UNITS]));
+    const MRR = { ...STOCK, definition: { ...STOCK.definition, snapshot: { column: 'day', take: 'last', per: 'account' } } };
+    mount(<MetricEditor projectId={P} existing={{ ...MRR, tag: 't1' } as never} onSaved={() => {}} onClose={() => {}} />);
+    const field = await screen.findByRole('combobox', { name: 'For each' });
+    await waitFor(() => expect(field.textContent).toBe('account'));
+    await pick('For each', 'The whole scope');
+    expect(screen.queryByText(/own latest row counts/)).toBeNull(); // NEGATIVE CONTROL: the hint goes with it
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'metric:update')).toBe(true));
+    const body = calls.find((c) => c.channel === 'metric:update')?.payload as { patch: { definition: { snapshot?: unknown } } };
+    expect(body.patch.definition.snapshot).toEqual({ column: 'day', take: 'last', per: null });
   });
 
   it('NEGATIVE CONTROL: with no date column there is no Snapshot field, and the formula tab has none', async () => {
