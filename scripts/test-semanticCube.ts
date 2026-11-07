@@ -238,6 +238,21 @@ async function replySection(): Promise<void> {
     return { ok: true, json: { data: Array.from({ length: b.query.limit === 51 ? 51 : 60 }, (_v, i) => row(`n${i}`, 1, b.query.limit === 51 || i >= 10 ? null : '1')), annotation: ann } };
   });
   ok('a full 51-row reply all NULL on its first order key is asked again (the values may all be past the cut)', show(posts) === show([51, wire.CUBE_ROW_LIMIT]), show(posts));
+  // The probe's table: a NULL region (100), 60 others (10 each), and a '' region (5) past the top-51 cut.
+  posts.length = 0;
+  const blanks = [row(null, 1, '100'), ...Array.from({ length: 60 }, (_v, i) => row(`c${String(i).padStart(2, '0')}`, 1, '10')), row('', 1, '5')];
+  const cutBlank = await wire.loadRows(top51, async (b) => {
+    posts.push(b.query.limit);
+    return { ok: true, json: { data: blanks.slice(0, b.query.limit), annotation: ann } };
+  });
+  ok("a cut reply with one blank form in a text dimension is asked again, so its '' and NULL are both seen and refused",
+    show(posts) === show([51, wire.CUBE_ROW_LIMIT]) && !cutBlank.ok && /NULLIF/.test(cutBlank.error), show([posts, cutBlank]));
+  posts.length = 0;
+  await wire.loadRows(top51, async (b) => {
+    posts.push(b.query.limit);
+    return { ok: true, json: { data: Array.from({ length: 60 }, (_v, i) => row(`c${i}`, i ? 1 : null, '10')).slice(0, b.query.limit), annotation: ann } };
+  });
+  ok('NEGATIVE CONTROL: a cut reply whose only NULL is in a number dimension is asked once', show(posts) === '[51]', show(posts));
   ok('…as is a boundary tie that opens with a NULL', !wire.cutIsExact([[3, 'a'], [2, null], [2, null]], [0, 1]) && !wire.cutIsExact([[null, 'a'], [null, 'b']], [0, 1]));
   const list: CubeBody = { query: { measures: [], dimensions: ['orders.many'], timeDimensions: [], filters: [], order: [['orders.many', 'asc']], limit: wire.CUBE_ROW_LIMIT, timezone: 'UTC' }, nonBlank: ['orders.many'], limit: 2 };
   const listed = wire.readLoad(list, { data: ['\t', '  ', 'a', 'b', 'c'].map((v) => ({ 'orders.many': v })), annotation: { dimensions: { 'orders.many': { type: 'string' } } } });

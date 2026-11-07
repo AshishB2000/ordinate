@@ -125,6 +125,8 @@ export function readLoad(body: CubeBody, json: unknown): LoadRead {
   if (full && body.query.limit === CUBE_ROW_LIMIT) return { ok: true, columns: keys.map(({ name }) => ({ name, type: '' })), rows: rows.slice(0, CUBE_ROW_LIMIT), truncated: true };
   const order = body.query.order.map(([m]) => keys.findIndex((k) => k.key === m || k.key.startsWith(`${m}.`)));
   if (full && !cutIsExact(rows, order)) return { recut: true };
+  // One blank form in a cut may hide the other past it (the check above needs both, and "Other" drops both): re-ask.
+  if (full && dims.some((i) => !numeric.has(keys[i].key) && rows.some((r) => r[i] === '' || r[i] === null))) return { recut: true };
   const drop = new Set((body.nonBlank ?? []).map((m) => keys.findIndex((k) => k.key === m)));
   if (drop.size) rows = rows.filter((r) => ![...drop].some((i) => blank(r[i])));
   if (body.limit !== undefined) rows = rows.slice(0, body.limit);

@@ -126,7 +126,10 @@ export function finishRows(body: DbtBody, rows: Cell[][], limit: number, cap: nu
   const columns = keys.map(({ name }) => ({ name, type: '' }));
   if (rows.length > cap) return { ok: true, columns, rows: rows.slice(0, cap), truncated: true };
   const order = body.orderBy.map((o) => keys.findIndex((k) => ('metric' in o ? k.metric && k.name === o.metric.name : !k.metric && k.name === o.groupBy.name)));
-  if (rows.length >= limit && limit <= cap && !cutIsExact(rows, order)) return { recut: true };
+  const cut = rows.length >= limit && limit <= cap;
+  if (cut && !cutIsExact(rows, order)) return { recut: true };
+  // One blank form in a cut may hide the other past it (the check above needs both, and "Other" drops both): re-ask.
+  if (cut && body.groupBy.some((g, i) => !g.grain && rows.some((r) => r[i] === '' || r[i] === null))) return { recut: true };
   let out = rows;
   const drop = (body.nonBlank ?? []).map((n) => keys.findIndex((k) => !k.metric && k.name === n));
   if (drop.length) out = out.filter((r) => !drop.some((i) => blank(r[i])));
