@@ -197,7 +197,8 @@ export function metaShape(meta: { steps?: unknown; columns: ParsedColumn[]; sour
   live?: { baseFilters?: unknown; calculated?: LiveCalc[]; calculatedUnreadable?: true } }): { steps: TransformStep[]; source: string[]; final: string[] } {
   return shapeOf({
     steps: meta.steps, baseFilters: meta.live?.baseFilters, columns: declaredColumns(meta),
-    calculated: meta.live?.calculatedUnreadable ? '\u0000unreadable' : meta.live?.calculated, // not a list: read as unknown, as on the record
+    // A list read in part: its readable calcs, then an entry that does not read, so the rest is unknown, as on the record.
+    calculated: meta.live?.calculatedUnreadable ? [...(meta.live.calculated ?? []), null] : meta.live?.calculated,
     ...(meta.sourceColumns ? { source: { columns: meta.sourceColumns } } : {}),
   });
 }

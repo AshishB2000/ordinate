@@ -5,6 +5,9 @@
 // kpiHidden; under mask a chart's labels by `Who = IF … ELSE [cat]` are tokens. The Assistant's withheld list
 // and the policy summary's count name the calcs. NEGATIVE CONTROL: with nothing marked every figure is drawn.
 //
+// A stored calc list this pod cannot read in full (`calculatedUnreadable`) still carries a mark through the calcs it
+// can read: the Assistant's withheld list names them.
+//
 // § layer  a layer's metric (part 7 b2) is read from every column of its semantic dataset, as far as the policy can
 //          tell (analysis/semanticMeasures layerReads): under drop a /p/ KPI and chart over a mirror are hidden once any
 //          column of the dataset is marked; under mask they are drawn. NEGATIVE CONTROL: with nothing marked, drawn.
@@ -29,6 +32,8 @@ const { kpiHidden }: typeof import('../src/publish/kpiPolicy') = require('../src
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const fake: typeof import('./semanticFake') = require('./semanticFake');
 const adapters: typeof import('../src/engine/live/semantic/adapters') = require('../src/engine/live/semantic/adapters');
 const sq: typeof import('../src/engine/live/semantic/semanticQuery') = require('../src/engine/live/semantic/semanticQuery');
@@ -125,6 +130,12 @@ async function main(): Promise<void> {
   await inApp(() => store.setPolicy(P, { publish: 'mask', export: 'mask', report: 'mask' }));
   const maskLayer = await layerPage();
   ok('layer, mask: the mirror\'s figures pass, as every aggregate does', drawn(maskLayer), show(maskLayer));
+
+  // ── a calc list read in part ──
+  await inApp(() => rec.serialized(rec.datasetFilePath(P, L), (r) => { r.calculated = [...CALCS, 7]; }));
+  ok('fixture: the stored list is read in part', (await inApp(() => datasets.getDatasetMeta(P, L)))?.live?.calculatedUnreadable === true);
+  ok('a list read in part still carries the marks through the calcs it can read', show([...(await inApp(() => share.withheldColumns(P, L)))].sort()) === show(['Bonus', 'Who', 'amt', 'cat']),
+    show([...(await inApp(() => share.withheldColumns(P, L)))]));
 }
 
 main().then(async () => { await close(); finish(); }, async (err) => {
