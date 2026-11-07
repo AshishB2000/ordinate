@@ -27,6 +27,9 @@ import { tableFacts } from '../app/tableDocs';
 import { tableWithout } from '../ai/hiddenFacts';
 import { hiddenColumnsFor } from '../data/rowAccess';
 import { load as loadCatalog } from '../app/catalog';
+import { getDatasetMeta } from '../data/datasets';
+import { isLive } from '../data/liveDataset';
+import { liveWithheld } from './liveProfile';
 
 /** The most metrics a draft is told about, first by name: about what fills the
  *  facts' metric block (planFacts.USER_BLOCK_MAX) at ordinary lengths, and the
@@ -47,6 +50,9 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
     const tables: NonNullable<PlanFactExtras['tables']> = {};
     for (const d of ctx.datasets) {
       columnDocs[d.id] = await assistantColumnDocs(projectId, d.id);
+      // A Live column pending review or detected as personal is withheld as the Live facts withhold it (./liveProfile): no codes.
+      const meta = await getDatasetMeta(projectId, d.id);
+      if (meta && isLive(meta)) for (const c of await liveWithheld(projectId, d.id, meta)) if (columnDocs[d.id][c]) columnDocs[d.id][c] = { ...columnDocs[d.id][c], values: undefined };
       const table = tableWithout(await tableFacts(projectId, d.id), await hiddenColumnsFor(projectId, d.id)); // no hidden key or hierarchy level (part 4, D21)
       if (table) tables[d.id] = table;
     }

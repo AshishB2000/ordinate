@@ -184,7 +184,15 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const asTurn = [{ id: 't', role: 'assistant' as const, text: '', createdAt: '', answer: byCat }];
   const pendingLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const pendingBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
+  // A dashboard draft's column notes too (ipc/draftFacts): no value label of a column the Live facts withhold.
+  const { loadDraftFacts }: typeof import('../src/ipc/draftFacts') = require('../src/ipc/draftFacts');
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [{ value: KEPT_OUT, label: 'Kept label' }] }));
+  const draftCodes = async () => show((await H.as(ORG_A, () => loadDraftFacts(P, { datasets: [{ id: L }] } as never))).columnDocs?.[L]?.cat?.values ?? null);
+  const pendingDraft = await draftCodes();
+  ok('pending: a dashboard draft is told no value label of the column', !pendingDraft.includes('Kept label') && !pendingDraft.includes(KEPT_OUT), pendingDraft);
   await H.as(ORG_A, () => privacy.decide(P, L, 'cat', 'none'));
+  ok('NEGATIVE CONTROL: dismissed, the draft is told the label', (await draftCodes()).includes('Kept label'));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   const dismissedLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const dismissedBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
   const catLabels = !('ok' in dismissedLive) ? dismissedLive.card.data.labels.map(String) : [];
