@@ -20,10 +20,11 @@ import { checkFunnelDefinition } from './funnelMetric';
 import * as datasets from '../data/datasets';
 import { externalReadOnly } from '../engine/semanticMessages';
 import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
+import * as msg from './metricSaveMessages';
 
 /** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
 export function nameTakenMessage(name: unknown): string {
-  return `A metric called "${String(name).trim()}" already exists.`;
+  return msg.metricNameTaken(String(name).trim());
 }
 
 /**
@@ -113,11 +114,11 @@ export async function saveMetricChecked(projectId: string, input: unknown) { // 
       filters: sanitizeDashboardFilters(raw.filters),
       ...when,
     });
-    if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
+    if (!m) return { ok: false, error: msg.metricNotSaved() };
     await versions.record(projectId, 'metric', m);
     return { ok: true, metric: m };
   } catch (err: any) { // any: whatever a store threw
-    return { ok: false, error: err?.message || 'Failed to save the metric' };
+    return { ok: false, error: err?.message || msg.metricSaveFailed() };
   }
 }
 
@@ -139,11 +140,11 @@ export async function updateMetricChecked(projectId: string, id: string, patch: 
     const tg = before && raw.target ? await checkTarget(projectId, { ...before, ...next, definition: next.definition !== undefined ? metrics.sanitizeDefinition(next.definition) : before.definition }, raw.target) : null; if (tg) return { ok: false, ...tg };
     if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
     const m = await metrics.updateMetric(projectId, id, next, base);
-    if (!m) return { ok: false, error: 'Metric not found' };
+    if (!m) return { ok: false, error: msg.metricNotFound() };
     await versions.record(projectId, 'metric', m, { before });
     return { ok: true, metric: m, tag: contentTag('metric', m) };
   } catch (err: any) { // any: whatever a store threw
     if (isRecordChanged(err)) throw err; // the route's 409
-    return { ok: false, error: err?.message || 'Failed to update the metric' };
+    return { ok: false, error: err?.message || msg.metricUpdateFailed() };
   }
 }
