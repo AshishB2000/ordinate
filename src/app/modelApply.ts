@@ -177,26 +177,42 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
     });
   }
 
-  for (const item of of('relationship')) {
-    await one(item, out, io, async () => {
-      const r = formOf(item).value as ModelRelationship;
-      if (item.targetId) {
-        // shortcut: relationships keep no tag, so they are compared just before their save, as base filters are
-        const now = (await listRelationships(projectId)).find((x) => x.id === item.targetId);
-        if (!now || relationshipOf(now).base !== item.hereHash) return modelObjectMoved();
-      }
-      const reply = await saveRelationshipChecked(projectId, {
-        ...(item.targetId && { id: item.targetId }),
-        from: { datasetId: r.from.dataset, column: r.from.column },
-        to: { datasetId: r.to.dataset, column: r.to.column },
-        cardinality: r.cardinality,
-        label: r.label ?? '', // sent, so an absent label clears the edge's own
-      });
-      if (!reply?.ok) return String(reply?.error ?? modelWriteFailed());
-      if (!item.targetId) fresh.relationships.set(r.id, reply.relationship.id);
-      return null;
-    }, dangling(item));
-  }
+  /**
+   * Writes `pending` in plan order, each after any new object it names (a dbt formula after every input: their date)
+   * and after any object giving up the name or label it takes (a rename, then a new one taking the old name). The plan
+   * refuses a swap, so a cycle left goes in plan order, and its save says why.
+   */
+  const inOrder = async (pending: PlanItem[], write: (item: PlanItem) => () => Promise<string | null>): Promise<void> => {
+    const waits = (item: PlanItem): boolean => {
+      const t = takes(item, formOf(item).value);
+      return formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && (!p.targetId || !!file.dbt)))
+        || (t !== undefined && pending.some((p) => p !== item && givesUp(p, formOf(p).value) === t));
+    };
+    while (pending.length) {
+      const at = pending.findIndex((p) => !waits(p));
+      const [item] = pending.splice(at < 0 ? 0 : at, 1);
+      await one(item, out, io, write(item), dangling(item));
+    }
+  };
+
+  await inOrder(of('relationship'), (item) => async () => {
+    const r = formOf(item).value as ModelRelationship;
+    if (item.targetId) {
+      // shortcut: relationships keep no tag, so they are compared just before their save, as base filters are
+      const now = (await listRelationships(projectId)).find((x) => x.id === item.targetId);
+      if (!now || relationshipOf(now).base !== item.hereHash) return modelObjectMoved();
+    }
+    const reply = await saveRelationshipChecked(projectId, {
+      ...(item.targetId && { id: item.targetId }),
+      from: { datasetId: r.from.dataset, column: r.from.column },
+      to: { datasetId: r.to.dataset, column: r.to.column },
+      cardinality: r.cardinality,
+      label: r.label ?? '', // sent, so an absent label clears the edge's own
+    });
+    if (!reply?.ok) return String(reply?.error ?? modelWriteFailed());
+    if (!item.targetId) fresh.relationships.set(r.id, reply.relationship.id);
+    return null;
+  });
 
   const termWrite = (item: PlanItem) => async (): Promise<string | null> => {
     const t = follow(formOf(item).value as ModelTerm);
@@ -227,17 +243,7 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
     fresh.metrics.set(m.id, reply.metric.id);
     return null;
   };
-  // Terms, then metrics (a metric's term step), each after any new object it names (a dbt formula after every input:
-  // their date) and after any object giving up the name it takes (a rename, then a new one taking its old name). The
-  // plan refuses a swap, so a cycle left goes in plan order, and its save says why.
-  const pending = todo.filter((i) => i.kind === 'term' || i.kind === 'metric');
-  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && (!p.targetId || !!file.dbt)))
-    || pending.some((p) => p !== item && givesUp(p) === takes(formOf(item).value));
-  while (pending.length) {
-    const at = pending.findIndex((p) => !waits(p));
-    const [item] = pending.splice(at < 0 ? 0 : at, 1);
-    await one(item, out, io, item.kind === 'term' ? termWrite(item) : metricWrite(item), dangling(item));
-  }
+  await inOrder(todo.filter((i) => i.kind === 'term' || i.kind === 'metric'), (item) => (item.kind === 'term' ? termWrite(item) : metricWrite(item))); // terms first: a metric's term step
 
   return { ok: true, ...out, ...(downloadToken ? { before: { downloadToken } } : {}) };
 }

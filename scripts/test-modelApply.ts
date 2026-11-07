@@ -361,7 +361,24 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const added = await snapOf();
   await applyPlanned(N.P, asWas);
   ok('importing the before file of an import that added a snapshot removes it', JSON.stringify(added) === '{"column":"day","take":"first"}' && (await snapOf()) === undefined, show([added, await snapOf()]));
-  ok('a rename and a new metric taking its old name: both land, in that order',r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
+  ok('a rename and a new metric taking its old name: both land, in that order', r10b.failed.length === 0 && r10b.written.join() === `metric:${N.stock},metric:${fid(82)}` && names10.includes('Zz stock') && names10.includes('Stock on hand'), show(r10b));
+
+  // A relationship's label is a name too, one per pair of datasets: a new edge taking the label a relabel gives up
+  // (its id sorts first) lands after it; two edges swapping labels are refused by the plan.
+  const n2 = await exported(N.P);
+  const edge = jsonAt(n2, 'relationships.json').relationships[0];
+  const second = { ...edge, id: fid(0), base: undefined, from: { ...edge.from, column: 'region' }, to: { ...edge.to, column: 'name' }, label: 'Customer' };
+  const relabelled = editAt(n2, 'relationships.json', (o) => { o.relationships[0].label = 'Zz customer'; o.relationships.push(second); });
+  const r10e = done(await applyPlanned(N.P, relabelled));
+  const labels10 = (await as(() => rels.listRelationships(N.P))).map((r) => r.label).sort();
+  ok('a relabel and a new relationship taking its old label: both land, in that order', r10e.failed.length === 0 && r10e.written.join() === `relationship:${edge.id},relationship:${fid(0)}` && labels10.join() === 'Customer,Zz customer', show([r10e, labels10]));
+  const n3 = await exported(N.P);
+  const swapLabels = editAt(n3, 'relationships.json', (o) => { for (const r of o.relationships) r.label = r.label === 'Customer' ? 'Zz customer' : 'Customer'; });
+  const swapPlan = await plan(N.P, swapLabels);
+  const swapItems = swapPlan.items.filter((i) => i.kind === 'relationship');
+  const labelSwapSaid = await as(async () => [msg.modelNameSwap('Zz customer'), msg.modelNameSwap('Customer')]);
+  ok('two relationships swapping labels: both skipped with the sentence, nothing written', swapItems.length === 2 && swapItems.every((i) => i.status === 'skipped' && i.reason === 'invalid' && labelSwapSaid.includes(String(i.error)))
+    && done(await apply(N.P, swapLabels, swapPlan.hash)).written.length === 0, show(swapItems));
 
   await close();
   finish();

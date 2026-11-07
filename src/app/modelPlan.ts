@@ -127,13 +127,21 @@ const refuse = (i: PlanItem, error: string, reason: SkipReason = 'invalid'): voi
 
 export type Mapped = ReturnType<typeof mapRefs<any>>; // any: one object of any kind, as the files hold it
 
-/** The name (lower-cased) an item gives up: its object's name here, when the files rename it. */
-export const givesUp = (i: PlanItem): string | undefined => {
-  const c = i.changes?.find((x) => x.field === 'name');
-  return typeof c?.here === 'string' && c.file !== undefined ? c.here.trim().toLowerCase() : undefined;
+type Named = { name?: unknown; label?: unknown; from?: { dataset?: unknown }; to?: { dataset?: unknown } };
+/**
+ * The name an item's object takes in `v` (its file form), case-blind: a term's or metric's name (one namespace), a
+ * relationship's label on its pair of datasets (`labelClash`); none for a relationship with no label.
+ */
+export const takes = (i: PlanItem, v: Named): string | undefined => {
+  if (i.kind !== 'relationship') return `name:${String(v.name ?? '').trim().toLowerCase()}`;
+  return typeof v.label === 'string' && v.label ? `label:${[String(v.from?.dataset), String(v.to?.dataset)].sort().join()}:${v.label.toLowerCase()}` : undefined;
 };
-/** The name (lower-cased) a term or metric takes, as the files name it. */
-export const takes = (o: { name?: unknown }): string => String(o.name ?? '').trim().toLowerCase();
+/** The name an item gives up: what its object takes here (its changed keys as they are here), when the files move it. */
+export const givesUp = (i: PlanItem, v: Named): string | undefined => {
+  if (!i.targetId) return undefined;
+  const was = takes(i, { ...v, ...Object.fromEntries((i.changes ?? []).map((c) => [c.field, c.here])) });
+  return was !== takes(i, v) ? was : undefined; // a change of case only gives up nothing
+};
 
 export async function planImport(projectId: string, file: ParsedModel): Promise<ImportPlan> {
   return (await planDetailed(projectId, file)).plan;
@@ -316,18 +324,20 @@ export async function planDetailed(projectId: string, upload: ParsedModel): Prom
       terms: [...here.terms.map((pt) => ({ ...form('term', pt), id: pt.id })), ...fresh('term')].map((x) => ({ id: x.id, name: x.name, aliases: x.aliases ?? [] })),
     };
   };
-  /** A term or metric that takes a name another gives up, which (through any more) takes this one's: no order lands it. */
-  const giver = new Map(items.filter((i) => (i.kind === 'term' || i.kind === 'metric') && writes(i) && givesUp(i)).map((i) => [givesUp(i) as string, i]));
+  /** A term, metric or relationship taking a name (a label) another gives up, which (through any more) takes this one's: no order lands it. */
+  const valueOf = (i: PlanItem): Named => (fileOf.get(i.key) as Mapped).value;
+  const giver = new Map(items.filter((i) => (i.kind === 'term' || i.kind === 'metric' || i.kind === 'relationship') && writes(i) && givesUp(i, valueOf(i))).map((i) => [givesUp(i, valueOf(i)) as string, i]));
   const swapped = (item: PlanItem): boolean => {
     for (let cur = item, n = 0; n < giver.size; n++) {
-      const next = giver.get(takes((fileOf.get(cur.key) as Mapped).value));
-      if (!next || next === cur) return false; // nobody gives it up, or a change of case only
+      const t = takes(cur, valueOf(cur));
+      const next = t === undefined ? undefined : giver.get(t);
+      if (!next || next === cur) return false; // nobody gives it up
       if (next === item) return true;
       cur = next;
     }
     return false;
   };
-  for (const item of [...giver.values()].filter(swapped)) refuse(item, modelNameSwap(String((fileOf.get(item.key) as Mapped).value.name)));
+  for (const item of [...giver.values()].filter(swapped)) refuse(item, modelNameSwap(String(valueOf(item).name ?? valueOf(item).label)));
   for (let pass = 0; pass <= items.length; pass++) {
     const post = postNames();
     // A dbt formula's inputs this import writes are judged by their own saves, before its (the apply's order); the rest as stored.

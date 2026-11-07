@@ -117,8 +117,9 @@ refuses if the project changed since ("This project changed since the dry run. C
 - **Never a delete.** An object only the project has stays.
 - A column's sensitivity may be raised, never lowered.
 - Every object goes through the same checks as the editor's save (names, formulas, term cycles, caps).
-- A rename and a new object taking the old name both land (the rename is written first). Two objects swapping
-  names are refused: rename one to a free name, import, then rename it.
+- A rename (a metric's or term's name, a relationship's label) and a new object taking the old name both land:
+  the rename is written first. Two objects swapping names or labels are refused: rename one to a free name,
+  import, then rename it.
 
 ## From dbt
 
