@@ -289,6 +289,18 @@ async function main(): Promise<void> {
     && (await share.assistantColumnDocs(pid, renamedDs!.id)).contact.sensitivity === 'personal');
   await datasets.deleteDataset(pid, renamedDs!.id);
 
+  // A mark carries to a column COMPUTED from the marked one (semantic layer part 4, D22): bonus = [salary] * 0.1 leaves masked.
+  const payDs = await datasets.saveDataset(pid, { name: 'Pay', sourceKind: 'csv', columns: [{ name: 'salary', type: 'number' }, { name: 'dept', type: 'text' }], rows: [[52000, 'Ops']] });
+  await catalog.setColumn(pid, payDs!.id, 'salary', { sensitivity: 'financial' });
+  await datasets.updateSteps(pid, payDs!.id, [{ type: 'calculated_field', name: 'bonus', expression: '[salary] * 0.1' }, { type: 'calculated_field', name: 'team', expression: '[dept]' }]);
+  ok('calculated: the mark follows salary → bonus', (await share.sensitiveColumns(pid, payDs!.id)).get('bonus') === 'financial');
+  const PAY_PLUS_BONUS = { columns: [{ name: 'salary', type: 'number' as const }, { name: 'dept', type: 'text' as const }, { name: 'bonus', type: 'number' as const }, { name: 'team', type: 'text' as const }], rows: [[52000, 'Ops', 5200, 'Ops']] };
+  const exported = await share.applyToTable(pid, payDs!.id, PAY_PLUS_BONUS, 'export');
+  ok('a calculated column over a financial column is masked on export', exported.masked.includes('bonus') && exported.rows[0][2] === mask.maskToken(salt, '5200'), JSON.stringify(exported));
+  ok('NEGATIVE CONTROL: a calculated column over dept is not masked', exported.rows[0][3] === 'Ops' && !exported.masked.includes('team'), JSON.stringify(exported));
+  ok('calculated: …and bonus is withheld from the Assistant', (await share.withheldColumns(pid, payDs!.id)).has('bonus'));
+  await datasets.deleteDataset(pid, payDs!.id);
+
   // ── 3c. Publish: the API the publish feature calls ────────────────────────
   const table = { columns: COLS, rows: ROWS };
   const pub = await share.applyToTable(pid, did, table, 'publish');

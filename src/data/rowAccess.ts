@@ -29,7 +29,8 @@ import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
 import { storedRules, withFirstWritePolicy, type KeptRules } from './datasetRecord';
 import { memoOf, readRawRecord as readRaw, type Raw } from './rawRecord';
-import { columnReason, columnView, columnsRuled, upstreamHides } from './columnGate';
+import { columnReason, columnView, newestColumnRules, upstreamHides } from './columnGate';
+export { columnRulesSince, columnsRuled, fanOutHides } from './columnGate';
 import { asOfIso } from './asOf';
 import { isTermStep } from './termStep';
 import type { FilterStep } from './transforms';
@@ -105,9 +106,38 @@ export function inExport(): boolean {
   return scopes.getStore()?.out?.kind === 'export';
 }
 
-/** The columns of `id` hidden from the caller here (inside a fan-out: from its least-entitled audience). Empty for an unrestricted caller. */
+/**
+ * The columns of `id` whose values are hidden from the caller here (inside a fan-out: from its least-entitled
+ * audience) — EVERY column when the rules do not hold or a dataset upstream hides one, since which columns carry
+ * those values is then unknown. Empty for an unrestricted caller. What a reply leaves out or marks.
+ */
 export async function hiddenColumnsFor(projectId: string, id: string): Promise<ReadonlySet<string>> {
-  return (await columnView(projectId, id, inFanOut() ? 'fanout' : 'caller')).hidden;
+  const audience = inFanOut() ? 'fanout' : 'caller';
+  const view = await columnView(projectId, id, audience);
+  if (view.state === 'ok' && !(await upstreamHides(projectId, id, audience))) return view.hidden;
+  const cols = (await readRaw(projectId, id))?.columns;
+  return new Set((Array.isArray(cols) ? cols : []).flatMap((c: { name?: unknown } | null) => (typeof c?.name === 'string' ? [c.name] : [])));
+}
+
+const anywhere = new WeakMap<object, Map<string, Promise<ReadonlySet<string>>>>();
+
+/** Every column name hidden from the caller on any dataset of the project (`hiddenColumnsFor`'s union), once per request: conservative on purpose, a false hide never a leak. */
+export function hiddenAnywhere(projectId: string): Promise<ReadonlySet<string>> {
+  const memo = memoOf(anywhere);
+  const key = `${inFanOut() ? 'fanout' : 'caller'}\0${projectId}`;
+  let hit = memo.get(key);
+  if (!hit) {
+    hit = (async () => {
+      const out = new Set<string>();
+      if (!isValidId(projectId) || (!inFanOut() && !(await restrictedOn(projectId)))) return out;
+      const datasets = require('./datasets') as typeof import('./datasets'); // lazy: the dataset store calls into this module
+      for (const d of await datasets.listDatasets(projectId)) for (const c of await hiddenColumnsFor(projectId, d.id)) out.add(c);
+      return out;
+    })();
+    memo.set(key, hit);
+    hit.catch(() => memo.delete(key));
+  }
+  return hit;
 }
 
 // ── The record, raw ─────────────────────────────────────────────────────────
@@ -166,13 +196,6 @@ export async function policyClosed(projectId: string, id: string): Promise<boole
   return (await effective(projectId, id)).kind !== 'none';
 }
 
-/**
- * Row rules (`policyClosed`) or column rules, here or upstream, for anyone: what a reply sent alike to every
- * reader (a push, a legacy published site, the project's colours) treats as closed.
- */
-export async function governed(projectId: string, id: string): Promise<boolean> {
-  return (await policyClosed(projectId, id)) || (isValidId(projectId) && isValidId(id) && (await columnsRuled(projectId, id)));
-}
 
 // ── The doors ───────────────────────────────────────────────────────────────
 
@@ -210,12 +233,13 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   return lockValuesOf(eff.raw, eff.policy, caller.userId, caller.teamIds);
 }
 
-/** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. */
-async function closedReason(projectId: string, id: string): Promise<RowPolicyReason | null> {
+/** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. `rowsOnly`: the row rules alone. */
+async function closedReason(projectId: string, id: string, rowsOnly = false): Promise<RowPolicyReason | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const scope = scopes.getStore();
   const out = scope?.out;
-  if (scope?.locked === id && out?.kind !== 'fanout') return columnReason(projectId, id, scope.checked, out?.kind); // its door gated the question
+  const columns = (): Promise<RowPolicyReason | null> => (rowsOnly ? Promise.resolve(null) : columnReason(projectId, id, scope?.checked, out?.kind));
+  if (scope?.locked === id && out?.kind !== 'fanout') return columns(); // its door gated the question
   const caller = await callerOn(projectId);
   if (!caller.restricted && out?.kind !== 'fanout') return null;
   let eff: Effective;
@@ -225,7 +249,7 @@ async function closedReason(projectId: string, id: string): Promise<RowPolicyRea
     if (isRowPolicyError(err)) return err.reason; // unreadable: closed
     throw err;
   }
-  if (eff.kind === 'none') return columnReason(projectId, id, scope?.checked, out?.kind);
+  if (eff.kind === 'none') return columns();
   if (out?.kind === 'fanout') return 'fanout';
   if (!caller.restricted) return null;
   if (out?.kind === 'export') return 'export';
@@ -245,9 +269,12 @@ export async function gateRows(projectId: string, id: string): Promise<void> {
   if (reason) refuse(reason);
 }
 
-/** For a walk over datasets that SKIPS what the caller may not read (value search, Home's insights): never throws, never fails a build. */
-export async function closedToCaller(projectId: string, id: string): Promise<boolean> {
-  return (await closedReason(projectId, id)) !== null;
+/**
+ * For a walk over datasets that SKIPS what the caller may not read (value search, Home's insights): never throws,
+ * never fails a build. `rowsOnly`: closed by row rules alone, for a reply that leaves out the hidden columns itself.
+ */
+export async function closedToCaller(projectId: string, id: string, opts: { rowsOnly?: boolean } = {}): Promise<boolean> {
+  return (await closedReason(projectId, id, opts.rowsOnly)) !== null;
 }
 
 /** Is the caller restricted on this project at all? (The `scoped` flag; nothing about the rules leaves.) */
@@ -274,36 +301,46 @@ export function withLockSteps(lock: Lock, filters: readonly FilterStep[] | undef
   return starts ? only : [...lock.steps, ...only];
 }
 
-/** Does any dataset of the project have row or column rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
+/** Does any dataset of the project have row rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
 export async function anyPolicyClosed(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   // Lazy: the dataset store calls into this module, so it is not imported at load time.
   const datasets = require('./datasets') as typeof import('./datasets');
-  for (const d of await datasets.listDatasets(projectId)) if (await governed(projectId, d.id)) return true;
+  for (const d of await datasets.listDatasets(projectId)) if (await policyClosed(projectId, d.id)) return true;
   return false;
 }
 
-/** `anyPolicyClosed`, remembered per org and project on this pod for a few seconds — the legacy `/p/` check runs per fetch. */
+/** The project's rules as an older published site that recorded no datasets asks of them, remembered per org and project on this pod for a few seconds — it runs per fetch. */
 const ANY_CLOSED_TTL_MS = 15_000;
-const anyClosed = new Map<string, { at: number; value: Promise<boolean> }>();
+const anyClosed = new Map<string, { at: number; value: Promise<{ rows: boolean; columnsAt: number }> }>();
 
-/**
- * `anyPolicyClosed` for a page served per fetch (an older published site, src/publish/hosted.ts). Forgotten at
- * once when this pod saves rules (`rulesChanged`); CEILING: another pod may serve such a page for up to 15 s
- * after rules are first set in its project.
- */
-export function anyPolicyClosedRecently(projectId: string): Promise<boolean> {
+function projectRulesRecently(projectId: string): Promise<{ rows: boolean; columnsAt: number }> {
   const key = ctx().org.id + '\u0000' + projectId;
   const hit = anyClosed.get(key);
   if (hit && Date.now() - hit.at < ANY_CLOSED_TTL_MS) return hit.value;
-  const value = anyPolicyClosed(projectId);
+  const value = (async () => ({ rows: await anyPolicyClosed(projectId), columnsAt: await newestColumnRules(projectId) }))();
   anyClosed.set(key, { at: Date.now(), value });
   value.catch(() => anyClosed.delete(key));
   if (anyClosed.size > 1000) anyClosed.delete(anyClosed.keys().next().value as string);
   return value;
 }
 
-/** Rules were saved or removed in `projectId` (dataset:setRowPolicy): what this pod remembers of it goes. */
+/**
+ * `anyPolicyClosed` for a page served per fetch (an older published site, src/publish/hosted.ts). Forgotten at
+ * once when this pod saves rules (`rulesChanged`); CEILING: another pod may serve such a page for up to 15 s
+ * after rules are first set in its project.
+ */
+export async function anyPolicyClosedRecently(projectId: string): Promise<boolean> {
+  return (await projectRulesRecently(projectId)).rows;
+}
+
+/** Has any dataset of the project column rules set after `iso` (or that do not sanitize)? `anyPolicyClosedRecently`'s twin, with its memory and its ceiling. */
+export async function anyColumnRulesSince(projectId: string, iso: string): Promise<boolean> {
+  const since = Date.parse(iso);
+  return Number.isNaN(since) || (await projectRulesRecently(projectId)).columnsAt > since;
+}
+
+/** Rules were saved or removed in `projectId` (dataset:setRowPolicy; step 07's column setter calls it too): what this pod remembers of it goes. */
 export function rulesChanged(projectId: string): void {
   anyClosed.delete(ctx().org.id + '\u0000' + projectId);
 }

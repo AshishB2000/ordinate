@@ -629,7 +629,7 @@
   "subscriptionText.not_sent_none_of_the_chosen": "Non envoyé : aucune des cartes choisies n’est encore dans le tableau de bord.",
   "subscriptionText.not_sent_the_dashboard_was_deleted": "Non envoyé : le tableau de bord a été supprimé.",
   "subscriptionText.not_sent_the_figures_could_not": "Non envoyé : les chiffres n’ont pas pu être calculés.",
-  "subscriptionText.not_sent_this_dashboard_reads_a": "Non envoyé : ce tableau de bord lit un jeu de données soumis à des règles d’accès aux lignes, et les abonnements montrent les mêmes chiffres à tout le monde : ils sont donc désactivés pour lui.",
+  "subscriptionText.not_sent_this_dashboard_reads_a": "Non envoyé : ce tableau de bord lit un jeu de données dont les règles d’accès limitent ce que certaines personnes voient, et les abonnements montrent les mêmes chiffres à tout le monde : ils sont donc désactivés pour lui.",
   "subscriptionText.not_sent_this_server_cannot_read": "Non envoyé : ce serveur ne peut pas lire les URL de webhook sans DATABASE_URL et ORDINATE_MASTER_KEY.",
   "subscriptionText.not_sent_to_nobody_on_it": "Non envoyé à {channel} : personne sur cette liste ne peut lire ce projet.",
   "subscriptionText.not_sent_to_this_list_is": "Non envoyé à {channel} : cette liste dépasse la limite horaire d’e-mails de l’organisation.",

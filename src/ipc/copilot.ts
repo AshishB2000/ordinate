@@ -1,7 +1,10 @@
 import { ipcMain } from './bus';
 import { ctx, senderOf, serverDataDir } from '../server/context';
 import * as onboarding from '../app/onboarding';
-import { closedToCaller, gateRows } from '../data/rowAccess';
+import { closedToCaller, gateRows, hiddenColumnsFor } from '../data/rowAccess';
+import { withoutColumns } from '../data/columnAccess';
+import { dropHidden, factsOf, tableWithout } from '../ai/hiddenFacts';
+import { metricHidden } from '../analysis/columnHidden';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
@@ -165,7 +168,8 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const out: FactMetric[] = [];
     const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
-      if ((datasetId && s.datasetId !== datasetId) || metrics.isExternalDefinition(s.definition)) continue; // a layer's metric has no figure here (part 7 b0)
+      // A layer's metric has no figure here (part 7 b0); one reading a hidden column is not the caller's vocabulary (part 4).
+      if ((datasetId && s.datasetId !== datasetId) || metrics.isExternalDefinition(s.definition) || (await metricHidden(projectId, s.id))) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
       const r = await resolveMetric(projectId, s.id, scope).catch((err: unknown) => {
         if (isLiveFigureError(err)) return null;
@@ -207,9 +211,9 @@ export async function buildFacts(
   // work, never a fixed script. `emit` defaults to a no-op, so the unit test
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
-  if (kind === 'dataset' && id) {
-    // Whole-dataset facts (column summaries, sample rows, insights, a Live sample): refused on a dataset with row access rules (row-policy D9).
-    await gateRows(projectId, id);
+  // Whole-dataset facts (column summaries, sample rows, insights, a Live sample): refused on a dataset with row access
+  // rules (row-policy D9); with a column hidden from the caller, built without it (part 4, D21: ../ai/hiddenFacts).
+  const datasetFacts = kind === 'dataset' && id ? await factsOf(projectId, id, async (hidden) => {
     // A Live dataset keeps no rows: its columns, its sampled profile and — unless
     // withheld — its sample values (L2.5), with its defined metrics' figures from
     // the warehouse (L2.4). One source: ai/liveFacts.
@@ -219,7 +223,8 @@ export async function buildFacts(
       if (live.metrics) emit({ kind: 'compute', label: 'Resolved ' + plural(live.metrics, 'metric'), count: live.metrics });
       return live.facts;
     }
-    const ds = await datasets.getDataset(projectId, id);
+    const whole = await datasets.getDataset(projectId, id);
+    const ds = whole && withoutColumns(whole, hidden);
     if (ds) {
       emit({ kind: 'read', label: 'Read ' + ds.name, detail: plural(ds.rowCount, 'row') });
       const summaries = ds.columns.map((col, c) =>
@@ -229,17 +234,19 @@ export async function buildFacts(
       const issues = findQualityIssues(ds.columns, ds.rows);
       emit({ kind: 'quality', label: 'Checked data quality', detail: plural(issues.length, 'issue') + ' found', count: issues.length });
       // The same app-computed findings the Insights cards show — so the dock can
-      // narrate "West fell 31%" from the app's figure rather than deriving one.
-      const insights = await listInsights(projectId, id);
+      // narrate "West fell 31%" from the app's figure rather than deriving one. Computed over every column: none with one hidden.
+      const insights = hidden.size ? [] : await listInsights(projectId, id);
       emit({ kind: 'compute', label: 'Read ' + plural(insights.length, 'insight'), count: insights.length });
       const defined = await factMetrics(projectId, id, undefined, question);
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
       const columnDocs = await catalogColumns(projectId, id); // the user's own column notes (catalog)
-      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, await tableFacts(projectId, id), await termFactsFor(projectId, id, question)); // its glossary terms beside its metrics
+      return copilot.datasetFacts(ds, summaries, issues, insights, defined, columnDocs, tableWithout(await tableFacts(projectId, id), hidden), await termFactsFor(projectId, id, question)); // its glossary terms beside its metrics
     }
-  }
+    return null;
+  }) : null;
+  if (datasetFacts) return datasetFacts;
 
   if (kind === 'visual' && id) {
     const v = await visuals.getVisual(projectId, id);
@@ -401,7 +408,7 @@ export async function buildFacts(
     visuals: vList.map((x) => x.name),
     dashboards: dashList.map((x) => x.name),
   }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
-    name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id), table: await tableFacts(projectId, m!.id),
+    name: m!.name, columns: dropHidden(m!.columns, await hiddenColumnsFor(projectId, m!.id)), docs: await catalogColumns(projectId, m!.id), table: tableWithout(await tableFacts(projectId, m!.id), await hiddenColumnsFor(projectId, m!.id)),
     // A Live dataset's profile and sample values (L2.5) — none from a dataset with row access rules the caller may not read whole.
     notes: (await closedToCaller(projectId, m!.id)) ? undefined : await liveInventoryNotes(projectId, m!),
   }))));

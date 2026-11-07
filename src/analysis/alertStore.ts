@@ -23,7 +23,7 @@
 // (`explainEvent`), and the notification never waits for it.
 
 import * as fs from 'fs';
-import { assertFanOutAllowed, fanOutScope, governed, isRowPolicyError } from '../data/rowAccess';
+import { assertFanOutAllowed, fanOutHides, fanOutScope, isRowPolicyError, policyClosed } from '../data/rowAccess';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -637,7 +637,8 @@ export async function allProjectIds(): Promise<string[]> {
 
 /**
  * The events a push may carry to every reader of the project: one about a
- * dataset with row access rules (or built from one) keeps its ids and time and
+ * dataset with row access rules (or built from one), or naming a column hidden
+ * from any reader (semantic layer part 4), keeps its ids and time and
  * loses its figures, sentence and diagnosis (docs/row-policy, "Pushes") — the
  * inbox re-reads `alerts:list`, which redacts per caller. A pipeline failure on a
  * dataset from a connection loses the driver's error the same way (one payload
@@ -646,7 +647,8 @@ export async function allProjectIds(): Promise<string[]> {
 export async function pushableEvents(projectId: string, events: AlertEvent[]): Promise<AlertEvent[]> {
   const out: AlertEvent[] = [];
   for (const e of await withoutRunError(projectId, events, connectionDatasetIds)) {
-    if (!(await governed(projectId, e.datasetId))) { out.push(e); continue; } // row or column rules: one payload for every reader
+    // One payload for every reader: row rules, or a column hidden from the least-entitled one that it names (part 4, D17).
+    if (!(await policyClosed(projectId, e.datasetId)) && !(await fanOutHides(projectId, e.datasetId, [e.ruleName, e.message, e.diagnosis ?? '']))) { out.push(e); continue; }
     const { diagnosis: _d, ...kept } = e;
     out.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: '' } as AlertEvent);
   }

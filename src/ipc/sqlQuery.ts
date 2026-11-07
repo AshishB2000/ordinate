@@ -21,22 +21,24 @@ import * as sqlDatasets from '../engine/sqlDatasets';
 import * as importStage from '../data/importStage';
 import * as datasets from '../data/datasets';
 import * as jobs from '../app/jobs';
+import { hiddenColumnsFor } from '../data/rowAccess';
+import { markHidden } from '../data/columnAccess';
 
 export async function schemaFor(projectId: unknown) {
   if (!isValidId(projectId)) return { ok: false, error: 'Invalid project id' };
   const cat = await sqlDatasets.projectCatalog(projectId);
   return {
     ok: true,
-    datasets: cat.map((e) => ({
+    datasets: await Promise.all(cat.map(async (e) => ({
       id: e.id,
       name: e.name,
       alias: e.alias,
       slug: e.slug,
       rowCount: e.rowCount,
       queryable: e.queryable,
-      // The names SQL actually sees — de-duplicated exactly as the CTE body is.
-      columns: viewColumns(e.columns).map((c) => ({ name: c.name, type: c.type })),
-    })),
+      // The names SQL actually sees — de-duplicated exactly as the CTE body is; a hidden column marked (part 4).
+      columns: markHidden(viewColumns(e.columns).map((c) => ({ name: c.name, type: c.type })), await hiddenColumnsFor(projectId, e.id)),
+    }))),
   };
 }
 

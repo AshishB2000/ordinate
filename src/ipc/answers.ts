@@ -16,6 +16,9 @@
 // Registered from ./copilot's register(), which hands over its number guard —
 // the guard is a safety control and there is exactly one of it.
 
+import { hiddenColumnsFor } from '../data/rowAccess';
+import { dropHidden } from '../ai/hiddenFacts';
+import { metricHidden } from '../analysis/columnHidden';
 import { ipcMain } from './bus';
 import { lockedTable, withLockOf } from './rowDoors';
 import { withoutColumns } from '../data/columnAccess';
@@ -288,8 +291,13 @@ export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
   const list = await datasets.listDatasets(projectId);
   const metas = await Promise.all(list.map((d) => datasets.getDatasetMeta(projectId, d.id)));
   const docs = (await loadCatalog(projectId)).columns;
-  return metas.filter((m): m is NonNullable<typeof m> => !!m)
-    .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]), shown: shownNames(m.columns, docs[m.id]) }));
+  const out: SpecDataset[] = [];
+  for (const m of metas) {
+    if (!m) continue;
+    const columns = dropHidden(m.columns, await hiddenColumnsFor(projectId, m.id)); // a hidden column is no word a spec may use (part 4, D21)
+    out.push({ id: m.id, name: m.name, columns, names: taughtNames(columns, docs[m.id]), shown: shownNames(columns, docs[m.id]) });
+  }
+  return out;
 }
 
 const statusField = async (status: ReturnType<typeof statusFor>, ref: string): Promise<{ status?: { state: StatusState } }> => {
@@ -303,7 +311,9 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   try {
     const status = statusFor(projectId);
     for (const s of await metrics.listMetrics(projectId)) {
-      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s)) continue; // part 5's shapes, and a layer's metric (no column measure): not named by a model on this release
+      // Part 5's shapes and a layer's metric (no column measure) are not named by a model on this release; one
+      // reading a hidden column is not the caller's (part 4).
+      if (!metrics.isSimpleDefinition(s.definition) || unofferedMetric(s) || (await metricHidden(projectId, s.id))) continue;
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,

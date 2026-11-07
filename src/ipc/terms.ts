@@ -22,6 +22,7 @@ import type { FactTerm } from '../ai/termFacts';
 import { withheldColumns } from '../ai/columnNotes';
 import { assistantColumnDocs } from '../app/sharePolicy';
 import { termUsage } from '../analysis/termUsage';
+import { termHidden } from '../analysis/columnHidden';
 
 /** A term as `projectId`'s caller may read it: unchanged, or (restricted) every filter value left out. */
 export async function termForCaller(projectId: string, t: Term): Promise<Term & { valuesHidden?: true }> {
@@ -40,7 +41,7 @@ export async function listForCaller(projectId: string) {
   const out = [];
   for (const t of await terms.listFullTerms(projectId)) {
     if (!names.has(t.datasetId)) names.set(t.datasetId, (await datasets.getDatasetMeta(projectId, t.datasetId))?.name ?? '');
-    out.push({ ...terms.toSummary(t), datasetName: names.get(t.datasetId) || null, definition: terms.describeTermFilters(t, () => hide) });
+    out.push({ ...terms.toSummary(t), datasetName: names.get(t.datasetId) || null, definition: terms.describeTermFilters(t, () => hide), ...((await termHidden(projectId, t.id)) ? { hidden: true as const } : {}) }); // part 4, D19
   }
   return out;
 }
@@ -50,7 +51,8 @@ export async function listForCaller(projectId: string) {
  * written as "…" for a caller row access rules restrict, and for a column marked personal or financial.
  */
 export async function termFactsFor(projectId: string, datasetId: string, question?: string): Promise<FactTerm[]> {
-  const own = (await terms.listFullTerms(projectId)).filter((t) => t.datasetId === datasetId);
+  const own = [];
+  for (const t of await terms.listFullTerms(projectId)) if (t.datasetId === datasetId && !(await termHidden(projectId, t.id))) own.push(t); // part 4, D21
   if (!own.length) return [];
   const hideAll = await restrictedOn(projectId);
   const withheld = withheldColumns(await assistantColumnDocs(projectId, datasetId));

@@ -626,7 +626,7 @@
   "subscriptionText.not_sent_none_of_the_chosen": "Not sent: none of the chosen cards are on the dashboard any more.",
   "subscriptionText.not_sent_the_dashboard_was_deleted": "Not sent: the dashboard was deleted.",
   "subscriptionText.not_sent_the_figures_could_not": "Not sent: the figures could not be computed.",
-  "subscriptionText.not_sent_this_dashboard_reads_a": "Not sent: this dashboard reads a dataset with row access rules, and subscriptions show the same figures to everyone, so they are off for it.",
+  "subscriptionText.not_sent_this_dashboard_reads_a": "Not sent: this dashboard reads a dataset whose access rules limit what some people see, and subscriptions show the same figures to everyone, so they are off for it.",
   "subscriptionText.not_sent_this_server_cannot_read": "Not sent: this server cannot read webhook URLs without DATABASE_URL and ORDINATE_MASTER_KEY.",
   "subscriptionText.not_sent_to_nobody_on_it": "Not sent to {channel}: nobody on it can read this project.",
   "subscriptionText.not_sent_to_this_list_is": "Not sent to {channel}: this list is larger than the organization's hourly email limit.",

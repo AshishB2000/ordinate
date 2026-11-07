@@ -24,7 +24,8 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
-import { RowPolicyError, closedToCaller, gateRows, inFanOut, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, gateRows, hiddenColumnsFor, inFanOut, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import { mentionsHidden } from '../data/columnAccess';
 import type { RowPolicyReason } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
 import * as visuals from '../analysis/visuals';
@@ -254,10 +255,23 @@ function withoutLabels<T extends VisualLike>(v: T): T {
   return out as T;
 }
 
+/** The record's filter steps on a hidden column without their values (as a restricted caller's term, ./terms termForCaller). */
+function withoutHiddenValues<T extends VisualLike>(v: T, hidden: ReadonlySet<string>): T {
+  const filters = (v as { filters?: unknown }).filters;
+  if (!hidden.size || !Array.isArray(filters)) return v;
+  const kept = filters.map((f: unknown) => {
+    if (!f || typeof f !== 'object' || !mentionsHidden((f as { column?: unknown }).column, hidden)) return f;
+    const { value: _v, values: _vs, radius: _r, ...rest } = f as Record<string, unknown>;
+    return rest;
+  });
+  return { ...v, filters: kept };
+}
+
 /**
- * A visual as a restricted caller gets it (round 2 #12, R19): on a dataset with rules — or one they cannot
+ * A visual as a restricted caller gets it (round 2 #12, R19): on a dataset with row rules — or one they cannot
  * name (a version of a deleted visual), or reaching a related dataset closed to them (B1) — without the
- * labels `withoutLabels` drops. CEILING: that caller
+ * labels `withoutLabels` drops; one that names a column hidden from them (part 4, D18) without those labels and
+ * without the values of its filters on a hidden column. CEILING: that caller
  * sees the default order and colours; the waterfall still marks its totals, which the server fills from the
  * stored record (`storedFigureAsk`). Every other caller gets the record unchanged (the same object).
  */
@@ -265,9 +279,13 @@ export async function visualForCaller<T extends VisualLike | null>(projectId: st
   if (!v || !(await restrictedOn(projectId))) return v;
   const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
   const filters = (v as { filters?: unknown }).filters;
-  const closed = !ds || (await closedToCaller(projectId, ds))
-    || (!!v.encoding && !!(await relatedClosed(projectId, ds, chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []))));
-  return closed ? withoutLabels(v) : v;
+  if (!ds) return withoutLabels(v);
+  const reads = once(v.encoding ? chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []) : async () => []);
+  const closed = (await closedToCaller(projectId, ds, { rowsOnly: true })) || (!!v.encoding && !!(await relatedClosed(projectId, ds, reads)));
+  const hidden = new Set<string>(); // what is hidden on every table it reads, a related one's included
+  for (const id of new Set([ds, ...(await reads())])) for (const c of await hiddenColumnsFor(projectId, id)) hidden.add(c);
+  if (closed) return withoutHiddenValues(withoutLabels(v), hidden);
+  return mentionsHidden([v.encoding, filters], hidden) ? withoutHiddenValues(withoutLabels(v), hidden) : v;
 }
 
 /**

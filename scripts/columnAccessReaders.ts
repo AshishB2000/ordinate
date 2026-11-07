@@ -1,20 +1,21 @@
 // Every `read` contract a project viewer can call, with how COLUMN access rules cover it (semantic layer
 // part 4, D15–D18) — the column twin of scripts/rowPolicyReaders.ts. A `read` contract missing here fails
-// scripts/test-columnDoors.ts (and step 06's test-columnAccessSafetyNet): classify it, and say how it is
+// scripts/test-columnAccessSafetyNet.ts: classify it, and say how it is
 // covered, in the PR that adds it. Never classify by copying the row class without checking what it returns.
 //
 //   GATE    a figure door (./columnDoors gateColumns): a question naming a hidden column refuses `hidden`
 //   DROP    a row reader: hidden cells null in place (or the column left out of a file), named in `hidden`
 //   NET     a whole-table reader: the storage net refuses a caller something is hidden from (`columns`)
 //   REDACT  answers, with what names a hidden column's values left out for that caller
-//   MARK    lists columns, a hidden one marked `hidden: true` (names are not secret; step 06)
+//   MARK    lists columns, a hidden one marked `hidden: true` (names are not secret)
 //   FANOUT / EXPORT  a fan-out build (gated as its least-entitled audience) / an export (refused)
 //   SKIP    a walk that skips a dataset closed to the caller
 //   META    returns no value, figure or row of a dataset
 //
-// As of step 05 the classes are TREATMENT's mapped (DOOR → GATE, LOCKED → DROP or GATE, EXPLICIT → NET), with
-// the row readers' own classes noted. Step 06 sets the D18 overrides (catalog:columns, dataset:columns,
-// sql:schema, metric:list, term:list…) and proves every class with canaries.
+// The classes are TREATMENT's mapped (DOOR → GATE, LOCKED → DROP or GATE, EXPLICIT → NET), with the overrides
+// step 06 made each saying how it is covered. scripts/test-columnAccessSafetyNet.ts proves every class: a canary
+// in every hidden cell, grepped in every reply a hidden-from viewer gets for every read contract, MCP tool, push
+// and model prompt; and every GATE channel refusing a question that names a hidden column.
 
 export type ColumnTreatment = 'GATE' | 'DROP' | 'NET' | 'REDACT' | 'MARK' | 'FANOUT' | 'EXPORT' | 'SKIP' | 'META';
 
@@ -23,7 +24,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'ai:status': 'META',
   'alerts:list': 'REDACT',
   'alerts:markSeen': 'META',
-  'alerts:test': 'FANOUT',
+  'alerts:test': 'FANOUT', // so is alerts:save on a dataset with column rules; test-columnAccessSafetyNet
   'analysis:draft': 'NET',
   'analysis:gallery': 'REDACT',
   'analysis:open': 'REDACT',
@@ -41,7 +42,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'captureDataset:image': 'NET',
   'captureDataset:list': 'REDACT',
   'captureDataset:status': 'META',
-  'catalog:columns': 'REDACT',
+  'catalog:columns': 'REDACT', // a hidden column's example and value labels left out (app/columnLabelAccess); test-columnRedact
   'catalog:get': 'META',
   'catalog:getTable': 'REDACT',
   'catalog:list': 'META',
@@ -59,7 +60,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'connections:list': 'REDACT',
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'NET',
+  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts
   'copilot:deleteThread': 'META',
   'copilot:history': 'META',
   'copilot:newThread': 'META',
@@ -69,11 +70,11 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'dashboard:exportHtml': 'EXPORT',
   'dashboard:metric': 'GATE',
   'dataSearch:query': 'SKIP',
-  'dataset:columns': 'META',
+  'dataset:columns': 'MARK', // a hidden column marked hidden: true (columnAccess.markHidden); test-columnRedact
   'dataset:composePreview': 'NET',
   'dataset:distinct': 'GATE', // distinctFor: the column and the parent picks are the question
   'dataset:list': 'REDACT',
-  'dataset:liveSchema': 'REDACT',
+  'dataset:liveSchema': 'REDACT', // closedToCaller: no sample values; test-columnRedact
   'dataset:page': 'DROP', // pageFor: hidden cells null in place, named in `hidden`; a search, sort or filter on one refuses
   'dataset:profile': 'GATE', // withLockOf: the column is the question (a Live sample too)
   'dataset:source': 'META',
@@ -87,7 +88,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'embed:status': 'META',
   'events:list': 'META',
   'explore:suggest': 'META',
-  'format:colors:get': 'REDACT',
+  'format:colors:get': 'REDACT', // no colours of a column hidden on any dataset (rowAccess.hiddenAnywhere); test-columnRedact
   'formula:check': 'NET',
   'formula:functions': 'META',
   'fx:get': 'META',
@@ -110,7 +111,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'mentions:setPrefs': 'META',
   'metric:check': 'GATE',
   'metric:get': 'META',
-  'metric:list': 'META',
+  'metric:list': 'REDACT', // a metric that reads a hidden column marked hidden: true (analysis/columnHidden); test-columnRedact
   'metric:preview': 'GATE',
   'metric:table': 'GATE',
   'metric:values': 'GATE',
@@ -138,11 +139,11 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'projects:open': 'REDACT',
   'projects:overview': 'META',
   'projects:roles': 'META',
-  'publish:plan': 'FANOUT',
+  'publish:plan': 'FANOUT', // gated as its least-entitled audience: one reading a hidden column refuses; test-columnAccessSafetyNet
   'publish:sites': 'META',
   'publish:targets': 'META',
   'quality:failingRows': 'NET',
-  'quality:list': 'REDACT',
+  'quality:list': 'REDACT', // closedToCaller: the rules without args, no run; test-columnRedact
   'quality:preview': 'NET',
   'rebuild:match': 'NET',
   'rebuild:read': 'META',
@@ -175,7 +176,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'sql:datasetQuery': 'META',
   'sql:explain': 'NET',
   'sql:run': 'NET',
-  'sql:schema': 'META',
+  'sql:schema': 'MARK', // a hidden column marked hidden: true; test-columnRedact
   'starred:get': 'META',
   'starred:set': 'META',
   'stats:dashboards': 'META',
@@ -189,13 +190,13 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'subscription:get': 'META',
   'subscription:history': 'META',
   'subscription:list': 'META',
-  'subscription:preview': 'FANOUT',
+  'subscription:preview': 'FANOUT', // its figures built in a fan-out scope (subscriptions/run buildMessage); test-columnAccessSafetyNet
   'summary:compute': 'NET',
   'summary:rewrite': 'NET',
   'template:list': 'NET',
   'template:plan': 'NET',
   'term:get': 'REDACT',
-  'term:list': 'REDACT',
+  'term:list': 'REDACT', // values hidden from a restricted caller; one on a hidden column marked hidden: true; test-columnRedact
   'term:usage': 'META',
   'text:preview': 'NET',
   'text:profile': 'NET',
@@ -210,7 +211,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'versions:list': 'META',
   'visual:data': 'GATE',
   'visual:dataBatch': 'GATE',
-  'visual:get': 'REDACT',
+  'visual:get': 'REDACT', // visualForCaller: one naming a hidden column loses its labels and those filter values; test-columnRedact
   'visual:list': 'META',
   'visual:preview': 'GATE',
   'visual:rows': 'DROP', // pageFor: as dataset:page; the mark's filter passes the gate

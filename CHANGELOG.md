@@ -51,6 +51,10 @@ All notable changes to Ordinate are documented here. Format based on
   app (a report, a published page, the model behind a Summary rewrite), drop it for editors too. Two
   things stay: a dataset imported from a table is still named after it by default, so a viewer reads that
   name until you rename the dataset; and an editor's own in-app view keeps the error text.
+- **A column computed from a sensitive one is masked too.** A column marked personal or financial was
+  carried only across a rename, so `bonus = [salary] * 0.1` left an export, a published page or the
+  Assistant unmasked. Every column a later Prepare step computes from a marked one is now treated as
+  marked (a formula, a split, a pivot over it).
 
 ### Audit log
 

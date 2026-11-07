@@ -19,7 +19,7 @@
 // this app.
 
 import { ipcMain } from './bus';
-import { closedToCaller, policyClosed, rowPolicyRefusal } from '../data/rowAccess';
+import { closedToCaller, columnsRuled, isRowPolicyError, policyClosed, rowPolicyRefusal } from '../data/rowAccess';
 import { rowReaderMessage } from '../data/rowAccessMessages';
 
 import * as store from '../analysis/alertStore';
@@ -170,6 +170,11 @@ export function register(): void {
     try {
       // An alert fans out (its inbox push, its channels): refused for everyone on a dataset with row access rules (docs/row-policy D10).
       if (rule && typeof rule.datasetId === 'string' && (await policyClosed(projectId, rule.datasetId))) return rowPolicyRefusal('fanout');
+      // …and on one with column rules, the save asks what the test asks (gated as its audience): a rule that reads a hidden column refuses (part 4, D17).
+      if (rule && typeof rule.datasetId === 'string' && (await columnsRuled(projectId, rule.datasetId))) {
+        const tried = await store.testRule(projectId, rule).then(() => null, (err: unknown) => (isRowPolicyError(err) ? err : null));
+        if (tried) return rowPolicyRefusal(tried.reason);
+      }
       const saved = await store.saveRule(projectId, rule);
       if (!saved) return { ok: false, error: 'That rule is not complete.' };
       return { ok: true, rule: saved };

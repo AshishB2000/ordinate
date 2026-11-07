@@ -17,6 +17,9 @@ const rec: typeof import('../src/data/datasetRecord') = require('../src/data/dat
 const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const msg: typeof import('../src/data/rowAccessMessages') = require('../src/data/rowAccessMessages');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
+
 
 export const SSN_CANARY = 'SSN_CANARY';
 export const STAFF_COLUMNS = [
@@ -82,4 +85,54 @@ export function refusedAs(r: H.Reply, reason: 'hidden' | 'columns'): boolean {
   if (H.refused(r, reason)) return true;
   const b = r.body as { ok?: unknown; code?: unknown; error?: unknown } | null;
   return r.status === 200 && !!b && b.ok === false && b.code === 'row_policy' && b.error === sentenceOf(reason);
+}
+
+// ── The Assistant's prompts (scripts/test-columnFacts, test-columnAccessSafetyNet) ──
+
+export const EXAMPLE = 'EXAMPLE_PAY_52000';
+export const LABEL = 'LABEL_OF_SSN_1';
+/** The salary column's description: a reply may carry it (names and notes are not secret); a prompt for east never does. */
+export const NOTE = 'Annual pay';
+const salaries = STAFF_ROWS.map((r) => r[1] as number);
+const TOTAL = salaries.reduce((a, b) => a + b, 0);
+/** A salary figure, as any facts block could print it. */
+export const SALARY_FIGURES = [String(TOTAL), TOTAL.toLocaleString('en-US'), `${(TOTAL / 1000).toFixed(1)}K`, String(TOTAL / salaries.length)]; // the total and the mean (the largest, 1407, is in an SVG path)
+/** What no reply or prompt for east may carry: an ssn value, a salary figure, the salary example, an ssn label. (A prompt also drops the note.) */
+export const leaksHidden = (p: string): string | null => [SSN_CANARY, EXAMPLE, LABEL, ...SALARY_FIGURES].find((x) => p.includes(x)) ?? null;
+
+/** Stubs the model: an answer chart for the question, a narration for the app's own "Narrate…" ask. Every prompt is kept. */
+export function stubModel(prompts: string[], spec: unknown): void {
+  (analyze as unknown as { askCopilot: unknown }).askCopilot = async (_prior: unknown, facts: string, q: string) => {
+    prompts.push(`${facts}\n${q}`);
+    return q.startsWith('Narrate')
+      ? { ok: true, text: 'Here is the chart.', suggestedAction: { kind: 'none', intent: '' } }
+      : { ok: true, text: 'Here it is.', suggestedAction: { kind: 'answer', intent: 'people by dept', spec } };
+  };
+  (execConfig as unknown as { executionReady: unknown }).executionReady = async () => true;
+}
+
+/** The fixtures every prompt check reads: metrics, a term, a visual on salary and one on dept, a published board, notes. */
+export async function factsWorld(W: ColumnWorld): Promise<{ SALARY_V: string; DEPT_V: string; BOARD: string; PAYROLL: string }> {
+  const { P, staff } = W;
+  const must = (what: string, r: H.Reply): H.Reply => { if (r.status !== 200 || r.body?.ok === false) throw new Error(`${what}: ${r.text.slice(0, 200)}`); return r; };
+  const PAYROLL = String(must('metric', await W.call('boss', 'metric:save', { projectId: P, input: { name: 'Payroll', datasetId: staff, definition: { column: 'salary', aggregation: 'sum' } } })).body.metric.id);
+  must('metric', await W.call('boss', 'metric:save', { projectId: P, input: { name: 'Headcount', datasetId: staff, definition: { column: 'employee_id', aggregation: 'count' } } }));
+  must('term', await W.call('boss', 'term:save', { projectId: P, input: { name: 'High earners', aliases: [], description: '', datasetId: staff, filters: [{ type: 'filter', column: 'salary', op: '>', value: 1200 }] } }));
+  must('example', await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: staff, column: 'salary', patch: { example: EXAMPLE, description: NOTE } }));
+  must('labels', await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: staff, column: 'ssn', patch: { values: [{ value: `${SSN_CANARY}_1`, label: LABEL }] } }));
+  const visual = async (values: object[]): Promise<string> => {
+    const r = must('visual', await W.call('boss', 'visual:save', { projectId: P, datasetId: staff, name: 'Pay', chartType: 'bar', encoding: { category: 'dept', values } }));
+    return String(r.body?.visual?.id ?? r.body?.id);
+  };
+  const SALARY_V = await visual([{ column: 'salary', aggregation: 'sum' }]);
+  const DEPT_V = await visual([{ column: 'employee_id', aggregation: 'count' }]);
+  const card = (extra: object) => ({ id: crypto.randomUUID(), layout: { x: 0, y: 0, w: 4, h: 4 }, ...extra });
+  const board = must('board', await W.call('boss', 'analysis:create', { projectId: P, name: 'Board', sheets: [{ name: 'One', cards: [
+    card({ type: 'visual', visualId: SALARY_V }), card({ type: 'visual', visualId: DEPT_V }),
+    card({ type: 'metric', metric: { datasetId: staff, column: 'salary', aggregation: 'sum', label: 'Pay total' } }),
+    card({ type: 'metric', metric: { datasetId: staff, column: 'employee_id', aggregation: 'count', label: 'People' } }),
+  ] }] }));
+  const BOARD = String(board.body?.id ?? board.body?.analysis?.id);
+  must('publish', await W.call('boss', 'analysis:publish', { projectId: P, id: BOARD }));
+  return { SALARY_V, DEPT_V, BOARD, PAYROLL };
 }

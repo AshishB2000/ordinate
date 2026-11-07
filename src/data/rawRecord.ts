@@ -46,20 +46,23 @@ export function readRawRecord(projectId: string, id: string): Promise<Raw | null
   const key = `${projectId}\0${id}`;
   let hit = memo.get(key);
   if (!hit) {
-    hit = (async (): Promise<Raw | null> => {
-      const live = datasetFilePath(projectId, id);
-      // Live once more after a Trash miss: a restore writes the live record, then removes the entry, between our reads.
-      const text = (await textOrNull(live)) ?? (await textOrNull(entryPath(projectId, 'dataset', id))) ?? (await textOrNull(live));
-      if (text === null) return null;
-      try {
-        const raw: unknown = JSON.parse(text);
-        return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
-      } catch {
-        return CORRUPT;
-      }
-    })();
+    hit = readRawRecordNow(projectId, id);
     memo.set(key, hit);
     hit.catch(() => memo.delete(key));
   }
   return hit;
+}
+
+/** `readRawRecord` without the request's memo: what is stored NOW (a check after a long build in the same request). */
+export async function readRawRecordNow(projectId: string, id: string): Promise<Raw | null> {
+  const live = datasetFilePath(projectId, id);
+  // Live once more after a Trash miss: a restore writes the live record, then removes the entry, between our reads.
+  const text = (await textOrNull(live)) ?? (await textOrNull(entryPath(projectId, 'dataset', id))) ?? (await textOrNull(live));
+  if (text === null) return null;
+  try {
+    const raw: unknown = JSON.parse(text);
+    return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
+  } catch {
+    return CORRUPT;
+  }
 }

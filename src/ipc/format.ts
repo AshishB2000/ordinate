@@ -16,7 +16,7 @@
 // colours would silently vanish.
 
 import { ipcMain } from './bus';
-import { anyPolicyClosed, restrictedOn } from '../data/rowAccess';
+import { anyPolicyClosed, hiddenAnywhere, restrictedOn } from '../data/rowAccess';
 import * as projects from '../app/projects';
 import * as colorMap from '../analysis/colorMap';
 import type { ColorMap, ColumnColors } from '../analysis/colorMap';
@@ -60,9 +60,13 @@ export function register(): void {
   ipcMain.handle('format:colors:get', async (_e, { projectId }: { projectId?: unknown } = {}) => {
     if (typeof projectId !== 'string') return {};
     const project = await projects.getProject(projectId);
-    // The map lists every value an editor's chart dealt: none to a caller row access rules restrict (REDACT).
-    if (project && (await restrictedOn(projectId)) && (await anyPolicyClosed(projectId))) return {};
-    return project ? colorMap.sanitizeColorMap(project.colorMap) : {};
+    // The map lists every value an editor's chart dealt: none to a caller row access rules restrict (REDACT),
+    // and no column's that is hidden from them on any dataset (part 4, D18).
+    if (!project) return {};
+    if ((await restrictedOn(projectId)) && (await anyPolicyClosed(projectId))) return {};
+    const map = colorMap.sanitizeColorMap(project.colorMap);
+    for (const c of await hiddenAnywhere(projectId)) delete map[c];
+    return map;
   });
 
   // A chart is about to draw these values of this column, in this order.

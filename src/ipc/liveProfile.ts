@@ -19,7 +19,8 @@
 // the pickers' refusal is a reply (`LiveValuesRefusal`) that says which case it is.
 
 import { ipcMain } from './bus';
-import { closedToCaller, gateRows } from '../data/rowAccess';
+import { closedToCaller, gateRows, hiddenColumnsFor } from '../data/rowAccess';
+import { dropHidden, tableWithout } from '../ai/hiddenFacts';
 import { redactBaseFilters } from '../data/liveBaseFilters';
 import type { FilterStep } from '../data/transforms';
 import * as datasets from '../data/datasets';
@@ -82,14 +83,16 @@ export async function liveCopilotFacts(
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !isLive(meta) || !meta.live) return null;
   const metrics = await defined();
+  const hidden = await hiddenColumnsFor(projectId, datasetId); // left out entirely (part 4, D21)
+  const profile = meta.live.profile;
   const facts = liveDatasetFacts({
     name: meta.name,
-    columns: meta.columns,
-    profile: meta.live.profile,
+    columns: dropHidden(meta.columns, hidden),
+    profile: profile && hidden.size ? { ...profile, columns: dropHidden(profile.columns, hidden) } : profile,
     schemaSyncedAt: meta.live.schemaSyncedAt,
     withheld: await liveWithheld(projectId, datasetId, meta),
     docs: await assistantColumnDocs(projectId, datasetId),
-    table: await tableFacts(projectId, datasetId),
+    table: tableWithout(await tableFacts(projectId, datasetId), hidden),
     metrics,
     terms: await glossary(),
   });

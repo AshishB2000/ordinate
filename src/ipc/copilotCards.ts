@@ -20,6 +20,7 @@ import { paramValues, resolveFilterParams, type ParamValues } from '../analysis/
 import { viewScope } from '../analysis/savedViews';
 import { getFx } from '../app/fxStore';
 import { isLiveDatasetError } from '../data/liveDataset';
+import { isRowPolicyError } from '../data/rowAccess';
 import type { FilterStep } from '../data/transforms';
 import { computeCardMetric } from './dashboards';
 import { fxScope } from './fxQuery';
@@ -58,7 +59,8 @@ async function orNone<T>(asked: Promise<T>): Promise<T | null> {
   try {
     return await asked;
   } catch (err) {
-    if (isLiveFigureError(err) || isLiveDatasetError(err)) return null;
+    // …and a card over a column hidden from the caller (part 4, D21): no figure for them, the rest of the board kept.
+    if (isLiveFigureError(err) || isLiveDatasetError(err) || (isRowPolicyError(err) && err.reason === 'hidden')) return null;
     throw err;
   }
 }

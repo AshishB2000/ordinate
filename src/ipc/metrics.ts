@@ -24,6 +24,7 @@
 // the results. Folding a stored ratio, or averaging per-row ratios, gives a
 // number that is wrong in a way no one can see.
 
+import { metricHidden } from '../analysis/columnHidden';
 import { ipcMain } from './bus';
 import { distinctFor } from './distinctFor';
 import { isRowPolicyError } from '../data/rowAccess';
@@ -471,6 +472,7 @@ async function decorate(projectId: string, list: metrics.MetricSummary[]): Promi
       ...s,
       datasetName: ds ? ds.name : null,
       definitionText: describeDefinition({ definition: s.definition, filters: [] }),
+      ...((await metricHidden(projectId, s.id)) ? { hidden: true } : {}), // it reads a column hidden from the caller (part 4, D19)
     });
   }
   return withStatus(projectId, 'metric', out);
