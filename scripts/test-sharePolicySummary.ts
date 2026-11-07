@@ -14,7 +14,9 @@
 //
 // The facts a report's narrative page hands the model (copilot:ask, context analysis, with the report's share path:
 // src/ipc/copilot.ts buildFacts) withhold the same figures: a KPI card's and a saved metric's totalled from salary.
-// NEGATIVE CONTROLS: the hours figures stay; the Assistant in the app still reads the payroll figure.
+// NEGATIVE CONTROLS: the hours figures stay; the Assistant in the app still reads the payroll figure. Nor does the
+// narrative replay the caller's Assistant thread, or build the answer chart a model suggests (no share path there).
+// NEGATIVE CONTROL: an ask in the app still replays the thread.
 //
 //   npm run build:ts && node scripts/test-sharePolicySummary.js
 
@@ -37,6 +39,9 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const copilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply
+const threads: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const reportSpec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
@@ -171,6 +176,34 @@ async function main(): Promise<void> {
       handlers.set('copilot:ask', real);
     }
     ok('a report\'s narrative asks with the report\'s share path', asked.length === 1 && asked[0].share === 'report' && asked[0].context?.kind === 'analysis', show(asked));
+    // The caller asked the Assistant in the app earlier, and its answer quoted the payroll; the model, asked for the
+    // narrative, suggests a chart of salary by day (each day's payroll is a SALARY_BYTES figure).
+    await inApp(async () => {
+      const th = await threads.createThread(P);
+      await threads.appendTurn(P, { role: 'user', text: 'What is total payroll?' }, th!.id);
+      await threads.appendTurn(P, { role: 'assistant', text: `Total payroll is ${TOTAL.toLocaleString('en-US')}.` }, th!.id);
+    });
+    const sent: { prior: { text: string }[]; facts: string; q: string }[] = [];
+    const realAsk = analyze.askCopilot;
+    const realReady = execConfig.executionReady;
+    (analyze as { askCopilot: unknown }).askCopilot = async (prior: { text: string }[], facts: string, q: string) => {
+      sent.push({ prior, facts, q });
+      return q.startsWith('Narrate') ? { ok: true, text: facts, suggestedAction: { kind: 'none', intent: '' } }
+        : { ok: true, text: 'Echo: ' + prior.map((x) => x.text).join(' / '), suggestedAction: { kind: 'answer', intent: 'pay by day', spec: { dataset: 'Staff', category: 'day', measures: [{ column: 'salary', aggregation: 'sum' }] } } };
+    };
+    (execConfig as { executionReady: unknown }).executionReady = async () => true;
+    try {
+      const page = ((await rpc('report:build', { projectId: P, id: fx.narrated })).pages || []).find((p: any) => p.kind === 'narrative'); // any: a report page
+      const into = JSON.stringify(sent);
+      ok('drop: the narrative replays no Assistant thread and builds no suggested chart: nothing it sends the model or prints carries a payroll figure',
+        sent.length === 1 && sent[0].prior.length === 0 && leaked(into).length === 0 && !!page && leaked(JSON.stringify(page)).length === 0, show([leaked(into), sent.map((x) => x.q.slice(0, 40)), page]));
+      sent.length = 0;
+      const own = await rpc('copilot:ask', { projectId: P, context: { kind: '' }, question: 'And now?' });
+      ok('NEGATIVE CONTROL: an ask in the app replays the thread', own?.ok === true && sent[0]?.prior.some((x) => x.text.includes(TOTAL.toLocaleString('en-US'))), show([own, sent[0]?.prior]));
+    } finally {
+      (analyze as { askCopilot: unknown }).askCopilot = realAsk;
+      (execConfig as { executionReady: unknown }).executionReady = realReady;
+    }
 
     // ── mask: an aggregate passes ──
     const mask = await leave('mask');

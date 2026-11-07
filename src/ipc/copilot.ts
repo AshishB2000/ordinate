@@ -542,12 +542,14 @@ export function register() {
         : undefined;
 
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const hit = await verifiedAsk(projectId, q, tid, guardAnswer); // a verified question, word for word (./verifiedAsk)
+      // `share`: only a server caller names one (a report's narrative, ./reportsServer): the contract has no such field. Its
+      // answer leaves the app, so only the facts shaped for that path go with it: no thread, no verified or suggested chart.
+      const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
+      const hit = sharing ? null : await verifiedAsk(projectId, q, tid, guardAnswer); // a verified question, word for word (./verifiedAsk)
       if (hit) return hit;
       const turns = await copilot.loadHistory(projectId, tid);
-      const prior = turns.map((t) => ({ role: t.role, text: t.text }));
-      // `share`: only a server caller names one (a report's narrative, ./reportsServer): the contract has no such field.
-      const facts = await buildFacts(projectId, context || {}, emit, q, isSharePath(share) && share !== 'bundle' ? share : undefined);
+      const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
+      const facts = await buildFacts(projectId, context || {}, emit, q, sharing);
       const guided = await askGuidance(projectId, context || {}, facts.provenance.kind, q); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
@@ -576,7 +578,7 @@ export function register() {
         // audited against that chart's own ledger (./answers). A spec that does
         // not resolve keeps the prose answer and says plainly why no chart came.
         let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
-        if (res.suggestedAction && res.suggestedAction.kind === 'answer') {
+        if (!sharing && res.suggestedAction && res.suggestedAction.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
           answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer, prev?.spec, prev?.withheld);
         }
