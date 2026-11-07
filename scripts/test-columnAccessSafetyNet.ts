@@ -130,7 +130,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const P2: string = (await W.call('boss', 'projects:create', { name: 'Second' })).body.id;
     const lone = await W.as('boss', async () => (await datasets.saveDataset(P2, { name: 'Lone', sourceKind: 'csv', columns: C.STAFF_COLUMNS, rows: C.STAFF_ROWS }))!.id);
     const site = (await W.as('boss', () => hosted.getSite(siteId)))!;
-    const story = (publishedAt: string) => ({ ...site, projectId: P2, publishedAt, datasetIds: undefined, config: { ...site.config, storyIds: [crypto.randomUUID()] } });
+    const story = (publishedAt: string) => ({ ...site, projectId: P2, publishedAt, buildStartedAt: undefined, datasetIds: undefined, config: { ...site.config, storyIds: [crypto.randomUUID()] } });
     const servable = (s: ReturnType<typeof story>) => W.as('boss', () => hosted.servable(s));
     const old = new Date(Date.now() - 60_000).toISOString();
     ok('NEGATIVE CONTROL: legacy: an older site is served in a project with no rules', (await servable(story(old))) === true);
@@ -142,6 +142,12 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     });
     ok('legacy: …and not once its project has column rules newer than it', (await servable(story(old))) === false);
     ok('NEGATIVE CONTROL: legacy: one published after those rules is served', (await servable(story(new Date(Date.now() + 1000).toISOString()))) === true);
+    // Judged from its build's start, not its publish: a rule saved mid-build can land after the build's own check
+    // (a constructed manifest: the rule stamped between the build's start and its publishedAt).
+    const ruledAt = Date.parse(String(((await W.rawOf(staff)).columnAccess as { updatedAt?: string } | undefined)?.updatedAt));
+    const builtFrom = (from: number) => W.as('boss', () => hosted.servable({ ...site, buildStartedAt: new Date(from).toISOString(), publishedAt: new Date(ruledAt + 1000).toISOString() }));
+    ok('a site built from before a column rule, published after it, is not served', (await builtFrom(ruledAt - 1000)) === false);
+    ok('NEGATIVE CONTROL: …one whose build began after the rule is served', (await builtFrom(ruledAt + 500)) === true);
 
     // Subscriptions and alerts.
     const channelsMod: typeof import('../src/app/channels') = require('../src/app/channels');
@@ -206,6 +212,9 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const at = new Date().toISOString();
     await W.as('boss', () => pipeStore.appendRuns(P, [{ nodeId: `dataset:${staff}`, id: crypto.randomUUID(), runId: crypto.randomUUID(), trigger: 'manual' as const, status: 'failed' as const,
       startedAt: at, finishedAt: at, durationMs: 1, attempts: 1, warnings: [`${canary(7)} looks odd`], errors: [`no row for ${canary(8)}`] }]));
+    // A failed refresh's text can quote a value: every list of datasets leaves it out for east (dataset:list, home:overview).
+    const recMod: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    await W.as('boss', () => recMod.serialized(recMod.datasetFilePath(P, staff), (raw) => { raw.lastRefreshStatus = 'error'; raw.lastRefreshError = `"${canary(9)}" is not a number`; return true; }));
 
     const SUB = String(((await W.call('boss', 'subscription:list', { projectId: P })).body?.subscriptions as { id: string }[] | undefined)?.[0]?.id);
     const COUNT_BY = (category: string) => ({ category, values: [COUNT] });
@@ -313,6 +322,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const edTexts = [...(await sweep('ed')), ...(await mcpTextsAs('ed'))];
     ok('NEGATIVE CONTROL: hr\'s and the editor\'s replies carry them', hrTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => t.includes(C.SSN_CANARY)) && edTexts.some((t) => C.SALARY_FIGURES.some((f) => t.includes(f))));
     ok('NEGATIVE CONTROL: …and so do hr\'s prompts', prompts.some((p) => p.includes(C.SSN_CANARY)));
+    ok('NEGATIVE CONTROL: hr\'s dataset:list and home:overview carry the refresh error', ['dataset:list ', 'home:overview '].every((ch) => hrTexts.some((t) => t.startsWith(ch) && t.includes(canary(9)))));
     const answered = (texts: string[]): string => texts.find((t) => t.startsWith('answer_verified_question ')) ?? '';
     ok('NEGATIVE CONTROL: hr\'s answer_verified_question over salary carries its figures; east\'s does not', C.SALARY_FIGURES.some((f) => answered(hrTexts).includes(f))
       && !hasCanary(answered(eastTexts)), `${answered(hrTexts).slice(0, 200)} | ${answered(eastTexts).slice(0, 200)}`);
@@ -355,7 +365,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     };
     must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'employee_id'] }] } }));
     // Every metric of the project at once: Payroll's and the ssn metric's figures would show in the canary sweep above.
-    const PROJECT_WIDE = new Set(['home:overview', 'numbers:get', 'metric:table']);
+    const PROJECT_WIDE = new Set(['numbers:get', 'metric:table']);
     const gates = Object.entries(COLUMN_TREATMENT).filter(([, c]) => c === 'GATE').map(([ch]) => ch);
     const unproven = gates.filter((ch) => !(ch in PAIRS) && !PROJECT_WIDE.has(ch));
     ok('every GATE channel has a question naming ssn here, or is project-wide (proven by the canaries)', unproven.length === 0, unproven.join(', '));
@@ -381,6 +391,28 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       const d = H.diff(pick(mine.body), pick(theirs.body), {});
       ok(`gate: ${ch} answers east the question on dept, Object.is-equal to the editor's`, mine.status === 200 && !noFigure(mine, ch) && d === '', `${d} | ${show(mine)}`);
     }
+
+    // ── Key drivers: a drivers tile ranks every text column, named or not, so a caller its dataset hides one from is refused it ──
+    const GRADE_ROWS = Array.from({ length: 30 }, (_, i) => ['All', `${C.SSN_CANARY}_G${'ABC'[i % 3]}`, 100 + i * (i % 3 + 1), `2024-0${1 + (i % 2)}-1${i % 9}`]);
+    const grades = await W.as('boss', async () => (await datasets.saveDataset(P, { name: 'Grades', sourceKind: 'csv', rows: GRADE_ROWS,
+      columns: [{ name: 'region', type: 'text' }, { name: 'grade', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }] }))!.id);
+    await W.plant(grades, [{ column: 'grade', visibleTo: [{ teamId: W.hrTeam }] }]);
+    const SUM_AMOUNT = { column: 'amount', aggregation: 'sum' };
+    const WHY = { category: 'region', values: [SUM_AMOUNT], drivers: { metric: SUM_AMOUNT, compare: { mode: 'bucket', column: 'day', label: '2024-02', prev: '2024-01', grain: 'month' }, path: [] } };
+    const WHY_V = idOf(must('drivers visual', await W.call('boss', 'visual:save', { projectId: P, datasetId: grades, name: 'Why', chartType: 'waterfall', encoding: WHY, overrides: { waterfallTotals: ['Start', 'End'] } })));
+    const whyAsks: Array<[string, unknown]> = [['visual:preview', { projectId: P, datasetId: grades, encoding: WHY }], ['visual:data', { projectId: P, datasetId: grades, encoding: WHY, visualId: WHY_V }]];
+    for (const [ch, input] of whyAsks) {
+      const r = await W.call('east', ch, input);
+      ok(`drivers: ${ch} refuses east a key-drivers tile on a dataset hiding a column from them`, H.refused(r, 'hidden') && !hasCanary(r.text), show(r));
+      for (const who of ['hr', 'ed']) {
+        const a = await W.call(who, ch, input);
+        ok(`NEGATIVE CONTROL: drivers: ${ch} answers ${who}, the column's members ranked`, a.body?.ok === true && a.text.includes(`${C.SSN_CANARY}_G`), show(a));
+      }
+    }
+    const whyBoard = (must('drivers board', await W.call('boss', 'analysis:create', { projectId: P, name: 'Drivers board', sheets: [{ name: 'One', cards: [
+      { id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId: WHY_V }] }] })).body);
+    const whyRun = await W.call('boss', 'publish:run', target(String(whyBoard?.id ?? whyBoard?.analysis?.id)));
+    ok('drivers: a publish of the drivers board refuses (its audience includes east)', H.refused(whyRun) && !hasCanary(whyRun.text), show(whyRun));
 
     // ── The next-level chip (part 6): an answer never offers a level hidden from the caller ──
     must('hierarchy', await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: staff, patch: { hierarchies: [{ name: 'Org', levels: ['dept', 'ssn'] }] } }));

@@ -214,6 +214,11 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     const eastRow = await listRow('east');
     ok('redact: east\'s dataset list keeps the schedule but not the anomaly keys', eastRow?.scoped === true && eastRow.autoRefresh?.watch === true && !H.leaks(JSON.stringify(eastRow)), JSON.stringify(eastRow));
     ok('NEGATIVE CONTROL: the editor\'s list carries them', !!auto && H.leaks(JSON.stringify(await listRow('ed'))));
+    // …nor a failed refresh's text, which can quote a value: on Home as in the list.
+    await W.as('boss', () => recMod.serialized(recMod.datasetFilePath(P, sqlPlain), (raw) => { raw.lastRefreshStatus = 'error'; raw.lastRefreshError = `no ${H.W_CANARY}_8`; return true; }));
+    const homeRow = async (who: string) => ((await W.call(who, 'home:overview', { projectId: P })).body.datasets as { id: string }[]).find((x) => x.id === sqlPlain);
+    ok('redact: east\'s Home has the failed refresh but not its text', (await homeRow('east') as { lastRefreshStatus?: string } | undefined)?.lastRefreshStatus === 'error' && !H.leaks(JSON.stringify(await homeRow('east'))), JSON.stringify(await homeRow('east')));
+    ok('NEGATIVE CONTROL: the editor\'s Home carries it', H.leaks(JSON.stringify(await homeRow('ed'))));
     const tab = await W.call('boss', 'dataset:rowPolicy', { projectId: P, datasetId: orders });
     ok('the tab lists the datasets built from Orders', [sqlOver, twoHops, unioned].every((id) => (tab.body?.builtFrom ?? []).some((x: { id: string }) => x.id === id)), show(tab));
 

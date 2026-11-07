@@ -25,7 +25,9 @@ import type { FilterStep } from '../data/transforms';
 import { computeCardMetric } from './dashboards';
 import { fxScope } from './fxQuery';
 import { isLiveFigureError } from './liveRoute';
-import { resolveMetric } from './metrics';
+import { resolveMetric, type MetricRead } from './metrics';
+import { kpiHidden } from '../publish/kpiPolicy';
+import type { SharePath } from '../app/privacyStore';
 
 export interface SavedScope {
   filters: FilterStep[];
@@ -65,18 +67,25 @@ async function orNone<T>(asked: Promise<T>): Promise<T | null> {
   }
 }
 
-/** One figure per metric card, in sheet order; null where the app has no number (a missing dataset, a Live figure its warehouse could not give). */
-export async function metricCardFigures(projectId: string, a: Analysis, scope: SavedScope): Promise<{ label: string; value: number | null }[]> {
+/**
+ * One figure per metric card, in sheet order; null where the app has no number (a missing dataset, a Live figure its
+ * warehouse could not give) — or, leaving by `share` (a report's narrative), where the Share policy withholds the
+ * figure there, as it does the tile's (publish/kpiPolicy).
+ */
+export async function metricCardFigures(projectId: string, a: Analysis, scope: SavedScope, share?: SharePath): Promise<{ label: string; value: number | null }[]> {
   const out: { label: string; value: number | null }[] = [];
   for (const page of a.sheets || []) {
     for (const card of page.cards || []) {
       if (card.type !== 'metric' || !card.metric) continue;
       const m = card.metric;
-      const saved = m.metricId ? await orNone(resolveMetric(projectId, m.metricId, scope)) : null;
+      const reads: MetricRead[] = []; // what the figure is totalled from, as publish/dashboardData collects a tile's
+      const saved = m.metricId ? await orNone(resolveMetric(projectId, m.metricId, share ? { ...scope, reads } : scope)) : null;
+      if (!saved) reads.push({ datasetId: m.datasetId, column: m.column, aggregation: m.aggregation });
       const own = !saved && m.column
         ? await orNone(computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, scope.filters, scope.params))
         : null;
-      out.push({ label: m.label || (saved ? saved.name : '') || `${m.aggregation}(${m.column})`, value: saved ? saved.value : own ? own.value : null });
+      const hidden = share ? await kpiHidden(projectId, reads, share) : '';
+      out.push({ label: m.label || (saved ? saved.name : '') || `${m.aggregation}(${m.column})`, value: hidden ? null : saved ? saved.value : own ? own.value : null });
     }
   }
   return out;

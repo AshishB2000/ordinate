@@ -75,7 +75,7 @@ async function countd(env: H.Env): Promise<void> {
   await judged(env, 'countd', fx,
     { tiles: ['Pay levels KPI', 'Distinct pay KPI'], metrics: ['Distinct pay'], rules: ['Pay levels above 3'], mcp: ['Distinct pay'] },
     { tiles: ['Teams KPI'], metrics: ['Teams'], rules: ['Teams above 1'], mcp: ['Teams'] },
-    (on) => H.mark(env, P, S, 'salary', on), 'd2604e31e39603c141539f7e03a69a88b5e35cc0009051fd091cff5e9cf51dab');
+    (on) => H.mark(env, P, S, 'salary', on), '765261e43c35dbd70db570955894221e7b3207a3d4c8c1dd8c2d7d68cf240aa2');
 }
 
 const TO_JUNE = [{ type: 'filter', column: 'day', op: '<=', value: '2025-06-30' }]; // the window's end, so the year to date is the fixture's half year on any day

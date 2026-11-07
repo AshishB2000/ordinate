@@ -1399,3 +1399,15 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
 - **Older pods.** No function moved to refused. The NULL spelling moves the cache key of a calc holding an
   always-NULL term; its figures cannot change. A formula over 500 bound values now refuses at save, and a
   stored one refuses `calculated`; each failed at the connector's gate on every warehouse before.
+
+## 2026-11-07 — Review pass: base filters, copies and the import row cap
+
+- **Base filters compare in the warehouse's collation.** A text base filter (`=`, `in`, `contains`, `<`…) is
+  compiled like a chart filter, so on a warehouse whose collation is case- or accent-insensitive it keeps
+  rows a copy's Prepare step (code points) drops; only a row access lock compares bytes (row-policy D13).
+- **A copy over the row cap with base filters is refused** (`copyCapped`). The copy is the import's fetch
+  (`run`, cells typed as any import types them), then the base filters as Prepare steps; over 1,000,000 rows
+  that kept their part of an arbitrary first million. A bound, filtered fetch would be a Live statement
+  (`runBound` is warehouse()'s alone, at its 100,000-row cap), so the copy refuses instead.
+- **A table import the cap cut now says so.** `selectionSql` built a table at the cap itself, so no
+  connector's cap + 1 wrapper ever saw the probe row; it is built at cap + 1.

@@ -20,6 +20,8 @@ import { Markdown } from './Markdown';
 import s from './Story.module.css';
 import { TermChip } from '../../model/terms/TermChip';
 import { termIdOf } from '../../model/terms/api';
+import { LiveRefusal } from '../../live/LiveOff';
+import { liveRefusalOf } from '../../live/refusal';
 
 const TONE_ICON: Record<CalloutTone, IconName> = { info: 'info', success: 'check', warning: 'alert', danger: 'alert' };
 const TONES: CalloutTone[] = ['info', 'success', 'warning', 'danger'];
@@ -228,7 +230,16 @@ function Body({ props }: { props: BlockProps }) {
     }
     case 'metric':
     case 'metrics_row': {
-      const fig = figure as MetricFigure | undefined;
+      const got = figure as MetricFigure | undefined;
+      // Refused (typed): the server's sentence, never a retry.
+      if (got && !('figures' in got)) {
+        return liveRefusalOf(got) !== null ? <LiveRefusal refusal={got} projectId={projectId} /> : (
+          <div className={`${s.figure} ${s.missing}`}>
+            <Icon name="alert" /> {got.error}
+          </div>
+        );
+      }
+      const fig = got;
       const n = block.kind === 'metric' ? 1 : block.metricIds.length;
       // A viewer's caption is a figcaption: its block is the figure.
       const Wrap = props.readOnly ? 'figure' : 'div';
