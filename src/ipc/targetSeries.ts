@@ -13,6 +13,7 @@ import { isSimpleDefinition } from '../analysis/metrics';
 import { followedEncoding } from '../analysis/metricMeasures';
 import { metricDate } from '../analysis/metricTimeScope';
 import { bucketRange } from '../analysis/driverScope';
+import { OTHER_LABEL } from '../analysis/categoryKey';
 import * as msg from '../analysis/targetMessages';
 import { sanitizeEncoding } from '../analysis/visuals';
 import type { VizEncoding } from '../analysis/visuals';
@@ -59,15 +60,17 @@ async function byColumn(projectId: string, m: Metric, reply: Ok, column: string,
   if (!(await datasets.getDatasetMeta(projectId, p.planDatasetId))?.columns.some((c) => c.name === column)) return { note: msg.targetPlanNoColumn(column) };
   const enc = await followedEncoding(projectId, p.planDatasetId, sanitizeEncoding({ category: column, values: [planMeasure(p.plan)] }));
   const byLabel = new Map<string, number>();
+  let folded = !!reply.category?.note; // a folded "Other" holds other members than the plan's (as ./periodChart pairs a compare)
   for (const ask of p.asks) {
     const plan = await vizDataFor(projectId, p.planDatasetId, enc, [...p.filters, ...bounds(p.planDate, ask)]);
     if (!plan.ok) return null; // a refusal is the plan's: no target rather than a half-drawn one
+    folded ||= !!plan.category?.note;
     plan.data.labels.forEach((l, i) => {
       const v = plan.data.series[0]?.values[i];
       if (typeof v === 'number') byLabel.set(String(l), (byLabel.get(String(l)) ?? 0) + v * ask.fraction);
     });
   }
-  return { values: reply.data.labels.map((l) => byLabel.get(String(l)) ?? null) };
+  return { values: reply.data.labels.map((l) => (folded && l === OTHER_LABEL ? null : byLabel.get(String(l)) ?? null)) };
 }
 
 /** `share`: the outgoing path the chart is shaped for (a target from a plan the policy would hide is left off). */

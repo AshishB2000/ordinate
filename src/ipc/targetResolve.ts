@@ -22,6 +22,7 @@ import { fixedTarget, periodParts, planAsks, widened } from '../analysis/targetM
 import type { PeriodPart } from '../analysis/targetMath';
 import * as msg from '../analysis/targetMessages';
 import { scopeRange } from '../analysis/periodScope';
+import { windowedScope } from '../analysis/periodMath';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
 import { resolveColumnOwner } from '../analysis/joinPlan';
 import { listRelationships } from '../analysis/relationships';
@@ -35,6 +36,7 @@ import { TermNotExpandedError } from '../data/termStep';
 import { infoFor } from './relationships';
 import * as ipcMetrics from './metrics';
 import type { MetricRead } from './metrics';
+import { baseOf } from './periodMetric';
 import { kpiHidden } from '../publish/kpiPolicy';
 import type { Outgoing } from '../publish/dashboardData';
 import type { SharePath } from '../app/privacyStore';
@@ -100,25 +102,39 @@ async function rulesAgree(projectId: string, a: string, b: string): Promise<bool
 /** What a scope makes of a target: the closed range it covers and the `per` periods in it. */
 interface Frame { filters: FilterStep[]; dateCol: string; adds: boolean; range?: { from?: string; to?: string }; parts: PeriodPart[] }
 
+/**
+ * A period metric's target is its base's over the days its figure covers (the window, as ./periodMetric draws it),
+ * added up as the base adds up: a YTD target is the pro-rated sum of the monthly plan. One that compares periods has none.
+ */
+async function periodFrame(projectId: string, m: Metric, filters: FilterStep[]): Promise<{ judged: Metric; filters: FilterStep[] } | string> {
+  if (!metrics.isPeriodDefinition(m.definition)) return { judged: m, filters };
+  if (m.definition.compare) return msg.targetOnCompare();
+  const found = await baseOf(projectId, m.datasetId, m.definition);
+  if ('error' in found) return found.error;
+  return { judged: found.base, filters: windowedScope(filters, found.date, m.definition.window, todayIso(), getCalendar()).filters };
+}
+
 /** The frame, a fixed figure that holds at any scope, or the sentence naming why there is no target. */
 async function frameOf(projectId: string, m: Metric, spec: MetricTargetSpec, scope: FilterStep[]): Promise<{ frame: Frame } | { fixed: number } | string> {
   const s = await metricScope(projectId, m, scope);
   if (!s.ok) return s.error;
+  const p = await periodFrame(projectId, m, s.filters);
+  if (typeof p === 'string') return p;
   const dateCol = await metricDate(projectId, m);
   const byName = await metricsByName(projectId);
   const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
-  const adds = additivityOf(m, columns, byName).time;
+  const adds = additivityOf(p.judged, columns, byName).time;
   if (adds && !spec.per) return msg.targetNeedsPer();
   if (!adds && 'value' in spec.source) return { fixed: spec.source.value }; // a fixed figure holds at any scope
   const cal = getCalendar();
-  const found = dateCol ? scopeRange(s.filters, [{ name: dateCol, type: 'date' }])?.range : undefined;
+  const found = dateCol ? scopeRange(p.filters, [{ name: dateCol, type: 'date' }])?.range : undefined;
   const today = todayIso();
   const range = found ? { from: found.from, to: found.to && found.to < today ? found.to : today } : undefined;
   const closed = range && range.from && range.to && range.from <= range.to ? { from: range.from, to: range.to } : null;
   if (adds && !closed) return msg.targetPickPeriod();
   const parts = closed && spec.per ? periodParts(closed, spec.per, cal) : [];
   if (adds && !parts.length) return msg.targetPickPeriod();
-  return { frame: { filters: s.filters, dateCol, adds, range, parts } };
+  return { frame: { filters: p.filters, dateCol, adds, range, parts } };
 }
 
 /** The plan metric a frame is matched to, its date, and the scope's filters as the plan applies them; or the sentence naming why not. */
@@ -262,9 +278,13 @@ export async function checkTarget(projectId: string, m: Pick<Metric, 'id' | 'nam
   const spec = t && typeof t === 'object' ? (t as MetricTargetSpec) : null;
   if (!spec) return null;
   const refuse = (error: string): { error: string; field: 'target' } => ({ error, field: 'target' });
+  const period = metrics.isPeriodDefinition(m.definition) ? m.definition : null;
+  if (period?.compare) return refuse(msg.targetOnCompare());
   const columns = (await datasets.getDatasetMeta(projectId, m.datasetId))?.columns ?? [];
+  // A period metric's target adds up as its base does (periodFrame); a base that is gone is the period check's to say.
+  const judged = (period && (await metrics.getMetric(projectId, period.base))) || m;
   // shortcut: the metric's own filters don't change whether it adds up, so none are passed; read them in if one ever does
-  const adds = additivityOf({ ...m, filters: [] }, columns, await metricsByName(projectId)).time;
+  const adds = additivityOf({ ...judged, filters: [] }, columns, await metricsByName(projectId)).time;
   if (adds && !spec.per) return refuse(msg.targetNeedsPer());
   if (spec.per && !(await metricDate(projectId, m))) return refuse(msg.targetNeedsDate());
   if ('metricId' in spec.source) {

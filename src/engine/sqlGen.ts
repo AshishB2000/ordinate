@@ -311,7 +311,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
             warnings.push(periodSkipWarning(step.column));
             break;
           }
-          where = sqlPeriodPredicate(col.physical, r, params);
+          where = sqlPeriodPredicate(col.physical, r, params, sqlEmpty(col.physical));
         } else if (LIST_OPS.has(op)) {
           if (retyped.has(col.physical)) {
             return bail(`filter on "${step.column}" needs a data-derived type (retyped by an earlier fill_empty)`);

@@ -1,5 +1,6 @@
 // Explore's drill crumbs, drawn from the question itself: a text hierarchy's path is the group-by (level k) plus one
-// `=` step on each level above it. PURE; nothing is stored, so Back, a copied link and a saved visual all agree.
+// `=` step on each level above it. PURE; nothing is stored, so Back, a copied link and a saved visual all agree on the
+// path (a value's label is the drill's, when this page drilled to it).
 
 import type { NavHierarchy } from '../model/navigation';
 import { isKeptStep } from '../visuals/keptStep.ts';
@@ -17,7 +18,8 @@ export function upTo(q: Question, h: NavHierarchy, index: number): Question {
   return { ...q, encoding: { ...q.encoding, category: h.levels[index] }, filters: q.filters.filter((f) => isKeptStep(f) || f.op !== '=' || !gone.has(f.column)) };
 }
 
-export function crumbsOf(q: Question, list: readonly NavHierarchy[]): DrillCrumb[] | null {
+/** `labelOf`: a value's label as a drill's reply named it (`crumb.label`); a copied link has none, so the value. */
+export function crumbsOf(q: Question, list: readonly NavHierarchy[], labelOf: (column: string, value: string) => string = (_c, v) => v): DrillCrumb[] | null {
   const at = levelOf(list, q.encoding.category);
   if (!at || at.index < 1) return null;
   const { hierarchy: h, index: k } = at;
@@ -25,7 +27,7 @@ export function crumbsOf(q: Question, list: readonly NavHierarchy[]): DrillCrumb
   for (let j = 0; j < k; j++) {
     const steps = eqOn(q, h.levels[j]);
     if (steps.length !== 1) return null;
-    values.push(String(steps[0].value ?? ''));
+    values.push(labelOf(h.levels[j], String(steps[0].value ?? '')));
   }
   return [{ label: h.name, to: upTo(q, h, 0) }, ...values.map((label, j) => ({ label, to: j === k - 1 ? null : upTo(q, h, j + 1) }))];
 }

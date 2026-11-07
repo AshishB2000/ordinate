@@ -266,5 +266,35 @@ const post = (channel: string, payload: unknown): Promise<any> => handlers.get(c
   ok('…and the column graph was not empty, so the canary check was not vacuous', replies[0] && replies[0].nodes.some((n: { kind: string }) => n.kind === 'source') && replies[0].usedIn.metric === 1, show(replies[0] && replies[0].usedIn));
   const stored = fs.readdirSync(process.env.ORDINATE_LOCAL_DIR as string, { recursive: true } as never).map(String).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(process.env.ORDINATE_LOCAL_DIR as string, f), 'utf8')).join('');
   ok('NEGATIVE CONTROL: the canary is in the stored records', /secret_dir_7q/.test(stored) && /secret_tbl_7q/.test(stored) && /key=secret_7q/.test(stored));
+
+  // Differential (part 8): a BARE column only a many side has hangs off the table the KPI door reads it on (kpiSubtitle.tableOf).
+  const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+  const relStore: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
+  const { tableOf }: typeof import('../src/publish/kpiSubtitle') = require('../src/publish/kpiSubtitle');
+  const { cardReads, alertReads }: typeof import('../src/analysis/lineageColumns') = require('../src/analysis/lineageColumns');
+  const MP = (await projects.createProject('many side')).id;
+  const MC = (await datasets.saveDataset(MP, { name: 'Customers', sourceKind: 'csv', columns: [{ name: 'cust_id', type: 'text' }, { name: 'name', type: 'text' }], rows: [['c1', 'Ann']] }))!.id;
+  const MO = (await datasets.saveDataset(MP, { name: 'Orders', sourceKind: 'csv', columns: [{ name: 'order_id', type: 'text' }, { name: 'cust_id', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['o1', 'c1', 10]] }))!.id;
+  await relStore.saveRelationship(MP, { from: { datasetId: MO, column: 'cust_id' }, to: { datasetId: MC, column: 'cust_id' }, cardinality: 'many_to_one' });
+  for (const column of ['amount', 'name']) {
+    await metricStore.saveMetric(MP, { name: `Sum ${column}`, datasetId: MC, definition: { column, aggregation: 'count' } } as never);
+    await metricStore.saveMetric(MP, { name: `Per ${column}`, datasetId: MC, definition: { formula: `count(${column}) / count(cust_id)` } } as never);
+    await analysisStore.saveAnalysis(MP, { name: `KPI ${column}`, sheets: [{ name: 'Main', cards: [{ type: 'metric', metric: { datasetId: MC, column, aggregation: 'count' }, layout: { x: 0, y: 0, w: 3, h: 2 } }] }] } as never);
+    await alertStore.saveRule(MP, { name: `Alert ${column}`, datasetId: MC, compare: 'threshold', threshold: { op: '<', value: 1 }, metric: { column, aggregation: 'count' } });
+  }
+  const mi = await loadInput(MP);
+  const onWhich = (reads: Map<string, string[]>, column: string): string[] => [...reads].filter(([, cs]) => cs.includes(column)).map(([d]) => d);
+  for (const column of ['amount', 'name']) {
+    const door = await tableOf(MP, MC, column);
+    const seen = [
+      ...mi.metrics.filter((m) => String(m.name).endsWith(` ${column}`)).map((m) => [`metric ${m.name}`, onWhich(metricColumns(m, mi), column)] as const),
+      ...mi.dashboards.filter((d) => d.name === `KPI ${column}`).flatMap((d) => d.sheets.flatMap((s: { cards: unknown[] }) => s.cards)).map((c) => ['dashboard KPI', onWhich(cardReads(c, mi) ?? new Map(), column)] as const),
+      ...mi.alerts.filter((a) => a.name === `Alert ${column}`).map((a) => ['alert', onWhich(alertReads(a, mi), column)] as const),
+    ];
+    ok(`many side: lineage reads ${column} on the table the KPI door reads it on, for every reader (${door === MO ? 'Orders' : 'Customers'})`, seen.length === 4 && seen.every(([, on]) => on.length === 1 && Object.is(on[0], door)), show(seen));
+  }
+  ok('NEGATIVE CONTROL: the door reads amount on Orders and name on Customers', (await tableOf(MP, MC, 'amount')) === MO && (await tableOf(MP, MC, 'name')) === MC);
+  const used = (await post('lineage:fields', { projectId: MP, datasetId: MO })).fields.amount?.usedIn;
+  ok('many side: lineage:fields(Orders).amount counts both metrics, the KPI\'s dashboard and the alert', used?.metric === 2 && used.dashboard === 1 && used.alert === 1, show(used));
   finish();
 })().catch((err: unknown) => { console.error(err); process.exit(1); });

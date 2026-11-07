@@ -79,7 +79,7 @@ export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duc
     // Resolved HERE, at query time — the stored step carries only its preset.
     // No range → null, i.e. no predicate: transforms skips the step the same way.
     const r = s.period ? resolvePeriodNow(s.period) : null;
-    return r ? sqlPeriodPredicate(p, r, params) : null;
+    return r ? sqlPeriodPredicate(p, r, params, sqlEmpty(p)) : null;
   }
   if (op === 'contains') {
     // Always string-based regardless of column type. A null cell becomes '' and

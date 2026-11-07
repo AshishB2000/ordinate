@@ -9,6 +9,7 @@
 import * as metrics from '../analysis/metrics';
 import type { Metric } from '../analysis/metrics';
 import { describeDefinition, describeFilter } from '../analysis/metricFormat';
+import { termWords } from '../analysis/terms';
 import { baseName } from './periodMetric';
 import { followedDefinition, needsMetricPlan } from '../analysis/metricMeasures';
 import { listRelationships } from '../analysis/relationships';
@@ -62,7 +63,7 @@ export async function metricDefinitionText(projectId: string, m: Pick<Metric, 'd
   const filters = Array.isArray(m.filters) ? m.filters : [];
   const withholds = stepWithholder(projectId, m.datasetId, docs);
   const hidden = new Set(await Promise.all(filters.map(async (s) => ((await withholds(s)) ? s : null))));
-  return describeDefinition(m, (s) => (hidden.has(s) ? withheldWords(s) : describeFilter(s)), await baseName(projectId, m.definition));
+  return describeDefinition(m, await termWords(projectId, m.filters, (s) => (hidden.has(s) ? withheldWords(s) : describeFilter(s))), await baseName(projectId, m.definition));
 }
 
 /** By `encoding.values` index: the measure's line, or undefined when its bare `aggregation(column)` is the truth. */

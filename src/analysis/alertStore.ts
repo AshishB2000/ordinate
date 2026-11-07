@@ -36,6 +36,7 @@ import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
+import { lockedTable, withLockOf } from '../ipc/rowDoors';
 import { mirrorSpec } from '../ipc/semanticFigures';
 import { snapshotMetric } from './snapshotGuards';
 import { alertSkipped } from './pendingKinds';
@@ -43,6 +44,7 @@ import { metricWatch } from './alertMetric';
 import { ruleTarget } from './alertTarget';
 import type { MetricSnapshot } from './snapshot';
 import { getMetric } from './metrics';
+import type { MetricFormat } from './metrics';
 import { rewriteControlPeriods } from './metricTime';
 import { metricScope } from './metricTimeScope';
 import { sanitizeDashboardFilters } from './dashboards';
@@ -52,7 +54,7 @@ import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
-import { isLiveDatasetError } from '../data/liveDataset';
+import { isLive, isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isExternalMetricError, refuseExternal } from './externalMetric';
 import { logger } from '../app/logger';
@@ -155,6 +157,12 @@ function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => 
 }
 
 // ── Rules CRUD ───────────────────────────────────────────────────────────────
+
+/** Why `alerts:save` refuses a rule outright (D6): one by period or for anomalies reads rows, which a Live dataset doesn't keep, so it would never fire. From the record alone. */
+export async function liveRuleRefusal(projectId: string, raw: any): Promise<string | null> { // any: the zod-checked loose rule, read field by field
+  const byRows = raw?.compare === 'anomaly' || (raw?.compare === 'change' && raw?.change?.vs === 'previous_period');
+  return byRows && typeof raw.datasetId === 'string' && isLive(await datasets.getDatasetMeta(projectId, raw.datasetId)) ? alerts.liveRuleByRows() : null;
+}
 
 /** Create or replace one rule. Returns the STORED rule (sanitized), or null. */
 export async function saveRule(projectId: string, raw: any): Promise<AlertRule | null> {
@@ -331,7 +339,7 @@ export async function markSeen(projectId: string, eventId?: string): Promise<boo
 export async function metricFor(
   projectId: string,
   rule: AlertRule,
-): Promise<{ value: number | null; previous: number | null; period?: string; skip?: true; target?: number | null }> {
+): Promise<{ value: number | null; previous: number | null; period?: string; skip?: true; target?: number | null; targetNone?: string }> {
   const stored = (rule.metric.filters || []) as FilterStep[];
   if (rule.compare === 'anomaly') return { value: null, previous: null };
   const named = typeof rule.metric.metricId === 'string' ? await getMetric(projectId, rule.metric.metricId) : null;
@@ -365,7 +373,7 @@ export async function metricFor(
   const value = watch ? await watch() : res && res.ok ? res.value : null;
   if (rule.compare === 'target') { // compared with the metric's target in this very scope; a deleted metric leaves the rule as it is
     const target = await ruleTarget(projectId, rule, filters, value);
-    return target === 'gone' ? { value: null, previous: null, skip: true } : { value, previous: null, target };
+    return target === 'gone' ? { value: null, previous: null, skip: true } : { value, previous: null, target: target.value, ...(target.none ? { targetNone: target.none } : {}) };
   }
   return { value, previous: rule.lastValue ?? null };
 }
@@ -407,14 +415,20 @@ export async function recentPeriods(
  */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   try {
-    const src = await datasets.residentSource(projectId, datasetId);
-    if (src) {
-      const fast = await distinctAllResident(src, column);
-      if (fast) return fast;
-    }
-    const ds = await datasets.getDataset(projectId, datasetId);
-    if (!ds) return null;
-    return distinctAllJs(ds.columns, ds.rows, column);
+    requireExtract(await datasets.getDatasetMeta(projectId, datasetId)); // D6: a Live dataset's periods are not routed; said from its record, never hydrated
+    // A door (D17): the column gate on the period column (a hidden one refuses), then the row lock, so an alert's
+    // fan-out reads its periods over a dataset whose other columns are hidden.
+    return await withLockOf(projectId, datasetId, async (lock) => {
+      const src = lock ? null : await datasets.residentSource(projectId, datasetId); // the resident read takes no lock: the JS fold does
+      if (src) {
+        const fast = await distinctAllResident(src, column);
+        if (fast) return fast;
+      }
+      const ds = await datasets.getDataset(projectId, datasetId);
+      if (!ds) return null;
+      const t = lockedTable(ds, lock);
+      return distinctAllJs(t.columns, t.rows, column);
+    }, [column]);
   } catch (err) {
     if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no periods" would be a silent answer — and so would a refusal
     return null; // a rule that cannot read its period column simply does not fire
@@ -447,6 +461,10 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
 }
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
+
+/** The format of the metric a rule watches, for its sentence's figures (alerts.fmtMetric); none for a column's rule. */
+const formatOf = async (projectId: string, rule: AlertRule): Promise<MetricFormat | undefined> =>
+  typeof rule.metric.metricId === 'string' ? (await getMetric(projectId, rule.metric.metricId))?.format : undefined;
 
 /**
  * Where a fired change came from (ipc/alertDiagnosis). Required lazily — that
@@ -497,7 +515,7 @@ export async function evaluateProject(
         const { value, previous, period, skip, target } = await metricFor(projectId, rule);
         if (skip) return null;
         const r = alerts.evaluateRule({
-          rule, value, previous, period, target,
+          rule, value, previous, period, target, format: await formatOf(projectId, rule),
           anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
           now,
           eventId: randomUUID(),
@@ -511,7 +529,7 @@ export async function evaluateProject(
     } catch (err) {
       // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
       // time — its state untouched, never "the value was null" — and the others still are. Nor is a refused one.
-      if (isLiveFigureError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue;
+      if (isLiveFigureError(err) || isLiveDatasetError(err) || isRowPolicyError(err) || isExternalMetricError(err)) continue; // a Live rule by period (D6) too
       throw err;
     }
     if (!res) continue; // untouched: its metric is gone
@@ -557,12 +575,13 @@ export async function testRule(projectId: string, raw: any): Promise<{
   if (rule.compare === 'change' && rule.change?.vs === 'previous_period' && rule.change.periodColumn && read.period === undefined) {
     return { ok: true, fire: false, message: alerts.notTwoPeriodsYet(rule.change.periodColumn), value, previous };
   }
+  if (rule.compare === 'target' && read.targetNone) return { ok: true, fire: false, message: read.targetNone, value, previous }; // no target: why it cannot fire
   const anomalies = rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined;
   // `wouldFire` ignores the stored anomaly keys on purpose here: the question is
   // "does this dataset have anomalies", not "are any of them new since a run the
   // user has not made yet".
   const probe: AlertRule = rule.compare === 'anomaly' ? { ...rule, anomalyKeys: undefined } : rule;
-  const out = alerts.wouldFire(probe, value, previous, anomalies, read.target);
+  const out = alerts.wouldFire(probe, value, previous, anomalies, read.target, await formatOf(projectId, rule));
   return { ok: true, fire: out.fire, message: out.message, value, previous };
 }
 

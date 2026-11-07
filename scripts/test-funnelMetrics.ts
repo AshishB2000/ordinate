@@ -203,12 +203,17 @@ void (async () => {
   const leaves = await H.as(H.ORG_A, () => mm.withLeafMeasures(P, D, { category: 'country', values: [M(conv)] } as never));
   ok('the share policy is shown the funnel\'s columns, as a formula\'s leaves', JSON.stringify(leaves.values.map((v) => v.column)) === '["user","event","ts"]', show(leaves.values));
   const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+  const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
   const { randomUUID }: typeof import('crypto') = require('crypto');
   const rule = { id: randomUUID(), name: 'r', datasetId: D, enabled: true, compare: 'threshold', threshold: { op: '<', value: 0.9 }, metric: { column: '', aggregation: 'sum', metricId: rate.id, filters: [GERMANY] } };
   const watched = await H.as(H.ORG_A, () => alertStore.metricFor(P, rule as never));
   ok('an alert on a funnel metric watches its figure', typeof watched.value === 'number' && Object.is(watched.value, await kpi(rate, [GERMANY])), show(watched));
   const tested = await H.as(H.ORG_A, () => alertStore.testRule(P, rule as never));
   ok('the Test button: the funnel figure', tested.ok && tested.fire === true && Object.is(tested.value, await kpi(rate, [GERMANY])), show(tested));
+  const shown = (await resolved(rate, [GERMANY])).display as string;
+  ok('… and its sentence says the figure as the tile does (a percent)', shown.endsWith('%') && tested.message.includes(shown), show([tested.message, shown]));
+  const onColumn = await H.as(H.ORG_A, () => alertStore.testRule(P, { ...rule, threshold: { op: '>', value: 0 }, metric: { column: 'ts', aggregation: 'count' } } as never));
+  ok('NEGATIVE CONTROL: a rule on a column keeps the compact figure', onColumn.message.includes(alerts.fmtMetric(onColumn.value)), show(onColumn.message));
 
   await close();
   finish();

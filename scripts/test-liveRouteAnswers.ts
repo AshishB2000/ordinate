@@ -43,6 +43,8 @@ const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visu
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
+const crypto: typeof import('crypto') = require('crypto');
 const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
 const relationships: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
@@ -184,7 +186,15 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const asTurn = [{ id: 't', role: 'assistant' as const, text: '', createdAt: '', answer: byCat }];
   const pendingLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const pendingBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
+  // A dashboard draft's column notes too (ipc/draftFacts): no value label of a column the Live facts withhold.
+  const { loadDraftFacts }: typeof import('../src/ipc/draftFacts') = require('../src/ipc/draftFacts');
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [{ value: KEPT_OUT, label: 'Kept label' }] }));
+  const draftCodes = async () => show((await H.as(ORG_A, () => loadDraftFacts(P, { datasets: [{ id: L }] } as never))).columnDocs?.[L]?.cat?.values ?? null);
+  const pendingDraft = await draftCodes();
+  ok('pending: a dashboard draft is told no value label of the column', !pendingDraft.includes('Kept label') && !pendingDraft.includes(KEPT_OUT), pendingDraft);
   await H.as(ORG_A, () => privacy.decide(P, L, 'cat', 'none'));
+  ok('NEGATIVE CONTROL: dismissed, the draft is told the label', (await draftCodes()).includes('Kept label'));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { values: [] }));
   const dismissedLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
   const dismissedBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
   const catLabels = !('ok' in dismissedLive) ? dismissedLive.card.data.labels.map(String) : [];
@@ -296,6 +306,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('…a warehouse that does not answer skips that rule (its state untouched) and the others are still evaluated', show(before) === show(after)
     && (await H.as(ORG_A, () => alertStore.load(P))).rules.filter((r) => r.name === 'Copy sales').every((r) => (r.history || []).length >= 2), show(warned.lines).slice(0, 200));
   fake.hook = null;
+  // A Live rule by period has no rows to list its periods from (D6, typed): it alone is skipped, never the project's evaluation.
+  const byPeriod = { id: '6c1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f', name: 'Live by period', datasetId: L, enabled: true, metric: { column: 'amt', aggregation: 'sum' }, compare: 'change', change: { pct: 1, direction: 'either', vs: 'previous_period', periodColumn: 'd' } };
+  await H.as(ORG_A, () => alertStore.restoreRule(P, byPeriod));
+  const copies = async () => ((await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.name === 'Copy sales')?.history ?? []).length;
+  const [had, ran] = [await copies(), await H.as(ORG_A, () => alertStore.evaluateProject(P)).then(() => 'ran', (e: unknown) => String(e))];
+  const stuck = (await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.id === byPeriod.id);
+  ok('alerts: a Live rule by period is skipped, untouched, and the others are still evaluated', ran === 'ran' && (await copies()) === had + 1 && stuck?.lastEvaluatedAt === undefined, show([ran, had, stuck]));
+  // …so the save says so up front, from the record (never hydrated): one by period, or for anomalies, reads rows Live doesn't keep.
+  const saveRule = async (patch: Record<string, unknown>): Promise<Reply> => (await post('alerts:save', { projectId: P, rule: { ...byPeriod, id: crypto.randomUUID(), ...patch } })).value;
+  const [livePeriod, liveAnomaly] = [await saveRule({}), await saveRule({ compare: 'anomaly', change: undefined })];
+  ok('alerts:save refuses a Live rule by period, or for anomalies, and says why', [livePeriod, liveAnomaly].every((r) => r.ok === false && r.code === 'live_dataset' && r.error === alerts.liveRuleByRows()), show([livePeriod, liveAnomaly]));
+  ok('NEGATIVE CONTROL: the same rule on the copy saves, and a threshold on Live saves', (await saveRule({ datasetId: X })).ok === true && (await saveRule({ compare: 'threshold', change: undefined, threshold: { op: '>', value: 1 } })).ok === true);
 
   // Value labels on a Live card (PR 06): what a person reads says the label; the chart keeps the warehouse's value beside it,
   // and the model's facts keep the value (F5). Before THE SPY: labelling reads the record, never the rows.
@@ -315,8 +337,11 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('Live card: its filter chip and bullet say the label; the step keeps the stored value', show(liveFiltered.filterLabels) === show(['region in The north'])
     && liveFiltered.bullets.includes('Filtered to region in The north.') && show(liveFiltered.steps) === show([{ type: 'filter', column: 'region', op: 'in', values: ['North'] }]), show(liveFiltered).slice(0, 300));
   ok('…and the model\'s facts keep "region in North"', 'factsText' in liveFilteredFacts && liveFilteredFacts.factsText.includes('Filtered to: region in North.') && !liveFilteredFacts.factsText.includes('The north'));
-  // Under a row lock the case fix looks up the caller's rows only: a value outside them has no label to say (the unlocked card above is the control).
   const liveAnswersIpc: typeof import('../src/ipc/liveAnswers') = require('../src/ipc/liveAnswers');
+  const termed = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['North']), [], ['Gold tier']));
+  ok('Live card: a glossary term beside a labelled filter keeps its name', !!termed && 'card' in termed && show(termed.card.filterLabels) === show(['region in The north', 'Gold tier'])
+    && termed.card.bullets.includes('Filtered to region in The north; Gold tier.'), show(termed).slice(0, 300));
+  // Under a row lock the case fix looks up the caller's rows only: a value outside them has no label to say (the unlocked card above is the control).
   const lockedCard = await H.as(ORG_A, () => liveAnswersIpc.liveCardFor(P, spec(['North']), [{ type: 'filter', column: 'region', op: '=', value: 'South' }]));
   ok('Live card under a lock that holds no North: its filter text says North as asked, never its label', !!lockedCard && 'card' in lockedCard
     && show(lockedCard.card.filterLabels) === show(['region in North']) && !show(lockedCard.card).includes('The north'), show(lockedCard).slice(0, 300));

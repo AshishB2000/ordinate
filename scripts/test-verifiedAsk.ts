@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const ask = (question: string, extra: object = {}): Promise<any> => call('copilot:ask', { projectId: pid, context: {}, question, ...extra });
 
   const r = await ask('revenue by region?');
-  ok('no model, exact match: answered by the app', r.ok && r.guidance?.verifiedId === V && calls === 0, JSON.stringify(r));
+  ok('no model, exact match: answered by the app, and its guidance says no model narrated it', r.ok && r.guidance?.verifiedId === V && calls === 0 && !('narrated' in r.guidance), JSON.stringify(r));
   ok('the turn stores the verified spec', rules.sameChart(r.turns.at(-1).answer, saved.q.spec));
   const again = await ask('Revenue per region', { threadId: r.threadId });
   ok('a phrasing answers into the same thread', again.ok && again.threadId === r.threadId && again.turns.length === r.turns.length + 2 && calls === 0);
@@ -66,7 +66,8 @@ async function main(): Promise<void> {
   (execConfig as any).executionReady = async () => true;
   (analyze as any).askCopilot = async () => ({ ok: true, text: 'West leads.', suggestedAction: { kind: 'none', intent: '' } });
   const narrated = await ask('Revenue by region');
-  ok('a model narrates a hit, but never picks it', narrated.ok && narrated.answer === 'West leads.' && narrated.guidance.verifiedId === V);
+  ok('a model narrates a hit, but never picks it, and the guidance says it narrated', narrated.ok && narrated.answer === 'West leads.' && narrated.guidance.verifiedId === V
+    && narrated.guidance.narrated === true, JSON.stringify(narrated.guidance));
 
   // ── Examples ──────────────────────────────────────────────────────────────
   const sent: string[] = [];
@@ -88,7 +89,7 @@ async function main(): Promise<void> {
   const hist = async (t: string): Promise<any[]> => (await call('copilot:history', { projectId: pid, threadId: t })).turns;
   (analyze as any).askCopilot = async () => ({ ok: true, text: 'Narrated.', suggestedAction: { kind: 'none', intent: '' } });
   const kept = await ask('Revenue by region');
-  ok('a verified answer remembers how', (await hist(kept.threadId)).at(-1).guidance?.verifiedId === V);
+  ok('a verified answer remembers how, narrated and all', ((g) => g?.verifiedId === V && g.narrated === true)((await hist(kept.threadId)).at(-1).guidance));
   (analyze as any).askCopilot = async (_p: unknown, facts: string) => { sent.push(facts); return { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }; };
   const modelled = await ask('profit by region', { threadId: kept.threadId });
   const mg = (await hist(kept.threadId)).at(-1).guidance;

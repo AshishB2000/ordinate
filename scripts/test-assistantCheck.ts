@@ -111,6 +111,20 @@ async function main(): Promise<void> {
     ok('the record places every working question: the run\'s 50 first, in the order asked, then the 9 skipped', capped.ids?.length === 59
       && capped.ids.slice(0, 50).join() === capped.results.map((r) => r.id).join(), JSON.stringify(capped.ids?.length));
 
+    // The heartbeat is written before each model call, the first too: a slow model call is not a dead pod's run.
+    const copilotMod = require('../src/ipc/copilot') as { buildFacts: (...a: unknown[]) => Promise<unknown> };
+    const realFacts = copilotMod.buildFacts;
+    copilotMod.buildFacts = async (...a: unknown[]) => { await new Promise((r) => setTimeout(r, 40)); return realFacts(...a); }; // a slow inventory
+    const beats: number[] = [];
+    (analyze as any).askCopilot = async (_p: unknown, _f: string, q: string) => {
+      const st = JSON.parse(rawCheck(P));
+      beats.push(Date.parse(st.heartbeatAt) - Date.parse(st.startedAt));
+      return REPLY[q] ?? PROSE;
+    };
+    await runToEnd(P);
+    copilotMod.buildFacts = realFacts;
+    ok('a fresh heartbeat is stored before each model call, the first one too', beats.length === 50 && beats[0] >= 40 && beats.every((b, i) => i === 0 || b >= beats[i - 1]), JSON.stringify(beats.slice(0, 3)));
+
     // Cancel between questions: the record says stopped.
     let hold!: () => void;
     const slow = new Promise<void>((r) => (hold = r));

@@ -78,7 +78,13 @@ const mcpHandlers: typeof import('../src/automation/handlers') = require('../src
     ok('door: visual:drillDown — east\'s drilled chart is east\'s own visual:data for the same question, cell by cell', drEast.d.body?.available === true && drEast.d.body.encoding.category === 'region'
       && sameCells(cellsOf(drEast.chart), cellsOf(byHand)) && JSON.stringify(cellsOf(drEast.chart)?.[0]) === '["East"]', `${drEast.d.text.slice(0, 200)} | ${drEast.chart?.text.slice(0, 200)}`);
     ok('NEGATIVE CONTROL: the editor\'s drilled chart differs (c3 is in more regions than East)', drEd.d.body?.available === true && !sameCells(cellsOf(drEd.chart), cellsOf(drEast.chart)) && (cellsOf(drEd.chart)?.[0].length ?? 0) > 1, drEd.chart?.text.slice(0, 200));
-    ok('nothing east was given carries a West value', replies.length > 0 && !replies.some((t) => H.leaks(t)), replies.find((t) => H.leaks(t))?.slice(0, 200));
+    // The crumb's value label (catalog:columns REDACT): east sends a West customer the boss labelled; the crumb is the value
+    // east sent, never its label. (Not in `replies`: it echoes east's own mark.)
+    const crumbOf = (who: string) => W.call(who, 'visual:drillDown', { projectId: P, datasetId: orders, encoding: byCustomer, mark: { category: `${H.W_CANARY}_3` } });
+    const [westEast, westEd] = [await crumbOf('east'), await crumbOf('ed')];
+    ok('redact: visual:drillDown — east\'s crumb for a labelled West customer is the raw value, without its label', westEast.body?.crumb?.label === `${H.W_CANARY}_3` && !westEast.text.includes('West three'), westEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor\'s crumb is the label', westEd.body?.crumb?.label === 'West three', westEd.text.slice(0, 240));
+    ok('nothing east was given carries a West value',replies.length > 0 && !replies.some((t) => H.leaks(t)), replies.find((t) => H.leaks(t))?.slice(0, 200));
   } finally {
     await W.close();
   }

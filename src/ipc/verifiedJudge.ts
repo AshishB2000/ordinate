@@ -16,7 +16,8 @@ import { isLive } from '../data/liveDataset';
 import { computeCard, specDatasets, specMetrics, specTerms } from './answers';
 
 export type Outcome = 'match' | 'differs' | 'refused';
-export interface Judged { outcome: Outcome; reason?: string; by?: 'spec' | 'figures' }
+/** `datasetId`: the reply's own dataset, when its card's reason is the one given (it can quote that dataset's values). */
+export interface Judged { outcome: Outcome; reason?: string; by?: 'spec' | 'figures'; datasetId?: string }
 
 const sameValues = (a: readonly unknown[], b: readonly unknown[]): boolean => a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const sameFigures = (a: ChartData, b: ChartData): boolean =>
@@ -37,6 +38,6 @@ export async function judgeSpec(projectId: string, q: VerifiedQuestion, raw: unk
   const mine = await computeCard(projectId, q.spec);
   if ('ok' in mine) return { outcome: 'differs', reason: mine.reason };
   const theirs = await computeCard(projectId, drawn, true);
-  if ('ok' in theirs) return { outcome: 'differs', reason: theirs.reason };
+  if ('ok' in theirs) return { outcome: 'differs', reason: theirs.reason, datasetId: v.spec.datasetId };
   return { outcome: sameFigures(mine.card.data, theirs.card.data) ? 'match' : 'differs', by: 'figures' };
 }

@@ -3,7 +3,7 @@
 // (`ed.view.drillInto`). The tile, its rows drawer, Explain and ⋯ then read the one drilled definition. Nothing here
 // computes a figure; an older pod that has no navigation or no drill leaves the click as it was.
 
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../ui/Toast';
 import type { Card, Step, VisualDef } from '../analyses/api';
@@ -38,6 +38,10 @@ export function useTileDrill(ed: EditorApi, card: Card, saved: VisualDef): { def
   const def = useMemo(() => drilledDef(saved, drill), [saved, drill]);
   const busy = useRef(false);
   const used = useRef(false); // this tile has drilled: its cached levels stay fresh for a minute, so Up asks nothing
+  // Back at the root, the tile is fresh as any other again: after the render that redrew the cached root.
+  useEffect(() => {
+    if (!drill) used.current = false;
+  }, [drill]);
 
   const offer = async (at: DrillAt): Promise<DrillOffer | null> => {
     // Drill only where the dashboard is read: the view page, Present, and a phone (which reads the editing route too).

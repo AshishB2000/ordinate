@@ -113,6 +113,14 @@ describe('The Data model: the test chat', () => {
     expect(json.textContent).toContain('"category": "region"');
   }, 30_000);
 
+  it('a verified turn a model narrated says so, not "no model call"', async () => {
+    serve(history([user('u1', 'revenue by region'), bot('a1', 'West leads.', { guidance: { verifiedId: V1, instructions: 0, examples: [], narrated: true } })]));
+    renderApp(`/model/${P}?tab=assistant`);
+    const how = await screen.findByTestId('how-answered', {}, LAZY);
+    expect(within(how).getByText('A verified question — the app drew it; a model only wrote the words.')).toBeTruthy();
+    expect(how.textContent).not.toContain('no model call');
+  }, 30_000);
+
   it('a removed verified question reads "since removed"', async () => {
     serve(history([user('u1', 'x'), bot('a1', 'y', { guidance: { verifiedId: '9c6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', instructions: 0, examples: [] } })]));
     renderApp(`/model/${P}?tab=assistant`);
