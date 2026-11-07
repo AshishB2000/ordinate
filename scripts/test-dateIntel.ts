@@ -12,10 +12,11 @@
 //   npm run build:ts && node scripts/test-dateIntel.js
 
 import {
-  resolvePeriod, shiftRange, describePeriod, sanitizePeriod, sanitizeCompare, periodDay,
+  resolvePeriod, shiftRange, describePeriod, sanitizePeriod, sanitizeCompare, periodDay, periodFilterDay,
   daysFromIso, isoFromDays, shiftBucketLabel, setCalendar, PERIOD_PRESETS,
 } from '../src/analysis/dateIntel';
 import type { CalendarPrefs, PeriodSpec } from '../src/analysis/dateIntel';
+import { daysFromCivil, parseDateCell } from '../src/analysis/categoryKey';
 import { compareScope, overlayFilters, scopeRange, overlayCaption } from '../src/analysis/periodScope';
 import { controlSteps, mergeDashboardFilters } from '../src/analysis/dashboardFilters';
 import { sanitizeCard } from '../src/analysis/dashboards';
@@ -163,6 +164,11 @@ function eq(label: string, got: string, want: string): void {
   eq('null', d(null), 'null');
   eq('a number', d(20240305), 'null');
   ok('daysFromIso rejects the lax shape', daysFromIso('2024-3-5') === null);
+  // A period FILTER reads a cell of neither shape as a date axis does (parseDateCell), and a shaped cell as periodDay.
+  const f = (s: unknown): string => { const v = periodFilterDay(s); return v === null ? 'null' : isoFromDays(v); };
+  const axis = (s: string): string => { const c = parseDateCell(s); return c ? isoFromDays(daysFromCivil(c.y, c.m, c.d)) : 'null'; };
+  for (const s of ['Jan 5, 2024', 'Mar 28, 2024', ' 2024-03-05', '5 Mar 2024', 'n/a', '2024-03-05x', '']) eq(`filter reads ${JSON.stringify(s)} as the axis does`, f(s), axis(s));
+  for (const s of ['2024-03-05', '03/05/2024', '2024-03-05T10:22:00Z', '2024-02-30', '2024-02-30T10:00', null]) eq(`filter reads ${JSON.stringify(s)} as periodDay`, f(s), d(s));
 }
 
 // ── 8. Overlay labels ───────────────────────────────────────────────────────
