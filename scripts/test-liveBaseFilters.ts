@@ -32,6 +32,7 @@ const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engin
 const liveBase: typeof import('../src/engine/live/liveBase') = require('../src/engine/live/liveBase');
 const liveProfile: typeof import('../src/data/liveProfile') = require('../src/data/liveProfile');
 const compile: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const { isLive } = H.liveDataset;
 
 const { fake, ORG_A } = H;
@@ -357,6 +358,13 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
   }
 
   // ── 5. Copies keep the base filters as Prepare steps (never wider than the dataset) ──
+  // The fetch a copy reads (a table selection, the fake's cap + 1 wrapper) says when the row cap cut it.
+  const N = H.fx.fixtureRows().length;
+  const cutRun = await H.as(ORG_A, () => connectionRun.runConnection(H.fakeMod.LIVE_FAKE_ID, {}, {}, { table: 'live_typed' }, { rowLimit: 300 }));
+  ok('a table over the row cap: the run keeps the cap and reports it truncated, with the warning',
+    cutRun.ok === true && cutRun.truncated && cutRun.result.rows.length === 300 && cutRun.result.warnings.some((w) => /truncated at 300 rows/.test(w)), show(cutRun.ok ? { truncated: cutRun.truncated, rows: cutRun.result.rows.length, warnings: cutRun.result.warnings } : cutRun));
+  const fitRun = await H.as(ORG_A, () => connectionRun.runConnection(H.fakeMod.LIVE_FAKE_ID, {}, {}, { table: 'live_typed' }, { rowLimit: N }));
+  ok('NEGATIVE CONTROL: a table exactly at the cap is all of it, not truncated', fitRun.ok === true && !fitRun.truncated && fitRun.result.rows.length === N && fitRun.result.warnings.length === 0, show(fitRun.ok ? fitRun.result.warnings : fitRun));
   await setBase(L, BASE);
   H.queryCache.clear();
   const kpi = async (d: string, column: string, aggregation: string): Promise<Reply> => (await post('dashboard:metric', { projectId: P, datasetId: d, column, aggregation })).value;
