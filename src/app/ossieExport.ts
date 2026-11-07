@@ -73,6 +73,8 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
         : def.snapshot ? ossieWhy.metricSnapshot()
         : m.filters?.length ? ossieWhy.metricFilters()
         : d.baseFilters?.length ? ossieWhy.metricBaseFilters() // `source` is the whole table: the figure would be another number
+        // COUNT(x) counts '' and '  '; NULLIF(TRIM(x), '') is no fix, as TRIM's whitespace set varies by dialect.
+        : (def.aggregation === 'count' || def.aggregation === 'countd') && colsOf(d).find((c) => c.name === def.column)?.type === 'text' ? ossieWhy.metricCountText()
         : undefined;
       if (!def || why) { miss('metric', m.name, why as string); keep('metrics', { ...strip(m), dataset: d.name }); continue; }
       let name = m.name; // a metric shares its dataset's namespace with the fields

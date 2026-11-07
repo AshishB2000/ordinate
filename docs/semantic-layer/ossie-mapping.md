@@ -25,6 +25,7 @@ Interchange until it entered the Apache Incubator). Licence: Apache 2.0.
 | Field | `fields[]` with `expression.sql` (the column), `description`, `datatype`, `ai_context` (display name and aliases as `synonyms`, example as `examples`) | mapped; `number` has no `datatype` (Ossie splits Integer/Decimal/Float, Ordinate does not) |
 | Value labels, sensitivity | none | reported, labels kept in the extension |
 | Simple metric: sum, avg, count, min, max, distinct count | dataset-scoped `metrics[]`, `expression.sql` (`SUM(x)`, `COUNT(DISTINCT x)`) | mapped |
+| Count or distinct count of a text field | none exact: `COUNT(x)` counts `''` and whitespace, Ordinate counts only non-blank text, and a `NULLIF(TRIM(x), '')` rewrite is not exact (TRIM's whitespace set varies by dialect) | not mapped, reported; a count of a number or date field maps |
 | Metric filters | none | metric not mapped, reported (a metric without its filter would be another number) |
 | A metric on a Live dataset with base filters | none: `source` is the whole table | not mapped, reported (the same reason) |
 | Formula, period, funnel metric | none: "metrics cannot reference other metrics" | not mapped, reported |

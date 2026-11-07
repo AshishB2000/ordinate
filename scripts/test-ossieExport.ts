@@ -40,12 +40,12 @@ void (async () => {
   ok('a date column is a time dimension', ds('orders').fields.find((f: { name: string }) => f.name === 'day').dimension?.is_time === true);
   ok('aliases are synonyms', JSON.stringify(ds('orders').fields.find((f: { name: string }) => f.name === 'amount').ai_context.synonyms) === '["Amount","net"]');
   ok('the guide is the dataset ai_context instructions', ds('orders').ai_context.instructions.includes('One row per order line'));
-  const ms = ds('orders').metrics as { name: string; expression: { sql: string } }[];
-  ok('a distinct count maps', ms.some((m) => m.name === 'Orders' && m.expression.sql === 'COUNT(DISTINCT order_id)'));
+  const ms = (ds('orders').metrics ?? []) as { name: string; expression: { sql: string } }[];
   ok('a relationship maps from the many side', JSON.stringify(doc.relationships.map((r: { from: string; to: string; from_columns: string[]; to_columns: string[] }) => [r.from, r.to, r.from_columns, r.to_columns])) === '[["orders","customers",["customer_id"],["id"]]]');
   const rep = (kind: string, name: string) => out.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
   ok('a metric with a filter is reported, not exported without it', rep('metric', 'Revenue') && !ms.some((m) => m.name === 'Revenue'));
   ok('a snapshot, a period and a formula metric are reported', rep('metric', 'Stock on hand') && rep('metric', 'Revenue MTD') && rep('metric', 'Avg basket'));
+  ok('a distinct count of a text column is reported, not exported (section 6 has the figures)', rep('metric', 'Orders') && !ms.some((m) => m.name === 'Orders'));
   ok('terms and value labels are reported', rep('term', 'EMEA') && rep('valueLabels', 'region'));
   ok('role and sensitivity are reported; a default calendar is not', rep('role', 'Orders') && rep('sensitivity', 'amount') && !rep('calendar', 'Calendar'));
   ok('every unmapped definition is kept in the ordinate extension', doc.custom_extensions[0].vendor_name === 'ordinate' && /EMEA/.test(doc.custom_extensions[0].data));
@@ -116,12 +116,27 @@ void (async () => {
   const ids6 = new Map<string, string>();
   ids6.set('Live revenue', await metric(F.live, 'Live revenue', { column: 'amount', aggregation: 'sum' }));
   ids6.set('N total', await metric(B.id, 'N total', { column: 'n', aggregation: 'sum' }));
+  for (const [name, column, aggregation] of [['Tags', 'tag', 'count'], ['Distinct tags', 'tag', 'countd'], ['Ns', 'n', 'count'], ['Distinct ns', 'n', 'countd']]) ids6.set(name, await metric(B.id, name, { column, aggregation }));
   const six = await H.as(H.ORG_A, () => ossieExport(F.P));
   const doc6 = JSON.parse(six.text);
   const metricsOf = (n: string) => (doc6.datasets.find((d: { name: string }) => d.name === n)?.metrics ?? []) as { name: string; expression: { sql: string } }[];
   const rep6 = (kind: string, name: string) => six.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
   ok('a metric on a Live dataset with base filters is reported, never exported as the whole table\'s total', rep6('metric', 'Live revenue') && !metricsOf('live').length, JSON.stringify(metricsOf('live')));
   ok('NEGATIVE CONTROL: a metric on a Live dataset without base filters maps', metricsOf('blanks').some((m) => m.name === 'N total' && m.expression.sql === 'SUM(n)'), JSON.stringify(metricsOf('blanks')));
+  // Ordinate's figure (metric:values) against the exported SQL run over the document's source, in the same warehouse.
+  const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+  const ordinate = async (name: string): Promise<unknown> => (await must('metric:values', { projectId: F.P, ids: [ids6.get(name)] }))[0]?.value;
+  const blanks = doc6.datasets.find((d: { name: string }) => d.name === 'blanks');
+  const overSource = async (sql: string): Promise<number> => Number((await H.as(H.ORG_A, () => duck.queryAsync(`SELECT ${sql} AS v FROM ${blanks.source}`)))[0].v);
+  ok('a count and a distinct count of a text column with blanks are reported, not exported', rep6('metric', 'Tags') && rep6('metric', 'Distinct tags')
+    && !metricsOf('blanks').some((m) => m.name === 'Tags' || m.name === 'Distinct tags'), JSON.stringify(metricsOf('blanks')));
+  const [tags, countTag] = [await ordinate('Tags'), await overSource('COUNT(tag)')];
+  ok('…because COUNT(tag) counts the blanks Ordinate does not', tags === 3 && countTag === 5, `${String(tags)} vs ${countTag}`);
+  const mapped = metricsOf('blanks');
+  const agree: string[] = [];
+  for (const m of mapped) if (!Object.is(await ordinate(m.name), await overSource(m.expression.sql))) agree.push(m.name);
+  ok('NEGATIVE CONTROL: a count, a distinct count and a sum of a number column map, and their SQL gives Ordinate\'s figure (Object.is)',
+    ['N total', 'Ns', 'Distinct ns'].every((n) => mapped.some((m) => m.name === n)) && agree.length === 0, `${JSON.stringify(mapped)} disagree: ${agree.join()}`);
 
   await close();
   finish();

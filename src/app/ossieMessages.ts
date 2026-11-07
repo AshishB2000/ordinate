@@ -30,6 +30,10 @@ export function ossieWhy_metricBaseFilters(): string {
   return t('ossieMessages.a_metric_on_a_dataset_with');
 }
 
+export function ossieWhy_metricCountText(): string {
+  return t('ossieMessages.ordinate_counts_only_text_that_is');
+}
+
 export function ossieWhy_metricFormula(): string {
   return (t('ossieMessages.ossie_metrics_cannot_refer_to_other'));
 }
@@ -66,6 +70,7 @@ export const ossieWhy = {
   sensitivity: ossieWhy_sensitivity,
   metricFilters: ossieWhy_metricFilters,
   metricBaseFilters: ossieWhy_metricBaseFilters,
+  metricCountText: ossieWhy_metricCountText,
   metricFormula: ossieWhy_metricFormula,
   metricSnapshot: ossieWhy_metricSnapshot,
   metricDate: ossieWhy_metricDate,

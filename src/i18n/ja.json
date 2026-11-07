@@ -545,6 +545,7 @@
   "modelFileMessages.your_access_to_this_project_is": "このプロジェクトへのアクセスは行アクセスルールで制限されているため、定義をエクスポートもインポートもできません。",
   "ossieMessages.a_dataset_of_this_relationship_is": "この関係のデータセットが見つかりません。",
   "ossieMessages.a_metric_on_a_dataset_with": null,
+  "ossieMessages.ordinate_counts_only_text_that_is": null,
   "ossieMessages.ossie_does_not_say_which_date": "Ossie には指標がどの日付で集計するかを示す仕組みがないため、日付フィールドを時間として印付けします。",
   "ossieMessages.ossie_has_no_always_applied_filters": "Ossie には常に適用されるフィルターがないため、ordinate 拡張に保持されます。",
   "ossieMessages.ossie_has_no_calendar_settings": "Ossie にはカレンダー設定がありません。",
