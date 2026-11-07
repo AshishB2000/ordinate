@@ -22,7 +22,7 @@ function commandSection(c: Command): string {
   const where = [
     c.cli ? `CLI \`${cliSignature(c)}\`` : 'MCP only',
     c.tool ? `MCP tool \`${c.tool}\`` : 'CLI only',
-    c.readOnly ? 'read-only' : `**writes ${c.writes || 'data'}**`,
+    c.readOnly ? (c.needs ? 'read-only (editors)' : 'read-only') : `**writes ${c.writes || 'data'}**`,
   ].join(' · ');
   const lines = [`### ${title}`, '', where, '', c.summary, ''];
   const rows: string[] = [];
@@ -40,7 +40,7 @@ function commandSection(c: Command): string {
 
 export function generateDocs(commands: readonly Command[]): string {
   const index = commands.map((c) =>
-    `| ${c.cli ? '`' + c.cli + '`' : '—'} | ${c.tool ? '`' + c.tool + '`' : '—'} | ${c.readOnly ? 'read' : 'writes ' + (c.writes || 'data')} | ${c.summary} |`);
+    `| ${c.cli ? '`' + c.cli + '`' : '—'} | ${c.tool ? '`' + c.tool + '`' : '—'} | ${c.readOnly ? (c.needs ? 'read (editors)' : 'read') : 'writes ' + (c.writes || 'data')} | ${c.summary} |`);
   return [
     '# Automation: the MCP endpoint',
     '',

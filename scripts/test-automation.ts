@@ -143,8 +143,8 @@ async function cliCodes(): Promise<void> {
   const wantCli = ['projects list', 'datasets list', 'datasets describe', 'datasets import', 'datasets refresh', 'query',
     'metrics list', 'metrics value', 'insights', 'dashboards list', 'dashboards export', 'reports run', 'publish'];
   ok('every CLI command the spec names exists', wantCli.every((c) => clis.includes(c)));
-  ok('read-only everywhere except the two creators and publish / unpublish (among tools)',
-    reg.COMMANDS.filter((c) => c.tool && !c.readOnly).map((c) => c.tool).sort().join() === 'create_dashboard,create_visual,publish_dashboard,unpublish_dashboard');
+  ok('read-only everywhere except the two creators, publish / unpublish and import_model (among tools)',
+    reg.COMMANDS.filter((c) => c.tool && !c.readOnly).map((c) => c.tool).sort().join() === 'create_dashboard,create_visual,import_model,publish_dashboard,unpublish_dashboard');
   ok('no connection tool is exposed', !tools.some((t) => /conn|secret|config|key/.test(t)));
   let shaped = true;
   for (const c of reg.COMMANDS) {

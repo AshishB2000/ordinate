@@ -41,8 +41,8 @@ export type ApplyReply =
   | { ok: false; code: 'plan_changed'; error: string };
 
 export interface ApplyIo {
-  /** Offers the project's model as it is now (a download token), before the first write. */
-  before: () => Promise<string>;
+  /** Offers the project's model as it is now (a download token), before the first write. Absent: no download (MCP: git is the undo). */
+  before?: () => Promise<string>;
   /** A test seam: runs before each object's write. */
   onBeforeWrite?: (key: string) => Promise<unknown>;
 }
@@ -150,7 +150,7 @@ export async function applyImport(projectId: string, file: ParsedModel, planHash
   if (plan.hash !== planHash) return { ok: false, code: 'plan_changed', error: modelPlanChanged() };
   const todo = plan.items.filter((i) => LANDS.has(i.status) || (i.status === 'conflict' && choices[i.key] === 'file'));
   if (!todo.length) return { ok: true, written: [], failed: [] };
-  const downloadToken = await io.before();
+  const downloadToken = await io.before?.();
   const out: Out = { written: [], failed: [] };
   const of = (kind: PlanItem['kind']): PlanItem[] => todo.filter((i) => i.kind === kind);
   const formOf = (item: PlanItem): Mapped => forms.get(item.key) as Mapped;
@@ -228,5 +228,5 @@ export async function applyImport(projectId: string, file: ParsedModel, planHash
     });
   }
 
-  return { ok: true, ...out, before: { downloadToken } };
+  return { ok: true, ...out, ...(downloadToken ? { before: { downloadToken } } : {}) };
 }

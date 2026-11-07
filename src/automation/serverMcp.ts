@@ -79,7 +79,7 @@ export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null, 
               canRead,
               allow: async (c, id) => {
                 projectId = id;
-                const check: ProjectScoped = { access: c.readOnly ? 'read' : 'write', input: z.unknown(), project: () => id };
+                const check: ProjectScoped = { access: c.readOnly && c.needs !== 'editor' ? 'read' : 'write', input: z.unknown(), project: () => id };
                 const decision = await authorize(check, null, who, db);
                 if (!decision.ok) outcome = 'denied';
                 else if (typeof decision.rank === 'number') seedRank(id, decision.rank); // row access rules ask the same rank
@@ -91,7 +91,7 @@ export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null, 
               outcome = 'ok';
               return out;
             } finally {
-              if (!cmd.readOnly) {
+              if (!cmd.readOnly || cmd.needs === 'editor') {
                 await audit(db, {
                   org: who.org.id, actor: who.user.email, action: 'rpc', channel: `mcp:${cmd.tool}`,
                   projectId, outcome, requestId: who.requestId,

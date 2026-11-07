@@ -131,6 +131,16 @@ async function main(): Promise<void> {
     /`list_topics`, then `list_datasets` with `topic`/.test(answer) && /`query_sql` still reads every dataset/.test(answer)
     && (await call('list_topics', {}))[0].name === 'Sales' && (await call('list_datasets', { topic: 'Sales' })).length === 1, { skill: answer.length });
   ok('answer-data-questions: …and the SQL above still answers whatever the topic lists', (await call('query_sql', { sql })).rows.length > 0);
+  // ── keep-model-in-git ──
+  const keep = skill('keep-model-in-git');
+  const exported = (await call('export_model', {})) as { format: string; files: Record<string, string> };
+  ok('keep-model-in-git: export_model on the sample project returns model files', exported.format === 'ordinate-model' && 'model.json' in exported.files, Object.keys(exported.files));
+  const dry = await call('import_model', { files: exported.files });
+  ok('keep-model-in-git: a dry run of the exported files changes nothing', dry.plan.items.every((i: { status: string }) => i.status === 'unchanged'), dry.plan.items.map((i: { status: string }) => i.status));
+  const applyCall = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(keep)![1]!);
+  ok('keep-model-in-git: its apply example is accepted by the registry\'s argument check', reg.validateArgs(reg.findTool('import_model')!, applyCall, 'stdio').apply === true);
+  ok('negative control: an argument the skill does not teach is refused', (() => { try { reg.validateArgs(reg.findTool('import_model')!, { ...applyCall, hash: 'x' }, 'stdio'); return false; } catch { return true; } })());
+  ok('keep-model-in-git: it names both tools and they exist', ['export_model', 'import_model'].every((t) => keep.includes('`' + t + '`') && reg.findTool(t)));
 }
 
 main()
