@@ -139,7 +139,7 @@ async function runCheck(projectId: string, run: CheckRun, questions: VerifiedQue
     run.state = 'done';
   } catch (err) {
     run.state = err instanceof jobs.JobCancelled || jc.signal.aborted ? 'stopped' : 'error';
-    if (run.state === 'error') run.error = text(err instanceof Error ? err.message : String(err)) || 'Something went wrong.';
+    if (run.state === 'error') run.error = text(err instanceof Error ? err.message : String(err)) || msg.checkFailed();
     run.finishedAt = new Date().toISOString();
     await writeMine(projectId, run).catch(() => false);
     throw err;
