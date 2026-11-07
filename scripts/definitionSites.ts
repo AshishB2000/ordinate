@@ -27,7 +27,8 @@ export type DefinitionSiteHow = 'keeps' | 'refuses' | 'words' | 'answers';
 export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: DefinitionSiteHow }>> = {
   // answers
   'src/analysis/metricMeasures.ts': { count: 26, how: 'answers' }, // + a period measure charts alone, on its base (p5-06); a semantic dataset's measures go to its door first (./semanticMeasures); a mirror leaf reads every field of its dataset for the Share policy (D17a)
-  'src/ipc/metrics.ts': { count: 10, how: 'answers' }, // + a period metric resolves its base (p5-05); a mirror resolves through ./semanticFigures layerFigure
+  'src/ipc/metrics.ts': { count: 9, how: 'answers' }, // + a period metric resolves its base (p5-05); a mirror resolves through ./semanticFigures layerFigure
+  'src/ipc/targetResolve.ts': { count: 2, how: 'keeps' }, // a period metric's target is framed over its window, judged on its base (p5-09 review fix); an external one is not a period, so its target is framed as before
   'src/analysis/semanticMeasures.ts': { count: 2, how: 'answers' }, // a formula measure on a semantic dataset: formulaOverLayer, or columnOnLayer
   'src/ipc/semanticFigures.ts': { count: 3, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only; a story's metric block asks the KPI door, or says why (b3)
   // refuses

@@ -43,6 +43,8 @@ const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visu
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
+const crypto: typeof import('crypto') = require('crypto');
 const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
 const relationships: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
@@ -304,6 +306,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('…a warehouse that does not answer skips that rule (its state untouched) and the others are still evaluated', show(before) === show(after)
     && (await H.as(ORG_A, () => alertStore.load(P))).rules.filter((r) => r.name === 'Copy sales').every((r) => (r.history || []).length >= 2), show(warned.lines).slice(0, 200));
   fake.hook = null;
+  // A Live rule by period has no rows to list its periods from (D6, typed): it alone is skipped, never the project's evaluation.
+  const byPeriod = { id: '6c1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f', name: 'Live by period', datasetId: L, enabled: true, metric: { column: 'amt', aggregation: 'sum' }, compare: 'change', change: { pct: 1, direction: 'either', vs: 'previous_period', periodColumn: 'd' } };
+  await H.as(ORG_A, () => alertStore.restoreRule(P, byPeriod));
+  const copies = async () => ((await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.name === 'Copy sales')?.history ?? []).length;
+  const [had, ran] = [await copies(), await H.as(ORG_A, () => alertStore.evaluateProject(P)).then(() => 'ran', (e: unknown) => String(e))];
+  const stuck = (await H.as(ORG_A, () => alertStore.load(P))).rules.find((r) => r.id === byPeriod.id);
+  ok('alerts: a Live rule by period is skipped, untouched, and the others are still evaluated', ran === 'ran' && (await copies()) === had + 1 && stuck?.lastEvaluatedAt === undefined, show([ran, had, stuck]));
+  // …so the save says so up front, from the record (never hydrated): one by period, or for anomalies, reads rows Live doesn't keep.
+  const saveRule = async (patch: Record<string, unknown>): Promise<Reply> => (await post('alerts:save', { projectId: P, rule: { ...byPeriod, id: crypto.randomUUID(), ...patch } })).value;
+  const [livePeriod, liveAnomaly] = [await saveRule({}), await saveRule({ compare: 'anomaly', change: undefined })];
+  ok('alerts:save refuses a Live rule by period, or for anomalies, and says why', [livePeriod, liveAnomaly].every((r) => r.ok === false && r.code === 'live_dataset' && r.error === alerts.liveRuleByRows()), show([livePeriod, liveAnomaly]));
+  ok('NEGATIVE CONTROL: the same rule on the copy saves, and a threshold on Live saves', (await saveRule({ datasetId: X })).ok === true && (await saveRule({ compare: 'threshold', change: undefined, threshold: { op: '>', value: 1 } })).ok === true);
 
   // Value labels on a Live card (PR 06): what a person reads says the label; the chart keeps the warehouse's value beside it,
   // and the model's facts keep the value (F5). Before THE SPY: labelling reads the record, never the rows.

@@ -421,13 +421,10 @@ export async function resolveMetricSeries(
   const base = Array.isArray(scope.filters) ? scope.filters : [];
   const out: MetricSeries = { labels: keys, values: [], display: [] };
   for (const key of keys) {
-    const ctx = newCtx(projectId, base.concat([
-      { type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep,
-    ]));
-    ctx.stack.add(metric.name.toLowerCase());
-    const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0, metric.name);
-    out.values.push(v);
-    out.display.push(displayOf(v, metric.format, ctx.fx, metrics.isSimpleDefinition(metric.definition)));
+    // The KPI's resolver, so a date control's (or a scorecard's) marked period reaches a part on another dataset (D9).
+    const r = await resolveMetric(projectId, metricId, { filters: base.concat([{ type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep]) });
+    out.values.push(r ? r.value : null);
+    out.display.push(r ? r.display : displayOf(null, metric.format, undefined, true));
   }
   return out;
 }
