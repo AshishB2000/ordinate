@@ -10,7 +10,7 @@
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
 //   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
 //      empty state); one written with Enter is stored by the server and still there after a reload, and a
-//      figure-like one is flagged.
+//      figure-like one is flagged. With no model, Check the Assistant is off and says why.
 //
 //   npm --prefix web run e2e -- model
 
@@ -255,6 +255,11 @@ e2e('data model: assistant', async (s) => {
   const SAMPLE = ['When someone says sales, they mean the revenue column.', 'Profit is already net of discount; never subtract the discount again.', 'Use order_date for any period.'];
   for (const text of SAMPLE) await section.getByRole('list', { name: 'Instructions' }).getByText(text, { exact: true }).waitFor();
   await page.getByRole('region', { name: 'Verified questions' }).getByText('Top 5 states by revenue', { exact: true }).waitFor();
+  // Check the Assistant (part 3 D13 (3)) asks the model: with none connected, the button is off and says why.
+  const check = page.getByRole('region', { name: 'Verified questions' }).getByRole('button', { name: 'Check the Assistant' });
+  await check.waitFor();
+  assert.equal(await check.isDisabled(), true);
+  assert.equal(await check.getAttribute('title'), 'Connect a model to check the Assistant.');
 
   await section.getByRole('button', { name: 'Instruction' }).click();
   await section.getByRole('textbox', { name: 'New instruction' }).fill('Revenue means the revenue column.');

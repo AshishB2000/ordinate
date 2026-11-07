@@ -279,6 +279,24 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('write: east gets 403 from verified:save and verified:delete',
       (await W.call('east', 'verified:save', { projectId: P, input: { question: 'Mine', spec: spec(orders) } })).status === 403
         && (await W.call('east', 'verified:delete', { projectId: P, id: westQ.body?.question?.id })).status === 403);
+    // Check the Assistant (part 3 D13 (3)): boss's run of the Orders question is refused with a reason quoting a West value the model wrote.
+    const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
+    const readyStub = (execConfig as any).executionReady;
+    (execConfig as any).executionReady = async () => true;
+    (analyzeMod as any).askCopilot = async () => ({ ok: true, text: 'x', suggestedAction: { kind: 'answer', intent: '', spec: { dataset: 'Plain', category: `${H.W_CANARY}_1`, measures: [{ column: 'sales', aggregation: 'sum' }] } } });
+    const started = await W.call('boss', 'verified:check', { projectId: P });
+    let cEd = await W.call('ed', 'verified:checkResult', { projectId: P });
+    for (let i = 0; i < 400 && cEd.body?.run?.state === 'running'; i++) cEd = await new Promise<void>((r) => setTimeout(r, 25)).then(() => W.call('ed', 'verified:checkResult', { projectId: P }));
+    const cEast = await W.call('east', 'verified:checkResult', { projectId: P });
+    eastReplies.push(cEast.text);
+    ok('redact: verified:checkResult — east reads outcomes, no reason', started.body?.ok === true && cEast.body?.run?.runId === started.body.runId && cEast.body.run.results.length > 0
+      && cEast.body.run.results.every((r: { outcome: string }) => r.outcome === 'refused' && !('reason' in r)) && !H.leaks(cEast.text), `${started.text.slice(0, 120)} | ${cEast.text.slice(0, 300)}`);
+    ok('NEGATIVE CONTROL: the editor reads the reason, West value and all', cEd.body?.run?.state === 'done' && cEd.body.run.results.some((r: { reason?: string }) => r.reason?.includes(`${H.W_CANARY}_1`)) && H.leaks(cEd.text), cEd.text.slice(0, 600));
+    const eastCheck = await W.call('east', 'verified:check', { projectId: P });
+    ok('write: east gets 403 from verified:check before it runs (the record is boss\'s run still)', eastCheck.status === 403
+      && (await W.call('ed', 'verified:checkResult', { projectId: P })).body?.run?.runId === started.body?.runId, eastCheck.text.slice(0, 120));
+    (analyzeMod as any).askCopilot = askStub;
+    (execConfig as any).executionReady = readyStub;
     await W.call('boss', 'verified:delete', { projectId: P, id: westQ.body?.question?.id }); // the sections below run with none
 
     // Value labels name STORED values, so a caller closed to a dataset reads no list from any reply that carries a column doc. boss labels

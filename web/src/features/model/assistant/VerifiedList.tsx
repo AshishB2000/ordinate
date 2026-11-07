@@ -15,11 +15,12 @@ import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { day, formatNumber } from '../../data/format';
 import { toastMovedToTrash } from '../../projects/trashToast';
-import { useVerified, type VerifiedRow } from './api';
+import { useCheckResult, useVerified, type CheckResult, type VerifiedRow } from './api';
+import { CheckAssistant, CheckOutcome } from './CheckAssistant';
 import { VerifiedDialog } from './VerifiedDialog';
 import a from './Assistant.module.css';
 
-function Row({ projectId, row, canEdit, onEdit }: { projectId: string; row: VerifiedRow; canEdit: boolean; onEdit: () => void }) {
+function Row({ projectId, row, canEdit, onEdit, result }: { projectId: string; row: VerifiedRow; canEdit: boolean; onEdit: () => void; result?: CheckResult }) {
   const client = useQueryClient();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,6 +50,7 @@ function Row({ projectId, row, canEdit, onEdit }: { projectId: string; row: Veri
         <p className={a.detail}>{what}</p>
         {!!row.phrasings.length && <p className={a.detail}>Also asked as {row.phrasings.map((p) => `“${p}”`).join(', ')}</p>}
         {row.note && <p className={a.note}>{row.note}</p>}
+        {result && <CheckOutcome result={result} />}
         {!row.runs && row.problem && (
           <p className={a.warn}>
             <Icon name="alert" size={12} />
@@ -80,6 +82,8 @@ function Row({ projectId, row, canEdit, onEdit }: { projectId: string; row: Veri
 
 export function VerifiedList({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const q = useVerified(projectId);
+  const check = useCheckResult(projectId); // each row's line from the last check; a question added since has none
+  const results = new Map((check.data?.results ?? []).map((r) => [r.id, r] as const));
   const [editing, setEditing] = useState<string | null>(null);
   const list = q.data?.questions ?? [];
   const broken = q.data?.broken ?? 0;
@@ -99,7 +103,7 @@ export function VerifiedList({ projectId, canEdit }: { projectId: string; canEdi
       <div className={a.card}>
         <ul className={a.vList} aria-label="Verified questions">
           {list.map((row) => (
-            <Row key={row.id} projectId={projectId} row={row} canEdit={canEdit} onEdit={() => setEditing(row.id)} />
+            <Row key={row.id} projectId={projectId} row={row} canEdit={canEdit} onEdit={() => setEditing(row.id)} result={results.get(row.id)} />
           ))}
         </ul>
         <p className={a.foot}>
@@ -127,6 +131,7 @@ export function VerifiedList({ projectId, canEdit }: { projectId: string; canEdi
           </div>
           <p className={a.sub}>Questions the team checked, with the answer the Assistant gives every time.</p>
         </div>
+        {canEdit && !!list.length && <CheckAssistant projectId={projectId} working={list.filter((r) => r.runs).length} />}
       </div>
       {body}
       {open?.spec && <VerifiedDialog projectId={projectId} row={{ ...open, spec: open.spec }} onClose={() => setEditing(null)} />}

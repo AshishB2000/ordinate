@@ -11,6 +11,7 @@
 //   a period metric over Payroll (through its base) and a funnel by ssn; a period over Headcount is not (CONTROL).
 // - verified:list (part 3) leaves out, for east, a verified question whose spec names a hidden column, with no value
 //   filter; People by dept stays (CONTROL); hr lists both (CONTROL).
+// - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnRedact.js
@@ -25,6 +26,10 @@ const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnect
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
 const metricsMod: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const recordKinds: typeof import('../src/app/recordKinds') = require('../src/app/recordKinds');
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
 
 const EXAMPLE = 'EXAMPLE_PAY_52000';
 
@@ -155,6 +160,20 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     ok('verified:list: a question over salary (no value filter) reaches no east; People by dept does', vEast.body?.ok === true && !vEast.text.includes('VERIFIED_PAY_CANARY') && !/salary/i.test(vEast.text)
       && vEast.body.questions.some((q: { question: string }) => q.question === 'People by dept'), vEast.text.slice(0, 300));
     ok('NEGATIVE CONTROL: hr lists both', ((t) => t.includes('VERIFIED_PAY_CANARY') && t.includes('People by dept'))((await W.call('hr', 'verified:list', { projectId: P })).text));
+    // ── verified:checkResult (p3-10): the outcomes for everyone; a reason (it can quote the model) for no one Staff hides a column from ──
+    const PEOPLE_ID: string = vEast.body.questions.find((q: { question: string }) => q.question === 'People by dept')?.id ?? '';
+    const now = new Date().toISOString();
+    const run = { runId: '7f1c2d3e-4b5a-4c6d-8e7f-901a2b3c4d5e', state: 'done', startedBy: 'boss@acme.test', startedAt: now, heartbeatAt: now, finishedAt: now,
+      total: 1, asked: 1, matched: 0, skipped: 0, results: [{ id: PEOPLE_ID, outcome: 'refused', reason: `"${C.SSN_CANARY}_4" is not a column of Staff.` }] };
+    await W.as('boss', async () => {
+      const file = path.join(recordKinds.projectDir(P), 'assistant-check.json');
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      await recordFs.writeFile(file, JSON.stringify(run), 'utf8');
+    });
+    const crEast = await W.call('east', 'verified:checkResult', { projectId: P });
+    ok('verified:checkResult: east reads the outcome of a Staff question, without its reason', crEast.body?.run?.results?.[0]?.outcome === 'refused' && !('reason' in crEast.body.run.results[0])
+      && !crEast.text.includes(C.SSN_CANARY), crEast.text.slice(0, 300));
+    ok('NEGATIVE CONTROL: hr reads the reason', (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true);
 
     // ── quality:list and dataset:liveSchema: the whole dataset (closedToCaller) ──
     must('quality', await W.call('boss', 'quality:save', { projectId: P, datasetId: staff, rule: { kind: 'in_set', column: 'ssn', args: { values: [`${C.SSN_CANARY}_0`] }, severity: 'warn' } }));

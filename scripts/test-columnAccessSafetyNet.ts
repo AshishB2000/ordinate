@@ -19,9 +19,13 @@
 // Every GATE channel refuses east a question that names ssn, and answers one that does not Object.is-equal to
 // the editor's (NEGATIVE CONTROL: the editor is answered the first).
 //
+// CHECK THE ASSISTANT (p3-10): a question east's list leaves out (it names salary) is no row of east's last check and
+// no count of it (asked, matched, total, skipped); hr reads every row and the stored counts (NEGATIVE CONTROL).
+//
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessSafetyNet.js
 
 export {}; // module scope — sibling test scripts share top-level names
+import { randomUUID } from 'crypto';
 import { ok, finish } from './selfcheck';
 import * as C from './columnAccessHarness';
 import * as H from './rowPolicyHarness';
@@ -36,6 +40,10 @@ const api: typeof import('../src/api/index') = require('../src/api/index');
 const sse: typeof import('../src/server/sse') = require('../src/server/sse');
 const pipeStore: typeof import('../src/app/pipelineStore') = require('../src/app/pipelineStore');
 const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const recordKinds: typeof import('../src/app/recordKinds') = require('../src/app/recordKinds');
+const fs: typeof import('fs') = require('fs');
+const path: typeof import('path') = require('path');
 import { COLUMN_TREATMENT } from './columnAccessReaders';
 
 const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
@@ -368,6 +376,31 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
       const d = H.diff(pick(mine.body), pick(theirs.body), {});
       ok(`gate: ${ch} answers east the question on dept, Object.is-equal to the editor's`, mine.status === 200 && !noFigure(mine, ch) && d === '', `${d} | ${show(mine)}`);
     }
+
+    // ── Check the Assistant (p3-10): east's last check has no row and no count of a question east's list leaves out ──
+    const verify = async (question: string, measures: object[]): Promise<string> => String(must(question, await W.call('boss', 'verified:save', { projectId: P,
+      input: { question, spec: { datasetId: staff, category: 'dept', measures, filters: [], chartType: 'column', title: question } } })).body?.question?.id);
+    const [PAY, HEAD, AVG] = [String(payQ.body?.question?.id), await verify('Head by dept', [COUNT]), await verify('Average pay by dept', [{ column: 'salary', aggregation: 'avg' }])];
+    const plantRun = (run: object): Promise<void> => W.as('boss', async () => {
+      const file = path.join(recordKinds.projectDir(P), 'assistant-check.json');
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      await recordFs.writeFile(file, JSON.stringify(run), 'utf8');
+    });
+    const now = new Date().toISOString();
+    const counts = (r: H.Reply) => { const x = r.body?.run; return x ? JSON.stringify([x.total, x.asked, x.matched, x.skipped, x.results.map((y: { id: string }) => y.id)]) : r.text.slice(0, 200); };
+    // Done: Pay matched, Head differs. Running: Head asked and matched, Pay not asked yet, Average pay past the cap.
+    await plantRun({ runId: randomUUID(), state: 'done', startedBy: 'boss@acme.test', startedAt: now, heartbeatAt: now, finishedAt: now, total: 2, asked: 2, matched: 1, skipped: 0,
+      results: [{ id: PAY, outcome: 'match' }, { id: HEAD, outcome: 'differs' }], ids: [PAY, HEAD] });
+    ok('check: east\'s done check has no row and no count of Pay by dept', counts(await W.call('east', 'verified:checkResult', { projectId: P })) === JSON.stringify([1, 1, 0, 0, [HEAD]]),
+      counts(await W.call('east', 'verified:checkResult', { projectId: P })));
+    ok('NEGATIVE CONTROL: hr reads both rows and the stored counts', counts(await W.call('hr', 'verified:checkResult', { projectId: P })) === JSON.stringify([2, 2, 1, 0, [PAY, HEAD]]),
+      counts(await W.call('hr', 'verified:checkResult', { projectId: P })));
+    await plantRun({ runId: randomUUID(), state: 'running', startedBy: 'boss@acme.test', startedAt: now, heartbeatAt: now, total: 2, asked: 1, matched: 1, skipped: 1,
+      results: [{ id: HEAD, outcome: 'match' }], ids: [HEAD, PAY, AVG] });
+    const eastRunning = await W.call('east', 'verified:checkResult', { projectId: P });
+    ok('check: east\'s running check counts neither the hidden question still to ask nor the hidden one past the cap', counts(eastRunning) === JSON.stringify([1, 1, 1, 0, [HEAD]])
+      && !('ids' in (eastRunning.body?.run ?? {})), counts(eastRunning));
+    ok('NEGATIVE CONTROL: hr reads the running check as stored, without its ids', ((r) => counts(r) === JSON.stringify([2, 1, 1, 1, [HEAD]]) && !('ids' in r.body.run))(await W.call('hr', 'verified:checkResult', { projectId: P })));
   } finally {
     await W.close();
   }
