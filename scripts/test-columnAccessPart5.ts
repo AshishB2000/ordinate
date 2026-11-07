@@ -10,6 +10,8 @@
 // SNAPSHOT PER (p5-07): a count of dept on each employee's latest day gives east no figure (KPI, tile, chart) when
 // the entity is ssn or the snapshot's date is a hidden one, and is listed hidden; NEGATIVE CONTROLS: the editor's
 // figures, and the same count per employee_id answering east Object.is-equal to the editor.
+// FUNNEL (p5-08): Ops → Eng entries by ssn, or timed by a hidden date, give east no figure (KPI, tile, chart) and are
+// listed hidden; NEGATIVE CONTROLS: the editor's figures, and by employee_id on `day` east's Object.is-equal to the editor's.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-columnAccessPart5.js
 
@@ -106,6 +108,25 @@ void (async () => {
     ok('NEGATIVE CONTROL: …and so does its chart', dIdChart === '', dIdChart);
     const eastSnapList = await listed('east');
     ok('snapshot: east\'s metric list marks the ssn and hidden-date ones hidden, not the employee_id one', eastSnapList[PER_SSN] && eastSnapList[PER_HIRED] && !eastSnapList[PER_ID], JSON.stringify(eastSnapList));
+
+    // ── Funnel (p5-08) ───────────────────────────────────────────────────────
+    const funnelOf = (entity: string, time = 'day') => ({ funnel: { entity, event: 'dept', time, steps: ['Ops', 'Eng'], window: { n: 365, unit: 'days' } }, show: 'entered' });
+    const [F_SSN, F_HIRED, F_ID] = [await save('Ops to Eng by ssn', funnelOf('ssn')), await save('Ops to Eng by hire date', funnelOf('employee_id', 'hired')), await save('Ops to Eng', funnelOf('employee_id'))];
+    const fTile = (who: string, id: string) => W.call(who, 'analysis:tiles', { projectId: P, items: [{ kind: 'metric', datasetId: log, column: '', aggregation: 'sum', metricId: id }] });
+    const fChart = (who: string, id: string, entity: string) => W.call(who, 'visual:data', { projectId: P, datasetId: log, encoding: { category: 'dept', values: [{ column: entity, aggregation: 'countd', metricId: id }] } });
+    for (const [label, id, entity] of [['by ssn', F_SSN, 'ssn'], ['on a hidden date', F_HIRED, 'employee_id']] as const) {
+      const [kpi, tl, ch] = [await values('east', id), await fTile('east', id), await fChart('east', id, entity)];
+      ok(`funnel ${label}: east gets no figure, typed (metric:values, analysis:tiles, visual:data)`, valueOf(kpi) === 'refused' && C.refusedAs({ ...tl, body: tl.body?.[0] }, 'hidden') && pointsOf(ch) === 'refused'
+        && ![kpi, tl, ch].some((r) => C.leaksHidden(r.text)), `${show(kpi)} | ${show(tl)} | ${show(ch)}`);
+      const [edKpi, edChart] = [await values('ed', id), await fChart('ed', id, entity)];
+      ok(`NEGATIVE CONTROL: funnel ${label}: the editor gets each figure`, typeof valueOf(edKpi) === 'number' && Array.isArray(pointsOf(edChart)), `${show(edKpi)} | ${show(edChart)}`);
+    }
+    const [fEast, fEd] = [await values('east', F_ID), await values('ed', F_ID)];
+    ok('NEGATIVE CONTROL: funnel by employee_id on day answers east, Object.is-equal to the editor\'s', typeof valueOf(fEast) === 'number' && Object.is(valueOf(fEast), valueOf(fEd)), `${show(fEast)} | ${show(fEd)}`);
+    const dF = H.diff(pointsOf(await fChart('east', F_ID, 'employee_id')), pointsOf(await fChart('ed', F_ID, 'employee_id')), {});
+    ok('NEGATIVE CONTROL: …and so does its chart by dept', dF === '', dF);
+    const eastFunnels = await listed('east');
+    ok('funnel: east\'s metric list marks the ssn and hidden-date ones hidden, not the employee_id one', eastFunnels[F_SSN] && eastFunnels[F_HIRED] && !eastFunnels[F_ID], JSON.stringify(eastFunnels));
   } finally {
     await W.close();
   }

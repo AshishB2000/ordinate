@@ -3,7 +3,7 @@
 // (`metric:table`), absent from an older pod and null when unknown, and both of those read "—".
 
 import { Badge } from '../../../ui/Badge';
-import { isPeriod, type MetricSummary } from '../../analyses/metrics/api';
+import { isFunnel, isPeriod, type MetricSummary } from '../../analyses/metrics/api';
 import s from '../Model.module.css';
 
 export interface Additivity {
@@ -16,6 +16,7 @@ export function CountsBy({ m, list = [] }: { m: MetricSummary; list?: MetricSumm
   const def = m.definition as MetricSummary['definition'] | undefined; // a summary without one draws no snapshot, never a crash
   const snap = def && 'column' in def ? def.snapshot : null;
   const base = def && isPeriod(def) ? list.find((b) => b.id === def.base) : undefined;
+  if (def && isFunnel(def)) return <code className={s.formula}>{def.funnel.time}</code>; // part 5, D5: by its entries' time
   if (def && isPeriod(def)) {
     return base?.timeColumn ? (
       <span className={s.countsBy}>
@@ -39,12 +40,14 @@ export function CountsBy({ m, list = [] }: { m: MetricSummary; list?: MetricSumm
   );
 }
 
-/** `period`: a period metric (part 5), which adds across categories for a different reason than a snapshot. */
-export function AddsUp({ a, period = false }: { a: Additivity | null | undefined; period?: boolean }) {
+/** `period` / `funnel`: a period or funnel metric (part 5), which adds across categories for a different reason than a snapshot. */
+export function AddsUp({ a, period = false, funnel = false }: { a: Additivity | null | undefined; period?: boolean; funnel?: boolean }) {
   if (!a) return <span className={s.muted}>—</span>;
   if (a.categories && a.time) return <Badge tone="ok">Yes</Badge>;
   const [word, why] = a.categories
-    ? ['Not over time', period ? 'A running window: it adds up across categories, not across dates, since two of its windows overlap.' : 'A snapshot: it adds up across categories, not across dates.']
+    ? ['Not over time', period ? 'A running window: it adds up across categories, not across dates, since two of its windows overlap.'
+      : funnel ? 'One entry per entity: it adds up across categories, not across dates, since an entity can enter in two of them.'
+      : 'A snapshot: it adds up across categories, not across dates.']
     : ['No', "It can't be added up, so a total of it would be wrong."];
   return (
     <span title={why}>

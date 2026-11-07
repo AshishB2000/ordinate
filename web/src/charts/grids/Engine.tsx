@@ -205,13 +205,19 @@ function CohortCurve({ data, g }: { data: EngineData; g: CohortGridShape }) {
 
 // ── The event funnel ─────────────────────────────────────────────────────────
 
-export function FunnelView({ data, exportData, fill }: EngineProps & { data: EngineData & { eventFunnel: EventFunnelShape } }) {
+/** `onSaveMetric`: the builder's Save as metric (part 5, D7): its host makes the metric from the encoding. Absent → no button (a dashboard tile, Explore). */
+export function FunnelView({ data, exportData, fill, onSaveMetric }: EngineProps & { data: EngineData & { eventFunnel: EventFunnelShape }; onSaveMetric?: () => void }) {
   const f = data.eventFunnel;
   const bd = f.breakdown;
   const bdId = useId();
   return (
     <div className={[s.wrap, fill && s.fill].filter(Boolean).join(' ')}>
       <Head meta={t('cohortRender.entered_strict_order_within_of_the', { p0: fmtVal(f.counts[0] || 0), window: engWindow(f.window) })}>
+        {onSaveMetric && (
+          <Button size="sm" icon="target" onClick={onSaveMetric}>
+            Save as metric
+          </Button>
+        )}
         {exportData && <ExportButton type="event_funnel" exportData={exportData} />}
       </Head>
       {f.excluded > 0 && (

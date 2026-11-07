@@ -1,8 +1,8 @@
 // A funnel metric (semantic layer part 5, D5): "Visit → buy", the share of entities that reached a funnel's last step.
-// This file is PURE — the type and its whitelist; ./metrics imports from here, never the other way round. A release
-// that cannot compute one keeps it verbatim and shows no figure (./pendingKinds).
+// This file is PURE — the type, its whitelist and its words; ./metrics imports from here, never the other way round.
+// Its figure is the funnel grid's, through the chart door (ipc/funnelMetric, step 08).
 
-import { FUNNEL_MIN_STEPS, sanitizeEventFunnel } from './funnelEvents';
+import { FUNNEL_MIN_STEPS, sanitizeEventFunnel, windowText } from './funnelEvents';
 import type { FunnelEncoding } from './funnelEvents';
 
 /** What the metric's figure is: converted ÷ entered, the converted count, or the entered count. */
@@ -24,4 +24,11 @@ export function sanitizeFunnelDefinition(raw: unknown): MetricFunnelDefinition |
   if (!enc || enc.steps.length < FUNNEL_MIN_STEPS) return undefined;
   const { entity, event, time, steps, window } = enc;
   return { funnel: { entity, event, time, steps, window }, show: o.show as FunnelShow };
+}
+
+const SHOW_WORDS: Record<FunnelShow, string> = { rate: 'conversion rate', converted: 'converted', entered: 'entered' };
+
+/** "visit → cart → buy within 7 days, conversion rate" (metricFormat.describeDefinitionShort). */
+export function funnelWords(def: MetricFunnelDefinition): string {
+  return `${def.funnel.steps.join(' → ')} within ${windowText(def.funnel.window)}, ${SHOW_WORDS[def.show]}`;
 }

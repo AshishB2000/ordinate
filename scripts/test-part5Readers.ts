@@ -152,11 +152,12 @@ void (async () => {
     if (x === periodM) ok(`${x.name}: its KPI says its base is gone`, (await ipcMetrics.resolveMetric(P, x.id))!.notes?.[0] === checkMsg.periodBaseMissing());
     // Step 06 charts a period metric: this one's base is gone, so its chart says so, and a formula over it is not charted yet.
     const c = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: x.id }]);
-    ok(`${x.name}: a chart says why`, c.ok === false && c.error === (x === periodM ? checkMsg.periodBaseMissing() : msg.metricKindPending(x.name)), JSON.stringify(c).slice(0, 300));
+    // Step 08 charts a funnel metric: this one's event column holds customer ids, so nobody entered and every bucket has no figure.
+    ok(`${x.name}: a chart says why, or draws no figure`, x === periodM ? c.ok === false && c.error === checkMsg.periodBaseMissing() : c.ok === true && c.data.series[0].values.every((v: unknown) => v === null), JSON.stringify(c).slice(0, 300));
     const f = (await metrics.saveMetric(P, { name: `Twice ${x.name}`, datasetId: D, definition: { formula: `[${x.name}] * 2` } }))!;
     ok(`${x.name}: a formula over it has no KPI figure`, (await ipcMetrics.resolveMetric(P, f.id))!.value === null);
     const cf = await chartOf([{ column: 'amount', aggregation: 'sum', metricId: f.id }]);
-    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && cf.error === (x === periodM ? checkMsg.periodInChartFormula(x.name) : msg.metricKindPending(x.name)), JSON.stringify(cf).slice(0, 300));
+    ok(`${x.name}: a chart of a formula over it says why`, cf.ok === false && cf.error === checkMsg.periodInChartFormula(x.name), JSON.stringify(cf).slice(0, 300)); // planned on tiles only (steps 06, 08)
   }
   // A count distinct is computed from step 02 (scripts/test-countDistinct.ts holds it to the reference): 7 customers, each in both months.
   ok('Customers (countd): its KPI is the distinct count, never a sum', (await ipcMetrics.resolveMetric(P, customers.id))!.value === 7, JSON.stringify(await ipcMetrics.resolveMetric(P, customers.id)));
@@ -191,7 +192,7 @@ void (async () => {
   const kindCards = (await analysis.getAnalysis(P, board.id))!.sheets[0].cards.filter((c) => c.type === 'metric');
   ok('dashboard: a KPI card of a funnel metric (no column, a metricId, sum) survives', kindCards.length === 1 && kindCards[0].metric!.metricId === funnelM.id && kindCards[0].metric!.column === '', JSON.stringify(kindCards));
   ok('NEGATIVE CONTROL: the same card with an aggregation no store knows is dropped, as today', dashboardModel.sanitizeCards([{ ...kindCard, metric: { ...kindCard.metric, aggregation: 'median' } }]).length === 0 && dashboardModel.sanitizeCards([kindCard]).length === 1);
-  ok('the words say it is newer', metricFormat.describeDefinition(funnelM) === 'a newer kind of metric');
+  ok('a funnel metric has its words (step 08)', metricFormat.describeDefinition(funnelM) === 'visit → buy within 7 days, conversion rate', metricFormat.describeDefinition(funnelM));
   ok('a period metric has its words (step 05)', metricFormat.describeDefinition(periodM) === 'its base metric, year to date, % change on last year', metricFormat.describeDefinition(periodM));
   const dated = (await metrics.saveMetric(P, { name: 'Dated revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, timeColumn: 'day' }))!;
   const datedYtd = (await metrics.saveMetric(P, { name: 'Dated 30 years', datasetId: D, definition: { base: dated.id, window: { last: 366, unit: 'month' } } }))!; // thirty years to last month: the rows' days on any clock from March 2026 to 2056
@@ -232,12 +233,12 @@ void (async () => {
   const countdRule = R({ metric: { column: 'customer_id', aggregation: 'countd' } }); // evaluated from step 02
   const rules = [
     R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 90 }, metric: { column: '', aggregation: 'sum', metricId: periodM.id } }),
-    R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }),
   ];
+  const funnelRule = R({ metric: { column: 'amount', aggregation: 'sum', metricId: funnelM.id }, armed: true, history: [1, 2] }); // evaluated by its metric from step 08
   const perRule = R({ metric: { column: 'amount', aggregation: 'sum', metricId: perM.id } }); // evaluated from step 07
   const plainRule = R({});
   const tag = (r: { metric: object; compare: string }): string => `${(r.metric as { aggregation: string }).aggregation}/${r.compare}/${(r.metric as { metricId?: string }).metricId ? 'a metric' : 'no metric'}`;
-  for (const r of [...rules, plainRule, countdRule, perRule]) await alertStore.restoreRule(P, r);
+  for (const r of [...rules, plainRule, countdRule, perRule, funnelRule]) await alertStore.restoreRule(P, r);
   const before = (await alertStore.load(P)).rules;
   for (const r of rules) ok(`kept on load: ${tag(r)}`, before.some((x) => x.id === r.id));
   ok('the target rule keeps its targetPct and its empty column', isDeepStrictEqual((before.find((x) => x.id === rules[0].id) as { targetPct?: unknown } | undefined)?.targetPct, { op: 'below', pct: 90 }) && before.find((x) => x.id === rules[0].id)?.metric.column === '');
@@ -249,6 +250,8 @@ void (async () => {
   }
   ok('NEGATIVE CONTROL: the plain rule was evaluated', typeof after.find((x) => x.id === plainRule.id)?.lastEvaluatedAt === 'string');
   ok('a rule on a per-entity snapshot metric is evaluated (step 07)', typeof after.find((x) => x.id === perRule.id)?.lastEvaluatedAt === 'string');
+  const fr = after.find((x) => x.id === funnelRule.id);
+  ok('a rule on a funnel metric is evaluated by its metric (step 08), never as sum(amount): nobody entered, so it never fires', typeof fr?.lastEvaluatedAt === 'string' && fr?.lastFiredAt === undefined, JSON.stringify(fr));
   ok('a countd rule is evaluated, and keeps its aggregation', typeof after.find((x) => x.id === countdRule.id)?.lastEvaluatedAt === 'string' && after.find((x) => x.id === countdRule.id)?.metric.aggregation === 'countd');
   ok('NEGATIVE CONTROL: a target rule with no targetPct is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined })) === null);
   ok('NEGATIVE CONTROL: a target rule over 1000% is not a rule', alerts.sanitizeRule(R({ compare: 'target', threshold: undefined, targetPct: { op: 'below', pct: 1001 } })) === null);
@@ -259,6 +262,8 @@ void (async () => {
     ok(`the Test button says why: ${tag(r)}`, tested.ok && !tested.fire && tested.message === msg.alertPending() && tested.value === null, JSON.stringify(tested));
   }
   ok('NEGATIVE CONTROL: the Test button evaluates the plain rule', (await alertStore.testRule(P, plainRule)).fire === true);
+  const testedF = await alertStore.testRule(P, funnelRule);
+  ok('the Test button evaluates a funnel rule by its metric: no figure (nobody entered), never sum(amount)', testedF.ok && !testedF.fire && testedF.value === null && testedF.message !== msg.alertPending(), JSON.stringify(testedF));
   const testedPer = await alertStore.testRule(P, perRule);
   ok('the Test button evaluates a per-entity snapshot rule: its KPI', Object.is(testedPer.value, PER_FIGURE), JSON.stringify(testedPer));
   const testedC = await alertStore.testRule(P, countdRule);

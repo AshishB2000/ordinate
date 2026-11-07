@@ -20,13 +20,15 @@ const isDate = (meta: Columns, column: string): boolean => !!meta && meta.column
 
 /**
  * The date column a metric counts by, or `''` when it has none or the column is no longer a date column of its dataset.
- * A period metric (part 5, D8) counts by its base's: a base on its own dataset that is not itself a period metric.
+ * A period metric (part 5, D8) counts by its base's: a base on its own dataset that is not itself a period metric. A funnel
+ * metric counts by `funnel.time` when it is a date column.
  */
 export async function metricDate(projectId: string, m: Pick<Metric, 'datasetId' | 'timeColumn'> & { definition?: MetricDefinition }): Promise<string> {
   if (m.definition && metrics.isPeriodDefinition(m.definition)) {
     const base = await metrics.getMetric(projectId, m.definition.base);
     return base && base.datasetId === m.datasetId && !metrics.isPeriodDefinition(base.definition) ? metricDate(projectId, base) : '';
   }
+  if (m.definition && metrics.isFunnelDefinition(m.definition)) return isDate(await datasets.getDatasetMeta(projectId, m.datasetId), m.definition.funnel.time) ? m.definition.funnel.time : ''; // part 5, D5: by its entries' time
   return m.timeColumn && isDate(await datasets.getDatasetMeta(projectId, m.datasetId), m.timeColumn) ? m.timeColumn : '';
 }
 

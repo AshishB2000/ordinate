@@ -25,6 +25,7 @@ import type { ParsedColumn } from '../src/data/parse';
 import type { Cell, FilterStep } from '../src/data/transforms';
 import type { EventFunnel, FunnelEncoding } from '../src/analysis/funnelEvents';
 import { ok, finish } from './selfcheck';
+import { eq, G_BUYERS, MARCH_TS, SHOP_COLS, SHOP_FUNNEL, shopRows } from './funnelShop';
 
 const COLS: ParsedColumn[] = [
   { name: 'user', type: 'text' }, { name: 'event', type: 'text' },
@@ -196,6 +197,49 @@ async function testDifferential(): Promise<void> {
        enc()) === null);
 }
 
+// ── 5. Entry filters (part 5, D6): the scope picks who enters, the filters pick which events count ──
+
+async function testEntry(): Promise<void> {
+  const shop = fixture(SHOP_COLS, shopRows());
+  ok('SHOP has at least 1,200 rows', shop.rows.length >= 1200, String(shop.rows.length));
+  const base = (over: Partial<FunnelEncoding> = {}): FunnelEncoding => ({ ...SHOP_FUNNEL, steps: SHOP_FUNNEL.steps.slice(), window: { ...SHOP_FUNNEL.window }, ...over });
+  const E = (country: string, over: Partial<FunnelEncoding> = {}): FunnelEncoding => ({ ...base(over), entry: [eq('country', country)] });
+  const go = (e: FunnelEncoding, f?: FilterStep[]): EventFunnel => fe.buildEventFunnel(shop.columns, shop.rows, e, f).funnel;
+  ok('no entry filters: the grid, byte for byte', JSON.stringify(go(base())) === JSON.stringify(go({ ...base(), entry: [] })));
+  const cases: [string, FunnelEncoding, FilterStep[]][] = [
+    ['Germany entries', E('Germany'), []],
+    ['March entries', { ...base(), entry: [MARCH_TS] }, []],
+    ['Germany, own filter channel=web', E('Germany'), [eq('channel', 'web')]],
+    ['Germany, by country (the entry row\'s value)', E('Germany', { breakdown: 'country' }), []],
+    ['France, by country: a tie goes by row order', E('France', { breakdown: 'country' }), []],
+    ['two entry filters and a list', { ...base(), entry: [MARCH_TS, { type: 'filter', column: 'country', op: 'in', values: ['Spain', 'Italy'] }] }, [eq('channel', 'store')]],
+    ['nobody enters', E('Mars'), []],
+  ];
+  for (const [label, e, f] of cases) await diff(`entry: ${label}`, shop, e, f);
+  const g = go(E('Germany'));
+  ok('Germans who bought from France convert', g.counts[2] === G_BUYERS, `${g.counts[2]} vs ${G_BUYERS}`);
+  ok('NEGATIVE CONTROL: the same filter on every event loses them (D6)', go(base(), [eq('country', 'Germany')]).counts[2] < g.counts[2]);
+  const march = go({ ...base(), entry: [MARCH_TS] });
+  ok('March entries: a user who first visited in February enters at the March visit, and converts', march.counts[2] > go(base()).counts[2], JSON.stringify([march.counts, go(base()).counts]));
+  const t = go(E('France', { breakdown: 'country' })).breakdown?.groups.find((x) => x.label === 'France')?.counts[0];
+  ok('a France entry admits t1 at its French visit, though its first is German', !!t && t === go(E('France')).counts[0]);
+  ok('sanitizeEventFunnel never reads entry from a client', !('entry' in fe.sanitizeEventFunnel(E('Germany'))!));
+  const missing: FunnelEncoding = { ...base(), entry: [eq('nope', 'x')] };
+  const warned = fe.buildEventFunnel(shop.columns, shop.rows, missing).warnings;
+  ok('an entry filter on a missing column: the JS reference says it skipped it', warned.some((w) => /unknown column "nope"/.test(w)), JSON.stringify(warned));
+  // The resident gate (ipc/visualsEngines): a filter that can warn sends the funnel to the JS reference.
+  const ds: typeof import('../src/data/datasets') = require('../src/data/datasets');
+  const engines: typeof import('../src/ipc/visualsEngines') = require('../src/ipc/visualsEngines');
+  const real = ds.residentSource;
+  (ds as { residentSource: unknown }).residentSource = async () => shop.src;
+  try {
+    ok('an entry filter on a missing column declines the resident path, never skipped', (await engines.residentEngineData('p', 'd', { category: '', values: [], eventFunnel: missing }, [])) === null);
+    ok('NEGATIVE CONTROL: an entry filter on a real column is answered in place', (await engines.residentEngineData('p', 'd', { category: '', values: [], eventFunnel: E('Germany') }, [])) !== null);
+  } finally {
+    (ds as { residentSource: unknown }).residentSource = real;
+  }
+}
+
 async function testSample(): Promise<void> {
   const csv = path.join(__dirname, '..', 'assets', 'samples', 'retail-orders.csv');
   if (!fs.existsSync(csv)) { ok('sample: assets/samples/retail-orders.csv exists', false, csv); return; }
@@ -220,7 +264,7 @@ async function main(): Promise<void> {
   let bridge = false;
   try { bridge = duck.isAvailable(); } catch { bridge = false; }
   if (!bridge) console.log('ok   (skipped) the DuckDB bridge is unavailable — differential not run');
-  else { await testDifferential(); await testSample(); }
+  else { await testDifferential(); await testSample(); await testEntry(); }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
   finish();
 }

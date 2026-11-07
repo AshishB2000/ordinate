@@ -48,16 +48,16 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/externalMetric.ts': { count: 2, how: 'keeps' }, // the kind and its whitelist
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
   'src/analysis/metrics.ts': { count: 2, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13)
-  'src/analysis/pendingKinds.ts': { count: 8, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
+  'src/analysis/pendingKinds.ts': { count: 6, how: 'keeps' }, // part 5's one classifier: an external one is none of its kinds
   'src/analysis/statusPin.ts': { count: 3, how: 'keeps' }, // the pin hashes the definition whole; an external one reads no column
   'src/analysis/columnHidden.ts': { count: 2, how: 'keeps' }, // a formula's names, then the definition walked whole for hidden columns
-  'src/analysis/metricTimeScope.ts': { count: 7, how: 'keeps' }, // formulas, and a period's base's date: an external one counts by its own dataset
+  'src/analysis/metricTimeScope.ts': { count: 8, how: 'keeps' }, // formulas, a period's base's date, a funnel's time: an external one counts by its own dataset
   'src/analysis/metricUsage.ts': { count: 3, how: 'keeps' }, // formula references and a period's base only
   'src/ipc/metricCheck.ts': { count: 2, how: 'keeps' }, // formula references only
+  'src/ipc/funnelMetric.ts': { count: 1, how: 'keeps' }, // the funnel save check: an external one is no funnel
   'src/ipc/metricTree.ts': { count: 2, how: 'keeps' }, // the suggester's list: names and formulas
   'src/ipc/periods.ts': { count: 1, how: 'keeps' }, // formats a delta after resolveMetric (which refuses first)
   'web/src/features/calc/MeasureForm.tsx': { count: 1, how: 'keeps' }, // formulas only
-  'web/src/features/calc/api.ts': { count: 2, how: 'keeps' }, // the measure carries its metricId: the chart door refuses it
   // words
   'src/analysis/metricFormat.ts': { count: 4, how: 'words' }, // + a period metric's words (p5-05)
   'src/automation/handlers.ts': { count: 2, how: 'words' }, // list_metrics' snapshot flag; metric_value refuses through resolveMetric

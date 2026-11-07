@@ -48,6 +48,11 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/drillScope.ts': { count: 3, how: 'keeps' },
   'src/ipc/drivers.ts': { count: 3, how: 'keeps' },
   'src/ipc/driversPoint.ts': { count: 2, how: 'keeps' },
+  // a funnel metric chart's own filters, params bound (resolveFilterParams keeps a term), asked of the chart door, which expands it
+  'src/ipc/funnelChart.ts': { count: 1, how: 'keeps' },
+  // a funnel metric's own filters, params bound (resolveFilterParams keeps a term), asked of the chart door, which expands it;
+  // its scope's terms are expanded first (expandTerms throws typed), so the entry filters inside the encoding hold none
+  'src/ipc/funnelMetric.ts': { count: 1, how: 'keeps' },
   'src/ipc/insights.ts': { count: 1, how: 'keeps' },
   'src/ipc/metricTree.ts': { count: 2, how: 'keeps' },
   'src/ipc/metrics.ts': { count: 7, how: 'keeps' },
@@ -92,7 +97,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/datasetPage.ts': { count: 2, how: 'throws' },
   'src/engine/driversResident.ts': { count: 1, how: 'throws' },
   'src/engine/facetResident.ts': { count: 1, how: 'throws' },
-  'src/engine/funnelResident.ts': { count: 1, how: 'throws' },
+  // the funnel's filters and its entry filters (part 5 D6): both compiled by filterPredicates, which throws on a term
+  'src/engine/funnelResident.ts': { count: 2, how: 'throws' },
   'src/engine/fxResident.ts': { count: 2, how: 'throws' },
   'src/engine/geoResident.ts': { count: 1, how: 'throws' },
   'src/engine/joinResident.ts': { count: 3, how: 'throws' },

@@ -79,6 +79,16 @@ describe('The Data model: metrics', () => {
     expect(within(await rowOf('Stock')).getByText('Not over time').closest('[title]')?.getAttribute('title')).toBe('A snapshot: it adds up across categories, not across dates.');
   });
 
+  it('a funnel metric (step 08) counts by its funnel\'s time and says why it adds up across categories only', async () => {
+    const buyers = metric('m7', 'Buyers', { definition: { funnel: { entity: 'user', event: 'event', time: 'ts', steps: ['visit', 'buy'], window: { n: 7, unit: 'days' } }, show: 'converted' } });
+    serve({ 'metric:table': { body: { ok: true, metrics: [...METRICS, buyers], rows: { ...ROWS, m7: row({ categories: true, time: false }) } } } });
+    renderApp(`/model/${P}?tab=metrics`);
+    const r = await rowOf('Buyers');
+    expect(within(r).getByText('ts')).toBeTruthy();
+    expect(within(r).queryByText('Any date')).toBeNull();
+    expect(within(r).getByText('Not over time').closest('[title]')?.getAttribute('title')).toBe('One entry per entity: it adds up across categories, not across dates, since an entity can enter in two of them.');
+  });
+
   it('NEGATIVE CONTROL: an older pod sends no additivity, and that reads "—", never "No"', async () => {
     serve();
     renderApp(`/model/${P}?tab=metrics`);

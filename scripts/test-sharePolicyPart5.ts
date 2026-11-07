@@ -6,6 +6,7 @@
 //   period   a year-to-date metric over a base totalled from it, and an alert watched through it (p5-05);
 //            its chart by month (p5-06)
 //   snapshot-per  each team's latest salary, summed: its KPI, its chart by team and an alert on it (p5-07)
+//   funnel   a funnel metric keyed by a marked user column: its KPI, its chart and an alert watched through it (p5-08)
 //
 // Under drop each such figure says the house wording, never its figure; under mask it passes, as every aggregate does.
 // Negative controls in each part: a figure over a column nobody marked is shown beside it on every surface; with nothing
@@ -130,6 +131,31 @@ async function snapshotPer(env: H.Env): Promise<void> {
     (on) => H.mark(env, P, S, 'salary', on), '96585e47b2e787f70404b49d5c5cbb5dc450a109a7d3da0d171c232453eec04c');
 }
 
+async function funnel(env: H.Env): Promise<void> {
+  const { P } = await H.project(env, 'Part 5 funnel');
+  // Six users visit in March 2025, four add to the cart, two buy: the same events twice, one table's user column marked.
+  const rows = [1, 2, 3, 4, 5, 6].flatMap((u) => ['visit', 'cart', 'buy'].slice(0, u <= 2 ? 3 : u <= 4 ? 2 : 1).map((e, i) => [`u${u}`, e, `2025-03-${String(u * 3 + i).padStart(2, '0')}`]));
+  const table = (name: string) => env.inApp(async () => (await H.datasets.saveDataset(P, { name, sourceKind: 'csv', columns: [{ name: 'user', type: 'text' }, { name: 'event', type: 'text' }, { name: 'ts', type: 'date' }], rows }))!.id);
+  const E = await table('Signups');
+  const V = await table('Visits');
+  const def = { funnel: { entity: 'user', event: 'event', time: 'ts', steps: ['visit', 'cart', 'buy'], window: { n: 7, unit: 'days' } }, show: 'converted' };
+  const signed = await H.saveMetric(env, P, E, 'Signed up', def);
+  const visited = await H.saveMetric(env, P, V, 'Bought', def);
+  const kpi = (ds: string, m: { id: string }) => ({ datasetId: ds, column: '', aggregation: 'sum', metricId: m.id });
+  const byMonth = (ds: string, m: { id: string; name: string }) => ({ datasetId: ds, encoding: { category: 'ts', grain: 'month', values: [{ column: m.name, aggregation: 'sum', metricId: m.id }] } });
+  const fx = await H.publishable(env, P, [
+    { title: 'Signed up KPI', metric: kpi(E, signed) }, { title: 'Bought KPI', metric: kpi(V, visited) },
+    { title: 'Signed up by month', visual: byMonth(E, signed) }, { title: 'Bought by month', visual: byMonth(V, visited) },
+  ], [signed.id, visited.id], [ // a funnel metric's rule has no column of its own: it is watched through the metric (alertMetric)
+    { name: 'Signed up above 1', datasetId: E, metric: { ...kpi(E, signed), label: 'Signed up' }, compare: 'threshold', threshold: { op: '>', value: 1 } },
+    { name: 'Bought above 1', datasetId: V, metric: { ...kpi(V, visited), label: 'Bought' }, compare: 'threshold', threshold: { op: '>', value: 1 } },
+  ], ['Signed up', 'Bought']);
+  await judged(env, 'funnel', fx,
+    { tiles: ['Signed up KPI'], metrics: ['Signed up'], rules: ['Signed up above 1'], mcp: ['Signed up'], charts: ['Signed up by month'] },
+    { tiles: ['Bought KPI'], metrics: ['Bought'], rules: ['Bought above 1'], mcp: ['Bought'], charts: ['Bought by month'] },
+    (on) => H.mark(env, P, E, 'user', on), 'b0612ea0f93e6e4fc4b717edc47a72674e02d65b8205cbd13570db7382bb5a61');
+}
+
 (async () => {
   const env = await H.start();
   try {
@@ -137,6 +163,7 @@ async function snapshotPer(env: H.Env): Promise<void> {
     await period(env);
     await periodChart(env);
     await snapshotPer(env);
+    await funnel(env);
   } finally {
     await env.close();
   }

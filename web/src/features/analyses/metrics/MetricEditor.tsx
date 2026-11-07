@@ -1,5 +1,5 @@
 // One dialog for a whole metric (legacy metricEditor.ts): name, dataset,
-// definition (Simple, Formula or Period: ./PeriodFields), filters, format, description, direction —
+// definition (Simple, Formula, Period: ./PeriodFields, or a Funnel from the funnel grid: ./FunnelFields), filters, format, description, direction —
 // with a LIVE figure from the server (`metric:preview` runs the resolver and
 // the formatter the saved record will use). A draft without an id is a
 // prefill: "Save as metric…" on a KPI hands one in. A duplicate name is
@@ -26,11 +26,12 @@ import type { FilterStep } from '../../visuals/api';
 import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
-import { isFormula, isPeriod, periodRangeText, useMetricList, type Metric, type MetricFormat, type Snapshot } from './api';
+import { isFormula, isFunnel, isPeriod, periodRangeText, useMetricList, type FunnelDefinition, type Metric, type MetricFormat, type Snapshot } from './api';
 import { movesPin } from '../../model/status/status';
 import { needsWarning, SaveWarning } from '../../model/status/SaveWarning';
 import { KeyHint } from './KeyHint';
 import { PeriodFields, type PeriodDraft } from './PeriodFields';
+import { FunnelFields } from './FunnelFields';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
@@ -75,7 +76,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   const ds = datasetId ?? sets.data?.[0]?.id ?? null;
   const cols = useDatasetColumns(projectId, ds ?? undefined);
   const others = useMetricList(projectId);
-  const [mode, setMode] = useState<'simple' | 'formula' | 'period'>(def && isFormula(def) ? 'formula' : def && isPeriod(def) ? 'period' : 'simple');
+  const [mode, setMode] = useState<'simple' | 'formula' | 'period' | 'funnel'>(def && isFormula(def) ? 'formula' : def && isPeriod(def) ? 'period' : def && isFunnel(def) ? 'funnel' : 'simple');
   const simple = def && 'column' in def ? def : null;
   const [column, setColumn] = useState<string | null>(simple ? simple.column || null : null);
   const col = column && cols.data?.columns.some((c) => c.name === column) ? column : (cols.data?.columns[0]?.name ?? null);
@@ -87,6 +88,8 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   // A period metric (part 5, D8): its base, window and comparison; '' until a base is picked.
   const [period, setPeriod] = useState<PeriodDraft>(def && isPeriod(def) ? def : { base: '' });
   const [periodError, setPeriodError] = useState('');
+  // A funnel metric (part 5, D5): only from the funnel grid's Save as metric, or a saved one; its steps are read-only here.
+  const [funnel, setFunnel] = useState<FunnelDefinition | null>(def && isFunnel(def) ? def : null);
   const [snapError, setSnapError] = useState('');
   const [formula, setFormula] = useState(def && isFormula(def) ? def.formula : '');
   // The builder's filter rows and typed dialog (filterDialog.ts): values, conditions, ranges, periods — never a guessed type.
@@ -114,7 +117,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
 
   const periodReady = !!period.base && (!!period.window || !!period.compare);
   const snap = snapshotOf(snapshot);
-  const definition = mode === 'formula' ? { formula } : mode === 'period' ? (periodReady ? period : null) : col ? { column: col, aggregation: agg, snapshot: snap && { ...snap, per: per || null } } : null;
+  const definition = mode === 'formula' ? { formula } : mode === 'period' ? (periodReady ? period : null) : mode === 'funnel' ? funnel : col ? { column: col, aggregation: agg, snapshot: snap && { ...snap, per: per || null } } : null;
   const live = liveFilters(filters);
   const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
@@ -183,7 +186,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
     if (!ds || !definition) return setError('Choose a dataset and a column.');
     setSaving(true);
     // The date only when it changed: an edit that leaves it alone lets a formula take its new parts' date (the server's rule). A period metric has none of its own.
-    const dated = mode === 'period' ? { timeColumn: '' } : editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
+    const dated = mode === 'period' || mode === 'funnel' ? { timeColumn: '' } : editingId && timeColumn === (existing?.timeColumn ?? '') ? {} : { timeColumn };
     const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction, ...dated }, guard);
     setSaving(false);
     if ('changed' in r) return; // the banner
@@ -195,7 +198,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
   // Save mine as a copy: these boxes as a new metric, which the host then shows (a duplicate name is refused as ever).
   const copy = async () => {
     if (!ds || !definition) throw new Error('Choose a dataset and a column.');
-    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn: mode === 'period' ? '' : timeColumn });
+    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction, timeColumn: mode === 'period' || mode === 'funnel' ? '' : timeColumn });
     if ('error' in r) throw new Error(r.error);
     if ('metric' in r) {
       onSaved(r.metric);
@@ -265,13 +268,16 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               setSnapshot('');
               setPer('');
               setPeriod({ base: '' });
+              setFunnel(null); // its columns are the old dataset's
+              setMode((m) => (m === 'funnel' ? 'simple' : m));
             }}
           />
-          <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' || v === 'period' ? v : 'simple')}>
+          <Tabs value={mode} onValueChange={(v) => setMode(v === 'formula' || v === 'period' || (v === 'funnel' && funnel) ? v : 'simple')}>
             <TabList label="Definition">
               <Tab value="simple">Simple</Tab>
               <Tab value="formula">Formula</Tab>
               <Tab value="period">Period</Tab>
+              {funnel && <Tab value="funnel">Funnel</Tab>}
             </TabList>
           </Tabs>
           {mode === 'simple' ? (
@@ -332,6 +338,16 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
                 />
               )}
             </>
+          ) : mode === 'funnel' && funnel ? (
+            <FunnelFields
+              value={funnel}
+              error={periodError || undefined}
+              onChange={(next, f) => {
+                setFunnel(next);
+                setPeriodError('');
+                setFormat({ kind: f.kind, decimals: f.decimals ?? 0, prefix: f.prefix ?? '', suffix: f.suffix ?? '', compact: f.compact === true });
+              }}
+            />
           ) : mode === 'period' ? (
             <PeriodFields
               projectId={projectId}
@@ -367,7 +383,7 @@ function EditorBody({ projectId, existing, onSaved, onClose, onReload, ...props 
               )}
             </>
           )}
-          {mode !== 'period' && (
+          {mode !== 'period' && mode !== 'funnel' && (
           <div className={s.group}>
             <Select
               label="Date it counts by"

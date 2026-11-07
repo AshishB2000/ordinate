@@ -5,14 +5,15 @@
 // headers), a header click re-asks the SERVER for the sort (one RPC, the
 // arrow follows the reply's echo), subtotals collapse and expand, the cohort
 // heatmap is shaded, Export CSV writes the server's member total, zero
-// console / CSP errors (fixture). Element screenshots in both themes.
+// console / CSP errors (fixture). Element screenshots in both themes. Then (part 5, step 08) the builder's funnel
+// grid saved as a metric, its tile and its chart by region on a dashboard.
 //
 //   npm --prefix web run e2e
 
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, settled } from './fixtures.ts';
+import { csrfToken, e2e, SCREENS, screens, screensInPlace, settled } from './fixtures.ts';
 
 const TILES = ['pivot', 'cohort', 'event_funnel', 'pivot-hierarchy', 'funnel-breakdown'] as const;
 const tile = (page: Page, key: string) => page.locator(`[data-grid="${key}"]`);
@@ -142,4 +143,58 @@ e2e('pivot, cohort and funnel grids render from the API, accessibly, in both the
   await page.evaluate(() => localStorage.removeItem('ordinate.theme'));
   console.log(`screens: ${files.join(', ')}`);
   for (const l of rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}`);
+});
+
+e2e('funnel grid: Save as metric, then its tile and its chart (part 5, step 08)', async ({ page, server }) => {
+  // The sample's state funnel (Office Supplies → Furniture → Technology within 30 days) saved as "Office Supplies →
+  // Technology", its conversion rate; then a KPI and a column chart by region on a dashboard, every figure the server's.
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const rpc = async (channel: string, payload: unknown) => (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as Record<string, any>; // any: each channel's reply
+  const ds = ((await rpc('dataset:list', { projectId: pid })) as unknown as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!.id;
+  const eventFunnel = { entity: 'state', event: 'category', time: 'order_date', steps: ['Office Supplies', 'Furniture', 'Technology'], window: { n: 30, unit: 'days' } };
+  const saved = await rpc('visual:save', { projectId: pid, datasetId: ds, name: 'State funnel', chartType: 'event_funnel', encoding: { category: 'category', values: [{ column: 'units', aggregation: 'sum' }], eventFunnel } });
+  const grid = (saved.visual?.id ?? saved.id) as string;
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/visuals/${pid}/${grid}`);
+  await settled(page);
+  await page.getByRole('button', { name: 'Save as metric' }).click();
+  const dlg = page.getByRole('dialog', { name: 'New metric' });
+  assert.equal(await dlg.getByLabel('Name').inputValue(), 'Office Supplies → Technology');
+  assert.equal(await dlg.getByRole('tab', { name: 'Funnel' }).getAttribute('aria-selected'), 'true');
+  await dlg.getByText('Office Supplies → Furniture → Technology, within 30 days').waitFor();
+  const preview = dlg.getByRole('complementary', { name: 'Preview' });
+  await preview.getByText('Office Supplies → Furniture → Technology within 30 days, conversion rate').waitFor(); // the server's words
+  await preview.getByText(/^\d+(\.\d)?%$/).waitFor(); // the server's figure, as a percent
+  await screensInPlace(page, 'grids-funnel-metric-editor');
+  await dlg.getByRole('button', { name: 'Create metric' }).click();
+  await page.getByText('Saved the metric “Office Supplies → Technology”.').waitFor();
+  const metric = ((await rpc('metric:list', { projectId: pid })).metrics as { id: string; name: string }[]).find((m) => m.name === 'Office Supplies → Technology')!.id;
+
+  // The Metrics list shows it with its figure.
+  await page.goto(`/model/${pid}?tab=metrics`);
+  await settled(page);
+  const row = page.getByRole('table').getByRole('row').filter({ has: page.getByRole('button', { name: 'Office Supplies → Technology' }) });
+  await row.getByText(/^\d+(\.\d)?%$/).waitFor();
+
+  // A dashboard: its KPI and a column chart by region; each bar is the tile filtered to that region (a state is in one region).
+  const chartEnc = { category: 'region', values: [{ column: 'state', aggregation: 'countd', metricId: metric }] };
+  const byRegion = await rpc('visual:save', { projectId: pid, datasetId: ds, name: 'Conversion by region', chartType: 'column', encoding: chartEnc, overrides: { numberFormat: 'percent' } });
+  const chartId = (byRegion.visual?.id ?? byRegion.id) as string;
+  const cards = [
+    { type: 'metric', layout: { x: 0, y: 0, w: 4, h: 3 }, metric: { datasetId: ds, column: '', aggregation: 'sum', metricId: metric, label: 'Office Supplies → Technology' } },
+    { type: 'visual', layout: { x: 4, y: 0, w: 8, h: 7 }, visualId: chartId },
+  ];
+  const board = (await rpc('analysis:create', { projectId: pid, name: 'Funnel metric', sheets: [{ name: 'Sheet 1', cards }] })).id as string;
+  const drawn = await rpc('visual:data', { projectId: pid, datasetId: ds, encoding: chartEnc, filters: [] });
+  assert.ok(drawn.ok && drawn.data.labels.length >= 4, JSON.stringify(drawn).slice(0, 300));
+  const first = String(drawn.data.labels[0]);
+  const tile = (await rpc('metric:values', { projectId: pid, ids: [metric], filters: [{ type: 'filter', column: 'region', op: '=', value: first }] })) as unknown as { value: number }[];
+  assert.equal(drawn.data.series[0].values[0], tile[0].value, `the ${first} bar is the tile filtered to ${first}`);
+  await page.goto(`/analyses/${pid}/${board}`);
+  await settled(page);
+  await page.getByRole('group', { name: 'Conversion by region card' }).getByRole('img', { name: 'Conversion by region' }).waitFor();
+  await screens(page, 'grids-funnel-metric-dashboard');
+
+  for (const [channel, id] of [['analysis:delete', board], ['visual:delete', chartId], ['visual:delete', grid], ['metric:delete', metric]] as const) await rpc(channel, { projectId: pid, id });
 });

@@ -21,6 +21,7 @@ export function GridViz({
   onSort,
   exportData,
   fill,
+  onSaveMetric,
 }: {
   type: string;
   data: GridData;
@@ -30,6 +31,8 @@ export function GridViz({
   /** Cohort / funnel: the Share-policy-shaped reply, for Export CSV. */
   exportData?: () => Promise<EngineData>;
   fill?: boolean;
+  /** Funnel: the builder's Save as metric. */
+  onSaveMetric?: () => void;
 }) {
   if (type === 'pivot') {
     if (!data.pivot || !Array.isArray(data.pivot.cells)) {
@@ -56,5 +59,5 @@ export function GridViz({
       </EmptyState>
     );
   }
-  return <FunnelView data={data as EngineData & { eventFunnel: EventFunnelShape }} label={label} exportData={exportData} fill={fill} />;
+  return <FunnelView data={data as EngineData & { eventFunnel: EventFunnelShape }} label={label} exportData={exportData} fill={fill} onSaveMetric={onSaveMetric} />;
 }

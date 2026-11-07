@@ -18,7 +18,7 @@ const crypto: typeof import('crypto') = require('crypto');
 
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
-const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+export const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const store: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
