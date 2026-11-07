@@ -8,7 +8,7 @@
 //              CUBE_NAME_RE refused. NEGATIVE CONTROLS: an encoder that drops a NULL from a list fails the round
 //              trip; one that writes a value into a member name fails the value check.
 //   § reply    readLoad / loadRows: numbers by Cube's own annotation only, a missing member, '' and NULL in one
-//              dimension refused, a reply at the cap truncated, a cut with a NULL first asked again, a value list's
+//              dimension refused, a reply at the cap truncated, a cut that opens with a NULL asked again, a value list's
 //              blanks dropped before its cut.
 //   § matrix   the semantic parity matrix (./semanticParityMatrix.ts) asked through the encoder, Cube's reading of
 //              the query, the fake's answer in Cube's wire shape (a NULL first on `desc`, as Postgres) and loadRows:
@@ -231,6 +231,14 @@ async function replySection(): Promise<void> {
     return { ok: true, json: { data: [row('a', 1, '9'), row('b', 1, '8'), row('z', 1, null)], annotation: ann } };
   });
   ok('NEGATIVE CONTROL: a full reply with its NULLs last is asked once', show(posts) === '[3]');
+  posts.length = 0;
+  const top51 = { ...body, query: { ...body.query, limit: 51 } };
+  await wire.loadRows(top51, async (b) => {
+    posts.push(b.query.limit);
+    return { ok: true, json: { data: Array.from({ length: b.query.limit === 51 ? 51 : 60 }, (_v, i) => row(`n${i}`, 1, b.query.limit === 51 || i >= 10 ? null : '1')), annotation: ann } };
+  });
+  ok('a full 51-row reply all NULL on its first order key is asked again (the values may all be past the cut)', show(posts) === show([51, wire.CUBE_ROW_LIMIT]), show(posts));
+  ok('…as is a boundary tie that opens with a NULL', !wire.cutIsExact([[3, 'a'], [2, null], [2, null]], [0, 1]) && !wire.cutIsExact([[null, 'a'], [null, 'b']], [0, 1]));
   const list: CubeBody = { query: { measures: [], dimensions: ['orders.many'], timeDimensions: [], filters: [], order: [['orders.many', 'asc']], limit: wire.CUBE_ROW_LIMIT, timezone: 'UTC' }, nonBlank: ['orders.many'], limit: 2 };
   const listed = wire.readLoad(list, { data: ['\t', '  ', 'a', 'b', 'c'].map((v) => ({ 'orders.many': v })), annotation: { dimensions: { 'orders.many': { type: 'string' } } } });
   ok('a value list: whitespace-only values dropped, then the cut', show(rowsOf(listed)?.rows) === '[["a"],["b"]]', show(listed));
@@ -241,6 +249,7 @@ async function matrixSection(): Promise<void> {
   const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
   const fake: typeof import('./semanticFake') = require('./semanticFake');
   const pm: typeof import('./semanticParityMatrix') = require('./semanticParityMatrix');
+  const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
   const TABLE = 'cube_fixture';
   const x = await mx.setupExtract(ok);
   if (!x) return;
@@ -255,16 +264,16 @@ async function matrixSection(): Promise<void> {
   };
   let posts = 0;
   /** Cube as the fake plays it: the query read as Cube runs it, answered in its wire shape, a NULL first on desc. */
-  const post = async (b: CubeBody): Promise<{ ok: true; json: unknown }> => {
+  const post = (table: string) => async (b: CubeBody): Promise<{ ok: true; json: unknown }> => {
     posts += 1;
     const { query } = fakeCube.decodeCube(b, columns, 'cube');
-    const all = await fake.runFake(TABLE, columns, { ...query, limit: undefined });
+    const all = await fake.runFake(table, columns, { ...query, limit: undefined });
     return { ok: true, json: fakeCube.cubeReply(b, query, all.rows, columns) };
   };
-  const ask = (log: import('./semanticParityMatrix').Log): import('../src/engine/live/semantic/evaluateSemantic').SemanticRunner => async (q, step) => {
+  const ask = (log: import('./semanticParityMatrix').Log, table = TABLE): import('../src/engine/live/semantic/evaluateSemantic').SemanticRunner => async (q, step) => {
     const req = cube.cubeAdapter.encode(q, 'orders', columns, { dataset: env.dataset, layer: env.layer });
     if (spec.isRefusal(req)) return req;
-    const r = await wire.loadRows(req.body as CubeBody, post);
+    const r = await wire.loadRows(req.body as CubeBody, post(table));
     if (!r.ok) throw new Error(r.error);
     if (r.truncated) throw new Error('past the cap'); // the door refuses it (tooLarge)
     const rows = sq.alignRows(r.columns.map((c) => c.name), r.rows, req.columns);
@@ -279,6 +288,22 @@ async function matrixSection(): Promise<void> {
   const values = await ask([])({ dimensions: [{ name: 'cat' }], metrics: [], where: [{ kind: 'empty', column: 'cat', negate: true }], order: [{ by: 'cat', desc: false }] }, 'chart');
   const listed = spec.isRefusal(values) ? [] : values.rows.map((r) => r[0]);
   ok('a value list over the fixture\'s blanks: no NULL, \'\', space, tab or NBSP in it, every other value once', listed.length > 5 && listed.every((v) => typeof v === 'string' && v.trim() !== '') && new Set(listed).size === listed.length, show(listed));
+
+  // 60 categories whose revenue is NULL and 10 with one: the fake (as Postgres) puts the NULLs first on desc, so the
+  // top-51 cut holds none of the 10; the extract ranks them first.
+  const nullRows: import('./liveParityFixture').Cell[][] = [...Array.from({ length: 60 }, (_v, i) => [`n${String(i).padStart(2, '0')}`, null]), ...Array.from({ length: 10 }, (_v, i) => [`v${i}`, i + 1])]
+    .map(([many, amt], i) => [many, 'Alpha', i % 2 ? 'North' : 'South', amt, 1, 1, '2024-01-01', fx.BIG[0]]);
+  const imported = fx.importTyped(fx.COLUMNS, nullRows);
+  const saved = await datasets.saveDataset(x.pid, { name: 'Nulls', sourceKind: 'csv', columns: imported.columns, rows: imported.rows });
+  const back = saved && await datasets.getDataset(x.pid, saved.id);
+  if (!saved || !back) { ok('saved the NULL-revenue extract', false); return; }
+  const nx = { pid: x.pid, did: saved.id, rows: nullRows, stored: { columns: back.columns, rows: back.rows } };
+  const nsource = await fx.duckEngine.load('cube_nulls', layout, fx.warehouseCells(fx.COLUMNS, nullRows));
+  const nb: import('./semanticParityMatrix').Bench = { x: nx, env, typed: fx.env(nsource, columns), kit: mx.parityKit(nx, fx.runDuck), ask: (log) => ask(log, 'cube_nulls') };
+  for (const c of [{ name: '70 categories, 60 of them NULL revenue', metrics: ['revenue'], enc: { category: 'many' } }, { name: '…split by region', metrics: ['revenue'], enc: { category: 'many', series: 'region' } }]) {
+    const r = await pm.chartCase(nb, c);
+    ok(`Cube: ${c.name}: the 10 with a value ranked first, every cell as the extract (Object.is)`, r.problems.length === 0, r.problems.join(' | '));
+  }
 }
 
 void (async () => {

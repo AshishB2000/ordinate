@@ -91,12 +91,13 @@ const blank = (v: Cell): boolean => v === null || (typeof v === 'string' && v.tr
 /**
  * Whether the first `limit` rows Cube returned are the first `limit` under Ordinate's order, a NULL last either way:
  * key by key, each column's NULLs only after its values, within the rows tied with the last row on every key before.
+ * Rows that open with a NULL prove nothing (the warehouse may sort NULLs first, every value past the cut): not exact.
  */
 export function cutIsExact(rows: Cell[][], keys: number[]): boolean {
   let tied = rows;
   for (const k of keys) {
     const firstNull = tied.findIndex((r) => r[k] === null);
-    if (firstNull >= 0 && tied.slice(firstNull).some((r) => r[k] !== null)) return false;
+    if (firstNull === 0 || (firstNull > 0 && tied.slice(firstNull).some((r) => r[k] !== null))) return false;
     const last = tied[tied.length - 1]?.[k] ?? null;
     tied = tied.filter((r) => Object.is(r[k], last));
     if (tied.length <= 1) return true;
