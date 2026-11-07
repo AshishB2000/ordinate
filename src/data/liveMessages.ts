@@ -139,3 +139,8 @@ export function liveCalcNoPreviewMessage(): string {
 export function liveCopyCappedMessage(count: string): string {
   return t('liveMessages.a_copy_can_t_be_made', { count });
 }
+
+/** `live:setBaseFilters` failed in a way it did not expect. Its own words go to the server log only (they can name a record's path). */
+export function liveBaseFiltersSaveFailedMessage(): string {
+  return t('liveMessages.the_filters_could_not_be_saved');
+}

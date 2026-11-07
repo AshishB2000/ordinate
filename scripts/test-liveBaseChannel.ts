@@ -90,6 +90,13 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
   ok('NEGATIVE CONTROL: the plain step passes the check, its keys in any order', 'steps' in handler.baseFiltersRefusal({ columns: cols }, [{ values: BASE[0].values, op: 'not in', column: 'region', type: 'filter' }]));
   ok('NEGATIVE CONTROL: a period the sanitizer only normalizes (a stray n on this_month) passes',
     'steps' in handler.baseFiltersRefusal({ columns: cols }, [F('d', 'period', undefined, { period: { preset: 'this_month', n: 6 } })]));
+  // A failure the handler did not expect answers the catalog's sentence: a record store's error can name its path.
+  const realSet = H.liveDataset.setBaseFilters;
+  const PATH = '/srv/ordinate/data/orgs/acme/records/x.json';
+  (H.liveDataset as { setBaseFilters: typeof realSet }).setBaseFilters = async () => { throw new Error(`EACCES: permission denied, open '${PATH}'`); };
+  let thrown: Reply;
+  try { thrown = (await set(BASE)).value; } finally { (H.liveDataset as { setBaseFilters: typeof realSet }).setBaseFilters = realSet; }
+  ok('a thrown save answers the catalog sentence, never the error\'s own words', thrown.ok === false && thrown.error === liveMsg.liveBaseFiltersSaveFailedMessage() && !show(thrown).includes(PATH), show(thrown));
 
   H.queryCache.clear();
   // Called in a request context of its own: an injected request's signal fires when its reply closes,

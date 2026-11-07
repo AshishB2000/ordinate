@@ -24,6 +24,8 @@ import { liveBaseFiltersUnreadable } from '../engine/liveRefusals';
 import * as queryCache from '../engine/queryCache';
 import { layerBaseFilter } from '../engine/semanticMessages';
 import { layerLabel } from '../engine/live/semantic/semanticRefusals';
+import { safeError } from '../connectors/types';
+import { logger } from '../app/logger';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -78,7 +80,8 @@ export function register(): void {
     try {
       return await setLiveBaseFilters(payload);
     } catch (err: unknown) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Could not save the filters' };
+      logger.warn(`[live] save the always-applied filters: ${safeError(err)}`);
+      return { ok: false, error: msg.liveBaseFiltersSaveFailedMessage() };
     }
   });
 }
