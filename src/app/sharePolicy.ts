@@ -33,7 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
-import { carriersOf } from '../data/columnAccess';
+import { carriersOf, metaShape } from '../data/columnAccess';
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
@@ -77,20 +77,19 @@ export interface PolicySummary {
 /**
  * column → level for every column the user marked, CARRIED to every column a
  * later step computes from it: a rename, a formula, a step writing columns it
- * does not name (data/columnAccess carriersOf, the one carrier rule; part 4,
- * D22). A catalog key is the column's name when it was marked; a policy that
- * only looked names up would let `bonus = [salary] * 0.1` leave unmasked.
+ * does not name, a Live dataset's calculated field (data/columnAccess carriersOf
+ * over metaShape, the one carrier rule; part 4, D22). A catalog key is the
+ * column's name when it was marked; a policy that only looked names up would
+ * let `bonus = [salary] * 0.1` leave unmasked.
  */
-async function markedLevels(projectId: string, datasetId: string, meta: Pick<datasets.DatasetMeta, 'steps' | 'columns' | 'sourceColumns'> | null): Promise<Map<string, SensitiveLevel>> {
+async function markedLevels(projectId: string, datasetId: string, meta: Parameters<typeof metaShape>[0] | null): Promise<Map<string, SensitiveLevel>> {
   const docs = await catalog.getColumns(projectId, datasetId, true);
   const out = new Map<string, SensitiveLevel>();
   for (const k of Object.keys(docs)) {
     const s = docs[k].sensitivity;
     if (s === 'personal' || s === 'financial') out.set(k, s);
   }
-  const steps = Array.isArray(meta?.steps) ? meta.steps : [];
-  const final = (meta?.columns ?? []).map((c) => c.name);
-  const source = (meta?.sourceColumns ?? meta?.columns ?? []).map((c) => c.name);
+  const { steps, source, final } = meta ? metaShape(meta) : { steps: [], source: [], final: [] }; // a Live record's calcs too (part 8)
   for (const [marked, level] of out) { // a carrier added here is visited too: its own carriers are already among them
     for (const c of carriersOf(steps, source, final, [marked]).carriers.keys()) if (!out.has(c)) out.set(c, level);
   }
