@@ -143,6 +143,11 @@ void (async () => {
   const sorted = (xs: string[] | undefined): string => show([...(xs ?? [])].sort());
   ok('…over a field with blanks (\'\', spaces, a tab, NBSP, NULL): the extract\'s values less the blank ones, each once',
     sorted(cs.values) === sorted((cx.values as string[]).filter((v) => v.trim() !== '')) && cs.values?.length > 5, show([cx, cs]));
+  // A picker under a parent filter dbt cannot write (a quote): the encoder's typed refusal, before any question.
+  const asked0 = fake.requests.length;
+  const quoted = (await post('dataset:distinct', { projectId: P, datasetId: SEM, column: 'many', limit: 200, filters: [{ type: 'filter', column: 'cat', op: '=', value: "O'Brien" }] })).value;
+  ok("dataset:distinct under a filter dbt cannot write (O'Brien): refused layerFilter in the layer's sentence, nothing asked",
+    quoted.ok === false && quoted.code === 'live_refused' && quoted.reason === 'layerFilter' && fake.requests.length === asked0, show(quoted));
   const neg = agree(await chart(X, ['max_amount']), await chart(SEM, ['max_amount'], {}, [WEST]), ['max_amount']);
   ok('NEGATIVE CONTROL: a filtered dbt chart is not the unfiltered extract\'s', neg.length > 0);
 

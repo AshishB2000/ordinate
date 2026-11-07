@@ -376,6 +376,9 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
   if (!c.ok) return refused(dialectOf(t), c);
   // A statement is never sent to a semantic layer: a lookup that only knows SQL (a key check) is the layer's to refuse.
   if (t.semantic && !('semantic' in c)) return refused(dialectOf(t), refuseLayer('layerLookup', t.semantic.env));
+  // A filter the backend cannot write (its encoder's typed refusal) is said before anything is asked, never a failure.
+  const unsaid = 'semantic' in c ? semanticRunner(t, new AbortController().signal, () => undefined).check?.(c.semantic) : null;
+  if (unsaid) return refused(dialectOf(t), unsaid);
   const op = opOf(dialectOf(t));
   const key = keyOf(t, 'semantic' in c ? { lookup: c.semantic } : { lookup: c.query.sql, params: c.query.params });
   const ages = agesOf(t);
