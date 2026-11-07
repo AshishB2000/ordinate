@@ -19,7 +19,8 @@ import type { Outgoing } from './dashboardData';
  */
 export async function kpiHidden(projectId: string, reads: MetricRead[], via?: Outgoing | SharePath): Promise<string> {
   if (!via || !reads.length) return '';
-  const values = await Promise.all(reads.map(async (r) => ({ column: r.column, aggregation: r.aggregation, datasetId: (await tableOf(projectId, r.datasetId, r.column)) ?? r.datasetId })));
+  const once = [...new Map(reads.map((r) => [`${r.datasetId}\0${r.column}`, r])).values()]; // once per column: a layer metric reads every field, in every combination
+  const values = await Promise.all(once.map(async (r) => ({ column: r.column, aggregation: r.aggregation, datasetId: (await tableOf(projectId, r.datasetId, r.column)) ?? r.datasetId })));
   const encoding = { category: '', values };
   const data = { labels: [], series: [] };
   if (typeof via === 'string') {
