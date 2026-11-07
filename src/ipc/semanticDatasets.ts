@@ -86,7 +86,7 @@ export async function addSemanticDataset(p: Record<string, unknown>) {
   }
   const read = readModel(d, backend, model, new Date().toISOString());
   const ds = await saveSemanticRecord(projectId, { name: str(p.name) || layer.name, connId, semantic: read.semantic, columns: read.columns, maxCacheAgeSec });
-  if (!ds) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+  if (!ds) return { ok: false, error: smsg.addNoProject() };
   queueSync(projectId, ds.id);
   return { ok: true, dataset: { id: ds.id, name: ds.name, rowCount: 0, columns: ds.columns.map((c) => ({ name: c.name, type: c.type })), mode: 'live' as const } };
 }
@@ -105,7 +105,7 @@ export function register(): void {
       return await addSemanticDataset(payload);
     } catch (err: unknown) {
       logger.warn(`[live] add a semantic dataset failed: ${safeError(err)}`);
-      return { ok: false, error: 'Could not add the dataset' };
+      return { ok: false, error: smsg.addFailed() };
     }
   });
 }
