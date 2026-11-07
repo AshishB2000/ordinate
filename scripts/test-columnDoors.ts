@@ -69,7 +69,8 @@ const { z } = require('zod') as typeof import('zod');
     const PAYROLL_PER_HEAD = await saveMetric('Payroll per head', { formula: 'sum(salary) / count(employee_id)' });
     const HEADCOUNT = await saveMetric('Headcount', { column: 'employee_id', aggregation: 'count' });
     // A distinct count (part 5): metric:save offers none before p5-04, so it is stored as that release stores it.
-    const DISTINCT_SALARY = (await W.as('boss', () => metricsMod.saveMetric(P, { name: 'Distinct salaries', datasetId: staff, definition: { column: 'salary', aggregation: 'countd' } })))!.id;
+    const distinct = async (name: string, column: string): Promise<string> => (await W.as('boss', () => metricsMod.saveMetric(P, { name, datasetId: staff, definition: { column, aggregation: 'countd' } })))!.id;
+    const [DISTINCT_SALARY, DISTINCT_DEPT] = [await distinct('Distinct salaries', 'salary'), await distinct('Distinct depts', 'dept')];
     const term = await W.call('boss', 'term:save', { projectId: P, input: { name: 'High earners', aliases: [], description: '', datasetId: staff, filters: [{ type: 'filter', column: 'salary', op: '>', value: 1200 }] } });
     const HIGH_EARNERS: string = term.body?.term?.id;
     ok('setup: three metrics and a term on Staff', !!HIGH_EARNERS, term.text.slice(0, 200));
@@ -121,6 +122,7 @@ const { z } = require('zod') as typeof import('zod');
       ['headcount by dept, filtered on dept', 'visual:data', viz(BY_DEPT, [{ type: 'filter', column: 'dept', op: '=', value: 'Ops' }])],
       ['the headcount KPI', 'dashboard:metric', kpi('employee_id', 'count')],
       ['the Headcount metric', 'metric:values', { projectId: P, ids: [HEADCOUNT] }],
+      ['a distinct count of dept (part 5)', 'metric:values', { projectId: P, ids: [DISTINCT_DEPT] }],
       ['the distinct depts', 'dataset:distinct', { projectId: P, datasetId: staff, column: 'dept' }],
     ] as const) {
       const d = sameFigure(await W.call('east', ch, body), await W.call('ed', ch, body));

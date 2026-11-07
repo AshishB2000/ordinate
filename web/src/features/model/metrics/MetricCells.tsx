@@ -1,10 +1,22 @@
-// Two cells of the Data model's metrics table: the date a metric counts by (semantic D9, with its snapshot,
+// Cells of the Data model's metrics table: the date a metric counts by (semantic D9, with its snapshot,
 // D8) and whether it can be added up (D7). Both say what the server sent: `additivity` is the server's rule
-// (`metric:table`), absent from an older pod and null when unknown, and both of those read "—".
+// (`metric:table`), absent from an older pod and null when unknown, and both of those read "—". And the lock
+// beside a metric or term the server marks hidden from the caller (part 4, D19), the Glossary's too.
 
 import { Badge } from '../../../ui/Badge';
+import { Icon } from '../../../ui/icons/Icon';
 import { isFunnel, isPeriod, type MetricSummary } from '../../analyses/metrics/api';
 import s from '../Model.module.css';
+import d from '../../data/Data.module.css';
+
+/** `why`: the server's refusal sentence, when it sent one (`metric:table`); else the app's words. */
+export function HiddenLock({ why = 'Hidden from you: it uses a column limited to certain people.' }: { why?: string }) {
+  return (
+    <span className={d.lockedName} title={why}>
+      <Icon name="lock" size={12} label={why} />
+    </span>
+  );
+}
 
 export interface Additivity {
   categories: boolean;
