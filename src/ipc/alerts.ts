@@ -34,6 +34,7 @@ import { askCopilot } from '../ai/analyze';
 import { buildFacts, guardAnswer } from './copilot';
 import { serverDataDir } from '../server/context';
 import { liveCodeOf } from './liveRoute';
+import { LIVE_DATASET_CODE } from '../data/liveDataset';
 import { markSeenFor, perMember, seenView } from '../server/alertInbox';
 import { logger } from '../app/logger';
 
@@ -170,6 +171,8 @@ export function register(): void {
 
   ipcMain.handle('alerts:save', async (_e, { projectId, rule }: any = {}) => {
     try {
+      const live = await store.liveRuleRefusal(projectId, rule); // by period or for anomalies on Live: it would never fire (D6)
+      if (live) return { ok: false, code: LIVE_DATASET_CODE, error: live };
       // An alert fans out (its inbox push, its channels): refused for everyone on a dataset with row access rules (docs/row-policy D10).
       if (rule && typeof rule.datasetId === 'string' && (await policyClosed(projectId, rule.datasetId))) return rowPolicyRefusal('fanout');
       // …and on one with column rules, the save asks what the test asks (gated as its audience): a rule that reads a hidden column refuses (part 4, D17).

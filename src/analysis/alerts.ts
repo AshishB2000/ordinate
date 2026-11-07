@@ -605,6 +605,11 @@ export function notTwoPeriodsYet(column: string): string {
   return t('alerts.nothing_to_compare_yet_has_fewer', { column });
 }
 
+/** A rule by period, or for anomalies, on a Live dataset: both read rows, which a Live dataset doesn't keep (D6). Said at save. */
+export function liveRuleByRows(): string {
+  return t('alerts.alerts_by_period_and_anomaly_alerts');
+}
+
 /**
  * The Test button: would this rule fire RIGHT NOW, and with what numbers?
  *

@@ -13,6 +13,7 @@
   "aiMessages.that_model_isn_t_one_your": "Tu organización no ha activado ese modelo. Elige otro.",
   "aiMessages.this_column_is_marked_personal_or": "Esta columna está marcada como personal o financiera, así que sus valores no se envían al Asistente.",
   "alerts.above": "por encima de",
+  "alerts.alerts_by_period_and_anomaly_alerts": null,
   "alerts.alerts_fired": "{listCount} alertas activadas: {p1}{tail}.",
   "alerts.and_more": ", y {rest} más",
   "alerts.anomalies_in_2": "Anomalías en {name}",

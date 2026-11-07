@@ -10,6 +10,7 @@
   "aiMessages.that_model_isn_t_one_your": "That model isn’t one your organization has turned on. Pick another.",
   "aiMessages.this_column_is_marked_personal_or": "This column is marked personal or financial, so its values aren’t sent to the Assistant.",
   "alerts.above": "above",
+  "alerts.alerts_by_period_and_anomaly_alerts": "Alerts by period and anomaly alerts read the dataset's rows, which a Live dataset doesn't keep. Make a copy to use one, or alert on a threshold.",
   "alerts.alerts_fired": "{listCount} alerts fired: {p1}{tail}.",
   "alerts.and_more": ", and {rest} more",
   "alerts.anomalies_in_2": "Anomalies in {name}",

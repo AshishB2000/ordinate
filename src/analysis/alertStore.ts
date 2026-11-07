@@ -54,7 +54,7 @@ import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
-import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
+import { isLive, isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isExternalMetricError, refuseExternal } from './externalMetric';
 import { logger } from '../app/logger';
@@ -157,6 +157,12 @@ function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => 
 }
 
 // ── Rules CRUD ───────────────────────────────────────────────────────────────
+
+/** Why `alerts:save` refuses a rule outright (D6): one by period or for anomalies reads rows, which a Live dataset doesn't keep, so it would never fire. From the record alone. */
+export async function liveRuleRefusal(projectId: string, raw: any): Promise<string | null> { // any: the zod-checked loose rule, read field by field
+  const byRows = raw?.compare === 'anomaly' || (raw?.compare === 'change' && raw?.change?.vs === 'previous_period');
+  return byRows && typeof raw.datasetId === 'string' && isLive(await datasets.getDatasetMeta(projectId, raw.datasetId)) ? alerts.liveRuleByRows() : null;
+}
 
 /** Create or replace one rule. Returns the STORED rule (sanitized), or null. */
 export async function saveRule(projectId: string, raw: any): Promise<AlertRule | null> {

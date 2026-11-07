@@ -13,6 +13,7 @@
   "aiMessages.that_model_isn_t_one_your": "Dieses Modell hat deine Organisation nicht freigegeben. Wähle ein anderes.",
   "aiMessages.this_column_is_marked_personal_or": "Diese Spalte ist als persönlich oder finanziell markiert, daher werden ihre Werte nicht an den Assistenten gesendet.",
   "alerts.above": "über",
+  "alerts.alerts_by_period_and_anomaly_alerts": null,
   "alerts.alerts_fired": "{listCount} Warnungen ausgelöst: {p1}{tail}.",
   "alerts.and_more": " und {rest} weitere",
   "alerts.anomalies_in_2": "Anomalien in {name}",

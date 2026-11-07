@@ -13,6 +13,7 @@
   "aiMessages.that_model_isn_t_one_your": "そのモデルは組織で有効になっていません。別のモデルを選んでください。",
   "aiMessages.this_column_is_marked_personal_or": "この列は個人情報または財務情報として指定されているため、値はアシスタントに送信されません。",
   "alerts.above": "超過",
+  "alerts.alerts_by_period_and_anomaly_alerts": null,
   "alerts.alerts_fired": "{listCount}件のアラートが発動しました: {p1}{tail}。",
   "alerts.and_more": "、ほか{rest}件",
   "alerts.anomalies_in_2": "{name}の異常",
