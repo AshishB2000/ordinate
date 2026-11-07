@@ -419,3 +419,18 @@ h5.mdH {
   flex-wrap: wrap;
   gap: var(--sp-8);
 }
+
+/* A drilled tile: its crumb row over the chart. Undrilled, both wrappers lay out as if they were not there. */
+.plain {
+  display: contents;
+}
+.drilled {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.drilledBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}

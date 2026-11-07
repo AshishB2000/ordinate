@@ -4,6 +4,8 @@
 
 import { rpc, type RpcInput } from '../../../api/client';
 import type { Encoding, FilterStep } from '../encoding';
+import { DRILL_CHART_TYPES, grainWord, nextGrain, nextLevel, type NavHierarchy } from '../../../../../src/analysis/drillLevels.ts';
+import type { DateGrain } from '../../../../../src/analysis/categoryKey.ts';
 
 export type DrillDownReply =
   | { ok: true; available: true; encoding: Encoding; steps: FilterStep[]; crumb: { column: string; label: string; next: string } }
@@ -19,4 +21,21 @@ export async function drillDown(input: RpcInput<'visual:drillDown'>): Promise<Dr
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : DRILL_FAILED };
   }
+}
+
+/** What a drill would go to, in the words the sheet uses ("by state", "by month"), or null: the click stays inert. */
+export function drillableAxis(a: {
+  chartType: string;
+  encoding: Encoding;
+  category: { kind?: string; grain?: string } | undefined;
+  hierarchies: readonly NavHierarchy[];
+  ladder: readonly DateGrain[];
+}): { next: string; word: string } | null {
+  if (!DRILL_CHART_TYPES.has(a.chartType)) return null;
+  if (a.category?.kind === 'date') {
+    const next = nextGrain(a.ladder, a.category.grain as DateGrain);
+    return next ? { next, word: grainWord(next, a.ladder) } : null;
+  }
+  const down = nextLevel(a.hierarchies, a.encoding.category);
+  return down ? { next: down.next, word: down.next } : null;
 }

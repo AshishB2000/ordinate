@@ -79,6 +79,10 @@ e2e(
   async ({ page, server, rpc }) => {
     const pid = server.sample.projectId;
     await openSample(page, pid);
+    // A hierarchy over the bars' category: a tap then offers to drill (the model's hierarchies are read on the first tap).
+    const sets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
+    const seeded = await call(page, 'catalog:setTable', { projectId: pid, datasetId: sets.find((d) => d.name === 'Retail orders')?.id, patch: { hierarchies: [{ name: 'Product', levels: ['category', 'sub_category'] }] } });
+    assert.equal(seeded.ok, true, JSON.stringify(seeded));
     console.log(`rpc: dashboard open on a phone ${rpc.loads.at(-1)?.rpcs ?? 0}`);
     await page.locator('[data-phone]').waitFor();
 
@@ -172,6 +176,8 @@ e2e(
     assert.ok(hit, 'a tap on a bar opens the point sheet');
     await point.getByRole('button', { name: /^Show the rows behind this point/ }).waitFor();
     await point.getByRole('button', { name: /^Comment on this point/ }).waitFor();
+    await point.getByRole('button', { name: /^Drill into / }).waitFor();
+    assert.match((await point.getByRole('list').getByRole('button').first().textContent()) ?? '', /^Drill into .*By sub_category, on this chart only/, 'the drill is first in the sheet');
     await shots(page, 'phone-point');
     const filter = point.getByRole('button', { name: /^Filter to “/ });
     const label = ((await filter.textContent()) ?? '').replace(/^Filter to “([^”]+)”.*$/, '$1');
@@ -188,6 +194,19 @@ e2e(
     assert.ok(Math.abs(db.width - 375) <= 1 && Math.abs(db.y + db.height - 812) <= 1, `the drill rises from the bottom edge, full width (${JSON.stringify(db)})`);
     await shots(page, 'phone-drill');
     await page.keyboard.press('Escape');
+    // The tile's own drill: the crumb row, over the chart, at phone width with no sideways scroll.
+    await tapUntil(page, await box(bars.locator('canvas').first()), async () => (await point.count()) === 1);
+    await point.getByRole('button', { name: /^Drill into / }).click();
+    const crumbs = bars.getByRole('navigation', { name: 'Drill path' });
+    await crumbs.waitFor();
+    assert.match((await crumbs.textContent()) ?? '', /^Product.*· by sub_category/);
+    await page.waitForTimeout(600);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'the crumb row adds no sideways scroll');
+    const cb = await box(crumbs);
+    const bb = await box(bars);
+    assert.ok(cb.x >= bb.x && cb.x + cb.width <= bb.x + bb.width + 1, `the crumbs sit inside the card (${JSON.stringify(cb)} in ${JSON.stringify(bb)})`);
+    await bars.scrollIntoViewIfNeeded();
+    await shots(page, 'phone-tile-drill');
   },
   { device: PHONE },
 );

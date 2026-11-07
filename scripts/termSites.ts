@@ -67,6 +67,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'web/src/features/dashboards/CardRuntime.tsx': { count: 3, how: 'keeps' },
   'web/src/features/dashboards/ControlsExtras.tsx': { count: 1, how: 'keeps' },
   'web/src/features/dashboards/tileActions.tsx': { count: 5, how: 'keeps' },
+  // the tile's drill sends mergeFilters(tileFilters, def.filters) (a term step passes through) to visual:drillDown, a door
+  'web/src/features/dashboards/useTileDrill.tsx': { count: 1, how: 'keeps' },
   'web/src/features/dashboards/useViewer.ts': { count: 1, how: 'keeps' },
   // the Live dataset's Always applied: saved through liveFilters, which keeps a term step (the server's contract refuses one)
   'web/src/features/data/BaseFiltersPanel.tsx': { count: 1, how: 'keeps' },

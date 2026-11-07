@@ -328,7 +328,7 @@ function loadTile(projectId: string, params: ParamPayload, scope: Scope, req: Ti
 }
 
 /** One tile's answer, computed by the server; batched with the sheet's other tiles. */
-export function useTile<T extends VisualTile | MetricTile | StatsTile | { ok: boolean }>(projectId: string, params: ParamPayload, req: TileRequest | undefined) {
+export function useTile<T extends VisualTile | MetricTile | StatsTile | { ok: boolean }>(projectId: string, params: ParamPayload, req: TileRequest | undefined, staleTime?: number) {
   // Inside an open dashboard, the reader's As of and the dashboard's currency apply to every tile.
   const view = useContext(EditorCtx)?.view;
   const scope: Scope = { ...(view?.asOf ? { asOf: view.asOf } : {}), ...(view?.currency ? { currency: view.currency } : {}) };
@@ -339,6 +339,8 @@ export function useTile<T extends VisualTile | MetricTile | StatsTile | { ok: bo
     retry: (count, err) => count < 2 && err instanceof RpcError && (err.status === 0 || err.status >= 500),
     // Keep the last figure on screen while the next computes (kpiTicker's hold).
     placeholderData: (prev) => prev,
+    // A drilled tile keeps the level it left for a minute: Up redraws it without asking again.
+    ...(staleTime ? { staleTime } : {}),
   });
 }
 

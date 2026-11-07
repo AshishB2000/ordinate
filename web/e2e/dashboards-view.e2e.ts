@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { csrfToken, e2e, SCREENS, screens, settled } from './fixtures.ts';
+import { clickUntil, csrfToken, e2e, SCREENS, screens, settled } from './fixtures.ts';
 
 /** One screenshot per theme WITHOUT a reload: a reload would close the dialog on screen. */
 async function screensInPlace(page: Page, name: string): Promise<void> {
@@ -157,4 +157,81 @@ e2e('drafts: a draft, its Preview, Publish, the published view, edits not live, 
   await page.goto(view);
   await settled(page);
   await page.getByRole('region', { name: 'Preview' }).waitFor(); // never published again: an editor gets the Preview
+});
+
+e2e('drill: a tile over a hierarchy drills by its crumbs on the view page, and a published page does not', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  const csrf = await csrfToken({ page, server });
+  const call = async (channel: string, payload: unknown): Promise<any> => // any: each channel's own reply
+    (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [payload] } })).json()) as unknown;
+  const gallery = (await call('analysis:gallery', { projectId: pid })) as { id: string; name: string }[];
+  const aid = gallery.find((g) => g.name === 'Retail overview')?.id ?? '';
+  const orders = ((await call('dataset:list', { projectId: pid })) as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')?.id;
+  const set = await call('catalog:setTable', { projectId: pid, datasetId: orders, patch: { hierarchies: [{ name: 'Product', levels: ['category', 'sub_category'] }] } });
+  assert.equal(set.ok, true, JSON.stringify(set));
+
+  const channels: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/api/rpc/')) channels.push(decodeURIComponent(r.url().split('/api/rpc/')[1] ?? ''));
+  });
+  await page.goto(`/dashboards/${pid}/${aid}`);
+  await page.getByRole('group', { name: 'Revenue card' }).getByText('$5.2M').waitFor();
+  await settled(page);
+  const card = page.getByRole('group', { name: 'Revenue by category card' });
+  await card.locator('canvas').first().waitFor();
+  await page.waitForTimeout(800);
+  const load = channels.length;
+  assert.equal(channels.includes('model:navigation'), false, 'a page load never reads the model’s hierarchies');
+
+  // Right-click a bar until its menu offers the drill (the sample's tiles filter on a plain click).
+  const canvas = (await card.locator('canvas').first().boundingBox())!;
+  const item = page.getByRole('menuitem', { name: /^Drill into / });
+  let found = false;
+  for (let r = 1; r <= 6 && !found; r++) {
+    for (let c = 1; c <= 9 && !found; c++) {
+      await page.mouse.click(canvas.x + (canvas.width * c) / 10, canvas.y + (canvas.height * r) / 7, { button: 'right' });
+      found = await item.waitFor({ timeout: 700 }).then(() => true, () => false);
+      if (!found) await page.keyboard.press('Escape');
+    }
+  }
+  assert.ok(found, 'a right-click on a bar offers "Drill into"');
+  const picked = ((await item.textContent()) ?? '').replace(/^Drill into (.*) · by sub_category$/, '$1');
+  const drilled = page.waitForRequest((r) => r.url().includes('analysis%3Atiles') && (r.postData() ?? '').includes('sub_category'));
+  await item.click();
+  const asked = JSON.parse((await drilled).postData() ?? '{}').args[0].items.find((i: { encoding?: { category?: string } }) => i.encoding?.category === 'sub_category');
+  const crumbs = card.getByRole('navigation', { name: 'Drill path' });
+  await crumbs.waitFor();
+  assert.equal((await crumbs.innerText()).replace(/\s+/g, ' ').trim(), `Product ${picked} · by sub_category Up`);
+  await page.waitForTimeout(800);
+  const added = channels.slice(load);
+  console.log(`rpc: dashboard drill ${added.length} (${added.join(', ')})`);
+  assert.deepEqual([...added].sort(), ['analysis:tiles', 'model:navigation', 'visual:drillDown'], 'the first drill adds exactly the navigation, the drill and one tile read');
+
+  // The tile's bars ARE the server's answer to the drilled question, asked directly.
+  const direct = await call('visual:data', { projectId: pid, datasetId: asked.datasetId, encoding: asked.encoding, filters: asked.filters, params: [] });
+  assert.equal(direct.ok, true, JSON.stringify(direct));
+  const tiled = await call('analysis:tiles', { projectId: pid, params: [], items: [asked] });
+  const reply = (Array.isArray(tiled) ? tiled : tiled.items ?? tiled.results)?.[0];
+  assert.deepEqual(reply?.data?.labels, direct.data.labels, 'the drilled labels');
+  assert.deepEqual(reply?.data?.series, direct.data.series, 'the drilled figures');
+  assert.ok(direct.data.labels.length > 0 && !direct.data.labels.includes(picked), 'children, not the parent');
+  await screensInPlace(page, 'tile-drilled');
+
+  // Up redraws by category and asks nothing.
+  const upFrom = channels.length;
+  await crumbs.getByRole('button', { name: 'Up' }).click();
+  await crumbs.waitFor({ state: 'detached' });
+  await page.waitForTimeout(800);
+  assert.deepEqual(channels.slice(upFrom), [], 'Up is a cached tile: no request');
+
+  // A published page has its own renderer: a click on a bar sends nothing.
+  const site = await call('publish:run', { projectId: pid, dashboardIds: [aid] });
+  assert.equal(site.ok, true, JSON.stringify(site));
+  await page.goto(`${server.base}/p/${site.site.id}/`);
+  await page.locator('canvas').first().waitFor();
+  await page.waitForTimeout(800);
+  const pub = (await page.locator('canvas').first().boundingBox())!;
+  const mark = channels.length;
+  await clickUntil(page, pub, async () => false, 6, 4);
+  assert.deepEqual(channels.slice(mark), [], 'a click on a published chart makes no RPC');
 });
