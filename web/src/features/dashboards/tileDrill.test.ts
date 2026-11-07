@@ -2,7 +2,7 @@
 // saved view is applied. `tileFilters` appends its steps, `drilledDef` swaps in the drilled encoding.
 
 import { describe, expect, it } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import type { EditorApi } from '../analyses/editor/context';
@@ -10,6 +10,9 @@ import type { Step, VisualDef } from '../analyses/api';
 import { tileFilters } from './CardRuntime';
 import { drilledDef, drillSteps, type TileDrill, type TileDrillLevel } from './tileDrill';
 import { useViewer } from './useViewer';
+import { useTileDrill } from './useTileDrill';
+import { serveRpc } from '../../test-utils';
+import type { Card } from '../analyses/api';
 
 const REV = { column: 'revenue', aggregation: 'sum' };
 const def = { id: 'v', name: 'Revenue', datasetId: 'D', chartType: 'column', encoding: { category: 'region', values: [REV] }, overrides: {}, filters: [], updatedAt: '' } as VisualDef;
@@ -58,5 +61,26 @@ describe('the viewer’s drills', () => {
     act(() => result.current.drillInto('A', 'Geography', L2));
     expect(tileFilters(ed(), 'A')).toEqual([eq('year', '2024'), ...L1.steps, ...L2.steps]);
     expect(tileFilters(ed(), 'B')).toEqual(before);
+  });
+});
+
+describe('a drilled tile\'s freshness', () => {
+  it('keeps its levels fresh for a minute while drilled (Up asks nothing), and drops that once it is back at the root', async () => {
+    const DRILLED = { ok: true, available: true, encoding: L1.encoding, steps: L1.steps, crumb: { column: 'region', label: 'East', next: 'state' } };
+    serveRpc({ 'model:navigation': { body: { ok: true, tables: [{ datasetId: 'D', hierarchies: [{ id: 'h', name: 'Geography', levels: ['region', 'state'] }] }], dateLadder: ['year', 'month', 'day'], topics: [] } }, 'visual:drillDown': { body: DRILLED } });
+    const v = renderHook(() => useViewer('P', 'A'), { wrapper: wrap });
+    const ed = () => ({ projectId: 'P', viewing: true, view: v.result.current, params: {}, filtersFor: () => [] }) as unknown as EditorApi;
+    const t = renderHook(() => useTileDrill(ed(), { id: 'A' } as Card, def), { wrapper: wrap });
+    expect(t.result.current.staleTime).toBeUndefined();
+    const offer = await act(() => t.result.current.offer({ category: 'East', shown: 'East', time: false }));
+    act(() => offer!.run());
+    await waitFor(() => expect(v.result.current.drills.has('A')).toBe(true));
+    t.rerender();
+    expect(t.result.current.staleTime).toBe(60_000);
+    act(() => v.result.current.drillUp('A', 0));
+    t.rerender();
+    expect(t.result.current.staleTime).toBe(60_000); // the Up itself redraws the cached root
+    t.rerender();
+    expect(t.result.current.staleTime).toBeUndefined();
   });
 });

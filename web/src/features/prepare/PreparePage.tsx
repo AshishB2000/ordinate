@@ -99,8 +99,8 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
   const [formula, setFormula] = useState<Formula>(() => (params.get('add') === 'calculated_field' ? { index: -1 } : null));
   const [warnings, setWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  // A step that feeds something asks first, so the step actions wait for lineage's first reply; a failed lineage read
-  // (an old pod) never blocks a remove.
+  // A step that feeds something asks first, so the step actions wait for lineage's reply (a fresh one after each edit:
+  // the indexes move); a failed lineage read (an old pod) never blocks a remove.
   const lineage = useLineageFields(projectId, datasetId);
   const [removing, setRemoving] = useState<{ index: number; name: string; usedIn: UsedCounts } | null>(null);
   const [profile, setProfile] = useState<string | null>(null);
@@ -195,7 +195,7 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
             steps={state.steps}
             counts={state.stepCounts}
             names={names}
-            busy={busy || lineage.isPending} // until lineage answers, a Remove cannot know whether to ask first
+            busy={busy || lineage.isFetching} // until lineage answers (again, after an edit), a Remove cannot know whether to ask first
             onMove={move}
             onEdit={(i) => open(state.steps[i].type, i)}
             onRemove={(i) => {

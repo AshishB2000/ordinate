@@ -111,6 +111,7 @@ export function useApplyReply(projectId: string, datasetId: string) {
     }));
     void qc.invalidateQueries({ queryKey: ['dataset:columns', projectId, datasetId] });
     void qc.invalidateQueries({ queryKey: ['dataset:list', projectId] });
+    void qc.invalidateQueries({ queryKey: ['lineage:fields', projectId, datasetId] }); // its step indexes moved with the edit
   };
 }
 

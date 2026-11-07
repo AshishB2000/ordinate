@@ -420,6 +420,13 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const [eastChips, edChips] = [await chipsOf('east'), await chipsOf('ed')];
     ok('chips: east\'s answer by dept offers no "By ssn" (Org: dept › ssn)', eastChips.length > 0 && !eastChips.some((l) => /ssn/.test(l)), eastChips.join(' | '));
     ok('NEGATIVE CONTROL: the editor\'s does', edChips.includes('By ssn'), edChips.join(' | '));
+    // …nor does a drill: Ops by dept goes down into ssn, which east cannot read (its chart would be refused next).
+    const drillOps = (who: string) => W.call(who, 'visual:drillDown', { ...viz(COUNT_BY('dept')), mark: { category: 'Ops' } });
+    const [eastDrill, hrDrill] = [await drillOps('east'), await drillOps('hr')];
+    const drillMessages: typeof import('../src/ipc/drillMessages') = require('../src/ipc/drillMessages');
+    ok('drill: east\'s drill into Ops is refused, in the catalogued sentence, naming no ssn', eastDrill.status === 200 && eastDrill.body?.available === false
+      && eastDrill.body.reason === drillMessages.drillHiddenLevel('Org') && !/ssn/.test(eastDrill.text), show(eastDrill));
+    ok('NEGATIVE CONTROL: hr\'s drills into ssn', hrDrill.body?.available === true && hrDrill.body.encoding?.category === 'ssn', show(hrDrill));
 
     // ── Check the Assistant (p3-10): east's last check has no row and no count of a question east's list leaves out ──
     const verify = async (question: string, measures: object[]): Promise<string> => String(must(question, await W.call('boss', 'verified:save', { projectId: P,

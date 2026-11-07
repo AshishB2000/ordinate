@@ -27,9 +27,11 @@ export interface DrillProps {
   hierarchies: readonly NavHierarchy[];
   ladder: readonly DateGrain[];
   onChange: (next: Question) => void;
+  /** The drilled value's label, as the server named it for its crumb (`crumb.label`). */
+  onLabel?: (column: string, value: string | number, label: string) => void;
 }
 
-export function useExploreDrill({ projectId, datasetId, question, reply, chartType, hierarchies, ladder, onChange }: DrillProps): { onMark?: PanelMark; sheet: ReactNode } {
+export function useExploreDrill({ projectId, datasetId, question, reply, chartType, hierarchies, ladder, onChange, onLabel }: DrillProps): { onMark?: PanelMark; sheet: ReactNode } {
   const [offer, setOffer] = useState<{ mark: string | number; shown: string } | null>(null);
   const busy = useRef(false);
   const axis = reply ? drillableAxis({ chartType, encoding: question.encoding, category: reply.category, hierarchies, ladder }) : null;
@@ -42,12 +44,15 @@ export function useExploreDrill({ projectId, datasetId, question, reply, chartTy
         const r = await drillDown({ projectId, datasetId, encoding: question.encoding, filters: liveFilters(question.filters), mark: { category: mark } });
         if (!r.ok) toast(DRILL_FAILED, { kind: 'error' });
         else if (!r.available) toast(r.reason);
-        else onChange({ ...question, encoding: r.encoding, filters: [...question.filters, ...r.steps] });
+        else {
+          onLabel?.(r.crumb.column, mark, r.crumb.label);
+          onChange({ ...question, encoding: r.encoding, filters: [...question.filters, ...r.steps] });
+        }
       } finally {
         busy.current = false;
       }
     },
-    [projectId, datasetId, question, onChange],
+    [projectId, datasetId, question, onChange, onLabel],
   );
 
   if (!axis || !reply) return { sheet: null };

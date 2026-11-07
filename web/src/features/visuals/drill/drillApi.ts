@@ -23,6 +23,13 @@ export async function drillDown(input: RpcInput<'visual:drillDown'>): Promise<Dr
   }
 }
 
+/** A level hidden from the caller (part 4, the reply's `hidden`) ends its hierarchy there: `visual:drillDown` refuses a drill into it. */
+export const endAtHidden = (list: readonly NavHierarchy[], hidden: readonly string[] = []): NavHierarchy[] =>
+  list.map((h) => {
+    const i = h.levels.findIndex((l) => hidden.includes(l));
+    return i < 0 ? h : { ...h, levels: h.levels.slice(0, i) };
+  });
+
 /** What a drill would go to, in the words the sheet uses ("by state", "by month"), or null: the click stays inert. */
 export function drillableAxis(a: {
   chartType: string;
