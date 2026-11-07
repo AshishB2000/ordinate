@@ -24,6 +24,8 @@ const PASSWORD = 'pw-canary-pgfacts-5d2e';
   }
   const dbName = `ordinate_pgfacts_${process.pid}_${Date.now()}`;
   const scratch = new URL(adminUrl);
+  // The connection's own password (CI's Postgres asks for one); under trust auth there is none, so a canary stands in.
+  const secret = decodeURIComponent(scratch.password) || PASSWORD;
   scratch.pathname = '/' + dbName;
   const root = new Client({ connectionString: adminUrl });
   await root.connect();
@@ -40,10 +42,10 @@ const PASSWORD = 'pw-canary-pgfacts-5d2e';
       create index plain_t_note on public.plain_t (note, region);
       insert into public.plain_t select i, 'n' || i, 'r' from generate_series(1, 3) i;
       analyze public.plain_t;
-      comment on table public.plain_t is 'pw=${PASSWORD}';
+      comment on table public.plain_t is 'pw=${secret.replace(/'/g, "''")}';
       create table reordered (a int, b int, primary key (b, a));`);
     const values = { host: scratch.hostname, port: Number(scratch.port || 5432), database: dbName, user: decodeURIComponent(scratch.username) };
-    const secrets = { password: PASSWORD }; // the server asks for none under trust auth; it is here to be redacted
+    const secrets = { password: secret }; // the password the reader signs in with, also planted in a comment to be redacted
     const read = async (table: string) => readTableFacts('postgres', values, secrets, table);
     const got = async (table: string) => { const r = await read(table); return r && r.ok ? r.facts : null; };
 
@@ -59,7 +61,7 @@ const PASSWORD = 'pw-canary-pgfacts-5d2e';
     ok('real pg: an unqualified name, the analysed estimate, a composite index in its own order, no partition', p?.rowEstimate === 3 && !('partition' in p) && JSON.stringify(p.indexes?.map((i) => [i.name, i.columns, i.unique])) ===
       '[["plain_t_note",["note","region"],false],["plain_t_pkey",["id"],true]]' && p.columns.length === 3, JSON.stringify(p));
     ok('real pg: a key listed in a different order than the columns keeps the key\'s order', JSON.stringify((await got('reordered'))?.primaryKey) === '{"columns":["b","a"],"enforced":true}');
-    ok('real pg: a password stored in a comment is redacted', p?.comment === 'pw=***' && !JSON.stringify(await read('public.plain_t')).includes(PASSWORD));
+    ok('real pg: a password stored in a comment is redacted', p?.comment === 'pw=***' && !JSON.stringify(await read('public.plain_t')).includes(secret));
 
     const missing = await read('public.nope');
     ok('real pg: a table that is not there is an error', missing?.ok === false && missing.error === 'No such table: nope', JSON.stringify(missing));
