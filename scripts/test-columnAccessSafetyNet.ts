@@ -130,7 +130,7 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const P2: string = (await W.call('boss', 'projects:create', { name: 'Second' })).body.id;
     const lone = await W.as('boss', async () => (await datasets.saveDataset(P2, { name: 'Lone', sourceKind: 'csv', columns: C.STAFF_COLUMNS, rows: C.STAFF_ROWS }))!.id);
     const site = (await W.as('boss', () => hosted.getSite(siteId)))!;
-    const story = (publishedAt: string) => ({ ...site, projectId: P2, publishedAt, datasetIds: undefined, config: { ...site.config, storyIds: [crypto.randomUUID()] } });
+    const story = (publishedAt: string) => ({ ...site, projectId: P2, publishedAt, buildStartedAt: undefined, datasetIds: undefined, config: { ...site.config, storyIds: [crypto.randomUUID()] } });
     const servable = (s: ReturnType<typeof story>) => W.as('boss', () => hosted.servable(s));
     const old = new Date(Date.now() - 60_000).toISOString();
     ok('NEGATIVE CONTROL: legacy: an older site is served in a project with no rules', (await servable(story(old))) === true);
@@ -142,6 +142,12 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     });
     ok('legacy: …and not once its project has column rules newer than it', (await servable(story(old))) === false);
     ok('NEGATIVE CONTROL: legacy: one published after those rules is served', (await servable(story(new Date(Date.now() + 1000).toISOString()))) === true);
+    // Judged from its build's start, not its publish: a rule saved mid-build can land after the build's own check
+    // (a constructed manifest: the rule stamped between the build's start and its publishedAt).
+    const ruledAt = Date.parse(String(((await W.rawOf(staff)).columnAccess as { updatedAt?: string } | undefined)?.updatedAt));
+    const builtFrom = (from: number) => W.as('boss', () => hosted.servable({ ...site, buildStartedAt: new Date(from).toISOString(), publishedAt: new Date(ruledAt + 1000).toISOString() }));
+    ok('a site built from before a column rule, published after it, is not served', (await builtFrom(ruledAt - 1000)) === false);
+    ok('NEGATIVE CONTROL: …one whose build began after the rule is served', (await builtFrom(ruledAt + 500)) === true);
 
     // Subscriptions and alerts.
     const channelsMod: typeof import('../src/app/channels') = require('../src/app/channels');
