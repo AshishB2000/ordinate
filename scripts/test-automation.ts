@@ -137,7 +137,8 @@ async function cliCodes(): Promise<void> {
   ok('tool names unique and snake_case', new Set(tools).size === tools.length && tools.every((t) => /^[a-z]+(_[a-z]+)*$/.test(t)));
   ok('CLI names unique', new Set(clis).size === clis.length);
   const want = ['list_datasets', 'describe_dataset', 'aggregate', 'query_sql', 'list_metrics', 'metric_value', 'insights',
-    'create_visual', 'create_dashboard', 'publish_dashboard', 'unpublish_dashboard', 'export_dashboard', 'run_report'];
+    'create_visual', 'create_dashboard', 'publish_dashboard', 'unpublish_dashboard', 'export_dashboard', 'run_report',
+    'list_verified_questions', 'answer_verified_question', 'get_instructions'];
   ok('every tool the spec names exists', want.every((t) => tools.includes(t)), want.filter((t) => !tools.includes(t)).join());
   const wantCli = ['projects list', 'datasets list', 'datasets describe', 'datasets import', 'datasets refresh', 'query',
     'metrics list', 'metrics value', 'insights', 'dashboards list', 'dashboards export', 'reports run', 'publish'];

@@ -220,6 +220,25 @@ export const COMMANDS: readonly Command[] = [
     run: (a, ctx) => h.metricValue(ctx, String(a.metric), a.terms),
   },
   {
+    tool: 'list_verified_questions', readOnly: true,
+    summary: "The project's verified questions: answers the team signed off, each a spec the app computes. Never a stored figure.",
+    args: {},
+    run: (_a, ctx) => h.listVerifiedQuestions(ctx),
+  },
+  {
+    tool: 'answer_verified_question', readOnly: true,
+    summary: 'The answer to a verified question, computed now by the app under your row access rules. Say it is verified, and by whom.',
+    args: { question: { type: 'string', description: "A verified question's id, or its wording or one of its phrasings." } },
+    required: ['question'],
+    run: (a, ctx) => h.answerVerifiedQuestion(ctx, String(a.question)),
+  },
+  {
+    tool: 'get_instructions', readOnly: true,
+    summary: "The project's Assistant instructions: what its editors wrote about how to read the data. Follow them when you choose datasets, columns and words.",
+    args: {},
+    run: (_a, ctx) => h.getInstructions(ctx),
+  },
+  {
     cli: 'terms list', tool: 'list_terms', readOnly: true,
     summary: "List the project's glossary terms: named row filters (EMEA, Enterprise, Recent order) with their other names, their dataset and their filters in words. Pass a term's name to aggregate or metric_value as `terms` to filter by it. A viewer row access rules restrict gets no filter value. Each item may carry status: certified, needs_review or retired (with certifiedBy, certifiedAt, and replacedBy for a retired one).",
     args: {},

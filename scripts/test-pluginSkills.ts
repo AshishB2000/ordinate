@@ -113,6 +113,16 @@ async function main(): Promise<void> {
   const quotedNe = /Northeast leads at ([\d.]+)%/.exec(answer)![1];
   ok('answer-data-questions: the example SQL runs and Northeast leads at the quoted margin',
     rows[0]![0] === 'Northeast' && String(rows[0]![1]) === quotedNe, { rows, quotedNe });
+
+  // The verified-question example: what the team signed off, and the same figures aggregate gives.
+  const vArgs = JSON.parse(/- `answer_verified_question`: `(\{.*\})`/.exec(answer)![1]!);
+  const v = await call('answer_verified_question', vArgs);
+  const byRegion = await call('aggregate', { dataset: 'Retail orders', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] } });
+  ok('answer-data-questions: the verified example answers, and agrees with aggregate',
+    Object.is(v.series[0].values[v.labels.indexOf('West')], byRegion.series[0].values[byRegion.labels.indexOf('West')]) && v.verifiedBy.length > 0);
+  ok('answer-data-questions: it names the three tools, and checks the team\'s answers before aggregate',
+    ['get_instructions', 'list_verified_questions', 'answer_verified_question'].every((t) => answer.includes(`\`${t}\``))
+    && answer.indexOf('Check what the team signed off first') > 0 && answer.indexOf('Check what the team signed off first') < answer.indexOf('## An ambiguous question'));
 }
 
 main()

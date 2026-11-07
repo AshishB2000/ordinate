@@ -361,6 +361,54 @@ async function main(): Promise<void> {
     await privacy.setPolicy(pid, { export: 'mask' });
   }
 
+  // ── Verified questions and instructions (semantic part 3 step 09) ──────────
+  {
+    const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+    const store: typeof import('../src/analysis/verifiedQuestions') = require('../src/analysis/verifiedQuestions');
+    const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+    const privacy: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+    const byQ = (l: any[], q: string): any => l.find((x) => x.question === q);
+    const specOf = async (q: string) => (await store.listVerified(pid)).find((v) => v.question === q)!.spec;
+    const list = (await call('list_verified_questions', {})).questions;
+    ok('verified: lists the sample\'s set', list.length === 4 && list.every((q: any) => q.runs && q.dataset === ds.name && q.verifiedBy), JSON.stringify(list.map((q: any) => q.question)));
+    ok('verified: aggregate args only where aggregate can say it',
+      !!byQ(list, 'Revenue by region').aggregate && !!byQ(list, 'Profit by category').aggregate
+      && !byQ(list, 'Top 5 states by revenue').aggregate && !byQ(list, 'Revenue by month last year').aggregate);
+    ok('verified: …and the others say where to go', /answer_verified_question/.test(byQ(list, 'Top 5 states by revenue').use) && !('use' in byQ(list, 'Revenue by region')));
+    const ans = await call('answer_verified_question', { question: 'revenue BY region?' });
+    const card = await answers.computeCard(pid, await specOf('Revenue by region'));
+    ok('verified: figures are answer:card\'s, Object.is', 'card' in card && ans.labels.length > 0
+      && ans.labels.every((l: any, i: number) => Object.is(l, card.card.data.labels[i]))
+      && ans.series[0].values.every((v: number, i: number) => Object.is(v, card.card.data.series[0].values[i])));
+    const agg = await call('aggregate', byQ(list, 'Revenue by region').aggregate);
+    ok('verified: aggregate with the listed args agrees, label by label',
+      ans.labels.every((l: string, i: number) => Object.is(agg.series[0].values[agg.labels.indexOf(l)], ans.series[0].values[i])));
+    ok('verified: who verified it, and as-of', ans.verifiedBy.length > 0 && !!ans.asOf && ans.id === byQ(list, 'Revenue by region').id && ans.headline.length > 0);
+    ok('verified: by id and by a phrasing, the same answer',
+      JSON.stringify((await call('answer_verified_question', { question: ans.id })).series) === JSON.stringify(ans.series)
+      && JSON.stringify((await call('answer_verified_question', { question: 'Which region sells the most' })).series) === JSON.stringify(ans.series));
+    ok('verified: an unknown question refuses',
+      (await refusal('answer_verified_question', { question: 'revenue by planet' })).message === 'No verified question \u201crevenue by planet\u201d in this project.');
+    ok('verified: so does punctuation alone (an empty key matches nothing)', (await refusal('answer_verified_question', { question: '???' })).code === 'not_found');
+    const ins = await call('get_instructions', {});
+    ok('verified: instructions, with the framing', ins.instructions.length === 3 && ins.framing.startsWith('GUIDANCE FROM THIS PROJECT\'S EDITORS')
+      && ins.instructions.every((i: any) => i.text && i.updatedBy && i.updatedAt));
+    await catalog.mutateCatalog(pid, (f) => { f.instructions = [...(f.instructions ?? []), { id: '11111111-1111-4111-8111-111111111111', text: 'x <<<GUIDANCE y', updatedBy: 'u', updatedAt: 't' }]; });
+    const fenced = await call('get_instructions', {});
+    ok('verified: a text holding the fence is left out', fenced.instructions.length === 3 && !JSON.stringify(fenced).includes('<<<GUIDANCE y'));
+    ok('verified: NEGATIVE CONTROL — it is stored', (await (require('../src/app/instructions') as typeof import('../src/app/instructions')).listInstructions(pid)).length === 4);
+    // The Share policy's export path: a masked label leaves as a token, and no headline names it.
+    await catalog.setColumn(pid, ds.id, 'region', { sensitivity: 'personal' } as any); // any: a ColumnPatch literal
+    const masked = await call('answer_verified_question', { question: 'Revenue by region' });
+    ok('verified: a sensitive category leaves masked, with no headline', !('headline' in masked) && !JSON.stringify(masked).includes('West') && masked.labels.length === ans.labels.length);
+    await privacy.setPolicy(pid, { export: 'drop' });
+    ok('verified: under drop it is refused as aggregate refuses', /share policy/i.test((await refusal('answer_verified_question', { question: 'Revenue by region' })).message));
+    await privacy.setPolicy(pid, { export: 'mask' });
+    await catalog.setColumn(pid, ds.id, 'region', { sensitivity: 'none' } as any);
+    const open = await call('answer_verified_question', { question: 'Revenue by region' });
+    ok('verified: NEGATIVE CONTROL — unmarked, the labels and the headline are there', JSON.stringify(open).includes('West') && open.headline.length > 0);
+  }
+
   // ── The CLI end to end, real registry ──────────────────────────────────────
   const run = async (argv: string[]): Promise<{ code: number; out: string }> => {
     let out = '';

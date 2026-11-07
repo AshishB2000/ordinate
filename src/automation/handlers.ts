@@ -53,6 +53,7 @@ import { metricHidden } from '../analysis/columnHidden';
 
 export { resolveProject };
 export { aggregate, createVisual, createDashboard } from './creators';
+export * from './verifiedTools';
 
 // ── Lookups ──────────────────────────────────────────────────────────────────
 
