@@ -4,7 +4,7 @@
 // the tile's loading / error states. It computes nothing.
 
 import { useMemo, useRef } from 'react';
-import { asMonthLabels } from '../../charts/build';
+import { drawnLabels, rawOf, shownName, type ValueLabelPairs } from '../../charts/valueLabelMap';
 import { Chart, type ChartHandle } from '../../charts/Chart';
 import { DataTable } from '../../charts/DataTable';
 import { MapThumb } from '../../charts/maps/MapThumb';
@@ -54,12 +54,13 @@ export function mergeFilters(dash: readonly Step[], own: readonly Step[]): Step[
 }
 
 /**
- * The server's own label for a clicked mark. A first-of-month axis is drawn as "Jan 2023" (build.ts asMonthLabels);
- * a filter on that text would match no row, so a click-filter carries the label the server sent for that position.
+ * The server's own label for a clicked mark. A first-of-month axis is drawn as "Jan 2023" (build.ts asMonthLabels),
+ * a labelled value as its label (`pairs`, "EU" drawn "Europe"); a filter on that text would match no row, so a
+ * click-filter carries the label the server sent for that position.
  */
-export function serverLabel(labels: readonly unknown[] | undefined, shown: string | number): string | number {
+export function serverLabel(labels: readonly unknown[] | undefined, shown: string | number, pairs?: ValueLabelPairs): string | number {
   if (!labels) return shown;
-  const i = asMonthLabels(labels as unknown[]).findIndex((l) => String(l) === String(shown));
+  const i = drawnLabels(labels as unknown[], pairs).findIndex((l) => String(l) === String(shown));
   const raw = i < 0 ? shown : labels[i];
   return typeof raw === 'number' ? raw : String(raw);
 }
@@ -157,15 +158,18 @@ export function VisualTileBody({
   thumb?: boolean;
   /** The figures as an accessible table instead of the chart (tileActions.ts "View as table"). */
   asTable?: boolean;
-  /** A left click on a mark (click-to-filter, a tile action, the drill): its category, its series, the click itself. */
-  onMark?: (category: string | number, series?: string, event?: React.MouseEvent) => void;
+  /**
+   * A left click on a mark (click-to-filter, a tile action, the drill): its category and series as STORED, the click
+   * itself, and, on a chart that draws value labels, the mark as drawn ("Europe" for EU) for a chip to say.
+   */
+  onMark?: (category: string | number, series?: string, event?: React.MouseEvent, drawn?: { category: string; series?: string }) => void;
   /**
    * `onMark` is click-to-filter: ⌘/Ctrl-click reaches it (multi-select) instead of pinning a comment, and the
    * category is the SERVER's label for the mark, not the axis text a month axis shows in its place.
    */
   filterMark?: boolean;
-  /** A tile's tooltip_visual (T2.9): the hovered mark's category, or null off a mark. */
-  onHover?: (category: string | number | null, e: React.MouseEvent) => void;
+  /** A tile's tooltip_visual (T2.9): the hovered mark's category as stored, or null off a mark, and as drawn. */
+  onHover?: (category: string | number | null, e: React.MouseEvent, drawn?: string) => void;
   /** ⌥-click on a mark, or ⌘/Ctrl-click where that does not multi-select (T2.9, commentDoors.ts cmtOnChartClick): a comment pinned to that point. */
   onPinAt?: (category: string | number, series?: string) => void;
   onMapMark?: (column: string | undefined, category: string) => void;
@@ -182,7 +186,7 @@ export function VisualTileBody({
    * the label as the axis draws it ("Mar 2025" for "2025-03-01").
    * Wins over `onMark`.
    */
-  onMarkTap?: (point: ChartPoint, time: boolean, value: string | number, shown: string) => void;
+  onMarkTap?: (point: ChartPoint, time: boolean, value: string | number, shown: string, drawn?: { category: string; series?: string }) => void;
 }) {
   const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
@@ -219,6 +223,9 @@ export function VisualTileBody({
   // A held answer for another ask (the type or a figure override just changed): loading, never drawn as this one.
   if (q.data.ask !== undefined && q.data.ask !== figureAskKey(def.chartType, def.overrides)) return <SkeletonBlock label={`Loading ${label}`} />;
   const labels: readonly unknown[] | undefined = q.data.data.labels;
+  // A mark drawn by its value label ("Europe") is sent back as its stored value (EU): every filter, pin and drill.
+  const pairs = q.data.data.valueLabels;
+  const storedSeries = (name: string | undefined) => (name === undefined ? undefined : String(rawOf(name, pairs?.series)));
   // "time": the SERVER bucketed the axis by date (its `category.kind`).
   const time = q.data.category?.kind === 'date';
   const click =
@@ -229,24 +236,27 @@ export function VisualTileBody({
           if (onMarkTap) {
             // A bar or a line names its point by the axis — the nearest one, as a fingertip is wider than a point; a
             // pie, a scatter or a treemap by the mark that was hit.
-            const p = pointAt(chart.current, e.nativeEvent, labels ?? []) ?? (m ? { bucket: String(serverLabel(labels, m.category)), ...(m.series ? { series: m.series } : {}) } : null);
+            const p = pointAt(chart.current, e.nativeEvent, labels ?? [], pairs) ?? (m ? { bucket: String(serverLabel(labels, m.category, pairs)), ...(m.series ? { series: storedSeries(m.series) } : {}) } : null);
             if (!p) return;
             const i = labels ? labels.findIndex((l) => String(l) === p.bucket) : -1;
             const raw = i >= 0 ? labels?.[i] : undefined;
-            const shown = i >= 0 ? String(asMonthLabels(labels as unknown[])[i]) : p.bucket;
-            return onMarkTap(p, time, typeof raw === 'number' ? raw : p.bucket, shown);
+            const shown = i >= 0 ? String(drawnLabels(labels, pairs)[i]) : p.bucket;
+            const drawn = pairs ? { category: shown, ...(p.series !== undefined ? { series: String(shownName(p.series, pairs)) } : {}) } : undefined;
+            return onMarkTap(p, time, typeof raw === 'number' ? raw : p.bucket, shown, drawn);
           }
           if (!m) return;
-          if (onPinAt && (e.altKey || (!filterMark && (e.metaKey || e.ctrlKey)))) return onPinAt(m.category, m.series);
-          onMark?.(filterMark || serverMark ? serverLabel(labels, m.category) : m.category, m.series, e);
+          if (onPinAt && (e.altKey || (!filterMark && (e.metaKey || e.ctrlKey)))) return onPinAt(rawOf(m.category, pairs?.category), storedSeries(m.series));
+          const drawn = pairs ? { category: String(m.category), ...(m.series ? { series: m.series } : {}) } : undefined;
+          onMark?.(filterMark || serverMark ? serverLabel(labels, m.category, pairs) : rawOf(m.category, pairs?.category), storedSeries(m.series), e, drawn);
         }
       : undefined;
+  const hover = (drawn: string | number | undefined, e: React.MouseEvent) => onHover?.(drawn === undefined ? null : rawOf(drawn, pairs?.category), e, drawn === undefined ? undefined : String(drawn));
   // On a bar or a point of a chart with a category axis; off one, and on any other chart, the browser's own menu opens.
   const tile = q.data;
   const menu =
     onMarkMenu && !thumb && !asTable && def.encoding.category
       ? (e: React.MouseEvent) => {
-          const p = pointAt(chart.current, e.nativeEvent, tile.data.labels ?? []);
+          const p = pointAt(chart.current, e.nativeEvent, tile.data.labels ?? [], tile.data.valueLabels);
           if (!p) return;
           e.preventDefault();
           onMarkMenu(p, e, time);
@@ -257,7 +267,7 @@ export function VisualTileBody({
       className={onMark || onMarkTap ? `${s.drawn} ${s.crossFilter}` : s.drawn}
       onClick={click}
       onContextMenu={menu}
-      onMouseMove={onHover ? (e) => onHover(markAt(chart.current, e.nativeEvent)?.category ?? null, e) : undefined}
+      onMouseMove={onHover ? (e) => hover(markAt(chart.current, e.nativeEvent)?.category, e) : undefined}
       onMouseLeave={onHover ? (e) => onHover(null, e) : undefined}
     >
       {asTable && !def.chartType.startsWith('map_') ? (

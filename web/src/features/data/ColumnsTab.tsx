@@ -5,6 +5,7 @@
 // "Also called" is the other names people ask for the column by: the Assistant
 // resolves a question written in one (src/ai/answerSpec.ts), and the server
 // refuses a name another column already answers to — said at the field.
+// "Value labels" (ValueLabelsDialog) say what a text column's stored codes mean.
 // A viewer of the project reads every note and changes none.
 
 import { useId, useRef, useState } from 'react';
@@ -16,6 +17,7 @@ import { useColumnDocs, useStats, useWrite, type ColumnDoc } from './api';
 import { useLiveSchema } from './liveApi';
 import { useCanEdit } from '../projects/api';
 import { SENSITIVITY } from './Details';
+import { ValueLabelsCell } from './ValueLabelsDialog';
 import s from './Data.module.css';
 
 type Patch = Pick<ColumnDoc, 'displayName' | 'description' | 'example' | 'sensitivity'>;
@@ -139,7 +141,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
       </EmptyState>
     );
   }
-  if (docs.isPending) return <SkeletonTable cols={7} rows={Math.min(8, header.columns.length)} label="Loading the column notes" />;
+  if (docs.isPending) return <SkeletonTable cols={8} rows={Math.min(8, header.columns.length)} label="Loading the column notes" />;
   if (docs.isError) return <ErrorState heading={3} title="The column notes could not be loaded" message={docs.error.message} onRetry={() => void docs.refetch()} />;
   const all = docs.data;
   const doc = (name: string): ColumnDoc => (Object.prototype.hasOwnProperty.call(all, name) ? all[name] : {});
@@ -150,7 +152,8 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
     <section className={s.section} aria-label="Column notes">
       <p className={s.lead}>
         Descriptions show as tooltips wherever a column is named, and a display name replaces the raw one in pickers. Mark a
-        column personal or financial so exports and reports can say so.
+        column personal or financial so exports and reports can say so. Value labels say what a text column&apos;s stored codes
+        mean: charts and filters show the label and still filter by the code.
       </p>
       <p className={s.lead} id={helpId}>
         <span className={s.strong}>Also called</span>: {ALSO_CALLED_HELP} Separate names with commas.
@@ -163,6 +166,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
               <th scope="col">Type</th>
               <th scope="col">Display name</th>
               <th scope="col">Also called</th>
+              <th scope="col">Value labels</th>
               <th scope="col">Description</th>
               <th scope="col">Example</th>
               <th scope="col">Sensitivity</th>
@@ -184,6 +188,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
                   <td>
                     <AlsoCalled projectId={projectId} datasetId={datasetId} column={c.name} names={d.aliases ?? []} helpId={helpId} readOnly={!canEdit} />
                   </td>
+                  <td>{c.type === 'text' && <ValueLabelsCell projectId={projectId} datasetId={datasetId} column={c.name} values={d.values} canEdit={canEdit} />}</td>
                   <td>
                     <Cell multiline readOnly={!canEdit} value={d.description ?? ''} placeholder={canEdit ? 'Add a description' : '—'} label={`Description of ${c.name}`} onSave={(v, no) => patch(c.name, { description: v }, no)} />
                   </td>

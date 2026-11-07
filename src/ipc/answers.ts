@@ -26,6 +26,8 @@ import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
 import { buildVizData } from '../analysis/vizData';
 import type { ChartData } from '../analysis/vizData';
+import type { ValueLabelPairs } from '../analysis/valueLabels';
+import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
 import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
 import { isKeptStep } from '../data/filterList';
@@ -79,7 +81,8 @@ export interface AnswerCard {
   title: string;
   chartType: string;
   datasetName: string;
-  data: ChartData;
+  /** Raw labels, with what a stored value is called beside them (./valueLabelReplies). */
+  data: ChartData & { valueLabels?: ValueLabelPairs };
   caption: string;
   headline: Headline[];
   bullets: string[];
@@ -209,7 +212,8 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
   data = withChartFigures(data, figureAsk(chartType)); // the figures the card draws (analysis/chartShapes), and its caption reads
   // A column the user gave a display name reads as that name (the catalog).
-  const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
+  const names = await displayNames(projectId, ds.id).catch(() => ({}));
+  const caption = tileCaption({ chartType, data, names });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   // The rows are already loaded, so their time comes off the same record — no second read.
   const read = asOfFrom([ds]);
@@ -220,22 +224,30 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const withheld = await withheldColumns(projectId, ds.id);
   const saidFilterLabels = spec.filters.some((f) => 'column' in f && withheld.has(f.column))
     ? [...specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels, ...terms.labels] : undefined;
-  const facts = cardFacts({
+  const factsIn = {
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
-  }, spec, withheld);
+  };
+  const facts = cardFacts(factsIn, spec, withheld);
+  // What a PERSON reads says a stored value's label (F5), its filters' too (a value its locked rows hold); the model's facts above keep the value.
+  const labelled = await labelCardData(projectId, ds.id, encoding, data, viz.category);
+  const said = await filterText(projectId, ds.id, spec.filters, held);
+  const shown = saidFilters(spec.filters, said, held);
+  const shownLabels = shown === spec.filters ? filterLabels : specFilterSteps({ filters: shown }, ds.columns, ds.rows).labels;
+  const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
+  const say = (column: string, value: string): string => saidValue(said, held, column, value);
   // What the app did to a value comes first: it changes what the chart is about. The CARD's line, never the facts'.
-  const notes = (spec.matched ?? []).map((m) => valueMatched(m.said, m.value, m.column)).concat(viz.warnings);
+  const notes = (spec.matched ?? []).map((m) => valueMatched(m.said, say(m.column, m.value), m.column)).concat(viz.warnings);
   if (viz.category && viz.category.note) notes.push(viz.category.note);
-  // Nothing to draw because a value is not in its column: the nearest stored ones, never a marked column's.
-  const near = data.labels.length ? null : nearestValueFixes(spec, held, withheld);
+  notes.push(...labelled.notes, ...said.notes.filter((n) => !labelled.notes.includes(n)));
+  // Nothing to draw because a value is not in its column: the nearest stored ones (said by their labels), never a marked column's.
+  const near = data.labels.length ? null : nearestValueFixes(spec, held, withheld, say);
 
   return {
     card: {
-      ok: true, spec, title: spec.title, chartType, datasetName: ds.name, data, caption,
-      headline: facts.headline, bullets: facts.bullets,
+      ok: true, spec, title: spec.title, chartType, datasetName: ds.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
-      filterLabels, steps, notes, ...(asOf ? { asOf } : {}),
+      filterLabels: shownLabels, steps, notes, ...(asOf ? { asOf } : {}),
       ...(near ? { noMatch: { text: noRowsMatch(near.column, near.op, near.said), options: near.options } } : {}),
     },
     factsText: facts.text,

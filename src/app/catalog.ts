@@ -10,7 +10,7 @@
 //     tags:    { sales: { color: 3 } },
 //     records: { 'dataset:<uuid>': { description, tags, owner, updatedBy, updatedAt } },
 //     columns: { '<datasetId>': { discount: { description, displayName, aliases, example,
-//                                             sensitivity, updatedBy, updatedAt } } } }
+//                                             sensitivity, values?, updatedBy, updatedAt } } } }
 //
 // A METRIC's description is the one exception: the Metric record already has
 // `description` (metrics.ts), so that field stays the single source of truth
@@ -41,7 +41,8 @@ import { logger } from './logger';
 import { sanitizeInstructions, type Instruction } from './instructions';
 import { sanitizeStatus, type StatusDoc } from './statusDocs';
 import { sanitizeTables, type TableDoc } from './tableDocs';
-import { sanitizeValueLabels, type ValueLabel } from '../analysis/valueLabels';
+import { sanitizeValueLabels, valueLabelProblem, type ValueLabel } from '../analysis/valueLabels';
+import { valueLabelProblemText } from '../analysis/valueLabelMessages';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -338,8 +339,11 @@ export async function getColumns(projectId: string, datasetId: string, strict = 
   return own(file.columns, datasetId) ? file.columns[datasetId] : dict();
 }
 
-/** `addAlias`: ONE name appended to `aliases` inside the write — "Remember" on an answer card. Ignored beside `aliases`. */
-export interface ColumnPatch { description?: unknown; displayName?: unknown; aliases?: unknown; addAlias?: unknown; example?: unknown; sensitivity?: unknown }
+/**
+ * `addAlias`: ONE name appended to `aliases` inside the write — "Remember" on an answer card. Ignored beside `aliases`.
+ * `values`: the whole value-label list ([] removes it); a list that is not an array is ignored.
+ */
+export interface ColumnPatch { description?: unknown; displayName?: unknown; aliases?: unknown; addAlias?: unknown; example?: unknown; sensitivity?: unknown; values?: unknown }
 
 /**
  * Merge the fields PRESENT in `patch` (`aliases` replaces the list).
@@ -351,6 +355,10 @@ export interface ColumnPatch { description?: unknown; displayName?: unknown; ali
  * means two columns. (A display name may still repeat another column's name or
  * caption, as it could before aliases existed.) `datasetColumns` is the
  * dataset's current column names; without it the documented columns stand in.
+ *
+ * A `values` list is THROWN back, saving nothing, with the sentence for what the
+ * reader would quietly drop: two values with one label, a repeat, a blank or a
+ * long value, a label that is empty once trimmed, more than 500 rows.
  */
 export async function setColumn(
   projectId: string, datasetId: string, column: string, patch: ColumnPatch, datasetColumns?: string[],
@@ -358,10 +366,12 @@ export async function setColumn(
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
   if (typeof column !== 'string' || !column || column.length > MAX_COLUMN_NAME) return null;
   const p = patch && typeof patch === 'object' ? patch : {};
+  const labelled = Array.isArray(p.values) ? labelsOf(p.values) : undefined;
   return mutate(projectId, (file) => {
     if (!own(file.columns, datasetId)) file.columns[datasetId] = dict();
     const cols = file.columns[datasetId];
     const cur = own(cols, column) ? cols[column] : sanitizeColumnDoc({}, column);
+    const values = labelled ?? cur.values;
     const asked = p.aliases !== undefined ? p.aliases : p.addAlias !== undefined ? appended(cur, p.addAlias, column) : undefined;
     const aliases = asked !== undefined ? sanitizeAliases(asked, column) : cur.aliases;
     const displayName = p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName;
@@ -384,13 +394,21 @@ export async function setColumn(
       sensitivity: p.sensitivity !== undefined
         ? (SENSITIVITIES.has(String(p.sensitivity)) ? p.sensitivity as Sensitivity : 'none')
         : cur.sensitivity,
-      ...(cur.values && { values: cur.values }),
+      ...(values && values.length > 0 && { values }),
       updatedBy: osUser(),
       updatedAt: new Date().toISOString(),
     };
     cols[column] = next;
     return next;
   });
+}
+
+/** A patch's value-label list as stored; THROWS the sentence when it holds what a reader would drop. Rows that are not {value, label} text are not rows. */
+function labelsOf(raw: unknown[]): ValueLabel[] {
+  const list = raw.filter((r): r is ValueLabel => !!r && typeof (r as ValueLabel).value === 'string' && typeof (r as ValueLabel).label === 'string');
+  const problem = valueLabelProblem(list);
+  if (problem) throw new Error(valueLabelProblemText(problem));
+  return sanitizeValueLabels(list);
 }
 
 /**

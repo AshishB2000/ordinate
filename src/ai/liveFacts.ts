@@ -172,7 +172,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   const hidden = input.columns.filter((c) => input.withheld.has(c.name) && byName.get(c.name)?.values?.length).map((c) => c.name);
   if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked, or detected, as personal or financial data.)`);
   tableNoteLines(lines, input.table);
-  columnNoteLines(lines, input.docs || {}, input.columns.map((c) => c.name)); // current columns only, as the resolver reads them
+  columnNoteLines(lines, input.docs || {}, input.columns.map((c) => c.name), input.withheld); // current columns only, as the resolver reads them
   metricLines(lines, ledger, input.metrics || []);
   termLines(lines, input.terms || []);
   lines.push('');

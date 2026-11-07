@@ -65,6 +65,7 @@ import { followMetricMeasures } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
+import { withValueLabels } from './valueLabelReplies';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -663,7 +664,8 @@ export function register() {
       // the shaped chart still shows.
       // The figures the chart draws (analysis/chartShapes) come LAST, off the series as shaped: never more than they say.
       // A reference line's metric counts by its own date, so it is given the steps as they came (./visualsAnalytics).
-      const drew = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, flt), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
+      // Then what a stored value is called, beside it (./valueLabelReplies): after the policy, so a masked value has no pair.
+      const drew = await withValueLabels(projectId, datasetId, enc, withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, flt), enc), await storedFigureAsk(projectId, datasetId, drawnAs))); // r8:events
       const reply = drew.ok && scoped.ok && scoped.periodOn ? { ...drew, periodOn: scoped.periodOn } : drew;
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the

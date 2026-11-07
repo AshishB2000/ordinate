@@ -138,6 +138,7 @@ export function FilterDialog({
       return next;
     });
   const shown = list.data?.values ?? [];
+  const named = new Map(list.data?.valueLabels); // a value by its label ("Europe"); the step keeps the stored value
   const total = list.data?.total ?? shown.length;
 
   return (
@@ -187,7 +188,7 @@ export function FilterDialog({
               ) : shown.length === 0 ? (
                 <p className={s.empty}>{search ? 'No values match that search.' : 'This column has no values to filter on.'}</p>
               ) : (
-                shown.map((v) => <Checkbox key={v} label={v === '' ? '(empty)' : v} checked={selected.has(v)} onCheckedChange={(on) => toggle(v, on)} />)
+                shown.map((v) => <Checkbox key={v} label={v === '' ? '(empty)' : (named.get(v) ?? v)} checked={selected.has(v)} onCheckedChange={(on) => toggle(v, on)} />)
               )}
             </div>
             <p className={s.note} role="status">

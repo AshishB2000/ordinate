@@ -28,7 +28,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'captureDataset:image': 'EXPLICIT',
   'captureDataset:list': 'REDACT',
   'captureDataset:status': 'META',
-  'catalog:columns': 'META',
+  'catalog:columns': 'REDACT', // value labels name stored values: withheld from a caller closed to the dataset (src/app/columnLabelAccess.ts)
   'catalog:get': 'META',
   'catalog:getTable': 'REDACT', // keyCheck counts every row: withheld from a caller closed to the dataset
   'catalog:list': 'META',

@@ -1,0 +1,74 @@
+/* The value labels dialog (ValueLabelsDialog.tsx): its tools row, the value / label list, what it says. */
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+}
+.hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.list {
+  max-height: min(52vh, 480px);
+  overflow: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.table th:first-child {
+  width: 40%;
+}
+.value code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  text-overflow: ellipsis;
+  white-space: pre; /* a stored value is matched exactly: its spaces show */
+  vertical-align: middle;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.alert {
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  color: var(--error-text);
+  font-size: var(--t-13);
+}
+.note {
+  margin: var(--sp-8) 0 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.note:empty {
+  margin: 0; /* kept in the page, so what a fill finds is announced */
+}
+.none {
+  color: var(--muted);
+}
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 599px) {
+  .hint {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

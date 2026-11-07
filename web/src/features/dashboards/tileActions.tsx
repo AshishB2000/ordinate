@@ -131,7 +131,8 @@ export function actionMenu(card: Card, def: VisualDef | undefined, run: ReturnTy
 }
 
 /** tooltip_visual: another visual, filtered to the hovered mark, drawn beside the pointer. */
-export function TooltipVisual({ ed, tip, column, category, at }: { ed: EditorApi; tip: VisualDef | undefined; column: string; category: string | number; at: { x: number; y: number } }) {
+/** `category` filters it (the stored value); `drawn` is what the hovered mark said ("Europe" for EU), its heading. */
+export function TooltipVisual({ ed, tip, column, category, drawn, at }: { ed: EditorApi; tip: VisualDef | undefined; column: string; category: string | number; drawn?: string; at: { x: number; y: number } }) {
   const req = useMemo(
     () =>
       tip
@@ -151,7 +152,7 @@ export function TooltipVisual({ ed, tip, column, category, at }: { ed: EditorApi
   const y = Math.min(at.y + 16, window.innerHeight - 220);
   return (
     <div className={s.tip} role="tooltip" style={{ left: x, top: y }}>
-      <div className={s.tipHead}>{String(category)}</div>
+      <div className={s.tipHead}>{drawn ?? String(category)}</div>
       {!tip ? (
         <p className={s.tipNote}>The tooltip visual was deleted.</p>
       ) : q.data && q.data.ok ? (

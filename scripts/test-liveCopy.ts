@@ -10,7 +10,8 @@
 //    nothing is saved.
 // 2. The copy. A NEW extract named "<name> (copy)" holding every warehouse row
 //    (against a direct count), refreshable from the same origin, its table view
-//    paging, the Live dataset's column notes (a personal mark) carried over.
+//    paging, the Live dataset's column notes (a personal mark, value labels on a
+//    text column) carried over.
 //    The Live dataset: its record byte-identical, no Parquet, still Live, and
 //    no live question spent (runBound never called).
 // 3. The reply: id, name, rowCount, warnings — no SQL, no secret, no address
@@ -63,9 +64,13 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
     });
     const extract = await H.datasets.saveDataset(projectId, { name: 'Already a copy', sourceKind: 'csv', columns: fakeMod.ORDERS_COLUMNS, rows: [['North', 1, '2024-01-01']] });
     if (!orphan || !extract) throw new Error('fixture not saved');
-    await catalog.setColumn(projectId, orders.liveId, 'region', { sensitivity: 'personal', description: 'Where the order shipped', aliases: ['territory'] });
+    await catalog.setColumn(projectId, orders.liveId, 'region', {
+      sensitivity: 'personal', description: 'Where the order shipped', aliases: ['territory'],
+      values: [{ value: 'North', label: 'Northern region' }, { value: 'South ', label: 'Southern region' }],
+    });
     // Taught before the warehouse had a `day` column (no column list here, so nothing refuses it): the copy must leave it out.
-    await catalog.setColumn(projectId, orders.liveId, 'amount', { sensitivity: 'financial', aliases: ['takings', 'Day'] });
+    // A list on a column the copy types as a number (the store takes it; only a save through the handler checks the type).
+    await catalog.setColumn(projectId, orders.liveId, 'amount', { sensitivity: 'financial', aliases: ['takings', 'Day'], values: [{ value: '10', label: 'Ten' }] });
     await catalog.setColumn(projectId, orders.liveId, 'gone_column', { description: 'Not in the warehouse any more' });
     await catalog.setColumn(projectId, orders.liveId, 'day', { description: 'When it was booked' });
     // A catalog edited by hand: amount's caption is a name region is also called, which no write would have saved.
@@ -132,6 +137,9 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
   ok('copy: the Live dataset\'s column notes come with it — the personal mark too',
     notes.value?.columns?.region?.sensitivity === 'personal' && notes.value.columns.region.description === 'Where the order shipped', notes.body);
   ok('copy: …only for columns the copy has', !('gone_column' in (notes.value?.columns ?? {})), notes.body);
+  ok('copy: the value labels come with it, as stored (a value with a trailing space keeps it)',
+    JSON.stringify(notes.value?.columns?.region?.values) === '[{"value":"North","label":"Northern region"},{"value":"South ","label":"Southern region"}]', notes.body);
+  ok('copy: …but not a list on a column the copy types as a number', notes.value?.columns?.amount !== undefined && !('values' in notes.value.columns.amount), notes.body);
   ok('copy: the "Also called" names come with it', JSON.stringify(notes.value?.columns?.region?.aliases) === '["territory"]', notes.body);
   ok('copy: a list that now collides with a column is left out — and the financial mark is NOT lost with it',
     notes.value?.columns?.amount?.sensitivity === 'financial' && JSON.stringify(notes.value.columns.amount.aliases) === '[]', notes.body);

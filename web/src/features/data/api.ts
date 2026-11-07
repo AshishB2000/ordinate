@@ -140,6 +140,8 @@ export interface ColumnDoc {
   aliases?: string[];
   example?: string;
   sensitivity?: 'none' | 'personal' | 'financial';
+  /** What each stored value is called ("EU" is "Europe"); absent for a caller the dataset's row rules close it to. */
+  values?: { value: string; label: string }[];
   updatedBy?: string;
   updatedAt?: string;
 }

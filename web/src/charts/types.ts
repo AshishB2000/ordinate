@@ -3,6 +3,7 @@
 // (TcCalc); the pipeline they describe is build.ts.
 
 import type { ChartFigures } from '../../../src/analysis/chartShapes.ts';
+import type { ValueLabelPairs } from '../../../src/analysis/valueLabels.ts';
 import type { ChartTypeSpec } from './typeSpec';
 
 /**
@@ -50,6 +51,8 @@ export interface ChartDataShape {
    * (src/analysis/chartShapes.ts) for the type the request named. Never worked out here.
    */
   figures?: ChartFigures;
+  /** What a stored category or series name is CALLED ("EU" → "Europe"), for the values in this reply (./valueLabelMap). Drawn, never sent back. */
+  valueLabels?: ValueLabelPairs;
 }
 
 /**

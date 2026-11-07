@@ -34,7 +34,8 @@ export interface NoMatch { column: string; op: '=' | 'in'; said: string; options
 /** column → the stored text by its key (trimmed, lower case); the first spelling met wins, in row order. */
 export type Held = Map<string, Map<string, string>>;
 
-const MATCH_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
+/** The operators whose values are stored values (`contains EU` is not the value EU): matched, case-fixed and said by a label. */
+export const MATCH_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
 const MAX_SAID = 80;
 const MAX_MATCHED = 16;
 const MAX_OPTIONS = 3;
@@ -146,9 +147,13 @@ export function sanitizeMatched(raw: unknown, filters: AnswerFilter[]): ValueMat
  * in its place. Null when no such filter has a near value.
  *
  * Never for a column in `withheld`: its values are personal or financial, and
- * a suggestion is a list of them.
+ * a suggestion is a list of them. `say`: the text an option shows for a stored
+ * value (its value label, ipc/valueLabelReplies), looked up by the WHOLE value
+ * before the cut; the option's spec keeps the value.
  */
-export function nearestValueFixes(spec: AnswerSpec, held: Held, withheld: ReadonlySet<string>): NoMatch | null {
+export function nearestValueFixes(
+  spec: AnswerSpec, held: Held, withheld: ReadonlySet<string>, say: (column: string, value: string) => string = (_column, value) => value,
+): NoMatch | null {
   for (const [i, f] of spec.filters.entries()) {
     if ('term' in f || 'period' in f || (f.op !== '=' && f.op !== 'in') || withheld.has(f.column)) continue;
     const byKey = held.get(f.column);
@@ -159,7 +164,7 @@ export function nearestValueFixes(spec: AnswerSpec, held: Held, withheld: Readon
       const fixed = { ...f };
       if (f.value === said) fixed.value = n.value;
       if (f.values) fixed.values = f.values.map((v) => (v === said ? n.value : v));
-      return { label: n.value.slice(0, MAX_SAID), spec: { ...spec, filters: spec.filters.map((x, j) => (j === i ? fixed : x)) } };
+      return { label: say(f.column, n.value).slice(0, MAX_SAID), spec: { ...spec, filters: spec.filters.map((x, j) => (j === i ? fixed : x)) } };
     });
     if (options.length) return { column: f.column, op: f.op === 'in' ? 'in' : '=', said: said.slice(0, MAX_SAID), options };
   }

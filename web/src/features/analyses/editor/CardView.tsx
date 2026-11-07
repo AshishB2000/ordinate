@@ -15,7 +15,7 @@ import { vizLabel } from '../VisualTile';
 import { builderFor } from './AddVisual';
 import { useEditor } from './context';
 import { activeTab, childrenOf } from './geometry';
-import { substitute } from './filters';
+import { substitute, type ClickMark } from './filters';
 import { ImageBody, NavBody, StatsBody, statsTitle, type ImageSpec, type StatsSpec } from './KindCards';
 import { MetricBody, metricLabel } from './MetricCard';
 import s from './Cards.module.css';
@@ -71,8 +71,8 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
     // view state, so a viewer has it too and the record is never written. ⌘/Ctrl adds to the selection.
     const cols = clickColumns(ed, def);
     const onMark = cols
-      ? (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }) =>
-          ed.view.clickMark(card.id, { column: cols.column, value: v, ...(cols.seriesColumn && series !== undefined ? { seriesColumn: cols.seriesColumn, series } : {}) }, !!e && (e.metaKey || e.ctrlKey))
+      ? (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }, drawn?: ClickMark['drawn']) =>
+          ed.view.clickMark(card.id, { column: cols.column, value: v, ...(cols.seriesColumn && series !== undefined ? { seriesColumn: cols.seriesColumn, series } : {}), ...(drawn ? { drawn } : {}) }, !!e && (e.metaKey || e.ctrlKey))
       : undefined;
     // A tile's own actions (T2.9) outrank cross-filter, as on the desktop; a narrowing reads here too.
     return <VisualCard ed={ed} card={card} def={def} asTable={asTable} onMark={onMark} />;

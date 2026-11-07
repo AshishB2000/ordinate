@@ -110,6 +110,22 @@ async function main(): Promise<void> {
   ok('describe_dataset: …and the key check once it was counted',
     JSON.stringify((await call('describe_dataset', { dataset: ds.id })).table.keyCheck) === JSON.stringify({ rows: 4, empty: 0, repeatedKeys: 1, checkedAt: '2026-11-04T00:00:00.000Z' }));
   ok('describe_dataset: the rest of the reply is what it was (columns, SQL name)', noted.columns.length === meta.columns.length && noted.sqlName === 'retail_orders');
+  // Value labels: what a text column's stored codes mean, on that column; nothing on a column without them.
+  const catalogStore: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const textCol = meta.columns.find((c) => c.type === 'text')!.name;
+  const L = [{ value: 'EU', label: 'Europe' }, { value: 'NA', label: 'North America' }];
+  ok('describe_dataset: no labels, no valueLabels key on any column', !d.columns.some((c: any) => 'valueLabels' in c));
+  await catalogStore.setColumn(pid, ds.id, textCol, { values: L });
+  const labelled = await call('describe_dataset', { dataset: ds.id });
+  ok('describe_dataset: a text column carries its value labels', JSON.stringify(labelled.columns.find((c: any) => c.name === textCol).valueLabels) === JSON.stringify(L), JSON.stringify(labelled.columns));
+  ok('describe_dataset: …and only that column', labelled.columns.filter((c: any) => 'valueLabels' in c).length === 1);
+  await catalogStore.setColumn(pid, ds.id, textCol, { sensitivity: 'personal' });
+  ok('describe_dataset: a column marked personal carries no value labels (its codes are its values)', !(await call('describe_dataset', { dataset: ds.id })).columns.some((c: any) => 'valueLabels' in c));
+  await catalogStore.setColumn(pid, ds.id, textCol, { sensitivity: 'none', values: [] });
+  const numCol = meta.columns.find((c) => c.type === 'number')!.name;
+  await catalogStore.setColumn(pid, ds.id, numCol, { values: [{ value: '5', label: 'Five' }] }); // the store knows no types: a list left on a retyped column
+  ok('describe_dataset: a list left on a column that is not text is not said', !(await call('describe_dataset', { dataset: ds.id })).columns.some((c: any) => 'valueLabels' in c));
+  await catalogStore.setColumn(pid, ds.id, numCol, { values: [] });
 
   // Secrets: an origin with a token in its URL, and one with a file path.
   const secretUrl = 'https://data.example/export.csv?token=SEKRET-TOKEN-123';

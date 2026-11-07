@@ -76,7 +76,8 @@ function QuickDialog({ kind, datasetId, cols, onClose }: { kind: 'category' | 'p
     enabled: !!column,
     queryFn: () => distinctValues({ projectId: ed.projectId, datasetId, column: column as string, limit: 200 }),
   });
-  const opts = (values.data?.values ?? []).filter((v) => v != null && String(v).trim() !== '').map((v) => ({ value: String(v), label: String(v) }));
+  const named = new Map(values.data?.valueLabels); // shown by its label ("Europe"), filtered by the stored value
+  const opts = (values.data?.values ?? []).filter((v) => v != null && String(v).trim() !== '').map((v) => ({ value: String(v), label: named.get(String(v)) ?? String(v) }));
   const title = kind === 'period' ? 'Period: pick a value' : 'Category: pick a value';
   return (
     <Dialog

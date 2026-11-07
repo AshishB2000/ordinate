@@ -10,6 +10,7 @@ import * as OrdFormat from '../../../src/app/format.ts';
 import { CHART_PALETTE } from './palette';
 import { t } from './strings';
 import type { ChartDataShape, ChartSeriesShape, Cx } from './types';
+import { shownData } from './valueLabelMap';
 
 export interface TableModel {
   /** The first header cell. */
@@ -19,7 +20,8 @@ export interface TableModel {
   rows: Array<{ label: string; cells: string[] }>;
 }
 
-export function tableModel(data: ChartDataShape): TableModel {
+export function tableModel(raw: ChartDataShape): TableModel {
+  const data = shownData(raw); // each value by its label
   const labels: Cx[] = Array.isArray(data.labels) ? data.labels : [];
   const series: ChartSeriesShape[] = Array.isArray(data.series) ? data.series : [];
   return {

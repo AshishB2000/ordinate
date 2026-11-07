@@ -4,6 +4,7 @@ import { RowPolicyError, closedToCaller, isRowPolicyError, withLockSteps } from 
 import { seesSourceNames } from '../data/sourceNames';
 import { distinctFor } from './distinctFor';
 import { narrowSteps } from './distinctNarrow';
+import { distinctWithLabels } from './valueLabelReplies';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
 import * as importIpc from './datasetImport';
@@ -25,6 +26,7 @@ import {
   readPage,
   pageRowsJs,
   PageRequest,
+  DistinctRequest,
   MAX_DISTINCT,
 } from '../engine/datasetPage';
 import { medianOf } from '../data/columnProfile';
@@ -494,11 +496,13 @@ export function register() {
       if (!col) return { values: [], total: 0 };
       // A Live dataset answers from its profile's sample (L2.5) — or, with no list to give, a typed
       // refusal saying which case it is (never synced, not sampled, not listed). Never an empty list (D6).
-      const live = await liveDistinct(projectId, datasetId, col, req);
-      if (live) return parents.length && !('ok' in live) ? { ...live, narrowed: false } : live; // a sample is not narrowed: say so (p6-05a)
-
-      // Under the caller's row access lock (./distinctFor): only values that exist in their rows.
-      return (await distinctFor(projectId, datasetId, col, req, 'datasetDistinct')) ?? { values: [], total: 0 };
+      // Else under the caller's row access lock (./distinctFor): only values that exist in their rows. Then value labels.
+      const read = async (r: DistinctRequest) => {
+        const live = await liveDistinct(projectId, datasetId, col, r);
+        if (live) return parents.length && !('ok' in live) ? { ...live, narrowed: false as const } : live; // a sample is not narrowed: say so (p6-05a)
+        return distinctFor(projectId, datasetId, col, r, 'datasetDistinct');
+      };
+      return (await distinctWithLabels(projectId, datasetId, col, req, read)) ?? { values: [], total: 0 };
     } catch (err) {
       if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no values" would be a silent answer
       return { values: [], total: 0 };

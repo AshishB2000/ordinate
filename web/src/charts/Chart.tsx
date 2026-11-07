@@ -11,11 +11,12 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SkeletonBlock } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import * as OrdFormat from '../../../src/app/format.ts';
-import { asMonthLabels, buildChart, chartSeries } from './build';
+import { buildChart, chartSeries } from './build';
 import s from './Chart.module.css';
 import { loadChartJs } from './loadChartJs';
 import { resolveChartType } from './typeSpec';
 import type { ChartDataShape, Cx, Overrides } from './types';
+import { drawnLabels, shownData } from './valueLabelMap';
 import { buildWordCloud } from './wordCloud';
 
 /** What <Chart> holds: a Chart.js instance, or the word cloud's look-alike. */
@@ -151,7 +152,7 @@ export function Chart({
   // A screen reader hears what a waterfall, a Pareto, a 100% bar or a histogram draws: the server's figures as
   // text (the shared formatter's figureLines — the published page lists the same).
   const lines = useMemo(
-    () => OrdFormat.figureLines(type, asMonthLabels(Array.isArray(data.labels) ? data.labels : []), chartSeries(data).filter((x) => x.role !== 'overlay'), data.figures),
+    () => OrdFormat.figureLines(type, drawnLabels(data.labels, data.valueLabels), chartSeries(shownData(data)).filter((x) => x.role !== 'overlay'), data.figures),
     [type, data],
   );
   return (

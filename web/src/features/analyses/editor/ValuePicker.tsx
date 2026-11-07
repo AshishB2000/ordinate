@@ -13,7 +13,7 @@
 // reason, "Sync schema" for an editor where a sync can list them, and a box to
 // type a value into. Never an empty menu (D6).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatNumber } from '../../../../../src/app/format.ts';
 import { Button } from '../../../ui/Button';
@@ -157,7 +157,15 @@ export function ValuePicker({ projectId, control, value, onChange }: { projectId
   const q = useDistinct(projectId, control.datasetId, control.column, search);
   const picked = picksOf(control, value);
   const label = control.label || control.column;
-  const summary = picked.length === 0 ? 'All' : picked.length === 1 ? picked[0] || '(blank)' : `${picked.length} selected`;
+  // A value's label ("Europe" for EU), kept from every list seen, so the chip still says it while a search hides the value.
+  const [named, setNamed] = useState<ReadonlyMap<string, string>>(new Map());
+  const pairs = q.data?.valueLabels;
+  useEffect(() => {
+    if (pairs?.length) setNamed((m) => new Map([...m, ...pairs]));
+  }, [pairs]);
+  const listed = new Map(pairs);
+  const said = (v: string) => (v === '' ? '(blank)' : (listed.get(v) ?? named.get(v) ?? v));
+  const summary = picked.length === 0 ? 'All' : picked.length === 1 ? said(picked[0]) : `${picked.length} selected`;
   const noList = noListOf(q.error);
   if (noList) return <NoList projectId={projectId} control={control} refusal={noList} current={picked.length ? summary : ''} picked={picked} onChange={onChange} />;
 
@@ -172,10 +180,10 @@ export function ValuePicker({ projectId, control, value, onChange }: { projectId
   };
   const row = (v: string) =>
     multi ? (
-      <Checkbox key={v} label={v || '(blank)'} checked={picked.includes(v)} onCheckedChange={(c) => set(c ? [...picked, v] : picked.filter((x) => x !== v))} />
+      <Checkbox key={v} label={said(v)} checked={picked.includes(v)} onCheckedChange={(c) => set(c ? [...picked, v] : picked.filter((x) => x !== v))} />
     ) : (
       <button key={v} type="button" className={s.pick} aria-pressed={picked[0] === v} onClick={() => choose(v)}>
-        {v || '(blank)'}
+        {said(v)}
       </button>
     );
 

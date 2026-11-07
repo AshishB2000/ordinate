@@ -36,8 +36,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/data/filterList.ts': { count: 4, how: 'keeps' },
   // the one-step helper under sanitizeFilterList and sanitizeSteps
   'src/data/filterStepSanitize.ts': { count: 1, how: 'keeps' },
-  // also two specFilterSteps calls after the door (throws); the strictest wins
-  'src/ipc/answers.ts': { count: 3, how: 'keeps' },
+  // also three specFilterSteps calls after the door (throws): the steps, and the filter text with a value withheld or
+  // said by its value label (computeCard expands terms first; a term left in throws typed); the strictest wins
+  'src/ipc/answers.ts': { count: 4, how: 'keeps' },
   'src/ipc/copilotCards.ts': { count: 2, how: 'keeps' },
   // resolveFilterParams keeps a term; the Assistant's sentence names it by its kind (isKeptStep), no figure is computed
   'src/ipc/copilotMeasures.ts': { count: 1, how: 'keeps' },

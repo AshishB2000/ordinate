@@ -16,6 +16,7 @@ import { stampAsOf } from '../data/figureAsOf';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { withFigures } from '../analysis/chartShapes';
 import { storedFigureAsk } from './rowDoors';
+import { withValueLabels } from './valueLabelReplies';
 
 // The visual BUILDER's preview — MAIN PROCESS. Split from ./visuals.ts at its cap.
 //
@@ -38,8 +39,8 @@ export function register(): void {
         withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), p, d, e, values), e);
       const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run, values);
       // …and offers the map when the labels are places (analysis/geoHits) — what un-greys the builder's map chips.
-      // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes).
-      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
+      // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes); then the value labels beside them.
+      const reply = await withValueLabels(projectId, datasetId, enc, withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), await storedFigureAsk(projectId, datasetId, drawnAs))); // r8:events
       // Dated like `visual:data` (data/figureAsOf): the builder's preview says how fresh it is too.
       return await stampAsOf(reply.ok && bound.errors.length
         ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }

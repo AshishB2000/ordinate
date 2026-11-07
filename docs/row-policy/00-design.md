@@ -279,10 +279,13 @@ sensitive columns (fail open); it now refuses the search.
 
 ## The inventory
 
-Every channel a viewer can call is a `read` contract: **182** of the 371 contracts (`write` and
-`admin` channels need an editor or an admin, who are never restricted). Every one is listed here
-exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code and fails when a
-`read` contract is missing from it.
+Every channel a viewer can call is a `read` contract: **192** of the 388 contracts (`write` and
+`admin` channels need an editor or an admin, who are never restricted). The inventory of record is
+the table as code, `scripts/rowPolicyReaders.ts`: it classifies every one exactly once, and
+`scripts/test-rowPolicySafetyNet.ts` fails when a `read` contract is missing from it. The counts
+below are its. The per-channel rows after them are the design-time inventory with the reasons; some
+predate a later reclassification (a channel now REDACT may still sit under META) or a newer channel,
+and where a row and the code disagree, the code wins.
 
 | Treatment | Count | Meaning |
 |---|---|---|
@@ -290,12 +293,12 @@ exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code 
 | DOOR+ | 5 | Door figures, plus a part that goes through the locked distinct reader or is redacted. |
 | LOCKED | 5 | Row and value readers locked directly (`pageFor`, distinct, profile). |
 | NET | 31 | Reads rows outside a door through `getDataset`/`residentSource`: refused by the storage net. |
-| EXPLICIT | 11 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
+| EXPLICIT | 12 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
 | SKIP | 1 | A search across datasets: policy datasets are skipped for a restricted caller. |
-| REDACT | 6 | Metadata replies that carry row values: the values are stripped for a restricted caller. |
+| REDACT | 17 | Metadata replies that carry row values: the values are stripped for a restricted caller. |
 | FANOUT | 3 | Builds what is sent to others: refused for everyone. |
 | EXPORT | 4 | Builds a file: refused for a restricted caller. |
-| META | 102 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
+| META | 100 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
 
 Handler paths are under `src/`.
 
@@ -381,6 +384,7 @@ Handler paths are under `src/`.
 | `incremental:get` | `ipc/incremental.ts:15` | record `incremental.highWater` and `log[].highWater` (a row value) → stripped |
 | `dataset:liveSchema` | `ipc/liveProfile.ts:236` | record `live.profile` sample values and counts → stripped (column names and types stay) |
 | `captureDataset:list` | `ipc/captureDataset.ts:106` | stored `thumb` (an image of the table) → stripped for a capture linked to a policy dataset |
+| `catalog:columns` | `ipc/catalog.ts:35` | authored column notes, and each column's value labels (`ColumnDoc.values`: a list of STORED values) → the labels are stripped for a caller closed to the dataset (`app/columnLabelAccess.ts`, also on the `catalog:setColumn` and `catalog:addAlias` replies); a chart reply pairs only the values in its own locked result (`ipc/valueLabelReplies.ts`) |
 | `format:colors:get` | `ipc/format.ts:59` | project colour map: every category value an editor's chart dealt (colorMap.ts:35) → empty for a restricted caller in a project with any policy dataset |
 | **FANOUT** | | |
 | `publish:plan` | `ipc/publishServer.ts:66` | `planPublish` → `buildDashboard(defaultOnly)` + control `distinct()`: inside the fan-out scope → refused for EVERYONE when it reaches a policy dataset (the Publish dialog says why) |
@@ -402,7 +406,6 @@ Handler paths are under `src/`.
 | `branding:logo` | `ipc/prefs.ts:49` | the org logo |
 | `calendar:today` | `ipc/periods.ts:133` | the clock and the workspace calendar |
 | `captureDataset:status` | `ipc/captureDataset.ts:105` | AI readiness |
-| `catalog:columns` | `ipc/catalog.ts:29` | authored column notes (an `example` an editor typed is authored text — ceiling) |
 | `catalog:get` | `ipc/catalog.ts:15` | authored catalog doc |
 | `catalog:list` | `ipc/catalog.ts:58` | names, tags, `rowCount` (whole-table count — ceiling) |
 | `catalog:tags` | `ipc/catalog.ts:55` | tags |

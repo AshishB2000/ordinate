@@ -230,6 +230,87 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
         && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);
 
+    // Value labels name STORED values, so a caller closed to a dataset reads no list from any reply that carries a column doc. boss labels
+    // Orders' customer — a West value among them — and Plain's, which has no rules.
+    const labelRows = [{ value: `${H.W_CANARY}_3`, label: 'West three' }, { value: 'c1', label: 'Customer one' }];
+    const labelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'customer', patch: { values: labelRows } });
+    const labelledPlain = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: W.plain, column: 'customer', patch: { values: [{ value: 'c1', label: 'Customer one' }] } });
+    ok('setup: boss labels customer on Orders (a West value among them) and on Plain', labelled.body?.ok === true && labelled.body.column.values.length === 2 && labelledPlain.body?.ok === true, `${labelled.text.slice(0, 160)} | ${labelledPlain.text.slice(0, 160)}`);
+    const colsEast = await W.call('east', 'catalog:columns', { projectId: P, datasetId: orders });
+    const colsEd = await W.call('ed', 'catalog:columns', { projectId: P, datasetId: orders });
+    eastReplies.push(colsEast.text);
+    ok('redact: catalog:columns — east gets the column notes but no value labels, and nothing of West\'s',
+      colsEast.body?.ok === true && colsEast.body.columns.customer?.sensitivity === 'none' && !('values' in colsEast.body.columns.customer) && !H.leaks(colsEast.text) && !colsEast.text.includes('Customer one'), colsEast.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s catalog:columns holds both labels', colsEd.body?.columns?.customer?.values?.length === 2 && colsEd.text.includes('Customer one') && colsEd.text.includes('West three'), colsEd.text.slice(0, 200));
+    const colsPlain = await W.call('east', 'catalog:columns', { projectId: P, datasetId: W.plain });
+    ok('control: the gate is the dataset\'s rules, not the viewer — east reads the labels of a dataset with none', colsPlain.body?.columns?.customer?.values?.[0]?.label === 'Customer one', colsPlain.text.slice(0, 200));
+    // The two model-facing readers of the same docs: the Assistant's facts (assistantColumnDocs, the one funnel) and MCP's describe_dataset.
+    const sharePolicy: typeof import('../src/app/sharePolicy') = require('../src/app/sharePolicy');
+    type Described = { columns: { name: string; valueLabels?: unknown }[] };
+    const [aEast, aEd, dEast, dEd] = [await W.as('east', () => sharePolicy.assistantColumnDocs(P, orders)), await W.as('ed', () => sharePolicy.assistantColumnDocs(P, orders)),
+      await describedBy('east') as unknown as Described, await describedBy('ed') as unknown as Described];
+    eastReplies.push(JSON.stringify(aEast), JSON.stringify(dEast));
+    ok('redact: the Assistant\'s column docs — east gets the notes but no value labels', aEast.customer?.sensitivity === 'none' && !('values' in aEast.customer) && !/Customer one|West three/.test(JSON.stringify(aEast)), JSON.stringify(aEast.customer));
+    ok('NEGATIVE CONTROL: the editor\'s Assistant docs hold both labels', JSON.stringify(aEd.customer?.values) === JSON.stringify(labelRows), JSON.stringify(aEd.customer));
+    ok('redact: describe_dataset — east gets no value labels on any column', !dEast.columns.some((c) => 'valueLabels' in c) && !/Customer one|West three/.test(JSON.stringify(dEast)), JSON.stringify(dEast.columns));
+    ok('NEGATIVE CONTROL: the editor\'s describe_dataset carries them', JSON.stringify(dEd.columns.find((c) => c.name === 'customer')?.valueLabels) === JSON.stringify(labelRows), JSON.stringify(dEd.columns));
+    // A save's reply and an alias's reply carry the doc too. A writer is never row-restricted, so they are driven where every caller is closed to
+    // the dataset (a fan-out scope): the list is withheld there, and the same two calls outside it return it.
+    const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+    const writes = (who: string, scoped: boolean) => W.as(who, async () => {
+      const run = () => Promise.all([
+        rpc.handlers.get('catalog:setColumn')!({}, { projectId: P, datasetId: orders, column: 'customer', patch: { description: 'Who bought' } }),
+        rpc.handlers.get('catalog:addAlias')!({}, { projectId: P, datasetId: orders, column: 'customer', alias: 'buyer' }),
+      ]);
+      return scoped ? (await rowAccess.fanOutScope(run)).value : run();
+    });
+    const [closedSave, closedAlias] = await writes('ed', true);
+    const [openSave, openAlias] = await writes('ed', false);
+    ok('redact: catalog:setColumn and catalog:addAlias — a caller closed to the dataset gets the doc without value labels',
+      (closedSave as { ok: boolean }).ok && (closedAlias as { ok: boolean }).ok && ![closedSave, closedAlias].some((r) => /values|Customer one|West three/.test(JSON.stringify(r)) || H.leaks(JSON.stringify(r))), JSON.stringify([closedSave, closedAlias]).slice(0, 240));
+    ok('NEGATIVE CONTROL: the same two calls outside the scope return the list', [openSave, openAlias].every((r) => (r as { column: { values: unknown[] } }).column.values.length === 2), JSON.stringify([openSave, openAlias]).slice(0, 240));
+    // The chart is drawn from East's rows only: it carries no label of a West value.
+    const chartEast = await W.call('east', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
+    eastReplies.push(chartEast.text);
+    ok('east\'s chart by customer holds no West value and no label of one', chartEast.status === 200 && !H.leaks(chartEast.text) && !chartEast.text.includes('West three'), chartEast.text.slice(0, 200));
+    // Its pairs are for the values in its own locked reply, never the stored list (the list above is withheld from east).
+    ok('east\'s chart by customer pairs only East\'s own values: ["c1","Customer one"]', JSON.stringify(chartEast.body?.data?.valueLabels) === '{"category":[["c1","Customer one"]]}', JSON.stringify(chartEast.body?.data?.valueLabels));
+    const chartEd = await W.call('ed', 'visual:data', { projectId: P, datasetId: orders, encoding: enc });
+    ok('NEGATIVE CONTROL: the editor\'s chart pairs the West value too', JSON.stringify(chartEd.body?.data?.valueLabels) === JSON.stringify({ category: labelRows.map((r) => [r.value, r.label]) }), JSON.stringify(chartEd.body?.data?.valueLabels));
+    // A filter picker finds a value by its label only inside the caller's rows: the label search asks again through the lock.
+    const pick = (who: string, search: string) => W.call(who, 'dataset:distinct', { projectId: P, datasetId: orders, column: 'customer', search });
+    const pickWest = await pick('east', 'three');
+    const pickOwn = await pick('east', 'customer one');
+    const pickWestEd = await pick('ed', 'three');
+    eastReplies.push(pickWest.text, pickOwn.text);
+    ok('locked: east\'s picker searched by a West value\'s label finds nothing, and says no label', JSON.stringify(pickWest.body) === '{"values":[],"total":0}', pickWest.text.slice(0, 200));
+    ok('east\'s picker finds its own c1 by its label, the pair beside it', JSON.stringify(pickOwn.body) === '{"values":["c1"],"total":1,"valueLabels":[["c1","Customer one"]]}', pickOwn.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: the editor\'s picker finds the West value by its label', JSON.stringify(pickWestEd.body) === JSON.stringify({ values: [`${H.W_CANARY}_3`], total: 1, valueLabels: [[`${H.W_CANARY}_3`, 'West three']] }), pickWestEd.text.slice(0, 200));
+    // An answer card's filter text (bullet, chips, "did you mean") says a label only for a value east's own rows hold.
+    const cardOf = (who: string, column: string, value: string) => W.call(who, 'answer:card', { projectId: P, spec: spec(orders, { filters: [{ column, op: '=', value }] }) });
+    const ownCard = await cardOf('east', 'customer', 'c1');
+    eastReplies.push(ownCard.text);
+    ok('east\'s card filtered to its own c1 says "Customer one" in its chip and bullet', JSON.stringify(ownCard.body?.filterLabels) === '["customer = Customer one"]'
+      && ownCard.body.bullets.includes('Filtered to customer = Customer one.'), ownCard.text.slice(0, 240));
+    // The asked West value is echoed by design (it is east's own question), so these replies stay out of the leak sweep.
+    const westCard = await cardOf('east', 'customer', `${H.W_CANARY}_3`);
+    const westCardEd = await cardOf('ed', 'customer', `${H.W_CANARY}_3`);
+    ok('redact: east\'s card filtered to a West value says no label of it', westCard.status === 200 && westCard.body?.ok === true && !westCard.text.includes('West three')
+      && JSON.stringify(westCard.body.filterLabels) === JSON.stringify([`customer = ${H.W_CANARY}_3`]), westCard.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor\'s card filtered to it says "West three"', JSON.stringify(westCardEd.body?.filterLabels) === '["customer = West three"]'
+      && westCardEd.body.bullets.includes('Filtered to customer = West three.'), westCardEd.text.slice(0, 240));
+    // "Did you mean": east is offered its own region, by its label; never the West one, which the editor is offered.
+    await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'region', patch: { values: [{ value: 'East', label: 'Eastern' }, { value: 'West', label: 'Western' }] } });
+    const meant = (r: H.Reply): string => JSON.stringify(r.body?.noMatch?.options?.map((o: { label: string; spec: { filters: { value: unknown }[] } }) => [o.label, o.spec.filters[0].value]));
+    const eas = await cardOf('east', 'region', 'Eas');
+    const wesEast = await cardOf('east', 'region', 'Wes');
+    const wesEd = await cardOf('ed', 'region', 'Wes');
+    eastReplies.push(eas.text, wesEast.text);
+    ok('east\'s "did you mean" offers its own region by its label, the spec keeping the value', meant(eas) === '[["Eastern","East"]]', meant(eas));
+    ok('redact: east is never offered the West region or its label', wesEast.status === 200 && !wesEast.text.includes('Western') && !/"West"/.test(wesEast.text), wesEast.text.slice(0, 240));
+    ok('NEGATIVE CONTROL: the editor is offered it, by its label', meant(wesEd) === '[["Western","West"]]', meant(wesEd));
+    await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: orders, column: 'region', patch: { values: [] } });
+
     // An alert event found through a caller-chosen analysis id, on Orders: its figures are whole-dataset (NV-17).
     const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
     await W.as('boss', () => alertStore.recordEvents(P, [{ id: crypto.randomUUID(), ruleId: crypto.randomUUID(), ruleName: 'Sales watch', datasetId: orders, at: new Date().toISOString(),
@@ -421,6 +502,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const setColumns = (id: string, on: boolean) => W.as('boss', () => rec.serialized(rec.datasetFilePath(P, id), (r) => { if (on) r.columnAccess = CA; else delete r.columnAccess; return true; }));
     // The twin: the same rows and steps, no rules at all — what the editor's and the admin's replies must equal.
     const twin = await W.as('boss', async () => (await datasetsMod.saveDataset(P, { name: 'Orders', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    // …and the same value labels Orders' customer was given above (PR 06): a reply carries them beside its labels.
+    const twinLabelled = await W.call('boss', 'catalog:setColumn', { projectId: P, datasetId: twin, column: 'customer', patch: { values: labelRows } });
+    ok('setup: the twin\'s customer has Orders\' value labels', twinLabelled.body?.ok === true && twinLabelled.body.column.values.length === 2, twinLabelled.text.slice(0, 160));
     await mkRecs(twin);
     const swapTwin = { [twin]: orders, [recs[twin].visualId]: recs[orders].visualId, [recs[twin].metricId]: recs[orders].metricId, [recs[twin].dash]: recs[orders].dash };
     await setColumns(orders, true);

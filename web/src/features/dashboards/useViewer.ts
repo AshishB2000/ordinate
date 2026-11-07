@@ -56,6 +56,8 @@ export interface Viewer {
   clicks: readonly ClickFilter[];
   /** A click on a mark of card `origin`; `additive` is ⌘/Ctrl held. */
   clickMark(origin: string, mark: ClickMark, additive: boolean): void;
+  /** What a clicked stored value was DRAWN as, by `clickName(column, value)`: the chips' text ("Europe" for EU). */
+  clickNames: ReadonlyMap<string, string>;
   /** One chip's ×; no argument clears every click-filter (Esc, "Clear"). */
   clearClicks(one?: ClickFilter): void;
   crumb: Crumb | null;
@@ -125,13 +127,26 @@ export function toggled(sel: Step[], step: Step): Step[] {
   return [...sel.filter((x) => !(x.type === 'filter' && x.column === step.column && x.op === '=' && step.op === '=')), step];
 }
 
+/** The key of a clicked value's drawn text in `clickNames`. */
+export const clickName = (column: string, value: unknown): string => `${column}\u0000${value == null ? '' : String(value as string)}`;
+
 export function useViewer(projectId: string, analysisId: string, opening?: Opening | null): Viewer & { arrivedSheet?: string } {
   const [arrived] = useState(() => takeNavigation(analysisId));
   // The opening view's selection first, then a navigation's carry.
   const [selection, setSelection] = useState<Step[]>(() => merged(opening?.selection ?? [], arrived?.carry ?? []));
   const [narrowed, setNarrowed] = useState<ReadonlyMap<string, Step[]>>(() => opening?.narrowed ?? new Map());
   const [clicks, setClicks] = useState<readonly ClickFilter[]>([]);
-  const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => setClicks((c) => toggleClickFilter(c, origin, mark, additive)), []);
+  const [clickNames, setClickNames] = useState<ReadonlyMap<string, string>>(new Map());
+  const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => {
+    setClicks((c) => toggleClickFilter(c, origin, mark, additive));
+    const d = mark.drawn;
+    if (!d) return;
+    setClickNames((m) => {
+      const next = new Map(m).set(clickName(mark.column, mark.value), d.category);
+      if (mark.seriesColumn && d.series !== undefined) next.set(clickName(mark.seriesColumn, mark.series), d.series);
+      return next;
+    });
+  }, []);
   const clearClicks = useCallback((one?: ClickFilter) => setClicks((c) => (one ? c.filter((x) => !(x.origin === one.origin && x.column === one.column)) : c.length ? [] : c)), []);
   const [asOf, setAsOf] = useState<string | null>(() => opening?.asOf ?? null);
   const restore = useCallback((sel: Step[], tiles: ReadonlyMap<string, Step[]>, at: string | null) => {
@@ -186,6 +201,7 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
         }),
       clicks,
       clickMark,
+      clickNames,
       clearClicks,
       crumb: arrived?.crumb ?? null,
       arrivedSheet: arrived?.sheet,
@@ -202,6 +218,6 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
       openComments,
       restore,
     }),
-    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, expanded, comments, restore],
+    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clickNames, clearClicks, arrived, asOf, currency, compare, presenting, expanded, comments, restore],
   );
 }

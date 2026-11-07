@@ -4,7 +4,7 @@
 // how a click on a mark is routed (plain, ⌘/Ctrl, ⌥).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { asMonthLabels } from '../../charts/build';
@@ -14,6 +14,7 @@ import type { ClickFilter } from '../analyses/editor/filters';
 import { serverLabel, VisualTileBody } from '../analyses/VisualTile';
 import { clickColumns } from './CardRuntime';
 import { ClickFilterBar, clickValues } from './ClickFilters';
+import { clickName, useViewer } from './useViewer';
 
 // The chart's hit-test (Chart.js on a real canvas) is not what is under test: every click lands on this mark.
 const MONTHS = ['2023-01-01', '2023-02-01'];
@@ -82,6 +83,27 @@ describe('the click-filter chips', () => {
     render(<ClickFilterBar ed={ed} />);
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(clearClicks).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it('a value the chart drew by its label says the label; the filter keeps the stored value', () => {
+    const region: ClickFilter = { origin: 'card-a', column: 'region', values: ['EU', 'NA'] };
+    const names = new Map([[clickName('region', 'EU'), 'Europe']]);
+    expect(clickValues(region, false, names)).toBe('Europe, NA');
+    expect(clickValues(region)).toBe('EU, NA'); // NEGATIVE CONTROL: nothing drawn by a label, the values as stored
+    const { ed } = editor([region]);
+    render(<ClickFilterBar ed={{ ...ed, view: { ...ed.view, clickNames: names } } as EditorApi} />);
+    expect(screen.getByRole('group', { name: 'Click filters' }).textContent).toContain('region:Europe, NA');
+    expect(screen.getByRole('button', { name: 'Remove click filter region: Europe, NA' })).toBeTruthy();
+  });
+
+  it('the viewer keeps what each clicked value was drawn as, beside the click that filters by the value', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useViewer(P, D), { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+    act(() => result.current.clickMark('card-a', { column: 'region', value: 'EU', seriesColumn: 'tier', series: 'g', drawn: { category: 'Europe', series: 'Gold' } }, false));
+    expect(result.current.clicks).toEqual([{ origin: 'card-a', column: 'region', values: ['EU'] }, { origin: 'card-a', column: 'tier', values: ['g'] }]);
+    expect([result.current.clickNames.get(clickName('region', 'EU')), result.current.clickNames.get(clickName('tier', 'g'))]).toEqual(['Europe', 'Gold']);
+    act(() => result.current.clickMark('card-a', { column: 'region', value: 'NA' }, true));
+    expect(result.current.clickNames.size).toBe(2); // NEGATIVE CONTROL: a mark not drawn by a label names nothing
   });
 
   it('spells three values, then counts', () => {
@@ -162,6 +184,35 @@ describe('a click on a mark', () => {
     expect(onPinAt).toHaveBeenCalledExactlyOnceWith(JAN, 'B2B');
     fireEvent.click(target);
     expect(onMark.mock.calls[0].slice(0, 2)).toEqual([JAN, 'B2B']);
+  });
+
+  it('a mark drawn by its value label filters, and pins, by the stored value; the chip gets the drawn text', async () => {
+    const labelled = { ok: true, data: { labels: ['EU', 'NA'], series: [{ name: 'B2B', values: [1, 2] }], valueLabels: { category: [['EU', 'Europe']] } }, warnings: [] };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([labelled]), { status: 200 })));
+    hit.category = 'Europe';
+    const onMark = vi.fn();
+    const onPinAt = vi.fn();
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <VisualTileBody projectId={P} def={def()} filters={[]} params={[]} asTable onMark={onMark} onPinAt={onPinAt} filterMark />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    const target = (await screen.findByRole('table')).parentElement as HTMLElement;
+    expect(screen.getByRole('table').textContent).toContain('Europe'); // the table draws the label
+    fireEvent.click(target);
+    fireEvent.click(target, { altKey: true });
+    hit.category = JAN;
+    expect(onMark.mock.calls[0][0]).toBe('EU');
+    expect(onMark.mock.calls[0][3]).toEqual({ category: 'Europe', series: 'B2B' });
+    expect(onPinAt).toHaveBeenCalledExactlyOnceWith('EU', 'B2B');
+  });
+
+  it('NEGATIVE CONTROL: an unlabelled chart sends no drawn text (its chips say the value, as before)', async () => {
+    const { onMark, target } = await draw(true);
+    fireEvent.click(target);
+    expect(onMark.mock.calls[0][3]).toBeUndefined();
   });
 
   it('serverLabel maps axis text back by position, and leaves anything else alone', () => {

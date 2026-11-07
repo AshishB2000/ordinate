@@ -7,8 +7,35 @@
 // and project facts (./copilotFacts), a Live dataset's (./liveFacts) and the
 // dashboard draft's (src/analysis/planFacts.ts).
 
-/** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). */
-export interface FactColumnDoc { description?: string; displayName?: string; aliases?: string[]; sensitivity?: string }
+import type { ValueLabel } from '../analysis/valueLabels';
+// The one cell printer (D3). ./promptText reads WITHHELD from here only when it prints, so the cycle is safe.
+import { quoted } from './promptText';
+
+/** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). `values`: what its stored codes mean. */
+export interface FactColumnDoc { description?: string; displayName?: string; aliases?: string[]; sensitivity?: string; values?: ValueLabel[] }
+
+/** A column's value labels a model reads: at most this many pairs, then how many more. */
+export const VALUE_LABEL_FACT_MAX = 20;
+/** …and at most this many characters of them: past it pairs are cut, never the column's note. */
+const CODES_FACT_CHARS = 1000;
+
+/**
+ * `codes "EU" = Europe, "NA" = North America (+3 more)`: what the column's stored values mean, so an answer
+ * filters by the value and says the label. A value is a cell (quoted, cut, escaped), a label one line. '' with none.
+ */
+function codesBit(list: ValueLabel[] | undefined): string {
+  const all = Array.isArray(list) ? list : [];
+  const out: string[] = [];
+  let chars = 0;
+  for (const { value, label } of all.slice(0, VALUE_LABEL_FACT_MAX)) {
+    const pair = `${quoted(String(value))} = ${oneLine(label, FIELD_FACT_MAX)}`;
+    if (chars + pair.length > CODES_FACT_CHARS) break;
+    chars += pair.length + 2;
+    out.push(pair);
+  }
+  if (!out.length) return '';
+  return `codes ${out.join(', ')}${all.length > out.length ? ` (+${all.length - out.length} more)` : ''}`;
+}
 
 /**
  * What people call the column: `called "Net Amount"`, `also called "sales",
@@ -29,9 +56,10 @@ export function columnNameBits(d: FactColumnDoc): string[] {
  * The user's OWN notes on columns — what a column means, what they call it,
  * whether it is personal or financial — so an answer uses their words. Words,
  * not figures: a digit a note happens to contain reaches the ledger through
- * sealLedger, exactly like a digit in a dataset name.
+ * sealLedger, exactly like a digit in a dataset name. `withheld`: more columns whose
+ * values no model is shown than the marks say (a Live dataset's pending and detected ones).
  */
-export function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[]): void {
+export function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[], withheld?: ReadonlySet<string>): void {
   const notes: string[] = [];
   for (const name of Object.keys(docs || {})) {
     if (only && only.indexOf(name) < 0) continue;
@@ -39,6 +67,9 @@ export function columnNoteLines(lines: string[], docs: Record<string, FactColumn
     const bits = columnNameBits(d);
     if (d.description) bits.push(d.description);
     if (d.sensitivity && d.sensitivity !== 'none') bits.push(`${d.sensitivity} data; sample values withheld`);
+    // A code IS a stored value: none for a column whose values are withheld (marked; on Live also pending or detected).
+    const codes = d.sensitivity === 'personal' || d.sensitivity === 'financial' || withheld?.has(name) ? '' : codesBit(d.values);
+    if (codes) bits.push(codes);
     if (bits.length) notes.push(`- ${name}: ${bits.join('; ')}`);
   }
   if (!notes.length) return;

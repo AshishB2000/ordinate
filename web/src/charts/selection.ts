@@ -10,6 +10,7 @@
 // filtered to (dashboardFilters.ts clickFilterSteps).
 
 import type { Cx } from './types';
+import { rawOf } from './valueLabelMap';
 
 export interface MarkSelection {
   /** The server's labels of the picked categories (not the axis text). */
@@ -22,10 +23,11 @@ export interface MarkSelection {
 export const DIM_ALPHA = 0.28;
 
 /**
- * @param raw   the server's labels, as sent
- * @param shown the axis text for the same positions (a month axis reads "Jan 2023")
+ * @param raw    the server's labels, as sent
+ * @param shown  the axis text for the same positions (a month axis reads "Jan 2023", a labelled value its label)
+ * @param seriesPairs a split's value labels: a legend drawn "Europe" is the series EU the reader picked
  */
-export function selectionPlugin(sel: MarkSelection, raw: Cx[], shown: Cx[]): Cx {
+export function selectionPlugin(sel: MarkSelection, raw: Cx[], shown: Cx[], seriesPairs?: [string, string][]): Cx {
   const cats = sel.categories?.length ? new Set(sel.categories) : null;
   const catOn = cats ? new Set(raw.flatMap((r, i) => (cats.has(String(r)) ? [String(shown[i])] : []))) : null;
   const sers = sel.series?.length ? new Set(sel.series) : null;
@@ -37,7 +39,7 @@ export function selectionPlugin(sel: MarkSelection, raw: Cx[], shown: Cx[]): Cx 
       ctx.restore();
     };
   };
-  const seriesOff = (chart: Cx, i: number) => !!sers && chart.data.datasets.length > 1 && !sers.has(String(chart.data.datasets[i]?.label));
+  const seriesOff = (chart: Cx, i: number) => !!sers && chart.data.datasets.length > 1 && !sers.has(String(rawOf(chart.data.datasets[i]?.label, seriesPairs)));
   const picked = (chart: Cx, i: number) => !catOn || catOn.has(String((chart.data.labels || [])[i]));
   return {
     id: 'ordMarkSelection',

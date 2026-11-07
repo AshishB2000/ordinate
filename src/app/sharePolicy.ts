@@ -33,6 +33,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
+import { closedToCaller } from '../data/rowAccess';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
 import { readZipAsync, writeZipAsync } from './bundle';
@@ -127,16 +128,23 @@ export async function withheldColumns(projectId: string, datasetId: string): Pro
 
 /**
  * The catalog's column docs as the Assistant's facts read them
- * (ipc/copilot.ts): the stored docs, plus a level-only doc for a column a
- * rename step carried a mark to — so its values are withheld under its new name.
+ * (ipc/copilot.ts, MCP's describe_dataset): the stored docs, plus a level-only doc for a column a
+ * rename step carried a mark to — so its values are withheld under its new name. Value labels name
+ * stored values, so they stay only on a text column that is not marked, for a caller the dataset's
+ * rules leave open (D12).
  */
 export async function assistantColumnDocs(projectId: string, datasetId: string): Promise<Record<string, catalog.ColumnDoc>> {
   const docs: Record<string, catalog.ColumnDoc> = Object.assign(Object.create(null), await catalog.getColumns(projectId, datasetId, true));
   const meta = await datasets.getDatasetMeta(projectId, datasetId, true);
-  for (const [name, level] of await markedLevels(projectId, datasetId, meta ? meta.steps : [])) {
+  const marked = await markedLevels(projectId, datasetId, meta ? meta.steps : []);
+  for (const [name, level] of marked) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
       docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
     }
+  }
+  const closed = Object.values(docs).some((d) => d.values) && (await closedToCaller(projectId, datasetId).catch(() => true)); // rules unread: none
+  for (const [name, { values: codes, ...doc }] of Object.entries(docs)) {
+    if (codes && (closed || marked.has(name) || meta?.columns.find((c) => c.name === name)?.type !== 'text')) docs[name] = doc;
   }
   return docs;
 }
@@ -363,23 +371,24 @@ async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise
 }
 
 /**
- * Value labels (a column doc's `values`: a stored value → its display label) can hold the raw
- * values of a marked column. This release cannot tell which columns matter, so a shaped bundle
- * leaves every column's behind. The marks and the rest of each doc travel as they were.
+ * The catalog travels with each column's value labels (analysis/valueLabels.ts), which name STORED values: a column
+ * marked personal or financial leaves without its list, masked in Prepare or not (as its colours do). The mark stays.
  */
-function dropValueLabels(entries: ZipEntry[]): boolean {
-  const cat = entries.find((x) => x.name === 'catalog.json');
-  if (!cat) return false;
-  let rec: { columns?: Record<string, Record<string, Record<string, unknown>>> };
-  try { rec = JSON.parse(cat.data.toString('utf8')); } catch (_) { return false; }
-  let dropped = false;
-  for (const docs of Object.values((rec && rec.columns) || {})) {
-    for (const doc of Object.values(docs || {})) {
-      if (doc && typeof doc === 'object' && 'values' in doc) { delete doc.values; dropped = true; }
+async function dropMarkedLabels(projectId: string, entries: ZipEntry[]): Promise<boolean> {
+  const file = entries.find((x) => x.name === 'catalog.json');
+  if (!file) return false;
+  let doc: { columns?: Record<string, Record<string, { values?: unknown }>> };
+  try { doc = JSON.parse(file.data.toString('utf8')); } catch (_) { return false; }
+  let changed = false;
+  for (const [datasetId, docs] of Object.entries(doc?.columns ?? {})) {
+    for (const column of await withheldColumns(projectId, datasetId)) {
+      if (docs?.[column]?.values === undefined) continue;
+      delete docs[column].values;
+      changed = true;
     }
   }
-  if (dropped) cat.data = Buffer.from(JSON.stringify(rec, null, 2), 'utf8');
-  return dropped;
+  if (changed) file.data = Buffer.from(JSON.stringify(doc, null, 2), 'utf8');
+  return changed;
 }
 
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
@@ -439,7 +448,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
     await fs.promises.rm(scratch, { recursive: true, force: true });
   }
   if (await dropMarkedColors(projectId, entries)) changed = true;
-  if (dropValueLabels(entries)) changed = true;
+  if (await dropMarkedLabels(projectId, entries)) changed = true;
   if (!changed) return bytes;
   const manifest = entries.find((x) => x.name === 'manifest.json');
   if (manifest) {

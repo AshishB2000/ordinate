@@ -33,6 +33,7 @@ import { CATEGORY_CAP, OTHER_LABEL } from './categoryKey';
 import { facetCaption } from './facetCaption';
 import type { FacetGrid } from './facets';
 import { currentLanguage, t } from '../app/i18n';
+import { shownChart, type ValueLabelPairs } from './valueLabels';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -91,8 +92,8 @@ export interface CaptionKpi {
   value: number | null;
 }
 
-/** A chart's data as a caption reads it: the series, and the figures the chart draws (./chartShapes). */
-type CaptionData = ChartData & { figures?: ChartFigures };
+/** A chart's data as a caption reads it: the series, the figures the chart draws (./chartShapes), and what a stored value is called (./valueLabels). */
+type CaptionData = ChartData & { figures?: ChartFigures; valueLabels?: ValueLabelPairs };
 
 /** Everything a caption may read. Every field is already app-computed. */
 export interface CaptionInput {
@@ -151,8 +152,9 @@ function familyCaption(input: CaptionInput): string {
   // Small multiples: one sentence ACROSS the panels (./facetCaption).
   if (input.data && input.data.facets) return facetCaption(input.data.facets, family);
   // A month axis is named as the chart names it — "Jan 2023", in the caption's own language — BEFORE any
-  // sentence is put together (a calendar's labels are days, and stay so).
-  const data = family === 'calendar' ? input.data : monthNamed(input.data);
+  // sentence is put together (a calendar's labels are days, and stay so). So is a labelled value: "Europe", not "EU".
+  const named = family === 'calendar' ? input.data : monthNamed(input.data);
+  const data = named && Array.isArray(named.labels) && Array.isArray(named.series) ? shownChart(named) : named;
   const measure = measureNoun(data, input.names);
   // A pivot's sentence is about the GRID — how big it is and where its peak
   // sits — which `{labels, series}` cannot say: a leaf row's label is a joined
