@@ -91,6 +91,8 @@ export interface SyncReport {
   sensitivity?: 'manual';
   /** A semantic dataset's dimensions of a type no column can take: left out. */
   unmapped?: string[];
+  /** A semantic dataset's layer metrics whose mirror could not be written. */
+  unmirrored?: string[];
 }
 
 export type SyncReply = SyncReport | { ok: false; code: string; error: string; reason?: string };

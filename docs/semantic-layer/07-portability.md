@@ -226,7 +226,9 @@ its metric when drawn) turns the reference into `{ metric }`.
 - A dropped metric stays, listed as missing like `live.missingColumns`, and refuses: "Revenue is no
   longer defined in dbt". A layer-side rename is missing plus new, never a silent remap.
 - Names are unique per project, case-insensitively (`metricsByName`); a clash appends the
-  connection's name ("Revenue · dbt prod"). A trashed mirror is not recreated by the next sync.
+  connection's name ("Revenue · dbt prod"), a second one the dataset's ("Revenue · Orders"), then a
+  number ("Revenue · Orders 2"); a mirror that cannot be written is named in the sync reply
+  (`unmirrored`). A trashed mirror is not recreated by the next sync.
 
 **D14. One capability, one registry entry per source.** `ConnectorDef` gains an optional
 `semantic: { backend, listModels, describeModel, query }` (`src/connectors/types.ts`), a property

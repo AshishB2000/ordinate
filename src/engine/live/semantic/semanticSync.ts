@@ -110,11 +110,12 @@ export async function syncSemantic(projectId: string, datasetId: string, signal:
 
   // 4. The mirrors.
   const conn = await connections.getConnection(projectId, t.connectionId);
-  await syncMirrors(projectId, datasetId, read.semantic, conn?.name ?? '');
+  const mirrored = await syncMirrors(projectId, datasetId, read.semantic, conn?.name ?? '', meta.name);
   return {
     ok: true, schemaSyncedAt: now, columns: read.columns.length, ...diff, missing,
     sample: { ok: false, code: 'live_refused', reason: 'semantic', error: smsg.layerNotSampled(t.semantic.env.layer) },
     sensitivity: 'manual',
     ...(read.unmapped.length ? { unmapped: read.unmapped } : {}),
+    ...(mirrored.unmirrored.length ? { unmirrored: mirrored.unmirrored } : {}),
   };
 }

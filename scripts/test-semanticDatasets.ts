@@ -137,7 +137,7 @@ void (async () => {
     && isDeepStrictEqual(m.filters ?? [], [])), show(ms));
   ok('additive comes from the layer', named(ms, 'revenue')?.definition.additive === true && named(ms, 'avg_amount')?.definition.additive === undefined);
   const block = (await meta(D)).live.semantic;
-  const again = await as(() => mirrorsMod.syncMirrors(P, D, block, 'Layer prod'));
+  const again = await as(() => mirrorsMod.syncMirrors(P, D, block, 'Layer prod', 'Orders layer'));
   const v0 = await as(() => versions.list(P, 'metric', named(ms, 'revenue')!.id as string));
   ok('a second sync writes nothing new', again.created.length === 0 && again.updated.length === 0 && (await sync(D)).ok === true && (await mirrorsOf(D)).length === 4 && v0.length === 1, show({ again, v: v0.length }));
 
@@ -149,6 +149,17 @@ void (async () => {
   await sync(D2, P2);
   const names2 = (await as(() => metrics.listMetrics(P2))).map((m) => m.name);
   ok('a name clash (case-blind) takes the connection\'s name', names2.includes('orders · Layer prod') && names2.includes('Orders') && !names2.includes('orders'), show(names2));
+  // A third and a fourth dataset on the same layer: the connection's name is taken too, so the dataset's, then a number.
+  const D3 = await bare(P2, C2, 'Returns');
+  const r3 = await sync(D3, P2);
+  const D4 = await bare(P2, C2, 'Returns');
+  await sync(D4, P2);
+  const of = async (d: string): Promise<string[]> => (await mirrorsOf(d, P2)).map((m) => String(m.name)).sort();
+  ok('a third dataset sharing the names takes the dataset\'s name, a fourth of the same name a number: every layer metric mirrored',
+    show(await of(D3)) === show(['avg_amount · Layer prod', 'max_amount · Layer prod', 'orders · Returns', 'revenue · Layer prod'])
+      && show(await of(D4)) === show(['avg_amount · Returns', 'max_amount · Returns', 'orders · Returns 2', 'revenue · Returns']) && r3.ok === true && !('unmirrored' in r3), show([await of(D3), await of(D4), r3]));
+  const lost = await as(() => mirrorsMod.syncMirrors(P2, '00000000-0000-4000-8000-000000000000', block, 'Layer prod', 'Gone'));
+  ok('…a mirror that could not be written is named (unmirrored), never dropped in silence', show(lost.unmirrored) === show(block.metrics.map((m: { name: string }) => m.name)), show(lost));
 
   ok('trash a mirror', (await post('metric:delete', { projectId: P, id: named(ms, 'revenue')!.id })).value.ok === true);
   await sync(D);
