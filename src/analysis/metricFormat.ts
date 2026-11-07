@@ -89,7 +89,9 @@ export function describeFilterHidden(s: FilterStep): string {
 export function describeDefinitionShort(definition: MetricDefinition): string {
   if (isFormulaDefinition(definition)) return definition.formula;
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
-  return definition.column ? `${agg} of ${definition.column}` : agg;
+  const head = definition.column ? `${agg} of ${definition.column}` : agg;
+  const snap = definition.snapshot; // semantic D8: only the rows on that day
+  return snap ? `${head}, on the ${snap.take === 'last' ? 'latest' : 'earliest'} ${snap.column}` : head;
 }
 
 /**

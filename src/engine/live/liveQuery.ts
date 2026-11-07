@@ -80,7 +80,7 @@ export interface LiveFailure {
   code: LiveFailureCode;
   error: string;
   /** For `live_refused`: the compiler's refusal code, or the executor's own. */
-  reason?: LiveRefusalCode | 'tooManyGroups' | 'dailyLimit' | 'asOf' | 'fx';
+  reason?: LiveRefusalCode | 'tooManyGroups' | 'dailyLimit' | 'asOf' | 'fx' | 'snapshot';
 }
 
 /** `vizDataFor`'s success shape, dated. */

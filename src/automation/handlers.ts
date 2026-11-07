@@ -205,6 +205,7 @@ export async function metricsList(ctx: Ctx): Promise<unknown> {
     description: m.description || '',
     adds_up: await metricAdditivity(ctx.projectId, m.id, byName),
     counts_by: (await metricDate(ctx.projectId, m)) || null, // D9: the date its periods are on; a column that is gone counts as none
+    snapshot: (!metrics.isFormulaDefinition(m.definition) && m.definition.snapshot) || null, // D8: one day's rows, never a sum over dates
   })));
 }
 

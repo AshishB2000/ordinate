@@ -82,6 +82,17 @@ All notable changes to Ordinate are documented here. Format based on
   on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
   Off without a database. See `docs/notifications/00-design.md`.
 
+### Snapshot metrics
+
+- **A metric can be a snapshot** (Metrics → the metric → "Snapshot"): a balance, stock count or headcount is
+  the value on the latest (or earliest) day in scope, never a sum over every day. A chart by that date shows
+  each month's own latest day; any other chart takes the latest day over the whole chart, so a region with
+  no row on it has no bar. KPIs, the metric tree, scorecards, alerts made from its KPI, the Summary card,
+  published pages and formulas built on it all show that figure.
+- **Refused with a sentence instead of guessed:** on a Live dataset, by another date column, in a pivot
+  table, in an answer card or Explain, and in its key drivers. A what-if card keeps it at its baseline and
+  says why. `list_metrics` (MCP) carries `snapshot`. See `docs/server/upgrade.md` ("Snapshot metrics").
+
 ### Charts follow their metric
 
 - **A chart measure picked from a metric draws the metric as defined today.** Its column, its aggregation

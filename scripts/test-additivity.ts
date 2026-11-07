@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   ok('pivot avg pct_of_total → refused', (await chart({ category: 'region', values: pv.values, pivot: pv })).code === 'calc_not_additive');
   ok('the builder preview refuses it too', (await preview(null, { projectId: pid, datasetId: ds, encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'avg', calc: RT }] }, filters: [] }) as Any).code === 'calc_not_additive');
 
-  // A snapshot (a stock) adds across regions but not across days. The chart door cannot draw a snapshot metric yet (step 07), so these ask the check directly.
+  // A snapshot (a stock) adds across regions but not across days. These ask the check directly; scripts/test-snapshot.ts pins it end to end.
   const stockRT = (reply: object, category: string, series?: string, along: 'across' | 'down' = 'across') =>
     A.refuseNonAdditiveCalcs(reply as { ok: boolean }, pid, ds, { category, series, values: [{ column: 'qty', aggregation: 'sum', metricId: stock.id, calc: { kind: 'running_total', along } }] }) as Promise<Any>;
   const okReply = { ok: true, category: { kind: 'text' } };

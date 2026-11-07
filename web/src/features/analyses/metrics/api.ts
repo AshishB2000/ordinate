@@ -13,7 +13,12 @@ export interface MetricFormat {
   suffix?: string;
   compact?: boolean;
 }
-export type Definition = { formula: string } | { column: string; aggregation: Agg };
+/** A snapshot (semantic D8): only the rows on the latest (or earliest) day of a date column. `null` clears it on save. */
+export interface Snapshot {
+  column: string;
+  take: 'last' | 'first';
+}
+export type Definition = { formula: string } | { column: string; aggregation: Agg; snapshot?: Snapshot | null };
 
 /** `metric:list`'s decorated summary. */
 export interface MetricSummary {

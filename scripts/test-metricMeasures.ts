@@ -30,6 +30,7 @@ const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckd
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const privacy: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
 const measures: typeof import('../src/analysis/metricMeasures') = require('../src/analysis/metricMeasures');
+const liveRefusals: typeof import('../src/engine/liveRefusals') = require('../src/engine/liveRefusals');
 
 const { ORG_A, fx } = H;
 const show = (v: unknown): string => JSON.stringify(v, (_k, x) => (Object.is(x, -0) ? '-0' : x)).slice(0, 500);
@@ -187,6 +188,22 @@ const COL = { region: 2, amt: 3, qty: 4, tier: 5 } as const;
   // ── 9. A duplicate name is refused beside the Name field ───────────────────
   const dup = (await post('metric:save', { projectId: P, input: { name: 'qty PER row', datasetId: X, definition: { formula: 'sum(qty)' } } })).value;
   ok('a duplicate name is refused with the sentence and its field', dup.ok === false && dup.field === 'name' && /already exists/.test(String(dup.error)), show(dup));
+
+  // ── 10. A snapshot metric on a Live dataset is a typed refusal (semantic D8), never a plain sum, never hydrated ──
+  const snapDef = { column: 'amt', aggregation: 'sum', snapshot: { column: 'd', take: 'last' } };
+  const snapLive = await save('Live stock', L, snapDef);
+  const snapCopy = await save('Copy stock', X, snapDef);
+  const sk = await hydrates(L, async () => ((await post('metric:values', { projectId: P, ids: [snapLive], filters: [] })).value as unknown as Reply[])[0]);
+  ok('Live snapshot KPI (metric:values): typed refusal, its sentence, no hydrate', sk.value.ok === false && sk.value.code === 'live_refused' && sk.value.error === liveRefusals.liveSnapshotRefused() && !sk.hydrated, show(sk));
+  const thrown = await H.as(ORG_A, () => (require('../src/ipc/metrics') as typeof import('../src/ipc/metrics')).resolveMetric(P, snapLive).then(() => null, (err: unknown) => err as { failure?: { code?: string; reason?: string } }));
+  ok('Live snapshot KPI: the door throws it typed, reason snapshot', thrown?.failure?.code === 'live_refused' && thrown.failure.reason === 'snapshot', show(thrown));
+  const sc = await hydrates(L, () => chart(L, { category: 'region', values: [M('Live stock', snapLive)] }));
+  ok('Live snapshot chart: typed refusal, its sentence, no hydrate', sc.value.ok === false && sc.value.code === 'live_refused' && sc.value.reason === 'snapshot' && sc.value.error === liveRefusals.liveSnapshotRefused() && !sc.hydrated, show(sc));
+  const slf = await save('Live double stock', L, { formula: '[Live stock] * 2' });
+  const scf = await hydrates(L, () => chart(L, { category: 'region', values: [M('Live double stock', slf)] }));
+  ok('Live: a formula over a snapshot is refused the same way', scf.value.ok === false && scf.value.code === 'live_refused' && scf.value.reason === 'snapshot' && !scf.hydrated, show(scf));
+  ok('NEGATIVE CONTROL: the same definition on the copy has a figure', typeof (await kpi(snapCopy, [])) === 'number');
+  ok('NEGATIVE CONTROL: …and draws', (await chart(X, { category: 'region', values: [M('Copy stock', snapCopy)] })).ok === true);
 
   await close();
   finish();

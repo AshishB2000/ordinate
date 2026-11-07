@@ -59,9 +59,24 @@ export function measureNeedsOneAxis(name: string): string {
   return t('metricCheckMessages.the_measure_is_calculated_from_parts', { name });
 }
 
-/** A snapshot metric (the latest rows only) in a chart this version cannot compute it for. */
-export function measureSnapshotPending(name: string): string {
-  return t('metricCheckMessages.is_a_snapshot_metric_which_this', { name });
+/** A snapshot metric charted by a date column other than its own: per bucket of which date? Refused, never guessed. */
+export function snapshotOtherDate(metric: string, snapshotColumn: string, category: string): string {
+  return t('metricCheckMessages.is_a_snapshot_on_so_it', { metric, snapshotColumn, category });
+}
+
+/** A pivot value that is a snapshot metric: a pivot plots the stored column, a sum over every date. */
+export function snapshotInPivot(metric: string): string {
+  return t('metricCheckMessages.is_a_snapshot_which_a_pivot', { metric });
+}
+
+/** An answer card or Explain over a snapshot metric: the answer door draws a measure's stored column, a sum over every date. */
+export function snapshotInAnswer(metric: string): string {
+  return t('metricCheckMessages.is_a_snapshot_which_an_answer', { metric });
+}
+
+/** A snapshot metric's date names a column that is not a date column of its dataset. */
+export function snapshotNotDate(column: string): string {
+  return t('metricCheckMessages.is_not_a_date_column_so', { column });
 }
 
 /** Two dashboard date controls set different periods, and both land on the date a metric counts by. */

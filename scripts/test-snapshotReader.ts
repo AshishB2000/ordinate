@@ -3,7 +3,8 @@
 // A LATER release writes `snapshot: {column, take}` (a stock count is the last day's value, not a sum over
 // every day). A pod of THIS release that reads such a record must (1) keep it through every re-save, duplicate
 // and tree save, and (2) never draw the plain sum over every date in its place: every figure path that would
-// do so refuses or shows no figure, until the release that computes snapshots removes the refusals.
+// do so refuses or shows no figure, until the release that computes snapshots removes the refusals. Step 07 is
+// that release: the assertions marked "step 07" now pin its figure (scripts/test-snapshot.ts holds the matrix).
 //
 //   npm run build:ts && node scripts/test-snapshotReader.js
 
@@ -28,7 +29,6 @@ const msg: typeof import('../src/analysis/metricCheckMessages') = require('../sr
 const api: typeof import('../src/api/metrics') = require('../src/api/metrics');
 const ipcTree: typeof import('../src/ipc/metricTree') = require('../src/ipc/metricTree');
 const treeRef: typeof import('../src/analysis/metricTreeJs') = require('../src/analysis/metricTreeJs');
-const treeMsg: typeof import('../src/analysis/metricTreeMessages') = require('../src/analysis/metricTreeMessages');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const stories: typeof import('../src/ipc/stories') = require('../src/ipc/stories');
 const embedLock: typeof import('../src/publish/embedLock') = require('../src/publish/embedLock');
@@ -77,15 +77,18 @@ void (async () => {
   await metrics.updateMetric(pid, m.id, { tree: { relation: 'sum', children: [{ metricId: U1 }, { metricId: U2 }] } }, undefined, 'metricTree');
   ok('a tree save keeps it', isDeepStrictEqual((await metrics.getMetric(pid, m.id))!.definition, def));
   ok('a duplicate keeps it', isDeepStrictEqual((await metrics.duplicateMetric(pid, m.id))!.definition, def));
-  ok('the contract still refuses a writer', !api.metrics['metric:save'].input.safeParse({ projectId: pid, input: { name: 'x', datasetId: ds.id, definition: def } }).success);
+  ok('the contract takes a writer (step 07)', api.metrics['metric:save'].input.safeParse({ projectId: pid, input: { name: 'x', datasetId: ds.id, definition: def } }).success);
 
-  ok('no figure until step 07, never the sum over every date', (await ipcMetrics.resolveMetric(pid, m.id))!.value === null);
+  // Step 07 computes it: the latest day's units (the last day, 2024-02-20, holds one row of 49), never the sum over every date.
+  const lastDay = rows.filter((r) => r[0] === '2024-02-20').reduce((a, r) => a + r[2], 0);
+  ok('a figure since step 07: the latest day\'s, never the sum over every date', (await ipcMetrics.resolveMetric(pid, m.id))!.value === lastDay);
   const plain = (await metrics.saveMetric(pid, { name: 'Units', datasetId: ds.id, definition: { column: 'units', aggregation: 'sum' } }))!;
-  ok('NEGATIVE CONTROL: the same column without a snapshot has a figure', typeof (await ipcMetrics.resolveMetric(pid, plain.id))!.value === 'number');
+  ok('NEGATIVE CONTROL: the same column without a snapshot has the sum over every date', (await ipcMetrics.resolveMetric(pid, plain.id))!.value === rows.reduce((a, r) => a + r[2], 0));
 
   const f = (await metrics.saveMetric(pid, { name: 'Double', datasetId: ds.id, definition: { formula: '[Stock on hand] * 2' } }))!;
   const c = await viz(null, { projectId: pid, datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'Double', aggregation: 'sum', metricId: f.id }] } });
-  ok('a chart over it says why', c.ok === false && c.error === msg.measureSnapshotPending('Stock on hand'), JSON.stringify(c).slice(0, 300));
+  // The last day (2024-02-20) holds East's one row of 49: by region, East alone (West has no row that day).
+  ok('a chart of a formula over it is the snapshot\'s, per cell (step 07)', c.ok === true && JSON.stringify(c.data.labels) === '["East"]' && c.data.series[0].values[0] === 2 * lastDay, JSON.stringify(c).slice(0, 300));
   const fp = (await metrics.saveMetric(pid, { name: 'Double units', datasetId: ds.id, definition: { formula: '[Units] * 2' } }))!;
   const cp = await viz(null, { projectId: pid, datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'Double units', aggregation: 'sum', metricId: fp.id }] } });
   ok('NEGATIVE CONTROL: the same chart over a metric without a snapshot draws', cp.ok === true, JSON.stringify(cp).slice(0, 300));
@@ -97,14 +100,14 @@ void (async () => {
   // ── every other reader of a SIMPLE definition (the metricId on a chart, a tree part, a KPI-shaped lookup) ──
   const U = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const drawn = (encoding: Record<string, unknown>) => viz(null, { projectId: pid, datasetId: ds.id, encoding });
-  const pending = msg.measureSnapshotPending('Stock on hand');
+  const pending = msg.snapshotInAnswer('Stock on hand'); // the answer door still draws a measure's stored column
   const direct = await drawn({ category: 'region', values: [{ column: 'units', aggregation: 'sum', metricId: m.id }] });
-  ok('chart door: a measure that is a simple snapshot metric is refused', direct.ok === false && direct.error === pending, JSON.stringify(direct).slice(0, 300));
+  ok('chart door: a measure that is a simple snapshot metric draws its latest day (step 07)', direct.ok === true && JSON.stringify(direct.data.labels) === '["East"]' && direct.data.series[0].values[0] === lastDay, JSON.stringify(direct).slice(0, 300));
   const directPlain = await drawn({ category: 'region', values: [{ column: 'units', aggregation: 'sum', metricId: plain.id }] });
   ok('NEGATIVE CONTROL: the same chart over the metric without a snapshot draws its total', directPlain.ok === true && typeof directPlain.data.series[0].values[0] === 'number');
   const asPivot = (metricId: string) => drawn({ values: [], pivot: { rows: [{ column: 'region' }], columns: [], values: [{ column: 'units', aggregation: 'sum', metricId }], totals: { rows: true, columns: true, grand: true } } });
   const pivotSnap = await asPivot(m.id);
-  ok('chart door: a pivot value that is a snapshot metric is refused', pivotSnap.ok === false && pivotSnap.error === pending, JSON.stringify(pivotSnap).slice(0, 300));
+  ok('chart door: a pivot value that is a snapshot metric is refused', pivotSnap.ok === false && pivotSnap.error === msg.snapshotInPivot('Stock on hand'), JSON.stringify(pivotSnap).slice(0, 300));
   ok('NEGATIVE CONTROL: the same pivot over the metric without a snapshot draws', (await asPivot(plain.id)).ok === true);
   const split = (second: string) => drawn({ category: 'region', series: 'day', values: [{ column: 'units', aggregation: 'sum', metricId: plain.id }, { column: 'units', aggregation: 'sum', metricId: second }] });
   ok('NEGATIVE CONTROL: with a split only the first measure is drawn, so a snapshot second one is not refused', (await split(m.id)).ok === true);
@@ -126,7 +129,7 @@ void (async () => {
   const snapRoot = await withTree('Stock tree', def, { split: 'region' });
   const plainRoot = await withTree('Units tree', { column: 'units', aggregation: 'sum' }, { split: 'region' });
   const [rs, rp] = [await tree(snapRoot.id), await tree(plainRoot.id)];
-  ok('tree door: a snapshot root has no figure and no split, and says why', rs.ok && rs.root.current === null && rs.root.previous === null && rs.root.display === '—' && rs.root.children.length === 0 && typeof rs.root.note === 'string', JSON.stringify(rs).slice(0, 300));
+  ok('tree door: a snapshot root has its figure (step 07) and no split, and says why', rs.ok && typeof rs.root.current === 'number' && typeof rs.root.previous === 'number' && rs.root.children.length === 0 && typeof rs.root.note === 'string', JSON.stringify(rs).slice(0, 300));
   const refS = await reference(snapRoot.id);
   ok('tree JS reference: the snapshot root agrees with the door (Object.is)', Object.is(refS.current, rs.root.current) && Object.is(refS.previous, rs.root.previous) && refS.children.length === 0, JSON.stringify(refS).slice(0, 300));
   const refP = await reference(plainRoot.id);
@@ -138,14 +141,14 @@ void (async () => {
   const partSnap = await withTree('Parts with a snapshot', { column: 'units', aggregation: 'sum' }, sumOf(snapPart.id, plainPart.id));
   const partPlain = await withTree('Parts without one', { column: 'units', aggregation: 'sum' }, sumOf(plainPart.id, plainPart.id));
   const [ps, pp] = [await tree(partSnap.id), await tree(partPlain.id)];
-  ok('tree door: a snapshot part has no figure, and its parent names it', ps.ok && ps.root.children[0].current === null && ps.root.children[0].display === '—' && ps.root.note === treeMsg.partMissing('Stock part'), JSON.stringify(ps).slice(0, 300));
+  ok('tree door: a snapshot part has its figure (step 07), so its parent needs no note', ps.ok && typeof ps.root.children[0].current === 'number' && ps.root.note === undefined, JSON.stringify(ps).slice(0, 300));
   const refPart = await reference(partSnap.id);
   ok('tree JS reference: the snapshot part agrees with the door (Object.is)', Object.is(refPart.children[0].current, ps.root.children[0].current) && Object.is(refPart.children[0].previous, ps.root.children[0].previous));
   ok('NEGATIVE CONTROL: the same parts without a snapshot have figures and no note', pp.ok && typeof pp.root.children[0].current === 'number' && pp.root.note === undefined, JSON.stringify(pp).slice(0, 300));
 
   // The Assistant's metric vocabulary, a plan's, a template's role mapping, a story's reuse, an embed's lock.
-  const named = (await answers.specMetrics(pid)).map((x) => x.id);
-  ok('answers: a snapshot metric is not offered to a spec', !named.includes(m.id) && named.includes(plain.id), JSON.stringify(named));
+  const offered = await answers.specMetrics(pid);
+  ok('answers: a snapshot metric is never a bare column measure (step 07: offered, marked like a filtered one)', offered.find((x) => x.id === m.id)?.hasFilters === true && offered.find((x) => x.id === plain.id)?.hasFilters === false, JSON.stringify(offered.slice(0, 3)));
   const planned = (await planExec.loadProjectCtx(pid)).metrics.map((x) => x.id);
   ok('plans: a plan step cannot name a snapshot metric', !planned.includes(m.id) && planned.includes(plain.id), JSON.stringify(planned));
   // A fresh project per case: the plan's inline KPI is tied to a saved metric with the same column and total, if one exists.
@@ -170,7 +173,7 @@ void (async () => {
   ok('scenarios: the picker does not offer a snapshot metric', !listed.includes(m.id) && listed.includes(plain.id), JSON.stringify(listed));
   const run = await scenarioResolve.computeScenario(pid, { id: U(1), name: 't', baseMetricIds: [m.id, plain.id], drivers: scenarioModel.sanitizeDrivers([{ kind: 'pct', target: { column: 'units' }, value: 10 }]) });
   const row = (id: string) => run.metrics.find((x) => x.metricId === id)!;
-  ok('scenarios: a snapshot metric under a driver has no figure', row(m.id).value === null && row(m.id).baseline === null, JSON.stringify(row(m.id)));
+  ok('scenarios: a snapshot metric under a driver keeps its baseline, never re-summed over every date (step 07)', row(m.id).value === lastDay && row(m.id).baseline === lastDay, JSON.stringify(row(m.id)));
   ok('NEGATIVE CONTROL: the same column without a snapshot moves with the driver', typeof row(plain.id).value === 'number' && (row(plain.id).value as number) > (row(plain.id).baseline as number), JSON.stringify(row(plain.id)));
 
   // A template's measure role takes the metric's column only when the metric is a plain total.
@@ -213,21 +216,22 @@ void (async () => {
   // ── the alert job: a rule made from a snapshot metric's KPI keeps only its column and total ──
   const rule = (metric: Record<string, unknown>) => ({ name: 'Units above 0', datasetId: ds.id, metric: { column: 'units', aggregation: 'sum', ...metric }, compare: 'threshold', threshold: { op: '>', value: 0 } });
   const alertOn = await alertStore.testRule(pid, rule({ metricId: m.id }));
-  ok('alerts: a rule on a snapshot metric reads no figure and does not fire', alertOn.ok && alertOn.value === null && alertOn.fire === false, JSON.stringify(alertOn));
+  ok('alerts: a rule on a snapshot metric reads its latest day (step 07), never the plain total', alertOn.ok && alertOn.value === lastDay && alertOn.fire === true, JSON.stringify(alertOn));
   const alertPlain = await alertStore.testRule(pid, rule({ metricId: plain.id }));
   ok('NEGATIVE CONTROL: the same rule on a plain metric reads the total and fires', alertPlain.ok && typeof alertPlain.value === 'number' && alertPlain.fire === true, JSON.stringify(alertPlain));
   const alertBare = await alertStore.testRule(pid, rule({}));
   ok('NEGATIVE CONTROL: the same rule with no saved metric reads the total, as before', alertBare.ok && Object.is(alertBare.value, alertPlain.value), JSON.stringify(alertBare));
   const changeRule = { ...rule({ metricId: m.id }), compare: 'change', threshold: undefined, change: { pct: 10, direction: 'either', vs: 'previous_period', periodColumn: 'day' } };
   const alertChange = await alertStore.testRule(pid, changeRule);
-  ok('alerts: a previous-period rule on a snapshot metric reads no figure either', alertChange.value === null && alertChange.previous === null && alertChange.fire === false, JSON.stringify(alertChange));
+  // January's last day (2024-01-20) holds one row of 29; February's (2024-02-20) one of 49.
+  ok('alerts: a previous-period rule on a snapshot metric reads each period\'s last day (step 07)', alertChange.value === lastDay && alertChange.previous === rows.filter((r) => r[0] === '2024-01-20').reduce((a, r) => a + r[2], 0), JSON.stringify(alertChange));
 
   // ── the Summary card: a KPI of a snapshot metric never falls back to the card's stored {column, aggregation} ──
   const plainSum = rows.reduce((s, r) => s + r[2], 0);
   const summarised = async (metricId: string) => summary.computeSummary(pid, [{ cards: [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds.id, column: 'units', aggregation: 'sum', metricId } }] }], { filters: [], params: new Map() });
   const sumSnap = await summarised(m.id);
-  ok('summary: a snapshot metric\'s KPI says no figure, never the plain sum over every date',
-    !sumSnap.some((s) => s.kind === 'kpi') && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
+  ok('summary: a snapshot metric\'s KPI is its latest day\'s figure (step 07), never the plain sum over every date',
+    sumSnap.some((s) => s.kind === 'kpi' && s.figures.some((x) => x.value === lastDay)) && !sumSnap.some((s) => s.figures.some((x) => x.value === plainSum) || s.text.includes(plainSum.toLocaleString('en-US'))), JSON.stringify(sumSnap.find((s) => s.kind === 'kpi')));
   const sumPlain = await summarised(plain.id);
   ok('NEGATIVE CONTROL: the same KPI of a plain metric gives its figure', sumPlain.some((s) => s.kind === 'kpi' && s.figures.some((x) => typeof x.value === 'number')), JSON.stringify(sumPlain).slice(0, 400));
 

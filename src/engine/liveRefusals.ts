@@ -140,3 +140,8 @@ export function liveBaseFilterRefused(column: string): string {
 export function liveCalculatedRefused(column: string): string {
   return t('liveRefusals.this_dataset_s_calculated_fields_can', { column });
 }
+
+/** A snapshot metric (semantic D8): its latest day is not compiled for a warehouse yet. */
+export function liveSnapshotRefused(): string {
+  return t('liveRefusals.a_snapshot_metric_can_t_be');
+}

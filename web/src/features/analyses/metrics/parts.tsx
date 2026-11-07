@@ -69,7 +69,7 @@ export interface MetricFields {
 }
 
 /** A refusal's field: the sentence goes beside it. */
-export type SaveField = 'name' | 'timeColumn';
+export type SaveField = 'name' | 'timeColumn' | 'snapshot';
 /** `changed`: another tab or person saved the metric first — nothing was saved; the editor's banner says so. */
 export type SaveResult = { metric: Metric } | { error: string; field?: SaveField } | { changed: true };
 type Reply = { ok: boolean; metric?: Metric; error?: string; field?: SaveField; tag?: string };

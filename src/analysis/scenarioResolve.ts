@@ -202,12 +202,13 @@ function inputsFor(ctx: Ctx, datasetId: string, column: string, all: FilterStep[
 // ── the mirror of metrics.ts resolveDefinition ───────────────────────────────
 
 async function operand(pass: Pass, datasetId: string, spec: { column: string; aggregation: MetricAggregation; snapshot?: MetricSnapshot }, all: FilterStep[]): Promise<number | null> {
-  if (spec.snapshot) return null; // no figure until a later release, and a nudge must not re-sum it over every date
   // Scenarios are off for a Live dataset in v1 (plan L2.6): refused, typed — though its
   // KPIs are routed (L2.4), a driver's partitions read rows, so never a half-live figure.
   requireExtract(await datasets.getDatasetMeta(pass.ctx.projectId, datasetId));
   const moves = spec.aggregation === 'count' ? [] : columnMoves(pass.ctx.drivers, spec.column);
-  if (moves.length) {
+  // A snapshot's figure is one day's rows (D8): moving every row's value would re-sum it, so it keeps its baseline.
+  if (spec.snapshot && moves.length) pass.ctx.notes.add(`Drivers on "${spec.column}" were not applied to a snapshot metric.`);
+  else if (moves.length) {
     const parts = await inputsFor(pass.ctx, datasetId, spec.column, all, moves.map((m) => m.filter));
     if (parts) {
       if (!pass.nudge) moves.forEach((m, j) => { if (parts.some((p) => p.key[j] && p.pieces.n > 0)) pass.ctx.touched.add(m.index); });

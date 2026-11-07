@@ -285,17 +285,18 @@ export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
     .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]), shown: shownNames(m.columns, docs[m.id]) }));
 }
 
-/** The saved metrics a spec may name. Exported for scripts/test-snapshotReader.ts. */
+/** The saved metrics a spec may name. Exported for scripts/test-snapshot.ts. */
 export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     for (const s of await metrics.listMetrics(projectId)) {
-      if (metrics.isFormulaDefinition(s.definition) || s.definition.snapshot) continue; // a snapshot is not a plain total
+      if (metrics.isFormulaDefinition(s.definition)) continue;
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,
         column: s.definition.column, aggregation: s.definition.aggregation,
-        hasFilters: !!(full && full.filters.length),
+        // A snapshot is not a plain total either: named, it is that metric, never a bare column measure.
+        hasFilters: !!(full && (full.filters.length || (!metrics.isFormulaDefinition(full.definition) && full.definition.snapshot))),
         ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
       });
     }

@@ -57,6 +57,7 @@ import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
 import { metricDate, metricScope, settleOnSave, settleOnUpdate } from '../analysis/metricTimeScope';
+import { snapshotProblem } from '../analysis/snapshotGuards';
 import { contentTag, isRecordChanged } from '../app/editConflict';
 import { termHolding } from '../analysis/termNames';
 import { termNameTaken } from '../data/termMessages';
@@ -524,6 +525,8 @@ export function register() {
       // `field`: which box of the editor the sentence belongs beside.
       const taken = await nameRefusal(projectId, raw.name);
       if (taken) return { ok: false, error: taken, field: 'name' };
+      const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
+      if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = await settleOnSave(projectId, raw);
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const m = await metrics.saveMetric(projectId, {
@@ -546,6 +549,8 @@ export function register() {
       const taken = raw.name !== undefined ? await nameRefusal(projectId, raw.name, id) : null;
       if (taken) return { ok: false, error: taken, field: 'name' };
       const before = await metrics.getMetric(projectId, id);
+      const snap = before ? await snapshotProblem(projectId, before.datasetId, raw.definition) : null;
+      if (snap) return { ok: false, error: snap, field: 'snapshot' };
       const when = before ? await settleOnUpdate(projectId, before, raw) : {};
       if ('error' in when) return { ok: false, error: when.error, field: 'timeColumn' };
       const next = { ...raw, ...when };

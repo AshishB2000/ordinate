@@ -20,6 +20,10 @@
 // measure rides on the chart's filters in one question; measures that need
 // different rows are planned here as leaves. The copy the chart stored is only
 // the fallback for a metric that is gone (visuals.VizMeasure).
+//
+// A SNAPSHOT (D8) is always its own leaf: the door asks for it on its latest
+// day (ipc/snapshotDoors.snapshotAnswer), per date bucket on a chart by its own
+// date. A chart by another date, and a pivot, are refused here.
 
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
@@ -32,17 +36,22 @@ import type { ParamValues } from './params';
 import type { VizEncoding, VizMeasure } from './visuals';
 import { measureLabel } from './vizData';
 import * as datasets from '../data/datasets';
+import type { DatasetMeta } from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import * as msg from './metricCheckMessages';
+import type { MetricSnapshot } from './snapshot';
+import { isLive } from '../data/liveDataset';
+import { liveSnapshotRefused } from '../engine/liveRefusals';
 
 /** How deep `[A]` → `[B]` may go — ipc/metrics.ts's MAX_FORMULA_DEPTH, for the same reason. */
 const MAX_DEPTH = 10;
 
-/** One total the door is asked for: a column, an aggregation, and its metric's OWN filters. */
+/** One total the door is asked for: a column, an aggregation, and its metric's OWN filters (and snapshot). */
 export interface Leaf {
   column: string;
   aggregation: MetricAggregation;
   filters: FilterStep[];
+  snapshot?: MetricSnapshot;
 }
 
 /** A leaf by index, or a formula over operands keyed by the reference as written. */
@@ -58,15 +67,28 @@ export interface MeasurePlan {
  * `values`: the encoding's measures, each drawn simple metric's `column`/`aggregation` replaced by its metric's.
  * `filters`: the metric filters every measure shares, params bound. `plan`: only when the measures need separate questions.
  */
-export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string };
+export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string; code?: 'live_refused'; reason?: 'snapshot' };
 
-/** Whether a simple metric reads other rows than its column's plain total (step 07 adds a snapshot). */
+/** Whether a simple metric reads other rows than its column's plain total: its own filters, or a snapshot's day. */
 export function needsMetricPlan(m: Metric): boolean {
-  return m.filters.length > 0;
+  return m.filters.length > 0 || (!isFormulaDefinition(m.definition) && !!m.definition.snapshot);
 }
 
-/** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}`. */
-class PlanError extends Error {}
+/** Thrown inside `build` for a measure no chart can draw; becomes `{ok:false, error}` (typed when `live`). */
+class PlanError extends Error {
+  constructor(message: string, readonly live = false) {
+    super(message);
+  }
+}
+
+/** The simple snapshot metric a pivot value names, if any: a pivot plots the stored column (pivotData), a sum over every date. */
+async function pivotSnapshot(projectId: string, encoding: VizEncoding | null | undefined): Promise<Metric | null> {
+  for (const v of encoding?.pivot && Array.isArray(encoding.pivot.values) ? encoding.pivot.values : []) {
+    const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
+    if (m && !isFormulaDefinition(m.definition) && m.definition.snapshot) return m;
+  }
+  return null;
+}
 
 /** Cheap and synchronous: every chart without a metric measure stops here. */
 export function hasMetricMeasure(encoding: VizEncoding | null | undefined): boolean {
@@ -92,13 +114,13 @@ export function followedDefinition(m: Metric | null | undefined, datasetId: stri
 
 /**
  * Whether a chart's numbers differ from its stored copy now that it follows `m`, and why: `filters` when the metric
- * reads other rows than its column's plain total, `definition` when a drawn copy names another column or aggregation.
- * A snapshot metric's chart is refused (step 07 draws it), so it shows no other numbers: null.
+ * reads other rows than its column's plain total (its filters, or a snapshot's day), `definition` when a drawn copy
+ * names another column or aggregation.
  */
 export function chartChange(m: Metric, datasetId: string, encoding: VizEncoding): 'filters' | 'definition' | null {
   const copies = drawnMeasures(encoding).filter((v, i) => v.metricId === m.id && followedDefinition(m, datasetId, encoding, i));
   const def = m.definition as MetricSimpleDefinition; // followed (when copies is not empty), so a simple one
-  if (!copies.length || def.snapshot) return null;
+  if (!copies.length) return null;
   if (needsMetricPlan(m)) return 'filters';
   return copies.some((v) => v.column !== def.column || v.aggregation !== def.aggregation) ? 'definition' : null;
 }
@@ -113,33 +135,46 @@ export async function planMetricMeasures(
   encoding: VizEncoding,
   params: ParamValues = new Map(),
 ): Promise<PlanResult | null> {
+  const inPivot = await pivotSnapshot(projectId, encoding);
+  if (inPivot) return { ok: false, error: msg.snapshotInPivot(inPivot.name) };
   if (!hasMetricMeasure(encoding)) return null;
   const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
   const leafAt = new Map<string, number>();
   let byName: Map<string, Metric> | null = null;
   let columns: string[] | null = null;
+  let meta: DatasetMeta | null | undefined; // read once, by the first snapshot
 
-  const leafOf = (column: string, aggregation: MetricAggregation, own: FilterStep[], owner: string): Operand => {
+  const leafOf = (column: string, aggregation: MetricAggregation, own: FilterStep[], owner: string, snapshot?: MetricSnapshot): Operand => {
     // ponytail: an LOD total is per ROW of the whole table, not per chart cell;
     // refused until the chart door can group one (analysis/lodQuery.ts).
     if (column[0] === '{') throw new PlanError(msg.measureNoLod(owner));
     const filters = resolveFilterParams(own, params).steps;
-    const key = JSON.stringify([column, aggregation, filters]);
+    const key = JSON.stringify([column, aggregation, filters, snapshot ?? null]);
     let at = leafAt.get(key);
     if (at === undefined) {
       at = plan.leaves.length;
-      plan.leaves.push({ column, aggregation, filters });
+      plan.leaves.push(snapshot ? { column, aggregation, filters, snapshot } : { column, aggregation, filters });
       leafAt.set(key, at);
     }
     return { leaf: at };
   };
 
+  // A snapshot is per bucket only along its OWN date (D8); along another date it would be neither, so it is refused.
+  // On a Live dataset it is not compiled yet: a typed refusal, before any statement is sent.
+  const checkSnapshot = async (m: Metric, snap: MetricSnapshot): Promise<void> => {
+    if (meta === undefined) meta = await datasets.getDatasetMeta(projectId, datasetId);
+    if (isLive(meta)) throw new PlanError(liveSnapshotRefused(), true);
+    const cat = meta?.columns.find((c) => c.name === encoding.category);
+    if (cat && cat.type === 'date' && cat.name !== snap.column) throw new PlanError(msg.snapshotOtherDate(m.name, snap.column, cat.name));
+  };
+
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
     if (!isFormulaDefinition(m.definition)) {
-      if (m.definition.snapshot) throw new PlanError(msg.measureSnapshotPending(m.name)); // a sum over every date would be wrong; step 07 removes this
-      return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name) : null;
+      const snap = m.definition.snapshot;
+      if (snap) await checkSnapshot(m, snap);
+      return m.definition.column ? leafOf(m.definition.column, m.definition.aggregation, m.filters, m.name, snap) : null;
     }
     if (depth > MAX_DEPTH) return null;
     if (!columns) columns = ((await datasets.getDatasetMeta(projectId, datasetId))?.columns ?? []).map((c) => c.name);
@@ -175,6 +210,7 @@ export async function planMetricMeasures(
   const filtered = new Map<number, Metric>();
   let formula = false;
   let changed = false;
+  let snapped = false; // a snapshot is always its own leaf: two of them with no filters are still two questions
   try {
     for (let i = 0; i < considered.length; i += 1) {
       const v = considered[i];
@@ -186,9 +222,13 @@ export async function planMetricMeasures(
         if (root) plan.formulas.set(i, { name: m.name, root });
         continue;
       }
-      const def = followedDefinition(m, datasetId, encoding, i);
+      // A snapshot with no column of its own has no figure (as its KPI), never its stored copy summed over every date.
+      const def = followedDefinition(m, datasetId, encoding, i) ?? (m.datasetId === datasetId && m.definition.snapshot ? m.definition : null);
       if (!def) continue; // another dataset's, or no column of its own: the stored copy, as before
-      if (def.snapshot) throw new PlanError(msg.measureSnapshotPending(m.name)); // a sum over every date would be wrong; step 07 removes this
+      if (def.snapshot) {
+        await checkSnapshot(m, def.snapshot);
+        snapped = true;
+      }
       if (def.column !== v.column || def.aggregation !== v.aggregation) {
         values[i] = { ...v, column: def.column, aggregation: def.aggregation };
         changed = true;
@@ -198,15 +238,16 @@ export async function planMetricMeasures(
       filtered.set(i, m);
     }
     const shared = own[0] ?? [];
-    if (!formula && own.every((f) => JSON.stringify(f) === JSON.stringify(shared))) {
+    if (!formula && !snapped && own.every((f) => JSON.stringify(f) === JSON.stringify(shared))) {
       return shared.length || changed ? { ok: true, values, filters: shared } : null;
     }
     // A filtered simple metric is one leaf under its own filters; values[i] holds its metric's column and aggregation.
     for (const [i, m] of filtered) {
-      plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name), simple: true });
+      const snap = isFormulaDefinition(m.definition) ? undefined : m.definition.snapshot;
+      plan.formulas.set(i, { name: measureLabel(values[i]), root: leafOf(values[i].column, values[i].aggregation as MetricAggregation, m.filters, m.name, snap), simple: true });
     }
   } catch (err) {
-    if (err instanceof PlanError) return { ok: false, error: err.message };
+    if (err instanceof PlanError) return err.live ? { ok: false, error: err.message, code: 'live_refused', reason: 'snapshot' } : { ok: false, error: err.message };
     throw err;
   }
   return { ok: true, values, filters: [], plan };
