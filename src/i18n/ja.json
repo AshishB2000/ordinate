@@ -213,6 +213,7 @@
   "drillMessages.is_not_a_level_of_a": "{column} はどの階層のレベルでもありません。編集者はデータモデルの［フィールド］タブで階層を追加できます。",
   "drillMessages.is_the_last_level_of": "{column} は {name} の最後のレベルです。",
   "drillMessages.this_chart_does_not_drill_down": "このグラフはドリルダウンできません。⋯ →［行を表示］で内訳を確認できます。",
+  "drillMessages.this_chart_s_measures_are_filtered": null,
   "driverPointMessages.a_change_is_explained_between_two": "変化は 2 つの期間の間で説明されるため、軸に日付があるグラフが必要です。",
   "driverPointMessages.a_change_is_explained_from_today": "変化は現在のデータから説明されますが、このダッシュボードは過去のスナップショットを表示しています。説明するには「As of」を現在に戻してください。",
   "driverPointMessages.average_of": "{column} の平均",

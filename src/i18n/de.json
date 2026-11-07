@@ -213,6 +213,7 @@
   "drillMessages.is_not_a_level_of_a": "{column} ist keine Ebene einer Hierarchie. Ein Bearbeiter kann im Tab „Felder“ des Datenmodells eine anlegen.",
   "drillMessages.is_the_last_level_of": "{column} ist die letzte Ebene von {name}.",
   "drillMessages.this_chart_does_not_drill_down": "Dieses Diagramm lässt sich nicht aufschlüsseln. ⋯ → Zeilen anzeigen listet auf, was dahintersteht.",
+  "drillMessages.this_chart_s_measures_are_filtered": null,
   "driverPointMessages.a_change_is_explained_between_two": "Eine Änderung wird zwischen zwei Zeiträumen erklärt; dafür ist ein Diagramm mit einem Datum auf der Achse nötig.",
   "driverPointMessages.a_change_is_explained_from_today": "Eine Änderung wird anhand der heutigen Daten erklärt, und dieses Dashboard zeigt einen früheren Stand. Stellen Sie „As of“ wieder auf jetzt, um sie zu erklären.",
   "driverPointMessages.average_of": "Durchschnitt von {column}",

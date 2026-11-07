@@ -146,6 +146,20 @@ async function main(): Promise<void> {
   const gone = await all(monthly, { encoding: kpiEnc, mark: null, metricId: '00000000-0000-4000-8000-000000000000' });
   ok('formula: a metric of another dataset, or one that is gone, is refused', other.available === false && gone.available === false, show([other, gone]));
 
+  // ── a chart whose measures are separate questions (a per-measure plan) ──
+  const viz = handlers.get('visual:data')!;
+  const M = (m: { id: string; name: string }) => ({ column: m.name, aggregation: 'sum', metricId: m.id });
+  const twoLists = await all(monthly, { encoding: { category: 'region', values: [M(sales), M(refunds!)] }, mark: { category: 'East' } });
+  ok('plan: two measures under different metric filters are refused — no one set of rows adds up to both', twoLists.ok === true && twoLists.available === false && typeof twoLists.reason === 'string' && twoLists.rows === undefined, show(twoLists));
+  const ratio = await all(monthly, { encoding: { category: 'region', values: [M(rate)] }, mark: { category: 'East' } });
+  ok('plan: a formula over metrics with different filters is refused too', ratio.available === false && ratio.rows === undefined, show(ratio));
+  const twice = (await metrics.saveMetric(pid, { name: 'Sales twice', datasetId: monthly, definition: { formula: '[Sales] * 2' }, filters: [], format } as Any))!;
+  const sharedEnc = { category: 'region', values: [M(sales), M(twice)] };
+  const shared = await all(monthly, { encoding: sharedEnc, mark: { category: 'East' } });
+  const bars = await viz(null, { projectId: pid, datasetId: monthly, encoding: sharedEnc, filters: [] }) as Any;
+  const eastBar = bars.ok ? bars.data.series[0].values[bars.data.labels.indexOf('East')] : null;
+  ok('NEGATIVE CONTROL: measures that share one filter list keep it: the rows add up to the bar', shared.available === true && Object.is(sum(shared.rows), eastBar) && shared.rows.every((r: unknown[]) => r[2] === 'sale'), show([eastBar, shared.available && sum(shared.rows)]));
+
   // ── export ──────────────────────────────────────────────────────────────
   const listed = await all(monthly, { encoding: kpiEnc, mark: null, metricId: sales.id });
   const file = await download(null, { projectId: pid, datasetId: monthly, encoding: kpiEnc, filters: [], mark: null, metricId: sales.id, name: 'Sales' });

@@ -210,6 +210,7 @@
   "drillMessages.is_not_a_level_of_a": "{column} is not a level of a hierarchy. An editor can add one on the Data model's Fields tab.",
   "drillMessages.is_the_last_level_of": "{column} is the last level of {name}.",
   "drillMessages.this_chart_does_not_drill_down": "This chart does not drill down. ⋯ → Show the rows lists what is behind it.",
+  "drillMessages.this_chart_s_measures_are_filtered": "This chart's measures are filtered differently, so no one set of rows adds up to this mark. Open a measure on its own to see its rows.",
   "driverPointMessages.a_change_is_explained_between_two": "A change is explained between two periods, so this needs a chart with a date on its axis.",
   "driverPointMessages.a_change_is_explained_from_today": "A change is explained from today’s data, and this dashboard is showing an earlier snapshot. Switch “As of” back to now to explain it.",
   "driverPointMessages.average_of": "Average of {column}",

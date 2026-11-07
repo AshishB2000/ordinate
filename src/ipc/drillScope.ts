@@ -15,7 +15,7 @@
 //     is drawn under that metric's filters (analysis/metricMeasures), so the
 //     rows behind it carry them too, or they would not add up to the bar. A
 //     chart whose measures need different filter lists (a per-measure plan)
-//     keeps the chart's own rows: no one set of rows adds up to two lists.
+//     is refused: no one set of rows adds up to two lists.
 //
 //   · a dashboard date control's period on the date the figure counts by
 //     (analysis/metricTimeScope): the chart's, or the KPI's metric's. A chart
@@ -39,6 +39,7 @@ import { chartScope, metricScope } from '../analysis/metricTimeScope';
 import { resolveDrill, vizDataFor } from './visuals';
 import type { DrillMark, DrillResolution, VizDataReply } from './visuals';
 import { noRowsError } from '../analysis/externalMetric';
+import { drillSeparateFilters } from './drillMessages';
 
 export interface DrillRequest {
   encoding: unknown;
@@ -79,6 +80,12 @@ export async function drillInputs(projectId: string, datasetId: string, meta: { 
     filters = scoped.filters;
     const plan = await planMetricMeasures(projectId, datasetId, enc, values);
     if (plan?.ok && !plan.plan) followed = plan.filters;
+    if (plan?.ok && plan.plan) {
+      // Separate questions: their rows are one set only when every leaf asks the same filters.
+      const lists = new Set(plan.plan.leaves.map((l) => JSON.stringify([l.filters, l.snapshot ?? null, l.datasetId ?? null])));
+      if (lists.size > 1) return { ok: false, reason: drillSeparateFilters() };
+      followed = plan.plan.leaves[0]?.filters ?? [];
+    }
   }
 
   // resolveDrill reads a mark's two fields by type (its markValue), so the shape is all that is asserted here.
