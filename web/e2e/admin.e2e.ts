@@ -259,7 +259,8 @@ if (!adminUrl) {
 
     // ── Move the default; it holds across a reload ───────────────────────────
     await page.getByRole('radio', { name: 'Make Claude Haiku Stub the default' }).click();
-    await page.getByRole('radio', { name: 'Make Claude Haiku Stub the default', checked: true }).waitFor();
+    // Checked shows the pick while its save is in flight; enabled again means it landed (a reload before that can cancel it).
+    await page.getByRole('radio', { name: 'Make Claude Haiku Stub the default', checked: true, disabled: false }).waitFor();
     await page.reload();
     await settled(page);
     await page.getByRole('radio', { name: 'Make Claude Haiku Stub the default', checked: true }).waitFor();
