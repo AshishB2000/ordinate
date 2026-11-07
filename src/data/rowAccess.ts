@@ -40,7 +40,7 @@ import { parentsOfRecord, upstreamIds } from './upstream';
 
 export { ROW_POLICY_CODE, RowPolicyError, isRowPolicyError, rowPolicyRaised, rowPolicyRefusal, tagRowPolicyRefusals } from './rowPolicyError';
 export type { RowPolicyReason } from './rowPolicyError';
-import { RowPolicyError, isRowPolicyError, type RowPolicyReason } from './rowPolicyError';
+import { RowPolicyError, isRowPolicyError, rowPolicyRefusal, type RowPolicyReason } from './rowPolicyError';
 
 // ── Scopes ──────────────────────────────────────────────────────────────────
 
@@ -62,9 +62,17 @@ const scopes = new AsyncLocalStorage<Scope>();
 
 /** Refuses, typed — and a fan-out or export build remembers it, so a tile-level catch cannot publish around it. */
 export function refuseInScope(reason: RowPolicyReason): never {
+  remember(reason);
+  throw new RowPolicyError(reason);
+}
+/** `refuseInScope` for a door that answers `{ok:false}`: remembered the same, returned as the reply. */
+export function refusalInScope(reason: RowPolicyReason): ReturnType<typeof rowPolicyRefusal> {
+  remember(reason);
+  return rowPolicyRefusal(reason);
+}
+function remember(reason: RowPolicyReason): void {
   const out = scopes.getStore()?.out;
   if (out && !out.refused) out.refused = reason;
-  throw new RowPolicyError(reason);
 }
 const refuse: (reason: RowPolicyReason) => never = refuseInScope;
 

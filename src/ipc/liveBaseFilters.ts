@@ -20,9 +20,12 @@ import * as msg from '../data/liveMessages';
 import { liveBaseOf } from '../engine/live/liveBase';
 import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
+import { liveBaseFiltersUnreadable } from '../engine/liveRefusals';
 import * as queryCache from '../engine/queryCache';
 import { layerBaseFilter } from '../engine/semanticMessages';
 import { layerLabel } from '../engine/live/semantic/semanticRefusals';
+import { safeError } from '../connectors/types';
+import { logger } from '../app/logger';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -30,12 +33,16 @@ export type SetBaseFiltersReply =
   | { ok: true; baseFilters: FilterStep[]; epoch: number }
   | { ok: false; code?: 'not_live' | 'live_refused'; reason?: string; error: string };
 
+/** A step's keys and values in any key order, its period aside: the sanitizer only fills that one's defaults. */
+const shapeOf = (step: unknown): string => queryCache.stableStringify({ ...(step as object), period: undefined });
+
 /** The list as it will be stored, or the editor's refusal: checked the way every question will read it (the header). A model import asks it too. */
 export function baseFiltersRefusal(meta: { columns: datasets.DatasetMeta['columns'] }, filters: unknown): { steps: FilterStep[] } | { ok: false; code: 'live_refused'; reason: string; error: string } {
   const asked = Array.isArray(filters) ? filters : [];
   const steps = sanitizeBaseFilters(asked);
-  // A step the stored form would drop (an unknown operator, a radius, too many values) is refused, never saved short.
-  if (steps.length !== asked.length) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
+  // A step the stored form would drop (an unknown operator, a radius, too many values) or change (a `via`, `lock`,
+  // `context` or `datasetId` it strips: a model file's step has no contract) is refused, never saved short or narrowed.
+  if (steps.length !== asked.length || steps.some((st, i) => shapeOf(st) !== shapeOf(asked[i]))) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: msg.liveBaseFilterInvalidMessage() };
   // The declared columns only: a base filter runs before any calculated field exists (part 8 step 04).
   const base = liveBaseOf(steps, declaredColumns(meta));
   if (!base.ok) {
@@ -54,6 +61,8 @@ export async function setLiveBaseFilters(p: Record<string, unknown>): Promise<Se
   if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveBaseFiltersNotLiveMessage() };
   // A semantic dataset's layer applies its own rules; one of ours would be skipped there (cross-part check 14: refused).
   if (meta.live?.semantic) return { ok: false, code: 'live_refused', reason: 'baseFilter', error: layerBaseFilter(layerLabel(meta.live.semantic.backend)) };
+  // A list this pod cannot read in full is a newer pod's: saving over it would drop what it cannot see.
+  if (meta.live?.baseFiltersUnreadable) return { ok: false, code: 'live_refused', reason: 'baseFilterUnreadable', error: liveBaseFiltersUnreadable() };
   const checked = baseFiltersRefusal(meta, p.filters);
   if ('ok' in checked) return checked;
   const { steps } = checked;
@@ -71,7 +80,8 @@ export function register(): void {
     try {
       return await setLiveBaseFilters(payload);
     } catch (err: unknown) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Could not save the filters' };
+      logger.warn(`[live] save the always-applied filters: ${safeError(err)}`);
+      return { ok: false, error: msg.liveBaseFiltersSaveFailedMessage() };
     }
   });
 }

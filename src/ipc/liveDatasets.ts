@@ -52,6 +52,7 @@ import { safeError } from '../connectors/types';
 import { semanticNoCopy } from '../engine/semanticMessages';
 import { layerLabel } from '../engine/live/semantic/semanticRefusals';
 import { logger } from '../app/logger';
+import { formatNumber } from '../app/format';
 
 type Fail = { ok: false; error: string; code?: string };
 type Selection = { table?: string; query?: string };
@@ -158,7 +159,7 @@ export async function refreshLive(projectId: string, id: string) {
  * copy" both read through this one door. `source`: the error is the
  * connector's own (already through safeError) — "the connection is gone" is ours.
  */
-async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ ok: true; result: ParseResult } | (Fail & { source?: true })> {
+async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ ok: true; result: ParseResult; truncated: boolean } | (Fail & { source?: true })> {
   const sel = selectionOf(meta.origin);
   if (!sel || meta.origin?.kind !== 'connection') return { ok: false, error: msg.liveConnectionGoneMessage() };
   const conn = await connections.getConnection(projectId, meta.origin.connId);
@@ -166,10 +167,18 @@ async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ o
   const secrets = await loadSecrets(conn.id, getConnector(conn.connectorId));
   // A normal import: the app's own row cap, the connector's own bounds.
   const ran = await connectionRun.runConnection(conn.connectorId, conn.values, secrets, sel, { rowLimit: connectionRun.ROW_LIMIT });
-  return ran.ok ? { ok: true, result: ran.result } : { ok: false, error: ran.error, source: true };
+  return ran.ok ? { ok: true, result: ran.result, truncated: ran.truncated } : { ok: false, error: ran.error, source: true };
 }
 
-type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode | 'semanticNoCopy'; error: string };
+type BaseRefused = { ok: false; code: 'live_refused'; reason: LiveRefusalCode | 'semanticNoCopy' | 'copyCapped'; error: string };
+
+/**
+ * Base filters over a fetch the row cap cut would keep their part of an arbitrary first N rows, not the rows
+ * the Live dataset answers over: no copy. The fetch is the import's (`run`, its cells typed as any import's);
+ * a bound, filtered fetch would be a Live statement (`runBound`, held to warehouse() and its 100,000-row cap).
+ */
+const cutRefusal = (base: FilterStep[], truncated: boolean): BaseRefused | null =>
+  truncated && base.length ? { ok: false, code: 'live_refused', reason: 'copyCapped', error: msg.liveCopyCappedMessage(formatNumber(connectionRun.ROW_LIMIT)) } : null;
 
 /**
  * The base filters a copy keeps as its Prepare steps (D13), or why it cannot be made: a list this pod
@@ -250,6 +259,8 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
     logger.warn(`[live] make a copy of dataset ${id}: the source refused: ${ran.error}`);
     return { ok: false, error: msg.liveCopyReadFailedMessage() };
   }
+  const cut = cutRefusal(base.steps, ran.truncated);
+  if (cut) return cut;
   const steps = stepsOf(meta, base.steps);
   const data = await extractData(ran.result, steps);
   if (!data.ok) return stepRefused(base.steps, data.column);
@@ -305,6 +316,8 @@ export async function setDatasetMode(p: Record<string, unknown>) {
   if (held) return held;
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) return { ok: false, error: ran.error };
+  const cut = cutRefusal(base.steps, ran.truncated);
+  if (cut) return cut;
   const data = await extractData(ran.result, stepsOf(meta, base.steps));
   if (!data.ok) return stepRefused(base.steps, data.column);
   const ds = await toExtractRecord(projectId, id, data.data);

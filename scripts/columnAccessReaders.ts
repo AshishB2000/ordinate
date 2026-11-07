@@ -96,7 +96,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'geo:boundarySources': 'META',
   'geo:resolvePlace': 'META',
   'geo:spatialPreview': 'NET',
-  'home:overview': 'GATE',
+  'home:overview': 'REDACT', // its datasets as dataset:list's (summariesFor: no refresh error); standsOut's cards through the figure doors
   'incremental:get': 'REDACT',
   'input:load': 'NET',
   'input:lookups': 'META',

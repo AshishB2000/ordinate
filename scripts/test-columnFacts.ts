@@ -7,6 +7,8 @@
 // - No prompt sent for east carries an ssn value, a salary figure (the total, the mean, the largest), the salary
 //   example or a hidden column's value label; the dataset facts do not name salary, and still hold dept.
 //   NEGATIVE CONTROL: hr's dataset prompt carries the canary and the salary total.
+// - A drill hierarchy with a hidden level (dept › ssn) is in none of east's dataset, visual or Live facts (ai/hiddenFacts
+//   tableWithout). NEGATIVE CONTROL: hr's name it in each.
 // - A copy's sample values (part 3, its value index) skip a hidden column even inside the dataset branch's checked
 //   scope: dept's for east, never ssn's. NEGATIVE CONTROL: hr's list ssn's.
 // - Verified questions (part 3): one over salary is no example in east's prompt and does not answer east word for
@@ -54,6 +56,8 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     });
     await W.plant(liveStaff);
     ok('setup: the Live Staff is profiled', (await W.call('boss', 'dataset:syncLiveSchema', { projectId: P, datasetId: liveStaff })).body?.ok === true);
+    const tree = async (id: string) => (await W.call('boss', 'catalog:setTable', { projectId: P, datasetId: id, patch: { hierarchies: [{ name: 'Who tree', levels: ['dept', 'ssn'] }] } })).body?.ok === true;
+    ok('setup: Staff and the Live Staff drill dept › ssn', (await tree(staff)) && (await tree(liveStaff)));
     const promptsAs = async (who: string, contexts: object[], spec: unknown = BY_DEPT_SPEC): Promise<{ prompts: string[]; replies: H.Reply[] }> => {
       const prompts: string[] = [];
       stubModel(prompts, spec);
@@ -86,11 +90,14 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     ok('no prompt sent for east carries a hidden value, a figure made from one, its example, its note or its labels', !leak, `${leak} in ${east.prompts.find((p) => promptLeak(p))?.slice(0, 400)}`);
     ok('…nor names a hidden column in the dataset facts or the project inventory', ![east.prompts[0], east.prompts[8]].some((p) => /salary|ssn|bonus/i.test(p)), `${east.prompts[0].slice(0, 400)} || ${east.prompts[8]?.slice(0, 600)}`);
     ok('…nor the Live dataset\'s facts, which still hold its dept', !/salary|ssn|bonus/i.test(east.prompts[10]) && east.prompts[10]?.includes('dept'), east.prompts[10]?.slice(0, 600));
+    ok('…nor a hierarchy with a hidden level, in the dataset, visual or Live facts', [0, 4, 10].every((i) => !/Who tree|ssn/.test(east.prompts[i] ?? '')),
+      [0, 4, 10].map((i) => east.prompts[i]?.match(/.{0,80}(Who tree|ssn).{0,40}/)?.[0]).join(' | '));
     ok('…which still lists Staff\'s other columns', /Staff: dept \(text/.test(east.prompts[8]) && east.prompts[8].includes('employee_id'), east.prompts[8]?.slice(0, 600));
     ok('the dataset facts for east still hold dept and the row count', east.prompts[0].includes('dept') && east.prompts[0].includes('12 rows'), east.prompts[0].slice(0, 300));
     ok('…and the Headcount metric, but not Payroll or the term on salary', east.prompts[0].includes('Headcount') && !east.prompts[0].includes('Payroll') && !east.prompts[0].includes('High earners'));
     ok('nothing east is answered carries a hidden value either', east.replies.every((r) => !leaksHidden(r.text)), east.replies.map((r) => leaksHidden(r.text)).join());
-    const hr = await promptsAs('hr', [{ kind: 'dataset', id: staff }, { kind: 'dataset', id: liveStaff }]);
+    const hr = await promptsAs('hr', [{ kind: 'dataset', id: staff }, { kind: 'dataset', id: liveStaff }, { kind: 'visual', id: DEPT_V }]);
+    ok('NEGATIVE CONTROL: hr\'s dataset, Live and visual facts name the hierarchy', [0, 2, 4].every((i) => /Who tree/.test(hr.prompts[i] ?? '')), [0, 2, 4].map((i) => hr.prompts[i]?.slice(0, 120)).join(' | '));
     ok('NEGATIVE CONTROL: hr\'s facts name the key, and the Live facts name salary and ssn (the detector withholds ssn\'s values from everyone)', /ssn/.test(hr.prompts[0]) && /- salary \(number/.test(hr.prompts[2] ?? '') && /- ssn \(text/.test(hr.prompts[2] ?? ''), hr.prompts[2]?.slice(0, 600));
     ok('NEGATIVE CONTROL: hr\'s dataset prompt carries the canary, a salary figure and the salary note', hr.prompts.some((p) => p.includes(C.SSN_CANARY)) && hr.prompts.some((p) => p.includes(C.NOTE)) && hr.prompts.some((p) => SALARY_FIGURES.some((f) => p.includes(f))), hr.prompts[0]?.slice(0, 400));
     ok('NEGATIVE CONTROL: …and hr\'s the planted finding (the insights are read for hr)', hr.prompts[0].includes(`${C.SSN_CANARY}_9`));

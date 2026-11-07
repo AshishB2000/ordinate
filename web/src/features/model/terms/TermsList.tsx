@@ -19,6 +19,7 @@ import type { NavTopic } from '../navigation';
 import { inOrder } from '../topics/api';
 import { TopicLine } from '../topics/TopicPicker';
 import { TermDialog } from './TermDialog';
+import { HiddenLock } from '../metrics/MetricCells';
 import d from '../../data/Data.module.css';
 import s from './Terms.module.css';
 
@@ -95,6 +96,7 @@ export function TermsList({ projectId, canEdit, usage, topic }: { projectId: str
                   ) : (
                     <span title={t.description || undefined}>{t.name}</span>
                   )}
+                  {t.hidden && <HiddenLock />}
                   {t.status && (
                     <div className={s.status}>
                       <StatusBadge status={t.status} />

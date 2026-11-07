@@ -58,6 +58,7 @@ function pcStory(page: any, root: HTMLElement): void {
       fig.appendChild(pcEl('h3', 'pub-card-title', b.title));
       fig.appendChild(b.data && b.data.error ? pcEl('div', 'pub-broken', b.data.error) : pcChartBody({ chartType: b.chartType, title: b.title }, b.data || {}, page, () => { /* no filters in a story */ }));
       if (b.caption) fig.appendChild(pcEl('figcaption', 'pub-caption', b.caption));
+      if (b.data && b.data.note) fig.appendChild(pcEl('p', 'pub-caption', b.data.note)); // a term this block leaves out
       col.appendChild(fig);
     }
   }

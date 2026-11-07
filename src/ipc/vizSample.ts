@@ -36,7 +36,7 @@ export function register(): void {
       const bound = resolveFilterParams(visuals.sanitizeFilters(filters), values);
       // Table calculations on the aggregated grid, exactly as `visual:data` runs them.
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), p, d, e, values), e);
+        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values, sample: true }), p, d, e, values, drawnAs.chartType), e);
       const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run, values);
       // …and offers the map when the labels are places (analysis/geoHits) — what un-greys the builder's map chips.
       // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes); then the value labels beside them.

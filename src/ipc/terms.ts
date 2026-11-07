@@ -23,6 +23,7 @@ import { withheldColumns } from '../ai/columnNotes';
 import { assistantColumnDocs } from '../app/sharePolicy';
 import { termUsage } from '../analysis/termUsage';
 import { termHidden } from '../analysis/columnHidden';
+import * as msg from '../data/termMessages';
 
 /** A term as `projectId`'s caller may read it: unchanged, or (restricted) every filter value left out. */
 export async function termForCaller(projectId: string, t: Term): Promise<Term & { valuesHidden?: true }> {
@@ -73,7 +74,7 @@ export async function saveTermChecked(projectId: string, input: terms.TermInput)
   const problem = await terms.termProblem(projectId, input);
   if (problem) return { ok: false, ...problem };
   const t = await terms.saveTerm(projectId, input);
-  if (!t) return { ok: false, error: 'Could not save the term. Check the dataset still exists.', field: 'datasetId' };
+  if (!t) return { ok: false, error: msg.termNotSaved(), field: 'datasetId' };
   await versions.record(projectId, 'term', t);
   return { ok: true, term: t };
 }
@@ -82,16 +83,16 @@ export async function saveTermChecked(projectId: string, input: terms.TermInput)
 export async function updateTermChecked(projectId: string, id: string, patch: Partial<terms.TermInput>, base?: string) { // the reply as it always was
   try {
     const before = await terms.getTerm(projectId, id);
-    if (!before) return { ok: false, error: 'Glossary term not found' };
+    if (!before) return { ok: false, error: msg.termNotFound() };
     const problem = await terms.termProblem(projectId, { ...patch, aliases: patch.aliases ?? (patch.name !== undefined ? before.aliases : undefined), datasetId: before.datasetId }, id);
     if (problem) return { ok: false, ...problem };
     const t = await terms.updateTerm(projectId, id, patch, base);
-    if (!t) return { ok: false, error: 'Glossary term not found' };
+    if (!t) return { ok: false, error: msg.termNotFound() };
     await versions.record(projectId, 'term', t, { before });
     return { ok: true, term: t, tag: contentTag('term', t) };
   } catch (err) {
     if (isRecordChanged(err)) throw err; // the route's 409
-    return { ok: false, error: (err as Error)?.message || 'Failed to update the term' };
+    return { ok: false, error: (err as Error)?.message || msg.termNotUpdated() };
   }
 }
 
@@ -100,7 +101,7 @@ export function register(): void {
 
   ipcMain.handle('term:get', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const t = await terms.readTerm(projectId, id);
-    if (!t) return { ok: false, error: 'Glossary term not found' };
+    if (!t) return { ok: false, error: msg.termNotFound() };
     const term = await termForCaller(projectId, t.rec);
     return { ok: true, term, tag: await tagForCaller(projectId, 'term', term, t.tag) }; // tag: the term dialog's base
   });
@@ -112,7 +113,7 @@ export function register(): void {
 
   ipcMain.handle('term:delete', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const done = await trash.trashRecord(projectId, 'term', id); // to the Trash
-    return done.ok ? { ok: true } : { ok: false, error: 'Could not delete the term' };
+    return done.ok ? { ok: true } : { ok: false, error: msg.termNotDeleted() };
   });
 
   ipcMain.handle('term:usage', async (_e, { projectId }: { projectId: string }) => ({ ok: true, usage: await termUsage(projectId) }));

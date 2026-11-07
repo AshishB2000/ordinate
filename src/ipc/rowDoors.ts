@@ -24,7 +24,7 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
-import { RowPolicyError, closedToCaller, gateRows, hiddenColumnsFor, inFanOut, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, gateRows, hiddenColumnsFor, inFanOut, isRowPolicyError, refusalInScope, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
 import { mentionsHidden } from '../data/columnAccess';
 import type { RowPolicyReason } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
@@ -185,7 +185,9 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   const filters = expanded.steps; // its notes are the caller's: vizDataFor expands first, so none are left here
   const reads = once(chartReadsOf(projectId, datasetId, encoding, filters));
   // A hidden column FIRST: before the lock, the related gate, the Live split and the answer cache (./columnDoors).
-  return gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async () => {
+  return gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async (hidden) => {
+    // Key drivers rank every text column, named or not: refused while any is hidden here (and a fan-out build remembers it).
+    if (encoding && encoding.drivers && hidden.size) return refusalInScope('hidden');
     const lock = await lockOrRefusal(projectId, datasetId);
     if (isRefusal(lock)) return lock;
     if (!lock) {
