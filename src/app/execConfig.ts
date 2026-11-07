@@ -341,6 +341,13 @@ function podReady(): boolean {
   return Boolean(effectiveByokActive());
 }
 
+// The org's Assistant switch (copilot:setEnabled), read on every call: config.get() is the org's document, fresh per
+// request on any pod (src/server/orgConfig.ts), so turning it back on needs no restart. Not part of executionReady():
+// that gates every AI feature, and the dock offers "Turn the Assistant on" only while a model is ready.
+export function assistantOn(): boolean {
+  return get().copilotEnabled !== false;
+}
+
 // True iff the *local* path is usable right now (active CLI detected installed).
 export function localExecutionReady(): boolean {
   if (onServer()) return false;
@@ -404,7 +411,7 @@ export function publicConfig() {
     notifications:  { ...(cfg.notifications || { sound: false, desktop: false }) },
     autoRefresh:    cfg.autoRefresh !== false,
     // Default true when absent (older config.json predating Week 11).
-    copilotEnabled: cfg.copilotEnabled !== false,
+    copilotEnabled: assistantOn(),
     // Home "Starred" pins — a flat "type:id" list, safe to expose (no secrets).
     starred: [...(cfg.starred || [])],
     // Formats and branding carry no secrets: the renderer formats every figure

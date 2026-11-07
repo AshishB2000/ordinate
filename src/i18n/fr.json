@@ -11,6 +11,7 @@
   "aiMessages.enter_the_api_key_again_to": "Saisissez à nouveau la clé d’API pour changer l’URL de base à laquelle elle est envoyée.",
   "aiMessages.enter_the_gateway_s_base_url": "Saisissez l’URL de base de la passerelle.",
   "aiMessages.that_model_isn_t_one_your": "Votre organisation n’a pas activé ce modèle. Choisissez-en un autre.",
+  "aiMessages.the_assistant_is_off_for_your": null,
   "aiMessages.this_column_is_marked_personal_or": "Cette colonne est marquée comme personnelle ou financière : ses valeurs ne sont donc pas envoyées à l’Assistant.",
   "alerts.above": "au-dessus de",
   "alerts.alerts_by_period_and_anomaly_alerts": null,

@@ -11,6 +11,7 @@
   "aiMessages.enter_the_api_key_again_to": "Geben Sie den API-Schlüssel erneut ein, um die Basis-URL zu ändern, an die er gesendet wird.",
   "aiMessages.enter_the_gateway_s_base_url": "Gib die Basis-URL des Gateways ein.",
   "aiMessages.that_model_isn_t_one_your": "Dieses Modell hat deine Organisation nicht freigegeben. Wähle ein anderes.",
+  "aiMessages.the_assistant_is_off_for_your": null,
   "aiMessages.this_column_is_marked_personal_or": "Diese Spalte ist als persönlich oder finanziell markiert, daher werden ihre Werte nicht an den Assistenten gesendet.",
   "alerts.above": "über",
   "alerts.alerts_by_period_and_anomaly_alerts": null,

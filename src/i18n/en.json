@@ -8,6 +8,7 @@
   "aiMessages.enter_the_api_key_again_to": "Enter the API key again to change the base URL it is sent to.",
   "aiMessages.enter_the_gateway_s_base_url": "Enter the gateway’s base URL.",
   "aiMessages.that_model_isn_t_one_your": "That model isn’t one your organization has turned on. Pick another.",
+  "aiMessages.the_assistant_is_off_for_your": "The Assistant is off for your organization. An admin can turn it back on.",
   "aiMessages.this_column_is_marked_personal_or": "This column is marked personal or financial, so its values aren’t sent to the Assistant.",
   "alerts.above": "above",
   "alerts.alerts_by_period_and_anomaly_alerts": "Alerts by period and anomaly alerts read the dataset's rows, which a Live dataset doesn't keep. Make a copy to use one, or alert on a threshold.",

@@ -11,6 +11,7 @@
   "aiMessages.enter_the_api_key_again_to": "Vuelve a introducir la clave de API para cambiar la URL base a la que se envía.",
   "aiMessages.enter_the_gateway_s_base_url": "Introduce la URL base del gateway.",
   "aiMessages.that_model_isn_t_one_your": "Tu organización no ha activado ese modelo. Elige otro.",
+  "aiMessages.the_assistant_is_off_for_your": null,
   "aiMessages.this_column_is_marked_personal_or": "Esta columna está marcada como personal o financiera, así que sus valores no se envían al Asistente.",
   "alerts.above": "por encima de",
   "alerts.alerts_by_period_and_anomaly_alerts": null,

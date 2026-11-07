@@ -11,6 +11,7 @@
   "aiMessages.enter_the_api_key_again_to": "送信先のベース URL を変更するには、API キーをもう一度入力してください。",
   "aiMessages.enter_the_gateway_s_base_url": "ゲートウェイのベースURLを入力してください。",
   "aiMessages.that_model_isn_t_one_your": "そのモデルは組織で有効になっていません。別のモデルを選んでください。",
+  "aiMessages.the_assistant_is_off_for_your": null,
   "aiMessages.this_column_is_marked_personal_or": "この列は個人情報または財務情報として指定されているため、値はアシスタントに送信されません。",
   "alerts.above": "超過",
   "alerts.alerts_by_period_and_anomaly_alerts": null,
