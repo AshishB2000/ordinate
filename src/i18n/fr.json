@@ -207,6 +207,7 @@
   "common.vs_previous": "vs précédent",
   "connectorMessages.a_wallet_folder_is_a_path": "Un dossier de wallet est un chemin sur ce serveur, qu’une connexion ne peut pas utiliser. Utilisez la chaîne de connexion TLS, qui ne nécessite pas de wallet.",
   "connectorMessages.the_server_did_not_agree_to": "Le serveur n’a pas accepté de chiffrer la connexion : le mot de passe n’a donc pas été envoyé. Vérifiez que TLS est activé sur le serveur.",
+  "connectorMessages.the_source_returned_no_columns_for": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, et {p1} de plus",
   "draftMessages.only_the_project_s_editors_and": null,

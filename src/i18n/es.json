@@ -207,6 +207,7 @@
   "common.vs_previous": "frente al anterior",
   "connectorMessages.a_wallet_folder_is_a_path": "Una carpeta de wallet es una ruta de este servidor, que una conexión no puede usar. Usa la cadena de conexión TLS, que no necesita wallet.",
   "connectorMessages.the_server_did_not_agree_to": "El servidor no aceptó cifrar la conexión, así que no se envió la contraseña. Comprueba que el servidor tenga TLS activado.",
+  "connectorMessages.the_source_returned_no_columns_for": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, y {p1} más",
   "draftMessages.only_the_project_s_editors_and": null,

@@ -207,6 +207,7 @@
   "common.vs_previous": "ggü. Vorherigem",
   "connectorMessages.a_wallet_folder_is_a_path": "Ein Wallet-Ordner ist ein Pfad auf diesem Server, den eine Verbindung nicht verwenden kann. Verwenden Sie den TLS-Verbindungsstring, der kein Wallet benötigt.",
   "connectorMessages.the_server_did_not_agree_to": "Der Server hat der Verschlüsselung der Verbindung nicht zugestimmt, daher wurde das Passwort nicht gesendet. Prüfen Sie, ob TLS auf dem Server aktiviert ist.",
+  "connectorMessages.the_source_returned_no_columns_for": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0} und {p1} weitere",
   "draftMessages.only_the_project_s_editors_and": null,

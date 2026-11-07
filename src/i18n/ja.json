@@ -207,6 +207,7 @@
   "common.vs_previous": "対前",
   "connectorMessages.a_wallet_folder_is_a_path": "ウォレットフォルダーはこのサーバー上のパスのため、接続では使用できません。ウォレットが不要な TLS 接続文字列を使用してください。",
   "connectorMessages.the_server_did_not_agree_to": "サーバーが接続の暗号化に同意しなかったため、パスワードは送信されませんでした。サーバーで TLS が有効になっているか確認してください。",
+  "connectorMessages.the_source_returned_no_columns_for": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}、ほか{p1}件",
   "draftMessages.only_the_project_s_editors_and": null,
