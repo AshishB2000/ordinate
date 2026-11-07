@@ -66,3 +66,8 @@ export function targetSeriesTooLong(): string {
 export function targetPlanNoColumn(column: string): string {
   return t('targetMessages.the_plan_has_no_so_the', { column });
 }
+
+/** A period metric that compares periods (a change, a % change, last year's figure): no plan is for that. */
+export function targetOnCompare(): string {
+  return t('targetMessages.a_metric_that_compares_periods_has');
+}

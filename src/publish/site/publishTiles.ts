@@ -29,6 +29,12 @@ function pcFmt(v: number): string {
   try { return OrdFormat.formatValue(v, 'auto'); } catch (_) { return String(v); }
 }
 
+/** "Jan 1 – Oct 31, 2024" from two ISO days (the app's periodRangeText). */
+function pcDays(from: string, to: string): string {
+  const day = (iso: string): number => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  try { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).formatRange(day(from), day(to)); } catch (_) { return `${from} – ${to}`; }
+}
+
 let pcFigures = 0;
 
 /** Chart.js's own ink — ticks, legends, gridlines — from the page's tokens, read when a chart is drawn (the style's light or dark). */
@@ -206,6 +212,8 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     const box = pcEl('div', 'pub-kpi pub-kpi--card');
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));
     if (payload.subtitle) box.appendChild(pcEl('div', 'pub-kpi-label', payload.subtitle));
+    const days = payload.periodRange; // a period metric's days, the server's (part 5, D9), as the app's tile says them
+    if (days) box.appendChild(pcEl('div', 'pub-kpi-label', pcDays(days.from, days.to)));
     const tg = payload.target; // the server's target, attainment and how (part 5, D14); printed, never worked out here
     if (tg) box.appendChild(pcEl('div', 'pub-kpi-label', tg.none || (tg.attainmentDisplay ? `${tg.attainmentDisplay} of target${tg.how ? ` · ${tg.how}` : ''}` : '')));
     el.appendChild(box);

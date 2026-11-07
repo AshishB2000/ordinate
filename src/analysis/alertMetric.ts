@@ -1,6 +1,6 @@
 // An alert rule watched through its METRIC (semantic layer part 5, D14): a period or funnel metric has no
 // `{column, aggregation}` copy that says what it is, so its rule (stored with no column) is evaluated by
-// `resolveMetric`, the tile's own figure. Every other rule keeps its stored copy, as before.
+// `resolveMetric`, the tile's own figure; so is every target rule. Every other rule keeps its stored copy, as before.
 
 import type { AlertRule } from './alerts';
 import { getMetric, isFunnelDefinition, isPeriodDefinition } from './metrics';
@@ -35,7 +35,8 @@ export async function metricWatch(projectId: string, rule: AlertRule): Promise<M
   if (typeof id !== 'string') return null;
   const m = await getMetric(projectId, id);
   if (!m) return rule.metric.column ? null : 'gone';
-  if (rule.metric.column && !isPeriodDefinition(m.definition) && !isFunnelDefinition(m.definition)) return null;
+  // A target rule (D14) compares the metric's figure with the metric's target, whatever copy the card stored beside it.
+  if (rule.metric.column && rule.compare !== 'target' && !isPeriodDefinition(m.definition) && !isFunnelDefinition(m.definition)) return null;
   const stored = (rule.metric.filters || []) as FilterStep[];
   return async (period, reads) => {
     const range = period ? keyRange(period.key, period.op) : null;

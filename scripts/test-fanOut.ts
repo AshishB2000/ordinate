@@ -452,6 +452,14 @@ async function answers(): Promise<void> {
   const folded = await fan.askFanOut({ questions: [{ datasetId: C, encoding: { category: 'id', values: [M('id', 'count')] }, filters: [], measures: [0] }, { datasetId: O, encoding: { category: 'id', categoryDatasetId: C, values: [M('amount', 'sum')] }, filters: [], measures: [1] }], notes: [] },
     { category: 'id', values: [M('id', 'count'), M('amount', 'sum', O)] }, jsAsk);
   ok('a text axis folded into "Other" across questions is refused with its sentence', !folded.ok && folded.error === msg.fanOutOneAxis(), show(folded));
+  // The merged axis: a date's periods in time order, blank last, whichever question drew them; a text axis first-seen.
+  const drawn = (category: Ok['category'], by: Record<string, Cell[]>): Ask => async (d) => okOf({ data: { labels: by[d], series: [{ name: d, values: by[d].map((_, i) => i + 1) }] } as unknown as Ok['data'], recommendedShape: 'categorical', warnings: [], category });
+  const twoSides = { questions: [O, R].map((d, i) => ({ datasetId: d, encoding: { category: 'signup', values: [M('amount', 'sum')] }, filters: [], measures: [i] })), notes: [] };
+  const merged = async (category: Ok['category'], by: Record<string, Cell[]>) => ((r) => (r.ok ? { labels: r.data.labels, series: r.data.series.map((s) => s.values) } : r))(await fan.askFanOut(twoSides, { category: 'signup', values: [M('amount', 'sum', O), M('refund', 'sum', R)] }, drawn(category, by)));
+  const byMonth = await merged({ kind: 'date', grain: 'month' }, { [O]: ['2024-01', null, '2024-03'], [R]: ['2024-02', '2023-12'] });
+  ok('a date axis merged from two questions is in time order, blank last, each figure under its own period', show(byMonth) === show({ labels: ['2023-12', '2024-01', '2024-02', '2024-03', null], series: [[null, 1, null, 3, 2], [2, null, 1, null, null]] }), show(byMonth));
+  const byText = await merged({ kind: 'text' }, { [O]: ['West', 'East'], [R]: ['North', 'East'] });
+  ok('NEGATIVE CONTROL: a text axis keeps first-seen order', show(byText) === show({ labels: ['West', 'East', 'North'], series: [[1, 2, null], [null, 2, 1]] }), show(byText));
 
   // ── the door ──
   const { P, saved, swap } = await doorProject();

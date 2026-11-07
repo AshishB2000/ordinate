@@ -140,6 +140,13 @@ function sanitizeFlow(raw: unknown): unknown {
   };
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A period metric's days (part 5, D9): exactly two ISO days, else nothing. */
+function dayPair(raw: unknown): Obj | null {
+  const r = obj(raw);
+  return typeof r.from === 'string' && ISO_DAY.test(r.from) && typeof r.to === 'string' && ISO_DAY.test(r.to) ? { from: r.from, to: r.to } : null;
+}
+
 const TARGET_STATUS: ReadonlySet<unknown> = new Set(['good', 'warn', 'off', 'none']);
 /** A KPI's target as the server worked it out (part 5, D14, ipc/targetResolve): its figures and the app's own words. */
 function sanitizeTarget(raw: unknown): Obj {
@@ -164,6 +171,8 @@ export function sanitizePayload(raw: unknown): unknown {
     if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
     if (typeof o.note === 'string' && o.note) kpi.note = str(o.note, MAX_LABEL); // a dashboard term the tile left out
     if (o.target && typeof o.target === 'object') kpi.target = sanitizeTarget(o.target); // printed under the figure (site/publishTiles)
+    const days = dayPair(o.periodRange); // the days a period metric's figure covers, printed under it
+    if (days) kpi.periodRange = days;
     return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
