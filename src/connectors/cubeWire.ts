@@ -40,7 +40,7 @@ export interface CubeQuery {
 /**
  * The encoder's request body. `query` is all Cube sees. `nonBlank` names text members whose blank values (null,
  * '' or whitespace) the connector drops from a value list (Cube cannot test whitespace); `limit` is then the cut
- * applied after the drop, the query itself asking for every value.
+ * applied after the drop. The query asks the same limit, and a full reply the drop left short is asked again whole.
  */
 export interface CubeBody {
   query: CubeQuery;
@@ -91,12 +91,13 @@ const blank = (v: Cell): boolean => v === null || (typeof v === 'string' && v.tr
 /**
  * Whether the first `limit` rows Cube returned are the first `limit` under Ordinate's order, a NULL last either way:
  * key by key, each column's NULLs only after its values, within the rows tied with the last row on every key before.
+ * Rows that open with a NULL prove nothing (the warehouse may sort NULLs first, every value past the cut): not exact.
  */
 export function cutIsExact(rows: Cell[][], keys: number[]): boolean {
   let tied = rows;
   for (const k of keys) {
     const firstNull = tied.findIndex((r) => r[k] === null);
-    if (firstNull >= 0 && tied.slice(firstNull).some((r) => r[k] !== null)) return false;
+    if (firstNull === 0 || (firstNull > 0 && tied.slice(firstNull).some((r) => r[k] !== null))) return false;
     const last = tied[tied.length - 1]?.[k] ?? null;
     tied = tied.filter((r) => Object.is(r[k], last));
     if (tied.length <= 1) return true;
@@ -124,8 +125,14 @@ export function readLoad(body: CubeBody, json: unknown): LoadRead {
   if (full && body.query.limit === CUBE_ROW_LIMIT) return { ok: true, columns: keys.map(({ name }) => ({ name, type: '' })), rows: rows.slice(0, CUBE_ROW_LIMIT), truncated: true };
   const order = body.query.order.map(([m]) => keys.findIndex((k) => k.key === m || k.key.startsWith(`${m}.`)));
   if (full && !cutIsExact(rows, order)) return { recut: true };
+  // One blank form in a cut may hide the other past it (the check above needs both, and "Other" drops both): re-ask.
+  if (full && dims.some((i) => !numeric.has(keys[i].key) && rows.some((r) => r[i] === '' || r[i] === null))) return { recut: true };
   const drop = new Set((body.nonBlank ?? []).map((m) => keys.findIndex((k) => k.key === m)));
-  if (drop.size) rows = rows.filter((r) => ![...drop].some((i) => blank(r[i])));
+  if (drop.size) {
+    const kept = rows.filter((r) => ![...drop].some((i) => blank(r[i])));
+    if (full && kept.length < rows.length) return { recut: true }; // the drop left the cut short: the rest is past it
+    rows = kept;
+  }
   if (body.limit !== undefined) rows = rows.slice(0, body.limit);
   return { ok: true, columns: keys.map(({ name }) => ({ name, type: '' })), rows, truncated: false };
 }

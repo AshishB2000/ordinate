@@ -1,0 +1,232 @@
+// A dashboard's Summary card under the Share policy (src/ipc/summary.ts `computeSummary` with a `share` path): its
+// KPI, driver and alert sentences quote figures, so each is judged by the reads of the figure it quotes on the path
+// the page leaves by (publish/kpiPolicy kpiHidden), as the KPI tile and the alert's own post are. Under drop, a
+// Summary led by a KPI over a marked salary says neither its KPI's movement nor its contributor, nor an alert over
+// salary, on any surface an outside reader gets:
+//
+//   /p/ pages        publish:run, then GET /p/<id>/<file> as a member's browser does
+//   an embed         embedHtml, the page a signed embed is served
+//   the HTML export  dashboardPageHtml (the export path), and the CLI/MCP `dashboards export` that writes it
+//   a report         the summary page's bullets (report:build)
+//
+// NEGATIVE CONTROLS: a Summary led by the hours KPI keeps its sentence; an alert over hours is said in place of the
+// salary one; in the app summary:compute still says the payroll sentences; with nothing marked they leave.
+//
+// The facts a report's narrative page hands the model (copilot:ask, context analysis, with the report's share path:
+// src/ipc/copilot.ts buildFacts) withhold the same figures: a KPI card's and a saved metric's totalled from salary.
+// NEGATIVE CONTROLS: the hours figures stay; the Assistant in the app still reads the payroll figure. Nor does the
+// narrative replay the caller's Assistant thread, or build the answer chart a model suggests (no share path there).
+// NEGATIVE CONTROL: an ask in the app still replays the thread.
+//
+//   npm run build:ts && node scripts/test-sharePolicySummary.js
+
+export {}; // module scope — sibling test scripts share top-level names
+import { ok, finish } from './selfcheck';
+import * as B from './subscriptionHarness';
+
+const fs: typeof import('fs') = require('fs');
+const os: typeof import('os') = require('os');
+const path: typeof import('path') = require('path');
+
+const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-summary-'));
+const appMod: typeof import('../src/server/app') = require('../src/server/app');
+const envMod: typeof import('../src/server/env') = require('../src/server/env');
+const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
+const store: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const copilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply
+const threads: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
+const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
+const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const reportSpec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');
+const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
+const embedPage: typeof import('../src/publish/embedPage') = require('../src/publish/embedPage');
+const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const format: typeof import('../src/app/format') = require('../src/app/format');
+
+const DEV: B.Identity = { user: { email: 'dev@local', role: 'admin' }, org: { id: 'default' } };
+const JOBS: B.Identity = { user: { email: 'jobs@system', role: 'admin' }, org: { id: 'default' } };
+const show = (v: unknown): string => String(JSON.stringify(v)).slice(0, 500);
+function dataBlock(html: string): any { // any: the page's JSON, read field by field
+  const m = /<script type="application\/json" id="ordinate-page">([\s\S]*?)<\/script>/.exec(html);
+  return m ? JSON.parse(m[1]) : null;
+}
+
+// Ops and Lab, January to June 2025, as test-sharePolicyFigures: salaries 9xx37 / 9xx89, hours 12x3 nobody marks.
+const MONTHS = [1, 2, 3, 4, 5, 6];
+const ROWS = MONTHS.flatMap((mo) => [['Ops', `2025-0${mo}-15`, 90037 + mo * 1000, 1203 + mo * 10], ['Lab', `2025-0${mo}-15`, 90089 + mo * 1000, 1207 + mo * 10]]);
+const PAY = (mo: number): number => 90037 + 90089 + mo * 2000;
+const TOTAL = MONTHS.reduce((n, mo) => n + PAY(mo), 0);
+const figs = [...MONTHS.flatMap((mo) => [90037 + mo * 1000, 90089 + mo * 1000, PAY(mo)]), TOTAL];
+// The KPI's movement (192.1K from 190.1K, by 2.0K), its lead contributor's (+1.0K) and the payroll alert's total.
+const SALARY_BYTES = [...figs.map(String), ...figs.map((n) => n.toLocaleString('en-US')), '1.1M', '192.1K', '190.1K', '2.0K', '1.0K', 'Payroll above'];
+
+async function main(): Promise<void> {
+  B.context.enterServerMode(DATA);
+  appMod.registerHandlers();
+  format.setFormatPrefs({ locale: 'en-US' });
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
+  const base = await B.listen(app);
+  const { call } = B.client(base);
+  const rpc = async (channel: string, payload: unknown): Promise<any> => (await call(channel, payload)).body; // any: each channel's reply
+  const inApp = <T>(fn: () => Promise<T>): Promise<T> => B.context.runInContext(DEV, 'test', fn);
+  try {
+    const P: string = (await rpc('projects:create', { name: 'Summary share' })).id;
+    const fx = await inApp(async () => {
+      const S = (await datasets.saveDataset(P, { name: 'Staff', sourceKind: 'csv',
+        columns: [{ name: 'team', type: 'text' }, { name: 'day', type: 'date' }, { name: 'salary', type: 'number' }, { name: 'hours', type: 'number' }], rows: ROWS }))!.id;
+      // Refreshed long ago: a page that leaves the app names the alerts fired on the data as it is now.
+      await rec.serialized(rec.datasetFilePath(P, S), (raw) => { raw.lastRefreshedAt = '2000-01-01T00:00:00.000Z'; });
+      const id = (i: number): string => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+      const card = (i: number, type: string, extra: object) => ({ id: id(i), type, layout: { x: (i % 4) * 3, y: 0, w: 3, h: 3 }, ...extra });
+      const board = async (name: string, column: string, label: string, n: number) => (await analysis.saveAnalysis(P, { name, sheets: [{ id: id(90 + n), name: 'Main', cards: [
+        card(n * 10, 'metric', { metric: { datasetId: S, column, aggregation: 'sum', label } }),
+        card(n * 10 + 1, 'summary', { summary: {} }),
+      ] }] } as never))!;
+      const pay = await board('Payroll board', 'salary', 'Payroll KPI', 1);
+      const hrs = await board('Hours board', 'hours', 'Hours KPI', 2);
+      for (const [name, column] of [['Payroll', 'salary'], ['Hours', 'hours']]) {
+        await metrics.saveMetric(P, { name, datasetId: S, definition: { column, aggregation: 'sum' }, format: { kind: 'number', decimals: 0 } } as never);
+      }
+      const report = (await reportSpec.saveReport(P, { name: 'Payroll report', analysisId: pay.id, pages: [{ kind: 'summary', include: true, layout: 'full' }] }))!;
+      const narrated = (await reportSpec.saveReport(P, { name: 'Narrated report', analysisId: pay.id, pages: [
+        { kind: 'sheet', sheetIdx: 0, include: true, layout: 'full' }, { kind: 'narrative', include: true, layout: 'full' }] }))!;
+      const hrsReport = (await reportSpec.saveReport(P, { name: 'Hours report', analysisId: hrs.id, pages: [{ kind: 'summary', include: true, layout: 'full' }] }))!;
+      return { S, pay: pay.id, hrs: hrs.id, report: report.id, hrsReport: hrsReport.id, narrated: narrated.id };
+    });
+    // The hours alert fires first, the payroll one later: the newest is the one a Summary names.
+    const rule = async (name: string, column: string, label: string) => rpc('alerts:save', { projectId: P, rule: {
+      name, datasetId: fx.S, metric: { column, aggregation: 'sum', label }, compare: 'threshold', threshold: { op: '>', value: 10 } } });
+    await rule('Hours above 10', 'hours', 'Hours');
+    await B.context.runInContext(JOBS, 'job:tick:default', () => alertStore.evaluateProject(P, undefined, Date.now() - 60_000));
+    await rule('Payroll above 10', 'salary', 'Payroll');
+    const fired = await B.context.runInContext(JOBS, 'job:tick:default', () => alertStore.evaluateProject(P));
+    ok('fixture: the payroll rule fires on the total payroll', fired.some((e) => e.ruleName === 'Payroll above 10' && e.value === TOTAL), show(fired.map((e) => [e.ruleName, e.value])));
+
+    /** Every surface an outside reader gets, as its bytes, and each Summary's sentences. */
+    const leave = async (action: 'mask' | 'drop' | 'include') => {
+      await inApp(() => store.setPolicy(P, { publish: action, export: action, report: action }));
+      const run = await rpc('publish:run', { projectId: P, dashboardIds: [fx.pay, fx.hrs], storyIds: [] });
+      const site = run.site as import('../src/publish/hosted').HostedSite;
+      const pages = await Promise.all(site.pages.filter((p) => p.kind === 'dashboard').map(async (p) => dataBlock(await (await fetch(`${base}/p/${site.id}/${p.file}`)).text())));
+      const page = (name: string): any => pages.find((b) => b?.dashboard?.name === name); // any: as above
+      embedPage.clearEmbedCache();
+      const claims = { pub: site.id, dash: fx.pay, exp: 0, params: {}, hide: [] } as unknown as import('../src/server/embed/token').EmbedClaims;
+      const embedded = await B.context.runAsPublished(DEV, 'embed', () => recordFs.withReadMemo(() => embedPage.embedHtml(site, fx.pay, claims)));
+      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-summary-cli-'));
+      const cli = await inApp(() => automation.dashboardsExport({ projectId: P, transport: 'cli', cwd, headless: true, progress: () => {} }, 'Payroll board', 'html', 'out.html')) as { path: string };
+      const bullets = async (id: string): Promise<string[]> => ((await rpc('report:build', { projectId: P, id })).pages || []).flatMap((p: any) => p.bullets || []); // any: a report page
+      return {
+        page: page('Payroll board'), hoursPage: page('Hours board'),
+        embed: dataBlock('html' in embedded ? embedded.html : ''),
+        exported: dataBlock(await inApp(() => pub.dashboardPageHtml(P, fx.pay))),
+        cli: dataBlock(fs.readFileSync(cli.path, 'utf8')),
+        report: await bullets(fx.report), hoursReport: await bullets(fx.hrsReport),
+      };
+    };
+    type Out = Awaited<ReturnType<typeof leave>>;
+    const said = (block: any): string[] => (block?.dashboard?.sheets[0].cards.find((c: any) => c.kind === 'summary')?.payloads ?? []).flatMap((p: any) => p.sentences ?? []); // any: a page's JSON
+    const payrollSurfaces = (o: Out): Record<string, unknown> => ({ page: o.page, embed: o.embed, exported: o.exported, cli: o.cli, report: o.report });
+    const leaks = (o: Out): Record<string, string[]> => Object.fromEntries(Object.entries(payrollSurfaces(o))
+      .map(([k, v]) => [k, SALARY_BYTES.filter((b) => JSON.stringify(v ?? null).includes(b))]).filter(([, l]) => l.length));
+    const hoursKpi = (lines: string[]): boolean => lines.some((s) => s.startsWith('Hours KPI rose'));
+    const hoursAlert = (lines: string[]): boolean => lines.some((s) => s.startsWith('Alert “Hours above 10” fired'));
+
+    // ── nothing marked: the payroll sentences leave ──
+    const before = await leave('drop');
+    ok('fixture: with nothing marked, the payroll Summary quotes the KPI, its contributor and the payroll alert on every surface',
+      Object.keys(leaks(before)).length === 5 && ['page', 'embed', 'exported', 'cli'].every((k) => said((before as Record<string, unknown>)[k]).some((s) => s.startsWith('Payroll KPI rose')))
+      && before.report.some((s) => s.startsWith('Alert “Payroll above 10” fired')), show([Object.keys(leaks(before)), said(before.page), before.report]));
+
+    await inApp(() => catalog.setColumn(P, fx.S, 'salary', { sensitivity: 'financial' }));
+
+    // ── drop ──
+    const drop = await leave('drop');
+    ok('drop: no salary figure, payroll sentence or payroll alert leaves on /p/, the embed, the export, the CLI/MCP export or the report bullets',
+      Object.keys(leaks(drop)).length === 0, show([leaks(drop), said(drop.page), drop.report]));
+    ok('drop: the KPI tile beside it is hidden, as before', drop.page.dashboard.sheets[0].cards.find((c: any) => c.title === 'Payroll KPI')?.payloads.every((p: any) => p.hidden), show(drop.page.dashboard.sheets[0].cards[0])); // any: as above
+    ok('NEGATIVE CONTROL (drop): the payroll Summary names the hours alert instead, on the page and in the report',
+      hoursAlert(said(drop.page)) && hoursAlert(drop.report), show([said(drop.page), drop.report]));
+    ok('NEGATIVE CONTROL (drop): the hours Summary keeps its KPI sentence, on /p/ and in its report', hoursKpi(said(drop.hoursPage)) && hoursKpi(drop.hoursReport), show([said(drop.hoursPage), drop.hoursReport]));
+    const app2 = await rpc('summary:compute', { projectId: P, analysisId: fx.pay, pages: (await inApp(() => analysis.getAnalysis(P, fx.pay)))!.sheets });
+    ok('NEGATIVE CONTROL (drop): in the app the Summary still says the payroll KPI sentence', app2.ok && app2.sentences.some((s: any) => s.text.startsWith('Payroll KPI rose')), show(app2)); // any: a sentence
+    // An alert's figure that cannot be read (a Live rule's warehouse down, its daily cap): not judged, so not said — the page still builds.
+    const alertMetric: typeof import('../src/analysis/alertMetric') = require('../src/analysis/alertMetric');
+    const realReads = alertMetric.ruleReads;
+    (alertMetric as { ruleReads: unknown }).ruleReads = async () => { throw new Error('warehouse down'); };
+    try {
+      const run = await rpc('publish:run', { projectId: P, dashboardIds: [fx.pay], storyIds: [] });
+      const file = run?.site?.pages?.find((x: any) => x.kind === 'dashboard')?.file; // any: a site page
+      const lines = file ? said(dataBlock(await (await fetch(`${base}/p/${run.site.id}/${file}`)).text())) : [];
+      ok('drop: an alert whose figure cannot be judged is not said, and the page still publishes', !!file && !lines.some((x) => x.startsWith('Alert')), show([run?.error, lines]));
+    } finally {
+      (alertMetric as { ruleReads: unknown }).ruleReads = realReads;
+    }
+
+    // ── the report narrative's facts, under drop ──
+    const build: (...a: unknown[]) => Promise<{ text: string }> = copilot.buildFacts as never; // loosely typed: it also compiles against buildFacts before it took `share` (the red run)
+    const facts = (board: string, share?: 'report') => inApp(async () => (await build(P, { kind: 'analysis', id: board }, undefined, 'Write two paragraphs', share)).text);
+    const leaked = (text: string): string[] => SALARY_BYTES.filter((b) => text.includes(b));
+    const inAppFacts = await facts(fx.pay);
+    ok('NEGATIVE CONTROL (drop): in the app the Assistant\'s facts carry the payroll KPI and metric figure', leaked(inAppFacts).length > 0 && /Payroll KPI: 1,?122,?756/.test(inAppFacts), inAppFacts);
+    const narr = await facts(fx.pay, 'report');
+    ok('drop: a report narrative\'s facts carry no payroll figure, neither the KPI card\'s nor the saved metric\'s', leaked(narr).length === 0, show([leaked(narr), narr]));
+    ok('drop: …and still name the KPI card (the narrative is not dropped)', /Payroll KPI: /.test(narr), narr);
+    ok('NEGATIVE CONTROL (drop): the hours board\'s narrative facts keep the hours KPI and metric', /Hours KPI: 14,?880/.test(await facts(fx.hrs, 'report')) && /Hours/.test(narr) && narr.includes('14,880'), narr);
+    const real = handlers.get('copilot:ask')!;
+    const asked: any[] = []; // any: the payloads the narrative sends
+    handlers.set('copilot:ask', async (_e, arg) => { asked.push(arg); return { ok: true, answer: 'Two paragraphs.' }; });
+    try {
+      await rpc('report:build', { projectId: P, id: fx.narrated });
+    } finally {
+      handlers.set('copilot:ask', real);
+    }
+    ok('a report\'s narrative asks with the report\'s share path', asked.length === 1 && asked[0].share === 'report' && asked[0].context?.kind === 'analysis', show(asked));
+    // The caller asked the Assistant in the app earlier, and its answer quoted the payroll; the model, asked for the
+    // narrative, suggests a chart of salary by day (each day's payroll is a SALARY_BYTES figure).
+    await inApp(async () => {
+      const th = await threads.createThread(P);
+      await threads.appendTurn(P, { role: 'user', text: 'What is total payroll?' }, th!.id);
+      await threads.appendTurn(P, { role: 'assistant', text: `Total payroll is ${TOTAL.toLocaleString('en-US')}.` }, th!.id);
+    });
+    const sent: { prior: { text: string }[]; facts: string; q: string }[] = [];
+    const realAsk = analyze.askCopilot;
+    const realReady = execConfig.executionReady;
+    (analyze as { askCopilot: unknown }).askCopilot = async (prior: { text: string }[], facts: string, q: string) => {
+      sent.push({ prior, facts, q });
+      return q.startsWith('Narrate') ? { ok: true, text: facts, suggestedAction: { kind: 'none', intent: '' } }
+        : { ok: true, text: 'Echo: ' + prior.map((x) => x.text).join(' / '), suggestedAction: { kind: 'answer', intent: 'pay by day', spec: { dataset: 'Staff', category: 'day', measures: [{ column: 'salary', aggregation: 'sum' }] } } };
+    };
+    (execConfig as { executionReady: unknown }).executionReady = async () => true;
+    try {
+      const page = ((await rpc('report:build', { projectId: P, id: fx.narrated })).pages || []).find((p: any) => p.kind === 'narrative'); // any: a report page
+      const into = JSON.stringify(sent);
+      ok('drop: the narrative replays no Assistant thread and builds no suggested chart: nothing it sends the model or prints carries a payroll figure',
+        sent.length === 1 && sent[0].prior.length === 0 && leaked(into).length === 0 && !!page && leaked(JSON.stringify(page)).length === 0, show([leaked(into), sent.map((x) => x.q.slice(0, 40)), page]));
+      sent.length = 0;
+      const own = await rpc('copilot:ask', { projectId: P, context: { kind: '' }, question: 'And now?' });
+      ok('NEGATIVE CONTROL: an ask in the app replays the thread', own?.ok === true && sent[0]?.prior.some((x) => x.text.includes(TOTAL.toLocaleString('en-US'))), show([own, sent[0]?.prior]));
+    } finally {
+      (analyze as { askCopilot: unknown }).askCopilot = realAsk;
+      (execConfig as { executionReady: unknown }).executionReady = realReady;
+    }
+
+    // ── mask: an aggregate passes ──
+    const mask = await leave('mask');
+    ok('mask: the payroll KPI sentence leaves, as every aggregate does', said(mask.page).some((s) => s.startsWith('Payroll KPI rose')) && mask.report.some((s) => s.startsWith('Payroll KPI rose')), show([said(mask.page), mask.report]));
+  } finally {
+    await app.close();
+  }
+}
+
+main().then(finish, (err) => {
+  console.error(err);
+  process.exitCode = 1;
+  finish();
+});

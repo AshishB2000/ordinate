@@ -17,6 +17,7 @@ import { Skeleton, SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { useCanEdit } from '../projects/api';
 import { navFor, useNavigation, type NavTopic } from '../model/navigation';
+import { endAtHidden } from '../visuals/drill/drillApi';
 import { write as rememberTopic } from '../model/topics/rememberTopic';
 import { dateLadder } from '../../../../src/analysis/drillLevels.ts';
 import { ScopedChip } from '../data/RowAccessOff';
@@ -53,6 +54,7 @@ export function Explorer({
   const [sheet, setSheet] = useState(false);
   const live = dataset.mode === 'live';
   const list = fields.data?.fields ?? [];
+  const hierarchies = endAtHidden(navFor(nav.data, dataset.id), fields.data?.hidden);
   const e = question.encoding;
   const name = dataset.name || 'Untitled dataset';
   const kindOf = (column: string) => list.find((f) => f.name === column)?.kind;
@@ -97,7 +99,7 @@ export function Explorer({
       ) : fields.isError ? (
         <ErrorState compact heading={3} title="The fields could not be read" message={fields.error.message} onRetry={() => void fields.refetch()} />
       ) : (
-        <FieldList fields={list} hierarchies={navFor(nav.data, dataset.id)} topicFields={topicFields} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
+        <FieldList fields={list} hierarchies={hierarchies} topicFields={topicFields} roleOf={roleWord(question)} onPick={(f) => setQuestion(withField(question, f, kindOf))} />
       )}
     </>
   );
@@ -140,7 +142,7 @@ export function Explorer({
               canEdit={canEdit}
               question={question}
               onChange={setQuestion}
-              hierarchies={navFor(nav.data, dataset.id)}
+              hierarchies={hierarchies}
               ladder={nav.data?.dateLadder ?? dateLadder(false)}
             />
           ) : (

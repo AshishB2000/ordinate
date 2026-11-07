@@ -368,7 +368,7 @@ async function main(): Promise<void> {
   {
     const calls = serve(happy());
     await run.sampleTable('bigquery', ctx().values, { token: KEY.json }, 'sales.orders', 500);
-    ok('sample: the table SQL runs inside the cap wrapper', calls.find(isQuery)?.json.query === 'select * from (\nselect * from `sales.orders` limit 500\n) limit 501');
+    ok('sample: the table SQL runs inside the cap wrapper', calls.find(isQuery)?.json.query === 'select * from (\nselect * from `sales.orders` limit 501\n) limit 501');
   }
 
   // ── The editor's estimate, end to end ──────────────────────────────────────

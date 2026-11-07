@@ -34,6 +34,7 @@ import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
+import { assistantOff } from './aiMessages';
 import * as copilot from './copilot';
 import { buildPlanRecords } from '../analysis/planBuild';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
@@ -46,6 +47,7 @@ import { commitSteps } from '../ipc/datasets';
 import { writeBack } from '../ipc/versions';
 import { parseAsJob } from '../ipc/datasetImport';
 import { resolveMetric } from '../ipc/metrics';
+import { layerFieldMetric } from '../ipc/metricSave';
 import { checkVisual } from '../automation/creators';
 import { dispatch, parseFirstObject } from './analyze';
 import { checkStep, ctxFactsText, resolveRef } from './planCheck';
@@ -166,9 +168,10 @@ async function runPrepare(run: PlanRun, step: Extract<PlanStep, { kind: 'step' |
 async function runMetric(run: PlanRun, step: Extract<PlanStep, { kind: 'metric' }>, ctx: PlanCtx): Promise<StepOutcome> {
   const pid = run.projectId;
   const ds = must(ctx.datasets, step.dataset, 'dataset');
-  const m = await metrics.saveMetric(pid, {
-    name: step.name, datasetId: ds.id, definition: { column: step.column, aggregation: step.aggregation }, filters: [],
-  });
+  const definition = { column: step.column, aggregation: step.aggregation };
+  const onLayer = await layerFieldMetric(pid, ds.id, definition); // a semantic dataset measures its layer's metrics only
+  if (onLayer) return { ok: false, error: onLayer };
+  const m = await metrics.saveMetric(pid, { name: step.name, datasetId: ds.id, definition, filters: [] });
   if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
   await versions.record(pid, 'metric', m);
   const kpi = await kpiOf(pid, m.id);
@@ -321,6 +324,7 @@ const FIX_PROMPT =
 
 /** Fix: re-ask the model with the app's error; the answer is checked like any step. */
 export async function fixStep(run: PlanRun, index: number): Promise<{ ok: true; step: PlanStep } | { ok: false; error: string }> {
+  if (!execConfig.assistantOn()) return { ok: false, error: assistantOff() };
   if (!(await execConfig.executionReady())) return { ok: false, error: 'Fix needs an AI model. Set one up in Settings, or edit the step yourself.' };
   const ctx = await loadProjectCtx(run.projectId, ownKeys(run));
   const text = [

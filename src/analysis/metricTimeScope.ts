@@ -46,8 +46,11 @@ export type TimeVerdict = { error: string } | { timeColumn?: string };
 const ownDate = (input: TimeInput): string => (input.timeColumn ?? '').trim();
 const shown = (date: string): string => date || msg.dashboardDate();
 
-/** The metrics a formula names (`[Revenue]`), each with the dataset and the date it counts by; unknown names are the formula's own problem. */
-async function partsOf(projectId: string, input: TimeInput, meta: NonNullable<Columns>): Promise<Map<string, { name: string; date: string }[]>> {
+/**
+ * The metrics a formula names (`[Revenue]`), each with the dataset and the date it counts by; unknown names are the formula's own problem.
+ * `excused` (lower-cased): names a model import writes before this save, so their stored form is not the one the save meets.
+ */
+async function partsOf(projectId: string, input: TimeInput, meta: NonNullable<Columns>, excused: ReadonlySet<string>): Promise<Map<string, { name: string; date: string }[]>> {
   const byDataset = new Map<string, { name: string; date: string }[]>();
   if (!isFormulaDefinition(input.definition)) return byDataset;
   const columns = meta.columns.map((c) => c.name).concat(await relatedColumnNames(projectId, input.datasetId));
@@ -56,7 +59,7 @@ async function partsOf(projectId: string, input: TimeInput, meta: NonNullable<Co
   const byName = await metricsByName(projectId);
   for (const ref of new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()))) {
     const part = byName.get(ref);
-    if (!part) continue;
+    if (!part || excused.has(ref)) continue;
     byDataset.set(part.datasetId, [...(byDataset.get(part.datasetId) ?? []), { name: part.name, date: await metricDate(projectId, part) }]);
   }
   return byDataset;
@@ -71,12 +74,12 @@ async function partsOf(projectId: string, input: TimeInput, meta: NonNullable<Co
  * is a date column of that dataset because `metricDate` checked it there, and none when they have none. Asked when the
  * metric is saved, never afterwards: a part whose date moves later leaves the formula as it was.
  */
-async function judge(projectId: string, input: TimeInput): Promise<TimeVerdict> {
+async function judge(projectId: string, input: TimeInput, excused: ReadonlySet<string> = new Set()): Promise<TimeVerdict> {
   const meta = await datasets.getDatasetMeta(projectId, input.datasetId);
   if (!meta) return {}; // the save says the dataset is gone
   const own = ownDate(input);
   if (own && !isDate(meta, own)) return { error: msg.notADateColumn(own) };
-  const parts = await partsOf(projectId, input, meta);
+  const parts = await partsOf(projectId, input, meta, excused);
   for (const [datasetId, group] of parts) {
     const mine = !!own && datasetId === input.datasetId;
     const off = group.find((p) => p.date !== (mine ? own : group[0].date));
@@ -94,9 +97,9 @@ export async function checkTimeColumn(projectId: string, input: TimeInput): Prom
   return 'error' in v ? v.error : null;
 }
 
-/** `metric:save`: the date of the input as it arrived. */
-export function settleOnSave(projectId: string, raw: Record<string, any>): Promise<TimeVerdict> { // any: the zod-checked input, read field by field
-  return judge(projectId, { name: String(raw.name).trim(), datasetId: raw.datasetId, definition: sanitizeDefinition(raw.definition), timeColumn: raw.timeColumn });
+/** `metric:save`: the date of the input as it arrived. `excused`: as `partsOf` says (a model import's plan). */
+export function settleOnSave(projectId: string, raw: Record<string, any>, excused?: ReadonlySet<string>): Promise<TimeVerdict> { // any: the zod-checked input, read field by field
+  return judge(projectId, { name: String(raw.name).trim(), datasetId: raw.datasetId, definition: sanitizeDefinition(raw.definition), timeColumn: raw.timeColumn }, excused);
 }
 
 /**

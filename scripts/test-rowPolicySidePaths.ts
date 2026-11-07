@@ -13,7 +13,12 @@
 //    unruled copy that was then deleted, and a link to a trashed ruled
 //    dataset. NEGATIVE CONTROLS: the editor gets the table; a capture saved
 //    nowhere opens for east; its thumbnail is kept.
-// 3. NOTHING LEAKS: no reply to east carries a West value.
+// 3. THE LIVE SCHEMA TAB: its sample is of every row, so east gets no figure of it (sample rows, filled,
+//    distinct), only the columns. NEGATIVE CONTROL: the editor gets them.
+// 4. THE DOCK'S EXACT MATCH (semantic part 3 D8): a verified question with no value filter, asked word for word
+//    by east, is drawn under east's lock: its figures are the editor's of the same question on East's rows, by
+//    Object.is. NEGATIVE CONTROL: the editor's on Orders differ.
+// 5. NOTHING LEAKS: no reply to east carries a West value.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicySidePaths.js
 
@@ -138,7 +143,39 @@ const history: typeof import('../src/app/history') = require('../src/app/history
     ok('NEGATIVE CONTROL: …and keeps the one saved nowhere', !!row(list, nowhere)?.thumb);
     ok('NEGATIVE CONTROL: the editor\'s list keeps every thumbnail', !!row(await W.call('ed', 'captureDataset:list', { projectId: P }), joined)?.thumb);
 
-    // ── 3. Nothing leaks ────────────────────────────────────────────────
+    // ── 3. A Live dataset's Schema tab: its sample's figures are every row's ──
+    const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+    const recordMod: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const sampled = { sampledAt: '2026-01-02T00:00:00.000Z', sampleRows: 4013, method: 'limit', columns: [{ name: 'region', filled: 3917, distinct: 4 }, { name: 'sales', filled: 3989, distinct: 3971 }] };
+    const liveId = await W.as('boss', async () => {
+      const rec = await liveRecord.saveLiveRecord(P, { name: 'Orders (Live)', columns: H.COLUMNS, origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' } });
+      await recordMod.serialized(recordMod.datasetFilePath(P, rec!.id), (raw) => { raw.live = { ...(raw.live as object), profile: sampled }; });
+      return rec!.id;
+    });
+    ok('setup: a Live dataset with rules', await rules(liveId));
+    type Col = { filled: unknown; filledPct: unknown; distinct: unknown; more: unknown };
+    const figures = (r: H.Reply) => ({ rows: r.body?.sampleRows, cols: (r.body?.columns ?? []).map((c: Col) => [c.filled, c.filledPct, c.distinct, c.more]) });
+    const schemaEast = await east('dataset:liveSchema', { projectId: P, datasetId: liveId });
+    ok('Live Schema tab: east gets no count of every row (sample rows, filled, distinct), only the columns', schemaEast.body?.ok === true && schemaEast.body.sampleRows === null
+      && schemaEast.body.columns.length === H.COLUMNS.length && schemaEast.body.columns.every((c: Col) => c.filled === null && c.filledPct === null && c.distinct === null && c.more === 0)
+      && !/4013|3917|3989|3971/.test(schemaEast.text), JSON.stringify(figures(schemaEast)));
+    const schemaEd = await W.call('ed', 'dataset:liveSchema', { projectId: P, datasetId: liveId });
+    ok('NEGATIVE CONTROL: the editor gets the sample\'s figures', schemaEd.body?.sampleRows === 4013 && schemaEd.body.columns[0].filled === 3917 && schemaEd.body.columns[0].distinct === 4, JSON.stringify(figures(schemaEd)));
+
+    // ── 4. The dock's exact match (semantic part 3 D8) is drawn under east's lock ──
+    const SPEC = (d: string) => ({ datasetId: d, category: 'customer', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'x' });
+    const saveQ = async (question: string, d: string) => (await W.call('boss', 'verified:save', { projectId: P, input: { question, spec: SPEC(d) } })).body?.ok === true;
+    ok('setup: one verified question with no value filter on Orders, and one on East', (await saveQ('Sales by customer', orders)) && (await saveQ('Sales by customer, East copy', W.east)));
+    const askQ = (who: string, question: string) => W.call(who, 'copilot:ask', { projectId: P, context: { kind: '' }, question });
+    const mine = await east('copilot:ask', { projectId: P, context: { kind: '' }, question: 'Sales by customer' });
+    const [truth, whole] = [await askQ('ed', 'Sales by customer, East copy'), await askQ('ed', 'Sales by customer')];
+    const swap = { 'Sales by customer, East copy': 'Sales by customer', [W.east]: orders };
+    const gap = H.diff(mine.body?.ledger, truth.body?.ledger, swap);
+    ok("dock exact match: east's figures on Orders ≡ the editor's on East's rows (Object.is)", !!mine.body?.guidance?.verifiedId && mine.body.ledger?.length > 0 && gap === '',
+      `${gap} | ${mine.text.slice(0, 200)}`);
+    ok("NEGATIVE CONTROL: the editor's exact match on Orders sees more", H.diff(whole.body?.ledger, truth.body?.ledger, swap) !== '', whole.text.slice(0, 200));
+
+    // ── 5. Nothing leaks ────────────────────────────────────────────────
     const leaked = eastReplies.filter(H.leaks);
     ok(`nothing of West's in any of east's ${eastReplies.length} replies`, leaked.length === 0, leaked.map((t) => t.slice(0, 120)).join(' | '));
   } finally {

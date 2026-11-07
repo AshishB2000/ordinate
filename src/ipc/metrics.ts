@@ -37,11 +37,13 @@ import { isFormulaDefinition } from '../analysis/metrics';
 import { isNewerKind } from '../analysis/pendingKinds';
 import { targetField, targetHidden } from './targetResolve';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
+import { termWords } from '../analysis/terms';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
 import { metricUsage } from '../analysis/metricUsage';
 import { computeCardMetric } from './dashboards';
 import { layerFigure } from './semanticFigures';
+import { layerReads } from '../analysis/semanticMeasures';
 import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import type { MetricAggregation } from '../analysis/metricValue';
@@ -158,6 +160,7 @@ export async function resolveDefinition(
   // scope arrived already resolved by the handler.
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
   if (metrics.isExternalDefinition(definition)) { // only its layer answers it, on its own semantic dataset (part 7 b2; ./semanticFigures)
+    if (ctx.reads) ctx.reads.push(...(await layerReads(ctx.projectId, datasetId))); // read from every field, as the Share policy sees it
     const res = await layerFigure(ctx.projectId, datasetId, definition, all, ctx.params, depth, name);
     ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
     return res.ok ? res.value : null;
@@ -303,7 +306,7 @@ export async function resolveMetric(
     value,
     display: displayOf(value, metric.format, ctx.fx, metrics.isSimpleDefinition(metric.definition)),
     format: metric.format,
-    definitionText: describeDefinition(metric, undefined, await baseName(projectId, metric.definition)),
+    definitionText: describeDefinition(metric, await termWords(projectId, metric.filters), await baseName(projectId, metric.definition)),
   };
   if (metric.direction) out.direction = metric.direction;
   if (ctx.fx) out.fx = ctx.fx;
@@ -334,7 +337,7 @@ export async function previewDefinition(projectId: string, datasetId: string, de
     display: displayOf(value, metrics.sanitizeFormat(format), ctx.fx, metrics.isSimpleDefinition(def)),
     ...(ctx.fx ? { fx: ctx.fx } : {}), ...(ctx.periodRange ? { periodRange: ctx.periodRange } : {}), ...(ctx.notes && isNewerKind(def) ? { notes: ctx.notes } : {}),
     ...(ctx.asOf ? { asOf: ctx.asOf } : {}),
-    definitionText: describeDefinition({ definition: def, filters: own }, undefined, await baseName(projectId, def)),
+    definitionText: describeDefinition({ definition: def, filters: own }, await termWords(projectId, own), await baseName(projectId, def)),
   };
 }
 
@@ -418,13 +421,10 @@ export async function resolveMetricSeries(
   const base = Array.isArray(scope.filters) ? scope.filters : [];
   const out: MetricSeries = { labels: keys, values: [], display: [] };
   for (const key of keys) {
-    const ctx = newCtx(projectId, base.concat([
-      { type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep,
-    ]));
-    ctx.stack.add(metric.name.toLowerCase());
-    const v = await resolveDefinition(ctx, metric.datasetId, metric.definition, metric.filters, 0, metric.name);
-    out.values.push(v);
-    out.display.push(displayOf(v, metric.format, ctx.fx, metrics.isSimpleDefinition(metric.definition)));
+    // The KPI's resolver, so a date control's (or a scorecard's) marked period reaches a part on another dataset (D9).
+    const r = await resolveMetric(projectId, metricId, { filters: base.concat([{ type: 'filter', column: byColumn, op: plan.op, value: key } as FilterStep]) });
+    out.values.push(r ? r.value : null);
+    out.display.push(r ? r.display : displayOf(null, metric.format, undefined, true));
   }
   return out;
 }
@@ -511,7 +511,7 @@ export function register() {
     const t = await metrics.readMetric(projectId, id);
     if (!t) return { ok: false, error: 'Metric not found' };
     const timeColumnGone = !!t.rec.timeColumn && !(await metricDate(projectId, t.rec)); // counts as unset (./metricTimeScope); the editor says so
-    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec, undefined, await baseName(projectId, t.rec.definition)), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec, await termWords(projectId, t.rec.filters), await baseName(projectId, t.rec.definition)), tag: t.tag, ...(timeColumnGone ? { timeColumnGone } : {}) }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => saveMetricChecked(projectId, input));

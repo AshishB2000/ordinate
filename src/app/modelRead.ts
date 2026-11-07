@@ -44,37 +44,39 @@ export type ModelRead = ParsedModel | { refused: string };
 const Id = z.string().refine(isValidId);
 const Obj = z.unknown().refine((v) => !!v && typeof v === 'object' && !Array.isArray(v)); // passed by reference: never copied key by key
 const Steps = z.array(Obj).max(200);
+/** An optional key as the export writes one: `""` or `[]` is no key (./modelExport.ts `some`), so neither side compares one. */
+const some = <T extends z.ZodType<string | unknown[]>>(s: T) => s.optional().transform((v) => (v === '' || (Array.isArray(v) && !v.length) ? undefined : v));
 const Field = z.object({
   name: z.string().min(1).max(256),
-  description: z.string().max(2_000).optional(),
-  displayName: z.string().max(120).optional(),
-  aliases: z.array(z.string().max(60)).max(8).optional(),
-  example: z.string().max(200).optional(),
+  description: some(z.string().max(2_000)),
+  displayName: some(z.string().max(120)),
+  aliases: some(z.array(z.string().max(60)).max(8)),
+  example: some(z.string().max(200)),
   sensitivity: z.enum(['personal', 'financial']).optional(),
-  values: z.array(z.object({ value: z.string().min(1).max(256), label: z.string().max(120) })).max(500).optional(),
+  values: some(z.array(z.object({ value: z.string().min(1).max(256), label: z.string().max(120) })).max(500)),
 });
 const Dataset = z.object({
   id: Id,
   name: z.string().min(1).max(500),
   base: z.string().max(64).optional(), // no base: no three-way check (the plan's call)
-  description: z.string().max(2_000).optional(),
+  description: some(z.string().max(2_000)),
   role: z.enum(['fact', 'dimension']).optional(),
-  key: z.string().max(256).optional(),
-  grain: z.string().max(200).optional(),
-  fields: z.array(Field).max(5_000).optional(),
-  baseFilters: Steps.optional(),
-});
+  key: some(z.string().max(256)),
+  grain: some(z.string().max(200)),
+  fields: some(z.array(Field).max(5_000)),
+  baseFilters: some(Steps),
+}).refine((d) => new Set((d.fields ?? []).map((f) => f.name)).size === (d.fields ?? []).length); // one doc per column
 const Metric = z.object({
   id: Id,
   name: z.string().min(1).max(200),
   dataset: Id,
   base: z.string().max(64).optional(), // no base: no three-way check (the plan's call)
   definition: Obj,
-  filters: Steps.optional(),
+  filters: some(Steps),
   format: Obj,
-  description: z.string().max(2_000).optional(),
+  description: some(z.string().max(500)), // the store's cap (src/analysis/metrics.ts): longer is refused, never cut
   direction: z.enum(['up_good', 'down_good']).optional(),
-  timeColumn: z.string().max(256).optional(),
+  timeColumn: some(z.string().max(512)),
   target: Obj.optional(),
 });
 const Term = z.object({
@@ -82,8 +84,8 @@ const Term = z.object({
   name: z.string().min(1).max(200),
   dataset: Id,
   base: z.string().max(64).optional(), // no base: no three-way check (the plan's call)
-  aliases: z.array(z.string().max(60)).max(8).optional(),
-  description: z.string().max(500).optional(),
+  aliases: some(z.array(z.string().max(60)).max(8)),
+  description: some(z.string().max(500)),
   filters: Steps,
 });
 const End = z.object({ dataset: Id, column: z.string().min(1).max(500) });
@@ -93,7 +95,7 @@ const Relationship = z.object({
   from: End,
   to: End,
   cardinality: z.enum(['many_to_one', 'one_to_one']),
-  label: z.string().max(60).optional(),
+  label: some(z.string().max(60)),
 });
 const Manifest = z.object({
   format: z.string(),
@@ -105,6 +107,19 @@ const Manifest = z.object({
 
 class TooManyValues extends Error {}
 
+/** Nesting past this is no model a person wrote, and copying it later would overflow the stack: that file is unreadable. */
+const MAX_DEPTH = 64;
+function tooDeep(v: unknown): boolean {
+  const stack: Array<[unknown, number]> = [[v, 1]];
+  for (let top = stack.pop(); top; top = stack.pop()) {
+    const [x, depth] = top;
+    if (!x || typeof x !== 'object') continue;
+    if (depth > MAX_DEPTH) return true;
+    for (const c of Object.values(x)) stack.push([c, depth + 1]);
+  }
+  return false;
+}
+
 /** A hostile name, shown in a sentence: no control or format characters, cut short (as ./zipReader shows one). */
 const shown = (name: string): string => name.replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 120);
 const utf8 = new TextDecoder('utf-8', { fatal: true });
@@ -114,7 +129,9 @@ async function parseEntries(entries: ReadonlyMap<string, Uint8Array>): Promise<M
   let values = 0;
   const json = async (bytes: Uint8Array): Promise<unknown> => {
     if ((values += await countJsonValuesAsync(bytes)) > MAX_JSON_VALUES) throw new TooManyValues();
-    return JSON.parse(utf8.decode(bytes));
+    const v: unknown = JSON.parse(utf8.decode(bytes));
+    if (tooDeep(v)) throw new SyntaxError('nested too deep'); // read as any file that is not JSON
+    return v;
   };
   const out: ParsedModel = { manifest: undefined as unknown as ModelManifest, datasets: [], guides: new Map(), metrics: [], terms: [], relationships: [], invalid: [] };
   const unreadable = msg.modelObjectUnreadable();

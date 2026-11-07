@@ -8,6 +8,7 @@ import type { ChartHandle } from '../../charts/Chart';
 import { PHONE_QUERY } from '../../ui/Dialog';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { drillableAxis, useExploreDrill, type DrillProps } from './useExploreDrill';
+import { endAtHidden } from '../visuals/drill/drillApi';
 import { decodeQuestion, encodeQuestion, type Question } from './spec';
 import type { Preview } from '../visuals/api';
 
@@ -59,6 +60,10 @@ describe('drillableAxis', () => {
     expect(drillableAxis({ ...base, encoding: { ...base.encoding, category: 'state' } })).toBeNull();
     expect(drillableAxis({ ...base, hierarchies: [] })).toBeNull();
   });
+  it('offers no level hidden from the caller (part 4): the server refuses that drill', () => {
+    expect(drillableAxis({ ...base, hierarchies: endAtHidden([GEO], ['state']) })).toBeNull();
+    expect(drillableAxis({ ...base, hierarchies: endAtHidden([GEO], ['salary']) })).toEqual({ next: 'state', word: 'state' }); // NEGATIVE CONTROL
+  });
 });
 
 describe('Explore drill: the click', () => {
@@ -72,6 +77,13 @@ describe('Explore drill: the click', () => {
     expect(sent.mark).toEqual({ category: 'East' });
     expect(sent.encoding.category).toBe('region');
     expect(onChange).toHaveBeenCalledWith({ chartType: 'column', encoding: DRILLED.encoding, filters: [EAST] });
+  });
+  it('hands the server\'s crumb label on with the column and the value it names', async () => {
+    serve({ body: { ...DRILLED, crumb: { ...DRILLED.crumb, label: 'Eastern region' } } });
+    const onLabel = vi.fn();
+    render(<Probe onLabel={onLabel} />);
+    fireEvent.click(screen.getByRole('button', { name: 'mark' }));
+    await waitFor(() => expect(onLabel).toHaveBeenCalledWith('region', 'East', 'Eastern region'));
   });
   it('keeps the question\'s own steps (a kept one too) before the reply\'s', async () => {
     serve({ body: DRILLED });

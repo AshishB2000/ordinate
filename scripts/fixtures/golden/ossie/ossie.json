@@ -1,7 +1,7 @@
 {
   "custom_extensions": [
     {
-      "data": "{\"baseFilters\":[{\"dataset\":\"Live\",\"filters\":[{\"column\":\"region\",\"op\":\"=\",\"type\":\"filter\",\"value\":\"EU\"}]}],\"metrics\":[{\"dataset\":\"Orders\",\"definition\":{\"formula\":\"[Revenue] / [Orders]\"},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Avg basket\",\"timeColumn\":\"day\"},{\"dataset\":\"Orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"amount\"},\"description\":\"Net revenue in EMEA\",\"direction\":\"up_good\",\"filters\":[{\"term\":\"00000000-0000-4000-8000-000000000001\",\"type\":\"term\"}],\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"currency\",\"prefix\":\"$\"},\"name\":\"Revenue\",\"target\":{\"per\":\"month\",\"source\":{\"value\":1200}},\"timeColumn\":\"day\"},{\"dataset\":\"Orders\",\"definition\":{\"base\":\"00000000-0000-4000-8000-000000000002\",\"window\":{\"to_date\":\"month\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Revenue MTD\"},{\"dataset\":\"Orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"units\",\"snapshot\":{\"column\":\"day\",\"per\":\"region\",\"take\":\"last\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Stock on hand\"}],\"terms\":[{\"aliases\":[\"Europe and ME\"],\"dataset\":\"Orders\",\"description\":\"Europe and the Middle East\",\"filters\":[{\"column\":\"region\",\"op\":\"in\",\"type\":\"filter\",\"values\":[\"EU\",\"ME\"]}],\"name\":\"EMEA\"}],\"valueLabels\":[{\"dataset\":\"Orders\",\"field\":\"region\",\"values\":[{\"label\":\"Europe\",\"value\":\"EU\"},{\"label\":\"Middle East\",\"value\":\"ME\"}]}]}",
+      "data": "{\"baseFilters\":[{\"dataset\":\"live\",\"filters\":[{\"column\":\"region\",\"op\":\"=\",\"type\":\"filter\",\"value\":\"EU\"}]}],\"metrics\":[{\"dataset\":\"orders\",\"definition\":{\"formula\":\"[Revenue] / [Orders]\"},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Avg basket\",\"timeColumn\":\"day\"},{\"dataset\":\"orders\",\"definition\":{\"aggregation\":\"countd\",\"column\":\"order_id\"},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Orders\",\"timeColumn\":\"day\"},{\"dataset\":\"orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"amount\"},\"description\":\"Net revenue in EMEA\",\"direction\":\"up_good\",\"filters\":[{\"term\":\"EMEA\",\"type\":\"term\"}],\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"currency\",\"prefix\":\"$\"},\"name\":\"Revenue\",\"target\":{\"per\":\"month\",\"source\":{\"value\":1200}},\"timeColumn\":\"day\"},{\"dataset\":\"orders\",\"definition\":{\"base\":\"Revenue\",\"window\":{\"to_date\":\"month\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Revenue MTD\"},{\"dataset\":\"orders\",\"definition\":{\"aggregation\":\"sum\",\"column\":\"units\",\"snapshot\":{\"column\":\"day\",\"per\":\"region\",\"take\":\"last\"}},\"format\":{\"compact\":false,\"decimals\":0,\"kind\":\"number\"},\"name\":\"Stock on hand\"}],\"terms\":[{\"aliases\":[\"Europe and ME\"],\"dataset\":\"orders\",\"description\":\"Europe and the Middle East\",\"filters\":[{\"column\":\"region\",\"op\":\"in\",\"type\":\"filter\",\"values\":[\"EU\",\"ME\"]}],\"name\":\"EMEA\"}],\"valueLabels\":[{\"dataset\":\"orders\",\"field\":\"region\",\"values\":[{\"label\":\"Europe\",\"value\":\"EU\"},{\"label\":\"Middle East\",\"value\":\"ME\"}]}]}",
       "vendor_name": "ordinate"
     }
   ],
@@ -105,14 +105,6 @@
             "sql": "units"
           },
           "name": "units"
-        }
-      ],
-      "metrics": [
-        {
-          "expression": {
-            "sql": "COUNT(DISTINCT order_id)"
-          },
-          "name": "Orders"
         }
       ],
       "name": "orders",

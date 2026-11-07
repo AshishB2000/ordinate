@@ -617,7 +617,7 @@ export function register() {
       // Table calculations run on the aggregated grid, after either path (and
       // on the overlay's prior slice alike, so both sides mean the same thing).
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
-        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values }), p, d, e, values), e);
+        withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(p, d, e, f, { params: values }), p, d, e, values, drawnAs.chartType), e);
       const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run, values);
       const computed = await withTargetSeries(await withCompareSeries(drawn, projectId, datasetId, enc, flt, run, values), projectId, datasetId, enc, flt, isSharePath(share) ? share : undefined);
       const shaped = isSharePath(share) && share !== 'bundle'

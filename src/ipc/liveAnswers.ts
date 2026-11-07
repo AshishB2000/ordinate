@@ -229,7 +229,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
   const filterSaid = await filterText(projectId, meta.id, spec.filters, fixed.held);
   const shown = saidFilters(spec.filters, filterSaid, fixed.held);
-  const shownLabels = shown === spec.filters ? filterLabels : cardLabels({ ...spec, filters: shown }, meta.columns, r.filterLabels);
+  const shownLabels = shown === spec.filters ? filterLabels : [...cardLabels({ ...spec, filters: shown }, meta.columns, r.filterLabels), ...termLabels];
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   return {
     card: {

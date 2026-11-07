@@ -189,6 +189,12 @@ export function manySideOwner(primary: string, column: string, rels: Relationshi
   return owners.length ? { ok: true, datasetId: owners[0].datasetId } : null;
 }
 
+/** The table a BARE column is read on from `primary`, as the KPI door reads it: its own or a forward join's, else its one many side's, else the primary; null when two many sides have it (refused). */
+export function bareColumnTable(primary: string, column: string, rels: Relationship[], infos: Map<string, DsInfo>): string | null {
+  const many = manySideOwner(primary, column, rels, infos);
+  return resolveColumnOwner(primary, column, rels, infos) ?? (!many ? primary : many.ok ? many.datasetId : null);
+}
+
 /** A KPI over a many-side column, as that table's KPI: on which dataset, under which filters, with which notes (one measure, index 0). */
 export interface FanMetricPlan { datasetId: string; filters: FilterStep[]; notes: FanNote[] }
 

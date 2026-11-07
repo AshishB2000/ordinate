@@ -44,7 +44,7 @@ import { MAX_BYTES } from './http';
 import { accountOrigin, authFor, type SfAccount, type SfAuth } from './snowflakeAuth';
 import { snowflakeFetch, SfAbortError, type SfHttpResponse, type SfTransport } from './snowflakeHttp';
 import { connectorColumns, shapeFirst, shapePartition, statusOf, type Cell, type ShapeMode } from './snowflakeShape';
-import { buildBindings, cappedStatement, countPlaceholders, type SfBinding } from './snowflakeSql';
+import { buildBindings, cappedStatement, countPlaceholders, orderedCap, type SfBinding } from './snowflakeSql';
 import { IDENT_RE, snowflakeTableFacts } from './snowflakeFacts';
 import { snowflakeSemantic } from './snowflakeSemantic';
 import { safeError } from './types';
@@ -325,7 +325,7 @@ async function run(ctx: ConnectorContext, sql: string): Promise<ConnectorRows | 
 }
 
 /** The live capability: one compiled statement, `?` placeholders bound from `params` (never inlined). */
-async function runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError> {
+async function runBound(ctx: ConnectorContext, sql: string, params: LiveParam[], ordered = false): Promise<ConnectorRows | ConnectorError> {
   const statement = cleanSql(sql);
   if (!statement) return { ok: false, error: 'No query specified' };
   const list = Array.isArray(params) ? params : [];
@@ -333,7 +333,7 @@ async function runBound(ctx: ConnectorContext, sql: string, params: LiveParam[])
   if (holes !== list.length) return { ok: false, error: `The statement has ${holes} placeholders but ${list.length} parameters` };
   const bound = buildBindings(list);
   if (!bound.ok) return bound;
-  return execute(ctx, cappedStatement(statement, rowCap(ctx)), 'live', bound.bindings);
+  return execute(ctx, (ordered ? orderedCap : cappedStatement)(statement, rowCap(ctx)), 'live', bound.bindings);
 }
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set(['ACCOUNTADMIN', 'SYSADMIN', 'SECURITYADMIN']);

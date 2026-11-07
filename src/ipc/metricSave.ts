@@ -20,10 +20,11 @@ import { checkFunnelDefinition } from './funnelMetric';
 import * as datasets from '../data/datasets';
 import { externalReadOnly } from '../engine/semanticMessages';
 import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
+import * as msg from './metricSaveMessages';
 
 /** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
 export function nameTakenMessage(name: unknown): string {
-  return `A metric called "${String(name).trim()}" already exists.`;
+  return msg.metricNameTaken(String(name).trim());
 }
 
 /**
@@ -61,12 +62,14 @@ export type MetricRefusal = { error: string; field: string };
 
 /**
  * `metric:save`'s checks, in its order: the refusal, or the date the save settles on. `named`: the name's check (the
- * project as stored; a model import passes its own set).
+ * project as stored; a model import passes its own set). `excused`: the formula's parts a model import writes first
+ * (lower-cased), left out of the date check: the save after theirs checks them.
  */
 export async function metricProblem(
   projectId: string,
   raw: any, // any: the zod-checked input, read field by field (as the handler always read it)
   named: (name: unknown) => Promise<string | null> = (n) => nameRefusal(projectId, n),
+  excused?: ReadonlySet<string>,
 ): Promise<{ problem: MetricRefusal } | { when: { timeColumn?: string } }> {
   // `field`: which box of the editor the sentence belongs beside.
   const taken = await named(raw.name);
@@ -76,14 +79,14 @@ export async function metricProblem(
   const per = (await checkPeriodDefinition(projectId, raw.datasetId, raw.definition, raw.timeColumn)) ?? (await checkFunnelDefinition(projectId, raw.datasetId, raw.definition)); if (per) return { problem: per };
   const snap = await snapshotProblem(projectId, raw.datasetId, raw.definition);
   if (snap) return { problem: { error: snap, field: 'snapshot' } };
-  const when = await settleOnSave(projectId, raw);
+  const when = await settleOnSave(projectId, raw, excused);
   if ('error' in when) return { problem: { error: when.error, field: 'timeColumn' } };
   const tg = await checkTarget(projectId, { ...raw, id: '', name: String(raw.name), definition: metrics.sanitizeDefinition(raw.definition), ...when }, raw.target); if (tg) return { problem: tg };
   return { when };
 }
 
 /** A column (or funnel) metric on a semantic dataset: refused `columnOnLayer` — aggregating a dimension here goes around the layer. */
-async function layerFieldMetric(projectId: string, datasetId: unknown, definition: unknown): Promise<string | null> {
+export async function layerFieldMetric(projectId: string, datasetId: unknown, definition: unknown): Promise<string | null> {
   const meta = typeof datasetId === 'string' ? await datasets.getDatasetMeta(projectId, datasetId) : null;
   const sem = meta?.live?.semantic;
   const def = sem ? metrics.sanitizeDefinition(definition) : null;
@@ -111,11 +114,11 @@ export async function saveMetricChecked(projectId: string, input: unknown) { // 
       filters: sanitizeDashboardFilters(raw.filters),
       ...when,
     });
-    if (!m) return { ok: false, error: 'Could not save the metric. Check the dataset still exists.' };
+    if (!m) return { ok: false, error: msg.metricNotSaved() };
     await versions.record(projectId, 'metric', m);
     return { ok: true, metric: m };
   } catch (err: any) { // any: whatever a store threw
-    return { ok: false, error: err?.message || 'Failed to save the metric' };
+    return { ok: false, error: err?.message || msg.metricSaveFailed() };
   }
 }
 
@@ -137,11 +140,11 @@ export async function updateMetricChecked(projectId: string, id: string, patch: 
     const tg = before && raw.target ? await checkTarget(projectId, { ...before, ...next, definition: next.definition !== undefined ? metrics.sanitizeDefinition(next.definition) : before.definition }, raw.target) : null; if (tg) return { ok: false, ...tg };
     if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
     const m = await metrics.updateMetric(projectId, id, next, base);
-    if (!m) return { ok: false, error: 'Metric not found' };
+    if (!m) return { ok: false, error: msg.metricNotFound() };
     await versions.record(projectId, 'metric', m, { before });
     return { ok: true, metric: m, tag: contentTag('metric', m) };
   } catch (err: any) { // any: whatever a store threw
     if (isRecordChanged(err)) throw err; // the route's 409
-    return { ok: false, error: err?.message || 'Failed to update the metric' };
+    return { ok: false, error: err?.message || msg.metricUpdateFailed() };
   }
 }

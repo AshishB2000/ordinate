@@ -6,7 +6,7 @@
 
 import { answerNames } from '../engine/live/liveMissing';
 import { refineSpec } from '../ai/answerRefine';
-import { validateAnswerSpec } from '../ai/answerSpec';
+import { parseAgg, validateAnswerSpec } from '../ai/answerSpec';
 import type { SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
@@ -14,24 +14,38 @@ import { mentionsHidden } from '../data/columnAccess';
 import { hasValueFilter, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { listTagged } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
+import { listMetrics } from '../analysis/metrics';
+import { pendingMetric } from '../analysis/pendingKinds';
 import { specDatasets, specMetrics, specTerms } from './answers';
 
-export interface VerifiedEnv { datasets: SpecDataset[]; metrics: SpecMetric[]; terms: SpecTerm[] }
+/** `pending`: the ids of metrics of a kind this release cannot draw (part 5): `computeCard` refuses those in its own words. */
+export interface VerifiedEnv { datasets: SpecDataset[]; metrics: SpecMetric[]; terms: SpecTerm[]; pending: ReadonlySet<string> }
 
 /** What a spec may name in the project: metadata, the catalog and the term records. */
 export async function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
-  const [datasets, metrics, terms] = await Promise.all([specDatasets(projectId), specMetrics(projectId), specTerms(projectId)]);
-  return { datasets, metrics, terms };
+  const [datasets, metrics, terms, all] = await Promise.all([specDatasets(projectId), specMetrics(projectId), specTerms(projectId), listMetrics(projectId)]);
+  return { datasets, metrics, terms, pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
 }
 
 /** Why `q` no longer runs, in a sentence, or null. The same check a follow-up makes of the previous answer (./answers `previousAnswer`). */
 export function verifiedProblem(q: VerifiedQuestion, env: VerifiedEnv): string | null {
   const ds = env.datasets.find((d) => d.id === q.spec.datasetId);
   if (!ds) return msg.verifiedDatasetGone();
-  const gone = answerNames(q.spec).find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
+  const mirror = (id: string | undefined): boolean => !!id && !!env.metrics.find((s) => s.id === id)?.external; // a layer's metric: its `column` is no field
+  const named = answerNames({ ...q.spec, measures: q.spec.measures.filter((m) => !mirror(m.metricId)) });
+  const gone = named.find((n) => !ds.columns.some((c) => c.name === n)); // by exact name, as computeCard reads it
   if (gone !== undefined) return msg.verifiedColumnGone(gone, ds.name);
   if (q.spec.filters.some((f) => 'term' in f && !env.terms.some((t) => t.id === f.term))) return msg.verifiedTermGone();
-  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds), [ds], { metrics: env.metrics, terms: env.terms }); // a term by its id
+  // A measure named by a metric is the metric as verified (refineSpec's carried check): redefined, filtered or deleted,
+  // the figure under the mark is no longer the metric's. A retired metric is still in env.metrics, and still runs.
+  const drifted = q.spec.measures.some((m) => {
+    if (!m.metricId || env.pending.has(m.metricId)) return false; // a kind this release cannot draw: computeCard says so
+    const x = env.metrics.find((s) => s.id === m.metricId);
+    if (x?.external) return x.datasetId !== ds.id; // a layer's metric is the layer's to define: judged by existing on its dataset
+    return !x || x.datasetId !== ds.id || !!x.hasFilters || x.column !== m.column || (parseAgg(x.aggregation) || 'sum') !== m.aggregation;
+  });
+  if (drifted) return msg.verifiedMetricChanged();
+  const v = validateAnswerSpec(refineSpec(q.spec, {}, ds, env.metrics), [ds], { metrics: env.metrics, terms: env.terms }); // a term by its id, a mirror by its name
   return v.ok ? null : v.reason;
 }
 
@@ -51,7 +65,7 @@ export async function verifiedStates(projectId: string): Promise<VerifiedState[]
   for (const { rec: q, tag } of list) {
     const id = q.spec.datasetId;
     if (left.has(q.id)) continue;
-    if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id));
+    if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id, { rowsOnly: true })); // a hidden column: leftOutFor
     out.push({ q, problem: verifiedProblem(q, env), hidden: !!closed.get(id) && hasValueFilter(q.spec), tag });
   }
   return out;

@@ -14,11 +14,23 @@ export function dropHidden<T extends { name: string }>(cols: T[], hidden: Readon
   return hidden.size ? cols.filter((c) => !hidden.has(c.name)) : cols;
 }
 
-/** The table notes without a hidden key (and the grain worded from it): the key is the column's name and its state a fact of its values. */
+/**
+ * The table notes without a hidden key (and the grain worded from it: the key is the column's name and its state a
+ * fact of its values), and without a hierarchy with a hidden level (it names the column and says to group by it).
+ */
 export function tableWithout(table: FactTableDoc | undefined, hidden: ReadonlySet<string>): FactTableDoc | undefined {
-  if (!table || !table.key || !hidden.has(table.key)) return table;
-  const { key: _k, keyState: _s, grain, ...rest } = table;
-  return { ...rest, ...(grain && !grain.includes(table.key) ? { grain } : {}) };
+  if (!table || !hidden.size) return table;
+  const out: FactTableDoc = { ...table };
+  const key = out.key;
+  if (key && hidden.has(key)) {
+    delete out.key;
+    delete out.keyState;
+    if (out.grain?.includes(key)) delete out.grain;
+  }
+  const kept = out.hierarchies?.filter((h) => !h.levels.some((l) => hidden.has(l)));
+  if (kept?.length) out.hierarchies = kept;
+  else delete out.hierarchies;
+  return out;
 }
 
 /**

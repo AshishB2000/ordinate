@@ -15,6 +15,16 @@ export function cappedStatement(sql: string, cap: number): string {
   return `select * from (\n${sql}\n) limit ${cap + 1}`;
 }
 
+/**
+ * A semantic view's statement (ours: quoted names and binds, never user SQL) capped by its own last line: the
+ * wrapper above would drop its ORDER BY (Snowflake keeps a subquery's order only inside it). Its own LIMIT under the
+ * cap stays; a larger one, or none, becomes the cap's.
+ */
+export function orderedCap(sql: string, cap: number): string {
+  const own = /\nLIMIT (\d+)$/.exec(sql);
+  return own && Number(own[1]) <= cap + 1 ? sql : `${own ? sql.slice(0, own.index) : sql}\nLIMIT ${cap + 1}`;
+}
+
 /** The `?` placeholders Snowflake will bind: those outside strings, quoted identifiers and comments. */
 export function countPlaceholders(sql: string): number {
   let n = 0;

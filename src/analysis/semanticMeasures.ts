@@ -13,6 +13,16 @@ import { compileMetricFormula } from './metricFormula';
 import * as datasets from '../data/datasets';
 import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
 
+/**
+ * What a layer's metric is read from, as far as the Share policy can tell: every column of its semantic dataset (the
+ * layer computes it from fields this app cannot see), so a column marked anywhere on the dataset withholds every layer
+ * metric on it under drop (docs/semantic-layer/07-portability.md). None for a dataset that is not semantic.
+ */
+export async function layerReads(projectId: string, datasetId: string): Promise<{ datasetId: string; column: string; aggregation: 'count' }[]> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  return meta?.live?.semantic ? meta.columns.map((c) => ({ datasetId, column: c.name, aggregation: 'count' as const })) : [];
+}
+
 /** undefined: not a semantic dataset (the planner goes on); null: the door draws it; else the refusal. */
 export async function semanticMeasures(projectId: string, datasetId: string, encoding: VizEncoding): Promise<PlanResult | null | undefined> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);

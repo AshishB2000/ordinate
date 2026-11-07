@@ -4,7 +4,8 @@
 //
 // Order, so that what an object names is written before it: table and field docs (ONE locked catalog write) → a Live
 // dataset's base filters → relationships (a filter step's `via`) → terms (a metric's term step) → metrics (a new metric
-// after any new metric it names: a period's base, a target's plan metric).
+// after any new metric it names: a period's base, a target's plan metric); a term or metric taking a name another one
+// gives up, after that one.
 // - Each object is compared with the plan's `hereHash` when it is written: catalog docs inside the catalog's lock, terms
 //   and metrics as their editor's `base` (lockedUpdate). One edited since the dry run fails `moved`; the rest still land.
 // - New objects get fresh ids from their stores, never the file's (a pod's ids stay unique across projects), and what
@@ -25,10 +26,9 @@ import { logger } from './logger';
 import { fieldOf, relationshipOf, tableDocOf } from './modelExport';
 import { objectBase, type ModelDataset, type ModelMetric, type ModelRelationship, type ModelTerm } from './modelFormat';
 import { mapRefs, type ModelMatch } from './modelMatch';
-import { planDetailed, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
-import { formulaNames } from './dbtPlan';
+import { givesUp, planDetailed, takes, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
 import type { ParsedModel } from './modelRead';
-import { modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
+import { modelDependencyNotWritten, modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
 import { saveMetricChecked, updateMetricChecked } from '../ipc/metricSave';
 import { saveTermChecked, updateTermChecked } from '../ipc/terms';
 import { saveRelationshipChecked } from '../ipc/relationships';
@@ -61,12 +61,15 @@ function patchOf(item: PlanItem, value: object): Json {
   return Object.fromEntries((item.changes ?? []).map((c) => [c.field, v[c.field] !== undefined ? v[c.field] : CLEARED[c.field]]));
 }
 
-/** Runs one object's write and files it as written or failed: `write` answers the save's refusal, or null. */
-async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<string | null>): Promise<void> {
+/**
+ * Runs one object's write and files it as written or failed: `write` answers the save's refusal, or null. `dangling`:
+ * a new object it names that this apply has not written (it failed, or is not written yet), so it fails too.
+ */
+async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<string | null>, dangling?: string): Promise<void> {
   await io.onBeforeWrite?.(item.key);
   let error: string | null;
   try {
-    error = await write();
+    error = dangling ? modelDependencyNotWritten() : await write();
   } catch (err) {
     if (isRecordChanged(err)) error = modelObjectMoved();
     else {
@@ -158,6 +161,8 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
   // File id → the id its store gave a new object; `follow` rewrites a later object's references to them.
   const fresh: ModelMatch = { datasets: new Map(), terms: new Map(), metrics: new Map(), relationships: new Map(), how: new Map(), here: new Set() };
   const follow = <T>(v: T): T => mapRefs(v, fresh).value;
+  const made = new Set(todo.filter((i) => !i.targetId).map((i) => i.key));
+  const dangling = (item: PlanItem): string | undefined => formOf(item).refs.find((k) => k !== item.key && made.has(k) && !out.written.includes(k));
 
   await writeCatalog(projectId, file, todo.filter((i) => i.kind === 'table' || i.kind === 'field'), out, io);
 
@@ -172,64 +177,73 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
     });
   }
 
-  for (const item of of('relationship')) {
-    await one(item, out, io, async () => {
-      const r = formOf(item).value as ModelRelationship;
-      if (item.targetId) {
-        // shortcut: relationships keep no tag, so they are compared just before their save, as base filters are
-        const now = (await listRelationships(projectId)).find((x) => x.id === item.targetId);
-        if (!now || relationshipOf(now).base !== item.hereHash) return modelObjectMoved();
-      }
-      const reply = await saveRelationshipChecked(projectId, {
-        ...(item.targetId && { id: item.targetId }),
-        from: { datasetId: r.from.dataset, column: r.from.column },
-        to: { datasetId: r.to.dataset, column: r.to.column },
-        cardinality: r.cardinality,
-        label: r.label ?? '', // sent, so an absent label clears the edge's own
-      });
-      if (!reply?.ok) return String(reply?.error ?? modelWriteFailed());
-      if (!item.targetId) fresh.relationships.set(r.id, reply.relationship.id);
-      return null;
-    });
-  }
+  /**
+   * Writes `pending` in plan order, each after any new object it names (a dbt formula after every input: their date)
+   * and after any object giving up the name or label it takes (a rename, then a new one taking the old name). The plan
+   * refuses a swap, so a cycle left goes in plan order, and its save says why.
+   */
+  const inOrder = async (pending: PlanItem[], write: (item: PlanItem) => () => Promise<string | null>): Promise<void> => {
+    const waits = (item: PlanItem): boolean => {
+      const t = takes(item, formOf(item).value);
+      return formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && (!p.targetId || !!file.dbt)))
+        || (t !== undefined && pending.some((p) => p !== item && givesUp(p, formOf(p).value) === t));
+    };
+    while (pending.length) {
+      const at = pending.findIndex((p) => !waits(p));
+      const [item] = pending.splice(at < 0 ? 0 : at, 1);
+      await one(item, out, io, write(item), dangling(item));
+    }
+  };
 
-  for (const item of of('term')) {
-    await one(item, out, io, async () => {
-      const t = follow(formOf(item).value as ModelTerm);
-      if (item.targetId) {
-        const reply = await updateTermChecked(projectId, item.targetId, patchOf(item, t), item.hereHash);
-        return 'term' in reply ? null : reply.error;
-      }
-      const reply = await saveTermChecked(projectId, { name: t.name, aliases: t.aliases ?? [], description: t.description ?? '', datasetId: t.dataset, filters: t.filters });
-      if (!('term' in reply) || !reply.term) return reply.error;
-      fresh.terms.set(t.id, reply.term.id);
-      return null;
+  await inOrder(of('relationship'), (item) => async () => {
+    const r = formOf(item).value as ModelRelationship;
+    if (item.targetId) {
+      // shortcut: relationships keep no tag, so they are compared just before their save, as base filters are
+      const now = (await listRelationships(projectId)).find((x) => x.id === item.targetId);
+      if (!now || relationshipOf(now).base !== item.hereHash) return modelObjectMoved();
+    }
+    const reply = await saveRelationshipChecked(projectId, {
+      ...(item.targetId && { id: item.targetId }),
+      from: { datasetId: r.from.dataset, column: r.from.column },
+      to: { datasetId: r.to.dataset, column: r.to.column },
+      cardinality: r.cardinality,
+      label: r.label ?? '', // sent, so an absent label clears the edge's own
     });
-  }
+    if (!reply?.ok) return String(reply?.error ?? modelWriteFailed());
+    if (!item.targetId) fresh.relationships.set(r.id, reply.relationship.id);
+    return null;
+  });
 
-  // A new metric another new one names is written first; a cycle goes in plan order, and its save says why.
-  const pending = of('metric');
-  const nameOf = (p: PlanItem): string => String((formOf(p).value as ModelMetric).name).toLowerCase();
-  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId))
-    || (!!file.dbt && formulaNames(formOf(item).value).some((n) => pending.some((p) => p !== item && nameOf(p) === n))); // a dbt formula after its inputs (their date)
-  while (pending.length) {
-    const at = pending.findIndex((p) => !waits(p));
-    const [item] = pending.splice(at < 0 ? 0 : at, 1);
-    await one(item, out, io, async () => {
-      const m = follow(formOf(item).value as ModelMetric);
-      if (item.targetId) {
-        const reply = await updateMetricChecked(projectId, item.targetId, patchOf(item, m), item.hereHash);
-        return 'metric' in reply ? null : reply.error;
-      }
-      const reply = await saveMetricChecked(projectId, {
-        name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
-        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
-      });
-      if (!('metric' in reply) || !reply.metric) return String(reply.error);
-      fresh.metrics.set(m.id, reply.metric.id);
-      return null;
+  const termWrite = (item: PlanItem) => async (): Promise<string | null> => {
+    const t = follow(formOf(item).value as ModelTerm);
+    if (item.targetId) {
+      const reply = await updateTermChecked(projectId, item.targetId, patchOf(item, t), item.hereHash);
+      return 'term' in reply ? null : reply.error;
+    }
+    const reply = await saveTermChecked(projectId, { name: t.name, aliases: t.aliases ?? [], description: t.description ?? '', datasetId: t.dataset, filters: t.filters });
+    if (!('term' in reply) || !reply.term) return reply.error;
+    fresh.terms.set(t.id, reply.term.id);
+    return null;
+  };
+  const metricWrite = (item: PlanItem) => async (): Promise<string | null> => {
+    const m = follow(formOf(item).value as ModelMetric);
+    if (item.targetId) {
+      const patch = patchOf(item, m);
+      // The store keeps a snapshot (and its per) a definition leaves out; only null clears it, as the editor sends it.
+      const d = patch.definition as Record<string, unknown> | undefined;
+      if (d && 'column' in d) patch.definition = { ...d, snapshot: d.snapshot ? { per: null, ...(d.snapshot as object) } : null };
+      const reply = await updateMetricChecked(projectId, item.targetId, patch, item.hereHash);
+      return 'metric' in reply ? null : reply.error;
+    }
+    const reply = await saveMetricChecked(projectId, {
+      name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
+      description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
     });
-  }
+    if (!('metric' in reply) || !reply.metric) return String(reply.error);
+    fresh.metrics.set(m.id, reply.metric.id);
+    return null;
+  };
+  await inOrder(todo.filter((i) => i.kind === 'term' || i.kind === 'metric'), (item) => (item.kind === 'term' ? termWrite(item) : metricWrite(item))); // terms first: a metric's term step
 
   return { ok: true, ...out, ...(downloadToken ? { before: { downloadToken } } : {}) };
 }

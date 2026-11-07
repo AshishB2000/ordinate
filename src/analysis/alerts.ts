@@ -32,7 +32,8 @@
 // An ANOMALY rule delegates the whole question to ./anomalyWatch's key diff,
 // which is the edge-trigger it already implements.
 
-import { formatCompact } from '../app/format';
+import { formatCompact, formatMetric } from '../app/format';
+import type { MetricFormat } from './metrics';
 import type { MetricAggregation } from './metricValue';
 import type { FilterStep } from '../data/transforms';
 import type { Anomaly } from './anomalies';
@@ -173,9 +174,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * thresholds, same one decimal. (The renderer mirrors main in the other
  * direction too — see dashFiltersUi.toggleCrossFilterSteps.)
  */
-export function fmtMetric(v: number | null | undefined): string {
+export function fmtMetric(v: number | null | undefined, format?: MetricFormat): string {
   if (v == null || !Number.isFinite(v)) return '—';
-  return formatCompact(v);
+  // The watched metric's percent or duration, as its tile says it: a bare compact 0.625 would misread.
+  return format && (format.kind === 'percent' || format.kind === 'duration') ? formatMetric(v, format) : formatCompact(v);
 }
 
 /** A percentage for prose: one decimal, no trailing ".0", never signed. */
@@ -446,7 +448,9 @@ export function alertMessage(
   previous: number | null,
   newAnomalies = 0,
   target: number | null = null,
+  format?: MetricFormat, // the watched metric's (fmtMetric)
 ): string {
+  const fmt = (v: number | null | undefined): string => fmtMetric(v, format);
   // The surface's own word for this number, falling back to the column it is
   // computed over — see AlertMetric.label.
   const label = rule.metric.label || rule.metric.column || rule.name;
@@ -455,18 +459,18 @@ export function alertMessage(
     return t('alerts.new', { newAnomalies, where });
   }
   if (rule.compare === 'threshold' && rule.threshold) {
-    return t('alerts.is', { label, value: fmtMetric(value), op: opWord(rule.threshold.op), value2: fmtMetric(rule.threshold.value) });
+    return t('alerts.is', { label, value: fmt(value), op: opWord(rule.threshold.op), value2: fmt(rule.threshold.value) });
   }
   if (rule.compare === 'target') {
-    const shown = fmtMetric(value);
+    const shown = fmt(value);
     const share = fmtPct(value != null && target ? (value / target) * 100 : null);
-    const goal = fmtMetric(target);
+    const goal = fmt(target);
     return t('alerts.is_of_its_target_of', { label, shown, share, goal });
   }
   const pct = changePct(value, previous);
   const verb = pct != null && pct < 0 ? 'fell' : 'rose';
   const vs = vsWord(rule.change ? rule.change.vs : 'previous_refresh');
-  return t('alerts.to_since', { label, verb, pct: fmtPct(pct), value: fmtMetric(value), vs });
+  return t('alerts.to_since', { label, verb, pct: fmtPct(pct), value: fmt(value), vs });
 }
 
 /**
@@ -503,6 +507,8 @@ export interface EvaluateInput {
   anomalies?: Anomaly[];
   /** For a `target` rule: the metric's target in the scope its figure was read in (null: none). */
   target?: number | null;
+  /** The watched metric's format, for the sentence's figures (fmtMetric). */
+  format?: MetricFormat;
   now: number;
   /** Supplied by the caller so this module never reaches for randomUUID. */
   eventId: string;
@@ -582,7 +588,7 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
     previous,
     delta,
     deltaPct: changePct(value, previous),
-    message: alertMessage(rule, value, previous, newAnomalies, input.target ?? null),
+    message: alertMessage(rule, value, previous, newAnomalies, input.target ?? null, input.format),
     seen: false,
   };
   if (rule.createdFrom) event.analysisId = rule.createdFrom.analysisId;
@@ -597,6 +603,11 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
  */
 export function notTwoPeriodsYet(column: string): string {
   return t('alerts.nothing_to_compare_yet_has_fewer', { column });
+}
+
+/** A rule by period, or for anomalies, on a Live dataset: both read rows, which a Live dataset doesn't keep (D6). Said at save. */
+export function liveRuleByRows(): string {
+  return t('alerts.alerts_by_period_and_anomaly_alerts');
 }
 
 /**
@@ -614,10 +625,11 @@ export function wouldFire(
   previous?: number | null,
   anomalies?: Anomaly[],
   target?: number | null,
+  format?: MetricFormat,
 ): { fire: boolean; message: string } {
-  if (rule.compare === 'target') return { fire: targetBreached(rule, value, target ?? null), message: alertMessage(rule, value, null, 0, target ?? null) };
+  if (rule.compare === 'target') return { fire: targetBreached(rule, value, target ?? null), message: alertMessage(rule, value, null, 0, target ?? null, format) };
   if (rule.compare === 'threshold') {
-    return { fire: thresholdBreached(rule, value), message: alertMessage(rule, value, null) };
+    return { fire: thresholdBreached(rule, value), message: alertMessage(rule, value, null, 0, null, format) };
   }
   if (rule.compare === 'change') {
     const prev = previous ?? null;
@@ -627,10 +639,10 @@ export function wouldFire(
     if (prev == null) {
       return {
         fire: false,
-        message: t('alerts.nothing_to_compare_against_yet_this', { value: fmtMetric(value) }),
+        message: t('alerts.nothing_to_compare_against_yet_this', { value: fmtMetric(value, format) }),
       };
     }
-    return { fire: changeHit(rule, value, prev), message: alertMessage(rule, value, prev) };
+    return { fire: changeHit(rule, value, prev), message: alertMessage(rule, value, prev, 0, null, format) };
   }
   const diff = diffAnomalies(anomalies || [], rule.anomalyKeys);
   return { fire: diff.newKeys.length > 0, message: alertMessage(rule, value, null, diff.newKeys.length) };

@@ -16,9 +16,9 @@
       "reason": "Ossie metrics cannot refer to other metrics, so a formula, period or funnel metric is not exported."
     },
     {
-      "kind": "metricDate",
+      "kind": "metric",
       "name": "Orders",
-      "reason": "Ossie does not say which date a metric counts by; the date field is marked as time."
+      "reason": "Ordinate counts only text that is not blank, and an Ossie COUNT counts blanks too, so a count of a text field is not exported."
     },
     {
       "kind": "metric",
@@ -43,7 +43,7 @@
     {
       "kind": "sensitivity",
       "name": "amount",
-      "reason": "Sensitivity marks are never exported."
+      "reason": "A field marked personal or financial is exported without the mark, its example or its value labels."
     },
     {
       "kind": "term",

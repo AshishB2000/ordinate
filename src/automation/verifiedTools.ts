@@ -13,7 +13,7 @@ import { GUIDANCE_FRAMING } from '../ai/guidanceFacts';
 import * as sharePolicy from '../app/sharePolicy';
 import type { Headline } from '../ai/answerFacts';
 import { AutomationError } from './errors';
-import { noVerifiedQuestion, useAnswerVerified } from './verifiedToolMessages';
+import { noVerifiedQuestion, useAnswerVerified, verifiedSensitive } from './verifiedToolMessages';
 import type { Ctx } from './registry';
 
 export interface McpVerified {
@@ -74,7 +74,7 @@ export async function answerVerifiedQuestion(ctx: Ctx, question: string): Promis
   const shaped = await sharePolicy.applyToChart(ctx.projectId, q.spec.datasetId, encoding, {
     ok: true as const, data: card.data, warnings: [], recommendedShape: 'categorical', category: undefined,
   }, 'export');
-  if (!shaped.ok) throw new AutomationError('runtime', `${shaped.error}: a column this question reads is marked sensitive.`);
+  if (!shaped.ok) throw new AutomationError('runtime', verifiedSensitive());
   const data = shaped.data;
   // A masked label must not leave inside a headline or a note: both are worded from the unmasked labels.
   const same = JSON.stringify(data.labels) === JSON.stringify(card.data.labels)
