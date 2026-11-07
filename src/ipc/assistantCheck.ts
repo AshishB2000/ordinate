@@ -21,7 +21,7 @@ import * as analyze from '../ai/analyze';
 import { projectDir, isValidId } from '../app/recordKinds';
 import { osUser } from '../app/catalog';
 import type { VerifiedQuestion } from '../analysis/verifiedRules';
-import { closedToCaller } from '../data/rowAccess';
+import { closedToCaller, restrictedOn } from '../data/rowAccess';
 import { listVerified } from '../analysis/verifiedQuestions';
 import { buildFacts } from './copilot';
 import { askGuidance } from './guidance';
@@ -33,7 +33,8 @@ export const CHECK_MAX = 50, CHECK_STALE_MS = 120_000;
 const TEXT_MAX = 300, IDS_MAX = 5_000;
 
 export type CheckState = 'running' | 'done' | 'stopped' | 'error';
-export interface CheckResult { id: string; outcome: Outcome; reason?: string }
+/** `datasetId`: the reply's dataset when the reason came from its card (./verifiedJudge). Stored, never sent. */
+export interface CheckResult { id: string; outcome: Outcome; reason?: string; datasetId?: string }
 export interface CheckRun {
   runId: string;
   state: CheckState;
@@ -64,7 +65,8 @@ export function sanitizeCheck(raw: unknown): CheckRun | null {
   for (const r of Array.isArray(o.results) ? o.results.slice(0, CHECK_MAX) : []) {
     const x = r && typeof r === 'object' ? (r as Record<string, unknown>) : null;
     if (!x || !isValidId(x.id) || !OUTCOMES.has(x.outcome as string)) continue;
-    results.push({ id: x.id as string, outcome: x.outcome as Outcome, ...(typeof x.reason === 'string' ? { reason: text(x.reason) } : {}) });
+    results.push({ id: x.id as string, outcome: x.outcome as Outcome, ...(typeof x.reason === 'string' ? { reason: text(x.reason) } : {}),
+      ...(isValidId(x.datasetId) ? { datasetId: x.datasetId as string } : {}) });
   }
   return {
     runId: o.runId as string, state: o.state as CheckState, startedBy: text(o.startedBy, 200), startedAt: text(o.startedAt, 40), heartbeatAt: text(o.heartbeatAt, 40),
@@ -118,7 +120,7 @@ async function askOne(projectId: string, facts: string, q: VerifiedQuestion): Pr
   if (!res.ok) return { id: q.id, outcome: 'refused', reason: text(res.message) };
   if (res.suggestedAction.kind !== 'answer') return { id: q.id, outcome: 'refused', reason: msg.checkNoChart() };
   const j = await judgeSpec(projectId, q, res.suggestedAction.spec);
-  return { id: q.id, outcome: j.outcome, ...(j.reason ? { reason: text(j.reason) } : {}) };
+  return { id: q.id, outcome: j.outcome, ...(j.reason ? { reason: text(j.reason), ...(j.datasetId ? { datasetId: j.datasetId } : {}) } : {}) };
 }
 
 async function runCheck(projectId: string, run: CheckRun, questions: VerifiedQuestion[], jc: jobs.JobContext): Promise<void> {
@@ -186,24 +188,28 @@ function withoutLeftOut(run: CheckRun, ids: string[] | undefined, left: Readonly
 }
 
 /**
- * The last check as the caller may read it: a reason can quote a value the model wrote, so none on a dataset closed to
- * them; a question their list leaves out is no row and no count. An unrestricted caller reads the record as stored.
+ * The last check as the caller may read it: a reason can quote a value the model wrote, so none when the question's
+ * dataset or the reply's is closed to them, and a run's error for no restricted caller; a question their list leaves
+ * out is no row and no count. The reply's dataset id is never sent.
  */
 export async function checkFor(projectId: string): Promise<CheckRun | null> {
   const stored = await readCheck(projectId);
   if (!stored) return null;
-  const { ids, ...whole } = stored;
+  const { ids, error, ...rest } = stored;
+  const whole: CheckRun = error !== undefined && !(await restrictedOn(projectId)) ? { ...rest, error } : rest; // an error can quote anything
   const list = await listVerified(projectId);
   const left = await leftOutFor(projectId, list);
   const run = left.size ? withoutLeftOut(whole, ids, left) : whole;
-  if (!run.results.some((r) => r.reason !== undefined)) return run;
   const datasetOf = new Map(list.map((q) => [q.id, q.spec.datasetId] as const));
   const closed = new Map<string, boolean>();
+  const open = async (d: string): Promise<boolean> => {
+    if (!closed.has(d)) closed.set(d, await closedToCaller(projectId, d));
+    return closed.get(d) === false;
+  };
   const results: CheckResult[] = [];
-  for (const r of run.results) {
-    const d = datasetOf.get(r.id);
-    if (r.reason !== undefined && d && !closed.has(d)) closed.set(d, await closedToCaller(projectId, d));
-    const keep = r.reason !== undefined && !!d && closed.get(d) === false; // a deleted question's dataset is unknown: no reason
+  for (const { datasetId: replied, ...r } of run.results) {
+    const d = datasetOf.get(r.id); // a deleted question's dataset is unknown: no reason
+    const keep = r.reason !== undefined && !!d && (await open(d)) && (!replied || (await open(replied)));
     results.push(keep ? r : { id: r.id, outcome: r.outcome });
   }
   return { ...run, results };
