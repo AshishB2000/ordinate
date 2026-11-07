@@ -193,6 +193,8 @@ export interface LiveSchemaView {
   missing: MissingColumn[];
   /** The always-applied filters (D13); column and operator only for a caller row access rules restrict. */
   baseFilters: FilterStep[];
+  /** The stored list could not be read in full here (a newer pod's): `live:setBaseFilters` refuses until it can. */
+  baseFiltersUnreadable: boolean;
   /** The calculated fields (part 8 step 04, ./liveCalcs): names and types only to a caller row access restricts. */
   calculated: CalculatedView;
   /** A semantic dataset's grains per date dimension, as its layer lists them (part 7). */
@@ -209,21 +211,21 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
   const rows = prof?.sampleRows;
   const withheld = await liveWithheld(projectId, datasetId, meta);
   const missingNames = meta.live.missingColumns ?? [];
-  // The sample's values are every row's: none to a caller row access rules restrict (REDACT).
+  // The sample's values and counts are every row's: none to a caller row access rules restrict (REDACT).
   const closed = await closedToCaller(projectId, datasetId);
   return {
     ok: true,
     schemaSyncedAt: meta.live.schemaSyncedAt,
     syncing: !!(await refreshRunning(projectId, datasetId)),
     sampledAt: prof?.sampledAt ?? null,
-    sampleRows: rows ?? null,
+    sampleRows: closed ? null : rows ?? null,
     method: prof?.method ?? null,
     note: prof?.skipped ? SKIP_NOTE[prof.skipped]() : null,
     columns: declaredColumns(meta).map((c) => {
       const p = profileOf(meta, c.name);
-      const filled = typeof p?.filled === 'number' ? p.filled : null;
+      const filled = !closed && typeof p?.filled === 'number' ? p.filled : null;
       const values = closed ? [] : p?.values ?? [];
-      const distinct = typeof p?.distinct === 'number' ? p.distinct : null;
+      const distinct = !closed && typeof p?.distinct === 'number' ? p.distinct : null;
       return {
         name: c.name,
         type: c.type,
@@ -237,6 +239,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     }),
     missing: missingNames.length ? missingDependents(await loadInput(projectId), datasetId, missingNames) : [],
     baseFilters: redactBaseFilters(meta.live.baseFilters ?? [], closed),
+    baseFiltersUnreadable: meta.live.baseFiltersUnreadable === true,
     calculated: await liveCalculated(projectId, meta, closed),
     ...(meta.live.semantic ? { grains: meta.live.semantic.grains } : {}),
   };

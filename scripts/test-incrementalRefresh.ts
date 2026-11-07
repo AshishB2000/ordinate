@@ -235,7 +235,7 @@ async function main(): Promise<void> {
       let b = await run(ds.id);
       const full = f.calls.filter(fake.isQuery).pop();
       ok('8. bigquery: the first run is full, through the table\'s backtick path in the cap wrapper',
-        b.mode === 'full' && full?.json.query === 'select * from (\nselect * from `shop.orders` limit 1000000\n) limit 1000001', full?.json.query);
+        b.mode === 'full' && full?.json.query === 'select * from (\nselect * from `shop.orders` limit 1000001\n) limit 1000001', full?.json.query);
       ok('8. …and the mark is the TIMESTAMP, converted to ISO', b.highWater === '2024-01-02T00:00:00.000Z', JSON.stringify(b));
       warehouse = [['1', day(1), '10'], ['2', day(3), '25'], ['3', day(4), '40']];
       await tick();
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   await datasets.writeIncremental(pid, sfOrders, () => ({ enabled: true, cursorColumn: 'UPDATED', keyColumn: 'ID', lookback: 0, highWater: null, runsSinceFull: 0, log: [] }));
   e = await run(sfOrders);
   ok('9. the first run is full: the table SQL, quoted part by part, inside the cap',
-    e.mode === 'full' && sf.statements()[0] === 'select * from (\nselect * from "PUBLIC"."ORDERS" limit 1000000\n) limit 1000001', sf.statements()[0]);
+    e.mode === 'full' && sf.statements()[0] === 'select * from (\nselect * from "PUBLIC"."ORDERS" limit 1000001\n) limit 1000001', sf.statements()[0]);
   await tick();
   sfTable[1] = ['2', '103', '25.00'];
   sfTable.push(['4', '104', '40.00']);
