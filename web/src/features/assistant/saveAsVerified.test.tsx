@@ -7,6 +7,9 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
 import { setDockOpen } from './dockState';
 
+// Its waits allow 15 s for a lazy route chunk, so a test needs longer than Vitest's 5 s default.
+vi.setConfig({ testTimeout: 30_000 });
+
 // Chart.js needs a canvas jsdom does not have; the card's actions are what is under test.
 vi.mock('../../charts/Chart', () => ({ Chart: ({ label }: { label?: string }) => <div role="img" aria-label={label ?? 'Chart'} /> }));
 
