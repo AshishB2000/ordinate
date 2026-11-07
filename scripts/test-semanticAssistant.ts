@@ -10,6 +10,7 @@
 //               NEGATIVE CONTROL: an extract's measures are still its number columns.
 //   § plans     an AI plan's metric step and a story's KPI refuse a column metric there (columnOnLayer); NEGATIVE
 //               CONTROL: the same step on the extract saves.
+//   § gone      a mirror whose semantic dataset was deleted reads as any metric whose dataset was deleted does.
 //
 //   npm run build:ts && node scripts/test-semanticAssistant.js
 
@@ -84,6 +85,18 @@ void (async () => {
   ok('…and a story plan\'s KPI there is no block and no saved metric', !blocks.some((b) => b.kind === 'metric' || b.kind === 'metrics_row') && (await count()) === n, show(blocks));
   const onExtract = await as(() => planExec.RUN_DEPS.execute(run, { kind: 'metric', dataset: 'Fixture copy', name: 'Qty on the copy', column: 'qty', aggregation: 'sum' }, 0, planCtx));
   ok('NEGATIVE CONTROL: the same plan step on the extract saves', onExtract.ok === true, show(onExtract));
+
+  // ── § gone ── a mirror whose semantic dataset was deleted says so, never "finish the upgrade".
+  const D2 = await as(async () => (await liveRecord.saveSemanticRecord(P, { name: 'Short-lived', connId: conn, columns: [], semantic: { backend: 'fake', model: 'live_typed', metrics: [], grains: [], syncedAt: '2026-11-01T00:00:00.000Z' } }))!.id);
+  await post('dataset:syncLiveSchema', { projectId: P, datasetId: D2 });
+  const orphan = (await as(() => metrics.listMetrics(P))).find((m) => m.datasetId === D2)!;
+  await as(() => H.datasets.deleteDataset(P, D2));
+  const X2 = await as(async () => (await H.datasets.saveDataset(P, { name: 'Short copy', sourceKind: 'csv', columns: [{ name: 'amt', type: 'number' }], rows: [[1]] }))!.id);
+  const plain = await as(async () => (await metrics.saveMetric(P, { name: 'Plain amount', datasetId: X2, definition: { column: 'amt', aggregation: 'sum' } }))!);
+  await as(() => H.datasets.deleteDataset(P, X2));
+  const values = (await post('metric:values', { projectId: P, ids: [orphan.id, plain.id] })).value as Reply[];
+  const bare = (r: Reply): string => show({ ...r, id: undefined });
+  ok('a mirror whose dataset was deleted reads as any metric\'s does, never "finish the upgrade"', !/upgrade/i.test(JSON.stringify(values)) && values.length === 2 && bare(values[0]) === bare(values[1]), show(values));
 
   await close();
   finish();
