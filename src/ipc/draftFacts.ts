@@ -20,6 +20,7 @@ import { vocabularyOrder } from '../analysis/statusNotes';
 import type { PlanFactExtras, PlanFactMetric } from '../analysis/planFacts';
 import * as metrics from '../analysis/metrics';
 import { describeDefinition, describeDefinitionShort } from '../analysis/metricFormat';
+import { termWords } from '../analysis/terms';
 // The POLICY's reading of the catalog, not the catalog: a sensitivity mark is
 // carried across a later rename, so a marked column stays marked under its new name.
 import { assistantColumnDocs } from '../app/sharePolicy';
@@ -82,7 +83,7 @@ export async function loadDraftFacts(projectId: string, ctx: PlanContext): Promi
         datasetId: m.datasetId,
         definitionText: marked
           ? `${describeDefinitionShort(m.definition)}, filtered on a column whose values are withheld`
-          : describeDefinition(m),
+          : describeDefinition(m, await termWords(projectId, m.filters)),
         description: m.description,
         ...(status ? { status, ...(status.replacedBy ? { replacedBy: status.replacedBy.name } : {}) } : {}),
       });
