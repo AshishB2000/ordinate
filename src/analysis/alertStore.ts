@@ -36,6 +36,7 @@ import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
+import { lockedTable, withLockOf } from '../ipc/rowDoors';
 import { mirrorSpec } from '../ipc/semanticFigures';
 import { snapshotMetric } from './snapshotGuards';
 import { alertSkipped } from './pendingKinds';
@@ -407,14 +408,19 @@ export async function recentPeriods(
  */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   try {
-    const src = await datasets.residentSource(projectId, datasetId);
-    if (src) {
-      const fast = await distinctAllResident(src, column);
-      if (fast) return fast;
-    }
-    const ds = await datasets.getDataset(projectId, datasetId);
-    if (!ds) return null;
-    return distinctAllJs(ds.columns, ds.rows, column);
+    // A door (D17): the column gate on the period column (a hidden one refuses), then the row lock, so an alert's
+    // fan-out reads its periods over a dataset whose other columns are hidden.
+    return await withLockOf(projectId, datasetId, async (lock) => {
+      const src = lock ? null : await datasets.residentSource(projectId, datasetId); // the resident read takes no lock: the JS fold does
+      if (src) {
+        const fast = await distinctAllResident(src, column);
+        if (fast) return fast;
+      }
+      const ds = await datasets.getDataset(projectId, datasetId);
+      if (!ds) return null;
+      const t = lockedTable(ds, lock);
+      return distinctAllJs(t.columns, t.rows, column);
+    }, [column]);
   } catch (err) {
     if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no periods" would be a silent answer — and so would a refusal
     return null; // a rule that cannot read its period column simply does not fire
