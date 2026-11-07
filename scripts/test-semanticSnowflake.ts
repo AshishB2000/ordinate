@@ -132,6 +132,7 @@ async function listingSection(): Promise<void> {
       ['DIMENSION', 'AMOUNT', 'ORDERS', 'DATA_TYPE', 'NUMBER(12,2)'],
       ['DIMENSION', 'ORDER_DATE', 'ORDERS', 'DATA_TYPE', 'DATE'],
       ['DIMENSION', 'SHIPPED_AT', 'ORDERS', 'DATA_TYPE', 'TIMESTAMP_NTZ(9)'],
+      ['DIMENSION', 'PAID_AT', 'ORDERS', 'DATA_TYPE', 'TIMESTAMP_TZ(9)'],
       ['DIMENSION', 'NAME', 'ORDERS', 'DATA_TYPE', 'VARCHAR'],
       ['DIMENSION', 'NAME', 'CUSTOMERS', 'DATA_TYPE', 'VARCHAR'],
       ['DIMENSION', 'secret note', 'ORDERS', 'DATA_TYPE', 'VARCHAR'],
@@ -165,8 +166,13 @@ async function listingSection(): Promise<void> {
   ok('…dimensions typed through the Live mapping, a date or timestamp at every grain, a shared name qualified by its table, a name that is no identifier left out',
     d.ok && show(d.dimensions) === show([
       { name: 'REGION', type: 'text' }, { name: 'AMOUNT', type: 'number' }, { name: 'ORDER_DATE', type: 'date', grains: all },
-      { name: 'SHIPPED_AT', type: 'date', grains: all }, { name: 'ORDERS.NAME', type: 'text' }, { name: 'CUSTOMERS.NAME', type: 'text' },
+      { name: 'SHIPPED_AT', type: 'date', grains: all }, { name: 'PAID_AT', type: null }, { name: 'ORDERS.NAME', type: 'text' }, { name: 'CUSTOMERS.NAME', type: 'text' },
     ]), show(d));
+  // A TIMESTAMP_TZ's day is the UTC day only through CONVERT_TIMEZONE, which needs the type the record keeps for no
+  // semantic dataset: CAST(x AS DATE) would bucket by each value's own offset, so it is left out, named unmapped.
+  const read = d.ok ? (require('../src/engine/live/semantic/semanticSync') as typeof import('../src/engine/live/semantic/semanticSync')).readModel(d, 'snowflake', 'SALES.PUBLIC.ORDERS_SV', '2026-11-06T00:00:00.000Z') : null;
+  ok('…a TIMESTAMP_TZ dimension is no column of the dataset, named unmapped by the sync; a TIMESTAMP_NTZ one is a date',
+    !!read && show(read.unmapped) === '["PAID_AT"]' && !read.columns.some((c) => c.name === 'PAID_AT') && read.columns.some((c) => c.name === 'SHIPPED_AT' && c.type === 'date'), show(read));
   ok('…metrics say whether they add up (SUM, COUNT yes; AVG, a ratio, a derived metric no), a private one is left out, a comment is the description',
     d.ok && show(d.metrics) === show([
       { name: 'REVENUE', additive: true, description: 'Gross sales' }, { name: 'ORDER_COUNT', additive: true }, { name: 'AVG_ORDER', additive: false },

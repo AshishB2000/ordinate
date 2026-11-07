@@ -50,7 +50,7 @@ export function readModel(d: Described, backend: string, model: string, now: str
   for (const x of Array.isArray(d.dimensions) ? d.dimensions : []) {
     if (!x || !isLayerName(x.name) || seen.has(x.name)) continue;
     seen.add(x.name);
-    if (!TYPES.has(x.type)) {
+    if (x.type === null || !TYPES.has(x.type)) {
       unmapped.push(x.name);
       continue;
     }

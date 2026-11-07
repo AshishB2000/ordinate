@@ -212,7 +212,8 @@ export interface ConnectorSemantic {
   listModels(ctx: ConnectorContext): Promise<{ ok: true; models: Array<{ name: string; label?: string; description?: string }> } | ConnectorError>;
   describeModel(ctx: ConnectorContext, model: string): Promise<{
     ok: true;
-    dimensions: Array<{ name: string; type: ColumnType; grains?: DateGrain[] }>;
+    /** `type` null: a dimension Ordinate cannot read exactly, left out of the dataset and named by the sync (unmapped). */
+    dimensions: Array<{ name: string; type: ColumnType | null; grains?: DateGrain[] }>;
     metrics: Array<{ name: string; additive: boolean; description?: string }>;
   } | ConnectorError>;
   run(ctx: ConnectorContext, body: unknown): Promise<ConnectorRows | ConnectorError>;

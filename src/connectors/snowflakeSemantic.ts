@@ -9,7 +9,8 @@
 //   listModels     SHOW SEMANTIC VIEWS IN DATABASE | ACCOUNT LIMIT 1000 — no name interpolated (the database is
 //                  the session's); a view whose parts are not plain identifiers is not listed
 //   describeModel  DESCRIBE SEMANTIC VIEW "DB"."SCHEMA"."VIEW" — dimensions typed through the Live column mapping
-//                  (a DATE or TIMESTAMP at every grain: the encoder truncates inside the clause), metrics with
+//                  (a DATE or TIMESTAMP at every grain: the encoder truncates inside the clause; a TIMESTAMP_TZ
+//                  unmapped, its day would be its own offset's), metrics with
 //                  whether they add up (`additiveExpression`, failing safe); private members left out; a name two
 //                  members share stored as TABLE.NAME, so every stored name is unambiguous in a query
 //   run            the encoder's `{ sql, params }` through the connector's `runBound`: `?` binds, the row cap
@@ -100,10 +101,14 @@ async function describeModel(io: SnowflakeIo, ctx: ConnectorContext, model: stri
     return IDENT_RE.test(m.parent) ? `${m.parent}.${m.name}` : null;
   };
   const shown = all.filter((m) => m.props.get('ACCESS_MODIFIER') !== 'PRIVATE');
-  const dimensions = shown.filter((m) => m.kind === 'DIMENSION').flatMap((m) => {
+  type Dimension = Extract<Awaited<ReturnType<ConnectorSemantic['describeModel']>>, { ok: true }>['dimensions'][number];
+  const dimensions = shown.filter((m) => m.kind === 'DIMENSION').flatMap((m): Dimension[] => {
     const name = stored(m);
     if (!name) return [];
-    const type = liveColumnType('snowflake', m.props.get('DATA_TYPE') ?? '');
+    const dataType = m.props.get('DATA_TYPE') ?? '';
+    // shortcut: a TIMESTAMP_TZ's UTC day needs CONVERT_TIMEZONE, so its type, which no semantic record keeps; unmapped until one does
+    if (/TIMESTAMP_TZ/i.test(dataType)) return [{ name, type: null }];
+    const type = liveColumnType('snowflake', dataType);
     return [type === 'date' ? { name, type, grains: DATE_GRAINS.slice() } : { name, type }];
   });
   const metrics = shown.filter((m) => m.kind === 'METRIC' || m.kind === 'DERIVED_METRIC').flatMap((m) => {
