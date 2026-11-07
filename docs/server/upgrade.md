@@ -523,7 +523,8 @@ charts, pivots, answers, alerts and Prepare's group step), and computes none of 
 - A KPI tile, the Summary card and a metric's value show no figure.
 - A chart, a pivot table, an answer card and Explain refuse with a sentence such as "“Visit → buy”
   is a kind of metric from a newer version of Ordinate. Finish the upgrade, then try again."
-- A count distinct on a Live dataset is refused with a sentence until the release that counts it there.
+- A count distinct on a Live dataset is counted by the warehouse (`p5-03`), except on a chart by a
+  week calendar's periods, which refuses it with a sentence.
 - An alert on one is not evaluated, and its state is left as it was. Its Test button says why.
 - A target is kept and shown nowhere.
 

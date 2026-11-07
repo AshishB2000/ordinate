@@ -76,7 +76,7 @@ function finiteOrNull(n: number | null): number | null {
 }
 
 function emptyParts(): Parts {
-  return { s: null, c: null, n: null, x: null };
+  return { s: null, c: null, n: null, x: null, d: null };
 }
 
 /** Folding a part into a running total: counts and sums add, min/max stay min/max. */
@@ -96,6 +96,7 @@ export function measureValue(m: LiveMeasure, parts: Parts): number | null {
     case 'count': return parts.c === null ? 0 : parts.c;
     case 'min': return parts.n;
     case 'max': return parts.x;
+    case 'countd': return parts.d === null ? 0 : parts.d;
     default: return parts.c !== null && parts.c > 0 && parts.s !== null ? parts.s / parts.c : null;
   }
 }

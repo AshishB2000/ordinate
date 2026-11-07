@@ -42,6 +42,8 @@ process.env.ORDINATE_TODAY = '2025-03-15'; // inside the fixture's dates, so rel
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
 const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
 const pins: typeof import('./liveParityPins') = require('./liveParityPins');
+const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
+const { OTHER_LABEL: OTHER }: typeof import('../src/analysis/categoryKey') = require('../src/analysis/categoryKey');
 
 async function main(): Promise<void> {
   const x = await mx.setupExtract(ok);
@@ -72,6 +74,38 @@ async function main(): Promise<void> {
   const split = rawKit ? await rawKit.chartProblems({ category: 'cat', values: [mx.M('amt', 'sum')] }, [], report.envs.typed) : [];
   ok("NEGATIVE CONTROL: an extract saved raw ('' apart from null) disagrees with live on a `cat` chart — the blank category is one row on live",
     split.some((p) => /label count/.test(p)), split.join(' | '));
+
+  // NEGATIVE CONTROL for a distinct count (part 5, D2): on this fixture "Other" is not the sum of its folded
+  // categories, nor a category the sum of its series. With the matrix agreeing, Live counts those levels from rows:
+  // a compile that re-added per-category counts there would disagree with the extract.
+  const viz = (enc: import('../src/analysis/visuals').VizEncoding, f: import('../src/data/transforms').FilterStep[] = []) => visualsIpc.vizDataFor(x.pid, x.did, enc, f);
+  const countd = [mx.M('amt', 'countd')];
+  const byMany = await viz({ category: 'many', values: countd });
+  const kept = byMany.ok ? byMany.data.labels.filter((l) => l !== OTHER) : [];
+  const folded = await viz({ category: 'many', values: countd }, [mx.F('many', 'not in', undefined, { values: kept })]);
+  const total = (vs: (number | null)[]): number => vs.reduce<number>((a, v) => a + (v ?? 0), 0);
+  const other = byMany.ok ? byMany.data.series[0].values[byMany.data.labels.indexOf(OTHER)] : null;
+  const bySeries = await viz({ category: 'many', series: 'region', values: countd });
+  const flat = byMany.ok && bySeries.ok ? kept.map((l) => [byMany.data.series[0].values[byMany.data.labels.indexOf(l)], total(bySeries.data.series.map((s) => s.values[bySeries.data.labels.indexOf(l)]))]) : [];
+  ok('NEGATIVE CONTROL: the fixture tells a distinct count from a sum of counts — "Other" from its folded categories, a category from its series',
+    folded.ok && kept.length === 50 && typeof other === 'number' && other !== total(folded.data.series[0].values) && flat.length === 50 && flat.filter(([v, sum]) => v !== sum).length >= 45,
+    JSON.stringify({ other, folded: folded.ok && total(folded.data.series[0].values), differ: flat.filter(([v, sum]) => v !== sum).length, kept: kept.length }));
+
+  // NEGATIVE CONTROL, planted (spec 05, Tests "Distinct"): the compile as it would be if "Other" re-added the
+  // per-category distinct counts of its folded categories — the matrix's own comparison must catch it.
+  const cd: typeof import('../src/engine/live/compileDistinct') = require('../src/engine/live/compileDistinct');
+  const counted = cd.foldedDistinct;
+  cd.foldedDistinct = () => [
+    'lv_dk AS (SELECT lv_k AS lv_dk0, CAST(sum(lv_a0d) AS DOUBLE) AS lv_dv0 FROM lv_fold GROUP BY lv_k)',
+    `lv_outd AS (SELECT lv_out.*, lv_dk.lv_dv0 AS lv_b0d FROM lv_out JOIN lv_dk ON ${cd.nullSafeOn('lv_out.lv_k', 'lv_dk.lv_dk0', true)})`,
+  ];
+  const readded = await mx.parityKit(x, fx.runDuck).chartProblems({ category: 'many', values: countd }, [], report.envs.typed).finally(() => { cd.foldedDistinct = counted; });
+  ok('NEGATIVE CONTROL: a planted compile that re-adds the folded categories\' distinct counts into "Other" is caught', readded.some((p) => p.startsWith(`row ${JSON.stringify(OTHER)} `) && p.includes('has no twin')), readded.join(' | '));
+  // …and one that ranks a split's categories (and its series) by the sum of their cells, not their own distinct count.
+  const ranked = cd.totalAt;
+  cd.totalAt = (c, again, over, at) => ranked(c, false, again ? over.replace('max(', 'sum(') : over, at);
+  const summed = await mx.parityKit(x, fx.runDuck).chartProblems({ category: 'many', series: 'region', values: countd }, [], report.envs.typed).finally(() => { cd.totalAt = ranked; });
+  ok('NEGATIVE CONTROL: a planted compile that ranks a split by the sum of its series cells is caught', summed.length > 0, summed.join(' | '));
 
   await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, fx.runDuck).live, env: report.envs.typed, stored: x.stored, engine: fx.duckEngine });
   await (require('./liveParityBase') as typeof import('./liveParityBase')).baseFilterCase(x, fx.duckEngine.run, report.envs.typed, ok);

@@ -33,6 +33,7 @@ export const databricksDialect: SqlDialect = {
   ident,
   placeholder: (i, p) => `CAST(:p${i} AS ${TYPE[p.type]})`,
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
+  countDistinct: (x) => `count(DISTINCT ${x})`,
   toInt: (x) => `CAST(${x} AS INT)`,
   text: (c) => `CAST(${c} AS STRING)`,
   binary: (x) => `CAST(${x} AS BINARY)`,

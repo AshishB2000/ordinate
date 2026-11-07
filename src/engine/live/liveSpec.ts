@@ -44,7 +44,8 @@ import { activeWeekCal } from '../../analysis/retailCalendar';
 import { FILTER_OPS, emptyListWarning, periodSkipWarning } from '../../data/filterOps';
 import { getCalendar, resolvePeriod, todayIso } from '../../analysis/dateIntel';
 import * as msg from '../liveRefusals';
-import { NUMBER_AGGREGATIONS, PLAIN_AGGREGATIONS } from '../../data/aggregations';
+import type { Aggregation } from '../../data/aggregations';
+import { AGGREGATIONS, NUMBER_AGGREGATIONS } from '../../data/aggregations';
 
 // ── The IR ───────────────────────────────────────────────────────────────────
 
@@ -59,8 +60,8 @@ export interface LiveColumn extends ParsedColumn {
   sourceType?: string;
 }
 
-export type LiveAgg = 'sum' | 'avg' | 'count' | 'min' | 'max';
-export const LIVE_AGGS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
+export type LiveAgg = Aggregation;
+export const LIVE_AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 /** The aggregations that need a number column — `answerSpec.NUMERIC_AGGS`. */
 export const NUMERIC_AGGS: ReadonlySet<string> = new Set<string>(NUMBER_AGGREGATIONS);
 
@@ -125,7 +126,7 @@ export type LiveRefusalCode =
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
   | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
-  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable';
+  | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'distinctByWeekCalendar';
 
 /**
  * A question live cannot answer, said in a catalog sentence (`message`, through
@@ -181,6 +182,7 @@ const MESSAGES: Record<LiveRefusalCode, Sentence> = {
   baseFilter: { key: 'liveRefusals.the_always_applied_filter_on_can', param: 'column', text: (c) => msg.liveBaseFilterRefused(c) },
   calculated: { key: 'liveRefusals.this_dataset_s_calculated_fields_can', param: 'column', text: (c) => msg.liveCalculatedRefused(c) },
   baseFilterUnreadable: { key: 'liveRefusals.this_dataset_s_always_applied_filters', text: () => msg.liveBaseFiltersUnreadable() },
+  distinctByWeekCalendar: { key: 'liveRefusals.a_distinct_count_can_t_be', text: () => msg.liveDistinctByWeekCalendar() },
 };
 
 export function refuse(code: LiveRefusalCode, arg = ''): LiveRefusal {

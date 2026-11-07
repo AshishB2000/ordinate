@@ -52,6 +52,8 @@ import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
 import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicates } from './compileFilter';
 import { keyOf } from './profileSql';
+import type { Total } from './compileDistinct';
+import { distinctKey, foldedDistinct, totalAt, withTotals } from './compileDistinct';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -77,8 +79,8 @@ export type LiveKey =
 
 export type Compiled = { ok: true; query: CompiledQuery } | LiveRefusal;
 
-/** A measure's parts: s = sum, c = count, n = min, x = max. `avg` is s + c. */
-export type Part = 's' | 'c' | 'n' | 'x';
+/** A measure's parts: s = sum, c = count, n = min, x = max, d = a distinct count (never re-aggregated). `avg` is s + c. */
+export type Part = 's' | 'c' | 'n' | 'x' | 'd';
 
 export function partsOf(m: LiveMeasure): Part[] {
   switch (m.aggregation) {
@@ -86,6 +88,7 @@ export function partsOf(m: LiveMeasure): Part[] {
     case 'avg': return ['s', 'c'];
     case 'count': return ['c'];
     case 'min': return ['n'];
+    case 'countd': return ['d'];
     default: return ['x'];
   }
 }
@@ -157,17 +160,21 @@ function whereOf(p: Prepared, ir: LiveIR): string | LiveRefusal {
   return preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
 }
 
-/** The column a measure aggregates: a finite number, or for `count` a non-empty flag. */
+/** The column a measure aggregates: a finite number, for `count` a non-empty flag, for `countd` what it counts. */
 function measureInput(c: Ctx, m: LiveMeasure): string {
   const col = columnOf(c.columns, m.column)!;
+  if (m.aggregation === 'countd') return distinctKey(c, col);
   if (m.aggregation !== 'count') return numberOf(c, col);
   // `count` counts NON-EMPTY cells of any type (transforms.aggregate).
   return col.type === 'number' ? numberOf(c, col) : `CASE WHEN NOT ${emptyOf(c, col)} THEN 1 END`;
 }
 
-const AGG_OF: Record<Part, string> = { s: 'sum', c: 'count', n: 'min', x: 'max' };
-/** Re-aggregating a part: counts and sums add, minima and maxima stay minima and maxima. */
-const REAGG_OF: Record<Part, string> = { s: 'sum', c: 'sum', n: 'min', x: 'max' };
+const AGG_OF: Record<Exclude<Part, 'd'>, string> = { s: 'sum', c: 'count', n: 'min', x: 'max' };
+/** Re-aggregating a part: counts and sums add, minima and maxima stay minima and maxima. A distinct count never does. */
+const REAGG_OF: Record<Exclude<Part, 'd'>, string> = { s: 'sum', c: 'sum', n: 'min', x: 'max' };
+
+/** A part's aggregate over a measure's input `v`. */
+const aggOf = (d: SqlDialect, pt: Part, v: string): string => (pt === 'd' ? d.countDistinct(v) : `${AGG_OF[pt]}(${v})`);
 
 // ── One number ───────────────────────────────────────────────────────────────
 
@@ -185,7 +192,7 @@ export function compileMetric(ir: LiveIR, env: CompileEnv): Compiled {
   const sel: string[] = [];
   const cols: string[] = [];
   for (const part of partsOf(m)) {
-    sel.push(`${p.c.d.toDouble(`${AGG_OF[part]}(${v})`)} AS o_m0${part}`);
+    sel.push(`${p.c.d.toDouble(aggOf(p.c.d, part, v))} AS o_m0${part}`);
     cols.push(`o_m0${part}`);
   }
   const where = whereOf(p, ir);
@@ -292,6 +299,8 @@ function totalOver(c: Ctx, m: LiveMeasure, name: (p: Part) => string, partition:
     case 'count': return d.toDouble(`sum(${name('c')}) ${w}`);
     case 'min': return d.toDouble(`min(${name('n')}) ${w}`);
     case 'max': return d.toDouble(`max(${name('x')}) ${w}`);
+    // A partition of ONE group (no split): its distinct count is its total. A split's is counted again (./compileDistinct.ts).
+    case 'countd': return d.toDouble(`max(${name('d')}) ${w}`);
     default:
       return `CASE WHEN sum(${name('c')}) ${w} > 0 THEN ${d.toDouble(`sum(${name('s')}) ${w}`)} / ${d.toDouble(`sum(${name('c')}) ${w}`)} END`;
   }
@@ -322,6 +331,8 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const dated = key.kind === 'date' || key.kind === 'days';
   if (dated && (ir.order === 'value' || ir.top !== undefined)) return refuse('rankOnDate');
   if (ir.top !== undefined && (!Number.isInteger(ir.top) || ir.top < 1 || ir.order !== 'value')) return refuse('badQuery');
+  // Days roll up into a week calendar's periods in ./shape.ts, which no distinct count survives (part 5, D2).
+  if (key.kind === 'days' && ir.measures.some((m) => m.aggregation === 'countd')) return refuse('distinctByWeekCalendar');
 
   const g = keyExpr(c, catCol, key);
   if (isRefusal(g)) return g;
@@ -349,7 +360,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const base = [`${g} AS lv_g`];
   if (s) base.push(`${s} AS lv_s`);
   ms.forEach((m, i) => base.push(`${measureInput(c, m)} AS lv_v${i}`));
-  const grp = ms.flatMap((m, i) => partsOf(m).map((pt) => `${d.toDouble(`${AGG_OF[pt]}(lv_v${i})`)} AS lv_a${i}${pt}`));
+  const grp = ms.flatMap((m, i) => partsOf(m).map((pt) => `${d.toDouble(aggOf(d, pt, `lv_v${i}`))} AS lv_a${i}${pt}`));
   const ctes = [
     `lv_base AS (SELECT ${base.join(', ')} FROM ${p.from}${where})`,
     `lv_grp AS (SELECT ${gs}, ${grp.join(', ')} FROM lv_base GROUP BY ${gs})`,
@@ -361,29 +372,34 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   let k = 'lv_g';
   let part = (i: number, pt: Part): string => `lv_a${i}${pt}`;
   const text = key.kind === 'text';
+  // A distinct count is counted again from rows wherever this statement folds or ranks (./compileDistinct.ts).
+  const distinct = ms.some((m) => m.aggregation === 'countd');
+  const again = !!s && m0.aggregation === 'countd';
   if (text) {
     const keep = c.b.bind('text', OTHER_LABEL);
+    const t = totalAt(c, again, totalOver(c, m0, (pt) => `lv_a0${pt}`, 'lv_g'), { rel: 'lv_grp', relKey: 'lv_g', text, name: 'lv_dct', from: 'lv_base', by: 'lv_g' });
+    const reagg = ms.flatMap((m, i) => partsOf(m).flatMap((pt) => (pt === 'd' ? [] : [`${d.toDouble(`${REAGG_OF[pt]}(lv_a${i}${pt})`)} AS lv_b${i}${pt}`])));
     ctes.push(
-      `lv_tot AS (SELECT *, ${totalOver(c, m0, (pt) => `lv_a0${pt}`, 'lv_g')} AS lv_ct FROM lv_grp)`,
+      ...t.ctes,
+      `lv_tot AS (${withTotals('lv_grp', [[t, 'lv_ct']])})`,
       `lv_rank AS (SELECT *, dense_rank() OVER (ORDER BY ${byValue('lv_ct', 'lv_g')}) AS lv_cr FROM lv_tot)`,
-      `lv_fold AS (SELECT CASE WHEN lv_cr <= ${CATEGORY_CAP} THEN lv_g ELSE ${keep} END AS lv_k${s ? ', lv_s' : ''}, ` +
+      `lv_fold AS (SELECT CASE WHEN lv_cr <= ${CATEGORY_CAP} THEN lv_g ELSE ${keep} END AS lv_k${s ? ', lv_s' : ''}${distinct ? ', lv_g' : ''}, ` +
         `${ms.flatMap((m, i) => partsOf(m).map((pt) => `lv_a${i}${pt}`)).join(', ')}, max(lv_cr) OVER () AS lv_n FROM lv_rank)`,
-      `lv_out AS (SELECT lv_k${s ? ', lv_s' : ''}, ` +
-        `${ms.flatMap((m, i) => partsOf(m).map((pt) => `${d.toDouble(`${REAGG_OF[pt]}(lv_a${i}${pt})`)} AS lv_b${i}${pt}`)).join(', ')}, ` +
-        `${d.toDouble('max(lv_n)')} AS lv_nc FROM lv_fold GROUP BY lv_k${s ? ', lv_s' : ''})`,
+      `lv_out AS (SELECT ${[`lv_k${s ? ', lv_s' : ''}`, ...reagg, `${d.toDouble('max(lv_n)')} AS lv_nc`].join(', ')} FROM lv_fold GROUP BY lv_k${s ? ', lv_s' : ''})`,
+      ...(distinct ? foldedDistinct(c, ms, !!s, seriesText) : []),
     );
-    last = 'lv_out';
+    last = distinct ? 'lv_outd' : 'lv_out';
     k = 'lv_k';
     part = (i, pt) => `lv_b${i}${pt}`;
   }
 
   // Display order: the category rank, then the series rank.
   const valueOrdered = text || ir.order === 'value';
-  const fin: string[] = [];
-  if (valueOrdered) fin.push(`${totalOver(c, m0, (pt) => part(0, pt), k)} AS lv_ct2`);
-  if (s && seriesText) fin.push(`${totalOver(c, m0, (pt) => part(0, pt), 'lv_s')} AS lv_st`);
+  const fin: [Total, string][] = [];
+  if (valueOrdered) fin.push([totalAt(c, again, totalOver(c, m0, (pt) => part(0, pt), k), { rel: last, relKey: k, text, name: 'lv_dct2', from: text ? 'lv_bk' : 'lv_base', by: text ? 'lv_kk' : 'lv_g' }), 'lv_ct2']);
+  if (s && seriesText) fin.push([totalAt(c, again, totalOver(c, m0, (pt) => part(0, pt), 'lv_s'), { rel: last, relKey: 'lv_s', text: true, name: 'lv_dst', from: 'lv_base', by: 'lv_s' }), 'lv_st']);
   if (fin.length) {
-    ctes.push(`lv_fin AS (SELECT *, ${fin.join(', ')} FROM ${last})`);
+    ctes.push(...fin.flatMap(([t]) => t.ctes), `lv_fin AS (${withTotals(last, fin)})`);
     last = 'lv_fin';
   }
   const ranks = [`${d.toInt(`dense_rank() OVER (ORDER BY ${valueOrdered ? byValue('lv_ct2', k) : byKey(k)})`)} AS lv_cr2`];

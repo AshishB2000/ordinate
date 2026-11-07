@@ -28,6 +28,7 @@ export const redshiftDialect: SqlDialect = {
   ident: doubleQuoted,
   placeholder: (i, p) => `CAST($${i + 1} AS ${TYPE[p.type]})`,
   toDouble: (x) => `CAST(${x} AS DOUBLE PRECISION)`,
+  countDistinct: (x) => `count(DISTINCT ${x})`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS ${TEXT})`,
   // md5 hashes the bytes in both Postgres and Redshift (Postgres has no COLLATE() function, Redshift no COLLATE "C").

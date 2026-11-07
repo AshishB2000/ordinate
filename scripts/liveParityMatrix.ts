@@ -252,6 +252,8 @@ const CATEGORIES: Partial<VizEncoding>[] = [
 const MEASURES: VizMeasure[][] = [
   [M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('amt', 'min')], [M('qty', 'max')], [M('amt', 'none')],
   [M('d', 'count')], [M('amt', 'sum'), M('region', 'count'), M('qty', 'avg'), M('amt', 'max')],
+  // A distinct count (part 5, D2): text, number and date keys; first (it ranks and folds) and beside re-aggregated parts.
+  [M('cat', 'countd')], [M('amt', 'countd')], [M('d', 'countd')], [M('amt', 'countd'), M('amt', 'sum'), M('cat', 'countd')], [M('qty', 'avg'), M('d', 'countd')],
 ];
 const SERIES: (string | undefined)[] = [undefined, 'region', 'tier'];
 
@@ -352,7 +354,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   n += await charts(kit, ok, label('defining query'), SQL, { stride: 7 * stride });
   n += await charts(kit, ok, label('numbers stored as text'), TEXTNUM, {
     categories: [{ category: 'amt' }, { category: 'qty', bins: 20 }, { category: 'cat' }, { category: 'd', grain: 'quarter' }],
-    measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('amt', 'count')], [M('amt', 'min')], [M('qty', 'max')]],
+    measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('amt', 'count')], [M('amt', 'min')], [M('qty', 'max')], [M('amt', 'countd')]],
     stride,
   });
 
@@ -372,6 +374,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   const METRICS: [string, import('../src/analysis/metricValue').MetricAggregation][] = [
     ['amt', 'sum'], ['amt', 'avg'], ['amt', 'min'], ['amt', 'max'], ['amt', 'count'], ['qty', 'sum'], ['qty', 'avg'],
     ['cat', 'count'], ['d', 'count'], ['bigid', 'count'], ['region', 'count'], ['tier', 'max'],
+    ['cat', 'countd'], ['amt', 'countd'], ['d', 'countd'],
   ];
   let mk = 0;
   for (const env of [TYPED, TEXTNUM, SQL]) {
@@ -395,7 +398,7 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
   ];
   let k = 0;
   for (const category of ['cat', 'many', 'region', 'qty', 'd']) {
-    for (const measures of [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('qty', 'max'), M('amt', 'sum')]]) {
+    for (const measures of [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('qty', 'max'), M('amt', 'sum')], [M('amt', 'countd')]]) {
       for (const series of [undefined, 'region']) {
         for (const top of [undefined, 3, 7]) {
           k += 1;
@@ -419,6 +422,17 @@ export async function runMatrix(x: Extract, engine: ParityEngine, opts: { ok: Ok
       categories: [{ category: 'd' }, { category: 'd', grain: 'day' }, { category: 'd', grain: 'week' }, { category: 'd', grain: 'month' }, { category: 'd', grain: 'quarter' }, { category: 'd', grain: 'year' }],
       measures: [[M('amt', 'sum')], [M('amt', 'avg')], [M('cat', 'count')], [M('amt', 'min')]],
       stride,
+    });
+    // Days do not roll up into a distinct count (part 5, D2): refused, typed, before any statement. By day nothing rolls
+    // up, so it answers and agrees (the NEGATIVE CONTROL: the refusal is the roll-up's, not the calendar's).
+    for (const grain of [undefined, 'month'] as const) {
+      const a = spec.fromVizEncoding({ category: 'd', ...(grain ? { grain } : {}), values: [M('amt', 'countd')] }, [], TYPED.columns, {});
+      let sent = 0;
+      const out = a.ok ? await ev.evaluateLive(a.ir, TYPED, (q, step) => { sent += 1; return engine.run(q, step); }) : a;
+      ok(label(`week calendar ${calendarType}: a distinct count by ${grain ?? 'the chosen grain'} is refused (distinctByWeekCalendar), no statement sent`), !out.ok && out.code === 'distinctByWeekCalendar' && sent === 0, show(out));
+    }
+    n += await charts(kit, ok, label(`week calendar ${calendarType}, a distinct count by day`), TYPED, {
+      categories: [{ category: 'd', grain: 'day' }], measures: [[M('amt', 'countd')], [M('cat', 'countd')], [M('d', 'countd')]], stride,
     });
   }
   dateIntel.setCalendar({ weekStart: 1, fiscalYearStart: 1 });

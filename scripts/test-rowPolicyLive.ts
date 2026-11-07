@@ -83,6 +83,14 @@ const metricSql = (id: CompileDialectId, filters: FilterStep[]) => {
     const open = unlocked.ok ? comp.compileLatestDates(unlocked.ir, env('duckdb')) : null;
     ok('NEGATIVE CONTROL: without a lock the anchor reads every row, as before', !!open && open.ok && !/WHERE/.test(open.query.sql));
   }
+  // A distinct count is counted again from rows at every level it folds or ranks at (semantic layer part 5, step 03):
+  // each count reads `lv_base`, the one place the source is read, and that read carries the lock.
+  for (const id of dialects.DIALECT_IDS) {
+    const a = spec.fromVizEncoding({ category: 'region', series: 'amount', values: [{ column: 'day', aggregation: 'countd' }] }, [lockIn], COLS, { weekCal: null });
+    const q = a.ok ? comp.compileChart(a.ir, { kind: 'text' }, env(id)) : null;
+    ok(`${id}: a split distinct count, counted again from rows, reads the source once, inside the lock`,
+      !!q && q.ok && q.query.sql.split(' AS lv_src').length === 2 && whereOf(q.query.sql).startsWith(`${expectedWhere(id, 2, true)}),`) && (q.query.sql.match(/FROM lv_base/g) ?? []).length === 3, q && q.ok ? q.query.sql : JSON.stringify(q));
+  }
   const lockF = spec.adaptFilter(lockIn, COLS, {}, []);
   const fix = comp.compileCaseMatches('region', ['east'], env('duckdb'), lockF && !('code' in lockF) ? [lockF] : []);
   ok('the stored-spelling lookup is limited to the locked rows', fix.ok && /encode\(/.test(fix.query.sql) && fix.query.params.some((p) => p.value === SECRET[1]), fix.ok ? fix.query.sql : '');

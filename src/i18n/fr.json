@@ -363,6 +363,7 @@
   "liveRefusals.a_contains_filter_cannot_run_on": "Un filtre « contient » ne peut pas s’appliquer à la colonne numérique « {column} » d’un jeu de données en direct. Comparez-la plutôt à une valeur.",
   "liveRefusals.a_date_axis_keeps_time_order": "Un axe de dates garde l’ordre chronologique : il ne peut être ni classé ni réduit aux N premiers.",
   "liveRefusals.a_distance_filter_cannot_run_on": "Un filtre de distance ne peut pas encore s’appliquer à un jeu de données en direct.",
+  "liveRefusals.a_distinct_count_can_t_be": "Un nombre de valeurs distinctes ne peut pas encore être tracé selon les périodes d’un calendrier de semaines à partir d’un jeu de données en direct. Tracez-le par jour, ou faites une copie du jeu de données.",
   "liveRefusals.a_field_from_a_related_dataset": "Un champ d’un jeu de données lié ne peut pas encore être combiné avec un jeu de données en direct.",
   "liveRefusals.a_live_chart_cannot_be_split": "Un graphique en direct ne peut pas encore être scindé selon la colonne de dates « {column} ».",
   "liveRefusals.a_live_chart_needs_a_total": "Un graphique en direct a besoin d’un total, d’une moyenne, d’un nombre, d’un minimum ou d’un maximum. Il ne récupère jamais de lignes individuelles.",
