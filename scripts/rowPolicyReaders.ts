@@ -31,6 +31,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'catalog:columns': 'REDACT', // value labels name stored values: withheld from a caller closed to the dataset (src/app/columnLabelAccess.ts)
   'catalog:get': 'META',
   'catalog:getTable': 'REDACT', // keyCheck counts every row: withheld from a caller closed to the dataset
+  'catalog:instructions': 'META', // editor prose (D5)
   'catalog:list': 'META',
   'catalog:tags': 'META',
   'channel:list': 'META',

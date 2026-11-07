@@ -208,14 +208,15 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('redact: catalog:getTable — east gets no keyCheck', tEast.body?.ok === true && !('keyCheck' in tEast.body.table), tEast.text.slice(0, 200));
     ok('…and still gets the key and the guide, which are words, not counts', tEast.body.table.key === 'customer' && tEast.body.table.guide === 'One row per order.');
     ok('NEGATIVE CONTROL: the editor gets it', tEd.body?.ok === true && tEd.body.table.keyCheck?.rows === 126, tEd.text.slice(0, 200));
-    // …and so do the two other readers of the same doc: the Assistant's facts and the MCP reply carry the key and the guide, never the counts.
+    // …and so do the two other readers of the same doc: the Assistant's facts carry the key, and the MCP reply the key and the guide, never the counts.
+    // (The guide reaches the Assistant through its guidance block since p3-03: checked below.)
     const tableDocs: typeof import('../src/app/tableDocs') = require('../src/app/tableDocs');
     const automation: typeof import('../src/automation/handlers') = require('../src/automation/handlers');
     const mcpCtx = { projectId: P, transport: 'http' as const, cwd: '/', headless: false, progress: () => undefined };
     const factsOf = (who: string) => W.as(who, () => tableDocs.tableFacts(P, orders));
     const describedBy = (who: string) => W.as(who, () => automation.datasetsDescribe(mcpCtx, orders)) as Promise<{ table: { key: string; guide: string; keyCheck?: unknown } }>;
     const [fEast, fEd, mEast, mEd] = [await factsOf('east'), await factsOf('ed'), await describedBy('east'), await describedBy('ed')];
-    ok('redact: the Assistant\'s table facts — east gets the key and the guide, no keyState', fEast?.key === 'customer' && fEast.guide === 'One row per order.' && !('keyState' in fEast), JSON.stringify(fEast));
+    ok('redact: the Assistant\'s table facts — east gets the key, no keyState', fEast?.key === 'customer' && !('keyState' in fEast), JSON.stringify(fEast));
     ok('NEGATIVE CONTROL: the editor\'s table facts carry the key state', fEd?.keyState !== undefined, JSON.stringify(fEd));
     ok('redact: describe_dataset — east gets the key and the guide, no keyCheck', mEast.table.key === 'customer' && mEast.table.guide === 'One row per order.' && !('keyCheck' in mEast.table), JSON.stringify(mEast.table));
     ok('NEGATIVE CONTROL: the editor\'s describe_dataset carries the keyCheck', JSON.stringify(mEd.table.keyCheck).includes('"rows":126'), JSON.stringify(mEd.table));
@@ -231,6 +232,20 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('write: east gets 403 from catalog:setTable and catalog:checkKey',
       (await W.call('east', 'catalog:setTable', { projectId: P, datasetId: orders, patch: { key: 'region' } })).status === 403
         && (await W.call('east', 'catalog:checkKey', { projectId: P, datasetId: orders })).status === 403);
+    // The Assistant's instructions and a dataset's guide are editor prose every reader sees (D5, META): east reads the block the
+    // editor does — words, never a value of the rows its lock hides — and may not change the list.
+    const added = await W.call('boss', 'catalog:setInstructions', { projectId: P, op: { kind: 'add', text: 'Revenue means sales.' } });
+    const iEast = await W.call('east', 'catalog:instructions', { projectId: P });
+    eastReplies.push(iEast.text);
+    ok('meta: catalog:instructions — east reads the editors\' list', added.body?.ok === true && iEast.body?.ok === true && iEast.body.instructions[0]?.text === 'Revenue means sales.', iEast.text.slice(0, 200));
+    ok('write: east gets 403 from catalog:setInstructions', (await W.call('east', 'catalog:setInstructions', { projectId: P, op: { kind: 'add', text: 'x' } })).status === 403);
+    const guidance: typeof import('../src/ipc/guidance') = require('../src/ipc/guidance');
+    const guidedAs = (who: string) => W.as(who, () => guidance.askGuidance(P, { kind: 'dataset', id: orders }, 'dataset'));
+    const [gEast, gEd] = [await guidedAs('east'), await guidedAs('ed')];
+    eastReplies.push(gEast.text);
+    ok('meta: the Assistant\'s guidance — east gets the editor\'s block, the guide and the instruction, and no value',
+      gEast.text === gEd.text && gEast.text.includes('Guide for "Orders" (written by an editor): One row per order.') && gEast.text.includes('- Revenue means sales.') && !H.leaks(gEast.text), gEast.text);
+    await W.call('boss', 'catalog:setInstructions', { projectId: P, op: { kind: 'remove', id: added.body.instructions[0].id } }); // the sections below ask with none
 
     // Value labels name STORED values, so a caller closed to a dataset reads no list from any reply that carries a column doc. boss labels
     // Orders' customer — a West value among them — and Plain's, which has no rules.

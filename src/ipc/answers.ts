@@ -78,6 +78,7 @@ import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
 import { statusFor, type StatusState } from '../analysis/statusStore';
+import { instructionsGuidance } from './guidance';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -272,11 +273,12 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 }
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
-async function narrate(built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
+async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
   if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT };
-  const res = await askCopilot([], built.factsText, question);
+  const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
+  const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
   if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT };
-  return guard(res.text, built.ledger);
+  return guard(res.text, built.ledger.concat(g.ledger));
 }
 
 // ── The three entry points ───────────────────────────────────────────────────
@@ -427,7 +429,7 @@ export async function answerFromAction(
   if ('ok' in built) return built;
   // …also when it only became the previous chart once a value was matched to the one it already filtered to.
   if (base && sameChart(base, built.card.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
-  const n = await narrate(built,
+  const n = await narrate(projectId, built,
     `Narrate this chart answer to the question "${question}" in two or three sentences, citing only figures from the facts.`,
     guard);
   // The card's own spec: the validated one, with any filter value the app matched to what the data holds.
@@ -529,7 +531,7 @@ export function register(guard: Guard): void {
       if (!spec || !src) return { ok: false, reason: 'This chart cannot be explained.' };
       const built = await computeCard(projectId, spec);
       if ('ok' in built) return built;
-      const n = await narrate(built,
+      const n = await narrate(projectId, built,
         `Explain the chart "${src.name}" to the user in two or three sentences: what stands out, citing only figures from the facts.`,
         guard);
       const thread = await copilot.createThread(projectId);
@@ -554,7 +556,7 @@ export function register(guard: Guard): void {
       const built = await computeCard(projectId, s, true);
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
-      const n = await narrate(built,
+      const n = await narrate(projectId, built,
         `Narrate this chart answer ("${s.title}") in two or three sentences, citing only figures from the facts.`,
         guard);
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;

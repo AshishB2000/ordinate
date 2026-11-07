@@ -45,6 +45,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'catalog:columns': 'REDACT', // a hidden column's example and value labels left out (app/columnLabelAccess); test-columnRedact
   'catalog:get': 'META',
   'catalog:getTable': 'REDACT',
+  'catalog:instructions': 'META', // editor prose about the project (part 3, D5): no cell, label or figure of a dataset
   'catalog:list': 'META',
   'catalog:tags': 'META',
   'channel:list': 'META',

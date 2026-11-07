@@ -237,6 +237,20 @@ describe('Organization settings (Admin)', () => {
     expect(sent(calls, 'branding:set')).toEqual([{ accent: '#7c3aed' }]);
   });
 
+  it('Workspace: the org rules are called what they reach, screenshot analysis, and point to the project\'s Assistant instructions', async () => {
+    serve({
+      '/api/auth/me': { body: ADMIN_DEV },
+      'key:status': { body: { globalRules: 'Flag any risks.', autoRefresh: true, notifications: { alerts: true } } },
+    });
+    renderApp('/admin?tab=workspace');
+    const group = await screen.findByRole('region', { name: 'Screenshot analysis rules' });
+    expect(within(group).getByText(/added to every screenshot analysis the Assistant writes/)).toBeTruthy();
+    expect((within(group).getByRole('textbox', { name: 'Screenshot analysis rules' }) as HTMLTextAreaElement).value).toBe('Flag any risks.');
+    expect(within(group).getByText(/is set per project:/).textContent).toBe('What the Assistant should know when it answers questions is set per project: Data model → Assistant');
+    expect(within(group).getByRole('link', { name: 'Data model → Assistant' }).getAttribute('href')).toBe('/model?tab=assistant');
+    expect(screen.queryByRole('region', { name: 'Assistant rules' })).toBeNull();
+  });
+
   it('Workspace: the company name is saved trimmed on Enter and heads the sidebar at once', async () => {
     const acme = { ...BRANDING, companyName: 'Acme Corp' };
     const calls = serve({

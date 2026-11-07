@@ -7,6 +7,7 @@ import { GEO_LEVEL_LABELS } from './geoHits';
 import { columnNoteLines, tableNoteLines, type FactColumnDoc, type FactTableDoc } from '../ai/copilotFacts';
 import { statusClause } from '../ai/termFacts';
 import { answersText, kindText, type DraftAsk } from './planClarify';
+import { guidanceBlock } from '../ai/guidanceFacts';
 
 /**
  * `intent` is the user's own words from the create-analysis wizard — what they
@@ -54,6 +55,8 @@ export interface PlanFactExtras {
   /** datasetId → that dataset's table notes (app/tableDocs `tableFacts`). */
   tables?: Record<string, FactTableDoc>;
   metrics?: PlanFactMetric[];
+  /** The project's Assistant instructions (app/instructions), printed in the editors' fenced guidance block. */
+  instructions?: string[];
 }
 
 /**
@@ -213,6 +216,9 @@ export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanF
   // The user's notes: after the app's facts, which they must not bury, and
   // before the request, which stays last.
   if (extras) lines.push(...userNoteLines(ctx, extras));
+  // The editors' instructions, fenced as theirs (ai/guidanceFacts): after the notes, before the request.
+  const guided = extras?.instructions ? guidanceBlock({ instructions: extras.instructions }).text : '';
+  if (guided) lines.push('', guided);
   // The kind the user picked: the app's sentence, so it sits with the app's
   // facts — above the request it shapes, never inside the user's fence.
   const kind = ask ? kindText(ask.kind) : '';

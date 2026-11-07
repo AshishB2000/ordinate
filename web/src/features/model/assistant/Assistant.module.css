@@ -1,0 +1,197 @@
+/* The Data model's Assistant tab: the instructions list, numbered rows with who and when, inline editing.
+   Theme tokens only, so both themes follow. Under 900px a row's meta and actions stack under its text. */
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.title {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.sub {
+  margin: 2px 0 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* ── The list ──────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: rule;
+}
+.row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: var(--sp-12);
+  align-items: start;
+  padding: var(--sp-12) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  counter-increment: rule;
+}
+.list > .row:first-child {
+  border-top: 0;
+}
+.row:hover {
+  background: var(--surface-2);
+}
+/* Its place in the list, drawn by CSS: the order the Assistant reads them in. */
+.row::before {
+  content: counter(rule);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.rowEditing,
+.rowEditing:hover {
+  grid-template-columns: 24px minmax(0, 1fr);
+  background: var(--bg);
+}
+.adding {
+  counter-increment: none;
+  border-top: 1px solid var(--border-hairline);
+}
+.adding::before {
+  content: '+';
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.card > .adding:first-child {
+  border-top: 0;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding-top: 2px;
+}
+.text {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.warn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  font-size: var(--t-12);
+}
+.error {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error-text);
+}
+.side {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 24px;
+}
+.meta {
+  font-size: var(--t-12);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.foot svg {
+  flex: none;
+}
+
+/* ── Writing one ───────────────────────────────────────────────────── */
+.editor {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.editorField {
+  flex: 1;
+  min-width: 0;
+}
+.editorActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--sp-8);
+}
+
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+  .side {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+  .meta {
+    white-space: normal;
+  }
+  .editor {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .editorActions {
+    justify-content: flex-end;
+  }
+}

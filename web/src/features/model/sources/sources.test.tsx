@@ -19,7 +19,7 @@ describe('The Data model: source tables', () => {
     renderApp(`/model/${P}?tab=sources`);
     await nav();
     const tabs = within(screen.getByRole('tablist', { name: 'Data model views' })).getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Datasets', 'Source tables', 'Metrics', 'Glossary', 'Relationships']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Datasets', 'Source tables', 'Metrics', 'Glossary', 'Relationships', 'Assistant']); // part 3's Assistant tab last
     expect(screen.getByText('Tables in your databases and warehouses that datasets are built from. Only editors of this project see this tab.')).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
 

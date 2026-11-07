@@ -7,6 +7,7 @@
 
 import { useRef, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import * as OrdFormat from '../../../../src/app/format.ts';
 import { rpc, upload } from '../../api/client';
 import { applyBrandTokens } from '../../charts/palette';
@@ -352,10 +353,13 @@ function Assistant({ rules, autoRefresh, alerts, explain }: { rules: string; aut
   const notify = useWrite('notifications:set', keys);
   return (
     <>
-      <Group title="Assistant rules" desc="Fixed instructions added to every analysis the Assistant writes for this organization. The required output format wins if they conflict.">
+      <Group title="Screenshot analysis rules" desc="Fixed instructions added to every screenshot analysis the Assistant writes for this organization. The required output format wins if they conflict.">
         <div className={s.rules}>
+          <p className={s.rulesNote}>
+            What the Assistant should know when it answers questions is set per project: <Link className={s.inlineLink} to="/model?tab=assistant">Data model → Assistant</Link>
+          </p>
           <Textarea
-            aria-label="Assistant rules"
+            aria-label="Screenshot analysis rules"
             rows={4}
             maxLength={20_000}
             placeholder="e.g. Focus on the bottom line. Flag any risks. Keep it under three sentences."

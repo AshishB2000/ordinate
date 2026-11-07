@@ -316,6 +316,24 @@
 .rules {
   padding: var(--sp-12) var(--sp-16) 0;
 }
+.rulesNote {
+  margin: 0 0 var(--sp-8);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.inlineLink {
+  font-weight: 500;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.inlineLink:hover {
+  text-decoration: underline;
+}
+.inlineLink:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
 
 .filePick {
   display: flex;

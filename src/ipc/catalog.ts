@@ -4,6 +4,8 @@ import { labelsRefusal, readableColumn, readableColumns } from '../app/columnLab
 import * as catalogIndex from '../app/catalogIndex';
 import * as analysis from '../analysis/analysis';
 import * as datasets from '../data/datasets';
+import { changeInstructions, FIGURE_RE, listInstructions, type Instruction, type InstructionOp } from '../app/instructions';
+import { instructionNotSaved, instructionsNotRead } from '../app/instructionMessages';
 
 // Catalog IPC — descriptions, tags, owners and column docs (src/app/catalog.ts)
 // plus the cross-record reads (src/app/catalogIndex.ts). Every id is
@@ -12,6 +14,8 @@ import * as datasets from '../data/datasets';
 // only ever carries the fields a person typed.
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+/** A figure-like token gets the editor's warning ("Figures belong in metrics"): a flag on the reply, never stored, never a refusal. */
+const flagged = (list: Instruction[]) => list.map((i) => (FIGURE_RE.test(i.text) ? { ...i, figure: true as const } : i));
 
 export function register(): void {
   ipcMain.handle('catalog:get', async (_e, { projectId, ref }: any = {}) => {
@@ -74,6 +78,22 @@ export function register(): void {
       return { ok: true, rows, kinds };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read the catalog.', rows: [] };
+    }
+  });
+
+  ipcMain.handle('catalog:instructions', async (_e, { projectId }: any = {}) => {
+    try {
+      return { ok: true, instructions: flagged(await listInstructions(str(projectId))) };
+    } catch (_) {
+      return { ok: false, error: instructionsNotRead() };
+    }
+  });
+
+  ipcMain.handle('catalog:setInstructions', async (_e, { projectId, op }: any = {}) => {
+    try {
+      return { ok: true, instructions: flagged(await changeInstructions(str(projectId), op as InstructionOp)) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || instructionNotSaved() };
     }
   });
 
