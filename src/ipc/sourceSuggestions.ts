@@ -7,7 +7,7 @@
 import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as datasets from '../data/datasets';
-import { sourceTablesOf } from '../data/sourceTableOf';
+import { docTablesOf, sourceTablesOf } from '../data/sourceTableOf';
 import { getColumns, getDoc } from '../app/catalog';
 import { getTableDoc } from '../app/tableDocs';
 import { sourceDocGone } from '../app/sourceTableMessages';
@@ -35,7 +35,7 @@ function reader(projectId: string) {
     const conn = await once(conns, origin.connId, () => connections.getConnection(projectId, origin.connId));
     const index = await once(indexes, origin.connId, async () => new Map((await store.listSourceIndex(projectId, origin.connId)).map((e) => [e.table, e.docId])));
     const found: Doc[] = [];
-    for (const table of sourceTablesOf(origin, conn ?? undefined)) {
+    for (const table of docTablesOf(sourceTablesOf(origin, conn ?? undefined), [...index.keys()])) {
       const docId = index.get(table);
       if (!docId) continue;
       const doc = await once(docs, `${origin.connId}:${docId}`, async () => (await store.readSourceDoc(projectId, origin.connId, docId))?.rec);

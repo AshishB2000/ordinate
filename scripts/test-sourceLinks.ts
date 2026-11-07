@@ -201,6 +201,20 @@ async function schemas(): Promise<void> {
   ok('schemas: the linked choice meets its doc', block?.table === 'public.orders' && block.docId === D && block.owner === 'Data platform', JSON.stringify(block));
   const row = (await post('sourceTable:list', { projectId: P })).value.connections[0].rows;
   ok('schemas: one row for the table, with the dataset, no phantom', row.length === 1 && row[0].docId === D && row[0].datasetIds.join() === Q, JSON.stringify(row));
+
+  // A link the picker stored before it named schemas ("orders"): it meets the one documented schema.name ending in it.
+  const L = await H.as(ORG_A, async () => {
+    const id = (await H.datasets.saveDataset(P, { name: 'Old link', sourceKind: 'postgres', columns: [{ name: 'id', type: 'number' }], rows: [['1']], origin: { kind: 'connection', connId: s.C, sql: 'select 1' } }))!.id;
+    await setReadsTables(P, id, ['orders', 'public.orders']);
+    return id;
+  });
+  const old = (await post('sourceTable:forDataset', { projectId: P, datasetId: L })).value.tables;
+  ok('schemas: a bare link meets the one documented table it names, once', old.length === 1 && old[0].docId === D && old[0].table === 'public.orders', JSON.stringify(old));
+  ok('schemas: …and is listed on that table\'s row and in its lineage', ((r: Reply[]) => r.length === 1 && r[0].datasetIds.includes(L))((await post('sourceTable:list', { projectId: P })).value.connections[0].rows)
+    && (await post('sourceTable:lineage', { projectId: P, connId: s.C, docId: D })).value.nodes.some((n: Reply) => n.id === `dataset:${L}`));
+  await H.as(ORG_A, async () => { await setReadsTables(P, L, ['orders']); await store.createSourceDoc(P, s.C, 'staging.orders', {}); });
+  const two = (await post('sourceTable:forDataset', { projectId: P, datasetId: L })).value.tables;
+  ok('NEGATIVE CONTROL: two schemas document "orders": no guess, the bare link meets neither', two.length === 1 && two[0].table === 'orders' && two[0].docId === undefined, JSON.stringify(two));
 }
 
 (async () => {

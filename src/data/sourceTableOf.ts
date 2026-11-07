@@ -20,3 +20,16 @@ export function sourceTablesOf(origin: DatasetOrigin | undefined, conn: { table?
   const table = conn?.table?.trim();
   return table && !conn?.query?.trim() ? [table] : [];
 }
+
+/**
+ * `tables` by the names their docs go by, deduped in order. A bare name (a link the picker stored before it
+ * named schemas) becomes the one documented `schema.name` ending in it; with two such docs it stays as it is.
+ */
+export function docTablesOf(tables: string[], documented: readonly string[]): string[] {
+  const one = (t: string): string => {
+    if (t.includes('.') || documented.includes(t)) return t;
+    const hits = documented.filter((d) => d.endsWith(`.${t}`));
+    return hits.length === 1 ? hits[0] : t;
+  };
+  return [...new Set(tables.map(one))];
+}
