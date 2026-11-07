@@ -84,3 +84,20 @@ export function modelObjectMoved(): string {
 export function modelWriteFailed(): string {
   return t('modelFileMessages.this_could_not_be_written_check');
 }
+
+// ── Importing dbt definitions (f1) ───────────────────────────────────────────
+
+/** A JSON upload past the value budget or 32 MiB: a full manifest.json, which holds the whole project. */
+export function dbtUseSemanticManifest(): string {
+  return t('modelFileMessages.upload_target_semantic_manifest_json');
+}
+
+/** An upload that is neither a model zip nor JSON holding dbt's semantic models and metrics. */
+export function dbtNotAManifest(): string {
+  return t('modelFileMessages.this_file_is_neither_model_files');
+}
+
+/** More semantic models or metrics than one dry run reads. */
+export function dbtTooMany(): string {
+  return t('modelFileMessages.this_semantic_manifest_defines_more_than');
+}

@@ -1,5 +1,6 @@
 // The import dry run in words, for ImportDialog (docs/semantic-layer/07-portability.md "What you will see"): one
-// section per status, in the spec's order, each object as a line. Pure. Every count is the server's; this only words it.
+// section per status, in the spec's order, each object as a line. Pure. Every count is the server's (a dbt file's matched
+// datasets aside: they are said under Datasets); this only words it.
 
 import { formatNumber } from '../data/format';
 import type { ImportPlan, PlanItem, PlanKind, PlanStatus } from './api';
@@ -45,6 +46,7 @@ const FIELD: Record<string, string> = {
   displayName: 'display name', aliases: 'other names', example: 'example', sensitivity: 'sensitivity', values: 'value labels',
   baseFilters: 'filters', filters: 'filters', definition: 'definition', format: 'format', direction: 'direction',
   timeColumn: 'date', target: 'target', name: 'name', label: 'label', cardinality: 'cardinality', from: 'columns', to: 'columns',
+  importedFrom: 'link to dbt',
 };
 
 const kindOne = (k: PlanKind): string => KIND[k][0];
@@ -59,8 +61,27 @@ function dependents(list: PlanItem[]): string {
   return [...by].map(([k, n]) => `${formatNumber(n)} ${n === 1 ? KIND[k][1].replace(/s$/, '') : KIND[k][1]}`).join(' and ');
 }
 
+/** Why a dbt object was not imported, in words (f1): the shapes the translator does not read exactly. */
+const DBT_WORDS: Partial<Record<NonNullable<PlanItem['reason']>, string>> = {
+  cumulative: 'a running total (cumulative): reach it through a live dbt connection',
+  conversion: 'a conversion metric: reach it through a live dbt connection',
+  time_offset: 'compares with an earlier period (offset_window or offset_to_grain)',
+  cross_model: 'its inputs are on more than one semantic model',
+  window_groupings: 'a balance kept per entity (window_groupings)',
+  unknown_aggregation: "an aggregation Ordinate doesn't compute exactly (median, percentile, sum_boolean)",
+  not_a_column: 'its expr is SQL, not one column of the dataset, or a column of another type',
+  filter_shape: "its filter is not one Ordinate reads exactly: comparisons joined by AND, on a simple metric's own dimensions",
+  fill_nulls: 'dbt shows a value where there are no rows (fill_nulls_with); Ordinate shows no figure',
+  live_refused: "a balance can't be computed on a Live dataset yet",
+  unreadable: "a metric type or definition Ordinate doesn't read",
+  no_dataset: 'its semantic model has no dataset here',
+};
+
 function skippedLine(i: PlanItem, under: PlanItem[]): PlanLine {
   const more = under.length ? `and ${dependents(under)} on it` : undefined;
+  const dbt = i.reason ? DBT_WORDS[i.reason] : undefined;
+  const what = i.kind === 'field' ? 'Dimension ' : i.kind === 'table' ? 'Primary entity ' : '';
+  if (dbt) return { key: i.key, text: `${what}${i.name}`, detail: under.length ? `${dbt} · with ${dependents(under)} built on it` : dbt };
   switch (i.reason) {
     case 'dataset_missing':
       return { key: i.key, text: `Dataset ${quoted(i.name)} is not in this project`, detail: more };
@@ -103,7 +124,7 @@ function skippedLines(items: PlanItem[]): PlanLine[] {
 function lineOf(i: PlanItem): PlanLine {
   switch (i.status) {
     case 'updated':
-      return { key: i.key, text: i.name, detail: fieldsOf(i) || undefined };
+      return { key: i.key, text: i.name, detail: fieldsOf(i, i.kind === 'field' ? 'name' : '') || undefined }; // a field doc's name is its column
     case 'renamed': {
       const name = i.changes?.find((c) => c.field === 'name');
       return { key: i.key, text: `${quoted(name?.here)} → ${quoted(name?.file ?? i.name)}`, detail: fieldsOf(i, 'name') || undefined };
@@ -117,9 +138,20 @@ function lineOf(i: PlanItem): PlanLine {
   }
 }
 
+/** A dbt file's semantic models, each with the dataset it landed on (none: not in this project) and whether a blind name matched it. */
+export interface DbtModelLine { key: string; model: string; datasetId?: string; loose: boolean }
+export function dbtModels(plan: ImportPlan): DbtModelLine[] {
+  if (plan.source.kind !== 'dbt') return [];
+  return plan.items
+    .filter((i) => i.kind === 'dataset' && (i.status === 'unchanged' || i.reason === 'dataset_missing'))
+    .map((i) => ({ key: i.key, model: i.name, ...(i.status === 'unchanged' && i.targetId && { datasetId: i.targetId }), loose: !!i.changes?.some((c) => c.field === 'matchedByName') }));
+}
+
 export function planSections(plan: ImportPlan): PlanSection[] {
-  return ORDER.filter((s) => plan.counts[s] > 0).map((status) => {
-    const n = plan.counts[status];
+  // A dbt file's matched datasets are said under Datasets (ImportDialog), not counted here as unchanged objects.
+  const counts = { ...plan.counts, unchanged: plan.counts.unchanged - (plan.source.kind === 'dbt' ? plan.items.filter((i) => i.kind === 'dataset' && i.status === 'unchanged').length : 0) };
+  return ORDER.filter((s) => counts[s] > 0).map((status) => {
+    const n = counts[status];
     const title = `${formatNumber(n)} ${LABEL[status][n === 1 ? 0 : 1]}`;
     if (status === 'unchanged') {
       const newer = plan.items.filter((i) => i.status === 'unchanged' && i.newerHere).length;

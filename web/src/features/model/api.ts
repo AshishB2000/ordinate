@@ -165,13 +165,19 @@ export function exportedText(notCarried: readonly string[]): string {
 /** src/app/modelPlan.ts PlanStatus, PlanKind and SkipReason. */
 export type PlanStatus = 'unchanged' | 'updated' | 'renamed' | 'new' | 'conflict' | 'skipped' | 'onlyHere';
 export type PlanKind = 'dataset' | 'table' | 'field' | 'baseFilters' | 'relationship' | 'term' | 'metric';
-export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skipped' | 'sensitivity_lowered' | 'not_live' | 'invalid' | 'external';
+export type SkipReason = 'dataset_missing' | 'column_missing' | 'depends_on_skipped' | 'sensitivity_lowered' | 'not_live' | 'invalid' | 'external' | DbtSkip;
+/** src/app/dbtImport.ts DbtSkip: why a dbt object is not imported (f1). */
+export type DbtSkip =
+  | 'cumulative' | 'conversion' | 'time_offset' | 'cross_model' | 'window_groupings' | 'unknown_aggregation'
+  | 'not_a_column' | 'filter_shape' | 'fill_nulls' | 'live_refused' | 'unreadable' | 'no_dataset';
 
 export interface PlanItem {
   key: string;
   kind: PlanKind;
   name: string;
   status: PlanStatus;
+  /** The project object it lands on; for a dbt semantic model, its dataset. */
+  targetId?: string;
   changes?: { field: string; here?: unknown; file?: unknown }[];
   newerHere?: true;
   reason?: SkipReason;
@@ -185,18 +191,23 @@ export interface ImportPlan {
   hash: string;
   items: PlanItem[];
   counts: Record<PlanStatus, number>;
-  source: { appVersion: string; project: string };
+  /** `kind: 'dbt'`: a dbt semantic manifest, translated (a copy). */
+  source: { appVersion: string; project: string; kind?: 'dbt' };
   notCarried: string[];
 }
+
+/** A dbt semantic model's name → the dataset the person picked for it (f1). Sent only when it holds one. */
+export type DatasetMap = Record<string, string>;
+const withMap = (map: DatasetMap | undefined) => (map && Object.keys(map).length ? { datasetMap: map } : {});
 
 export type ImportPlanReply = { ok: true; plan: ImportPlan } | { ok: false; error: string };
 export type ImportApplyReply =
   | { ok: true; written: string[]; failed: { key: string; error: string }[]; before?: { downloadToken: string } }
   | { ok: false; code?: 'plan_changed'; error: string };
 
-export async function planModelImport(projectId: string, file: File): Promise<ImportPlanReply> {
+export async function planModelImport(projectId: string, file: File, datasetMap?: DatasetMap): Promise<ImportPlanReply> {
   const { fileToken } = await upload(file, file.name);
-  return (await rpc('model:importPlan', { projectId, fileToken })) as ImportPlanReply;
+  return (await rpc('model:importPlan', { projectId, fileToken, ...withMap(datasetMap) })) as ImportPlanReply;
 }
 
 /**
@@ -206,7 +217,7 @@ export async function planModelImport(projectId: string, file: File): Promise<Im
  * nothing refetched; never the whole cache (an import of one description is not a reload of every screen).
  */
 const IMPORT_REFRESH: Record<PlanKind, readonly string[]> = {
-  dataset: [], // a dataset the files name but this project lacks: only ever skipped, never written
+  dataset: [], // a dataset the files name: skipped when this project lacks it, confirmed for a dbt manifest; never written
   table: ['catalog:getTable', 'catalog:get', 'catalog:list', 'relationship:list'],
   field: ['catalog:columns', 'dataset:columns', 'dataset:distinct', 'visual:data', 'analysis:tile', 'explore:answer', 'answer:card', 'story:figures', 'report:preview', 'subscription:preview'],
   baseFilters: ['dataset:liveSchema', 'dataset:columns', 'dataset:list', 'dataset:source', 'dataset:distinct', 'lineage:get'],
@@ -221,9 +232,9 @@ export function importRefresh(plan: ImportPlan, written: readonly string[]): str
   return [...new Set([...[...kinds].flatMap((k) => IMPORT_REFRESH[k]), 'model:overview', 'model:navigation', 'model:review'])];
 }
 
-export async function applyModelImport(projectId: string, file: File, planHash: string, choices: Record<string, 'file' | 'here'>): Promise<ImportApplyReply> {
+export async function applyModelImport(projectId: string, file: File, planHash: string, choices: Record<string, 'file' | 'here'>, datasetMap?: DatasetMap): Promise<ImportApplyReply> {
   const { fileToken } = await upload(file, file.name);
-  return (await rpc('model:importApply', { projectId, fileToken, planHash, choices })) as ImportApplyReply;
+  return (await rpc('model:importApply', { projectId, fileToken, planHash, choices, ...withMap(datasetMap) })) as ImportApplyReply;
 }
 
 /** "This project also has a and b: an import leaves them as they are.", or '' when it has none of them. */

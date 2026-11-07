@@ -99,6 +99,44 @@ refuses if the project changed since ("This project changed since the dry run. C
 - A column's sensitivity may be raised, never lowered.
 - Every object goes through the same checks as the editor's save (names, formulas, term cycles, caps).
 
+## From dbt
+
+**Import…** also takes dbt's `target/semantic_manifest.json` (written by `dbt parse`). It is a **copy**: dbt
+stays the source of truth only through a live dbt connection. The file is told by its content, not its name;
+a full `manifest.json` small enough to read works too, and one over 32 MiB or 1,000,000 values is refused
+with "Upload target/semantic_manifest.json instead: it holds only the semantic layer." It goes through the
+same dry run and apply as model files, with one step more: under **Datasets** you confirm which dataset each
+semantic model is. Datasets are never created.
+
+| dbt | Ordinate |
+|---|---|
+| Semantic model | the dataset you pick; first offered by its exact name, else a name that differs only in case, spaces or `_` ("matched by name: check it") |
+| Primary entity whose `expr` (or name) is a column | the table's key |
+| Dimension on a column (a time dimension on a date column) | the field's description; `label` as its display name |
+| Simple metric: `sum`, `count`, `average`, `min`, `max`, `count_distinct` over a column | `{ column, aggregation }` (`avg`, `countd`) |
+| The measure's `agg_time_dimension`, else the model's default | the metric's date |
+| `non_additive_dimension` with no `window_groupings` | a snapshot: the last day for `max`, the first for `min` |
+| Filters: `{{ Dimension('<entity>__<dimension>') }}` with `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`, `IS [NOT] NULL`, joined by `AND` | filter steps; `!=` and `NOT IN` also leave out an empty cell, as SQL leaves out NULL |
+| Ratio; derived (`+ − × ÷`, brackets, numbers) over metrics on one semantic model | a formula metric (`[Revenue] / [Orders]`) |
+
+A metric's name is its `label`, else its dbt name. Each carries where it came from, so importing the file again
+updates it, even after a rename here (the dry run shows the rename back). An import changes only what dbt says:
+a table's role, grain, description and guide, a field's other names and value labels, and a metric's format,
+direction and target stay this project's.
+
+**Skipped, each named with why**, never approximated: cumulative and conversion metrics (reach them through a live
+dbt connection); a derived input with `offset_window` or `offset_to_grain`; inputs on more than one semantic model;
+`window_groupings`; `median`, `percentile`, `sum_boolean` and other aggregations; an `expr` that is SQL rather than
+one column; a filter of any other shape (`OR`, `LIKE`, `TimeDimension`, a function, another entity's dimension,
+an ordering comparison on text), or on a ratio or derived metric; `fill_nulls_with` (dbt shows 0 where there are
+no rows, Ordinate shows no figure); a snapshot on a Live dataset; a metric type Ordinate does not read; and a
+ratio or derived metric whose input was skipped, listed under that input. Foreign entities are not imported. One
+upload reads at most 500 semantic models and 2,000 metrics. dbt import is in the app only: MCP's `import_model`
+takes model files.
+
+The translation is held, figure by figure, to dbt's on a checked-in project (`scripts/fixtures/dbt/`,
+`scripts/test-dbtImport.ts`; its README says how the figures were recorded).
+
 ## The loop in CI
 
 A personal API token (**API tokens** in the app) acts as its user, so use an editor's. Both calls are

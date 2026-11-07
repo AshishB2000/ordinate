@@ -14,6 +14,8 @@ afterEach(() => {
 
 const P = '0b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 const O = '1b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+const V = '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
+const A = '3b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 const TOKEN = 'u'.repeat(43);
 /** The Data model is a lazy chunk: its first render waits on a transform (long under load). */
 const LAZY = { timeout: 15_000 };
@@ -52,7 +54,11 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
     'projects:list': body([{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }]),
     'projects:overview': body([{ id: P, name: 'Sales', updatedAt: '', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 0, sample: false }]),
     'projects:roles': body({ [P]: role }),
-    'dataset:list': body([{ id: O, name: 'Orders', sourceKind: 'csv', rowCount: 10, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' }]),
+    'dataset:list': body([
+      { id: O, name: 'Orders', sourceKind: 'csv', rowCount: 10, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' },
+      { id: V, name: 'visits', sourceKind: 'csv', rowCount: 8, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' },
+      { id: A, name: 'Orders archive', sourceKind: 'csv', rowCount: 10, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' },
+    ]),
     'model:overview': body({ ok: true, tables: [], todo: [], more: 0 }),
     'model:importPlan': body({ ok: true, plan: PLAN }),
     ...routes,
@@ -70,11 +76,11 @@ function serve(routes: Record<string, RpcReply> = {}, role: 'editor' | 'viewer' 
   return calls;
 }
 
-/** Opens Import… and picks a zip: the dialog, once the dry run is shown. */
-async function pick() {
+/** Opens Import… and picks a file (a zip unless said): the dialog, once the dry run is shown. */
+async function pick(name = 'retail-model.zip', type = 'application/zip') {
   fireEvent.click(await screen.findByRole('button', { name: 'Import…' }, LAZY));
   const dialog = await screen.findByRole('dialog', { name: 'Import model files' });
-  const file = new File(['zip!'], 'retail-model.zip', { type: 'application/zip' });
+  const file = new File(['zip!'], name, { type });
   await act(async () => fireEvent.change(within(dialog).getByLabelText('Model files'), { target: { files: [file] } }));
   return dialog;
 }
@@ -183,5 +189,81 @@ describe('importRefresh', () => {
   it('nothing written, nothing refetched; a key the plan does not hold is no kind', () => {
     expect(importRefresh(plan, [])).toEqual([]);
     expect(importRefresh(plan, ['metric:nope'])).toEqual([]);
+  });
+});
+
+// dbt's semantic manifest (part 7, f1): the datasets confirmed per semantic model, the copy notice, skips in words.
+const DBT_PLAN = {
+  hash: 'd1',
+  counts: { unchanged: 2, updated: 3, renamed: 0, new: 3, conflict: 0, skipped: 7, onlyHere: 0 },
+  source: { appVersion: '', project: '', kind: 'dbt' },
+  notCarried: [],
+  items: [
+    { key: `dataset:${O}`, kind: 'dataset', name: 'orders', status: 'unchanged', targetId: O, changes: [{ field: 'matchedByName', here: 'Orders' }] },
+    { key: `dataset:${V}`, kind: 'dataset', name: 'visits', status: 'unchanged', targetId: V },
+    { key: `table:${O}`, kind: 'table', name: 'Orders', status: 'updated', changes: [{ field: 'key', file: 'id' }] },
+    { key: `field:${O}:region`, kind: 'field', name: 'Orders · region', status: 'updated', changes: [{ field: 'description', file: 'x' }, { field: 'name', file: 'region' }] },
+    { key: 'metric:o', kind: 'metric', name: 'Orders', status: 'updated', changes: [{ field: 'importedFrom', file: { kind: 'dbt', name: 'orders' } }, { field: 'timeColumn', file: 'order_date' }] },
+    { key: 'metric:r', kind: 'metric', name: 'Revenue', status: 'new' },
+    { key: 'metric:a', kind: 'metric', name: 'AOV', status: 'new' },
+    { key: 'metric:v', kind: 'metric', name: 'Visits', status: 'new' },
+    { key: 'metric:dbt:visit_to_buy', kind: 'metric', name: 'Visit to buy', status: 'skipped', reason: 'conversion' },
+    { key: 'metric:dbt:revenue_per_visit', kind: 'metric', name: 'Revenue per visit', status: 'skipped', reason: 'cross_model' },
+    { key: 'metric:dbt:median_order', kind: 'metric', name: 'Median order', status: 'skipped', reason: 'unknown_aggregation' },
+    { key: 'metric:dbt:median_gap', kind: 'metric', name: 'Median gap', status: 'skipped', reason: 'depends_on_skipped', because: 'metric:dbt:median_order' },
+    { key: 'metric:dbt:revenue_filled', kind: 'metric', name: 'Revenue (filled)', status: 'skipped', reason: 'fill_nulls' },
+    { key: 'field:dbt:orders.order_month', kind: 'field', name: 'orders · order_month', status: 'skipped', reason: 'not_a_column' },
+    { key: 'table:dbt:orders.order', kind: 'table', name: 'orders · order', status: 'skipped', reason: 'not_a_column' },
+  ],
+};
+
+describe('The Data model: Import… a dbt semantic manifest', () => {
+  it('takes a .json file and shows each semantic model\'s dataset, a loose match marked, the copy notice and the skips in words', async () => {
+    const calls = serve({ 'model:importPlan': { body: { ok: true, plan: DBT_PLAN } } });
+    renderApp(`/model/${P}`);
+    const dialog = await pick('semantic_manifest.json', 'application/json');
+    const d = within(dialog);
+    expect((within(dialog).getByLabelText('Model files') as HTMLInputElement).accept).toContain('.json');
+    expect(uploads).toEqual(['semantic_manifest.json']);
+    expect(await d.findByText('A copy: dbt stays the source of truth only through a live dbt connection.')).toBeTruthy();
+    const datasets = d.getByRole('region', { name: 'Datasets' });
+    expect(within(datasets).getByRole('combobox', { name: 'Dataset for orders' }).textContent).toContain('Orders');
+    expect(within(datasets).getByText('matched by name: check it')).toBeTruthy();
+    expect(within(datasets).getByRole('combobox', { name: 'Dataset for visits' }).textContent).toContain('visits');
+    expect(d.queryByText('2 unchanged')).toBeNull(); // the datasets are said under Datasets, not counted as unchanged objects
+    expect(d.getByText('7 skipped')).toBeTruthy();
+    expect(d.getByText('description')).toBeTruthy(); // a field's name is what it is, never a change
+    expect(d.getByText('link to dbt, date')).toBeTruthy();
+    expect(d.getByText('Dimension orders · order_month')).toBeTruthy();
+    expect(d.getByText('Primary entity orders · order')).toBeTruthy();
+    expect(d.getByText('a conversion metric: reach it through a live dbt connection')).toBeTruthy();
+    expect(d.getByText('its inputs are on more than one semantic model')).toBeTruthy();
+    expect(d.getByText('dbt shows a value where there are no rows (fill_nulls_with); Ordinate shows no figure')).toBeTruthy();
+    expect(d.getAllByText('its expr is SQL, not one column of the dataset, or a column of another type')).toHaveLength(2);
+    expect(d.getByText(/an aggregation Ordinate doesn't compute exactly \(median, percentile, sum_boolean\)/)).toBeTruthy();
+    expect(d.getByText(/with 1 metric built on it/)).toBeTruthy();
+    expect(d.queryByText('Median gap')).toBeNull(); // counted under the input it needs
+    expect(calls.filter((c) => c.channel === 'model:importPlan').map((c) => c.payload)).toEqual([{ projectId: P, fileToken: TOKEN }]);
+  });
+
+  it('changing a semantic model\'s dataset plans again with datasetMap, and Apply sends the same map', async () => {
+    const calls = serve({ 'model:importPlan': { body: { ok: true, plan: DBT_PLAN } }, 'model:importApply': { body: { ok: true, written: ['metric:r'], failed: [] } } });
+    renderApp(`/model/${P}`);
+    const d = within(await pick('semantic_manifest.json', 'application/json'));
+    fireEvent.click(await d.findByRole('combobox', { name: 'Dataset for orders' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Orders archive' }));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'model:importPlan').map((c) => c.payload)).toEqual([{ projectId: P, fileToken: TOKEN }, { projectId: P, fileToken: TOKEN, datasetMap: { orders: A } }]));
+    expect(uploads).toEqual(['semantic_manifest.json', 'semantic_manifest.json']);
+    await act(async () => fireEvent.click(await d.findByRole('button', { name: 'Apply 6 changes' })));
+    expect(calls.filter((c) => c.channel === 'model:importApply').map((c) => c.payload)).toEqual([{ projectId: P, fileToken: TOKEN, planHash: 'd1', choices: {}, datasetMap: { orders: A } }]);
+  });
+
+  it('a model zip shows no Datasets section and no copy notice', async () => {
+    serve();
+    renderApp(`/model/${P}`);
+    const d = within(await pick());
+    expect(await d.findByText('14 unchanged')).toBeTruthy();
+    expect(d.queryByRole('region', { name: 'Datasets' })).toBeNull();
+    expect(d.queryByText(/A copy: dbt/)).toBeNull();
   });
 });

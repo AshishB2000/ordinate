@@ -26,6 +26,7 @@ import { fieldOf, relationshipOf, tableDocOf } from './modelExport';
 import { objectBase, type ModelDataset, type ModelMetric, type ModelRelationship, type ModelTerm } from './modelFormat';
 import { mapRefs, type ModelMatch } from './modelMatch';
 import { planDetailed, type Mapped, type PlanItem, type PlanStatus } from './modelPlan';
+import { formulaNames } from './dbtPlan';
 import type { ParsedModel } from './modelRead';
 import { modelObjectMoved, modelPlanChanged, modelWriteFailed } from './modelFileMessages';
 import { saveMetricChecked, updateMetricChecked } from '../ipc/metricSave';
@@ -145,8 +146,8 @@ async function writeCatalog(projectId: string, file: ParsedModel, items: PlanIte
   }
 }
 
-export async function applyImport(projectId: string, file: ParsedModel, planHash: string, choices: Readonly<Record<string, ApplyChoice>>, io: ApplyIo): Promise<ApplyReply> {
-  const { plan, forms, match } = await planDetailed(projectId, file);
+export async function applyImport(projectId: string, upload: ParsedModel, planHash: string, choices: Readonly<Record<string, ApplyChoice>>, io: ApplyIo): Promise<ApplyReply> {
+  const { plan, forms, match, file } = await planDetailed(projectId, upload); // `file`: as planned (a dbt copy keeps this project's other keys)
   if (plan.hash !== planHash) return { ok: false, code: 'plan_changed', error: modelPlanChanged() };
   const todo = plan.items.filter((i) => LANDS.has(i.status) || (i.status === 'conflict' && choices[i.key] === 'file'));
   if (!todo.length) return { ok: true, written: [], failed: [] };
@@ -208,7 +209,9 @@ export async function applyImport(projectId: string, file: ParsedModel, planHash
 
   // A new metric another new one names is written first; a cycle goes in plan order, and its save says why.
   const pending = of('metric');
-  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId));
+  const nameOf = (p: PlanItem): string => String((formOf(p).value as ModelMetric).name).toLowerCase();
+  const waits = (item: PlanItem): boolean => formOf(item).refs.some((k) => k !== item.key && pending.some((p) => p.key === k && !p.targetId))
+    || (!!file.dbt && formulaNames(formOf(item).value).some((n) => pending.some((p) => p !== item && nameOf(p) === n))); // a dbt formula after its inputs (their date)
   while (pending.length) {
     const at = pending.findIndex((p) => !waits(p));
     const [item] = pending.splice(at < 0 ? 0 : at, 1);
@@ -220,7 +223,7 @@ export async function applyImport(projectId: string, file: ParsedModel, planHash
       }
       const reply = await saveMetricChecked(projectId, {
         name: m.name, datasetId: m.dataset, definition: m.definition, filters: m.filters ?? [], format: m.format,
-        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target,
+        description: m.description, direction: m.direction, timeColumn: m.timeColumn, target: m.target, importedFrom: m.importedFrom,
       });
       if (!('metric' in reply) || !reply.metric) return String(reply.error);
       fresh.metrics.set(m.id, reply.metric.id);
