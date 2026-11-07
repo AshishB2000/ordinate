@@ -25,7 +25,7 @@ export function FormatFields({ format, onChange, affixes }: { format: MetricForm
   return (
     <div className={s.format}>
       <Select size="sm" aria-label="Format" value={format.kind} options={KINDS} onValueChange={(v) => onChange({ ...format, kind: v as MetricFormat['kind'] })} />
-      <Input size="sm" type="number" min={0} max={6} aria-label="Decimal places" value={String(format.decimals ?? 0)} onChange={(e) => onChange({ ...format, decimals: Number(e.target.value) || 0 })} />
+      <Input size="sm" type="number" min={0} max={6} aria-label="Decimal places" value={String(format.decimals ?? 0)} onChange={(e) => onChange({ ...format, decimals: Math.max(0, Math.min(6, Math.floor(Number(e.target.value) || 0))) })} />
       {affixes && (
         <>
           <Input size="sm" aria-label="Prefix" placeholder="Prefix" value={format.prefix ?? ''} maxLength={8} onChange={(e) => onChange({ ...format, prefix: e.target.value })} />

@@ -380,6 +380,17 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   ok('two relationships swapping labels: both skipped with the sentence, nothing written', swapItems.length === 2 && swapItems.every((i) => i.status === 'skipped' && i.reason === 'invalid' && labelSwapSaid.includes(String(i.error)))
     && done(await apply(N.P, swapLabels, swapPlan.hash)).written.length === 0, show(swapItems));
 
+  // A format's decimals as the store keeps them (0–6): 8 is refused, never stored as 6 and then a conflict forever.
+  const nOrders2 = jsonAt(await exported(N.P), 'metrics/orders.json');
+  const withDecimals = async (decimals: number): Promise<Files> => edit(await exported(N.P), 'metrics', nOrders2.id, (m) => { m.format = { ...m.format, decimals }; });
+  const eight = await withDecimals(8);
+  const eightItem = itemOf(await plan(N.P, eight), `metric:${nOrders2.id}`);
+  ok('a format with 8 decimals is refused with the sentence', eightItem.reason === 'invalid' && eightItem.error === (await as(async () => msg.modelMetricOutOfBounds('Orders'))), show(eightItem));
+  const six = await withDecimals(6);
+  const r10f = done(await applyPlanned(N.P, six));
+  ok('… and 6 lands as written, then plans unchanged', r10f.written.includes(`metric:${nOrders2.id}`) && (await metric(N.P, nOrders2.id))?.format.decimals === 6
+    && itemOf(await plan(N.P, await exported(N.P)), `metric:${nOrders2.id}`).status === 'unchanged', show(r10f));
+
   await close();
   finish();
 })().catch((err: unknown) => {

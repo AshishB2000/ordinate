@@ -31,7 +31,7 @@ export const Target = z.strictObject({
 });
 export const Format = z.strictObject({
   kind: z.enum(['number', 'currency', 'percent', 'duration']),
-  decimals: z.number().int().min(0).max(10).optional(),
+  decimals: z.number().int().min(0).max(6).optional(), // the store's MAX_DECIMALS (src/analysis/metrics.ts): more is refused, never clamped
   prefix: z.string().max(8).optional(),
   suffix: z.string().max(8).optional(),
   compact: z.boolean().optional(),
