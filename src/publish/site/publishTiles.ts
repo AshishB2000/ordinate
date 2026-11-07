@@ -11,7 +11,8 @@ declare const Chart: any; // the app's own Chart.js UMD, inlined before this scr
 // src/app/format.js, inlined and bound by the page's prelude (src/publish/siteHtml.ts).
 declare const OrdFormat: {
   formatValue(v: unknown, mode?: string): string; formatNumber(v: unknown, opts?: { decimals?: number; maxDecimals?: number }): string;
-  formatPercent(v: unknown, decimals?: number): string; asMonthLabels(labels: any[]): any[]; setFormatPrefs(p: unknown): void;
+  formatPercent(v: unknown, decimals?: number, opts?: { maxOnly?: boolean }): string; formatCompact(v: unknown): string;
+  asMonthLabels(labels: any[]): any[]; setFormatPrefs(p: unknown): void;
   figureLines(chartType: string, labels: any[], series: any[], figures: any): string[];
   formatPct(v: unknown): string; stepLabel(step: { src: number; label: string }, labels: readonly unknown[]): string;
 };
@@ -62,7 +63,7 @@ function pcRamp(): string[] {
 
 // ── Tiles ────────────────────────────────────────────────────────────────────
 
-function pcTable(model: { head: string[]; rows: any[][] }): HTMLElement {
+function pcTable(model: { head: string[]; rows: any[][]; calcs?: string[] }): HTMLElement {
   const wrap = pcEl('div', 'pub-table-wrap');
   const t = pcEl('table', 'pub-table');
   const tr = pcEl('tr');
@@ -71,9 +72,10 @@ function pcTable(model: { head: string[]; rows: any[][] }): HTMLElement {
   thead.appendChild(tr);
   t.appendChild(thead);
   const body = pcEl('tbody');
+  const calc = (i: number): string => (model.calcs && model.calcs[i]) || ''; // a calculated column prints its kind's figure (25.0%)
   for (const r of model.rows.slice(0, 1000)) {
     const row = pcEl('tr');
-    r.forEach((v: any, i: number) => row.appendChild(pcEl('td', i > 0 && typeof v === 'number' ? 'num' : '', v == null ? '' : typeof v === 'number' && i > 0 ? pcFmt(v) : String(v))));
+    r.forEach((v: any, i: number) => row.appendChild(pcEl('td', i > 0 && typeof v === 'number' ? 'num' : '', v == null ? '' : typeof v === 'number' && i > 0 ? (calc(i) ? pkCalcParts(calc(i), v).value : pcFmt(v)) : String(v))));
     body.appendChild(row);
   }
   t.appendChild(body);
@@ -125,7 +127,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
     const s = payload.series && payload.series[0];
     const v = s && s.values ? s.values[0] : null;
     const box = pcEl('div', 'pub-kpi');
-    box.appendChild(pcEl('div', 'pub-kpi-value', v == null ? '—' : pcFmt(v)));
+    box.appendChild(pcEl('div', 'pub-kpi-value', v == null ? '—' : pkCalcAxis([s], pcFmt)(v)));
     return box;
   }
   if (kind === 'table') {

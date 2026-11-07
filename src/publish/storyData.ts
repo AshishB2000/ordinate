@@ -13,6 +13,7 @@ import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
 import { refuseNonAdditiveCalcs } from '../analysis/additivity';
+import { withTableCalcs } from '../analysis/tableCalc';
 import { followedEncoding } from '../analysis/metricMeasures';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { kpiHidden } from './kpiPolicy';
@@ -76,7 +77,7 @@ export async function buildStory(
         else geoLevels.add(enc.geo.level);
       }
       const blockFilters = mergeDashboardFilters(b.filters, v.filters);
-      const reply = await withEvents(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc, undefined, v.chartType), projectId, v.datasetId, blockFilters); // r8:events
+      const reply = await withEvents(withTableCalcs(await refuseNonAdditiveCalcs(await vizDataFor(projectId, v.datasetId, enc, blockFilters), projectId, v.datasetId, enc, undefined, v.chartType), enc), projectId, v.datasetId, blockFilters); // r8:events; the calc as visual:data runs it
       if (!reply.ok) { blocks.push({ kind: 'broken', reason: reply.error }); continue; }
       const named = { ...(await labelListsFor(projectId, v.datasetId, enc)), otherBucket: reply.category?.note === OTHER_NOTE }; // value labels, after the policy
       const shaped = await chartPayload(v.datasetId, enc, v.chartType || 'column', v.overrides, reply.data, outgoing, named);

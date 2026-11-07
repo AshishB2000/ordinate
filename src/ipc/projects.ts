@@ -18,6 +18,7 @@ import * as recordFs from '../app/recordFs';
 import * as sample from '../app/sampleProject';
 import * as onboarding from '../app/onboarding';
 import { waitForLease } from '../app/runLease';
+import { FilterValueRefusal } from '../app/bundleFilterValues';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
 /** `sample:seed` calls in flight, by org. */
@@ -188,7 +189,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     } catch (err: any) {
       await fs.promises.rm(target, { force: true }).catch(() => undefined);
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
-      return { ok: false, error: err?.message || 'Export failed.' };
+      // A Share policy refusal stays typed past the job: a filter's literal on a marked column (app/bundleFilterValues).
+      return { ok: false, error: err?.message || 'Export failed.', ...(err instanceof FilterValueRefusal ? { code: err.code } : {}) };
     }
   });
 

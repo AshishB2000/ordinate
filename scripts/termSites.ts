@@ -151,6 +151,8 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/analysis/versionDiffParts.ts': { count: 1, how: 'ignores' },
   // a status pin (part 4) reads a plain filter's column; a term step is a dep, hashed by its own pin
   'src/analysis/statusPin.ts': { count: 1, how: 'ignores' },
+  // a shaped bundle refuses a plain filter that stores a marked column's literal; a term step names its term, whose own rows are scanned in the term's record
+  'src/app/bundleFilterValues.ts': { count: 1, how: 'ignores' },
   // names a term by its name and any other kept step by its kind, in a version's facts (05b)
   'web/src/features/projects/VersionPreview.tsx': { count: 2, how: 'ignores' },
 };
