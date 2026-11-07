@@ -4,6 +4,7 @@
 
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
+import type { StatusView } from '../../model/status/status';
 import type { Agg, ParamPayload, Step } from '../api';
 
 export interface MetricFormat {
@@ -36,6 +37,8 @@ export interface MetricSummary {
   /** It has a metric tree (./tree). */
   hasTree?: true;
   updatedAt: string;
+  /** Certified, changed since, or retired (part 4): the server's word, drawn as it came. */
+  status?: StatusView;
   /** The content tag from `metric:get`, when an editor opened it: its save's base (docs/edit-conflicts). */
   tag?: string;
 }

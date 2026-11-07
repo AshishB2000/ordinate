@@ -16,6 +16,8 @@ import { SkeletonRows } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import { AGG_LABEL, useTile, type Agg, type Card, type MetricTile } from '../api';
 import { formatBadge, isFormula, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
+import { pickerOrder } from '../../model/status/status';
+import { RetiredGroup } from '../../model/status/RetiredGroup';
 import { useEditor } from './context';
 import { findSlot } from './geometry';
 import { uuid } from './doc';
@@ -41,10 +43,11 @@ function Picker({ onPick, onCustom }: { onPick: (m: MetricSummary) => void; onCu
   const ed = useEditor();
   const list = useMetricList(ed.projectId);
   const [q, setQ] = useState('');
-  const shown = useMemo(() => {
-    const all = list.data ?? [];
+  const { shown, retired } = useMemo(() => {
     const k = q.trim().toLowerCase();
-    return (k ? all.filter((m) => m.name.toLowerCase().includes(k) || m.definitionText.toLowerCase().includes(k)) : all).slice(0, MAX_ROWS);
+    const all = k ? (list.data ?? []).filter((m) => m.name.toLowerCase().includes(k) || m.definitionText.toLowerCase().includes(k)) : (list.data ?? []);
+    const o = pickerOrder(all);
+    return { shown: o.main.slice(0, MAX_ROWS), retired: o.retired };
   }, [list.data, q]);
   const values = useMetricValues(
     ed.projectId,
@@ -89,6 +92,7 @@ function Picker({ onPick, onCustom }: { onPick: (m: MetricSummary) => void; onCu
             </div>
           ))
         )}
+        <RetiredGroup items={retired} />
       </div>
       <div className={s.pickerFoot}>
         <Button variant="ghost" onClick={onCustom}>

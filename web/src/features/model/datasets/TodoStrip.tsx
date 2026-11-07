@@ -4,11 +4,11 @@
 
 import { Icon } from '../../../ui/icons/Icon';
 import { formatNumber } from '../../data/format';
-import { todoText, type TodoItem } from '../api';
+import { reviewText, todoText, type ReviewItem, type TodoItem } from '../api';
 import m from '../Model.module.css';
 
-export function TodoStrip({ todo, more, nameOf, onOpen }: { todo: TodoItem[]; more: number; nameOf: (id: string) => string | undefined; onOpen: (item: TodoItem) => void }) {
-  if (!todo.length) return null;
+export function TodoStrip({ todo, review = [], more, nameOf, onOpen, onReview }: { todo: TodoItem[]; review?: ReviewItem[]; more: number; nameOf: (id: string) => string | undefined; onOpen: (item: TodoItem) => void; onReview?: (item: ReviewItem) => void }) {
+  if (!todo.length && !review.length) return null;
   return (
     <section className={m.strip} aria-label="To fill in next">
       <span className={m.stripHead}>
@@ -26,6 +26,12 @@ export function TodoStrip({ todo, more, nameOf, onOpen }: { todo: TodoItem[]; mo
           </button>
         );
       })}
+      {review.map((item) => (
+        <button key={item.ref} type="button" className={`${m.chip} ${item.kind === 'needs_review' ? m.chipWarn : ''}`} onClick={() => onReview?.(item)}>
+          <Icon name={item.kind === 'needs_review' ? 'alert' : 'archive'} size={12} />
+          {reviewText(item)}
+        </button>
+      ))}
       {more > 0 && <span className={m.more}>{`+${formatNumber(more)} more`}</span>}
     </section>
   );

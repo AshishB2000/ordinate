@@ -22,6 +22,8 @@ import { useTile, type ParamPayload, type Step, type VisualDef, type VisualTile 
 import { useTileAsOf } from './editor/tileAsOf';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
+import { RetiredNote } from '../model/status/RetiredNote';
+import { switchTo } from '../model/status/switchTo';
 import s from './Tiles.module.css';
 import { figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 import { isKeptStep, keptKey, markScopeTerms } from '../visuals/keptStep';
@@ -150,9 +152,12 @@ export function VisualTileBody({
   serverMark,
   onMarkMenu,
   onMarkTap,
+  onSwitch,
 }: {
   projectId: string;
   def: VisualDef;
+  /** An editor's "Switch to <replacement>" on a measure whose metric is retired: the new encoding, to be saved by the caller. */
+  onSwitch?: (encoding: VisualDef['encoding']) => void;
   filters: readonly Step[];
   params: ParamPayload;
   thumb?: boolean;
@@ -274,6 +279,9 @@ export function VisualTileBody({
         <DataTable data={q.data.data} label={label} />
       ) : (
         <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} onMapMark={thumb ? undefined : onMapMark} />
+      )}
+      {!thumb && def.encoding.values.some((v) => (v as { metricId?: string }).metricId) && (
+        <RetiredNote projectId={projectId} metricIds={def.encoding.values.map((v) => (v as { metricId?: string }).metricId)} onSwitch={onSwitch && ((i, to) => onSwitch(switchTo(def.encoding, i, to)))} />
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
       {!thumb && q.data.periodOn && <p className={s.periodOn}>Date range applied to {q.data.periodOn}</p>}

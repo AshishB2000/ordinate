@@ -8,6 +8,7 @@ import { EmptyState } from '../../../ui/States';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { useCanEdit } from '../../projects/api';
 import { useTerms } from '../../model/terms/api';
+import { pickerOrder } from '../../model/status/status';
 import type { FilterStep } from '../api';
 import s from './Filters.module.css';
 
@@ -16,7 +17,10 @@ export function TermPicker({ projectId, datasetId, onPick }: { projectId: string
   const glossary = useTerms(asked ? projectId : undefined);
   const canEdit = useCanEdit(projectId, asked);
   // This dataset's terms first; another dataset's applies through a relationship (or is refused, with a sentence).
-  const offered = [...(glossary.data ?? [])].sort((a, b) => Number(b.datasetId === datasetId) - Number(a.datasetId === datasetId));
+  // Certified first, retired last (pickerOrder is stable, so this dataset's terms stay ahead within a rank).
+  const here = [...(glossary.data ?? [])].sort((a, b) => Number(b.datasetId === datasetId) - Number(a.datasetId === datasetId));
+  const o = pickerOrder(here);
+  const offered = [...o.main, ...o.retired];
   const state = glossary.isError ? 'error' : glossary.data ? (offered.length ? 'ready' : 'empty') : 'loading';
   return (
     <Menu
@@ -41,7 +45,7 @@ export function TermPicker({ projectId, datasetId, onPick }: { projectId: string
         ) : undefined
       }
       items={offered.map((t) => ({
-        label: t.datasetId === datasetId ? t.name : `${t.name} (${t.datasetName ?? 'another dataset'})`,
+        label: (t.datasetId === datasetId ? t.name : `${t.name} (${t.datasetName ?? 'another dataset'})`) + (t.status?.state === 'retired' ? ' · retired' : ''),
         onSelect: () => onPick({ type: 'term', term: t.id } as unknown as FilterStep),
       }))}
     />

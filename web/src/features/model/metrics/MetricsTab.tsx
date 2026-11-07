@@ -26,6 +26,8 @@ import { failure } from '../../analyses/api';
 import { formatBadge, type Metric, type MetricSummary, type Usage } from '../../analyses/metrics/api';
 import { MetricEditor, type MetricDraft } from '../../analyses/metrics/MetricEditor';
 import { Sparkline } from '../../analyses/metrics/Sparkline';
+import { StatusActions } from '../status/StatusActions';
+import { StatusBadge } from '../status/StatusBadge';
 import { AddsUp, CountsBy, type Additivity } from './MetricCells';
 import d from '../../data/Data.module.css';
 import s from '../../analyses/metrics/Metrics.module.css';
@@ -70,6 +72,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<MetricDraft | null>(null);
   const [deleting, setDeleting] = useState<MetricSummary | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [state, setState] = useState<'all' | 'certified' | 'retired'>('all'); // the status filter
   const navigate = useNavigate();
   const canEdit = useCanEdit(projectId);
   const refresh = () => {
@@ -82,7 +85,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     try {
       const r = (await rpc('metric:get', { projectId, id: m.id })) as { ok: boolean; metric?: Metric; error?: string; tag?: string };
       if (!r.ok || !r.metric) throw new Error(r.error || 'That metric could not be read.');
-      setEditing({ ...r.metric, tag: r.tag }); // the tag: the editor's base (docs/edit-conflicts)
+      setEditing({ ...r.metric, tag: r.tag, ...(m.status && { status: m.status }) }); // the tag: the editor's base (docs/edit-conflicts)
     } catch (err) {
       toast(failure(err, 'That metric could not be read.'), { kind: 'error' });
     }
@@ -149,11 +152,22 @@ export function MetricsTab({ projectId }: { projectId: string }) {
     // Catalog tags on each row and the tag filter bar over the list (catalogUi.ts ctDecorate / ctAfterPaint).
     const tagged = (m: MetricSummary) => tagsOf(tags.data, `metric:${m.id}`);
     const present = [...new Set(q.data.metrics.flatMap((m) => tagged(m).map((t) => t.name)))];
-    const shown = tag ? q.data.metrics.filter((m) => tagged(m).some((t) => t.name === tag)) : q.data.metrics;
+    const byTag = tag ? q.data.metrics.filter((m) => tagged(m).some((t) => t.name === tag)) : q.data.metrics;
+    const shown = state === 'all' ? byTag : byTag.filter((m) => (state === 'retired' ? m.status?.state === 'retired' : m.status?.state === 'certified'));
     const tree = (m: MetricSummary) => void navigate(`/data/metrics/${projectId}/${m.id}/tree`);
     body = (
       <>
-        <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
+        <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={byTag.length === 0} />
+        {q.data.metrics.some((m) => m.status) && (
+          <div className={s.stateFilter} role="group" aria-label="Status">
+            {(['all', 'certified', 'retired'] as const).map((k) => (
+              <Button key={k} size="sm" variant={state === k ? 'primary' : 'ghost'} aria-pressed={state === k} onClick={() => setState(k)}>
+                {k === 'all' ? 'All' : k === 'certified' ? 'Certified' : 'Retired'}
+              </Button>
+            ))}
+          </div>
+        )}
+        {shown.length === 0 && state !== 'all' && <EmptyState icon="archive" heading={3} title={state === 'retired' ? 'Nothing is retired' : 'Nothing is certified yet'}>{state === 'retired' ? 'A retired metric stays where it is used, with a note that names its replacement.' : 'An admin certifies a metric after reviewing its definition.'}</EmptyState>}
         <div className={s.tableWrap}>
           <table className={s.table}>
             <thead>
@@ -195,6 +209,11 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                         </button>
                       )}
                       <TagChips tags={tagged(m)} />
+                      {m.status && (
+                        <div className={s.status}>
+                          <StatusBadge status={m.status} />
+                        </div>
+                      )}
                     </td>
                     <td className={s.dim}>{m.datasetName ?? '(missing dataset)'}</td>
                     <td className={s.def} title={m.definitionText}>
@@ -216,6 +235,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
                       {row?.usage && <ChangedCharts usage={row.usage} />}
                     </td>
                     <td className={s.actions}>
+                      <StatusActions projectId={projectId} kind="metric" id={m.id} name={m.name} status={m.status} compact />
                       {(canEdit || m.hasTree) && (
                         <Menu
                           label={`Actions for ${m.name}`}
@@ -253,7 +273,7 @@ export function MetricsTab({ projectId }: { projectId: string }) {
         <p className={d.lead}>What this project&apos;s numbers mean, defined once so every chart and KPI agrees.</p>
       </div>
       {body}
-      {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} used={editing.id ? q.data?.rows[editing.id]?.usage?.summary ?? undefined : undefined} onClose={() => setEditing(null)} onSaved={refresh} />}
       <Dialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}

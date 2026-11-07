@@ -16,6 +16,8 @@ import { DrillPanel, type DrillTarget } from '../../visuals/drill/DrillPanel';
 import { PointMenu } from '../../analytics/explain/PointMenu';
 import { useEditor, type EditorApi } from './context';
 import { useTileAsOf } from './tileAsOf';
+import { RetiredNote } from '../../model/status/RetiredNote';
+import { metricMeasure } from '../../calc/api';
 import s from './Cards.module.css';
 import { LiveRefusal } from '../../live/LiveOff';
 import { liveRefusalOf } from '../../live/refusal';
@@ -188,6 +190,24 @@ export function MetricBody({ card }: { card: Card }) {
       {/* Under the figure only when it adds something — never the head's title again (as kpiSubtitle.ts on a published page). */}
       {label.trim().toLowerCase() !== metricLabel(m).trim().toLowerCase() && <div className={s.metricLabel}>{label}</div>}
       {delta}
+      {m.metricId && (
+        <RetiredNote
+          projectId={ed.projectId}
+          metricIds={[m.metricId]}
+          onSwitch={
+            ed.writer && !ed.readOnly
+              ? (_i, to) =>
+                  ed.edit('Switch metric', (d) => {
+                    const c = d.sheets[ed.sheet].cards.find((x) => x.id === card.id);
+                    if (!c?.metric) return;
+                    const was = c.metric.label === m.label && m.label;
+                    const meas = metricMeasure(to);
+                    Object.assign(c.metric, { metricId: to.id, column: meas.column, aggregation: meas.aggregation, ...(was ? { label: to.name } : {}) });
+                  })
+              : undefined
+          }
+        />
+      )}
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
       {t.periodOn && <p className={s.periodOn}>Date range applied to {t.periodOn}</p>}

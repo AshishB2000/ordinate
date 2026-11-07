@@ -121,8 +121,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/ipc/modelOverview.ts': { count: 1, how: 'prepare' }, // reads a copy's Prepare filter steps to show them; a Prepare list takes no term
   'src/ipc/rowPolicy.ts': { count: 1, how: 'prepare' },
   'src/ipc/segments.ts': { count: 1, how: 'prepare' },
-  // a term's own filter rows (no term inside a term: FilterRows terms={false}); the server refuses one anyway
-  'web/src/features/model/terms/TermDialog.tsx': { count: 1, how: 'prepare' },
+  // a term's own filter rows (no term inside a term: FilterRows terms={false}); the server refuses one anyway. Also
+  // the certified-change warning (p4-03), which compares the same rows as the save sends them
+  'web/src/features/model/terms/TermDialog.tsx': { count: 2, how: 'prepare' },
   'web/src/features/prepare/drafts.ts': { count: 3, how: 'prepare' },
   'web/src/features/prepare/steps.ts': { count: 1, how: 'prepare' },
   // ignores: reads the shape only (a label, a diff). No crash on a term; skips it.

@@ -3,7 +3,7 @@
 // and its filters, in the builder's own filter rows. A refusal — a name a metric or another term already
 // answers to, a filter on a column the dataset lacks — is said under its box, the work still in the boxes.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { useDatasetColumns, useDatasets } from '../../../api/datasets';
@@ -14,11 +14,13 @@ import { Select } from '../../../ui/Select';
 import type { FilterStep } from '../../visuals/api';
 import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
+import { movesPin } from '../status/status';
+import { needsWarning, SaveWarning } from '../status/SaveWarning';
 import { saveTerm, splitAliases, type Term, type TermField, type TermSummary } from './api';
 import s from './Terms.module.css';
 
 /** `onSaved`: after a save lands, before the dialog closes (a cancel calls `onClose` only). */
-export function TermDialog({ projectId, term, onClose, onSaved }: { projectId: string; term?: TermSummary; onClose: () => void; onSaved?: () => void }) {
+export function TermDialog({ projectId, term, used, onClose, onSaved }: { projectId: string; term?: TermSummary; /** Where it is used, as the server worded it ('' = nowhere): for the certified-save warning. */ used?: string; onClose: () => void; onSaved?: () => void }) {
   const editingId = term?.id ?? '';
   const client = useQueryClient();
   const sets = useDatasets(projectId);
@@ -54,7 +56,19 @@ export function TermDialog({ projectId, term, onClose, onSaved }: { projectId: s
     };
   }, [editingId, projectId]);
 
+  // A certified term: a name or filter change warns first (D5). Compared with the boxes as the record loaded.
+  const first = useRef<string | undefined>(undefined);
+  const pinNow = () => JSON.stringify({ name: name.trim(), filters: liveFilters(filters) });
+  if (editingId && !loading) first.current ??= pinNow();
+  const [warn, setWarn] = useState(false);
+  const ask = () => {
+    const moved = first.current !== pinNow() ? { name: true } : {};
+    if (needsWarning(term?.status, movesPin('term', moved))) setWarn(true);
+    else void save();
+  };
+
   const save = async () => {
+    setWarn(false);
     setErrors({});
     if (!name.trim()) return setErrors({ name: 'A term needs a name.' });
     if (!ds) return setErrors({ datasetId: 'Choose a dataset.' });
@@ -79,12 +93,13 @@ export function TermDialog({ projectId, term, onClose, onSaved }: { projectId: s
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button variant="primary" loading={saving} disabled={loading} onClick={() => void save()}>
+          <Button variant="primary" loading={saving} disabled={loading} onClick={ask}>
             {editingId ? 'Save' : 'Create term'}
           </Button>
         </>
       }
     >
+      {warn && term?.status && <SaveWarning name={name.trim()} status={term.status} used={used} onConfirm={() => void save()} onCancel={() => setWarn(false)} />}
       <div className={s.fields}>
         <Input label="Name" placeholder="EMEA" value={name} error={errors.name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={200} />
         <Input

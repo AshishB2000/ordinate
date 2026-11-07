@@ -5,6 +5,7 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import type { FilterStep } from '../../visuals/api';
+import type { StatusView } from '../status/status';
 import { failure } from '../../analyses/api';
 
 /** `term:list`'s row: no filter values for a viewer row access rules restrict — the definition writes "…" for them. */
@@ -17,6 +18,8 @@ export interface TermSummary {
   datasetName: string | null;
   definition: string;
   updatedAt: string;
+  /** Certified, changed since, or retired (part 4). */
+  status?: StatusView;
 }
 
 /** `term:get`'s record. */

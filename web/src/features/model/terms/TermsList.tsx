@@ -12,6 +12,8 @@ import { Menu } from '../../../ui/Menu';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { formatNumber } from '../../data/format';
 import { toastMovedToTrash } from '../../projects/trashToast';
+import { StatusActions } from '../status/StatusActions';
+import { StatusBadge } from '../status/StatusBadge';
 import { useTerms, type TermSummary, type TermUsage } from './api';
 import { TermDialog } from './TermDialog';
 import d from '../../data/Data.module.css';
@@ -83,6 +85,11 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
                   ) : (
                     <span title={t.description || undefined}>{t.name}</span>
                   )}
+                  {t.status && (
+                    <div className={s.status}>
+                      <StatusBadge status={t.status} />
+                    </div>
+                  )}
                 </td>
                 <td className={s.dim}>{t.aliases.join(', ') || '—'}</td>
                 <td className={s.dim}>{t.datasetName ?? '(missing dataset)'}</td>
@@ -91,6 +98,7 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
                 </td>
                 <UsedBy u={usage && (usage[t.id] ?? null)} />
                 <td className={s.actions}>
+                  <StatusActions projectId={projectId} kind="term" id={t.id} name={t.name} status={t.status} compact />
                   {canEdit && (
                     <Menu
                       label={`Actions for ${t.name}`}
@@ -131,7 +139,7 @@ export function TermsList({ projectId, canEdit, usage }: { projectId: string; ca
         <p className={d.lead}>Business words defined once as filters, so “EMEA” means the same rows everywhere.</p>
       </div>
       {body}
-      {editing && canEdit && <TermDialog projectId={projectId} term={editing} onClose={() => setEditing(null)} />}
+      {editing && canEdit && <TermDialog projectId={projectId} term={editing} used={usage?.[editing.id]?.summary} onClose={() => setEditing(null)} />}
     </section>
   );
 }
