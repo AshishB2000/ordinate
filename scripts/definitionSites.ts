@@ -32,6 +32,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/semanticMeasures.ts': { count: 2, how: 'answers' }, // a formula measure on a semantic dataset: formulaOverLayer, or columnOnLayer
   'src/ipc/semanticFigures.ts': { count: 3, how: 'answers' }, // a mirror's KPI spec and its chart name: `{ metric: external }` on its own semantic dataset only; a story's metric block asks the KPI door, or says why (b3)
   // refuses
+  'src/ipc/answers.ts': { count: 6, how: 'refuses' }, // never a spec's column measure; a mirror is named in the vocabulary by id only (its figure: the semantic door's)
   'src/ai/planExec.ts': { count: 1, how: 'refuses' }, // a plan step cannot name it
   'src/ipc/periodMetric.ts': { count: 3, how: 'refuses' }, // a period over an external base: its base's resolution throws ExternalMetricError
   'src/analysis/additivity.ts': { count: 15, how: 'refuses' }, // adds up where the layer says plain sum or count (b2: `additive`), and a calc over one that does not is refused naming the layer; a period over an external base adds as it does
@@ -39,8 +40,6 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/analysis/metricTreeJs.ts': { count: 6, how: 'refuses' }, // the JS reference throws
   'src/analysis/scenarioResolve.ts': { count: 10, how: 'refuses' }, // behind resolveMetric's refusal; no column a driver moves
   'src/analysis/snapshotGuards.ts': { count: 5, how: 'refuses' }, // the answer door's measure check
-  'src/ipc/answers.ts': { count: 5, how: 'refuses' }, // never a spec's column measure
-  'src/ipc/copilot.ts': { count: 3, how: 'refuses' }, // left out of the Assistant's figures
   'src/ipc/drillScope.ts': { count: 2, how: 'refuses' }, // its rows are the layer's
   'src/ipc/drivers.ts': { count: 2, how: 'refuses' }, // naming a known layer (b3: noRowsError)
   'src/ipc/scenarios.ts': { count: 5, how: 'refuses' }, // the picker leaves it out
@@ -54,6 +53,8 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/targetSeries.ts': { count: 1, how: 'refuses' }, // a plan as a chart measure: an external plan is refused by the chart door, so no line
   'src/publish/embedLock.ts': { count: 3, how: 'refuses' }, // never allowed under a lock
   // keeps
+  'src/ipc/copilot.ts': { count: 2, how: 'keeps' }, // a snapshot's metadata; every figure, a mirror's too, is resolveMetric's
+  'src/ipc/explore.ts': { count: 1, how: 'keeps' }, // a semantic dataset's Explore measures are its mirrors, listed by id (no figure)
   'src/analysis/externalMetric.ts': { count: 4, how: 'keeps' }, // the kind and its whitelist; b3: which sentence a path that never asks a layer says, and a Metrics-table row's layer
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)
   'src/analysis/metrics.ts': { count: 3, how: 'keeps' }, // sanitize keeps it; an update keeps the stored one (D13), which only the layer sync's external one replaces
