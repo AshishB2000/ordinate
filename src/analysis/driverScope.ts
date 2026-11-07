@@ -25,6 +25,7 @@ import { compareScope } from './periodScope';
 import { daysFromIso, describeCompare, isoFromDays, sanitizeCompare } from './dateIntel';
 import type { DateRange } from './dateIntel';
 import { activeWeekCal, unitOfGrain, weekLabelRange } from './retailCalendar';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 export type DriverCompare =
   | { mode: 'previous_period' | 'previous_year' }
@@ -67,7 +68,7 @@ export interface PeriodScopes {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGGS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
 /** A drill deeper than this has run out of dimensions worth reading. */
 export const MAX_PATH = 4;
 const MAX_TEXT = 500;

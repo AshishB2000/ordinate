@@ -175,7 +175,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
       if (!stored) continue;
       const definitionText = await metricDefinitionText(projectId, stored, (notes[s.datasetId] ??= await catalogColumns(projectId, s.datasetId)));
       const date = await metricDate(projectId, s); // a date column that is gone counts as none (D9)
-      const snapshot = metrics.isFormulaDefinition(s.definition) ? undefined : s.definition.snapshot;
+      const snapshot = metrics.isSimpleDefinition(s.definition) ? s.definition.snapshot : undefined;
       out.push({ name: r.name, definitionText, value: r.value, display: r.display, additivity, description: s.description, ...(date ? { timeColumn: date } : {}), ...(snapshot ? { snapshot } : {}) });
     }
     return out;

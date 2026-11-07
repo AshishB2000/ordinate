@@ -30,6 +30,7 @@ import type { FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import type { Metric, MetricDefinition } from './metrics';
 import { isFormulaDefinition } from './metrics';
+import { isNewerKind } from './pendingKinds';
 import type { MetricAggregation } from './metricValue';
 import { tokenize } from '../formula/formulaTokens';
 import type { Tok } from '../formula/formulaTokens';
@@ -140,6 +141,7 @@ class Shaper {
   }
 
   aggregate(column: string, aggregation: MetricAggregation, filters: FilterStep[]): Val {
+    if (aggregation === 'countd') fail('A count of distinct values does not split into members.');
     if (aggregation === 'sum') return { t: 'lin', m: new Map([[this.operand(column, 'sum', filters), 1]]) };
     if (aggregation === 'count') return { t: 'lin', m: new Map([[this.operand(column, 'count', filters), 1]]) };
     if (aggregation === 'avg') {
@@ -154,6 +156,7 @@ class Shaper {
 
   definition(def: MetricDefinition, rawFilters: FilterStep[], stack: Set<string>, depth: number): Val {
     const filters = resolveFilterParams(rawFilters, this.params).steps;
+    if (isNewerKind(def)) fail('It is a kind of metric from a newer version of Ordinate.');
     if (!isFormulaDefinition(def)) {
       if (!def.column) fail('This metric has no column.');
       if (def.snapshot) fail('It is a snapshot, which keeps only the latest rows, so it does not split into members.');

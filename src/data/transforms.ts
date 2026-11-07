@@ -41,6 +41,8 @@ import { applyTextStep } from './stepsText';
 import type { RegexMemo } from './regexMemo';
 import { RADIUS_OP, withinKm } from '../analysis/geo/radius';
 import type { RadiusSpec } from '../analysis/geo/radius';
+import { AGGREGATIONS, type Aggregation as AggregationName } from './aggregations';
+import { PendingError, isPendingError } from './pendingError';
 
 /**
  * What a pipeline may be handed beyond its source: the project's masking key
@@ -75,7 +77,7 @@ export interface ApplyResult {
 // ── TransformStep union (single-source steps only) ───────────────────────────
 
 export type { FilterOp } from './filterOps';
-export type AggFn = 'sum' | 'avg' | 'count' | 'min' | 'max';
+export type AggFn = AggregationName;
 export interface Aggregation {
   column: string;
   fn: AggFn;
@@ -166,7 +168,7 @@ export type StepType = TransformStep['type'];
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 
-export const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+export const AGG_FNS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 export const STEP_TYPES: ReadonlySet<string> = new Set([
   'calculated_field',
   'filter',
@@ -286,6 +288,7 @@ export function foldStep(t: TableData, step: TransformStep, ctx: PipelineCtx, me
   } catch (e) {
     if (isRowPolicyError(e)) throw e; // a lock that cannot be honoured refuses the figure: never a skipped step
     if (isTermNotExpandedError(e)) throw e; // a glossary term no door expanded refuses it the same way
+    if (isPendingError(e)) throw e; // a count distinct this release cannot compute: never an ungrouped table
     // Defense in depth: no step should throw, but if one does, skip it.
     const msg = e instanceof Error ? e.message : 'unknown error';
     return skip(t, `Step "${step && step.type}" skipped: ${msg}`);
@@ -570,6 +573,7 @@ function aggregate(groupRows: Cell[][], columns: ParsedColumn[], agg: Aggregatio
     return null;
   }
   const fn: AggFn = AGG_FNS.has(agg.fn) ? agg.fn : 'count';
+  if (fn === 'countd') throw new PendingError('countd', agg.as); // shortcut: computed from part 5 step 02
 
   if (fn === 'count') {
     let count = 0;

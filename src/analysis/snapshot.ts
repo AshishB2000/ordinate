@@ -11,6 +11,8 @@ import type { DateGrain } from './categoryKey';
 export interface MetricSnapshot {
   column: string;
   take: 'last' | 'first';
+  /** Each entity's own latest (or earliest) day: the entity column (part 5, D11). Written by a later release; kept by this one. */
+  per?: string;
 }
 
 const MAX_COLUMN = 512;
@@ -20,16 +22,22 @@ export function sanitizeSnapshot(raw: unknown): MetricSnapshot | undefined {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
   if (!o || typeof o.column !== 'string' || !o.column || o.column.length > MAX_COLUMN) return undefined;
   if (o.take !== 'last' && o.take !== 'first') return undefined;
-  return { column: o.column, take: o.take };
+  const per = typeof o.per === 'string' && o.per && o.per.length <= MAX_COLUMN ? o.per : undefined;
+  return per ? { column: o.column, take: o.take, per } : { column: o.column, take: o.take };
 }
 
 /**
  * The snapshot an UPDATED simple definition carries. An editor that knows no snapshots sends `{column, aggregation}`
  * with the key left out, and that must not erase the one the record has; only an explicit `null` clears it. A valid
- * incoming one replaces the stored one. `stored` is the stored definition's `snapshot` value.
+ * incoming one replaces the stored one, and keeps the stored `per` unless it says `per` itself (an editor that knows
+ * no `per` leaves the key out). `stored` is the stored definition's `snapshot` value.
  */
 export function mergeSnapshot(incoming: unknown, stored: unknown): MetricSnapshot | undefined {
-  return incoming === null ? undefined : (sanitizeSnapshot(incoming) ?? sanitizeSnapshot(stored));
+  if (incoming === null) return undefined;
+  const next = sanitizeSnapshot(incoming);
+  if (!next) return sanitizeSnapshot(stored);
+  const per = 'per' in (incoming as object) ? undefined : sanitizeSnapshot(stored)?.per;
+  return per ? { ...next, per } : next;
 }
 
 // ── Which rows a snapshot keeps ──────────────────────────────────────────────

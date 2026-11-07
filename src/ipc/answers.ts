@@ -69,6 +69,7 @@ import { withPulls } from '../data/freshOnAskState';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
+import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
 
@@ -175,7 +176,8 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
 }
 
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }): Promise<Built | Failure> {
-  const snapshot = await snapshotMeasureRefusal(projectId, { category: asked.category, values: asked.measures }); // extract and Live alike
+  const asMeasures = { category: asked.category, values: asked.measures };
+  const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures)); // part 5's shapes first; extract and Live alike
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   const live = await liveCardFor(projectId, asked, [...(lock ? lock.steps : []), ...terms.steps], terms.labels);
@@ -290,13 +292,13 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     for (const s of await metrics.listMetrics(projectId)) {
-      if (metrics.isFormulaDefinition(s.definition)) continue;
+      if (!metrics.isSimpleDefinition(s.definition) || pendingMetric(s)) continue; // part 5's shapes: no figure on this release
       const full = await metrics.getMetric(projectId, s.id);
       out.push({
         id: s.id, name: s.name, datasetId: s.datasetId,
         column: s.definition.column, aggregation: s.definition.aggregation,
         // A snapshot is not a plain total either: named, it is that metric, never a bare column measure.
-        hasFilters: !!(full && (full.filters.length || (!metrics.isFormulaDefinition(full.definition) && full.definition.snapshot))),
+        hasFilters: !!(full && (full.filters.length || (metrics.isSimpleDefinition(full.definition) && full.definition.snapshot))),
         ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
       });
     }

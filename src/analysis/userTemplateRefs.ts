@@ -20,6 +20,7 @@
 // and everything between tokens is copied through verbatim.
 
 import { tokenize, type Tok } from '../formula/formulaTokens';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 export type RefResolver = (id: string) => string | null | undefined;
 
@@ -51,7 +52,7 @@ const ID_KEYS: ReadonlySet<string> = new Set([
 const TEXT_KEYS: ReadonlySet<string> = new Set(['text', 'heading', 'title']);
 
 const REF_TOKEN = /^\$([a-z]+\d*)$/;
-const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGG_FNS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A column as a formula writes it: bare when it is an identifier. */

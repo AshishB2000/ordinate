@@ -31,6 +31,7 @@ import * as datasets from '../data/datasets';
 import * as metrics from './metrics';
 import type { Metric, MetricDefinition, MetricFormat } from './metrics';
 import { isFormulaDefinition } from './metrics';
+import { isNewerKind } from './pendingKinds';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import { bindFormulaText, resolveFilterParams } from './params';
 import type { ParamValues } from './params';
@@ -222,6 +223,7 @@ async function operand(pass: Pass, datasetId: string, spec: { column: string; ag
 async function resolveDefinition(pass: Pass, datasetId: string, definition: MetricDefinition, filters: FilterStep[], depth: number, scope: FilterStep[]): Promise<number | null> {
   const ctx = pass.ctx;
   const all = resolveFilterParams(filters, ctx.params).steps.concat(scope);
+  if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
     return operand(pass, datasetId, definition, all);
@@ -438,6 +440,7 @@ export async function scenarioTargets(projectId: string, baseMetricIds: string[]
       columns.set(key, hit);
     };
     // `count` counts non-empty cells: no value driver moves it, so it offers no target.
+    if (isNewerKind(m.definition)) return; // part 5's kinds: nothing a driver moves on this release
     if (!isFormulaDefinition(m.definition)) { if (m.definition.column && m.definition.aggregation !== 'count') add(m.definition.column); return; }
     const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
     const compiled = compileMetricFormula(m.definition.formula, meta ? meta.columns.map((c) => c.name) : []);

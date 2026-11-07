@@ -42,6 +42,7 @@ import type { DateGrain } from './categoryKey';
 import { applyPivotCalcs, applyShowAs, calcSets } from './pivotCalc';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
+import { AGGREGATIONS } from '../data/aggregations';
 
 // ── Encoding ─────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export interface PivotGrid {
 const SHOW_AS: ReadonlySet<string> = new Set(['value', 'pct_row', 'pct_col', 'pct_total', 'rank']);
 const PIVOT_GRAINS: ReadonlySet<string> = new Set(['year', 'quarter', 'month']);
 const COND_KINDS: ReadonlySet<string> = new Set(['scale', 'bars', 'threshold']);
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
+const AGGS: ReadonlySet<string> = new Set<string>([...AGGREGATIONS, 'none']);
 
 function sanitizeDims(raw: unknown, cap: number): PivotDim[] {
   const list = Array.isArray(raw) ? raw : [];

@@ -385,6 +385,7 @@ export const MAIN_FILES = [
   'src/app/tableDocMessages.ts',
   'src/analysis/valueLabelMessages.ts',
   'src/analysis/joinMessages.ts',
+  'src/analysis/pendingMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

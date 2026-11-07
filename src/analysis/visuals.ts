@@ -41,8 +41,9 @@ import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeCompare } from './dateIntel';
 import type { CompareMode } from './dateIntel';
 import { logger } from '../app/logger';
+import { AGGREGATIONS, type Aggregation } from '../data/aggregations';
 
-export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
+export type VizAggregation = Aggregation | 'none';
 
 export interface VizMeasure {
   column: string; // dataset column name
@@ -276,7 +277,7 @@ function visualFilePath(projectId: string, id: string): string {
   return path.join(visualsDir(projectId), id + '.json');
 }
 
-const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max', 'none']);
+const AGG_FNS: ReadonlySet<string> = new Set<string>([...AGGREGATIONS, 'none']);
 const GEO_LEVELS: ReadonlySet<string> = new Set([
   'country', 'us_state', 'us_county', 'us_city', 'us_zip', 'world_city', 'point', 'custom',
   'hexbin', 'flow', // r6:geo

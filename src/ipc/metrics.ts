@@ -31,6 +31,7 @@ import { isRowPolicyError } from '../data/rowAccess';
 import * as metrics from '../analysis/metrics';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
+import { isNewerKind } from '../analysis/pendingKinds';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
 import { compileMetricFormula, evaluateMetricFormula } from '../analysis/metricFormula';
 import { proposeMetrics } from '../analysis/metricAuto';
@@ -150,6 +151,7 @@ async function resolveDefinition(
   // scope arrived already resolved by the handler.
   const all = resolveFilterParams(filters, ctx.params).steps.concat(ctx.scope);
 
+  if (isNewerKind(definition)) return null; // part 5's kinds: no figure on this release
   if (!isFormulaDefinition(definition)) {
     if (!definition.column) return null;
     ctx.reads?.push({ datasetId, column: definition.column, aggregation: definition.aggregation });

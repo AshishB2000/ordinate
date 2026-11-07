@@ -130,7 +130,7 @@ export function pointPlan(datasetId: string, enc: VizEncoding, chart: PointChart
   if (m.calc) return refusePoint('table_calc', msg.pointTableCalc());
   // A grouped chart SUMS a `none` measure (vizData.buildAggregated), so that is what is explained.
   const aggregation = m.aggregation === 'none' ? 'sum' : m.aggregation;
-  if (aggregation === 'min' || aggregation === 'max') return refusePoint('not_additive', msg.pointNotAdditive());
+  if (aggregation === 'min' || aggregation === 'max' || aggregation === 'countd') return refusePoint('not_additive', msg.pointNotAdditive());
 
   const bucket = input.bucket === undefined ? buckets[buckets.length - 1].label : input.bucket;
   const at = buckets.findIndex((b) => b.label === bucket);

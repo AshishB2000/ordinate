@@ -37,6 +37,7 @@ import * as projects from '../app/projects';
 import * as trashStore from '../app/trashStore';
 import { computeCardMetric } from '../ipc/dashboards';
 import { snapshotMetric } from './snapshotGuards';
+import { alertSkipped } from './pendingKinds';
 import type { MetricSnapshot } from './snapshot';
 import { getMetric } from './metrics';
 import { rewriteControlPeriods } from './metricTime';
@@ -472,7 +473,7 @@ export async function evaluateProject(
     if (datasetId && rule.datasetId !== datasetId) continue;
     // A disabled rule is not evaluated at all — not evaluated and then dropped.
     // Its history would otherwise keep growing while it was supposed to be off.
-    if (!rule.enabled) continue;
+    if (!rule.enabled || (await alertSkipped(projectId, rule))) continue; // nor is one a later release writes (part 5): kept, untouched
     const from = JSON.stringify(rule);
     let res: ReturnType<typeof alerts.evaluateRule>;
     try {
@@ -533,6 +534,7 @@ export async function testRule(projectId: string, raw: any): Promise<{
   if (!rule) return { ok: false, fire: false, message: '', value: null, previous: null };
   // An alert fans out: a rule over a dataset with row access rules is refused for everyone, up front (docs/row-policy D10).
   await assertFanOutAllowed(projectId, [rule.datasetId]);
+  const skipped = await alertSkipped(projectId, rule); if (skipped) return { ok: true, fire: false, message: skipped, value: null, previous: null };
   const read = (await fanOutScope(() => metricFor(projectId, rule))).value;
   const { value, previous } = read;
   // By period, no read at all means fewer than two complete periods — say that, not "from the next refresh on".

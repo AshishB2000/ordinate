@@ -17,8 +17,9 @@ import { MAX_RULES, MAX_SPLIT_PARTS, MAX_WINDOW_OFFSET, POWER_STEP_TYPES } from 
 import { checkRegex } from './regexSubset';
 import { isDateFormat } from './stepsClean';
 import { checkSpatialJoin } from '../analysis/geo/spatialJoin';
+import { PLAIN_AGGREGATIONS } from './aggregations';
 
-const AGG: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGG: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS); // the pivot step never takes countd
 const RULE_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '<', '>=', '<=', 'contains', 'is_empty', 'not_empty']);
 const WINDOW_FNS: ReadonlySet<string> = new Set(['row_number', 'lag', 'lead', 'running_sum', 'running_avg']);
 const MAX_NAME = 500;

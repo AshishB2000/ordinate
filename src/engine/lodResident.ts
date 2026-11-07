@@ -133,7 +133,7 @@ export async function lodMetricResident(
     const rel = joined(src.columns, p, context, normal, params);
     // `computeMetric` over the appended column: finite numbers only, count = non-null.
     const n = 'CASE WHEN isfinite(__v) THEN __v END';
-    const m: Record<MetricAggregation, string> = {
+    const m: Partial<Record<MetricAggregation, string>> = { // countd: none here, so null and the JS reference (no figure)
       sum: `sum(${n})`,
       avg: `CASE WHEN count(${n}) > 0 THEN sum(${n}) / count(${n}) END`,
       min: `min(${n})`,

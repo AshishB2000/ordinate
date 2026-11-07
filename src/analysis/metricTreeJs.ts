@@ -14,6 +14,7 @@ import { applyPipeline } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import type { Metric } from './metrics';
 import { isFormulaDefinition } from './metrics';
+import { isNewerKind } from './pendingKinds';
 import { computeMetric } from './metricValue';
 import { snapshotRows } from './snapshot';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
@@ -45,10 +46,11 @@ const MAX_DEPTH = 10;
 /** A metric's figure over the rows under `scope` — ipc/metrics.resolveDefinition, over rows. */
 export function metricJs(columns: ParsedColumn[], rows: Cell[][], metrics: Metric[], m: Metric, scope: FilterStep[], depth = 0, stack = new Set<string>()): number | null {
   const table = (filters: FilterStep[]) => applyPipeline({ columns, rows }, filters.concat(scope));
+  if (isNewerKind(m.definition)) return null; // part 5's kinds: no figure on this release, as the door
   if (!isFormulaDefinition(m.definition)) {
     const t = table(m.filters);
     const snap = m.definition.snapshot;
-    if (!m.definition.column || (snap && !columns.some((c) => c.name === snap.column && c.type === 'date'))) return null;
+    if (!m.definition.column || snap?.per || (snap && !columns.some((c) => c.name === snap.column && c.type === 'date'))) return null;
     // A snapshot reads only the rows on its latest (or earliest) day in scope (./snapshot), as the door does.
     return computeMetric(t.columns, snap ? snapshotRows(t.columns, t.rows, snap) : t.rows, m.definition);
   }

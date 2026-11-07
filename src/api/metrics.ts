@@ -5,13 +5,14 @@
 
 import { z } from 'zod';
 import { Base, byProjectId, rpc, Steps, Uuid } from './contract';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 /** What a metric IS (analysis/metrics.ts sanitizes every field again). */
 // A snapshot (semantic D8): only the rows on the latest (or earliest) day of `column`. null clears it; absent keeps the stored one.
 const Snapshot = z.strictObject({ column: z.string().min(1).max(512), take: z.enum(['last', 'first']) });
 const Definition = z.union([
   z.strictObject({ formula: z.string().max(2_000) }),
-  z.strictObject({ column: z.string().max(512), aggregation: z.enum(['sum', 'avg', 'count', 'min', 'max']), snapshot: Snapshot.nullable().optional() }),
+  z.strictObject({ column: z.string().max(512), aggregation: z.enum(PLAIN_AGGREGATIONS), snapshot: Snapshot.nullable().optional() }),
 ]);
 const Format = z.strictObject({
   kind: z.enum(['number', 'currency', 'percent', 'duration']),

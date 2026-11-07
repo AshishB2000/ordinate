@@ -14,10 +14,11 @@
 import { dispatch, parseFirstObject, type NeutralMsg, type TypedError } from './analyze';
 import * as execConfig from '../app/execConfig';
 import { CHART_TYPE_IDS } from '../analysis/analysisPlan';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 export const TILE_KINDS = ['kpi', 'chart', 'table', 'filter', 'text'] as const;
 export type TileKind = (typeof TILE_KINDS)[number];
-export const READ_AGGS = ['sum', 'avg', 'count', 'min', 'max'] as const;
+export const READ_AGGS = PLAIN_AGGREGATIONS;
 export type ReadAgg = (typeof READ_AGGS)[number];
 export const FILTER_KINDS = ['dropdown', 'multi', 'date_range'] as const;
 export type FilterKind = (typeof FILTER_KINDS)[number];

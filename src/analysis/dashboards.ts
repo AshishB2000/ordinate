@@ -46,6 +46,7 @@ import { sanitizeStatsSpec } from './stats/spec';
 import type { StatsSpec } from './stats/spec';
 import { sanitizeRadiusValue } from './geo/radius';
 import type { RadiusValue } from './geo/radius';
+import { AGGREGATIONS, type Aggregation } from '../data/aggregations';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
 // (src/analysis/cardModel.ts, which the web editor's port is tested against),
@@ -79,7 +80,7 @@ export const sizeLayout = require('./sizeLayout') as {
 
 export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats' | 'summary' | 'metricTree';
 export type CardAction = 'delete-sample';
-export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
+export type MetricAggregation = Aggregation;
 /**
  * `parameter` is the odd one out: it filters no column itself. It is the
  * reader's handle on one of the dashboard's `parameters` (analysis/params.ts),
@@ -248,7 +249,7 @@ const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'co
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
-export const METRIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+export const METRIC_AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range', 'parameter', 'radius']);
 const METRIC_FORMATS: ReadonlySet<string> = new Set([
   'auto',

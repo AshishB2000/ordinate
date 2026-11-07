@@ -38,10 +38,11 @@ import type { FilterStep } from '../data/transforms';
 import type { Anomaly } from './anomalies';
 import { diffAnomalies } from './anomalyWatch';
 import { t } from '../app/i18n';
+import { AGGREGATIONS } from '../data/aggregations';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
-export type AlertCompare = 'threshold' | 'change' | 'anomaly';
+export type AlertCompare = 'threshold' | 'change' | 'anomaly' | 'target'; // 'target': written by a later release (part 5), kept and skipped here
 export type ThresholdOp = '>' | '<' | '>=' | '<=';
 export type ChangeDirection = 'up' | 'down' | 'either';
 export type ChangeVs = 'previous_refresh' | 'previous_period';
@@ -83,6 +84,7 @@ export interface AlertRule {
   metric: AlertMetric;
   compare: AlertCompare;
   threshold?: { op: ThresholdOp; value: number };
+  targetPct?: { op: 'below' | 'above'; pct: number }; // compare 'target': below or above pct % of the metric's target (part 5, D14)
   change?: {
     pct: number;
     direction: ChangeDirection;
@@ -156,7 +158,7 @@ export const MAX_RULES = 100;
 /** Channels one rule may post to. */
 export const MAX_RULE_CHANNELS = 10;
 
-const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGGS: ReadonlySet<string> = new Set<string>(AGGREGATIONS);
 const OPS: ReadonlySet<string> = new Set(['>', '<', '>=', '<=']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -240,10 +242,10 @@ export function sanitizeRule(raw: any): AlertRule | null {
   const aggregation = String(m.aggregation || '');
   if (!AGGS.has(aggregation)) return null;
   const compare: AlertCompare =
-    raw.compare === 'change' ? 'change' : raw.compare === 'anomaly' ? 'anomaly' : 'threshold';
-  // An anomaly rule is the one kind allowed an empty column: it means "scan the
-  // whole dataset", which is exactly what the watch toggle used to do.
-  if (!column && compare !== 'anomaly') return null;
+    raw.compare === 'change' ? 'change' : raw.compare === 'anomaly' ? 'anomaly' : raw.compare === 'target' ? 'target' : 'threshold';
+  // An anomaly rule may have an empty column: it means "scan the whole dataset", which is exactly what the watch
+  // toggle used to do. So may a rule on a saved metric (part 5: a funnel or period metric has no column).
+  if (!column && compare !== 'anomaly' && !UUID_RE.test(String(m.metricId || ''))) return null;
 
   const rule: AlertRule = {
     id: String(raw.id),
@@ -264,6 +266,11 @@ export function sanitizeRule(raw: any): AlertRule | null {
     const value = num(t.value);
     if (value == null || !OPS.has(String(t.op))) return null;
     rule.threshold = { op: String(t.op) as ThresholdOp, value };
+  }
+  if (compare === 'target') {
+    const p = raw.targetPct || {};
+    if (num(p.pct) == null || p.pct <= 0 || p.pct > 1000 || (p.op !== 'below' && p.op !== 'above')) return null;
+    rule.targetPct = { op: p.op, pct: p.pct };
   }
   if (compare === 'change') {
     const c = raw.change || {};
@@ -306,6 +313,11 @@ export function sanitizeRule(raw: any): AlertRule | null {
   const channelIds = [...new Set((Array.isArray(raw.channelIds) ? raw.channelIds : []).filter((c: unknown) => UUID_RE.test(String(c))).map((c: unknown) => String(c).toLowerCase()))].slice(0, MAX_RULE_CHANNELS) as string[];
   if (channelIds.length) rule.channelIds = channelIds;
   return rule;
+}
+
+/** False for a rule a later release writes and this one keeps but never evaluates (part 5): a target, a count distinct, or no column. */
+export function canEvaluate(rule: AlertRule): boolean {
+  return rule.compare !== 'target' && rule.metric.aggregation !== 'countd' && (!!rule.metric.column || rule.compare === 'anomaly');
 }
 
 export function sanitizeEvent(raw: any): AlertEvent | null {

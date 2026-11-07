@@ -45,6 +45,7 @@ import { resolvePeriodNow } from '../analysis/dateIntel';
 import { sqlPeriodPredicate } from './periodSql';
 import type { PowerSqlOpts } from './sqlGenPower';
 import { genPowerStep } from './sqlGenPower';
+import { PLAIN_AGGREGATIONS } from '../data/aggregations';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ function sqlStr(phys: string): string {
 
 // ── Small helpers mirroring transforms.ts ────────────────────────────────────
 
-const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
+const AGG_FNS: ReadonlySet<string> = new Set<string>(PLAIN_AGGREGATIONS);
 const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
 const PHYS_RE = /^c\d+$/;
 
@@ -387,6 +388,7 @@ export function generateSql(relation: string, columns: SqlColumn[], steps: Trans
           // Unknown aggregation fn falls back to `count` with NO warning —
           // transforms.aggregate:368 does exactly that (sanitizeSteps normally
           // blocks it, but direct callers can reach it).
+          if (agg.fn === 'countd') return bail('count distinct is computed by the fold'); // which refuses it on this release
           const fn: AggFn = AGG_FNS.has(agg.fn) ? agg.fn : 'count';
           let expr: string;
           if (ci < 0) {
