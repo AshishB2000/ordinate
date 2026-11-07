@@ -18,6 +18,7 @@ import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { kpiHidden } from './kpiPolicy';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
+import { isExternalMetricError } from '../analysis/externalMetric';
 import { chartPayload } from './dashboardData';
 import { withEvents } from '../ipc/events'; // r8:events
 import type { BuildProgress, Outgoing } from './dashboardData';
@@ -99,7 +100,7 @@ export async function buildStory(
       } catch (err) {
         // A Live metric its warehouse could not give (L2.4), or a glossary term this pod cannot apply: left out, and
         // said if none is left — the story still publishes.
-        if (!isLiveFigureError(err) && !isTermNotExpandedError(err)) throw err;
+        if (!isLiveFigureError(err) && !isTermNotExpandedError(err) && !isExternalMetricError(err)) throw err;
         liveReason = err.message;
       }
       const hidden = r && r.ok ? await kpiHidden(projectId, reads, outgoing) : '';

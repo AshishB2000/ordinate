@@ -155,3 +155,8 @@ export function liveSnapshotRefused(): string {
 export function liveDistinctByWeekCalendar(): string {
   return t('liveRefusals.a_distinct_count_can_t_be');
 }
+
+/** A dataset that asks another tool's semantic layer (part 7; a later release reads it): it answers nothing here. */
+export function liveSemanticPending(): string {
+  return t('liveRefusals.this_dataset_asks_another_tool_s');
+}

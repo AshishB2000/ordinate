@@ -44,7 +44,7 @@ import type { QualityFact, SummaryCandidates, SummarySentence } from '../analysi
 import { driversFor } from './drivers';
 import { listInsights } from './insights';
 import { resolveMetric } from './metrics';
-import { getMetric } from '../analysis/metrics';
+import { getMetric, isExternalDefinition } from '../analysis/metrics';
 import { metricDate } from '../analysis/metricTimeScope';
 import { computeCardMetric } from './dashboards';
 import { guardAnswer } from './copilot';
@@ -114,7 +114,8 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
   // A Live dataset's KPI is its level alone: the drivers read rows, which live has none of here (L2.4).
   const live = isLive(meta);
   // The latest two periods of the date the metric counts by (D9), else the first date column.
-  const saved = m.metricId && !live ? await getMetric(projectId, m.metricId) : null;
+  const saved = m.metricId ? await getMetric(projectId, m.metricId) : null;
+  if (saved && isExternalDefinition(saved.definition)) return { kpi: null, driver: null }; // a layer's metric: no sentence, the tile says why (part 7 b0)
   const dateCol = live ? undefined : (saved && (await metricDate(projectId, saved))) || meta.columns.find((c) => c.type === 'date')?.name;
   // The card's own Compare first (but not under "as of": it moves TODAY's
   // periods), then the two latest periods the data has.

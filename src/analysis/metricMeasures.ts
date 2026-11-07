@@ -27,8 +27,9 @@
 
 import * as metrics from './metrics';
 import type { Metric, MetricSimpleDefinition } from './metrics';
-import { isFormulaDefinition } from './metrics';
+import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { pendingMeasureRefusal, pendingMetric, pendingSentence } from './pendingKinds';
+import { ExternalMetricError, externalRefusal, isExternalMetricError, type EXTERNAL_CODE } from './externalMetric';
 import { compileMetricFormula, evaluateMetricFormula } from './metricFormula';
 import type { MetricFormulaProgram } from './metricFormula';
 import type { MetricAggregation } from './metricValue';
@@ -68,7 +69,7 @@ export interface MeasurePlan {
  * `values`: the encoding's measures, each drawn simple metric's `column`/`aggregation` replaced by its metric's.
  * `filters`: the metric filters every measure shares, params bound. `plan`: only when the measures need separate questions.
  */
-export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string; code?: 'live_refused'; reason?: 'snapshot' };
+export type PlanResult = { ok: true; values: VizMeasure[]; filters: FilterStep[]; plan?: MeasurePlan } | { ok: false; error: string; code?: 'live_refused' | typeof EXTERNAL_CODE; reason?: string };
 
 /** Whether a simple metric reads other rows than its column's plain total: its own filters, or a snapshot's day. */
 export function needsMetricPlan(m: Metric): boolean {
@@ -82,11 +83,11 @@ class PlanError extends Error {
   }
 }
 
-/** The simple snapshot metric a pivot value names, if any: a pivot plots the stored column (pivotData), a sum over every date. */
+/** The simple snapshot metric (or a layer's metric) a pivot value names, if any: a pivot plots the stored column (pivotData), a sum over every date. */
 async function pivotSnapshot(projectId: string, encoding: VizEncoding | null | undefined): Promise<Metric | null> {
   for (const v of encoding?.pivot && Array.isArray(encoding.pivot.values) ? encoding.pivot.values : []) {
     const m = v && typeof v.metricId === 'string' ? await metrics.getMetric(projectId, v.metricId) : null;
-    if (m && metrics.isSimpleDefinition(m.definition) && m.definition.snapshot) return m;
+    if (m && (isExternalDefinition(m.definition) || (metrics.isSimpleDefinition(m.definition) && m.definition.snapshot))) return m;
   }
   return null;
 }
@@ -139,7 +140,7 @@ export async function planMetricMeasures(
   const pending = await pendingMeasureRefusal(projectId, encoding); // part 5's shapes: no figure on this release
   if (pending) return { ok: false, error: pending };
   const inPivot = await pivotSnapshot(projectId, encoding);
-  if (inPivot) return { ok: false, error: msg.snapshotInPivot(inPivot.name) };
+  if (inPivot) return isExternalDefinition(inPivot.definition) ? externalRefusal(new ExternalMetricError('pending', inPivot.name)) : { ok: false, error: msg.snapshotInPivot(inPivot.name) };
   if (!hasMetricMeasure(encoding)) return null;
   const considered = drawnMeasures(encoding);
   const plan: MeasurePlan = { leaves: [], formulas: new Map() };
@@ -173,6 +174,7 @@ export async function planMetricMeasures(
   };
 
   const build = async (m: Metric, stack: Set<string>, depth: number, top: boolean): Promise<Operand | null> => {
+    if (isExternalDefinition(m.definition)) throw new ExternalMetricError('pending', m.name); // a formula naming a layer's metric
     if (m.datasetId !== datasetId) throw new PlanError(msg.otherDataset(m.name));
     if (pendingMetric(m)) throw new PlanError(pendingSentence(m)); // part 5's shapes: no figure on this release
     if (metrics.isSimpleDefinition(m.definition)) {
@@ -220,6 +222,7 @@ export async function planMetricMeasures(
       const v = considered[i];
       const m = v?.metricId ? await metrics.getMetric(projectId, v.metricId) : null;
       if (!m) continue; // gone: the stored copy, as before
+      if (isExternalDefinition(m.definition)) throw new ExternalMetricError('pending', m.name); // a layer's metric: never its stored copy
       if (isFormulaDefinition(m.definition)) {
         formula = true;
         const root = await build(m, new Set([m.name.toLowerCase()]), 0, true);
@@ -253,6 +256,7 @@ export async function planMetricMeasures(
     }
   } catch (err) {
     if (err instanceof PlanError) return err.live ? { ok: false, error: err.message, code: 'live_refused', reason: 'snapshot' } : { ok: false, error: err.message };
+    if (isExternalMetricError(err)) return externalRefusal(err);
     throw err;
   }
   return { ok: true, values, filters: [], plan };

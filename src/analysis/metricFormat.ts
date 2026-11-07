@@ -18,8 +18,9 @@ import { VALUELESS_OPS, LIST_OPS } from '../data/filterOps';
 import type { Metric, MetricFormat, MetricDefinition } from './metrics';
 import { formatMetric } from '../app/format';
 import { describePeriod, getCalendar } from './dateIntel';
-import { isFormulaDefinition } from './metrics';
+import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { isNewerKind } from './pendingKinds';
+import { definedElsewhere } from './externalMetricMessages';
 
 /**
  * The ONE rendering of a metric's number — now `app/format.formatMetric`, the
@@ -90,6 +91,7 @@ export function describeFilterHidden(s: FilterStep): string {
 export function describeDefinitionShort(definition: MetricDefinition): string {
   if (isFormulaDefinition(definition)) return definition.formula;
   if (isNewerKind(definition)) return 'a newer kind of metric'; // part 5's kinds, kept and not computed here
+  if (isExternalDefinition(definition)) return definedElsewhere(); // b2 names the layer
   const agg = AGG_WORDS[definition.aggregation] || definition.aggregation;
   const head = definition.column ? `${agg} of ${definition.column}` : agg;
   const snap = definition.snapshot; // semantic D8: only the rows on that day

@@ -12,7 +12,7 @@
 import type { ParsedColumn } from '../data/parse';
 import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
-import { getMetric, isFormulaDefinition, metricsByName } from './metrics';
+import { getMetric, isExternalDefinition, isFormulaDefinition, metricsByName } from './metrics';
 import { isNewerKind } from './pendingKinds';
 import { metricShape } from './driverShape';
 import { tokenize } from '../formula/formulaTokens';
@@ -43,6 +43,7 @@ export function additivityOf(
 ): Additivity {
   const def = m.definition;
   if (isNewerKind(def)) return { categories: false, time: false }; // part 5's kinds: not computed here, so nothing adds
+  if (isExternalDefinition(def)) return { categories: false, time: false }; // the layer's figure, which this pod cannot give (b2 reads `additive`)
   if (!isFormulaDefinition(def)) {
     const a = aggregationAdditivity(def.aggregation);
     return def.snapshot ? { categories: a.categories, time: false } : a;
@@ -110,7 +111,7 @@ async function resolveMeasure(
   const stored = { name: metric?.name ?? `${m.aggregation} of ${m.column}`, additivity: aggregationAdditivity(m.aggregation) };
   if (!metric || plotsStored) return stored;
   const def = metric.definition;
-  if (!isFormulaDefinition(def) && !isNewerKind(def) && !def.snapshot) return stored;
+  if (!isFormulaDefinition(def) && !isNewerKind(def) && !isExternalDefinition(def) && !def.snapshot) return stored;
   // The columns and the other metrics are read for a formula only; a snapshot's rule needs neither.
   const formula = isFormulaDefinition(def);
   const columns = formula ? (await getDatasetMeta(projectId, dataset))?.columns ?? [] : [];

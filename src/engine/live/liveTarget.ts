@@ -89,6 +89,8 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return { ok: false, kind: 'unavailable', error: msg.liveDatasetMissing() };
   if (!isLive(meta) || !meta.live) return { ok: false, kind: 'unavailable', error: msg.liveNotLive() };
+  // b0: a dataset that asks another tool's semantic layer (part 7) has no table or SQL here: refused first, before base filters and calcs.
+  if (meta.live.semanticPending) return { ok: false, kind: 'refused', refusal: refuse('semanticPending') };
   // 00a: this pod can't compute a Live dataset's calculated fields (part 8), so a question would answer wider or skip a filter on one.
   if (hasLiveCalcs(meta.live)) return { ok: false, kind: 'refused', refusal: refuse('calculated', meta.live.calculated?.[0]?.name) };
   const origin = meta.origin;

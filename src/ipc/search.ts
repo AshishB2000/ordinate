@@ -37,6 +37,7 @@ import type { RecordSource, SourceKey } from '../app/searchSources';
 import * as index from '../server/searchIndex';
 import type { IndexRow } from '../server/searchIndex';
 import * as trace from '../engine/residentTrace';
+import { definedElsewhere } from '../analysis/externalMetricMessages';
 
 /** Enough to be useful, few enough to read without scrolling. */
 const MAX_RESULTS = 20;
@@ -95,7 +96,7 @@ const fromVisual = (v: visuals.VisualSummary): Item[] => one('visual', v.id, v.n
 /** `viewer`: a caller who may not see source names reads (and finds the connection by) viewerName, never a database, host or URL it is named after. */
 const fromConnection = (c: connections.Connection, viewer = false): Item[] => one('connection', c.id, viewer ? viewerName(c) : c.name, 'kind' in c && c.kind ? String(c.kind) : 'connection', c.updatedAt);
 const fromMetric = (m: metrics.MetricSummary): Item[] =>
-  one('metric', m.id, m.name, 'formula' in m.definition ? 'Formula metric' : metrics.isSimpleDefinition(m.definition) ? `${m.definition.aggregation}(${m.definition.column})` : 'A newer kind of metric', m.updatedAt);
+  one('metric', m.id, m.name, 'formula' in m.definition ? 'Formula metric' : metrics.isSimpleDefinition(m.definition) ? `${m.definition.aggregation}(${m.definition.column})` : metrics.isExternalDefinition(m.definition) ? definedElsewhere() : 'A newer kind of metric', m.updatedAt);
 const fromReport = (r: Pick<reportSpec.ReportSummary, 'id' | 'name' | 'format' | 'updatedAt'>): Item[] =>
   one('report', r.id, r.name, String(r.format || 'pdf').toUpperCase() + ' report', r.updatedAt);
 // Metrics, reports and alert rules are records too — the palette's → actions

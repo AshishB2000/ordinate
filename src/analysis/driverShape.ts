@@ -29,8 +29,9 @@
 import type { FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import type { Metric, MetricDefinition } from './metrics';
-import { isFormulaDefinition } from './metrics';
+import { isExternalDefinition, isFormulaDefinition } from './metrics';
 import { isNewerKind } from './pendingKinds';
+import { externalNoSplit } from './externalMetricMessages';
 import type { MetricAggregation } from './metricValue';
 import { tokenize } from '../formula/formulaTokens';
 import type { Tok } from '../formula/formulaTokens';
@@ -157,6 +158,7 @@ class Shaper {
   definition(def: MetricDefinition, rawFilters: FilterStep[], stack: Set<string>, depth: number): Val {
     const filters = resolveFilterParams(rawFilters, this.params).steps;
     if (isNewerKind(def)) fail('It is a kind of metric from a newer version of Ordinate.');
+    if (isExternalDefinition(def)) fail(externalNoSplit());
     if (!isFormulaDefinition(def)) {
       if (!def.column) fail('This metric has no column.');
       if (def.snapshot) fail('It is a snapshot, which keeps only the latest rows, so it does not split into members.');

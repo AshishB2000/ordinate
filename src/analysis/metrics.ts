@@ -32,6 +32,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
 import { mergeSnapshot } from './snapshot';
+import { isExternalDefinition, sanitizeExternal, sanitizeImportedFrom, type MetricExternalDefinition, type MetricImportedFrom } from './externalMetric';
 import type { MetricSnapshot } from './snapshot';
 import { sanitizeFunnelDefinition, type MetricFunnelDefinition } from './funnelMetric';
 import { sanitizePeriodDefinition, type MetricPeriodDefinition } from './periodMetric';
@@ -75,7 +76,13 @@ export interface MetricFormulaDefinition {
 }
 
 /** Funnel and period kinds (part 5) are written by a later release; this one keeps them and computes neither (./pendingKinds). */
-export type MetricDefinition = MetricSimpleDefinition | MetricFormulaDefinition | MetricFunnelDefinition | MetricPeriodDefinition;
+export type MetricDefinition =
+  | MetricSimpleDefinition
+  | MetricFormulaDefinition
+  | MetricFunnelDefinition
+  | MetricPeriodDefinition
+  | MetricExternalDefinition; // the last: another tool's semantic layer's (./externalMetric)
+export { isExternalDefinition };
 
 export function isFormulaDefinition(d: MetricDefinition): d is MetricFormulaDefinition {
   return typeof (d as MetricFormulaDefinition).formula === 'string';
@@ -107,6 +114,8 @@ export interface Metric {
   timeColumn?: string;
   /** What it is measured against (part 5, D12). Written by a later release; kept by this one, shown nowhere. */
   target?: MetricTargetSpec;
+  /** Where an import came from, so a re-import updates it (part 7 f1 writes it; kept from b0). */
+  importedFrom?: MetricImportedFrom;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
@@ -181,6 +190,8 @@ function trimTo(raw: unknown, max: number): string {
  */
 export function sanitizeDefinition(raw: unknown, stored?: unknown): MetricDefinition {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const external = sanitizeExternal(o); // wins over any key beside it: only a layer's sync writes one
+  if (external) return external;
   const formula = trimTo(o.formula, MAX_FORMULA);
   if (formula) return { formula };
   const kind = sanitizeFunnelDefinition(o) ?? sanitizePeriodDefinition(o);
@@ -257,6 +268,8 @@ function normalize(data: any, projectId: string): Metric {
   if (timeColumn) m.timeColumn = timeColumn;
   const target = sanitizeTarget(data.target);
   if (target) m.target = target;
+  const importedFrom = sanitizeImportedFrom(data.importedFrom);
+  if (importedFrom) m.importedFrom = importedFrom;
   return m;
 }
 
@@ -425,7 +438,8 @@ export async function updateMetric(
     const updated: Metric = {
       ...existing,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-      definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition, (existing.definition as { snapshot?: unknown }).snapshot) : existing.definition,
+      // An external one is read-only (D13): an editor that knows no such kind sends {column, aggregation} with every save.
+      definition: patch.definition !== undefined && !isExternalDefinition(existing.definition) ? sanitizeDefinition(patch.definition, (existing.definition as { snapshot?: unknown }).snapshot) : existing.definition,
       filters: patch.filters !== undefined ? sanitizeMetricFilters(patch.filters) : existing.filters,
       format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
       updatedAt: new Date().toISOString(),
@@ -469,6 +483,7 @@ export async function duplicateMetric(projectId: string, id: string): Promise<Me
   const newId = randomUUID();
   const now = new Date().toISOString();
   const copy: Metric = { ...source, id: newId, name: `${source.name} (copy)`, createdAt: now, updatedAt: now };
+  delete copy.importedFrom; // the copy is this project's own: a re-import must not match it too
   await fs.promises.mkdir(metricsDir(projectId), { recursive: true });
   await writeJsonAtomic(metricFilePath(projectId, newId), copy);
   return copy;

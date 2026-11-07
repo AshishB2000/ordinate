@@ -46,6 +46,7 @@ import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
 import { isLiveFigureError, liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE } from '../data/liveDataset';
+import { EXTERNAL_CODE, isExternalMetricError } from '../analysis/externalMetric';
 import { contentTag, recordReply } from '../app/editConflict';
 
 /**
@@ -194,6 +195,7 @@ function refusalOf(err: unknown): FigureRefusal | null {
   if (isLiveFigureError(err)) return { ...liveCodeOf(err), code: err.failure.code, error: err.failure.error };
   if (isLiveDatasetError(err)) return { code: LIVE_DATASET_CODE, error: err.message };
   if (isRowPolicyError(err)) return { code: ROW_POLICY_CODE, error: err.message }; // row access rules: said, never a silent blank
+  if (isExternalMetricError(err)) return { code: EXTERNAL_CODE, error: err.message, reason: err.reason }; // nor a layer's metric (part 7 b0)
   return null;
 }
 

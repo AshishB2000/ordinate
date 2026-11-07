@@ -386,6 +386,7 @@ export const MAIN_FILES = [
   'src/analysis/valueLabelMessages.ts',
   'src/analysis/joinMessages.ts',
   'src/analysis/pendingMessages.ts',
+  'src/analysis/externalMetricMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

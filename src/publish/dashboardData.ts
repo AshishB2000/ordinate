@@ -37,6 +37,7 @@ import { computeCardMetric } from '../ipc/dashboards';
 import { liveDistinct } from '../ipc/liveProfile';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isTermNotExpandedError } from '../data/termStep';
+import { isExternalMetricError } from '../analysis/externalMetric';
 import { resolveMetric, type MetricRead } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
@@ -531,7 +532,7 @@ export async function buildDashboard(
           } catch (err) {
             // A Live KPI its warehouse could not give (L2.4), or a glossary term this pod cannot apply: this tile says so,
             // as a chart tile does — the page still publishes.
-            if (!isLiveFigureError(err) && !isTermNotExpandedError(err)) throw err;
+            if (!isLiveFigureError(err) && !isTermNotExpandedError(err) && !isExternalMetricError(err)) throw err;
             payload = { error: err.message };
           }
           if (!payload.error) {
