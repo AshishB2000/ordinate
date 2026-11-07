@@ -1,0 +1,47 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "Built from the page's dimensionsPaginated signature and Dimension type (name, description, type: CATEGORICAL | TIME, queryableGranularities). No example reply is published.",
+  "reply": {
+    "data": {
+      "dimensionsPaginated": {
+        "items": [
+          {
+            "name": "metric_time",
+            "description": "The time of the metric",
+            "type": "TIME",
+            "queryableGranularities": [
+              "DAY",
+              "WEEK",
+              "MONTH",
+              "QUARTER",
+              "YEAR"
+            ]
+          },
+          {
+            "name": "customer__customer_type",
+            "description": "New or returning",
+            "type": "CATEGORICAL",
+            "queryableGranularities": []
+          },
+          {
+            "name": "order_id__ordered_at",
+            "description": null,
+            "type": "TIME",
+            "queryableGranularities": [
+              "DAY",
+              "WEEK",
+              "MONTH",
+              "QUARTER",
+              "YEAR"
+            ]
+          }
+        ],
+        "pageNum": 1,
+        "pageSize": 500,
+        "totalItems": 3,
+        "totalPages": 1
+      }
+    }
+  }
+}

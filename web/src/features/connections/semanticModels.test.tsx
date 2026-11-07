@@ -112,11 +112,19 @@ describe('a semantic layer under Connections', () => {
     expect(within(rail).getByText('Live · asked at the warehouse')).toBeTruthy(); // NEGATIVE CONTROL: a plain Live dataset
   }, 30_000);
 
+  it('a dbt connection lists its saved queries by that name, and says when there are none (d1)', async () => {
+    const DBT = { id: 'dbt-semantic-layer', label: 'dbt Semantic Layer (beta)', family: 'dbt', category: 'Semantic layers', browsable: false, live: false, semantic: true, fields: [] };
+    serve({ 'connectors:catalog': { body: [DBT] }, 'connections:list': { body: [{ ...CONN, connectorId: 'dbt-semantic-layer' }] }, 'connection:semanticModels': { body: { ok: true, models: [] } } });
+    renderApp(`/connections/${PID}/${CID}`);
+    const saved = await screen.findByRole('region', { name: 'Saved queries' }, LAZY);
+    expect(await within(saved).findByText('No saved queries in this environment yet.')).toBeTruthy();
+  }, 30_000);
+
   it('NEGATIVE CONTROL: a plain connection lists no models and asks for none', async () => {
     const calls = serve({ 'connections:list': { body: [{ ...CONN, connectorId: 'snowflake', semantic: undefined }] }, 'connectors:catalog': { body: [{ ...SNOWFLAKE, semantic: false }] } });
     renderApp(`/connections/${PID}/${CID}`);
     await screen.findByRole('button', { name: /^Run/ }, LAZY);
-    expect(screen.queryByRole('region', { name: /Models|Semantic views/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: /Models|Semantic views|Saved queries/ })).toBeNull();
     expect(calls.some((c) => c.channel === 'connection:semanticModels')).toBe(false);
   });
 });

@@ -1,0 +1,12 @@
+{
+  "source": "https://github.com/dbt-labs/semantic-layer-sdk-python (main, dbtsl/models and dbtsl/api/graphql)",
+  "read": "2026-11-05",
+  "note": "NOT on the API page: the SDK's CancelQueryOperation (cancelQuery(environmentId, queryId) { queryId }).",
+  "reply": {
+    "data": {
+      "cancelQuery": {
+        "queryId": "QueryID_12345678"
+      }
+    }
+  }
+}

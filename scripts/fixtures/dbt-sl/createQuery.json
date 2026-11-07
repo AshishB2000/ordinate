@@ -1,0 +1,12 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "The page's createQuery example: it \"Returns 'QueryID_12345678'\".",
+  "reply": {
+    "data": {
+      "createQuery": {
+        "queryId": "QueryID_12345678"
+      }
+    }
+  }
+}

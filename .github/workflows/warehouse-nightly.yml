@@ -1,4 +1,4 @@
-name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube)
+name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube, dbt)
 
 # The two warehouse connectors against REAL accounts (docs/live-data/00-plan.md,
 # L1.5): scripts/test-warehouseLive.ts, with credentials from repository
@@ -21,6 +21,9 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube)
 # Postgres seeded with the same fixture (scripts/fixtures/cube/compose.yml, the
 # image pinned by digest; scripts/test-semanticCubeLive.ts, semantic layer part
 # 7, e1); it needs no secret either: the deployment's API secret is a fixture.
+# The `dbt` job runs the semantic parity matrix against a dbt Cloud Semantic
+# Layer (semantic layer part 7, d1, beta; scripts/test-semanticDbtLive.ts) with
+# the DBT_SL_* secrets; until an account exists it prints that it skipped.
 # Postgres, standing in for Redshift, runs it on every PR (ci.yml's `check`).
 #
 # Not a required check, and nothing else depends on it. Without the secrets (a
@@ -144,11 +147,32 @@ jobs:
         if: failure()
         run: docker compose -f scripts/fixtures/cube/compose.yml logs cube | tail -200
 
+  dbt:
+    name: Semantic parity on dbt Cloud (beta; a real account)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - name: Type-check + compile TypeScript
+        run: npm run build:ts
+      # Skips green without the three secrets; some but not all is a failure.
+      - name: Semantic parity on dbt
+        run: node scripts/test-semanticDbtLive.js
+        env:
+          DBT_SL_HOST: ${{ secrets.DBT_SL_HOST }}
+          DBT_SL_ENVIRONMENT_ID: ${{ secrets.DBT_SL_ENVIRONMENT_ID }}
+          DBT_SL_TOKEN: ${{ secrets.DBT_SL_TOKEN }}
+
   # A red nightly is otherwise seen by nobody. One open issue per workflow: the
   # first failure opens it, each later one adds the run to it.
   report:
     name: Open an issue on failure
-    needs: [live, clickhouse, cube]
+    needs: [live, clickhouse, cube, dbt]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:

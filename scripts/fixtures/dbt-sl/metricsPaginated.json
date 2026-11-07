@@ -1,0 +1,32 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "Built from the page's metricsPaginated signature and Metric type (name, description, type: SIMPLE | RATIO | CUMULATIVE | DERIVED). No example reply is published.",
+  "reply": {
+    "data": {
+      "metricsPaginated": {
+        "items": [
+          {
+            "name": "order_total",
+            "description": "Sum of the order total",
+            "type": "SIMPLE"
+          },
+          {
+            "name": "food_order_amount",
+            "description": "Sum of the food in an order",
+            "type": "SIMPLE"
+          },
+          {
+            "name": "order_gross_profit",
+            "description": "Revenue less cost",
+            "type": "DERIVED"
+          }
+        ],
+        "pageNum": 1,
+        "pageSize": 500,
+        "totalItems": 3,
+        "totalPages": 1
+      }
+    }
+  }
+}

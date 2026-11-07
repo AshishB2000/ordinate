@@ -30,6 +30,7 @@ const catalogIds = connectorCatalog().map((d) => d.id);
 // can name was available. To give one a mark, add the file and its SOURCES.md entry, then delete it here.
 const BADGE_ONLY: Record<string, string> = {
   cube: 'Cube: no licensed mark available; the card shows the "CU" badge',
+  'dbt-semantic-layer': 'dbt Semantic Layer: no licensed mark available; the card shows the "DS" badge',
 };
 const missing = catalogIds.filter((id) => {
   if (id in BADGE_ONLY) return false;
@@ -44,9 +45,9 @@ ok('mapped PostgreSQL resolves to a bundled path',
 ok('Amazon Redshift resolves to the supplied local PNG',
   typeof logos['amazon-redshift']?.src === 'string' &&
   logos['amazon-redshift'].src.startsWith('data:image/png;base64,'));
-// 41 until the desktop's three local-file sources went with it (T8.1); 40 with Snowflake (L1.2) and BigQuery (L1.3); 42 with MongoDB and Athena; 43 with Cube (badge-only).
-ok('catalog exposes exactly 43 unique connector ids',
-  catalogIds.length === 43 && new Set(catalogIds).size === 43,
+// 41 until the desktop's three local-file sources went with it (T8.1); 40 with Snowflake (L1.2) and BigQuery (L1.3); 42 with MongoDB and Athena; 43 with Cube and 44 with the dbt Semantic Layer (both badge-only).
+ok('catalog exposes exactly 44 unique connector ids',
+  catalogIds.length === 44 && new Set(catalogIds).size === 44,
   JSON.stringify(catalogIds));
 ok('every catalog connector but the badge-only ones resolves to a real mark',
   missing.length === 0,

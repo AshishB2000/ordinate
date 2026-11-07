@@ -1,0 +1,16 @@
+{
+  "source": "GraphQL over HTTP convention; the SDK maps the message \"User is not authorized\" to its AuthError",
+  "read": "2026-11-05",
+  "note": "A GraphQL error reply (inferred): an errors array, no data.",
+  "reply": {
+    "errors": [
+      {
+        "message": "User is not authorized",
+        "path": [
+          "savedQueriesPaginated"
+        ]
+      }
+    ],
+    "data": null
+  }
+}

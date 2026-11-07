@@ -1,0 +1,70 @@
+{
+  "source": "https://docs.getdbt.com/docs/dbt-cloud-apis/sl-graphql",
+  "read": "2026-11-05",
+  "note": "Built from the page's savedQueriesPaginated signature and SavedQuery fields (the page publishes no example reply). Names from the page's examples (new_customer_orders, order_total, customer__customer_type, metric_time); order_metrics is a second saved query without a filter.",
+  "reply": {
+    "data": {
+      "savedQueriesPaginated": {
+        "items": [
+          {
+            "name": "new_customer_orders",
+            "label": "New customer orders",
+            "description": "Orders from new customers, by day",
+            "queryParams": {
+              "metrics": [
+                {
+                  "name": "order_total"
+                },
+                {
+                  "name": "food_order_amount"
+                },
+                {
+                  "name": "order_gross_profit"
+                }
+              ],
+              "groupBy": [
+                {
+                  "name": "metric_time",
+                  "grain": "DAY",
+                  "datePart": null
+                },
+                {
+                  "name": "customer__customer_type",
+                  "grain": null,
+                  "datePart": null
+                }
+              ],
+              "where": {
+                "whereSqlTemplate": "{{ Dimension('customer__customer_type') }} = 'new'"
+              }
+            }
+          },
+          {
+            "name": "order_metrics",
+            "label": null,
+            "description": null,
+            "queryParams": {
+              "metrics": [
+                {
+                  "name": "order_total"
+                }
+              ],
+              "groupBy": [
+                {
+                  "name": "metric_time",
+                  "grain": "MONTH",
+                  "datePart": null
+                }
+              ],
+              "where": null
+            }
+          }
+        ],
+        "pageNum": 1,
+        "pageSize": 100,
+        "totalItems": 2,
+        "totalPages": 1
+      }
+    }
+  }
+}

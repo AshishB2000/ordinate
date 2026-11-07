@@ -137,6 +137,40 @@ async function cubeCanary(): Promise<void> {
   await stub.close();
 }
 
+// ── dbt Semantic Layer (semantic layer part 7, d1, beta): the service token ────────────────────────────────────────
+// A dbt that echoes the Authorization header and the token into its GraphQL errors (the worst case): no error any way
+// out of the connector, no app log line and no connection view carries it.
+async function dbtCanary(): Promise<void> {
+  const fakeDbt: typeof import('./semanticFakeDbt') = require('./semanticFakeDbt');
+  const registry: typeof import('../src/connectors') = require('../src/connectors');
+  const connRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
+  const conns: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+  const transport: typeof import('../src/connectors/dbt') = require('../src/connectors/dbt');
+  const enc: typeof import('../src/engine/live/semantic/dbt') = require('../src/engine/live/semantic/dbt');
+  const fake = fakeDbt.startFakeDbt({ token: CANARY, environmentId: 42, models: [] });
+  const echoed: string[] = [];
+  fake.hook = () => {
+    echoed.push(`User is not authorized: ${fake.requests.at(-1)?.auth} (service token ${CANARY})`);
+    return { status: 200, json: { errors: [{ message: echoed.at(-1) }], data: null } };
+  };
+  transport.setTransport(fake.transport);
+  const dbt = registry.getConnector('dbt-semantic-layer')!;
+  const req = enc.dbtAdapter.encode({ dimensions: [], metrics: ['revenue'], where: [], order: [] }, 'orders', []);
+  const ctx = { values: { region: 'north-america', environmentId: '42' }, secrets: { token: CANARY }, rowLimit: 10, timeoutMs: 3_000 };
+  const out = [await dbt.semantic!.listModels(ctx), await dbt.semantic!.describeModel(ctx, 'orders'), await dbt.semantic!.run(ctx, 'body' in req ? req.body : null),
+    await dbt.listTables(ctx), await connRun.listTables('dbt-semantic-layer', ctx.values, ctx.secrets, { timeoutMs: 3_000 })];
+  transport.setTransport(null);
+  const said = out.flatMap((r) => (r.ok ? [] : [r.error]));
+  ok('dbt: every request carried the token as Bearer (the canary is real)', fake.requests.length === 5 && fake.requests.every((r) => r.auth === `Bearer ${CANARY}`));
+  ok(`dbt: ${said.length} errors (listing, describing, asking, the connection test) carry no spelling of the token`, said.length === 5 && said.every((e) => /not authorized/.test(e)) && leaks(said.join('\n')).length === 0, leaks(said.join('\n')).join());
+  for (const e of said) app.log.error({ err: new Error(e) }, 'dbt failure');
+  ok('dbt: …and the app log of them neither', leaks(appLog).length === 0, leaks(appLog).join());
+  const view = conns.publicConnection({ id: randomUUID(), name: 'dbt prod', connectorId: 'dbt-semantic-layer', values: { region: 'north-america', environmentId: '42', token: CANARY }, schemaVersion: 2 } as unknown as import('../src/connectors/connections').Connection);
+  ok('dbt: a connection\'s view carries no token (even one a stale record held)', !!view && leaks(JSON.stringify(view)).length === 0);
+  ok('dbt: NEGATIVE CONTROL the errors dbt sent did carry it', leaks(echoed.join('\n')).length > 0);
+  ok('dbt: everything this test printed so far carries no spelling of it', leaks(captured).length === 0);
+}
+
 (async () => {
   // ── The grep itself (negative control: it must SEE each spelling) ─────────
   const b = Buffer.from(CANARY);
@@ -210,6 +244,7 @@ async function cubeCanary(): Promise<void> {
   }
 
   await cubeCanary();
+  await dbtCanary();
 
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {

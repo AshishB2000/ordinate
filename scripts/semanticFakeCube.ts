@@ -165,7 +165,7 @@ export function canonical(q: SemanticQuery, columns: readonly LiveColumn[]): Sem
 const cmp = (a: unknown, b: unknown): number => (typeof a === 'number' && typeof b === 'number' ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0);
 
 /** Rows in Cube's order as Postgres runs it: `asc` puts a NULL last, `desc` first. */
-function postgresOrder(rows: unknown[][], order: Array<{ at: number; desc: boolean }>): unknown[][] {
+export function postgresOrder(rows: unknown[][], order: Array<{ at: number; desc: boolean }>): unknown[][] {
   return rows.slice().sort((a, b) => {
     for (const { at, desc } of order) {
       const [x, y] = [a[at], b[at]];

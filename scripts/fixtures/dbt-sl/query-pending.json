@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/dbt-labs/semantic-layer-sdk-python (main, dbtsl/models and dbtsl/api/graphql)",
+  "read": "2026-11-05",
+  "note": "The poll before the answer: a status the SDK's QueryStatus lists (UNKNOWN, PENDING, RUNNING, COMPILED, SUCCESSFUL, FAILED); the page names only SUCCESSFUL and FAILED as the end.",
+  "reply": {
+    "data": {
+      "query": {
+        "status": "RUNNING",
+        "error": null,
+        "totalPages": null,
+        "jsonResult": null
+      }
+    }
+  }
+}

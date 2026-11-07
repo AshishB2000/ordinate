@@ -410,6 +410,16 @@ CUBE_URL=http://127.0.0.1:4000 CUBE_API_SECRET=ordinate-cube-parity-not-a-secret
 docker compose -f scripts/fixtures/cube/compose.yml down -v
 ```
 
+The **dbt Semantic Layer (beta)** gets the same matrix once there is a dbt Cloud account:
+`scripts/test-semanticDbtLive.ts` asks the saved query `ordinate_parity` of the environment that
+`DBT_SL_ENVIRONMENT_ID` names, on `DBT_SL_HOST`, with the service token `DBT_SL_TOKEN` (the
+warehouse nightly's `dbt` job passes the three repository secrets). The account needs the two files
+in `scripts/fixtures/dbt-sl/project/models/` added to its dbt project and deployed to that
+environment, on the nightly's Snowflake account: a model selecting the parity fixture from literals,
+and its semantic model, four metrics and the saved query (`scripts/dbtFixture.ts` writes both). Until
+the three secrets exist the job prints that it skipped; the beta label comes off in the pull request
+that first sees it pass.
+
 It runs only when a warehouse's variables are set. Without them it prints that it skipped and
 passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
 These are inputs to the test, **not server settings**: the server never reads them, so they are not
@@ -426,6 +436,7 @@ in [configuration.md](configuration.md).
 | `SNOWFLAKE_DATABASE` | no | A database with **at least one table** the role can read. Without it, the account's first visible table is described, and the query-tag check is skipped. |
 | `SNOWFLAKE_SCHEMA` | no | The schema whose table is described first. |
 | `SNOWFLAKE_SEMANTIC_VIEW` | no | `DATABASE.SCHEMA.VIEW` of the semantic view made by `scripts/fixtures/snowflake-semantic-view.sql` (below). Without it, the semantic-view checks are skipped. Set without the other Snowflake variables, or not in that form, it is a failure. |
+| `DBT_SL_HOST`, `DBT_SL_ENVIRONMENT_ID`, `DBT_SL_TOKEN` | all three or none | The dbt Cloud Semantic Layer (beta): one of the three multi-tenant hosts, the environment that deploys `scripts/fixtures/dbt-sl/project`, and a service token with **Semantic Layer Only** and **Metadata Only**. Some but not all, or another host, is a failure. |
 | `BIGQUERY_KEY_JSON` | yes | The service-account key file, whole. |
 | `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
 | `BIGQUERY_DATASET` | no | The default dataset, listed first. |
@@ -597,7 +608,7 @@ Prepare step on a copy. Every value a formula writes is a bound parameter, never
 ## Semantic layers
 
 A company that already defines its metrics in a semantic layer (Snowflake semantic views, Cube,
-dbt) can keep their math there. A **semantic dataset** is a Live dataset whose questions the
+dbt, beta) can keep their math there. A **semantic dataset** is a Live dataset whose questions the
 layer answers. Its record names the layer's model and holds no table and no SQL. The connectors
 that reach a layer arrive with their own releases; this one adds the dataset, the sync and the
 doors (`connection:semanticModels`, `connection:addSemanticDataset`, both for editors).
@@ -728,6 +739,54 @@ are the model's dimensions, its metrics the model's measures.
 
 What the connector relies on, and which parts only a real deployment proves, is in
 [cube.md](../live-data/cube.md).
+
+### dbt Semantic Layer (beta)
+
+**dbt Semantic Layer (beta)** is a connection under **Semantic layers** in the source picker, for a
+dbt Cloud account with the Semantic Layer. It is **beta**: it is built from dbt's documentation and
+has **not yet been checked against a live dbt Cloud account**. The label comes off when the warehouse
+nightly first runs green against one (above). It lists the environment's **saved queries**, and
+**Add as dataset** makes a semantic dataset of one: its dimensions are the saved query's group-bys,
+its metrics the saved query's metrics.
+
+- **The form.** **Region** is the account's multi-tenant host: North America
+  (`semantic-layer.cloud.getdbt.com`), EMEA (`semantic-layer.emea.dbt.com`) or APAC
+  (`semantic-layer.au.dbt.com`). Ordinate contacts only these three, over https; single-tenant
+  and cell-based accounts, whose host is per account, are not supported in the beta. The
+  **Environment ID** is the deployment environment's number (dbt Cloud → Deploy → Environments).
+  The **Service token** needs the **Semantic Layer Only** and **Metadata Only** permissions (a
+  personal access token also works). It is kept in the secrets store and sent only in the
+  `Authorization` header, never in a reply or a log; the connection says only that one is set.
+- **One question at a time, plain GraphQL.** Each question reads the saved query once more (its own
+  filter, and whether it still has what is asked), creates the query, and polls it (every 250 ms,
+  doubling to 2 s) until dbt answers, `LIVE_QUERY_TIMEOUT_MS` passes or the viewer leaves; then
+  polling stops and Ordinate asks dbt to cancel. However many requests it takes, it counts as one
+  question. Results come as JSON (`jsonResult`), page by page up to the Live row cap.
+- **The saved query's own filter** is sent with every question, as dbt wrote it, so every figure
+  is filtered as the saved query is. A metric or group-by removed from the saved query in dbt
+  refuses its charts until the dataset is synced again.
+- **Types.** A categorical dimension is text (dbt reports no SQL type for it, so a numeric one is
+  text too); a time dimension is a date at the grains dbt lists for it (day to year). An entity, a
+  date part (day of week) and a name dbt would need quoted are left out.
+- **Can it be added up?** Only a simple metric whose one measure aggregates `sum` or `count`. A
+  ratio, derived, cumulative or conversion metric, a distinct count, and a metric whose measure
+  cannot be read are not, so a running total of it is refused.
+- **Filter values are written into dbt's filter text** (dbt's `where` is a template, with no bound
+  parameters), only by a closed encoder: text of letters, digits, spaces and `_ . , : ; / & ( ) # @
+  + % -` and `'`, up to 200 characters; ISO dates. Anything else is refused, naming dbt and the field,
+  never dropped: a value holding a brace, a backslash, a double quote, a tab, a line break, an emoji
+  or a curly quote; comparing text with `<` or `>` (a categorical dimension's order is unknown);
+  "is empty" on text (Ordinate's empty includes spaces); "contains" with `%` or `_`. A chart whose
+  kept categories hold such a value cannot ask for "Other" or a split, and is refused the same way.
+  Value pickers still work: their blanks are dropped by Ordinate from the list dbt returns.
+- **Blanks.** A dimension that answers both `''` and NULL is refused, as for Cube; declare it
+  `NULLIF(col, '')` in the semantic model to make them one.
+- **Restricted viewers are refused** on dbt datasets, as on every semantic layer: dbt compares
+  values in the warehouse's collation, never byte for byte.
+- **No copy.** A dbt connection has no tables to copy: "Copy the data" is refused.
+
+What the connector relies on, each item as documented and still to verify, is in
+[dbt-semantic-layer.md](../live-data/dbt-semantic-layer.md).
 
 ## Refresh URL
 

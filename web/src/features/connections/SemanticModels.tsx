@@ -26,15 +26,17 @@ export interface SemanticModel {
 type Listed = { ok: true; models: SemanticModel[] } | { ok: false; error: string };
 type Added = { ok: true; dataset: { id: string; name: string } } | { ok: false; error: string };
 
-export function SemanticModels({ projectId, connId, views, fill }: {
+export function SemanticModels({ projectId, connId, views, savedQueries, fill }: {
   projectId: string;
   connId: string;
   /** Snowflake's word: semantic views in a database, beside its tables. Otherwise a deployment's models. */
   views?: boolean;
+  /** dbt's word: an environment's saved queries (d1). */
+  savedQueries?: boolean;
   /** The page's main pane holds nothing else (a layer-only connection: no SQL to run). */
   fill?: boolean;
 }) {
-  const noun = views ? 'Semantic views' : 'Models';
+  const noun = views ? 'Semantic views' : savedQueries ? 'Saved queries' : 'Models';
   const q = useQuery({
     queryKey: ['connection:semanticModels', projectId, connId],
     queryFn: async () => {
@@ -51,7 +53,7 @@ export function SemanticModels({ projectId, connId, views, fill }: {
   else if (q.isError) body = <ErrorState compact heading={3} title={`${noun} could not be listed`} message={q.error.message} onRetry={() => void q.refetch()} />;
   else if (!q.data.length) {
     body = (
-      <EmptyState compact heading={3} icon="layers" title={views ? 'No semantic views in this database yet.' : 'No models in this deployment yet.'}>
+      <EmptyState compact heading={3} icon="layers" title={views ? 'No semantic views in this database yet.' : savedQueries ? 'No saved queries in this environment yet.' : 'No models in this deployment yet.'}>
         Once one is defined in the layer, it is listed here to add as a dataset.
       </EmptyState>
     );
