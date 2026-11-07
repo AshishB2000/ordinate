@@ -27,6 +27,8 @@ import type { FormCtx } from './FormParts';
 import { FormulaEditor } from './FormulaEditor';
 import { StepEditor } from './StepEditor';
 import { StepList } from './StepList';
+import { RemoveStepConfirm, feedsText } from './RemoveStepConfirm';
+import { useLineageFields, type UsedCounts } from '../model/api';
 import { STEP_TYPES, TEXT_STEPS } from './steps';
 import { SuggestedSteps, useSuggestCalc, useSuggestSteps } from './Suggest';
 import { TextProfile } from './TextProfile';
@@ -97,6 +99,10 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
   const [formula, setFormula] = useState<Formula>(() => (params.get('add') === 'calculated_field' ? { index: -1 } : null));
   const [warnings, setWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // A step that feeds something asks first, so the step actions wait for lineage's first reply; a failed lineage read
+  // (an old pod) never blocks a remove.
+  const lineage = useLineageFields(projectId, datasetId);
+  const [removing, setRemoving] = useState<{ index: number; name: string; usedIn: UsedCounts } | null>(null);
   const [profile, setProfile] = useState<string | null>(null);
   const [rail, setRail, commitRail] = useStoredSize('ordinate.prepareRail', 380, 300, 640);
   const apply = useApplyReply(projectId, datasetId);
@@ -189,10 +195,14 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
             steps={state.steps}
             counts={state.stepCounts}
             names={names}
-            busy={busy}
+            busy={busy || lineage.isPending} // until lineage answers, a Remove cannot know whether to ask first
             onMove={move}
             onEdit={(i) => open(state.steps[i].type, i)}
-            onRemove={(i) => void runOrToast({ kind: 'remove', index: i })}
+            onRemove={(i) => {
+              const made = lineage.data?.steps.find((x) => x.index === i);
+              if (made && made.produces[0] && feedsText(made.usedIn)) setRemoving({ index: i, name: made.produces[0], usedIn: made.usedIn });
+              else void runOrToast({ kind: 'remove', index: i });
+            }}
           />
           <div className={s.controls}>
             {/* Beside the rail, not under it: the 25 types fit the window's height there (Radix shifts it up to fit). */}
@@ -253,6 +263,15 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
         </div>
       </div>
 
+      {removing && (
+        <RemoveStepConfirm
+          name={removing.name}
+          usedIn={removing.usedIn}
+          busy={busy}
+          onClose={() => setRemoving(null)}
+          onConfirm={() => void runOrToast({ kind: 'remove', index: removing.index }).then(() => setRemoving(null))}
+        />
+      )}
       {formula && (
         <FormulaEditor
           projectId={projectId}

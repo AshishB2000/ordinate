@@ -9,6 +9,7 @@
 //   3. Glossary: a term made here, added to a visual's filters, changes its chart, and reads "1 visual".
 //   3b. Topics (part 6 step 07): Sales made from the header narrows Datasets and Metrics, is still picked after a
 //      reload, Show all clears it, an edit saves, and Delete puts it in the Trash as a "Topic".
+//   3c. Lineage: trace a column, "Used by" on each field, and the ask before removing a step that feeds a metric.
 //   4. An empty project: nothing to describe on any tab. The error and loading states.
 //   5. Assistant: the sample ships its instructions and verified questions (an empty project's tab is the
 //      empty state); one written with Enter is stored by the server and still there after a reload, and a
@@ -39,6 +40,7 @@ async function loadingShots(page: Page, url: string, channel: string, label: str
 /** One RPC the spec sends itself, as the signed-in user, with the CSRF pair. */
 async function post(s: Session, channel: string, payload: unknown): Promise<any> { // any: each channel's own reply
   const r = await s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': await csrfToken(s) }, data: { args: [payload] } });
+  assert.equal(r.status(), 200, `${channel}: ${await r.text()}`);
   return r.json();
 }
 
@@ -127,6 +129,57 @@ e2e('data model: datasets', async (s) => {
   await phoneFits(page, misfits, 'the Data model Overview');
   await screens(page, 'model-phone');
   assert.deepEqual(misfits, []);
+});
+
+e2e('data model: lineage, used by, and the ask before removing what feeds a metric', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  const retail = ((await post(s, 'dataset:list', { projectId: pid })) as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!;
+  assert.ok(retail);
+
+  // Trace a column: the server's graph around it, and its "Used by" line.
+  await page.goto(`/model/${pid}?dataset=${retail.id}&panel=lineage`);
+  await settled(page);
+  const lineage = page.getByRole('tabpanel', { name: 'Lineage' });
+  await lineage.getByRole('combobox', { name: 'Trace a column' }).click();
+  await page.getByRole('option', { name: 'revenue', exact: true }).click();
+  await lineage.getByText(/^Used by \d/).waitFor();
+  await lineage.getByRole('group', { name: 'Lineage graph' }).waitFor();
+  assert.match(page.url(), /[?&]column=revenue\b/);
+  await screens(page, 'model-lineage-column');
+
+  // Used by, on the Fields tab.
+  await page.goto(`/model/${pid}?dataset=${retail.id}&panel=fields`);
+  await settled(page);
+  const notes = page.getByRole('region', { name: 'Column notes' });
+  await notes.getByRole('columnheader', { name: 'Used by' }).waitFor();
+  await notes.locator('tr[data-column="revenue"]').getByText(/^Used by \d/).waitFor();
+  await screens(page, 'model-used-by');
+
+  // A calculated step and a metric on it: removing the step asks, and says what it feeds.
+  const added = await post(s, 'dataset:addStep', { projectId: pid, datasetId: retail.id, step: { type: 'calculated_field', name: 'Margin', expression: '[revenue] * 2' } });
+  assert.ok(added.ok, JSON.stringify(added));
+  const saved = await post(s, 'metric:save', { projectId: pid, input: { name: 'Total margin', datasetId: retail.id, definition: { column: 'Margin', aggregation: 'sum' } } });
+  assert.ok(saved.ok, JSON.stringify(saved));
+  await page.goto(`/data/${pid}/${retail.id}/prepare`);
+  await settled(page);
+  const steps = page.getByRole('list', { name: 'Pipeline steps' });
+  const n = await steps.getByRole('listitem').count();
+  await page.getByRole('button', { name: `Remove step ${n}` }).click();
+  const dlg = page.getByRole('dialog', { name: 'Delete “Margin”?' });
+  await dlg.getByText(/It feeds 1 metric\b/).waitFor();
+  await screensInPlace(page, 'prepare-remove-confirm');
+  await dlg.getByRole('button', { name: 'Keep it' }).click();
+  await dlg.waitFor({ state: 'detached' });
+  assert.equal(await steps.getByRole('listitem').count(), n, 'cancel kept the step');
+
+  // Put the sample back.
+  await page.getByRole('button', { name: `Remove step ${n}` }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.waitForFunction((k) => document.querySelectorAll('[aria-label="Pipeline steps"] > li').length === k, n - 1);
+  const metrics = (await post(s, 'metric:list', { projectId: pid })).metrics as { id: string; name: string }[];
+  await post(s, 'metric:delete', { projectId: pid, id: metrics.find((m) => m.name === 'Total margin')!.id });
+  for (const l of s.rpc.loads) assert.ok(l.rpcs <= 25, `${l.url} made ${l.rpcs} calls`);
 });
 
 e2e('data model: metrics', async ({ page, server }) => {

@@ -95,7 +95,7 @@ describe('the formula editor’s pure halves', () => {
 
 // ── The page, against a stubbed server ─────────────────────────────────────
 
-type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
+type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>);
 function serve(routes: Record<string, Reply>) {
   const calls: { channel: string; payload: unknown }[] = [];
   vi.stubGlobal(
@@ -106,7 +106,7 @@ function serve(routes: Record<string, Reply>) {
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
       const r = routes[channel] ?? { body: [] };
-      const out = typeof r === 'function' ? r(payload) : r;
+      const out = typeof r === 'function' ? await r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),
   );
@@ -172,10 +172,91 @@ describe('Prepare', () => {
       }),
     );
     renderApp(URL_);
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove step 1' }));
+    const btn = (await screen.findByRole('button', { name: 'Remove step 1' })) as HTMLButtonElement;
+    await waitFor(() => expect(btn.disabled).toBe(false)); // the step actions wait for lineage:fields
+    fireEvent.click(btn);
     expect(await screen.findByText('Filter skipped: nothing to do')).toBeTruthy();
     expect(calls.find((c) => c.channel === 'dataset:removeStep')?.payload).toEqual({ projectId: PID, datasetId: DID, index: 0 });
     expect(await screen.findByText('Prepare · 5,000 rows · 3 columns')).toBeTruthy();
+  });
+
+  describe('removing a step that something reads', () => {
+    const MARGIN = { type: 'calculated_field', name: 'Margin', expression: '[units] * 2' };
+    const REMOVED = { ok: true, dataset: { ...STATE, steps: [], updatedAt: '2026-10-03T10:01:00Z' }, preview: { columns: COLS, rowCount: 5000, warnings: [], stepCounts: [] } };
+    const fields = (steps: unknown[]) => ({ body: { ok: true, fields: {}, steps } });
+    const withSteps = (steps: unknown[], lineage: Reply, more: Record<string, Reply> = {}) =>
+      base({ 'prepare:get': { body: { ...STATE, steps, stepCounts: steps.map(() => ({ before: 5, after: 5 })) } }, 'lineage:fields': lineage, 'dataset:removeStep': { body: REMOVED }, ...more });
+    // The page asks lineage:fields once, and its step actions are off until it answers (or fails).
+    const settled = async (calls: { channel: string }[]) => {
+      await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
+      await waitFor(() => expect(screen.getAllByRole('button', { name: /^Remove step / }).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true));
+    };
+    const removes = (calls: { channel: string }[]) => calls.filter((c) => c.channel === 'dataset:removeStep');
+
+    it('asks first, names what it feeds, and removes only on Delete', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], fields([{ index: 1, produces: ['Margin'], usedIn: { metric: 1, visual: 3 } }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 2' });
+      await settled(calls);
+      fireEvent.click(btn);
+      const d = await screen.findByRole('dialog');
+      expect(within(d).getByText('Delete “Margin”?')).toBeTruthy();
+      expect(within(d).getByText(/It feeds 1 metric, 3 charts\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
+      fireEvent.click(within(d).getByRole('button', { name: 'Keep it' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(removes(calls)).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove step 2' }));
+      fireEvent.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+    });
+
+    it('Remove waits for lineage:fields: off until it answers, then it asks, never a remove on a guess', async () => {
+      let answer = (): void => {};
+      const held = new Promise<void>((r) => { answer = r; });
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], async () => { await held; return fields([{ index: 1, produces: ['Margin'], usedIn: { metric: 1 } }]); }));
+      renderApp(URL_);
+      const btn = (await screen.findByRole('button', { name: 'Remove step 2' })) as HTMLButtonElement;
+      await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
+      expect(btn.disabled).toBe(true);
+      fireEvent.click(btn);
+      expect(removes(calls)).toHaveLength(0);
+      answer();
+      await waitFor(() => expect(btn.disabled).toBe(false));
+      fireEvent.click(btn);
+      expect(await screen.findByText(/It feeds 1 metric\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
+    });
+
+    it('a rename step that feeds something asks too', async () => {
+      const calls = serve(withSteps([{ type: 'rename_column', from: 'amt', to: 'amount' }], fields([{ index: 0, produces: ['amount'], usedIn: { dashboard: 2 } }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 1' });
+      await settled(calls);
+      fireEvent.click(btn);
+      expect(await screen.findByText(/It feeds 2 dashboards\./)).toBeTruthy();
+      expect(removes(calls)).toHaveLength(0);
+    });
+
+    it('NEGATIVE CONTROL: a step that makes nothing, or feeds nothing, is removed at once', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], fields([{ index: 1, produces: ['Margin'], usedIn: {} }])));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 1' });
+      await settled(calls);
+      fireEvent.click(btn);
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('NEGATIVE CONTROL: with lineage:fields a 404, every remove is immediate', async () => {
+      const calls = serve(withSteps([STATE.steps[0], MARGIN], { status: 404, body: { error: 'nope' } }));
+      renderApp(URL_);
+      const btn = await screen.findByRole('button', { name: 'Remove step 2' });
+      await settled(calls);
+      fireEvent.click(btn);
+      await waitFor(() => expect(removes(calls)).toHaveLength(1));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
   });
 
   it('a step the form cannot build yet is refused here, without a call', async () => {

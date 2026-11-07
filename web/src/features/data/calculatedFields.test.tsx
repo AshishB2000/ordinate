@@ -151,6 +151,30 @@ describe('a Live dataset’s calculated fields', () => {
     await waitFor(() => expect(sent(calls)).toEqual([{ name: 'Margin', expression: '[revenue] - [cost]' }]));
   });
 
+  it('Delete of a field another reads names what it feeds, including a calculated field', async () => {
+    const calls = serve({ allowed: true, fields: [{ name: 'Margin', expression: '[revenue] - [cost]', type: 'number' }, { name: 'Margin %', expression: '[Margin] / [revenue]', type: 'number' }] }, {
+      'lineage:fields': { body: { ok: true, fields: { Margin: { usedIn: { calc: 1, metric: 1, visual: 3 } }, 'Margin %': { usedIn: {} } }, steps: [] } },
+    });
+    renderPanel();
+    await screen.findByRole('table');
+    const row = (n: string) => within(document.querySelector(`[data-calc="${n}"]`) as HTMLElement);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'lineage:fields')).toBe(true));
+    fireEvent.click(row('Margin').getByRole('button', { name: 'Delete' }));
+    const d = await screen.findByRole('dialog');
+    await within(d).findByText(/It feeds 1 metric, 3 charts, 1 calculated field\./);
+    expect(sent(calls)).toBeUndefined();
+    fireEvent.click(within(d).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(sent(calls)).toEqual([{ name: 'Margin %', expression: '[Margin] / [revenue]' }]));
+  });
+
+  it('NEGATIVE CONTROL: a field nothing reads keeps the plain confirmation', async () => {
+    serve({ allowed: true, fields: [BAND] }, { 'lineage:fields': { body: { ok: true, fields: {}, steps: [] } } });
+    renderPanel();
+    await screen.findByRole('table');
+    fireEvent.click(within(document.querySelector('[data-calc="Band"]') as HTMLElement).getByRole('button', { name: 'Delete' }));
+    expect((await screen.findByRole('dialog')).textContent).not.toContain('It feeds');
+  });
+
   it('an older server (no calculated block) shows no panel', async () => {
     const calls = serve(undefined);
     renderPanel();

@@ -134,7 +134,8 @@ function Cell({ value, placeholder, label, multiline, readOnly, onSave }: { valu
   );
 }
 
-export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: string; datasetId: string; header: DatasetColumns; live?: boolean }) {
+/** `usedBy` (column → words, the Data model's) adds a "Used by" column; absent, the table is the dataset page's. */
+export function ColumnsTab({ projectId, datasetId, header, live, usedBy }: { projectId: string; datasetId: string; header: DatasetColumns; live?: boolean; usedBy?: Record<string, string> }) {
   const docs = useColumnDocs(projectId, datasetId);
   // An example placeholder: the most common value — on a Live dataset, the schema sync's sample (it keeps no rows to count).
   const stats = useStats(projectId, live ? '' : datasetId, !live);
@@ -173,6 +174,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
             <tr>
               <th scope="col">Column</th>
               <th scope="col">Type</th>
+              {usedBy && <th scope="col">Used by</th>}
               <th scope="col">Display name</th>
               <th scope="col">Also called</th>
               <th scope="col">Value labels</th>
@@ -191,6 +193,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
                   <td>
                     <span className={s.typeChip}>{c.type}</span>
                   </td>
+                  {usedBy && <td className={s.muted}>{usedBy[c.name] ?? '\u2014'}</td>}
                   <td>
                     <Cell readOnly={!canEdit} value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v, no) => patch(c.name, { displayName: v }, no)} />
                   </td>

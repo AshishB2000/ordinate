@@ -10,6 +10,8 @@ import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog } from '../../ui/Dialog';
 import { Icon } from '../../ui/icons/Icon';
 import { EmptyState } from '../../ui/States';
+import { feedsText, RemoveStepConfirm } from '../prepare/RemoveStepConfirm';
+import { useLineageFields } from '../model/api';
 import { useCan } from '../projects/api';
 import type { Column } from '../prepare/api';
 import { useColumnFormula, type FormulaField } from '../prepare/FormulaEditor';
@@ -52,6 +54,7 @@ function FieldDialog({ projectId, datasetId, schema, editing, onClose }: { proje
 export function CalculatedFieldsPanel({ projectId, datasetId }: { projectId: string; datasetId: string }) {
   const q = useLiveSchema(projectId, datasetId);
   const set = useSetCalculated(projectId, datasetId);
+  const lineage = useLineageFields(projectId, datasetId);
   const editor = useCan(projectId)('editor');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
@@ -133,7 +136,11 @@ export function CalculatedFieldsPanel({ projectId, datasetId }: { projectId: str
         </div>
       )}
       {editing && <FieldDialog projectId={projectId} datasetId={datasetId} schema={q.data} editing={editing} onClose={() => setEditing(null)} />}
-      {deleting !== null && fields[deleting] && (
+      {deleting !== null && fields[deleting] && (() => {
+        const usedIn = lineage.data && Object.prototype.hasOwnProperty.call(lineage.data.fields, fields[deleting].name) ? lineage.data.fields[fields[deleting].name].usedIn : {};
+        return feedsText(usedIn) ? (
+          <RemoveStepConfirm name={fields[deleting].name} usedIn={usedIn} busy={set.isPending} onConfirm={() => remove(deleting)} onClose={() => setDeleting(null)} />
+        ) : (
         <ConfirmDelete
           title={`Delete “${fields[deleting].name}”?`}
           description="Charts, KPIs and filters that read it will say it is not a column of this dataset."
@@ -141,7 +148,8 @@ export function CalculatedFieldsPanel({ projectId, datasetId }: { projectId: str
           onConfirm={() => remove(deleting)}
           onClose={() => setDeleting(null)}
         />
-      )}
+        );
+      })()}
     </section>
   );
 }

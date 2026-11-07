@@ -14,6 +14,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { useLineage, type Lineage, type LineageNode, type LineageType } from './api';
 import { recordHref } from './CatalogTab';
 import { formatNumber } from './format';
+import { usedByText } from '../model/api';
 import s from './Data.module.css';
 import ms from './Model.module.css';
 
@@ -34,6 +35,8 @@ const KIND: Record<string, { word: string; plural: string; icon: IconName }> = {
   dashboard: { word: 'Dashboard', plural: 'Dashboards', icon: 'layout-dashboard' },
   report: { word: 'Report', plural: 'Reports', icon: 'file-text' },
   alert: { word: 'Alert', plural: 'Alerts', icon: 'bell' },
+  column: { word: 'Column', plural: 'Columns', icon: 'columns' },
+  term: { word: 'Glossary term', plural: 'Glossary terms', icon: 'list' },
 };
 
 /** "Used in 3 visuals · 1 dashboard" — the counts are the server's. */
@@ -168,11 +171,12 @@ export function LineageGraph({ projectId, g }: { projectId: string; g: Lineage }
 const TYPE_WORD: Record<LineageType, string> = { dataset: 'Dataset', visual: 'Visual', dashboard: 'Dashboard', metric: 'Metric', report: 'Report', alert: 'Alert' };
 
 /** The graph around one record, with what it is built from and what uses it; drawn in the drawer and in the Data model. */
-export function LineageView({ projectId, id, type = 'dataset' }: { projectId: string; id: string; type?: LineageType }) {
-  const q = useLineage(projectId, id, true, type);
-  const g = q.data;
-  if (q.isPending) return <SkeletonBlock label="Tracing what this is built from" />;
-  if (q.isError) return <ErrorState compact heading={3} title="The lineage could not be traced" message={q.error.message} onRetry={() => void q.refetch()} />;
+export function LineageView({ projectId, id, type = 'dataset', graph }: { projectId: string; id: string; type?: LineageType; graph?: Lineage }) {
+  // A graph already fetched (one column's, from lineage:column) is drawn as is, with "Used by" in its chip.
+  const q = useLineage(projectId, id, !graph, type);
+  const g = graph ?? q.data;
+  if (!graph && q.isPending) return <SkeletonBlock label="Tracing what this is built from" />;
+  if (!graph && q.isError) return <ErrorState compact heading={3} title="The lineage could not be traced" message={q.error!.message} onRetry={() => void q.refetch()} />;
   if (!g || g.nodes.length === 0) {
     return (
       <EmptyState compact heading={3} icon="lineage" title="Nothing to trace">
@@ -189,7 +193,7 @@ export function LineageView({ projectId, id, type = 'dataset' }: { projectId: st
         </span>
         <span className={ms.lnChip}>
           <Icon name="chart-bar" size={16} />
-          {usedInText(g.usedIn) || 'Not used by anything yet'}
+          {(graph ? usedByText(g.usedIn) : usedInText(g.usedIn)) || 'Not used by anything yet'}
         </span>
         <span className={s.meta}>Hover to follow a path; click to open.</span>
       </div>

@@ -112,6 +112,26 @@ describe('The Data model: a dataset\'s panel', () => {
     expect(await within(f).findByRole('region', { name: 'Column notes' })).toBeTruthy();
   });
 
+  it('Fields: says what uses each field, in the server\'s counts', async () => {
+    serve({ routes: { 'lineage:fields': { body: { ok: true, fields: { order_id: { usedIn: { metric: 2, visual: 6 } }, double: { usedIn: { term: 1 } } }, steps: [] } } } });
+    open('fields');
+    const f = await tabpanel('Fields');
+    const row = async (c: string) => within(await within(f).findByRole('region', { name: 'Column notes' }, LAZY)).getByText(c).closest('tr')!;
+    await waitFor(async () => expect((await row('order_id')).textContent).toContain('Used by 2 metrics · 6 visuals'));
+    expect((await row('email')).textContent).toContain('Not used yet');
+    expect(within(within(f).getByRole('region', { name: 'Calculated in Prepare' })).getByText('Used by 1 term')).toBeTruthy();
+  });
+
+  it('NEGATIVE CONTROL: with lineage:fields a 404, Used by reads \u2014 and the notes stay editable', async () => {
+    serve({ routes: { 'lineage:fields': { status: 404, body: { error: 'nope' } } } });
+    open('fields');
+    const f = await tabpanel('Fields');
+    const notes = await within(f).findByRole('region', { name: 'Column notes' }, LAZY);
+    await waitFor(() => expect(within(notes).getAllByText('\u2014').length).toBeGreaterThanOrEqual(2));
+    expect(within(notes).queryByText('Not used yet')).toBeNull();
+    expect((within(notes).getByRole('textbox', { name: 'Description of email' }) as HTMLTextAreaElement).readOnly).toBe(false);
+  });
+
   it('Guide: the rendered article; a viewer is offered nothing to write', async () => {
     serve({ doc: { guide: '# Orders\n\nUse **net** revenue.' } });
     open('guide');
