@@ -29,6 +29,7 @@ const driverScope: typeof import('../src/analysis/driverScope') = require('../sr
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+const ipcMetrics: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 const { randomUUID }: typeof import('crypto') = require('crypto');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
@@ -154,6 +155,16 @@ async function alertsSection(): Promise<void> {
   ok('the Test button says it would fire for the period in scope', (await H.as(H.ORG_A, () => alertStore.testRule(P, probe))).fire === true);
   const plainRule = { ...rule, id: randomUUID(), metric: { ...rule.metric, metricId: units.id } };
   ok('NEGATIVE CONTROL: a metric with no target never fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, plainRule))).fire === false);
+
+  // As "Alert me…" stores it from a KPI card: the card's column and total beside the metric. East is 1,000 of a 2,000 target.
+  const east = (await post('metric:save', { projectId: P, input: { name: 'East revenue', datasetId: D, definition: { column: 'amount', aggregation: 'sum' }, filters: [step('region', '=', 'East')], timeColumn: 'day', target: { source: { value: 3000 }, per: 'month' } } })).value.metric as Metric;
+  const fromCard = { ...rule, id: randomUUID(), metric: { column: 'amount', aggregation: 'sum', metricId: east.id, filters: THIS_MONTH, label: 'East revenue' } };
+  const tile = await H.as(H.ORG_A, () => ipcMetrics.resolveMetric(P, east.id, { filters: THIS_MONTH }));
+  const watched = await H.as(H.ORG_A, () => alertStore.metricFor(P, fromCard as never));
+  ok('a target rule from a KPI card watches the metric, its own filter and all', typeof watched.value === 'number' && Object.is(watched.value, tile?.value) && Object.is(watched.target, 2000), show([watched, tile?.value]));
+  ok('… so at 50% of its target it fires', (await H.as(H.ORG_A, () => alertStore.testRule(P, fromCard))).fire === true);
+  const copy = await H.as(H.ORG_A, () => alertStore.metricFor(P, { ...fromCard, compare: 'threshold', threshold: { op: '>', value: 0 } } as never));
+  ok('NEGATIVE CONTROL: a threshold rule from that card keeps its stored copy', Object.is(copy.value, (await H.as(H.ORG_A, () => ipcMetrics.resolveMetric(P, rev.id, { filters: THIS_MONTH })))?.value) && !Object.is(copy.value, tile?.value), show(copy));
 
   await post('metric:delete', { projectId: P, id: rev.id });
   const before = JSON.stringify(await stored());
