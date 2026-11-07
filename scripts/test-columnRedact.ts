@@ -14,6 +14,8 @@
 // - verified:list (part 3) leaves out, for east, a verified question whose spec names a hidden column, with no value
 //   filter; People by dept stays (CONTROL); hr lists both (CONTROL).
 // - verified:checkResult (p3-10): east reads a Staff question's outcome without its reason; hr reads it (CONTROL).
+// - a verified question with a value filter on dept (visible): east gets its spec and its mark; one filtered on ssn is
+//   left out (CONTROL).
 // - explore:suggest names, for east, the columns hidden from east (Explore's chip); none for hr (CONTROL).
 // - quality:list and dataset:liveSchema redact Staff for east (closedToCaller): no run, no args, no sample values.
 //
@@ -193,6 +195,16 @@ const EXAMPLE = 'EXAMPLE_PAY_52000';
     ok('verified:checkResult: east reads the outcome of a Staff question, without its reason', crEast.body?.run?.results?.[0]?.outcome === 'refused' && !('reason' in crEast.body.run.results[0])
       && !crEast.text.includes(C.SSN_CANARY), crEast.text.slice(0, 300));
     ok('NEGATIVE CONTROL: hr reads the reason', (await W.call('hr', 'verified:checkResult', { projectId: P })).body?.run?.results?.[0]?.reason?.includes(C.SSN_CANARY) === true);
+    // ── a value filter on a column east reads: hidden (D5) is row rules only, so east gets the spec and the mark ──
+    const OPS = { datasetId: staff, category: 'dept', measures: [{ column: 'employee_id', aggregation: 'count' }], filters: [{ column: 'dept', op: '=', value: 'Ops' }], chartType: 'column', title: 'Ops headcount' };
+    must('verified Ops', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'Ops headcount', spec: OPS } }));
+    must('verified ssn', await W.call('boss', 'verified:save', { projectId: P, input: { question: 'One person by dept', spec: { ...OPS, filters: [{ column: 'ssn', op: '=', value: `${C.SSN_CANARY}_1` }] } } }));
+    const vOps = await W.call('east', 'verified:list', { projectId: P });
+    const opsRow = vOps.body?.questions?.find((q: { question: string }) => q.question === 'Ops headcount');
+    const opsCard = (await W.call('east', 'answer:card', { projectId: P, spec: OPS })).body;
+    ok('a dept value question on Staff: east gets its spec, its filter in words and its mark', opsRow?.spec?.filters?.[0]?.value === 'Ops' && opsRow.filters[0] === 'dept = Ops'
+      && opsCard?.verified?.question === 'Ops headcount', `${JSON.stringify(opsRow).slice(0, 300)} ${JSON.stringify(opsCard?.verified)}`);
+    ok('NEGATIVE CONTROL: a question filtered on ssn is still left out for east', !vOps.text.includes(C.SSN_CANARY) && !vOps.body.questions.some((q: { question: string }) => q.question === 'One person by dept'), vOps.text.slice(0, 300));
 
     // ── explore:suggest (p4-07's chip): east's names the columns hidden from east, so Explore says its columns are limited ──
     const suggestOf = async (who: string) => (await W.call(who, 'explore:suggest', { projectId: P, datasetId: staff })).body;

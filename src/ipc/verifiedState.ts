@@ -62,7 +62,7 @@ export async function verifiedStates(projectId: string): Promise<VerifiedState[]
   for (const { rec: q, tag } of list) {
     const id = q.spec.datasetId;
     if (left.has(q.id)) continue;
-    if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id));
+    if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id, { rowsOnly: true })); // a hidden column: leftOutFor
     out.push({ q, problem: verifiedProblem(q, env), hidden: !!closed.get(id) && hasValueFilter(q.spec), tag });
   }
   return out;
