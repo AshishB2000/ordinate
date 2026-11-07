@@ -86,7 +86,7 @@ export async function metricProblem(
 }
 
 /** A column (or funnel) metric on a semantic dataset: refused `columnOnLayer` — aggregating a dimension here goes around the layer. */
-async function layerFieldMetric(projectId: string, datasetId: unknown, definition: unknown): Promise<string | null> {
+export async function layerFieldMetric(projectId: string, datasetId: unknown, definition: unknown): Promise<string | null> {
   const meta = typeof datasetId === 'string' ? await datasets.getDatasetMeta(projectId, datasetId) : null;
   const sem = meta?.live?.semantic;
   const def = sem ? metrics.sanitizeDefinition(definition) : null;

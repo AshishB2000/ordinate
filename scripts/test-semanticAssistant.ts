@@ -8,6 +8,8 @@
 //   § explore   explore:suggest lists the mirrors as the measures and suggests charts of them, no column sums; each
 //               suggestion draws, though its measure's `column` is the mirror's name (no field of the dataset).
 //               NEGATIVE CONTROL: an extract's measures are still its number columns.
+//   § plans     an AI plan's metric step and a story's KPI refuse a column metric there (columnOnLayer); NEGATIVE
+//               CONTROL: the same step on the extract saves.
 //
 //   npm run build:ts && node scripts/test-semanticAssistant.js
 
@@ -68,6 +70,20 @@ void (async () => {
   ok('…and a suggestion draws', drawn?.ok === true, show(drawn));
   const extract = (await post('explore:suggest', { projectId: P, datasetId: s.extractId })).value;
   ok('NEGATIVE CONTROL: an extract\'s measures are still its number columns', extract.ok === true && extract.measures.length > 0 && extract.measures.every((m: Reply) => !m.metricId), show(extract.measures));
+
+  // ── § plans ── an AI plan's metric step and a story plan's KPI save through the store: a column metric there is refused.
+  const planExec: typeof import('../src/ai/planExec') = require('../src/ai/planExec');
+  const storiesIpc: typeof import('../src/ipc/stories') = require('../src/ipc/stories');
+  const count = async (): Promise<number> => (await as(() => metrics.listMetrics(P))).filter((m) => m.datasetId === D).length;
+  const n = await count();
+  const planCtx = await as(() => planExec.loadProjectCtx(P));
+  const run = { projectId: P, id: 'r', threadId: 't', intent: 'i', steps: [], status: [], results: [], errors: [], touches: [] } as unknown as import('../src/ai/planRun').PlanRun;
+  const step = await as(() => planExec.RUN_DEPS.execute(run, { kind: 'metric', dataset: 'Orders layer', name: 'Qty total', column: 'qty', aggregation: 'sum' }, 0, planCtx));
+  ok('an AI plan\'s column metric on a semantic dataset is refused columnOnLayer, nothing saved', !step.ok && /not a metric/.test(String((step as Reply).error)) && (await count()) === n, show(step));
+  const blocks = await as(() => storiesIpc.blocksFromRecords(P, { name: 'S', sheets: [{ name: 'A', cards: [{ type: 'metric', metric: { datasetId: D, column: 'qty', aggregation: 'sum' } }] }] }, ''));
+  ok('…and a story plan\'s KPI there is no block and no saved metric', !blocks.some((b) => b.kind === 'metric' || b.kind === 'metrics_row') && (await count()) === n, show(blocks));
+  const onExtract = await as(() => planExec.RUN_DEPS.execute(run, { kind: 'metric', dataset: 'Fixture copy', name: 'Qty on the copy', column: 'qty', aggregation: 'sum' }, 0, planCtx));
+  ok('NEGATIVE CONTROL: the same plan step on the extract saves', onExtract.ok === true, show(onExtract));
 
   await close();
   finish();
