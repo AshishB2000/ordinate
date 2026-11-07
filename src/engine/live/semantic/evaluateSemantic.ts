@@ -144,6 +144,8 @@ async function chartRows(ir: LiveIR, plan: ChartPlan, run: SemanticRunner, grain
     const kept = byValue(ranked, 1).slice(0, CATEGORY_CAP).map((r) => r[0]);
     kept.forEach((k, i) => catRank.set(json(k), i + 1));
     nc = ranked.length > CATEGORY_CAP ? CATEGORY_CAP + 1 : ranked.length;
+    const unsaid = ranked.length > CATEGORY_CAP ? run.check?.(plan.other!(kept as Cell[])) : null; // before the cells are asked
+    if (unsaid) return unsaid;
     const c = await ask(run, plan.cells!(kept as Cell[]), 'chart');
     if (isRefusal(c)) return c;
     cells = c;
@@ -191,7 +193,8 @@ export async function evaluateSemantic(ir: LiveIR, env: SemanticEnv, run: Semant
   const asIfResolved = { ...ir, filters: ir.filters.filter((f) => f.kind !== 'latest') };
   const pre = ir.kind === 'metric' ? planMetric(asIfResolved, env) : planChart(asIfResolved, env);
   if (isRefusal(pre)) return pre;
-  const unsaid = run.check?.('query' in pre ? pre.query : pre.ranks); // a filter the backend cannot express (e1)
+  // A filter the backend cannot express (e1), in every question known before the answers (a split's series ranks too).
+  const unsaid = ('query' in pre ? [pre.query] : [pre.ranks, ...(pre.seriesRanks ? [pre.seriesRanks] : [])]).map((x) => run.check?.(x)).find((r) => r);
   if (unsaid) return unsaid;
   const lp = planLatest(ir, env);
   if (isRefusal(lp)) return lp;
