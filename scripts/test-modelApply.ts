@@ -351,7 +351,7 @@ const zipOf = (files: Files): Promise<Buffer> => writeZipAsync([...files.keys()]
   const r10b = done(await applyPlanned(N.P, taken));
   const names10 = (await as(() => metrics.listMetrics(N.P))).map((m) => m.name);
   // A file that drops a snapshot's per, or the snapshot, clears it (the update sends null, as the editor does).
-  const snapOf = async (): Promise<unknown> => ((await metric(N.P, N.stock))?.definition as { snapshot?: unknown }).snapshot;
+  const snapOf = async (): Promise<unknown> => ((await metric(N.P, N.stock))?.definition as { snapshot?: unknown } | undefined)?.snapshot;
   const r10c = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot.per; })));
   ok('a file without the snapshot\'s per: written, and the per is gone', r10c.written.includes(`metric:${N.stock}`) && JSON.stringify(await snapOf()) === '{"column":"day","take":"last"}', show([r10c, await snapOf()]));
   const r10d = done(await applyPlanned(N.P, edit(await exported(N.P), 'metrics', N.stock, (m) => { delete m.definition.snapshot; })));
