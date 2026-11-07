@@ -56,8 +56,9 @@ export function toOssie(files: ReadonlyMap<string, string>, inputs: OssieInputs)
     const fields = colsOf(d).map((c) => {
       const f: ModelField | undefined = docs.get(c.name);
       const syn = [f?.displayName, ...(f?.aliases ?? [])].filter((s): s is string => !!s);
-      const ai: Json = { synonyms: some(syn), examples: f?.example ? [f.example] : undefined };
-      if (f?.values?.length) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: d.name, field: c.name, values: f.values }); }
+      // A marked field's stored values (its example, its value labels) stay out, as Ordinate's own AI never sees them.
+      const ai: Json = { synonyms: some(syn), examples: f?.example && !f.sensitivity ? [f.example] : undefined };
+      if (f?.values?.length && !f.sensitivity) { miss('valueLabels', c.name, ossieWhy.valueLabels()); keep('valueLabels', { dataset: d.name, field: c.name, values: f.values }); }
       if (f?.sensitivity) miss('sensitivity', c.name, ossieWhy.sensitivity());
       return {
         name: c.name, expression: { sql: ident(c.name) }, description: f?.description, datatype: TYPE[c.type],

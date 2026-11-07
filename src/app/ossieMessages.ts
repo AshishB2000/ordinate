@@ -19,7 +19,7 @@ export function ossieWhy_role(): string {
 }
 
 export function ossieWhy_sensitivity(): string {
-  return (t('ossieMessages.sensitivity_marks_are_never_exported'));
+  return t('ossieMessages.a_field_marked_personal_or_financial');
 }
 
 export function ossieWhy_metricFilters(): string {

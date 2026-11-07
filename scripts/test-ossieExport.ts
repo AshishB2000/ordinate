@@ -117,11 +117,18 @@ void (async () => {
   ids6.set('Live revenue', await metric(F.live, 'Live revenue', { column: 'amount', aggregation: 'sum' }));
   ids6.set('N total', await metric(B.id, 'N total', { column: 'n', aggregation: 'sum' }));
   for (const [name, column, aggregation] of [['Tags', 'tag', 'count'], ['Distinct tags', 'tag', 'countd'], ['Ns', 'n', 'count'], ['Distinct ns', 'n', 'countd']]) ids6.set(name, await metric(B.id, name, { column, aggregation }));
+  // `amount` is already marked financial; `customer_id` is marked personal here.
+  await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'amount', patch: { example: '1234.56 PAYROLL_CANARY' } });
+  await must('catalog:setColumn', { projectId: F.P, datasetId: F.orders, column: 'customer_id', patch: { sensitivity: 'personal', example: 'c1', values: [{ value: 'c1', label: 'PERSONAL_CANARY' }] } });
   const six = await H.as(H.ORG_A, () => ossieExport(F.P));
   const doc6 = JSON.parse(six.text);
   const metricsOf = (n: string) => (doc6.datasets.find((d: { name: string }) => d.name === n)?.metrics ?? []) as { name: string; expression: { sql: string } }[];
   const rep6 = (kind: string, name: string) => six.report.notMapped.some((n) => n.kind === kind && n.name === name && n.reason.length > 0);
   ok('a metric on a Live dataset with base filters is reported, never exported as the whole table\'s total', rep6('metric', 'Live revenue') && !metricsOf('live').length, JSON.stringify(metricsOf('live')));
+  const fieldOf = (d: string, f: string) => doc6.datasets.find((x: { name: string }) => x.name === d).fields.find((x: { name: string }) => x.name === f);
+  ok('a field marked personal or financial exports no example and no value labels', !fieldOf('orders', 'amount').ai_context?.examples && !fieldOf('orders', 'customer_id').ai_context?.examples
+    && !/PAYROLL_CANARY|PERSONAL_CANARY/.test(six.text + JSON.stringify(six.report)) && rep6('sensitivity', 'customer_id') && !rep6('valueLabels', 'customer_id'), JSON.stringify([fieldOf('orders', 'amount'), fieldOf('orders', 'customer_id')]));
+  ok('NEGATIVE CONTROL: an unmarked field keeps its example and value labels', JSON.stringify(fieldOf('orders', 'region').ai_context?.examples) === '["EU"]' && /Middle East/.test(six.text) && rep6('valueLabels', 'region'));
   ok('NEGATIVE CONTROL: a metric on a Live dataset without base filters maps', metricsOf('blanks').some((m) => m.name === 'N total' && m.expression.sql === 'SUM(n)'), JSON.stringify(metricsOf('blanks')));
   // Ordinate's figure (metric:values) against the exported SQL run over the document's source, in the same warehouse.
   const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
