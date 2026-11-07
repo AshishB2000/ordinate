@@ -72,6 +72,8 @@ export interface MetricSummary {
   updatedAt: string;
   /** Certified, changed since, or retired (part 4): the server's word, drawn as it came. */
   status?: StatusView;
+  /** It reads a column hidden from the caller (part 4, D19): the server's mark, drawn as a lock. */
+  hidden?: true;
   /** The content tag from `metric:get`, when an editor opened it: its save's base (docs/edit-conflicts). */
   tag?: string;
 }

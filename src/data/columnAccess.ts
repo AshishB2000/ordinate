@@ -16,7 +16,7 @@
 import { isValidId } from '../app/ids';
 import { pipelineHash } from '../engine/queryCache';
 import { compile } from '../formula/formula';
-import { sanitizeLiveCalcs } from './liveCalcs';
+import { declaredColumns, sanitizeLiveCalcs, type LiveCalc } from './liveCalcs';
 import { MAX_COLUMN_CHARS, MAX_RULES, NON_WRITERS, UNNAMED_WRITERS, mentions } from './rowPolicy';
 import { STEP_TYPES, applyPipeline, sanitizeSteps, type Cell, type TableData, type TransformStep } from './transforms';
 import type { ParsedColumn } from './parse';
@@ -186,6 +186,21 @@ function shapeOf(raw: Record<string, unknown>): { steps: TransformStep[]; source
   const final = namesOf(raw.columns);
   const src = raw.source && typeof raw.source === 'object' ? (raw.source as { columns?: unknown }).columns : undefined;
   return { steps, source: Array.isArray(src) ? namesOf(src) : final, final };
+}
+
+/**
+ * `shapeOf` read off a dataset's metadata, where `applyLive` put a Live record's base filters and calcs under
+ * `live` (and its calcs in `columns` too): the Share policy carries a mark through exactly what a column rule is
+ * carried through, so the two cannot drift.
+ */
+export function metaShape(meta: { steps?: unknown; columns: ParsedColumn[]; sourceColumns?: ParsedColumn[];
+  live?: { baseFilters?: unknown; calculated?: LiveCalc[]; calculatedUnreadable?: true } }): { steps: TransformStep[]; source: string[]; final: string[] } {
+  return shapeOf({
+    steps: meta.steps, baseFilters: meta.live?.baseFilters, columns: declaredColumns(meta),
+    // A list read in part: its readable calcs, then an entry that does not read, so the rest is unknown, as on the record.
+    calculated: meta.live?.calculatedUnreadable ? [...(meta.live.calculated ?? []), null] : meta.live?.calculated,
+    ...(meta.sourceColumns ? { source: { columns: meta.sourceColumns } } : {}),
+  });
 }
 
 /** Intersect allow-lists: a carrier of several hidden columns is visible to the members every one of them names. */

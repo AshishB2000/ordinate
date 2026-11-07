@@ -77,7 +77,9 @@ export function Present({ projectId, name, blocks, figures, onExit }: { projectI
                   </figure>
                 );
               }
-              const f = figures[b.id] as MetricFigure | undefined;
+              const got = figures[b.id] as MetricFigure | undefined;
+              if (got && !('figures' in got)) return <p key={j} className={pr.presentCaption}>{got.error}</p>; // refused: the server's sentence
+              const f = got;
               return (
                 <div key={j}>
                   <div className={b.kind === 'metric' ? `${s.metrics} ${s.metricsOne}` : s.metrics}>

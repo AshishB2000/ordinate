@@ -237,6 +237,8 @@ export function register(): void {
         usage,
         additivity,
         ...layerRowWords(m.definition, value), // a layer's metric: its layer, and why it has no figure (part 7 b3)
+        // Refused under access rules (a column hidden from the caller, D19): the typed refusal, so the tab says why.
+        ...(value && value.ok === false && value.code === ROW_POLICY_CODE ? { refused: { code: value.code, reason: value.reason, error: value.error } } : {}),
       };
     }));
     return { ok: true, metrics: listed.metrics, rows };

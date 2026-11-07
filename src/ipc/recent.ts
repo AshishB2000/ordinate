@@ -11,6 +11,7 @@ import * as comments from '../app/comments';
 import { readableComments, targetNames } from './comments';
 import { commentSnippet } from '../app/mentionToken';
 import { labelsFor } from '../server/mentions/people';
+import { summariesFor } from '../data/sourceNames';
 
 // Home's IPC: the cross-project "Recent" list (see src/app/recent.ts:
 // metadata-only, never hydrates a table or computes a figure), the Starred
@@ -75,7 +76,7 @@ export function register() {
 
   ipcMain.handle('home:overview', async (_e, { projectId }: { projectId: string }) => {
     const [ds, an, caps, vis, stands] = await Promise.all([
-      datasets.listDatasets(projectId),
+      datasets.listDatasets(projectId).then((list) => summariesFor(projectId, list)), // a refresh error as dataset:list redacts it
       analysis.listAnalyses(projectId),
       history.loadAllSummaries(projectId),
       visuals.listVisuals(projectId),
@@ -90,14 +91,14 @@ export function register() {
         rowCount: d.rowCount,
         columnCount: d.columnCount,
         ...(d.qualityFailing !== undefined ? { qualityFailing: d.qualityFailing } : {}),
-        // Home's "Data freshness": the summary's own refresh state. The error is
-        // already redacted there (no URL past its host, no server path).
+        // Home's "Data freshness": the summary's own refresh state. The error is already redacted there (no URL
+        // past its host, no server path), and left out for a caller who may not read it (summariesFor).
         sourceKind: d.sourceKind,
         ...(d.mode === 'live' ? { mode: 'live' as const } : {}),
         ...(d.autoRefresh?.every ? { every: d.autoRefresh.every } : {}),
         ...(d.lastRefreshedAt ? { lastRefreshedAt: d.lastRefreshedAt } : {}),
         ...(d.lastRefreshStatus ? { lastRefreshStatus: d.lastRefreshStatus } : {}),
-        ...(d.lastRefreshError ? { lastRefreshError: d.lastRefreshError } : {}),
+        ...('lastRefreshError' in d && d.lastRefreshError ? { lastRefreshError: d.lastRefreshError } : {}),
         ...(d.behindSchedule ? { behindSchedule: true as const } : {}),
       })),
       standsOut: stands,

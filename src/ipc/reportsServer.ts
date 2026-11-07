@@ -17,7 +17,8 @@
 //   story:export       a story as report pages (audited)
 
 import { ipcMain } from './bus';
-import { exportScope } from '../data/rowAccess';
+import { ROW_POLICY_CODE, exportScope } from '../data/rowAccess';
+import * as metrics from '../analysis/metrics';
 import { handlers } from '../server/rpc';
 import * as appPaths from '../app/paths';
 import * as reportSpec from '../analysis/reportSpec';
@@ -89,6 +90,8 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
     metricValue: async (id, filters) => {
       const r = await call(event, 'metric:value', { projectId, id, filters, ...(share ? { share: 'report' } : {}) });
       if (r && r.hiddenByPolicy) return { name: String(r.name ?? ''), display: String(r.error), value: null };
+      // Refused under access rules (D19): its name (names are not secret) and why, never "Missing metric".
+      if (r && r.code === ROW_POLICY_CODE) return { name: (await metrics.getMetric(projectId, id))?.name ?? '', display: String(r.error), value: null };
       return r && r.ok !== false && r.name ? { name: String(r.name), display: String(r.display ?? '—'), value: typeof r.value === 'number' ? r.value : null } : null;
     },
     caption: async (input) => {
@@ -103,7 +106,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
     // is registered on the server (the Summary card is T2.9's); until then none.
     summaryLines: async (a, filters, params) => {
       if (!handlers.has('summary:compute') || !a.sheets.some((s) => (s.cards || []).some((c) => c && c.type === 'summary'))) return [];
-      const r = await call(event, 'summary:compute', { projectId, analysisId: a.id, name: a.name, pages: a.sheets, filters, params, asOf: null, outbound: true });
+      const r = await call(event, 'summary:compute', { projectId, analysisId: a.id, name: a.name, pages: a.sheets, filters, params, asOf: null, outbound: true, ...(share ? { share: 'report' } : {}) });
       return r && r.ok && Array.isArray(r.sentences) ? r.sentences.map((x: { text: unknown }) => String(x.text)) : [];
     },
     // ONE model call per distinct narrative in a request, however many times a
@@ -117,7 +120,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
         const question = t('reportRender.write_exactly_two_short_paragraphs', { p0: captions.map((c) => '- ' + c).join('\n') });
         let timer: ReturnType<typeof setTimeout> | undefined;
         const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), NARRATIVE_MS); });
-        const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question }), late]);
+        const r = await Promise.race([call(event, 'copilot:ask', { projectId, context: { kind: 'analysis', id: analysisId }, question, ...(share ? { share: 'report' } : {}) }), late]);
         clearTimeout(timer);
         return r && r.ok !== false && typeof r.answer === 'string' ? r.answer.trim() : '';
       })());

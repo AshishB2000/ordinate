@@ -609,7 +609,7 @@ export async function buildDashboard(
         // minus any sentence quoting a column the share policy withholds.
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
-          const list = await computeSummary(projectId, a.sheets, { analysisId: a.id, filters: scope.filters, params: scope.params, outbound: true });
+          const list = await computeSummary(projectId, a.sheets, { analysisId: a.id, filters: scope.filters, params: scope.params, outbound: true, ...(outgoing ? { share: outgoing } : {}) });
           base.variants.push(intern(store, { sentences: list.map((x) => x.text) }));
           done++;
         }
