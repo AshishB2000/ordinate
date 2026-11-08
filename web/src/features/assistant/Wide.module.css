@@ -1,0 +1,421 @@
+/* The Assistant full width (AssistantPage.tsx, Conversation.tsx's `page`): a
+   header bar, the project's conversations down the left, and the conversation
+   on the dock's lattice — centred while it is empty, then a column of turns
+   (920px at most) with the composer at its foot. Below 900px the column of
+   conversations gives way to the header's dropdown. */
+
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.page:focus-visible {
+  outline: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: var(--sp-48);
+  padding: 0 var(--sp-12) 0 var(--sp-16);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.crumb {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.crumb > svg {
+  flex: none;
+  color: var(--accent);
+}
+.name {
+  flex: none;
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.sep {
+  flex: none;
+  color: var(--text-faint);
+}
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.titleMenu {
+  display: none;
+  min-width: 0;
+}
+/* The model that answers (DockParts ModelPicker), as a quiet pill. */
+.model {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+.model:empty {
+  display: none;
+}
+.narrowOnly {
+  display: none;
+}
+
+/* ── Conversations ──────────────────────────────────────────────────────── */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.list {
+  flex: 0 0 264px;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-12) var(--sp-8);
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+.search {
+  flex: none;
+  margin-bottom: var(--sp-8);
+}
+.group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.group + .group {
+  margin-top: var(--sp-8);
+}
+.groupLabel {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-8) var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.row {
+  flex: none;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--surface-2);
+}
+.row[aria-current] {
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.row:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.listEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  margin: var(--sp-8) var(--sp-4);
+  padding: var(--sp-16) var(--sp-12);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.listEmpty > svg {
+  color: var(--text-faint);
+  margin-bottom: var(--sp-4);
+}
+.listEmpty > p {
+  margin: 0;
+}
+.listEmptyTitle {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── The stage ──────────────────────────────────────────────────────────── */
+.stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Before the first question: the greeting over the composer, the chips under
+   it, at about the middle of the stage (the composer a little above it). The
+   foot never shrinks below what it holds; the greeting's side gives way. */
+.start .scroll {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-16);
+}
+.start .column {
+  max-width: 680px;
+  margin-top: auto;
+}
+.start .foot {
+  flex: 1.4 1 0;
+  max-width: calc(680px + 2 * var(--sp-24));
+  gap: var(--sp-16);
+  padding-top: 0;
+}
+.intro {
+  margin-bottom: var(--sp-4);
+  text-align: center;
+}
+.greet {
+  margin: 0;
+  font-size: var(--t-28);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+}
+.line {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+/* The composer, wide: the dock's frame (Dock.module.css .composer) at the page's measure. */
+.page .composer {
+  margin: 0;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+}
+.page .input {
+  min-height: calc(2 * 1.5em + var(--sp-8));
+  max-height: 240px;
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.page .heroComposer .input {
+  min-height: calc(3 * 1.5em + var(--sp-8));
+}
+/* "@ Whole project ▾": what the answer is based on, and the `@` that changes it. */
+.at {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8) 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.at:hover:not(:disabled),
+.at[data-state='open'] {
+  border-color: var(--border-2);
+  background: var(--surface-3);
+}
+.at:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+.at:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.at > svg {
+  flex: none;
+  color: var(--muted);
+}
+/* Dark: the composer is --surface-float, which is --surface-2 there, so the chip steps up one. */
+:global([data-theme='dark']) .at {
+  border-color: var(--border-2);
+  background: var(--surface-3);
+}
+:global([data-theme='dark']) .at:hover:not(:disabled),
+:global([data-theme='dark']) .at[data-state='open'] {
+  border-color: var(--border-3);
+}
+.atPinned,
+:global([data-theme='dark']) .atPinned {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.atName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projectPick {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+}
+.page .send {
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  border-radius: var(--r-full);
+}
+
+/* The team's verified questions, as one row under the composer. */
+.verified {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.verified > span {
+  margin-right: var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.verified > button {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+  font-size: var(--t-12);
+}
+.verified > button:hover:not(:disabled) {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+
+/* The starter questions: a pick fills the composer. */
+.suggests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.suggest {
+  max-width: 100%;
+  padding: var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.suggest:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.suggest:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* After it: the turns down a centred column, the composer at its foot. */
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-24) var(--sp-24) var(--sp-8);
+}
+.column {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.foot {
+  flex: none;
+  width: 100%;
+  max-width: calc(920px + 2 * var(--sp-24));
+  box-sizing: border-box;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-24) var(--sp-16);
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .list,
+  .title,
+  .model {
+    display: none;
+  }
+  .titleMenu,
+  .narrowOnly {
+    display: flex;
+  }
+  .newLabel {
+    display: none;
+  }
+  .scroll {
+    padding: var(--sp-16) var(--sp-12) var(--sp-8);
+  }
+  .foot {
+    padding: var(--sp-8) var(--sp-12) var(--sp-12);
+  }
+}
+@media (max-width: 599px) {
+  .name,
+  .sep {
+    display: none;
+  }
+  .head {
+    padding-left: var(--sp-12);
+  }
+  .greet {
+    font-size: var(--t-20);
+  }
+}

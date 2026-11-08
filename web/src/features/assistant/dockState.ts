@@ -66,12 +66,19 @@ export function useDockOpen(): boolean {
   return useSyncExternalStore(subscribe, () => open);
 }
 
-// A question handed over from outside the dock (Home's ask bar — homeAsk.ts
-// dkAsk): the dock opens and asks it as if typed, or, when it cannot ask yet
-// (no project, no model), keeps it in the composer so nothing is lost. It may
-// come pointed at one thing, as `@` points the dock: Home's suggestions do.
+// A question handed over from outside the dock (homeAsk.ts dkAsk): the
+// Assistant asks it as if typed, or, when it cannot ask yet (no project, no
+// model), keeps it in the composer so nothing is lost. It may come pointed at
+// one thing, as `@` points the dock: Home's suggestions do.
+//
+// Most doors hand it to the dock. Home's ask bar hands it to the full-width
+// page (/assistant), which takes either kind: it is the dock, wide, and the dock
+// is not drawn beside it. The dock takes only its own, so a dock still mounted
+// for the moment Home navigates away never asks what was meant for the page.
+export type HandedTo = 'dock' | 'page';
 let question = '';
 let about: HandedAbout | null = null;
+let questionTo: HandedTo = 'dock';
 
 /** What a handed question is about, in the project that thing lives in. */
 export interface HandedAbout {
@@ -79,23 +86,34 @@ export interface HandedAbout {
   context: DockContext;
 }
 
-/** Opens the dock with `q` to ask; `on` points it at one thing first. */
-export function openDockWith(q: string, on?: HandedAbout): void {
+function hand(q: string, on: HandedAbout | undefined, to: HandedTo): void {
   question = q.trim();
   about = on ?? null;
-  // Asked in the project the thing is in: off a project's own route, the picked project is the dock's.
+  questionTo = to;
+  // Asked in the project the thing is in: off a project's own route, the picked project is the Assistant's.
   if (on) {
     picked = on.projectId;
     write(PROJECT_KEY, on.projectId);
   }
+}
+
+/** Opens the dock with `q` to ask; `on` points it at one thing first. */
+export function openDockWith(q: string, on?: HandedAbout): void {
+  hand(q, on, 'dock');
   open = true;
   write(OPEN_KEY, '1');
   emit();
 }
 
-/** The question waiting for the dock, if any. */
-export function usePendingQuestion(): string {
-  return useSyncExternalStore(subscribe, () => question);
+/** Hands `q` to the full-width Assistant; the caller navigates to /assistant, which asks it. */
+export function askOnPage(q: string, on?: HandedAbout): void {
+  hand(q, on, 'page');
+  emit();
+}
+
+/** The question waiting for the dock (or the page), if any. */
+export function usePendingQuestion(where: HandedTo): string {
+  return useSyncExternalStore(subscribe, () => (where === 'page' || questionTo === 'dock' ? question : ''));
 }
 
 /** The dock took the question: it is asked or in the composer now. */
@@ -107,22 +125,22 @@ export function takePendingQuestion(): { question: string; about: HandedAbout | 
   return taken;
 }
 
-// A verified answer handed over from outside the dock (Home's chips): the dock opens in its project and runs the
-// spec on the conversation it shows (`answer:rerun`), the same call a chip inside the dock makes.
+// A verified answer handed over from outside the Assistant (Home's chips): the full-width page opens in its project
+// and runs the spec on the conversation it shows (`answer:rerun`), the same call a chip inside it makes.
 export interface HandedSpec { spec: { datasetId: string } & Record<string, unknown>; label: string }
 let handedSpec: HandedSpec | null = null;
 
-export function openDockWithSpec(o: HandedSpec & { projectId: string }): void {
+/** Hands a verified answer to the full-width Assistant; the caller navigates to /assistant, which runs it. */
+export function runOnPage(o: HandedSpec & { projectId: string }): void {
   handedSpec = { spec: o.spec, label: o.label };
   picked = o.projectId;
   write(PROJECT_KEY, o.projectId);
-  open = true;
-  write(OPEN_KEY, '1');
   emit();
 }
 
-export function usePendingSpec(): HandedSpec | null {
-  return useSyncExternalStore(subscribe, () => handedSpec);
+/** The page's alone: a dock still open beside Home as it hands one over never runs it. */
+export function usePendingSpec(where: HandedTo): HandedSpec | null {
+  return useSyncExternalStore(subscribe, () => (where === 'page' ? handedSpec : null));
 }
 
 export function takePendingSpec(): HandedSpec | null {
@@ -130,6 +148,21 @@ export function takePendingSpec(): HandedSpec | null {
   handedSpec = null;
   if (taken) emit();
   return taken;
+}
+
+// The conversation the full-width page last showed: the dock opens on it next (its "Back to the side panel", the top
+// bar's toggle there), then forgets it. The other way, the dock's expand button puts its conversation in the URL.
+let pageThread: { projectId: string; id: string } | null = null;
+
+export function rememberPageThread(projectId: string, id: string): void {
+  pageThread = { projectId, id };
+}
+/** Read on the dock's first render (pure, so a double render reads the same); dropped once it mounted. */
+export function peekPageThread(): { projectId: string; id: string } | null {
+  return pageThread;
+}
+export function forgetPageThread(): void {
+  pageThread = null;
 }
 
 export function pickDockProject(id: string): void {

@@ -96,6 +96,8 @@ export const pages: RouteObject[] = [
   // The Data model (docs/semantic-layer): what the project's data means — its datasets now, its metrics and terms later.
   page('/model', () => import('../features/model/DataModelPage')),
   page('/model/:projectId', () => import('../features/model/DataModelPage')),
+  // The Assistant full width: the dock's conversation given the page (the dock is not drawn beside it).
+  page('/assistant', () => import('../features/assistant/AssistantPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

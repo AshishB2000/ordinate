@@ -3,6 +3,7 @@
 // answers.ts, plan.ts, aiModels.ts). Every figure in a reply — a KPI, a
 // row count, a turn count — is the server's; the dock only formats it.
 
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { useVerified } from '../model/assistant/api';
@@ -108,6 +109,33 @@ export function useAiStatus(enabled = true) {
     // asking again. A change is pushed (`key:changed`) or invalidated by the door that made it.
     staleTime: 30_000,
   });
+}
+
+const READY_HINT = 'ordinate.aiReady';
+
+/**
+ * Whether a model is ready, for the rail's Assistant entry (Shell.tsx), with no request of its own: the rail is
+ * on every page, and a page already at its RPC budget (e2e rpcBudget) has no room for one. The status an AI
+ * surface fetched (Home's ask bar, Explore, the dock, the Assistant's page), else what this browser saw last.
+ * shortcut: one hint per browser, not per org; a stale one shows the entry until an AI surface refetches, and
+ * the page it opens explains itself. Upgrade by carrying the flag on a reply the shell already reads.
+ */
+export function useAiReady(): boolean {
+  const known = useAiStatus(false).data?.ready;
+  useEffect(() => {
+    if (known === undefined) return;
+    try {
+      localStorage.setItem(READY_HINT, known ? '1' : '0');
+    } catch {
+      // storage blocked: the next page load waits for an AI surface again
+    }
+  }, [known]);
+  if (known !== undefined) return known;
+  try {
+    return localStorage.getItem(READY_HINT) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /** The caller's own pick (`ai:setMine`); refused unless the admin enabled it. */

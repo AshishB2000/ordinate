@@ -237,6 +237,34 @@ if (!dbUrl) {
       await page.screenshot({ path: path.join(SCREENS, `dock-verified-chips-${theme}.png`), fullPage: true });
     }
   });
+
+  // The same Assistant full width (/assistant): the dock's expand button opens its conversation there (the
+  // dock steps aside), a verified answer's card gets the page's width, a reload comes back to the
+  // conversation, and "Back to the side panel" hands it to the dock again.
+  e2e('assistant page: the dock expands into it, an answer gets the room, and it goes back to the dock', async ({ page }) => {
+    await page.goto('/');
+    await settled(page);
+    await openDock(page);
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    await dock.getByRole('button', { name: 'New conversation' }).click();
+    await dock.getByRole('button', { name: '✓ Revenue by region' }).waitFor();
+    await dock.getByRole('button', { name: 'Open the Assistant full width' }).click();
+    await page.waitForURL(/\/assistant\?thread=/);
+    await settled(page);
+    const wide = page.getByRole('region', { name: 'Assistant' });
+    assert.equal(await dock.count(), 0, 'no dock beside the page');
+    await wide.getByTestId('ai-not-ready').waitFor();
+    await wide.getByRole('button', { name: '✓ Revenue by region' }).click();
+    const card = wide.getByTestId('answer-card');
+    await card.getByText(/✓ Verified/).waitFor();
+    const width = (await card.boundingBox())?.width ?? 0;
+    assert.ok(width > 700, `the card has the page's width, not the dock's (${width}px)`);
+    await screens(page, 'assistant-page');
+    await card.getByText(/✓ Verified/).waitFor(); // the reload reopened the conversation in the URL
+    await wide.getByRole('button', { name: 'Back to the side panel' }).click();
+    await page.waitForURL((u) => new URL(u).pathname === '/');
+    await dock.getByTestId('answer-card').getByText(/✓ Verified/).waitFor();
+  });
 } else {
   const dbName = `ordinate_e2e_dock_${process.pid}_${Date.now()}`;
   const scratch = new URL(dbUrl);

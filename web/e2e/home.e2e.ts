@@ -2,7 +2,7 @@
 // sample: the greeting and its counts, the preview cards, the one table of
 // recent work and its pills, the New menu's doors, a pin that survives a
 // reload (the caller's own, on the server), the Get-started card folding to
-// its pill and back, a question handed to the Assistant dock, and a real job
+// its pill and back, a question handed to the Assistant's page, and a real job
 // (`quality:run`, started from this tab) reaching the Jobs popover and a toast
 // over the event stream. Screenshots of Home and the open Jobs popover in both
 // themes.
@@ -107,28 +107,32 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   await pill.click();
   await card.waitFor();
 
-  // ── the ask bar hands the question to the Assistant dock ──
+  // ── the ask bar hands the question to the Assistant, full width (/assistant) ──
   const ask = page.getByRole('textbox', { name: 'Ask a question or say what to build' });
   const question = 'Which month had the most orders?';
   await ask.fill(question);
   await ask.press('Enter');
-  // The real dock (T2.12). This server has no model set up, but the sample ships verified questions (part 3
-  // D8, D13), so the dock asks it at once: not one of them, it comes back to the composer with the connect hint.
-  const composer = page.getByRole('textbox', { name: 'Ask the Assistant' });
-  await page.waitForFunction((q) => (document.querySelector('#dock-panel textarea') as HTMLTextAreaElement | null)?.value === q, question);
+  // The real Assistant (T2.12), on its own page. This server has no model set up, but the sample ships verified
+  // questions (part 3 D8, D13), so it asks at once: not one of them, it comes back to the composer with the connect hint.
+  await page.waitForURL((u) => u.pathname === '/assistant');
+  const wide = page.getByRole('region', { name: 'Assistant' });
+  const composer = wide.getByRole('textbox', { name: 'Ask the Assistant' });
+  await wide.getByText('Connect a model to ask anything else.').waitFor();
   assert.equal(await composer.inputValue(), question);
-  await page.locator('#dock-panel').getByText('Connect a model to ask anything else.').waitFor();
-  assert.equal(await ask.inputValue(), '');
-  assert.ok(await page.evaluate(() => !!document.getElementById('dock-panel')?.contains(document.activeElement)), 'focus moved into the dock');
+  assert.ok(await page.evaluate(() => !!document.querySelector('section[aria-labelledby="assistant-h"]')?.contains(document.activeElement)), 'focus moved onto the page');
+  assert.equal(await page.locator('#dock-panel').count(), 0, 'not in the side panel as well');
   assert.equal(await page.getByRole('button', { name: 'Assistant', exact: true }).getAttribute('aria-expanded'), 'true');
-  await page.keyboard.press('Escape');
-  await page.locator('#dock-panel').waitFor({ state: 'detached' });
-  assert.equal(await page.getByRole('button', { name: 'Assistant', exact: true }).getAttribute('aria-expanded'), 'false');
-  await screensOpen(page, 'home-dock', async () => {
+  await screensOpen(page, 'home-assistant', async () => {
+    await page.goto('/');
+    await settled(page);
     await ask.fill('Which region had the worst month?');
     await ask.press('Enter');
-    await page.waitForFunction(() => !!(document.querySelector('#dock-panel textarea') as HTMLTextAreaElement | null)?.value);
+    await page.waitForURL((u) => u.pathname === '/assistant');
+    await settled(page);
+    await page.waitForFunction(() => !!(document.querySelector('section[aria-labelledby="assistant-h"] textarea') as HTMLTextAreaElement | null)?.value);
   });
+  await page.goto('/');
+  await settled(page);
 
   // ── a real job from this tab: the stream drives the button, the toast and the list ──
   const jobs = page.getByRole('button', { name: /^Jobs/ });

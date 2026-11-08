@@ -4,7 +4,7 @@
 // and computes every fact about it (src/ipc/copilot.ts buildFacts). The search
 // filters NAMES only.
 
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useDatasets } from '../../api/datasets';
 import { IconButton } from '../../ui/Button';
 import { Input } from '../../ui/Field';
@@ -94,14 +94,16 @@ export interface ContextPickerProps {
   onPick: (c: DockContext | null) => void;
   /** Focus goes back to the composer, not to the `@` button. */
   onClosed: () => void;
+  /** What opens it: the `@` button, unless the composer draws its own (the full-width page's context chip). */
+  trigger?: ReactElement;
 }
 
-export function ContextPicker({ projectId, open, onOpenChange, onPick, onClosed }: ContextPickerProps) {
+export function ContextPicker({ projectId, open, onOpenChange, onPick, onClosed, trigger }: ContextPickerProps) {
   return (
     <Popover
       title="Point the Assistant at"
       side="top"
-      align="end"
+      align={trigger ? 'start' : 'end'}
       className={s.popover}
       open={open}
       onOpenChange={onOpenChange}
@@ -109,7 +111,7 @@ export function ContextPicker({ projectId, open, onOpenChange, onPick, onClosed 
         e.preventDefault();
         onClosed();
       }}
-      trigger={<IconButton icon="at-sign" size="sm" label="Point the Assistant at something" title="Point the Assistant at something (@)" disabled={!projectId} />}
+      trigger={trigger ?? <IconButton icon="at-sign" size="sm" label="Point the Assistant at something" title="Point the Assistant at something (@)" disabled={!projectId} />}
     >
       {projectId && (
         <Choices
