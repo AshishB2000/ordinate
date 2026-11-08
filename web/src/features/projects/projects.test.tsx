@@ -184,6 +184,11 @@ describe('project switcher', () => {
     fireEvent.click(go);
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:delete')).toBe(true));
     expect(calls.find((c) => c.channel === 'projects:delete')?.payload).toEqual({ id: A });
+    // It was the open project: Beta became current before the delete went out, so no screen asks for Alpha after it.
+    const opened = calls.findIndex((c) => c.channel === 'projects:open' && (c.payload as { id?: string }).id === B);
+    expect(opened).toBeGreaterThan(-1);
+    expect(opened).toBeLessThan(calls.findIndex((c) => c.channel === 'projects:delete'));
+    await waitFor(() => expect(switcher().textContent).toContain('Beta'));
   });
 
   it('shares: lists grants, adds a person with a role, removes one (project admin)', async () => {
