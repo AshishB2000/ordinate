@@ -101,6 +101,13 @@ export function ProjectSwitcher() {
     }
   };
 
+  /** Leave a project that is going away: the next most recently opened one becomes current, and the open screens stop asking for it. */
+  const leave = (p: ProjectRow) => {
+    if (p.id !== cur.projectId) return;
+    const next = live.find((x) => x.id !== p.id);
+    if (next) switchTo(next.id);
+  };
+
   const fail = (what: string, err: unknown) =>
     toast(`${what}: ${err instanceof Error && err.message !== 'forbidden' ? err.message : 'you do not have permission'}.`, { kind: 'error' });
 
@@ -119,11 +126,7 @@ export function ProjectSwitcher() {
   const archive = async (p: ProjectRow, on: boolean) => {
     setOpen(false);
     try {
-      // Leave it first: the next most recently opened project becomes current.
-      if (on && p.id === cur.projectId) {
-        const next = live.find((x) => x.id !== p.id);
-        if (next) switchTo(next.id);
-      }
+      if (on) leave(p);
       await rpc('projects:archive', { id: p.id, archived: on });
       refresh();
       if (on) toast(`Archived “${p.name}”.`, { action: { label: 'Undo', onClick: () => void archive(p, false) } });
@@ -312,6 +315,8 @@ export function ProjectSwitcher() {
           <DeleteDialog
             project={dialog.p}
             onClose={() => setDialog(null)}
+            // Leave it first, as archive does: a Home reply that lands after the delete must not ask for the project again.
+            onDeleting={() => leave(dialog.p)}
             onDeleted={() => {
               refresh();
               toast(`Deleted “${dialog.p.name}”.`, { kind: 'success' });

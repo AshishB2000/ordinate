@@ -90,10 +90,22 @@ export function NewProjectDialog({ onCreated, onClose }: { onCreated: (id: strin
   );
 }
 
-export function DeleteDialog({ project, onClose, onDeleted }: { project: ProjectRow; onClose: () => void; onDeleted: () => void }) {
+export function DeleteDialog({
+  project,
+  onClose,
+  onDeleting,
+  onDeleted,
+}: {
+  project: ProjectRow;
+  onClose: () => void;
+  /** Runs as the delete is sent: the switcher leaves the project here, so no screen asks for it once it is gone. */
+  onDeleting?: () => void;
+  onDeleted: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const del = () => {
     setBusy(true);
+    onDeleting?.();
     rpc('projects:delete', { id: project.id }).then(
       (r) => {
         if ((r as { ok?: boolean } | null)?.ok) {
