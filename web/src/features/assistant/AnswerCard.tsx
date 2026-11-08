@@ -17,6 +17,11 @@
 // An answer run from a "Did you mean" column carries the name that was said
 // (`learn`), and the card offers to remember it (./RememberName).
 //
+// At its own width the card spreads out (the full-width Assistant): a taller
+// chart with every category named, bigger figures, the table at length, the
+// actions and follow-ups on one row. CSS only, a container query: the same
+// reply, nothing derived.
+//
 // A card whose spec is a working verified question's says so, "✓ Verified · who" (part 3 D9): the server's
 // `verified`, worked out at every draw, never the card's own guess.
 
@@ -183,32 +188,34 @@ export function AnswerCard({
       )}
       {/* An empty answer has no table to show and nothing worth keeping or splitting. */}
       {!card.noMatch && (
-        <div className={s.actions}>
-          <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
-            {table ? 'Hide table' : 'Show table'}
-          </Button>
-          <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
-          {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
-          {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
-        </div>
-      )}
-      {!card.noMatch && card.chips.length > 0 && (
-        <div className={s.chips}>
-          {card.chips.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              className={s.chip}
-              disabled={busy !== null}
-              aria-busy={busy === c.label || undefined}
-              onClick={() => {
-                setBusy(c.label);
-                void onFollowUp(c.spec, c.label).finally(() => setBusy(null));
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
+        <div className={s.foot}>
+          <div className={s.actions}>
+            <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
+              {table ? 'Hide table' : 'Show table'}
+            </Button>
+            <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
+            {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
+            {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
+          </div>
+          {card.chips.length > 0 && (
+            <div className={s.chips}>
+              {card.chips.map((c) => (
+                <button
+                  key={c.label}
+                  type="button"
+                  className={s.chip}
+                  disabled={busy !== null}
+                  aria-busy={busy === c.label || undefined}
+                  onClick={() => {
+                    setBusy(c.label);
+                    void onFollowUp(c.spec, c.label).finally(() => setBusy(null));
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

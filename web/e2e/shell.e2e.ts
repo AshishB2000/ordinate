@@ -10,6 +10,8 @@ import { NAV } from '../src/app/nav.ts';
 import { e2e, openSession, screens, settled, type Session } from './fixtures.ts';
 
 const heading = (s: Session) => s.page.getByRole('heading', { level: 1 });
+/** The rail's items here: no model on this server, so no Assistant page among them (Shell.tsx useAiReady). */
+const RAIL = NAV.filter((n) => n.to !== '/assistant');
 
 function report(s: Session): void {
   for (const l of s.rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}`);
@@ -21,7 +23,7 @@ e2e('the shell loads and Home lists the sample project', async (s) => {
   await settled(page);
   assert.equal(await heading(s).textContent(), 'Home');
   const nav = page.getByRole('navigation', { name: 'Sections' });
-  for (const item of NAV) assert.ok(await nav.getByRole('link', { name: item.label, exact: true }).isVisible(), item.label);
+  for (const item of RAIL) assert.ok(await nav.getByRole('link', { name: item.label, exact: true }).isVisible(), item.label);
   // T2.1's Home: no project list (the switcher is T2.2's) — the sample project
   // is the one Home speaks for, and its records are what Recent and Starred list.
   await page.getByTestId('project-switcher').getByText(server.sample.projectName).waitFor();
@@ -41,7 +43,7 @@ e2e('every nav item is reachable and lands on its route', async (s) => {
   await settled(page);
   const nav = page.getByRole('navigation', { name: 'Sections' });
   // Client-side, by clicking — then the same routes as full page loads (the server's index.html fallback).
-  for (const item of [...NAV.slice(1), NAV[0]!]) {
+  for (const item of [...RAIL.slice(1), RAIL[0]!]) {
     await nav.getByRole('link', { name: item.label, exact: true }).click();
     // An area may settle on its project-scoped path (/data → /data/<projectId>);
     // waiting for the bare path raced that redirect.
@@ -51,7 +53,7 @@ e2e('every nav item is reachable and lands on its route', async (s) => {
     await settled(page);
     assert.equal(await nav.getByRole('link', { name: item.label, exact: true }).getAttribute('aria-current'), 'page');
   }
-  for (const item of NAV) {
+  for (const item of NAV) { // the Assistant's page too: a direct load still lands on it
     await page.goto(item.to);
     await settled(page);
     assert.equal(await heading(s).textContent(), item.label, `heading on a direct load of ${item.to}`);

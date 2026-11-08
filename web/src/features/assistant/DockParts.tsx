@@ -3,9 +3,9 @@
 // in Dock.tsx) and the model picker under the composer. Which models there are is the org admin's (Admin → AI); which
 // one answers is each member's own pick.
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu, type MenuEntry } from '../../ui/Menu';
@@ -20,12 +20,35 @@ import s from './Dock.module.css';
 
 export const TOGGLE_ID = 'dock-toggle';
 
+/** The Assistant full width (AssistantPage.tsx): the same conversation as the dock, where the dock is not drawn. */
+export const ASSISTANT_PATH = '/assistant';
+
 const DockPanel = lazy(() => import('./Dock'));
 
-/** The dock, beside the routed page while open. The panel loads on first open. */
+function useOnAssistantPage(): boolean {
+  return useLocation().pathname === ASSISTANT_PATH;
+}
+
+/**
+ * From the full-width Assistant back to the side panel: the dock opens (on the page's conversation, which the page
+ * remembers for it) and the screen before comes back — Home when the page was the first thing opened, so Back
+ * never leaves the app. The browser router keeps the entry's place in history.state (`idx`, 0 the first; a
+ * replace keeps it, where it would change location.key).
+ */
+export function useBackToDock(): () => void {
+  const navigate = useNavigate();
+  return () => {
+    setDockOpen(true);
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    void (idx > 0 ? navigate(-1) : navigate('/'));
+  };
+}
+
+/** The dock, beside the routed page while open — not beside the full-width Assistant. The panel loads on first open. */
 export function Dock() {
   const open = useDockOpen();
-  if (!open) return null;
+  const onPage = useOnAssistantPage();
+  if (!open || onPage) return null;
   return (
     <Suspense fallback={<aside className={`${s.panel} ${s.loadingPanel}`} aria-label="Loading the Assistant" aria-busy="true" />}>
       <DockPanel />
@@ -33,27 +56,36 @@ export function Dock() {
   );
 }
 
-/** The top bar's Assistant button, and ⌘L / ⌘J (Ctrl elsewhere) — the dock's two doors. */
+/**
+ * The top bar's Assistant button, and ⌘L / ⌘J (Ctrl elsewhere) — the dock's two doors. On the full-width
+ * Assistant it is pressed, and takes the conversation back to the side panel: it never just hides it.
+ */
 export function DockToggle() {
   const open = useDockOpen();
+  const onPage = useOnAssistantPage();
+  const back = useBackToDock();
+  const toggle = onPage ? back : () => setDockOpen(!open);
+  const latest = useRef(toggle);
+  latest.current = toggle;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || (e.key !== 'l' && e.key !== 'j')) return;
       e.preventDefault();
-      setDockOpen(!open);
+      latest.current();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, []);
   return (
     <IconButton
       id={TOGGLE_ID}
       icon="sparkles"
       label="Assistant"
-      title="Assistant: works on what you're looking at (⌘L)"
-      aria-expanded={open}
-      aria-controls="dock-panel"
-      onClick={() => setDockOpen(!open)}
+      title={onPage ? 'Assistant: back to the side panel (⌘L)' : "Assistant: works on what you're looking at (⌘L)"}
+      aria-expanded={open || onPage}
+      aria-controls={onPage ? undefined : 'dock-panel'}
+      className={onPage ? s.toggleOn : undefined}
+      onClick={toggle}
     />
   );
 }

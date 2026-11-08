@@ -1,9 +1,10 @@
 // Home's hero — homeAsk.ts's ask bar, as the page's first thing: a tinted
 // panel the page's full measure with the bar on it, then small suggestion
 // chips under it. It asks what to do, not only what to ask: the Assistant
-// builds too. Enter or the send button hands the request to the Assistant dock
-// (no model is called from Home). A suggestion FILLS the bar, tags the dataset
-// it names (the dock's `@`, removable) and focuses it; it never sends: a
+// builds too. Enter or the send button hands the request to the Assistant's
+// full-width page, which asks it (no model is called from Home). A suggestion
+// FILLS the bar, tags the dataset it names (the dock's `@`, removable) and
+// focuses it; it never sends: a
 // suggestion is a draft to edit, and asking can cost money. Suggestions show
 // only when a model is set up; where none is, the panel says so, with the one
 // way to fix it.

@@ -27,4 +27,6 @@ export const NAV: readonly NavItem[] = [
 
   { to: '/analytics', label: 'Analytics', icon: 'activity' },
   { to: '/model', label: 'Data model', icon: 'layers' },
+  // Shown only while an AI model is ready (Shell.tsx).
+  { to: '/assistant', label: 'Assistant', icon: 'sparkles' },
 ];

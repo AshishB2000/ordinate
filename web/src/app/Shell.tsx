@@ -24,6 +24,7 @@ import { useTourVisits } from '../features/home/tourVisits';
 import { NAV, type NavItem } from './nav';
 import { NAV_GROUPS } from './navGroups';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
+import { useAiReady } from '../features/assistant/api';
 import { useWorkspacePrefs } from './prefs';
 import { CommandPalette, openPalette } from '../features/palette/CommandPalette';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
@@ -197,7 +198,9 @@ export function Shell() {
   // Admin is for org admins (the server refuses its channels to anyone else):
   // hidden once the role is known to be another; the page explains itself too.
   const role = me.data?.user?.role;
-  const shown = NAV.filter((n) => n.to !== '/admin' || role === undefined || role === 'admin');
+  // The Assistant's own page is offered while a model is ready, as Explore's ask box is (the dock's toggle stays).
+  const aiReady = useAiReady();
+  const shown = NAV.filter((n) => (n.to !== '/admin' || role === undefined || role === 'admin') && (n.to !== '/assistant' || aiReady));
   const groups = NAV_GROUPS.map((g) => ({ label: g.label, items: g.items.flatMap((to) => shown.filter((n) => n.to === to)) }));
   const bottom = shown.filter((n) => n.bottom);
   const here = useLocation();

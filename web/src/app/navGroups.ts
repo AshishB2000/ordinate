@@ -10,6 +10,6 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: readonly NavGroup[] = [
-  { label: 'View', items: ['/', '/explore', '/dashboards', '/reports'] },
+  { label: 'View', items: ['/', '/assistant', '/explore', '/dashboards', '/reports'] },
   { label: 'Build', items: ['/data', '/model', '/connections', '/pipelines', '/visuals', '/analytics'] },
 ];

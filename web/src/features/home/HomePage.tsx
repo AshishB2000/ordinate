@@ -14,10 +14,12 @@
 
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
-import { openDockWith, openDockWithSpec } from '../assistant/dockState';
+import { ASSISTANT_PATH } from '../assistant/DockParts';
+import { askOnPage, runOnPage } from '../assistant/dockState';
 import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
+import type { VerifiedChip } from '../assistant/api';
 import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
@@ -62,6 +64,7 @@ function NewMenu({ projectId }: { projectId: string | undefined }) {
 }
 
 export default function HomePage() {
+  const navigate = useNavigate();
   const me = useMe();
   const cur = useCurrentProject();
   const project = cur.project;
@@ -72,9 +75,16 @@ export default function HomePage() {
   const canEdit = useCanEdit(projectId);
   // Building is offered only to an editor; asking is anyone's.
   const prompts = suggestPrompts(ov.data?.datasets ?? [], canEdit);
-  // A suggestion points the Assistant at the dataset it names, in Home's project.
-  const ask = (q: string, about?: Starter['about']) =>
-    openDockWith(q, about && projectId ? { projectId, context: { kind: 'dataset', id: about.id, label: `dataset · ${about.name}`, name: about.name } } : undefined);
+  // Asked on the Assistant's own page, full width. A suggestion points it at the dataset it names, in Home's project.
+  const ask = (q: string, about?: Starter['about']) => {
+    askOnPage(q, about && projectId ? { projectId, context: { kind: 'dataset', id: about.id, label: `dataset · ${about.name}`, name: about.name } } : undefined);
+    void navigate(ASSISTANT_PATH);
+  };
+  const run = (c: VerifiedChip) => {
+    if (!projectId) return;
+    runOnPage({ projectId, spec: c.spec, label: c.question });
+    void navigate(ASSISTANT_PATH);
+  };
   return (
     <div className={s.scroll}>
       <header className={s.head}>
@@ -90,7 +100,7 @@ export default function HomePage() {
           {canEdit && <NewMenu projectId={projectId} />}
         </div>
       </header>
-      <AskBar prompts={prompts} onAsk={ask} projectId={projectId} onRun={(c) => projectId && openDockWithSpec({ projectId, spec: c.spec, label: c.question })} />
+      <AskBar prompts={prompts} onAsk={ask} projectId={projectId} onRun={run} />
       <YourNumbers projectId={projectId} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (

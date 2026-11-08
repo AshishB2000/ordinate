@@ -19,16 +19,45 @@ describe('shell', () => {
     const nav = screen.getByRole('navigation', { name: 'Sections' });
     // The rail draws its groups in order (navGroups.ts: View, then Build), then
     // the `bottom` items pinned to its foot — not NAV's append-only order.
-    const shown = [...NAV_GROUPS.flatMap((g) => g.items.map((to) => NAV.find((n) => n.to === to)!)), ...NAV.filter((n) => n.bottom)];
+    // No AI model here, so no Assistant page in the rail (the next test has one).
+    const shown = [...NAV_GROUPS.flatMap((g) => g.items.map((to) => NAV.find((n) => n.to === to)!)), ...NAV.filter((n) => n.bottom)].filter((n) => n.to !== '/assistant');
     expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(shown.map((n) => n.label));
     expect(within(nav).getAllByRole('link').slice(0, 4).map((a) => a.textContent)).toEqual(['Home', 'Explore', 'Dashboards', 'Reports']);
     for (const g of NAV_GROUPS) {
-      expect(within(within(nav).getByRole('group', { name: g.label })).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(g.items);
+      expect(within(within(nav).getByRole('group', { name: g.label })).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(g.items.filter((to) => to !== '/assistant'));
     }
     expect(screen.getByRole('search')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Account and theme' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Switch project/ })).toBeTruthy();
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
+  });
+
+  it('offers the Assistant’s page right after Home while a model is ready; NEGATIVE CONTROL, none without one', async () => {
+    const ready = { ready: true, models: [{ provider: 'anthropic', model: 'm', label: 'M', isDefault: true }], mine: { provider: 'anthropic', model: 'm' }, copilotEnabled: true, keyStore: null };
+    serveRpc({ 'ai:status': { body: ready } });
+    renderApp('/');
+    const nav = screen.getByRole('navigation', { name: 'Sections' });
+    const view = within(nav).getByRole('group', { name: 'View' });
+    await waitFor(() => expect(within(view).getAllByRole('link').map((a) => a.textContent)).toEqual(['Home', 'Assistant', 'Explore', 'Dashboards', 'Reports']));
+    expect(within(view).getByRole('link', { name: 'Assistant' }).getAttribute('href')).toBe('/assistant');
+  });
+
+  it('asks nothing of its own for the Assistant’s entry (every page holds an RPC budget): off an AI surface it goes by what this browser saw last', async () => {
+    const calls = serveRpc({});
+    localStorage.setItem('ordinate.aiReady', '1');
+    renderApp('/reports');
+    expect(within(screen.getByRole('navigation', { name: 'Sections' })).getByRole('link', { name: 'Assistant' }).getAttribute('href')).toBe('/assistant');
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls.some((c) => c.channel === 'ai:status')).toBe(false);
+  });
+
+  it('hides the Assistant’s page without a model (negative control)', async () => {
+    const calls = serveRpc({ 'ai:status': { body: { ready: false, reason: 'no_model', models: [], mine: null, copilotEnabled: true, keyStore: null } } });
+    renderApp('/');
+    await waitFor(() => expect(calls.some((c) => c.channel === 'ai:status')).toBe(true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(within(screen.getByRole('navigation', { name: 'Sections' })).queryByRole('link', { name: 'Assistant' })).toBeNull();
   });
 
   it('keeps every nav item keyboard reachable and navigates on activation', async () => {
@@ -53,7 +82,7 @@ describe('shell', () => {
     renderApp('/');
     const rail = screen.getByRole('navigation', { name: 'Sections' }).parentElement!;
     // Closed, the labels are faded, not removed: each link is still found by its name.
-    for (const n of NAV) expect(within(rail).getByRole('link', { name: n.label }).getAttribute('aria-hidden')).toBeNull();
+    for (const n of NAV.filter((x) => x.to !== '/assistant')) expect(within(rail).getByRole('link', { name: n.label }).getAttribute('aria-hidden')).toBeNull();
     expect(rail.hasAttribute('data-picked')).toBe(false);
     fireEvent.click(within(rail).getByRole('link', { name: 'Data' }));
     expect(rail.hasAttribute('data-picked')).toBe(true);
@@ -167,6 +196,6 @@ describe('shell', () => {
     expect(screen.getByRole('alert').textContent).toContain('kaboom');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     // the shell survived: nav still there and usable
-    expect(within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('link')).toHaveLength(NAV.length);
+    expect(within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('link')).toHaveLength(NAV.length - 1); // no model: no Assistant page
   });
 });

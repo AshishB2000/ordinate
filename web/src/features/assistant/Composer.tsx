@@ -1,9 +1,11 @@
-// The dock's composer: what the answer will be about (a chip), the question,
-// and one row of controls under it — which model answers, `@` to point at
-// something else, a way to bring data in, send. The text and the asking are
-// Dock.tsx's; this is their surface.
+// The Assistant's composer: what the answer will be about (a chip), the
+// question, and one row of controls under it — which model answers, `@` to
+// point at something else, a way to bring data in, send. The text and the
+// asking are useConversation's; this is their surface. Full width (`page`) the
+// chip IS the `@` and sits in that row, and the model is named in the page's
+// header instead.
 
-import { useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import { IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
@@ -13,6 +15,7 @@ import { CONTEXT_ICON, ContextPicker } from './ContextPicker';
 import { ModelPicker } from './DockParts';
 import type { DockContext } from './dockState';
 import s from './Dock.module.css';
+import w from './Wide.module.css';
 
 /** Bring data in — the import page's own doors, in the dock's project. Nothing is sent to a model from here. */
 function AddData({ projectId }: { projectId: string | null }) {
@@ -52,9 +55,11 @@ export interface ComposerProps {
   placeholder: string;
   /** The project switch, when the URL does not decide the project. */
   projectPick?: ReactNode;
+  layout?: 'dock' | 'page';
+  className?: string;
 }
 
-export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick }: ComposerProps) {
+export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick, layout = 'dock', className }: ComposerProps) {
   const [picking, setPicking] = useState(false);
   const caret = useRef<number | null>(null); // where the `@` was typed, to return to
 
@@ -87,24 +92,30 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
     caret.current = null;
   };
 
+  const about = context.kind ? context.name || `open ${context.kind}` : 'whole project';
+  const picker = (trigger?: ReactElement) => <ContextPicker projectId={projectId} open={picking} onOpenChange={setPicking} onPick={onPin} onClosed={backToInput} trigger={trigger} />;
+  const clear = pinned && (
+    <button type="button" className={s.contextClear} aria-label="Follow what’s on screen again" onClick={() => onPin(null)}>
+      <Icon name="x" />
+    </button>
+  );
+  const wide = layout === 'page';
   return (
-    <div className={s.composer}>
-      <div className={s.context}>
-        <span className={s.contextLabel}>Based on</span>
-        <span className={pinned ? `${s.contextChip} ${s.contextPinned}` : s.contextChip} title={`Answers are based on ${context.label}`} data-testid="dock-context">
-          <Icon name={CONTEXT_ICON[context.kind] ?? 'folder'} />
-          <span className={s.contextName}>{context.kind ? context.name || `open ${context.kind}` : 'whole project'}</span>
-          {pinned && (
-            <button type="button" className={s.contextClear} aria-label="Follow what’s on screen again" onClick={() => onPin(null)}>
-              <Icon name="x" />
-            </button>
-          )}
-        </span>
-        {projectPick && <span className={s.projectPick}>{projectPick}</span>}
-      </div>
+    <div className={[s.composer, wide && w.composer, className].filter(Boolean).join(' ')}>
+      {!wide && (
+        <div className={s.context}>
+          <span className={s.contextLabel}>Based on</span>
+          <span className={pinned ? `${s.contextChip} ${s.contextPinned}` : s.contextChip} title={`Answers are based on ${context.label}`} data-testid="dock-context">
+            <Icon name={CONTEXT_ICON[context.kind] ?? 'folder'} />
+            <span className={s.contextName}>{about}</span>
+            {clear}
+          </span>
+          {projectPick && <span className={s.projectPick}>{projectPick}</span>}
+        </div>
+      )}
       <textarea
         ref={inputRef}
-        className={s.input}
+        className={wide ? `${s.input} ${w.input}` : s.input}
         rows={1}
         aria-label="Ask the Assistant"
         placeholder={placeholder}
@@ -114,11 +125,24 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
         onKeyDown={onKey}
       />
       <div className={s.composeFoot}>
-        <ModelPicker status={status} />
+        {wide ? (
+          <>
+            {picker(
+              <button type="button" className={pinned ? `${w.at} ${w.atPinned}` : w.at} disabled={!projectId} aria-label={`Based on ${about}. Point the Assistant at something else`} title={`Answers are based on ${context.label}`} data-testid="dock-context">
+                <span className={w.atName}>{`@ ${about.charAt(0).toUpperCase()}${about.slice(1)}`}</span>
+                <Icon name="chevron-down" size={12} />
+              </button>,
+            )}
+            {clear}
+            {projectPick && <span className={w.projectPick}>{projectPick}</span>}
+          </>
+        ) : (
+          <ModelPicker status={status} />
+        )}
         <div className={s.composeActions}>
-          <ContextPicker projectId={projectId} open={picking} onOpenChange={setPicking} onPick={onPin} onClosed={backToInput} />
+          {!wide && picker()}
           <AddData projectId={projectId} />
-          <IconButton icon="arrow-up" size="sm" variant="primary" label="Send" disabled={!usable || !text.trim()} onClick={onSend} />
+          <IconButton icon="arrow-up" size="sm" variant="primary" label="Send" className={wide ? w.send : undefined} disabled={!usable || !text.trim()} onClick={onSend} />
         </div>
       </div>
     </div>

@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
-import { setDockOpen, takePendingQuestion } from '../assistant/dockState';
+import { forgetPageThread, setDockOpen, takePendingQuestion } from '../assistant/dockState';
 
 afterEach(() => {
   vi.unstubAllGlobals();
   act(() => {
     setDockOpen(false);
     takePendingQuestion();
+    forgetPageThread();
   });
   localStorage.clear();
 });
@@ -215,7 +216,7 @@ describe('Home', () => {
     expect(within(none).queryAllByRole('link')).toEqual([]);
   });
 
-  it('hands a question to the Assistant dock, which asks it; a chip only fills the bar', async () => {
+  it('hands a question to the Assistant’s full-width page, which asks it; a chip only fills the bar', async () => {
     const calls = stubServer({
       'ai:status': {
         ready: true,
@@ -226,7 +227,7 @@ describe('Home', () => {
       },
       'copilot:ask': { ok: true, turns: [], threadId: 't' },
     });
-    renderApp('/');
+    const router = renderApp('/');
     // The hero: the bar sits in its own region, first on the page; with a model ready it has nothing to explain.
     const hero = screen.getByRole('region', { name: 'What do you want to do?' });
     const input = within(hero).getByRole('textbox', { name: 'Ask a question or say what to build' });
@@ -246,18 +247,22 @@ describe('Home', () => {
     expect(within(hero).queryByTestId('ask-about')).toBeNull();
     fireEvent.submit(input.closest('form')!);
     expect((input as HTMLInputElement).value).toBe('');
+    // Asked on the Assistant's own page, full width — not in the side panel.
     await waitFor(() => expect(asked()[0]).toMatchObject({ projectId: P, question: 'What is in Returns?', context: { kind: '' } }));
-    expect(screen.getByRole('button', { name: 'Assistant' }).getAttribute('aria-expanded')).toBe('true');
+    expect(router.state.location.pathname).toBe('/assistant');
+    expect(screen.getByRole('region', { name: 'Assistant' })).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: 'Assistant' })).toBeNull();
 
-    // Kept, the tag points the Assistant at that dataset, as `@` does, and the dock shows it pinned.
-    fireEvent.click(screen.getByRole('button', { name: 'Summarise @Orders' }));
-    fireEvent.submit(input.closest('form')!);
-    expect(within(hero).queryByTestId('ask-about')).toBeNull();
+    // Kept, the tag points the Assistant at that dataset, as `@` does, and the page shows it pinned.
+    await act(() => router.navigate('/'));
+    const again = await screen.findByRole('region', { name: 'What do you want to do?' });
+    fireEvent.click(await within(again).findByRole('button', { name: 'Summarise @Orders' }));
+    fireEvent.submit(within(again).getByRole('textbox', { name: 'Ask a question or say what to build' }).closest('form')!);
     await waitFor(() => expect(asked()[1]).toMatchObject({ projectId: P, question: 'Summarise Orders', context: { kind: 'dataset', id: 'd1' } }));
     expect(screen.getByTestId('dock-context').textContent).toContain('Orders');
   });
 
-  it('keeps the question in the dock\'s composer when the Assistant is not set up, focus in the dock', async () => {
+  it('keeps the question in the Assistant page\'s composer when the Assistant is not set up, focus on the page', async () => {
     const calls = stubServer({});
     renderApp('/');
     const input = await screen.findByRole('textbox', { name: 'Ask a question or say what to build' });
@@ -273,7 +278,10 @@ describe('Home', () => {
     fireEvent.submit(input.closest('form')!);
     const composer = await screen.findByRole('textbox', { name: 'Ask the Assistant' });
     await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe('Which month was worst?'));
-    expect(document.getElementById('dock-panel')!.contains(document.activeElement)).toBe(true);
+    // The page says why it cannot ask, as the dock does.
+    const page = screen.getByRole('region', { name: 'Assistant' });
+    expect(within(page).getByTestId('ai-not-ready')).toBeTruthy();
+    expect(page.contains(document.activeElement)).toBe(true);
     expect(calls.some((c) => c.channel === 'copilot:ask')).toBe(false);
   });
 

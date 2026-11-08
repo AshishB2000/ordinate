@@ -4,13 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { useVerifiedChips } from './api';
-import { setDockOpen, takePendingSpec } from './dockState';
+import { forgetPageThread, setDockOpen, takePendingQuestion, takePendingSpec } from './dockState';
 
 afterEach(() => {
   cleanup();
   act(() => {
     setDockOpen(false);
     takePendingSpec();
+    takePendingQuestion();
+    forgetPageThread();
   });
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -108,15 +110,16 @@ describe('verified chips in the dock, with no model', () => {
 });
 
 describe('verified chips on Home, with no model', () => {
-  it('shows the chip; a click opens the dock, which re-asks the spec', async () => {
+  it('shows the chip; a click opens the Assistant full width, which re-asks the spec', async () => {
     const calls = serve(base([ROW]));
     renderApp('/');
     fireEvent.click(await screen.findByRole('button', { name: '✓ Revenue by region' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toEqual({ projectId: PID, threadId: THREAD, spec: SPEC, label: 'Revenue by region' }));
-    expect(screen.getByRole('complementary', { name: 'Assistant' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Assistant' })).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: 'Assistant' })).toBeNull();
   });
 
-  it('a question typed on Home is asked by the dock, and focus stays in the dock while it is', async () => {
+  it('a question typed on Home is asked on the Assistant’s page, and focus stays on it while it is', async () => {
     let release = (): void => {};
     const held = new Promise<Out>((r) => { release = () => r({ body: { ok: false, notReady: true } }); });
     const calls = serve(base([ROW], { 'copilot:ask': () => held }));
@@ -125,7 +128,7 @@ describe('verified chips on Home, with no model', () => {
     await screen.findByRole('button', { name: '✓ Revenue by region' });
     fireEvent.change(ask, { target: { value: 'Which month had the most orders?' } });
     fireEvent.submit(ask.closest('form')!);
-    const dock = await screen.findByRole('complementary', { name: 'Assistant' });
+    const dock = await screen.findByRole('region', { name: 'Assistant' });
     const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
     await waitFor(() => expect(box.disabled).toBe(true)); // being asked
     await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:ask')?.payload).toMatchObject({ projectId: PID, question: 'Which month had the most orders?' }));

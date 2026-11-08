@@ -7,7 +7,7 @@ import { matchPath } from 'react-router';
 import type { Ask } from './api';
 
 /** A record id, as the contracts check one (src/api/contract.ts `Uuid`). */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** A capture's id is its history thread's (src/api/captures.ts `CaptureId`). */
 const CAPTURE_ID = /^[0-9a-zA-Z_-]{1,64}$/;
 
