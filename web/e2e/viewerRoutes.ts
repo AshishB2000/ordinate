@@ -48,6 +48,7 @@ export const SKIP: Readonly<Record<string, string>> = {
   '/tokens': 'the signed-in person’s own API tokens: org read, not the project’s',
   '/about': 'version and licences: nothing of the project’s',
   '/admin': 'org admins only: the server refuses its channels to anyone else',
+  '/assistant': 'the dock’s conversation full width: its writes sit on answers, which need a model the walk’s server has none of',
 };
 
 /** The route patterns of routes.tsx's source that are neither walked nor skipped. */
