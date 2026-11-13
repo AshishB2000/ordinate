@@ -403,9 +403,16 @@ export async function createThread(projectId: string): Promise<CopilotThreadSumm
   };
   const who = ownerNow();
   if (who !== undefined) thread.owner = who;
-  const threads = [...(await loadThreads(projectId)), thread];
-  await writeThreads(projectId, threads);
-  return { id: thread.id, title: thread.title, updatedAt: thread.updatedAt, turnCount: 0 };
+  return changeThreads(projectId, async (threads) => {
+    await writeThreads(projectId, [...threads, thread]);
+    return { id: thread.id, title: thread.title, updatedAt: thread.updatedAt, turnCount: 0 };
+  });
+}
+
+// Every change reads, changes and writes copilot.json under its record lock (recordFs.locked, every
+// pod): one file holds every member's conversations, so two unlocked appends lost one of them.
+function changeThreads<T>(projectId: string, fn: (threads: CopilotThread[]) => Promise<T>): Promise<T> {
+  return recordFs.locked(copilotFilePath(projectId), async () => fn(await loadThreads(projectId)));
 }
 
 // Cap to the newest MAX_THREADS of each owner and atomic-write the whole file. The array is kept
@@ -462,34 +469,35 @@ export async function appendTurn(
   const guidance = role === 'assistant' ? sanitizeGuidance(turn && turn.guidance) : undefined;
   if (guidance) record.guidance = guidance;
 
-  const threads = await loadThreads(projectId);
-  const own = mine(threads);
-  let target = (threadId && own.find((t) => t.id === threadId)) || mostRecent(own);
-  if (!target) {
-    target = { id: randomUUID(), title: FALLBACK_TITLE, createdAt: record.createdAt, updatedAt: record.createdAt, turns: [] };
-    const who = ownerNow();
-    if (who !== undefined) target.owner = who;
+  return changeThreads(projectId, async (threads) => {
+    const own = mine(threads);
+    let target = (threadId && own.find((t) => t.id === threadId)) || mostRecent(own);
+    if (!target) {
+      target = { id: randomUUID(), title: FALLBACK_TITLE, createdAt: record.createdAt, updatedAt: record.createdAt, turns: [] };
+      const who = ownerNow();
+      if (who !== undefined) target.owner = who;
+      threads.push(target);
+    }
+
+    const next = [...target.turns, record];
+    target.turns = next.length > MAX_TURNS ? next.slice(next.length - MAX_TURNS) : next;
+    target.updatedAt = record.createdAt;
+    // Rename on the FIRST user turn only: once a thread carries a real title the
+    // derived one can't change, since the first user turn never changes. (It can
+    // still fall out of the ring cap — the title stays, which is what a user who
+    // named a conversation by asking a question expects.)
+    if (target.title === FALLBACK_TITLE) target.title = titleFromTurns(target.turns);
+
+    // Move the touched thread to the end so array order stays recency order — this is
+    // what makes mostRecent() deterministic when two writes share a millisecond, and
+    // what makes the MAX_THREADS ring evict least-recently-used.
+    const at = threads.indexOf(target);
+    if (at >= 0) threads.splice(at, 1);
     threads.push(target);
-  }
 
-  const next = [...target.turns, record];
-  target.turns = next.length > MAX_TURNS ? next.slice(next.length - MAX_TURNS) : next;
-  target.updatedAt = record.createdAt;
-  // Rename on the FIRST user turn only: once a thread carries a real title the
-  // derived one can't change, since the first user turn never changes. (It can
-  // still fall out of the ring cap — the title stays, which is what a user who
-  // named a conversation by asking a question expects.)
-  if (target.title === FALLBACK_TITLE) target.title = titleFromTurns(target.turns);
-
-  // Move the touched thread to the end so array order stays recency order — this is
-  // what makes mostRecent() deterministic when two writes share a millisecond, and
-  // what makes the MAX_THREADS ring evict least-recently-used.
-  const at = threads.indexOf(target);
-  if (at >= 0) threads.splice(at, 1);
-  threads.push(target);
-
-  await writeThreads(projectId, threads);
-  return target.turns;
+    await writeThreads(projectId, threads);
+    return target.turns;
+  });
 }
 
 // Rename ONE of the caller's conversations to the user's own words — cleaned the
@@ -501,12 +509,13 @@ export async function appendTurn(
 // first user turn — a marker field if anyone wants "Conversation" to stick.
 export async function renameThread(projectId: string, threadId: string, title: string): Promise<CopilotThreadSummary | null> {
   if (!isValidId(projectId) || typeof title !== 'string' || title.trim() === '') return null;
-  const threads = await loadThreads(projectId);
-  const target = mine(threads).find((t) => t.id === threadId);
-  if (!target) return null;
-  target.title = clampTitle(title);
-  await writeThreads(projectId, threads);
-  return { id: target.id, title: target.title, updatedAt: target.updatedAt, turnCount: target.turns.length };
+  return changeThreads(projectId, async (threads) => {
+    const target = mine(threads).find((t) => t.id === threadId);
+    if (!target) return null;
+    target.title = clampTitle(title);
+    await writeThreads(projectId, threads);
+    return { id: target.id, title: target.title, updatedAt: target.updatedAt, turnCount: target.turns.length };
+  });
 }
 
 // "Save as visual", kept on the answer turn it was saved from: a reload then links to the visual
@@ -514,12 +523,13 @@ export async function renameThread(projectId: string, threadId: string, title: s
 // assistant turn whose stored answer draws the very chart that was saved. False: nothing marked.
 export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(visualId)) return false;
-  const threads = await loadThreads(projectId);
-  const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
-  if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
-  turn.savedVisualId = visualId;
-  await writeThreads(projectId, threads);
-  return true;
+  return changeThreads(projectId, async (threads) => {
+    const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
+    if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
+    turn.savedVisualId = visualId;
+    await writeThreads(projectId, threads);
+    return true;
+  });
 }
 
 // Delete ONE of the caller's conversations, turns and all. False when there is
@@ -527,11 +537,12 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
 // id gets, so a delete can never say whether someone else's conversation exists.
 export async function deleteThread(projectId: string, threadId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
-  const threads = await loadThreads(projectId);
-  const target = mine(threads).find((t) => t.id === threadId);
-  if (!target) return false;
-  await writeThreads(projectId, threads.filter((t) => t !== target));
-  return true;
+  return changeThreads(projectId, async (threads) => {
+    const target = mine(threads).find((t) => t.id === threadId);
+    if (!target) return false;
+    await writeThreads(projectId, threads.filter((t) => t !== target));
+    return true;
+  });
 }
 
 // Delete a project's copilot.json. Returns true on success — a missing file is
@@ -539,7 +550,8 @@ export async function deleteThread(projectId: string, threadId: string): Promise
 export async function clearHistory(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   try {
-    await recordFs.rm(copilotFilePath(projectId), { force: true });
+    const file = copilotFilePath(projectId);
+    await recordFs.locked(file, () => recordFs.rm(file, { force: true })); // not undone by an append in flight
     return true;
   } catch (_) {
     return false;
