@@ -216,8 +216,15 @@ describe('Home', () => {
     expect(within(none).queryAllByRole('link')).toEqual([]);
   });
 
-  it('hands a question to the Assistant’s full-width page, which asks it; a chip only fills the bar', async () => {
+  it('hands a question to the Assistant’s full-width page, which asks it in a new conversation; a chip only fills the bar', async () => {
+    // Each ask from Home makes its own conversation; the page would otherwise open the most recent one (OLD).
+    const OLD = '33333333-3333-4333-8333-333333333333';
+    const made = ['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555'];
+    const fresh = [...made];
+    const thread = (p: unknown) => (p as { threadId?: string }).threadId;
     const calls = stubServer({
+      'copilot:newThread': () => ({ ok: true, thread: { id: fresh.shift() } }),
+      'copilot:history': (p: unknown) => ({ ok: true, turns: [], threadId: thread(p) ?? OLD }),
       'ai:status': {
         ready: true,
         models: [{ provider: 'anthropic', model: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', isDefault: true }],
@@ -225,7 +232,7 @@ describe('Home', () => {
         copilotEnabled: true,
         keyStore: null,
       },
-      'copilot:ask': { ok: true, turns: [], threadId: 't' },
+      'copilot:ask': (p: unknown) => ({ ok: true, turns: [], threadId: thread(p) }),
     });
     const router = renderApp('/');
     // The hero: the bar sits in its own region, first on the page; with a model ready it has nothing to explain.
@@ -248,8 +255,9 @@ describe('Home', () => {
     fireEvent.submit(input.closest('form')!);
     expect((input as HTMLInputElement).value).toBe('');
     // Asked on the Assistant's own page, full width — not in the side panel.
-    await waitFor(() => expect(asked()[0]).toMatchObject({ projectId: P, question: 'What is in Returns?', context: { kind: '' } }));
+    await waitFor(() => expect(asked()[0]).toMatchObject({ projectId: P, question: 'What is in Returns?', context: { kind: '' }, threadId: made[0] }));
     expect(router.state.location.pathname).toBe('/assistant');
+    expect(router.state.location.search).toBe(`?thread=${made[0]}`);
     expect(screen.getByRole('region', { name: 'Assistant' })).toBeTruthy();
     expect(screen.queryByRole('complementary', { name: 'Assistant' })).toBeNull();
 
@@ -258,7 +266,7 @@ describe('Home', () => {
     const again = await screen.findByRole('region', { name: 'What do you want to do?' });
     fireEvent.click(await within(again).findByRole('button', { name: 'Summarise @Orders' }));
     fireEvent.submit(within(again).getByRole('textbox', { name: 'Ask a question or say what to build' }).closest('form')!);
-    await waitFor(() => expect(asked()[1]).toMatchObject({ projectId: P, question: 'Summarise Orders', context: { kind: 'dataset', id: 'd1' } }));
+    await waitFor(() => expect(asked()[1]).toMatchObject({ projectId: P, question: 'Summarise Orders', context: { kind: 'dataset', id: 'd1' }, threadId: made[1] }));
     expect(screen.getByTestId('dock-context').textContent).toContain('Orders');
   });
 

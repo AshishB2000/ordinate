@@ -15,11 +15,11 @@
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
 import { ASSISTANT_PATH } from '../assistant/DockParts';
-import { askOnPage, runOnPage } from '../assistant/dockState';
+import { askOnPage, pickDockProject, runOnPage } from '../assistant/dockState';
 import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
-import type { VerifiedChip } from '../assistant/api';
+import { newThread, type VerifiedChip } from '../assistant/api';
 import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
@@ -75,15 +75,22 @@ export default function HomePage() {
   const canEdit = useCanEdit(projectId);
   // Building is offered only to an editor; asking is anyone's.
   const prompts = suggestPrompts(ov.data?.datasets ?? [], canEdit);
+  // What starts on Home starts a new conversation, in Home's project, opened by its id: never the last one, asked
+  // where you left it. If it cannot be made, the page opens on the most recent, as before.
+  const openNew = async () => {
+    if (projectId) pickDockProject(projectId);
+    const id = projectId ? await newThread(projectId).catch(() => '') : '';
+    void navigate(id ? `${ASSISTANT_PATH}?thread=${id}` : ASSISTANT_PATH);
+  };
   // Asked on the Assistant's own page, full width. A suggestion points it at the dataset it names, in Home's project.
   const ask = (q: string, about?: Starter['about']) => {
     askOnPage(q, about && projectId ? { projectId, context: { kind: 'dataset', id: about.id, label: `dataset · ${about.name}`, name: about.name } } : undefined);
-    void navigate(ASSISTANT_PATH);
+    void openNew();
   };
   const run = (c: VerifiedChip) => {
     if (!projectId) return;
     runOnPage({ projectId, spec: c.spec, label: c.question });
-    void navigate(ASSISTANT_PATH);
+    void openNew();
   };
   return (
     <div className={s.scroll}>
