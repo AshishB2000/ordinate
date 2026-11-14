@@ -101,6 +101,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     if (ok) for (const c of conns) await (require('../app/configSecrets') as typeof import('../app/configSecrets')).dropConnectionSecrets(c.id);
     // …and its masking key, which the server keeps in the secrets store, not the folder.
     if (ok) await dropSalt(id);
+    // …and its Assistant conversations, which are rows with DATABASE_URL (0023), not the folder's copilot.json.
+    if (ok) await (require('../ai/copilot') as typeof import('../ai/copilot')).clearHistory(id);
     // Server: who could open it goes with it (src/server/authz/share.ts).
     if (ok && serverDataDir() !== null) await (require('../server/authz/share') as typeof import('../server/authz/share')).dropGrants(id);
     return { ok };

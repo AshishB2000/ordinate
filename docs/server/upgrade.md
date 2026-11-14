@@ -628,6 +628,23 @@ key hash steps use). With the Helm chart's `emptyDir`, every pod had its own cop
 - A masking key stored since the upgrade is invisible to the older release. It mints a new file key,
   so hash tokens change, and its hash steps skip again instead of refusing.
 
+## Assistant conversations move into their own tables (`0023_assistant_threads`)
+
+Earlier releases kept every member's Assistant conversations in a project as one record,
+`projects/<id>/copilot.json`, rewritten whole on each turn and capped at 8 MiB for the whole project.
+From this release they are rows of `assistant_threads` and `assistant_turns`
+([design](../assistant-threads/00-design.md)).
+
+**Rolling out.** The migration only adds the tables. The first time a pod of this release touches a
+project's conversations, it moves that project's `copilot.json` into them and deletes the record.
+Nobody is asked anything and nothing is lost. An older pod still running writes `copilot.json` again,
+and the next call on a new pod moves that too. A turn an older pod saved to a conversation that had
+already moved can show up as a conversation of its own.
+
+**Rolling back.** The older release reads `copilot.json` only, so it shows no conversations for a
+project that has moved. They stay in the tables, and come back when you upgrade again, together with
+whatever the older release saved in the meantime.
+
 ## Compose
 
 From a checkout:

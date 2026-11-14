@@ -611,6 +611,7 @@
   "rebuildMessages.the_screenshot_names_no_measure_for": "La captura no indica ninguna medida para este elemento. Elija una columna.",
   "rebuildMessages.this_is_the_dashboard_s_own": "Este es el título del propio panel, así que da nombre al panel en lugar de ocupar un elemento. Restáurelo para conservarlo como nota.",
   "rebuildMessages.this_note_has_no_heading_to": "Esta nota no tiene un título que conservar.",
+  "recordLockMessages.this_could_not_be_read_try": null,
   "recordLockMessages.this_could_not_be_saved_try": null,
   "recordLockMessages.this_is_being_saved_by_someone": null,
   "recordLockMessages.this_is_too_large_to_save": "Es demasiado grande para guardarse (más de 32 MB).",
