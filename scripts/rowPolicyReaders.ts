@@ -6,6 +6,7 @@
 export type Treatment = 'DOOR' | 'DOOR+' | 'LOCKED' | 'NET' | 'EXPLICIT' | 'SKIP' | 'REDACT' | 'FANOUT' | 'EXPORT' | 'META';
 
 export const TREATMENT: Readonly<Record<string, Treatment>> = {
+  'agent:list': 'META', // Assistant agents: names, topics by name and dataset id, teams by name, instructions (editor prose, as catalog:instructions)
   'ai:setMine': 'META',
   'ai:status': 'META',
   'alerts:list': 'REDACT',

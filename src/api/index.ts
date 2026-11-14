@@ -54,6 +54,7 @@ import { verified } from './verified';
 import { topics } from './topics';
 import { columnAccess } from './columnAccess';
 import { semantic } from './semantic';
+import { agents } from './agents';
 
 export const contracts = {
   ...projects,
@@ -109,6 +110,7 @@ export const contracts = {
   ...topics,
   ...columnAccess,
   ...semantic,
+  ...agents,
 } as const;
 
 export type Channel = keyof typeof contracts;

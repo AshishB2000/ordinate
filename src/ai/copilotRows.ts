@@ -67,15 +67,16 @@ async function lockOwner(c: PoolClient, org: string, projectId: string, owner: s
 }
 
 interface TurnRow { thread_id: string; id: string; role: string; text: string; created_at: Date; body: string }
-interface ThreadRow { id: string; owner: string | null; title: string; created_at: Date; updated_at: Date; turns: number }
+interface ThreadRow { id: string; owner: string | null; title: string; created_at: Date; updated_at: Date; turns: number; agent_id: string | null }
 
 const RECENT = 'ORDER BY t.updated_at DESC, t.touched DESC';
-const SUMMARY = `SELECT t.id::text, t.title, t.updated_at,
+const SUMMARY = `SELECT t.id::text, t.title, t.updated_at, t.agent_id::text,
     (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns
   FROM assistant_threads t`;
 const TURNS = 'SELECT thread_id::text, id::text, role, text, created_at, body FROM assistant_turns';
 
-const summaryOf = (r: ThreadRow): CopilotThreadSummary => ({ id: r.id, title: r.title, updatedAt: r.updated_at.toISOString(), turnCount: r.turns });
+const summaryOf = (r: ThreadRow): CopilotThreadSummary =>
+  ({ id: r.id, title: r.title, updatedAt: r.updated_at.toISOString(), turnCount: r.turns, ...(r.agent_id ? { agentId: r.agent_id } : {}) });
 
 // A stored turn goes through the file's own sanitizer on every read, as copilot.json's did.
 function turnOf(r: TurnRow): CopilotTurn | undefined {
@@ -117,10 +118,10 @@ async function capThreads(c: PoolClient, org: string, projectId: string, owner: 
   );
 }
 
-const newThread = (c: PoolClient, org: string, projectId: string, id: string, at: string) =>
+const newThread = (c: PoolClient, org: string, projectId: string, id: string, at: string, agentId?: string) =>
   c.query(
-    `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-    [org, projectId, id, me(), copilot.FALLBACK_TITLE, at],
+    `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at, agent_id) VALUES ($1, $2, $3, $4, $5, $6, $6, $7)`,
+    [org, projectId, id, me(), copilot.FALLBACK_TITLE, at, agentId ?? null],
   );
 
 /** Every member's conversations in stored order (least recently touched first), turns and all. */
@@ -128,7 +129,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
   await moveFile(projectId);
   return tx(false, async (c, org) => {
     const threads = await c.query<ThreadRow>(
-      'SELECT id::text, owner, title, created_at, updated_at FROM assistant_threads WHERE org_id = $1 AND project_id = $2 ORDER BY touched',
+      'SELECT id::text, owner, title, created_at, updated_at, agent_id::text FROM assistant_threads WHERE org_id = $1 AND project_id = $2 ORDER BY touched',
       [org, projectId],
     );
     const turns = await c.query<TurnRow>(`${TURNS} WHERE org_id = $1 AND project_id = $2 ORDER BY thread_id, seq`, [org, projectId]);
@@ -141,7 +142,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
     }
     return threads.rows.map((r) => ({
       id: r.id, title: r.title, createdAt: r.created_at.toISOString(), updatedAt: r.updated_at.toISOString(),
-      turns: byThread.get(r.id) ?? [], ...(r.owner !== null ? { owner: r.owner } : {}),
+      turns: byThread.get(r.id) ?? [], ...(r.owner !== null ? { owner: r.owner } : {}), ...(r.agent_id ? { agentId: r.agent_id } : {}),
     }));
   });
 }
@@ -157,15 +158,15 @@ export async function latestThreadId(projectId: string): Promise<string | null> 
   return tx(false, async (c, org) => (await target(c, org, projectId, undefined))?.id ?? null);
 }
 
-export async function createThread(projectId: string, at: string): Promise<CopilotThreadSummary> {
+export async function createThread(projectId: string, at: string, agentId?: string): Promise<CopilotThreadSummary> {
   await moveFile(projectId);
   const id = randomUUID();
   await tx(true, async (c, org) => {
     await lockOwner(c, org, projectId, me());
-    await newThread(c, org, projectId, id, at);
+    await newThread(c, org, projectId, id, at, agentId);
     await capThreads(c, org, projectId, me());
   });
-  return { id, title: copilot.FALLBACK_TITLE, updatedAt: at, turnCount: 0 };
+  return { id, title: copilot.FALLBACK_TITLE, updatedAt: at, turnCount: 0, ...(agentId ? { agentId } : {}) };
 }
 
 export async function loadHistory(projectId: string, threadId?: string): Promise<CopilotTurn[]> {
@@ -213,7 +214,7 @@ export async function renameThread(projectId: string, threadId: string, title: s
   await moveFile(projectId);
   const r = await tx(true, (c, org) => c.query<ThreadRow>(
     `UPDATE assistant_threads t SET title = $5 WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3 AND t.id = $4
-     RETURNING t.id::text, t.title, t.updated_at,
+     RETURNING t.id::text, t.title, t.updated_at, t.agent_id::text,
        (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns`,
     [org, projectId, me(), threadId, pgText(title)],
   ));
@@ -267,9 +268,9 @@ async function insertThreads(c: PoolClient, org: string, projectId: string, thre
   for (const t of threads) { // one statement each, in stored order: `touched` follows it
     const id = copilot.isValidId(t.id) ? t.id : randomUUID();
     await c.query(
-      `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO assistant_threads (org_id, project_id, id, owner, title, created_at, updated_at, agent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (org_id, project_id, id) DO NOTHING`,
-      [org, projectId, id, t.owner ?? null, pgText(t.title), when(t.createdAt, now), when(t.updatedAt, now)],
+      [org, projectId, id, t.owner ?? null, pgText(t.title), when(t.createdAt, now), when(t.updatedAt, now), t.agentId ?? null],
     );
     if (!t.turns.length) continue;
     // Numbered as an append numbers them, after the conversation's highest: a turn already here

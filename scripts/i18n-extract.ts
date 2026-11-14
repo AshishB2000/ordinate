@@ -397,6 +397,7 @@ export const MAIN_FILES = [
   'src/app/hierarchyMessages.ts',
   'src/ipc/drillMessages.ts',
   'src/analysis/topicMessages.ts',
+  'src/ai/agentMessages.ts',
   'src/analysis/fanOutMessages.ts',
   'src/data/columnAccessMessages.ts',
   'src/analysis/targetMessages.ts',
