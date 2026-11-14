@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router';
 import { IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu } from '../../ui/Menu';
-import type { AiStatus } from './api';
+import type { AiModel, AiStatus } from './api';
 import { CONTEXT_ICON, ContextPicker } from './ContextPicker';
 import { ModelPicker } from './DockParts';
 import type { DockContext } from './dockState';
@@ -55,11 +55,15 @@ export interface ComposerProps {
   placeholder: string;
   /** The project switch, when the URL does not decide the project. */
   projectPick?: ReactNode;
+  /** Which Assistant answers (AgentPicker.tsx): nothing when this person has no agent to pick. */
+  agentPick?: ReactNode;
+  /** An agent's own model, which answers everyone in it: named instead of the person's picker. */
+  fixedModel?: { model: AiModel; by: string };
   layout?: 'dock' | 'page';
   className?: string;
 }
 
-export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick, layout = 'dock', className }: ComposerProps) {
+export function Composer({ inputRef, projectId, status, context, pinned, onPin, text, onText, onSend, usable, placeholder, projectPick, agentPick, fixedModel, layout = 'dock', className }: ComposerProps) {
   const [picking, setPicking] = useState(false);
   const caret = useRef<number | null>(null); // where the `@` was typed, to return to
 
@@ -134,10 +138,14 @@ export function Composer({ inputRef, projectId, status, context, pinned, onPin, 
               </button>,
             )}
             {clear}
+            {agentPick}
             {projectPick && <span className={w.projectPick}>{projectPick}</span>}
           </>
         ) : (
-          <ModelPicker status={status} />
+          <>
+            {agentPick}
+            <ModelPicker status={status} fixed={fixedModel} />
+          </>
         )}
         <div className={s.composeActions}>
           {!wide && picker()}

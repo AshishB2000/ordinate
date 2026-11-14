@@ -69,13 +69,22 @@ export interface Turn {
   savedVisualId?: string;
   /** How the answer was guided: ids and counts only (src/ai/turnGuidance.ts). None on a chip, a follow-up or an older turn. */
   guidance?: { verifiedId?: string; instructions: number; examples: string[]; narrated?: boolean };
+  /** An Assistant agent's out-of-scope reply: the dataset the Project assistant can answer from (src/ipc/agentAsk.ts). */
+  outside?: { dataset: string };
 }
+
+/** The Assistant agent a conversation is with (null: the Project assistant); `gone` once it was deleted. */
+export type ConversationAgent = { id: string; name: string; gone?: boolean } | null;
 
 export interface ThreadSummary {
   id: string;
   title: string;
   updatedAt: string;
   turnCount: number;
+  /** The Assistant agent it is with, by name (absent: the Project assistant); `agentGone` once that agent was deleted. */
+  agentId?: string;
+  agentName?: string;
+  agentGone?: boolean;
 }
 
 export interface ActivityStep {
@@ -93,7 +102,7 @@ export interface SuggestedAction {
 }
 
 export type AskReply =
-  | { ok: true; answer: string; turns: Turn[]; threadId: string | null; suggestedAction?: SuggestedAction }
+  | { ok: true; answer: string; turns: Turn[]; threadId: string | null; suggestedAction?: SuggestedAction; agent?: ConversationAgent }
   | { ok: false; notReady?: boolean; error?: string };
 
 /** What the dock is looking at — resolved inside the project by the server (buildFacts). `offset`: a scorecard's period, in periods back. */
@@ -152,7 +161,7 @@ export function useHistory(projectId: string | null, threadId: string) {
     staleTime: 30_000,
     queryFn: async () => {
       const r = (await rpc('copilot:history', { projectId: projectId as string, ...(threadId ? { threadId } : {}) })) as
-        | { ok: true; turns: Turn[]; threadId: string | null; title?: string | null }
+        | { ok: true; turns: Turn[]; threadId: string | null; title?: string | null; agent?: ConversationAgent }
         | { ok: false; error?: string };
       if (!r.ok) throw new Error(r.error || 'Could not load the conversation.');
       return r;
@@ -198,8 +207,9 @@ export function useAnalysisNames(projectId: string) {
   return useQuery({ queryKey: ['analysis:gallery', projectId], queryFn: async () => (await rpc('analysis:gallery', { projectId })) as Mentionable[] });
 }
 
-export async function newThread(projectId: string): Promise<string> {
-  const r = (await rpc('copilot:newThread', { projectId })) as { ok: boolean; thread?: { id: string } };
+/** `agentId`: the Assistant agent it is with; null or absent, the Project assistant. */
+export async function newThread(projectId: string, agentId?: string | null): Promise<string> {
+  const r = (await rpc('copilot:newThread', { projectId, ...(agentId ? { agentId } : {}) })) as { ok: boolean; thread?: { id: string } };
   return r.ok && r.thread ? r.thread.id : '';
 }
 
@@ -211,13 +221,15 @@ export async function deleteThread(projectId: string, threadId: string): Promise
   return ((await rpc('copilot:deleteThread', { projectId, threadId })) as { ok: boolean }).ok;
 }
 
-export async function ask(projectId: string, context: Ask, question: string, threadId: string, askId: string): Promise<AskReply> {
+/** `agentId`: the agent a conversation this ask STARTS is with (no `threadId`); an existing one keeps its own. */
+export async function ask(projectId: string, context: Ask, question: string, threadId: string, askId: string, agentId?: string | null): Promise<AskReply> {
   return (await rpc('copilot:ask', {
     projectId,
     context: { kind: context.kind, ...(context.id ? { id: context.id } : {}), ...(context.offset ? { offset: context.offset } : {}) },
     question,
     ...(threadId ? { threadId } : {}),
     askId,
+    ...(!threadId && agentId ? { agentId } : {}),
   })) as AskReply;
 }
 

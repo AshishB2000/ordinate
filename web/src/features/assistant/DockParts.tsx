@@ -203,10 +203,18 @@ export function modelLabel(m: AiModel, models: readonly AiModel[]): string {
  * so it follows you to every tab and every AI feature. With one model there is
  * nothing to choose — its name, as text.
  */
-export function ModelPicker({ status }: { status: AiStatus | undefined }) {
+export function ModelPicker({ status, fixed }: { status: AiStatus | undefined; fixed?: { model: AiModel; by: string } }) {
   const qc = useQueryClient();
   const mine = mineModel(status);
   if (!status?.ready || !mine) return null;
+  // An Assistant agent with its own model answers everyone in it with that one (docs/assistant-agents rule 7).
+  if (fixed) {
+    return (
+      <span className={s.modelName} title={`Model: ${modelLabel(fixed.model, status.models)}, set by ${fixed.by}`}>
+        {fixed.model.label}
+      </span>
+    );
+  }
   if (status.models.length === 1) {
     return (
       <span className={s.modelName} title={`Model: ${modelLabel(mine, status.models)}`}>

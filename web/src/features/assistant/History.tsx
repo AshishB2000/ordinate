@@ -11,7 +11,9 @@ import { Popover, PopoverClose } from '../../ui/Popover';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { threadTitle, turnsLabel, useThreads, type ThreadSummary } from './api';
+import { agentName } from './agents';
 import type { ThreadAct } from './ThreadActions';
+import a from './Agent.module.css';
 import s from './DockList.module.css';
 
 export interface ThreadGroup {
@@ -44,9 +46,21 @@ export interface HistoryProps {
   onOpen: (id: string) => void;
   /** Rename or delete a row's conversation (ThreadActions.tsx asks, then does it). */
   onAct: (act: ThreadAct) => void;
+  /** This person may use an Assistant agent: every row names who it was with, the Project assistant too. */
+  showAgents?: boolean;
 }
 
-export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct }: HistoryProps) {
+/** Which Assistant a conversation was with (docs/assistant-agents, "History"). */
+export function AgentTag({ t, line }: { t: ThreadSummary; /** Under the title (the page's column), not a pill beside it. */ line?: boolean }) {
+  const on = !!t.agentId && !t.agentGone;
+  return (
+    <span className={[line ? a.lineAgent : a.rowAgent, on && (line ? a.lineAgentOn : a.rowAgentOn)].filter(Boolean).join(' ')} data-testid="history-agent">
+      {agentName(t)}
+    </span>
+  );
+}
+
+export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct, showAgents }: HistoryProps) {
   const threads = useThreads(projectId, open);
   const [query, setQuery] = useState('');
   // A row's action closes this and opens a dialog: focus belongs to the dialog's
@@ -88,6 +102,7 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct
                 <PopoverClose asChild>
                   <button type="button" className={s.row} aria-current={t.id === threadId ? 'true' : undefined} onClick={() => onOpen(t.id)}>
                     <span className={s.rowTitle}>{threadTitle(t)}</span>
+                    {(showAgents || t.agentId) && <AgentTag t={t} />}
                     <span className={s.rowMeta}>{turnsLabel(t)}</span>
                   </button>
                 </PopoverClose>

@@ -136,6 +136,24 @@
   white-space: nowrap;
   cursor: pointer;
 }
+/* A row that names its Assistant agent: the title, and under it who the conversation was with. */
+.rowTwo {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1px;
+  height: auto;
+  min-height: 44px;
+  padding-top: var(--sp-4);
+  padding-bottom: var(--sp-4);
+}
+.rowText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .row:hover {
   background: var(--surface-2);
 }

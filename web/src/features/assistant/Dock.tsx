@@ -66,7 +66,7 @@ export default function DockPanel() {
               }}
             />
             <IconButton icon="plus" size="sm" label="New conversation" disabled={!c.pid || !!c.pending} onClick={() => void c.startNew()} />
-            <History projectId={c.pid} threadId={c.shownThread} open={c.historyOpen} onOpenChange={c.setHistoryOpen} onOpen={c.switchThread} onAct={c.setAct} />
+            <History projectId={c.pid} threadId={c.shownThread} open={c.historyOpen} onOpenChange={c.setHistoryOpen} onOpen={c.switchThread} onAct={c.setAct} showAgents={c.agents.length > 0} />
             <DockMenu status={c.status.data} isAdmin={c.isAdmin} turns={c.turns} thread={c.shownThread && !c.pending ? { id: c.shownThread, title: c.title } : null} onAct={c.setAct} />
             <IconButton icon="x" size="sm" label="Close the Assistant" onClick={() => setDockOpen(false)} />
           </div>

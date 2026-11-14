@@ -28,7 +28,7 @@ import { ConversationBody, ConversationDialogs } from './Conversation';
 import { DockMenu, ModelPicker, ThreadMenu, useBackToDock } from './DockParts';
 import { UUID } from './dockRoute';
 import { rememberPageThread } from './dockState';
-import { groupThreads, History } from './History';
+import { AgentTag, groupThreads, History } from './History';
 import { useConversation, type Conversation } from './useConversation';
 import w from './Wide.module.css';
 
@@ -56,8 +56,9 @@ function Conversations({ c }: { c: Conversation }) {
         <section key={g.label} className={w.group} aria-label={g.label}>
           <h2 className={w.groupLabel}>{g.label}</h2>
           {g.threads.map((t) => (
-            <button key={t.id} type="button" className={w.row} aria-current={t.id === c.shownThread ? 'true' : undefined} title={threadTitle(t)} onClick={() => c.switchThread(t.id)}>
-              {threadTitle(t)}
+            <button key={t.id} type="button" className={c.agents.length > 0 || t.agentId ? `${w.row} ${w.rowTwo}` : w.row} aria-current={t.id === c.shownThread ? 'true' : undefined} title={threadTitle(t)} onClick={() => c.switchThread(t.id)}>
+              <span className={w.rowText}>{threadTitle(t)}</span>
+              {(c.agents.length > 0 || t.agentId) && <AgentTag t={t} line />}
             </button>
           ))}
         </section>
@@ -113,13 +114,13 @@ export default function AssistantPage() {
             </span>
           </div>
           <span className={w.model}>
-            <ModelPicker status={c.status.data} />
+            <ModelPicker status={c.status.data} fixed={c.fixedModel && c.agent ? { model: c.fixedModel, by: c.agent.name } : undefined} />
           </span>
           <Button size="sm" icon="plus" aria-label="New conversation" disabled={!c.pid || !!c.pending} onClick={() => void c.startNew()}>
             <span className={w.newLabel}>New conversation</span>
           </Button>
           <span className={w.narrowOnly}>
-            <History projectId={c.pid} threadId={c.shownThread} open={c.historyOpen} onOpenChange={c.setHistoryOpen} onOpen={c.switchThread} onAct={c.setAct} />
+            <History projectId={c.pid} threadId={c.shownThread} open={c.historyOpen} onOpenChange={c.setHistoryOpen} onOpen={c.switchThread} onAct={c.setAct} showAgents={c.agents.length > 0} />
           </span>
           <DockMenu status={c.status.data} isAdmin={c.isAdmin} turns={c.turns} thread={c.shownThread && !c.pending ? { id: c.shownThread, title: c.title } : null} onAct={c.setAct} />
           <IconButton icon="minimize" size="sm" label="Back to the side panel" onClick={back} />
