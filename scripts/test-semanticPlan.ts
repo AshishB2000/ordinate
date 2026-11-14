@@ -88,7 +88,6 @@ function plans(): void {
   const withIn = plan.planChart(chart({ filters: [inF, { kind: 'range', column: 'order_date', from: '2024-01-01' }] }), SENV);
   ok('an `in` filter becomes a SemanticFilter verbatim', withIn.ok && show(withIn.ranks.where) === show([inF, { kind: 'range', column: 'order_date', from: '2024-01-01' }]));
   ok('a filter on a name the layer does not declare → unknownColumn', code(plan.planChart(chart({ filters: [{ kind: 'empty', column: 'gone', negate: false }] }), SENV)) === 'unknownColumn');
-  ok('an unresolved period never reaches the layer', code(plan.planChart(chart({ filters: [{ kind: 'latest', column: 'order_date', period: 'last_month', yearsBack: 0 }] }), SENV)) === 'unresolvedPeriod');
   const based = plan.planChart(chart({ filters: [inF] }), { ...SENV, base: [{ kind: 'compare', column: 'region', op: '!=', value: 'Test' }] });
   ok('the dataset\'s base filters lead every question\'s filters', based.ok && show(based.ranks.where) === show([{ kind: 'compare', column: 'region', op: '!=', value: 'Test' }, inF]) && show(based.other!([]).where) === show(based.ranks.where));
 
@@ -112,12 +111,10 @@ function plans(): void {
   const kpi = plan.planMetric({ kind: 'metric', measures: [{ metric: 'avg_basket' }], filters: [inF], order: 'natural', weekCal: null }, SENV);
   ok('a KPI: no dimension, no order', kpi.ok && show(kpi.query) === show({ dimensions: [], metrics: ['avg_basket'], where: [inF], order: [] }));
 
-  const latestIr = chart({ filters: [{ kind: 'latest', column: 'order_date', period: 'last_quarter', yearsBack: 0 }, inF] });
-  ok('planLatest without lookups → layerLookup', code(plan.planLatest(latestIr, SENV)) === 'layerLookup');
-  const lk = plan.planLatest(latestIr, { ...SENV, caps: { lookups: true, binaryCompare: false } });
-  ok('…with them: the latest non-empty day, one row, the question\'s own filters left out',
-    lk.ok && show(lk.queries) === show([{ column: 'order_date', query: { dimensions: [{ name: 'order_date', grain: 'day' }], metrics: [], where: [{ kind: 'empty', column: 'order_date', negate: true }], order: [{ by: 'order_date', desc: true }], limit: 1 } }]), show(lk));
-  ok('…none asked when the question has no data-relative period', (() => { const r = plan.planLatest(chart(), SENV); return r.ok && r.queries.length === 0; })());
+  const latest = (caps: typeof SENV.caps) => plan.planValues('order_date', [], { ...SENV, caps }, { desc: true, limit: 1 });
+  ok('the latest day (an empty answer\'s note) without lookups → layerLookup', code(latest({ lookups: false, binaryCompare: false })) === 'layerLookup');
+  ok('…with them: the latest non-empty day, one row',
+    show(latest({ lookups: true, binaryCompare: false })) === show({ dimensions: [{ name: 'order_date', grain: 'day' }], metrics: [], where: [{ kind: 'empty', column: 'order_date', negate: true }], order: [{ by: 'order_date', desc: true }], limit: 1 }), show(latest({ lookups: true, binaryCompare: false })));
 }
 
 /** Each question that can be checked is checked before any is asked: a split's series ranks first, its "Other" before its cells. */

@@ -1,6 +1,7 @@
 // An exact match through the real `copilot:ask` handler (semantic part 3 D8, D10): a question asked word for
-// word as a verified one is answered by the app — no model decides it, and none is needed. Any other question
-// goes to the model, with the project's verified questions beside it as examples.
+// word as a verified one is answered by the app — no model decides it or writes a word of it, even with one
+// ready: ZERO model calls, an empty turn text, the card's bullets. Any other question goes to the model (ONE
+// call), with the project's verified questions beside it as examples.
 //
 // PART 5 (p5-09): a verified question over a period metric can't be answered by a card, so its save refuses, and a
 // stored one (asked, or through MCP answer_verified_question) says the kind can't be shown here yet, never "a newer
@@ -64,10 +65,13 @@ async function main(): Promise<void> {
   ok('a question that no longer runs is not matched', (await ask('Scratch by k')).notReady === true && calls === before + 1);
 
   (execConfig as any).executionReady = async () => true;
-  (analyze as any).askCopilot = async () => ({ ok: true, text: 'West leads.', suggestedAction: { kind: 'none', intent: '' } });
-  const narrated = await ask('Revenue by region');
-  ok('a model narrates a hit, but never picks it, and the guidance says it narrated', narrated.ok && narrated.answer === 'West leads.' && narrated.guidance.verifiedId === V
-    && narrated.guidance.narrated === true, JSON.stringify(narrated.guidance));
+  (analyze as any).askCopilot = async () => { calls++; return { ok: true, text: 'West leads.', suggestedAction: { kind: 'none', intent: '' } }; };
+  const ready = calls;
+  const typed = await ask('Revenue by region');
+  ok('a model READY: a typed verified question still makes ZERO model calls — no prose, and the guidance says none narrated',
+    typed.ok && calls === ready && typed.answer === '' && typed.turns.at(-1).text === '' && typed.guidance.verifiedId === V && !('narrated' in typed.guidance), JSON.stringify(typed.guidance));
+  const other = await ask('revenue by region last year');
+  ok('NEGATIVE CONTROL: the stub is reached — any other question is ONE model call', other.ok && other.answer === 'West leads.' && calls === ready + 1, String(calls - ready));
 
   // ── Examples ──────────────────────────────────────────────────────────────
   const sent: string[] = [];
@@ -89,7 +93,9 @@ async function main(): Promise<void> {
   const hist = async (t: string): Promise<any[]> => (await call('copilot:history', { projectId: pid, threadId: t })).turns;
   (analyze as any).askCopilot = async () => ({ ok: true, text: 'Narrated.', suggestedAction: { kind: 'none', intent: '' } });
   const kept = await ask('Revenue by region');
-  ok('a verified answer remembers how, narrated and all', ((g) => g?.verifiedId === V && g.narrated === true)((await hist(kept.threadId)).at(-1).guidance));
+  const keptTurn = (await hist(kept.threadId)).at(-1);
+  ok('a verified answer remembers how — verified, no model — and replays with no text and its spec', keptTurn.text === '' && rules.sameChart(keptTurn.answer, saved.q.spec)
+    && ((g) => g?.verifiedId === V && !('narrated' in g))(keptTurn.guidance), JSON.stringify(keptTurn));
   (analyze as any).askCopilot = async (_p: unknown, facts: string) => { sent.push(facts); return { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }; };
   const modelled = await ask('profit by region', { threadId: kept.threadId });
   const mg = (await hist(kept.threadId)).at(-1).guidance;

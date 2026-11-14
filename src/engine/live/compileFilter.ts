@@ -151,8 +151,6 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
       if (f.to) parts.push(`${d} <= ${c.b.bind('date', f.to)}`);
       return `(${parts.join(' AND ')})`;
     }
-    case 'latest':
-      return refuse('unresolvedPeriod');
     case 'compare': {
       if (!SQL_OP[f.op]) return refuse('badQuery');
       if (col.type === 'number') {

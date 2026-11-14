@@ -14,9 +14,10 @@
 // filters: "revenue for West" with the West filter silently dropped is a
 // different, wrong answer that looks right.
 //
-// Relative periods ("last quarter") are resolved by the app against the data's
-// own latest date — never the model's idea of today — and stored as the period,
-// not the dates, so a refreshed dataset moves the answer with it.
+// Relative periods ("last quarter") are resolved by the app exactly as a
+// dashboard date filter resolves them — against today, under the workspace
+// calendar — never by the model's idea of today, and stored as the period, not
+// the dates, so a later draw moves the answer with the clock.
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
@@ -24,8 +25,11 @@ import { hasTermType, termError } from '../data/termStep';
 import { FILTER_OPS, LIST_OPS, VALUELESS_OPS } from '../data/filterOps';
 import type { FilterOp } from '../data/filterOps';
 import type { VizAggregation, VizMeasure } from '../analysis/visuals';
-import { dateBucket, dateBucketLabel, isDateGrain, parseDateCell } from '../analysis/categoryKey';
+import { civilFromDays, dateBucket, dateBucketLabel, daysFromCivil, isDateGrain, parseDateCell } from '../analysis/categoryKey';
 import type { CivilDate, DateGrain } from '../analysis/categoryKey';
+import { daysFromIso, getCalendar, isoFromDays, N_PRESETS, PERIOD_PRESETS, resolvePeriod, sanitizePeriod, todayIso } from '../analysis/dateIntel';
+import type { CalendarPrefs, PeriodPreset } from '../analysis/dateIntel';
+import { sameDayLastYear, weekCalOf } from '../analysis/retailCalendar';
 import { grainWord, nextGrain, nextLevel } from '../analysis/drillLevels';
 import type { NavHierarchy } from '../analysis/drillLevels';
 // Pure, like this file: the rules for what people call a column, `squash` among them.
@@ -39,14 +43,26 @@ import { NUMBER_AGGREGATIONS } from '../data/aggregations';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
-export type AnswerPeriod = 'last_month' | 'last_quarter' | 'last_year';
-const PERIODS: ReadonlySet<string> = new Set(['last_month', 'last_quarter', 'last_year']);
+/** A relative period: any dashboard date-filter preset but a custom range (`dateIntel.PERIOD_PRESETS`). */
+export type AnswerPeriod = Exclude<PeriodPreset, 'custom'>;
+const PERIODS: ReadonlySet<string> = new Set(PERIOD_PRESETS.filter((p) => p !== 'custom'));
 
 /** One filter as the APP stores it: an ordinary comparison, a relative period, or a reference to a glossary term (a door expands it). */
 export type AnswerFilter =
   | { column: string; op: FilterOp; value?: Cell; values?: Cell[] }
-  | { column: string; period: AnswerPeriod; yearsBack?: number }
+  | PeriodFilter
   | { term: string };
+
+/** `n`: how many, on a last-N period only ("last 30 days"). `yearsBack`: the same period that many years earlier. */
+export type PeriodFilter = { column: string; period: AnswerPeriod; n?: number; yearsBack?: number }; // a type, not an interface: it passes as a Record (verifiedPick)
+
+/** A period filter as stored: `n` as a dashboard's (`sanitizePeriod`: 1–3660, 1 when absent), only where it is read; `yearsBack` 1–20 or none. */
+function periodFilter(column: string, period: AnswerPeriod, n: unknown, yearsBack: unknown): PeriodFilter {
+  const out: PeriodFilter = { column, period };
+  if (N_PRESETS.has(period)) out.n = sanitizePeriod({ preset: period, n })!.n;
+  if (typeof yearsBack === 'number' && Number.isInteger(yearsBack) && yearsBack > 0 && yearsBack <= 20) out.yearsBack = yearsBack;
+  return out;
+}
 
 /** A spec whose every name resolved against a real dataset. What a turn persists. */
 export interface AnswerSpec {
@@ -277,9 +293,7 @@ function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<str
     const p = typeof o.period === 'string' ? o.period.trim().toLowerCase() : '';
     if (!PERIODS.has(p)) return `Unknown period "${String(o.period)}".`;
     if (col.type !== 'date') return `"${col.name}" is not a date, so it cannot be filtered to a period.`;
-    const yb = typeof o.yearsBack === 'number' && Number.isInteger(o.yearsBack) && o.yearsBack > 0 && o.yearsBack <= 20
-      ? o.yearsBack : 0;
-    return yb ? { column: col.name, period: p as AnswerPeriod, yearsBack: yb } : { column: col.name, period: p as AnswerPeriod };
+    return periodFilter(col.name, p as AnswerPeriod, o.n, o.yearsBack);
   }
 
   const op = filterOp(o);
@@ -446,8 +460,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
     }
     if (!f || typeof f.column !== 'string') continue;
     if (typeof f.period === 'string' && PERIODS.has(f.period)) {
-      const yb = Number.isInteger(f.yearsBack) && f.yearsBack > 0 && f.yearsBack <= 20 ? f.yearsBack : 0;
-      filters.push(yb ? { column: f.column, period: f.period, yearsBack: yb } : { column: f.column, period: f.period });
+      filters.push(periodFilter(f.column, f.period as AnswerPeriod, f.n, f.yearsBack));
     } else if (typeof f.op === 'string' && FILTER_OPS.has(f.op)) {
       const out: AnswerFilter = { column: f.column, op: f.op as FilterOp };
       if (f.value === null || typeof f.value === 'string' || typeof f.value === 'number') out.value = f.value;
@@ -471,13 +484,15 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   return spec;
 }
 
-// ── Periods: resolved by the APP against the data's own latest date ──────────
+// ── Periods: resolved by the APP as a dashboard date filter is ──────────────
 
-const PERIOD_GRAIN: Record<AnswerPeriod, 'month' | 'quarter' | 'year'> = {
-  last_month: 'month', last_quarter: 'quarter', last_year: 'year',
+/** The date-axis bucket a period may be exactly one of, for its label; a last-N, to-date period has none and is named by its days. */
+const PERIOD_GRAIN: Partial<Record<AnswerPeriod, DateGrain>> = {
+  today: 'day', yesterday: 'day', this_week: 'week', last_week: 'week', this_month: 'month', last_month: 'month',
+  this_quarter: 'quarter', last_quarter: 'quarter', this_year: 'year', last_year: 'year',
 };
 
-/** The latest real date in a column's cells, or null. */
+/** The latest real date in a column's cells, or null. What an empty answer's note says the data ends on. */
 export function latestDate(cells: Cell[]): CivilDate | null {
   let best: CivilDate | null = null;
   for (const c of cells) {
@@ -488,45 +503,79 @@ export function latestDate(cells: Cell[]): CivilDate | null {
   return best;
 }
 
+/** The same day `n` years back: by fiscal position under a week calendar (week 53 → week 52), else by the calendar. */
+function yearsAgo(today: string, n: number, cal: CalendarPrefs): string {
+  const t = daysFromIso(today);
+  if (t === null || n <= 0) return today;
+  const wc = weekCalOf(cal);
+  if (wc) {
+    let day = t;
+    for (let i = 0; i < n; i += 1) day = sameDayLastYear(day, wc);
+    return isoFromDays(day);
+  }
+  const c = civilFromDays(t);
+  return isoFromDays(daysFromCivil(c.y - n, c.m, Math.min(c.d, 28)));
+}
+
 /**
- * A relative period → the bucket it names and its label ("2024-Q4").
+ * An answer's period → its inclusive days and the label the card and the facts show ("2026-Q3").
  *
- * "Last quarter" is the latest quarter the DATA reaches, not the calendar's:
- * a dataset that ends in December 2024 asked about "last quarter" in 2026 means
- * Q4 2024, and an answer of "no rows" would be pedantically right and useless.
- * `yearsBack` shifts the same period back ("same for last year").
+ * "Last quarter" means what a dashboard's date filter means by it: the previous COMPLETE quarter before
+ * today, under the workspace calendar (fiscal year start, week calendar) — `dateIntel.resolvePeriod`, the
+ * same function, clock (`todayIso`) and calendar (`getCalendar`) every dashboard filter reads. Never the
+ * data's own latest quarter: a dataset refreshed daily always reaches today, so that would be "this quarter
+ * so far". A dataset that ends before the period answers no rows, and the card says why
+ * (ipc/answers `stalePeriodNotes`), never another period. `yearsBack` ("Same for last year") resolves the
+ * period as it stood on the same day that many years back.
+ *
+ * The label is the date axis's own name for the range when it is exactly one of its buckets ("2026-Q3", a
+ * week calendar's "FY26 Q3"); a fiscal quarter that is no calendar quarter is named by its days
+ * ("2026-08-01 to 2026-10-31"), as a dashboard names a custom range.
  */
-export function resolvePeriod(
-  period: AnswerPeriod,
-  latest: CivilDate,
-  yearsBack = 0,
-): { grain: 'month' | 'quarter' | 'year'; bucket: number; label: string } {
-  const grain = PERIOD_GRAIN[period];
-  const at: CivilDate = { y: latest.y - yearsBack, m: latest.m, d: Math.min(latest.d, 28) };
-  const bucket = dateBucket(at, grain);
-  return { grain, bucket, label: dateBucketLabel(bucket, grain) };
+export function answerPeriod(
+  p: Pick<PeriodFilter, 'period' | 'n' | 'yearsBack'>,
+  today: string = todayIso(),
+  cal: CalendarPrefs = getCalendar(),
+): { from: string; to: string; label: string } {
+  const r = resolvePeriod({ preset: p.period, n: p.n }, yearsAgo(today, p.yearsBack || 0, cal), cal);
+  if (!r || !r.from || !r.to) throw new Error(`Unreadable period ${p.period} on ${today}`); // a preset always resolves on a real day
+  const grain = PERIOD_GRAIN[p.period];
+  if (!grain) return { from: r.from, to: r.to, label: `${r.from} to ${r.to}` };
+  const f = daysFromIso(r.from)!;
+  const t = daysFromIso(r.to)!;
+  const bucketOf = (day: number): number => dateBucket(civilFromDays(day), grain);
+  const one = bucketOf(f) === f && bucketOf(t) === f && bucketOf(t + 1) === t + 1;
+  return { from: r.from, to: r.to, label: one ? dateBucketLabel(f, grain) : `${r.from} to ${r.to}` };
+}
+
+/**
+ * An EMPTY answer's periods that start after its data ends (a stale dataset): each one's label and the day
+ * the data ends, for the card to say why (ai/answerMessages `periodAfterData`) — never another period.
+ * `ends`: a period column's latest day (ISO) over the caller's rows, or null when unknown.
+ */
+export function periodsAfterData(spec: Pick<AnswerSpec, 'filters'>, ends: (column: string) => string | null): Array<{ label: string; ends: string }> {
+  const out: Array<{ label: string; ends: string }> = [];
+  for (const f of spec.filters) {
+    if (!('period' in f)) continue;
+    const p = answerPeriod(f);
+    const e = ends(f.column);
+    if (e && e < p.from) out.push({ label: p.label, ends: e });
+  }
+  return out;
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** A period bucket → its first and last day as ISO text. */
-export function periodBounds(grain: 'month' | 'quarter' | 'year', bucket: number): { from: string; to: string } {
-  const from = dateBucketLabel(bucket, 'day');
-  const [y, m] = from.split('-').map(Number);
-  const next: CivilDate = grain === 'year' ? { y: y + 1, m: 1, d: 1 }
-    : grain === 'quarter' ? { y: m + 3 > 12 ? y + 1 : y, m: ((m + 2) % 12) + 1, d: 1 }
-      : { y: m === 12 ? y + 1 : y, m: (m % 12) + 1, d: 1 };
-  return { from, to: dateBucketLabel(dateBucket(next, 'day') - 1, 'day') };
-}
-
 /**
  * The spec's filters → ordinary FilterSteps over THIS dataset's cells.
  *
- * A period over a column of plain ISO days becomes two bounds. Over any other
- * date text it becomes an `in` list of the column's distinct cells that fall in
- * the period's bucket — not bounds, because a date column is stored and
- * compared as TEXT and only plain ISO days order correctly that way, where the
- * bucket test uses the same parser every date axis in the app groups by.
+ * A period (`answerPeriod`: today's, as a dashboard filter's) over a column of
+ * plain ISO days becomes two bounds. Over any other date text it becomes an
+ * `in` list of the column's distinct cells that fall in the period's days — not
+ * bounds, because a date column is stored and compared as TEXT and only plain
+ * ISO days order correctly that way, where the day test uses the same parser
+ * every date axis in the app groups by. No row is read for the period itself,
+ * so the Live path (no rows) labels and steps it the same way.
  *
  * `labels` describes each filter for the card ("order_date: 2024-Q4").
  */
@@ -543,27 +592,23 @@ export function specFilterSteps(
     if (ci < 0) continue;
     if ('period' in f) {
       const cells = rows.map((r) => (r ? r[ci] ?? null : null));
-      const latest = latestDate(cells);
-      if (!latest) {
-        steps.push({ type: 'filter', column: f.column, op: 'in', values: [] });
-        labels.push(`${f.column}: no dates`);
-        continue;
-      }
-      const p = resolvePeriod(f.period, latest, f.yearsBack || 0);
+      const p = answerPeriod(f);
       labels.push(`${f.column}: ${p.label}`);
       // Plain ISO days compare correctly as text, so the period is two bounds —
       // which is also what a user reading the saved chart's filter expects.
       if (cells.every((c) => c === null || c === '' || (typeof c === 'string' && ISO_DAY.test(c)))) {
-        const b = periodBounds(p.grain, p.bucket);
-        steps.push({ type: 'filter', column: f.column, op: '>=', value: b.from });
-        steps.push({ type: 'filter', column: f.column, op: '<=', value: b.to });
+        steps.push({ type: 'filter', column: f.column, op: '>=', value: p.from });
+        steps.push({ type: 'filter', column: f.column, op: '<=', value: p.to });
         continue;
       }
+      const lo = daysFromIso(p.from)!;
+      const hi = daysFromIso(p.to)!;
       const keep = new Set<string>();
       const values: Cell[] = [];
       for (const c of cells) {
         const d = parseDateCell(c);
-        if (!d || dateBucket(d, p.grain) !== p.bucket) continue;
+        const day = d ? daysFromCivil(d.y, d.m, d.d) : NaN;
+        if (!(day >= lo && day <= hi)) continue;
         const k = String(c);
         if (!keep.has(k)) { keep.add(k); values.push(c); }
       }
@@ -600,8 +645,8 @@ export interface AnswerChip {
  *                          than the category exists (`splitCandidates`, which the
  *                          caller ranks from the data).
  *   - "Same for last year" — the dataset has a date column: a period filter moves
- *                          back a year, and an all-time answer narrows to the
- *                          data's latest year.
+ *                          back a year, and an all-time answer narrows to last
+ *                          year (`answerPeriod`, as a dashboard means it).
  *   - "Show as table"    — unless it already is one.
  */
 export function answerChips(
@@ -636,9 +681,9 @@ export function answerChips(
   const periodIdx = spec.filters.findIndex((f) => 'period' in f);
   const dateCol = ctx.columns.find((c) => c.type === 'date');
   if (periodIdx >= 0) {
-    const f = spec.filters[periodIdx] as Extract<AnswerFilter, { period: AnswerPeriod }>;
+    const f = spec.filters[periodIdx] as PeriodFilter;
     const filters = spec.filters.slice();
-    filters[periodIdx] = { column: f.column, period: f.period, yearsBack: (f.yearsBack || 0) + 1 };
+    filters[periodIdx] = { ...f, yearsBack: (f.yearsBack || 0) + 1 };
     chips.push({ label: 'Same for last year', spec: { ...spec, filters, title: cleanTitle(`${spec.title}, a year earlier`) } });
   } else if (dateCol && dateCol.name !== spec.category) {
     chips.push({
@@ -646,7 +691,7 @@ export function answerChips(
       spec: {
         ...spec,
         filters: spec.filters.concat([{ column: dateCol.name, period: 'last_year' }]),
-        title: cleanTitle(`${spec.title}, latest year`),
+        title: cleanTitle(`${spec.title}, last year`),
       },
     });
   }

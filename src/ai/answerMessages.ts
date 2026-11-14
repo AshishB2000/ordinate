@@ -14,6 +14,11 @@ export function noRowsMatch(column: string, op: '=' | 'in', said: string): strin
   return t('answerMessages.no_rows_match', { column, said });
 }
 
+/** An empty answer whose period starts after its data ends (./answerSpec `periodsAfterData`). `ends`: the day, already formatted. */
+export function periodAfterData(period: string, dataset: string, ends: string): string {
+  return t('answerMessages.no_rows_in_ends_on', { period, dataset, ends });
+}
+
 /** `answer:saveVisual` when the visual store would not take the chart. */
 export function answerNotSaved(): string {
   return t('answerMessages.could_not_save_this_answer_as');

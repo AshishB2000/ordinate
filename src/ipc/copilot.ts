@@ -546,7 +546,7 @@ export function register() {
       // `share`: only a server caller names one (a report's narrative, ./reportsServer): the contract has no such field. Its
       // answer leaves the app, so only the facts shaped for that path go with it: no thread, no verified or suggested chart.
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
-      const hit = sharing ? null : await verifiedAsk(projectId, q, tid, guardAnswer); // a verified question, word for word (./verifiedAsk)
+      const hit = sharing ? null : await verifiedAsk(projectId, q, tid); // a verified question, word for word (./verifiedAsk): no model call
       if (hit) return hit;
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
       const turns = await copilot.loadHistory(projectId, tid);
@@ -576,13 +576,14 @@ export function register() {
         if (!target) target = (await copilot.createThread(projectId))?.id;
 
         // An ANSWER action: the app builds the chart from the spec, and the turn's
-        // prose becomes a SECOND, narrow narration of that chart's own facts,
-        // audited against that chart's own ledger (./answers). A spec that does
-        // not resolve keeps the prose answer and says plainly why no chart came.
+        // prose stays this call's one sentence (no second model call), audited
+        // against the facts AND that chart's own ledger, so a figure the model
+        // wrote anyway is still flagged (./answers). A spec that does not
+        // resolve keeps the prose answer and says plainly why no chart came.
         let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
         if (!sharing && res.suggestedAction && res.suggestedAction.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
-          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer, prev?.spec, prev?.withheld);
+          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, prev?.spec, prev?.withheld);
         }
 
         // The guard runs BEFORE persistence, so the stored turn carries the note
@@ -593,11 +594,10 @@ export function register() {
         // what it QUOTES may be the model's words (Unknown dataset "…"), and a
         // figure written into a name is a figure the model wrote.
         const refused = answer && !answer.ok ? answer.reason : null;
-        const guarded = answer && answer.ok
-          ? { text: answer.text, audit: answer.audit }
-          : refused === null ? guardAnswer(res.text, ledger)
-            : guardAnswer(`${res.text}\n\n(No chart: ${refused})`, ledger.concat(reasonLedger(refused)));
         const built = answer && answer.ok ? answer : null;
+        const audited = built ? ledger.concat(built.ledger) : ledger;
+        const guarded = refused === null ? guardAnswer(res.text, audited)
+          : guardAnswer(`${res.text}\n\n(No chart: ${refused})`, ledger.concat(reasonLedger(refused)));
 
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const stored = await copilot.appendTurn(projectId, {
@@ -622,7 +622,7 @@ export function register() {
           // App-side records, for tests and the fidelity gate. The renderer shows
           // neither: the ledger is internal, and the audit's finding is already
           // in `answer`. Nothing new reaches a user in this PR.
-          ledger: built ? built.ledger : ledger,
+          ledger: audited,
           numberAudit: guarded.audit,
           guidance: guided.used,
         };

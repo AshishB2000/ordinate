@@ -38,6 +38,7 @@ const store: typeof import('../src/app/privacyStore') = require('../src/app/priv
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const copilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const answersIpc: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: each reply
 const threads: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
@@ -204,17 +205,22 @@ async function main(): Promise<void> {
         : { ok: true, text: 'Echo: ' + prior.map((x) => x.text).join(' / '), suggestedAction: { kind: 'answer', intent: 'pay by day', spec: { dataset: 'Staff', category: 'day', measures: [{ column: 'salary', aggregation: 'sum' }] } } };
     };
     (execConfig as { executionReady: unknown }).executionReady = async () => true;
+    // A chart answer asks no second model call, so the count of calls cannot tell whether one was built: count the builds.
+    const realBuild = answersIpc.answerFromAction;
+    let builds = 0;
+    (answersIpc as { answerFromAction: unknown }).answerFromAction = async (...a: Parameters<typeof realBuild>) => { builds += 1; return realBuild(...a); };
     try {
       const page = ((await rpc('report:build', { projectId: P, id: fx.narrated })).pages || []).find((p: any) => p.kind === 'narrative'); // any: a report page
       const into = JSON.stringify(sent);
       ok('drop: the narrative replays no Assistant thread and builds no suggested chart: nothing it sends the model or prints carries a payroll figure',
-        sent.length === 1 && sent[0].prior.length === 0 && leaked(into).length === 0 && !!page && leaked(JSON.stringify(page)).length === 0, show([leaked(into), sent.map((x) => x.q.slice(0, 40)), page]));
+        sent.length === 1 && builds === 0 && sent[0].prior.length === 0 && leaked(into).length === 0 && !!page && leaked(JSON.stringify(page)).length === 0, show([leaked(into), sent.map((x) => x.q.slice(0, 40)), page]));
       sent.length = 0;
       const own = await rpc('copilot:ask', { projectId: P, context: { kind: '' }, question: 'And now?' });
-      ok('NEGATIVE CONTROL: an ask in the app replays the thread', own?.ok === true && sent[0]?.prior.some((x) => x.text.includes(TOTAL.toLocaleString('en-US'))), show([own, sent[0]?.prior]));
+      ok('NEGATIVE CONTROL: an ask in the app replays the thread, and builds the chart it suggests', own?.ok === true && builds === 1 && sent[0]?.prior.some((x) => x.text.includes(TOTAL.toLocaleString('en-US'))), show([own, sent[0]?.prior, builds]));
     } finally {
       (analyze as { askCopilot: unknown }).askCopilot = realAsk;
       (execConfig as { executionReady: unknown }).executionReady = realReady;
+      (answersIpc as { answerFromAction: unknown }).answerFromAction = realBuild;
     }
 
     // ── mask: an aggregate passes ──

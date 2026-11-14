@@ -140,9 +140,9 @@ async function asks(): Promise<void> {
   await tableDocs.setTableDoc(P, D, { guide: '# Orders\nUse net_amount.' });
   const T = (await copilotStore.createThread(P))!.id;
   const SPEC = { dataset: 'Orders', category: 'region', measures: [{ column: 'net_amount', aggregation: 'sum' }] };
-  replies.push({ ok: true, text: 'Here.', suggestedAction: { kind: 'answer', intent: 'net by region', spec: SPEC } }, { ok: true, text: 'West leads.', suggestedAction: NONE });
+  replies.push({ ok: true, text: 'Here.', suggestedAction: { kind: 'answer', intent: 'net by region', spec: SPEC } });
   const first = await ask({ kind: 'dataset', id: D }, 'net by region', T);
-  ok('the first answer has a chart', first.ok && !!first.turns.at(-1).answer, JSON.stringify(first).slice(0, 300));
+  ok('the first answer has a chart, from ONE model call (no narration)', first.ok && !!first.turns.at(-1).answer && replies.length === 0 && !sent.some((x) => x.q.startsWith('Narrate')), JSON.stringify(first).slice(0, 300));
   await ask({ kind: 'dataset', id: D }, 'and by region', T);
   const s = asked();
   ok('order: facts, guidance, previous answer', s.indexOf('Dataset: "Orders"') >= 0 && s.indexOf('Dataset: "Orders"') < s.indexOf('<<<GUIDANCE') && s.indexOf('GUIDANCE\n\n' + B.PREVIOUS_ANSWER) > 0, s);

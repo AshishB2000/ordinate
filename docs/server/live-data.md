@@ -64,10 +64,12 @@ dataset on every pod, so the next view asks again whatever the age.
 | 1 h – 6 h | Large tables, BigQuery tables billed by bytes scanned, or data loaded a few times a day. |
 | 1 day | Data loaded nightly. Better still: a long age plus a [refresh URL](#refresh-url) called by the load job (dbt `on-run-end`, an Airflow task), so the cache empties exactly when new data lands. |
 
-What a choice costs: a dashboard of *T* Live tiles sends at most *T* statements per cache age, plus
-one per relative-date filter ("last quarter" asks the warehouse for its latest date, cached the same
-way), whether one person or a hundred are looking; identical questions asked at the same moment
-share one statement. Admin → Live usage shows the result per day and connection, and
+What a choice costs: a dashboard of *T* Live tiles sends at most *T* statements per cache age,
+whether one person or a hundred are looking; identical questions asked at the same moment share one
+statement. A relative date ("last quarter") is resolved against today, on a dashboard filter and in
+an Assistant answer alike, so it asks nothing more. Only an Assistant answer that comes back empty
+asks the warehouse for the date column's latest day (cached the same way), to say that the data
+ends before the period. Admin → Live usage shows the result per day and connection, and
 [the bounds below](#what-a-live-query-can-cost-and-how-it-is-bounded) cap it whatever the age. On a
 published `/p/` page a figure is never younger than `LIVE_MIN_CACHE_AGE_PUBLIC_SEC`.
 
@@ -526,8 +528,9 @@ A Live dataset can carry **always-applied filters**: plain filters, such as `ten
 sets them on the dataset's Schema tab, under **Always applied** (`live:setBaseFilters`). On a copy
 the same job is a Prepare filter step.
 
-- **Every statement carries them**: each chart, KPI, answer and alert, the period lookup behind
-  "last quarter", the spelling lookup behind a typed filter value, and the schema sync's sample. So a
+- **Every statement carries them**: each chart, KPI, answer and alert, the latest-day lookup behind
+  an empty answer's note, the spelling lookup behind a typed filter value, and the schema sync's
+  sample. So a
   value picker only lists values the filters keep. The values travel as bound parameters, like
   every value Ordinate sends.
 - **They never skip.** A chart filter on a column the dataset lacks is skipped with a warning. An

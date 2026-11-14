@@ -282,7 +282,7 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   const prev = await H.as(ORG_A, () => answers.previousAnswer(P, [liveTurn]));
   const narrowedTo = prev ? await H.as(ORG_A, () => answers.answerFromAction(P, {}, {
     kind: 'answer', intent: 'north only', spec: { refine: true, filters: [{ column: 'region', op: '=', value: 'north' }] },
-  }, 'north only', copilotIpc.guardAnswer, prev.spec)) : null;
+  }, 'north only', prev.spec)) : null;
   ok('a follow-up on a Live answer: told of it by name, merged, and answered by the warehouse — one more filter, the same dataset',
     !!prev && /^PREVIOUS ANSWER[^\n]*\ndataset "[^"]+"; category "region"; measures sum\(amt\); chart bar\.$/.test(prev.block)
     && !!narrowedTo && narrowedTo.ok === true && narrowedTo.spec.datasetId === L && show(narrowedTo.spec.filters) === show([{ column: 'region', op: '=', value: 'north' }]),

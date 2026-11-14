@@ -243,7 +243,8 @@ const ENC = { category: 'region', values: [{ column: 'amt', aggregation: 'sum' }
     ['number chart (bin range + chart)', async (d) => (await post('visual:data', { projectId: P, datasetId: d, encoding: { category: 'qty', values: [M('amt', 'sum')] } })).value, 2],
     ['date chart (grain probe + chart)', async (d) => (await post('visual:data', { projectId: P, datasetId: d, encoding: { category: 'd', values: [M('amt', 'sum')] } })).value, 2],
     ['KPI', async (d) => (await post('dashboard:metric', { projectId: P, datasetId: d, column: 'qty', aggregation: 'sum' })).value, 1],
-    ['answer (case fix + latest + chart)', async (d) => (await post('answer:card', { projectId: P, spec: ANSWER(d) })).value, 3],
+    ['answer (case fix + chart: its period is today\'s, no latest day)', async (d) => (await post('answer:card', { projectId: P, spec: ANSWER(d) })).value, 2],
+    ['an empty answer (case fix + chart + the latest day its note reads)', async (d) => (await post('answer:card', { projectId: P, spec: { ...ANSWER(d), filters: [ANSWER(d).filters[0], { column: 'd', period: 'last_year', yearsBack: 10 }] } })).value, 3],
     ['schema sync (profile)', async (d) => (await post('dataset:syncLiveSchema', { projectId: P, datasetId: d })).value, 1],
     ['key check (Check now)', async (d) => (await post('catalog:checkKey', { projectId: P, datasetId: d })).value, 1],
   ];

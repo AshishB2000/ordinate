@@ -84,7 +84,6 @@ async function main(): Promise<void> {
       run: () => ask('profit by region', { threadId: testThread, askId: crypto.randomUUID() }),
       on: (r) => r.ok && r.threadId === testThread, off: refusedAsk,
     },
-    { channel: 'copilot:ask (a verified question word for word: its narration)', run: () => ask('Revenue by region'), on: (r) => r.ok && r.answer === PROSE, off: (r) => r.ok && r.answer === '' && !!r.guidance?.verifiedId },
     { channel: 'answer:rerun (a chip: its narration)', run: () => call('answer:rerun', { projectId: pid, spec: SPEC, label: 'Again' }), on: (r) => r.ok && r.turns.at(-1).text === PROSE, off: (r) => r.ok && r.turns.at(-1).text === '' },
     { channel: 'answer:explain (its narration)', run: () => call('answer:explain', { projectId: pid, tile: { datasetId: ds.id, encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, filters: [], chartType: 'column', name: 'Revenue' } }), on: (r) => r.ok && r.narrated === true, off: (r) => r.ok && r.narrated === false },
     { channel: 'verified:check (Check the Assistant)', run: check, on: (r) => r.ok === true, off: (r) => r.ok === false && r.error === OFF },
@@ -111,7 +110,9 @@ async function main(): Promise<void> {
   ok('off: answer:card still draws', card.ok === true && card.datasetName === 'Orders' && JSON.stringify(card.data).includes('West'), JSON.stringify(card).slice(0, 200));
   const mcp = await tools.answerVerifiedQuestion({ projectId: pid } as never, 'Revenue by region').then((a) => a, (e: Error) => e.message);
   ok('off: MCP answer_verified_question still answers', typeof mcp === 'object' && JSON.stringify(mcp).includes('West'), JSON.stringify(mcp).slice(0, 200));
-  ok('off: and neither asked a model', calls === before);
+  const typed = await ask('Revenue by region'); // asks no model, on or off (test-verifiedAsk)
+  ok('off: a verified question word for word still answers, with no prose', typed.ok && typed.answer === '' && !!typed.guidance?.verifiedId, JSON.stringify(typed).slice(0, 200));
+  ok('off: and none of them asked a model', calls === before);
 
   ok('the switch comes back on without a restart', (await setEnabled(true)).ok === true && execConfig.publicConfig().copilotEnabled === true);
   await sweep('on again');

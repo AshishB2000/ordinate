@@ -1,8 +1,9 @@
 // The Assistant and MCP never see a hidden column (semantic layer part 4, D21), over the real RPC route, as real
 // users in a scratch Postgres (scripts/columnAccessHarness.ts: *Staff* hides `salary`, `ssn` and `bonus` from `east`).
 // The model is stubbed at its own boundary (`analyze.askCopilot`, as scripts/test-askDidYouMean.ts does) and every
-// prompt it is sent is kept: the facts and the question, for the dataset, visual, dashboard and project contexts, and
-// the narration of the answer chart it asks for.
+// prompt it is sent is kept: the facts and the question, for the dataset, visual, dashboard and project contexts — ONE
+// prompt per ask, its answer chart narrated by no second call (a narration's prompts: test-columnAccessSafetyNet's
+// sweep of answer:rerun and answer:explain).
 //
 // - No prompt sent for east carries an ssn value, a salary figure (the total, the mean, the largest), the salary
 //   example or a hidden column's value label; the dataset facts do not name salary, and still hold dept.
@@ -84,33 +85,34 @@ const BY_DEPT_SPEC = { dataset: 'Staff', category: 'dept', measures: [{ column: 
     ok("a copy's sample values for east: dept's, never ssn's", !!eastNotes?.dept?.includes('"Ops"') && !('ssn' in (eastNotes ?? {})) && !JSON.stringify(eastNotes).includes(C.SSN_CANARY), JSON.stringify(eastNotes));
     ok("NEGATIVE CONTROL: hr's list ssn's values", !!(await notesAs('hr'))?.ssn?.includes(C.SSN_CANARY));
     const east = await promptsAs('east', CONTEXTS);
-    ok('setup: east is answered in every context, with a chart narrated', east.replies.every((r) => r.body?.ok === true) && east.prompts.length === 2 * CONTEXTS.length, east.replies.map((r) => r.text.slice(0, 120)).join(' | '));
+    const charted = (r: H.Reply): boolean => r.body?.ok === true && !!r.body.turns?.at(-1)?.answer;
+    ok('setup: east is answered in every context, with a chart, ONE prompt each', east.replies.every(charted) && east.prompts.length === CONTEXTS.length, east.replies.map((r) => r.text.slice(0, 120)).join(' | '));
     const promptLeak = (p: string): string | null => leaksHidden(p) ?? (p.includes(C.NOTE) ? C.NOTE : null);
     const leak = east.prompts.map(promptLeak).find((x) => x !== null);
     ok('no prompt sent for east carries a hidden value, a figure made from one, its example, its note or its labels', !leak, `${leak} in ${east.prompts.find((p) => promptLeak(p))?.slice(0, 400)}`);
-    ok('…nor names a hidden column in the dataset facts or the project inventory', ![east.prompts[0], east.prompts[8]].some((p) => /salary|ssn|bonus/i.test(p)), `${east.prompts[0].slice(0, 400)} || ${east.prompts[8]?.slice(0, 600)}`);
-    ok('…nor the Live dataset\'s facts, which still hold its dept', !/salary|ssn|bonus/i.test(east.prompts[10]) && east.prompts[10]?.includes('dept'), east.prompts[10]?.slice(0, 600));
-    ok('…nor a hierarchy with a hidden level, in the dataset, visual or Live facts', [0, 4, 10].every((i) => !/Who tree|ssn/.test(east.prompts[i] ?? '')),
-      [0, 4, 10].map((i) => east.prompts[i]?.match(/.{0,80}(Who tree|ssn).{0,40}/)?.[0]).join(' | '));
-    ok('…which still lists Staff\'s other columns', /Staff: dept \(text/.test(east.prompts[8]) && east.prompts[8].includes('employee_id'), east.prompts[8]?.slice(0, 600));
+    ok('…nor names a hidden column in the dataset facts or the project inventory', ![east.prompts[0], east.prompts[4]].some((p) => /salary|ssn|bonus/i.test(p)), `${east.prompts[0].slice(0, 400)} || ${east.prompts[4]?.slice(0, 600)}`);
+    ok('…nor the Live dataset\'s facts, which still hold its dept', !/salary|ssn|bonus/i.test(east.prompts[5]) && east.prompts[5]?.includes('dept'), east.prompts[5]?.slice(0, 600));
+    ok('…nor a hierarchy with a hidden level, in the dataset, visual or Live facts', [0, 2, 5].every((i) => !/Who tree|ssn/.test(east.prompts[i] ?? '')),
+      [0, 2, 5].map((i) => east.prompts[i]?.match(/.{0,80}(Who tree|ssn).{0,40}/)?.[0]).join(' | '));
+    ok('…which still lists Staff\'s other columns', /Staff: dept \(text/.test(east.prompts[4]) && east.prompts[4].includes('employee_id'), east.prompts[4]?.slice(0, 600));
     ok('the dataset facts for east still hold dept and the row count', east.prompts[0].includes('dept') && east.prompts[0].includes('12 rows'), east.prompts[0].slice(0, 300));
     ok('…and the Headcount metric, but not Payroll or the term on salary', east.prompts[0].includes('Headcount') && !east.prompts[0].includes('Payroll') && !east.prompts[0].includes('High earners'));
     ok('nothing east is answered carries a hidden value either', east.replies.every((r) => !leaksHidden(r.text)), east.replies.map((r) => leaksHidden(r.text)).join());
     const hr = await promptsAs('hr', [{ kind: 'dataset', id: staff }, { kind: 'dataset', id: liveStaff }, { kind: 'visual', id: DEPT_V }]);
-    ok('NEGATIVE CONTROL: hr\'s dataset, Live and visual facts name the hierarchy', [0, 2, 4].every((i) => /Who tree/.test(hr.prompts[i] ?? '')), [0, 2, 4].map((i) => hr.prompts[i]?.slice(0, 120)).join(' | '));
-    ok('NEGATIVE CONTROL: hr\'s facts name the key, and the Live facts name salary and ssn (the detector withholds ssn\'s values from everyone)', /ssn/.test(hr.prompts[0]) && /- salary \(number/.test(hr.prompts[2] ?? '') && /- ssn \(text/.test(hr.prompts[2] ?? ''), hr.prompts[2]?.slice(0, 600));
+    ok('NEGATIVE CONTROL: hr\'s dataset, Live and visual facts name the hierarchy', [0, 1, 2].every((i) => /Who tree/.test(hr.prompts[i] ?? '')), [0, 1, 2].map((i) => hr.prompts[i]?.slice(0, 120)).join(' | '));
+    ok('NEGATIVE CONTROL: hr\'s facts name the key, and the Live facts name salary and ssn (the detector withholds ssn\'s values from everyone)', /ssn/.test(hr.prompts[0]) && /- salary \(number/.test(hr.prompts[1] ?? '') && /- ssn \(text/.test(hr.prompts[1] ?? ''), hr.prompts[1]?.slice(0, 600));
     ok('NEGATIVE CONTROL: hr\'s dataset prompt carries the canary, a salary figure and the salary note', hr.prompts.some((p) => p.includes(C.SSN_CANARY)) && hr.prompts.some((p) => p.includes(C.NOTE)) && hr.prompts.some((p) => SALARY_FIGURES.some((f) => p.includes(f))), hr.prompts[0]?.slice(0, 400));
     ok('NEGATIVE CONTROL: …and hr\'s the planted finding (the insights are read for hr)', hr.prompts[0].includes(`${C.SSN_CANARY}_9`));
     (insightsMod as { listInsights: unknown }).listInsights = realInsights;
     const asked = await promptsAs('east', [{ kind: 'dataset', id: staff }], { ...BY_DEPT_SPEC, measures: [{ column: 'salary', aggregation: 'sum' }] });
-    ok('an answer the model writes over salary draws no chart for east, and no narration is asked', asked.replies[0].body?.ok === true && asked.prompts.length === 1 && !leaksHidden(asked.replies[0].text), asked.replies[0].text.slice(0, 200));
+    ok('an answer the model writes over salary draws no chart for east', asked.replies[0].body?.ok === true && !charted(asked.replies[0]) && asked.prompts.length === 1 && !leaksHidden(asked.replies[0].text), asked.replies[0].text.slice(0, 200));
     // Part 3's label matching (p3-04) runs behind the column gate: a filter said as a hidden column's label is refused
     // before any label is read, so it is never mapped to the stored value.
     const BY_LABEL = { ...BY_DEPT_SPEC, filters: [{ column: 'ssn', op: '=', value: C.LABEL }] };
     const byLabel = await promptsAs('east', [{ kind: 'dataset', id: staff }], BY_LABEL);
-    ok("a filter said as ssn's value label draws no chart for east and is never mapped to its value", byLabel.replies[0].body?.ok === true && byLabel.prompts.length === 1 && !byLabel.replies[0].text.includes(C.SSN_CANARY), byLabel.replies[0].text.slice(0, 300));
+    ok("a filter said as ssn's value label draws no chart for east and is never mapped to its value", byLabel.replies[0].body?.ok === true && !charted(byLabel.replies[0]) && byLabel.prompts.length === 1 && !byLabel.replies[0].text.includes(C.SSN_CANARY), byLabel.replies[0].text.slice(0, 300));
     const hrLabel = await promptsAs('hr', [{ kind: 'dataset', id: staff }], BY_LABEL);
-    ok("NEGATIVE CONTROL: hr's is mapped to the stored value and drawn", hrLabel.replies[0].text.includes(`${C.SSN_CANARY}_1`) && hrLabel.prompts.length === 2, hrLabel.replies[0].text.slice(0, 300));
+    ok("NEGATIVE CONTROL: hr's is mapped to the stored value and drawn", hrLabel.replies[0].text.includes(`${C.SSN_CANARY}_1`) && charted(hrLabel.replies[0]) && hrLabel.prompts.length === 1, hrLabel.replies[0].text.slice(0, 300));
     // Part 3's verified questions (p3-06): one over salary is never an example in east's prompt, nor answers east when
     // asked word for word; one over dept is both (CONTROL). hr gets the salary one as an example and as the answer.
     const verify = async (question: string, measures: object[]): Promise<string> => String((await W.call('boss', 'verified:save', { projectId: P,

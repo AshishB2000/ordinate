@@ -4,7 +4,7 @@
 // same rules on Postgres, across two pods.
 //
 //   count         every warehouse statement is one query on its connection's
-//                 row for the UTC day — a KPI, an answer, its period MAX(); a
+//                 row for the UTC day — a KPI, an answer, a latest-day MAX(); a
 //                 cache hit or a joined flight is none
 //   bytes         the warehouse's own figure, summed per row; a warehouse that
 //                 reports none leaves the row's bytes null, never 0; BigQuery's
@@ -53,6 +53,7 @@ const adminLive: typeof import('../src/server/admin/liveUsage') = require('../sr
 const bq: typeof import('../src/connectors/bigquery') = require('../src/connectors/bigquery');
 const bqShape: typeof import('../src/connectors/bigqueryShape') = require('../src/connectors/bigqueryShape');
 const liveRun: typeof import('../src/connectors/liveRun') = require('../src/connectors/liveRun');
+const comp: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 
 const { lq, fake, queryCache, budget, context, ORG_A, ORG_B } = H;
 const M = (column: string, aggregation: VizMeasure['aggregation']): VizMeasure => ({ column, aggregation });
@@ -90,8 +91,9 @@ async function counting(s: H.OrgSetup): Promise<void> {
   await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(P, D, 0));
   for (let i = 0; i < 3; i++) await H.as(ORG_A, () => lq.liveMetric(P, D, kpi('amt'), []));
   await H.as(ORG_A, () => lq.liveAnswer(P, { datasetId: D, category: 'region', measures: [M('amt', 'sum')], filters: [{ column: 'd', period: 'last_quarter' }], chartType: 'bar', title: 'a' }));
+  await H.as(ORG_A, () => lq.liveLookup(P, D, (t) => comp.compileLatestDates('d', t.env))); // the MAX() an empty answer's note reads
   let r = await rowOf(ORG_A, s.connId);
-  ok('count: every statement is one query on its connection — 3 KPIs at age 0, an answer AND its MAX()', fake.calls.length === 5 && r?.queries === 5 && r.refused === 0 && r.projectId === P, show(r));
+  ok('count: every statement is one query on its connection — 3 KPIs at age 0, an answer (one statement), a latest-day MAX()', fake.calls.length === 5 && r?.queries === 5 && r.refused === 0 && r.projectId === P, show(r));
   ok('bytes: a warehouse that reports none leaves the row\'s bytes null — "not reported", never 0', r?.bytes === null);
 
   fake.hook = async () => { await new Promise((res) => setTimeout(res, 40)); return undefined; };

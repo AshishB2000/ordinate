@@ -36,12 +36,11 @@ const query = (c: Compiled | { ok: true; query: CompiledQuery } | { ok: false })
 const M = { column: 'amt', aggregation: 'sum' as const };
 const chart = (category: LiveIR['category'], filters: LiveFilter[] = []): LiveIR => ({ kind: 'chart', category, measures: [M], filters, order: 'natural', weekCal: null });
 const metricIr: LiveIR = { kind: 'metric', measures: [M], filters: [], order: 'natural', weekCal: null };
-const latestIr = chart({ column: 'region', kind: 'text' }, [{ kind: 'latest', column: 'd', period: 'last_quarter', yearsBack: 0 }]);
 const textIr = chart({ column: 'region', kind: 'text' }, [{ kind: 'compare', column: 'cat', op: '!=', value: 'x' }]);
 
 const BUILDERS: [string, (env: CompileEnv) => Compiled | { ok: true; query: CompiledQuery } | { ok: false }][] = [
   ['compileMetric', (env) => compile.compileMetric(metricIr, env)],
-  ['compileLatestDates', (env) => compile.compileLatestDates(latestIr, env)],
+  ['compileLatestDates', (env) => compile.compileLatestDates('d', env)],
   ['compileBinRange', (env) => compile.compileBinRange(chart({ column: 'qty', kind: 'bins' }), env)],
   ['compileGrainProbe', (env) => compile.compileGrainProbe(chart({ column: 'd', kind: 'date' }), env)],
   ['compileChart', (env) => compile.compileChart(textIr, { kind: 'text' }, env)],
@@ -68,7 +67,7 @@ for (const d of dialects.DIALECT_IDS) {
 
 const env = fx.env({ kind: 'table', parts: ['t'] });
 ok('NEGATIVE CONTROL: the canary check sees a statement without the base', !bound(query(compile.compileMetric(metricIr, env))!));
-ok('the latest-date anchor is narrowed by the base, as a lock narrows it', bound(query(compile.compileLatestDates(latestIr, { ...env, base: BASE }))!));
+ok('the latest day (an empty answer\'s note) is narrowed by the base, as a lock narrows it', bound(query(compile.compileLatestDates('d', { ...env, base: BASE }))!));
 ok('a base filter on an undeclared column refuses the question (unknownColumn)',
   show(compile.compileMetric(metricIr, { ...env, base: [{ kind: 'empty', column: 'gone', negate: true }] })) === show(compile.compileMetric({ ...metricIr, filters: [{ kind: 'empty', column: 'gone', negate: true }] }, env)));
 ok('profile: a base column outside env.columns refuses (unknownColumn)',

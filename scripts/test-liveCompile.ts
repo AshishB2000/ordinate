@@ -16,7 +16,7 @@
 //   3. Refusals are typed and loud, in catalog sentences: sum over text, an
 //      unknown column, within_km, and every feature live does not do yet.
 //   4. The pure pieces: shaping (−0, sum + count, row width), the probes,
-//      resolvePeriods, the step sequence of evaluateLive.
+//      an answer's period as a range, the step sequence of evaluateLive.
 //   5. Calculated fields (part 8 step 04): one derived table per calc a statement
 //      needs, golden fragments per dialect, the base filters innermost, every
 //      value bound in text order; Databricks refused; the size cap.
@@ -161,7 +161,7 @@ function unchangedCorpus(): string {
     const out: unknown[] = charts.map(([ir, key]) => comp.compileChart(ir, key, e));
     for (const m of all) out.push(comp.compileMetric(adapt(spec.fromMetric(m, [F('region', 'in', undefined, { values: ['a', null] })], COLS)), e));
     out.push(comp.compileGrainProbe(chart({ category: 'order_date', values: [sum] }), e), comp.compileBinRange(chart({ category: 'amount', values: [sum] }), e));
-    out.push(comp.compileLatestDates({ kind: 'chart', category: { column: 'region', kind: 'text' }, measures: [sum], filters: [{ kind: 'latest', column: 'order_date', period: 'last_quarter', yearsBack: 0 }], order: 'value', weekCal: null }, e));
+    out.push(comp.compileLatestDates('order_date', e));
     hash.update(show(out));
   }
   return hash.digest('hex');
@@ -315,8 +315,6 @@ function refusals(): void {
       comp.compileMetric({ kind: 'metric', measures: [{ column: 'note', aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null }, env('duckdb')), 'notNumeric'],
     ['an IR naming an undeclared column',
       comp.compileMetric({ kind: 'metric', measures: [{ column: 'secret_col', aggregation: 'count' }], filters: [], order: 'natural', weekCal: null }, env('duckdb')), 'unknownColumn'],
-    ['an unresolved data-relative period',
-      comp.compileMetric({ kind: 'metric', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [{ kind: 'latest', column: 'order_date', period: 'last_month', yearsBack: 0 }], order: 'natural', weekCal: null }, env('duckdb')), 'unresolvedPeriod'],
     ['a distinct count by week-calendar periods',
       comp.compileChart({ kind: 'chart', category: { column: 'order_date', kind: 'date', grain: 'month' }, measures: [{ column: 'note', aggregation: 'countd' }], filters: [], order: 'natural', weekCal: { type: '445', yearEnd: 'nearest' } }, { kind: 'days', grain: 'month', weekCal: { type: '445', yearEnd: 'nearest' } }, env('duckdb')), 'distinctByWeekCalendar'],
     ['a top N over a date axis',
@@ -327,7 +325,7 @@ function refusals(): void {
     ok(`refused, typed (${code}): ${label}`, !!x && x.ok === false && x.code === code && t(x), show(x));
   }
   const all: Parameters<typeof spec.refuse>[0][] = ['pivot', 'cohort', 'funnel', 'drivers', 'facet', 'map', 'related', 'raw', 'noCategory',
-    'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate', 'unresolvedPeriod',
+    'noMeasure', 'unknownColumn', 'notNumeric', 'unknownAggregation', 'withinKm', 'containsNumber', 'dateSeries', 'periodNotDate',
     'badIdentifier', 'badSource', 'categoryType', 'rankOnDate', 'rowShape', 'badQuery', 'baseFilter', 'calculated', 'baseFilterUnreadable', 'calculatedUnreadable',
     'calcDialect', 'calcTooLarge', 'columnMissing', 'distinctByWeekCalendar'];
   ok(`every refusal code (${all.length}) renders its catalog key with its parameters`, all.every((c) => t(spec.refuse(c, 'col'))));
@@ -373,14 +371,14 @@ async function pure(): Promise<void> {
   ok('the bin probe goes through binPlan (−0 read as 0)', show(bins) === '{"kind":"bins","lo":0,"hi":10,"width":2,"bins":5}', show(bins));
   ok('the grain probe goes through chooseGrain (an unreadable count coarsens)', shape.readGrain([[400, null, 30, 10, 3]], q(['a', 'b', 'c', 'd', 'e'])) === 'month');
 
-  const ir: LiveIR = { kind: 'chart', category: { column: 'region', kind: 'text' }, measures: [{ column: 'amount', aggregation: 'sum' }],
-    filters: [{ kind: 'latest', column: 'order_date', period: 'last_quarter', yearsBack: 0 }, { kind: 'latest', column: 'order_date', period: 'last_year', yearsBack: 1 }], order: 'value', weekCal: null };
-  const r = ev.resolvePeriods(ir, { order_date: { y: 2024, m: 11, d: 15 } });
-  ok('resolvePeriods: the period the DATA\'s latest date falls in, as inclusive ISO days', show(r.ir.filters) === show([
-    { kind: 'range', column: 'order_date', from: '2024-10-01', to: '2024-12-31' }, { kind: 'range', column: 'order_date', from: '2023-01-01', to: '2023-12-31' }])
-    && show(r.periodLabels) === '["order_date: 2024-Q4","order_date: 2023"]', show(r));
-  const none = ev.resolvePeriods(ir, { order_date: null });
-  ok('resolvePeriods: no date at all skips the filter with the extract\'s warning', none.ir.filters.length === 0 && none.warnings[0] === filterOps.emptyListWarning('order_date', 'in'));
+  // An answer's period resolves as a dashboard filter does: against today (`opts.today`), into the IR as a range.
+  const ir = adapt(spec.fromAnswerSpec({ datasetId: 'x', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], chartType: 'column', title: 't',
+    filters: [{ column: 'order_date', period: 'last_quarter' }, { column: 'order_date', period: 'last_year', yearsBack: 1 }] }, COLS, { weekCal: null, today: '2024-11-15' }));
+  ok('an answer\'s period: the previous complete period before TODAY, as inclusive ISO days in the IR', show(ir.filters) === show([
+    { kind: 'range', column: 'order_date', from: '2024-07-01', to: '2024-09-30' }, { kind: 'range', column: 'order_date', from: '2022-01-01', to: '2022-12-31' }]), show(ir.filters));
+  const later = adapt(spec.fromAnswerSpec({ datasetId: 'x', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], chartType: 'column', title: 't',
+    filters: [{ column: 'order_date', period: 'last_quarter' }] }, COLS, { weekCal: null, today: '2025-01-02' }));
+  ok('…which moves with the clock, so the cache key does too (negative control: another today, another range)', show(later.filters) === show([{ kind: 'range', column: 'order_date', from: '2024-10-01', to: '2024-12-31' }]), show(later.filters));
 
   const steps = async (i: LiveIR): Promise<string[]> => {
     const seen: string[] = [];
@@ -396,8 +394,8 @@ async function pure(): Promise<void> {
   ok('evaluateLive: a date axis with no grain probes the grain', show(await steps({ ...base, category: { column: 'order_date', kind: 'date' } })) === '["grain","chart"]');
   ok('evaluateLive: under a week calendar the warehouse groups by day — no probe',
     show(await steps({ ...base, category: { column: 'order_date', kind: 'date' }, weekCal: { type: '445', yearEnd: 'nearest' } })) === '["chart"]');
-  ok('evaluateLive: a data-relative period asks for the latest date first',
-    show(await steps({ ...ir })) === '["latest","chart"]');
+  ok('evaluateLive: an answer\'s period asks the warehouse nothing first (no latest date): ONE statement',
+    show(await steps({ ...ir })) === '["chart"]');
   const key: LiveKey = { kind: 'bins', lo: 0, hi: 1, width: 0.1, bins: 10 };
   const binned = comp.compileChart({ ...base, category: { column: 'amount', kind: 'bins' } }, key, env('duckdb'));
   ok('bin edges are bound parameters, never text', binned.ok && binned.query.params.some((p) => p.value === 0.1) && !binned.query.sql.includes('0.1'));

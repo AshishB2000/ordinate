@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   ok('DIFFERENTIAL: "sales" now validates to the very spec the real name does', after.ok && right.ok && sameLeaves(after.spec, right.spec), show([after, right]));
   ok('DIFFERENTIAL: …and draws the same card, Object.is on every figure',
     after.ok && right.ok && sameData(await card(after.spec), await card(right.spec)) && (await card(right.spec)).data.labels.length === 2);
-  replies.push(answerWith(SAID), narration);
+  replies.push(answerWith(SAID)); // ONE model call: a chart answer is not narrated again
   const next = lastOf(await call('copilot:ask', { projectId: pid, context: {}, question: 'sales by region', threadId: await thread() }));
   ok('next time: the same words are answered outright — a chart, no "Did you mean"',
     !!next.answer && !('suggest' in next) && right.ok && sameLeaves(next.answer.measures, right.spec.measures), show(next));
