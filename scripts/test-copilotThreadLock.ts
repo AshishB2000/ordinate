@@ -1,13 +1,15 @@
-// Assistant conversations under the record lock (src/ai/copilot.ts). Every member's
-// conversations live in ONE record, projects/<id>/copilot.json, so each change reads,
-// changes and writes it inside recordFs.locked (every pod) — server mode, two members:
+// Assistant conversations written at once (src/ai/copilot.ts), server mode, two members.
+// Without a database every member's conversations live in ONE record, projects/<id>/copilot.json,
+// so each change reads, changes and writes it inside recordFs.locked. With DATABASE_URL they are
+// rows (src/ai/copilotRows.ts), and one member's writes in a project take an advisory lock:
 //
 //   (a) 2 members × 25 appendTurn fired at once on one project: all 50 turns kept, each
 //       member one conversation holding their 25 — NEGATIVE CONTROL: the same appends
-//       with recordFs.locked stubbed to a pass-through lose some;
+//       without the lock (recordFs.locked stubbed to a pass-through; the rows' owner lock off)
+//       lose turns or split a member's into several conversations;
 //   (b) a rename, a createThread and a deleteThread racing 20 more appends all land.
 //
-// File leg always; the same on Postgres with DATABASE_URL (a scratch database, dropped after).
+// File leg always; the rows leg with DATABASE_URL (a scratch database, dropped after).
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-copilotThreadLock.js
 
@@ -26,6 +28,8 @@ const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recor
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const copilotRows: typeof import('../src/ai/copilotRows') = require('../src/ai/copilotRows');
+const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
 
 type Thread = import('../src/ai/copilot').CopilotThread;
 const ALICE = 'alice@acme.test';
@@ -44,6 +48,34 @@ function race(pid: string, n: number, label: string, ids: Record<string, string 
     as(who, () => copilot.appendTurn(pid, { role: 'user', text: `${who} ${label} ${i}` }, ids[who])))));
 }
 
+/** The two members' turns all kept, each member's in one conversation of their own. */
+function intact(threads: Thread[], n: number, label: string): boolean {
+  const got = texts(threads);
+  return got.length === 2 * n && [ALICE, BOB].every((who) => {
+    const own = threads.filter((t) => t.owner === who);
+    return own.length === 1 && own[0].turns.length === n && own[0].turns.every((x) => x.text.startsWith(`${who} ${label}`));
+  });
+}
+
+/** `fn` with this leg's lock out of the way: the record lock on files, the owner lock on rows. */
+async function unlocked<T>(fn: () => Promise<T>): Promise<T> {
+  if (copilotRows.on()) {
+    copilotRows._setOwnerLock(false);
+    try {
+      return await fn();
+    } finally {
+      copilotRows._setOwnerLock(true);
+    }
+  }
+  const real = recordFs.locked;
+  (recordFs as { locked: unknown }).locked = (_p: string, f: () => Promise<unknown>) => f();
+  try {
+    return await fn();
+  } finally {
+    (recordFs as { locked: unknown }).locked = real;
+  }
+}
+
 async function leg(name: string): Promise<void> {
   // (a) every turn of two members' concurrent appends is kept
   const pid = (await as(ALICE, () => projects.createProject('Chat'))).id;
@@ -60,17 +92,13 @@ async function leg(name: string): Promise<void> {
       own.map((t) => t.turns.length));
   }
 
-  const real = recordFs.locked;
-  (recordFs as { locked: unknown }).locked = (_p: string, fn: () => Promise<unknown>) => fn();
-  let lost = 0;
-  try {
-    const bare = (await as(ALICE, () => projects.createProject('Bare'))).id;
-    await race(bare, N, 'a');
-    lost = 2 * N - texts(await as(ALICE, () => copilot.loadThreads(bare))).length;
-  } finally {
-    (recordFs as { locked: unknown }).locked = real;
-  }
-  ok(`${name} (a) NEGATIVE CONTROL: the same appends with the lock stubbed out lose some (${lost} of ${2 * N})`, lost > 0);
+  const bare = await unlocked(async () => {
+    const pid = (await as(ALICE, () => projects.createProject('Bare'))).id;
+    await race(pid, N, 'a');
+    return as(ALICE, () => copilot.loadThreads(pid));
+  });
+  ok(`${name} (a) NEGATIVE CONTROL: the same appends without the lock lose turns or split conversations`,
+    !intact(bare, N, 'a'), `${texts(bare).length} kept in ${bare.length} conversations`);
 
   // (b) the other writers hold the same lock: none of them undoes an append, or is undone by one
   const a = all.find((t) => t.owner === ALICE)?.id;
@@ -108,8 +136,10 @@ async function leg(name: string): Promise<void> {
   try {
     await mig.migrate(pool);
     recordFs.useRecordDb(pool);
-    await leg('db');
+    inOrg.useOrgDb(pool); // as src/server/app.ts wires both: the conversations are rows
+    await leg('rows');
   } finally {
+    inOrg.useOrgDb(null);
     recordFs.useRecordDb(null);
     await pool.end();
     await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);

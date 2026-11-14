@@ -271,6 +271,15 @@ export async function locked<T>(p: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Inside `locked` with the DB: the hold's client and org, so rows a store keeps beside the record
+ * commit or roll back with it (src/ai/copilotRows.ts moving copilot.json). Null anywhere else.
+ */
+export function heldClient(): { client: PoolClient; org: string } | null {
+  const h = holds.getStore();
+  return h && h.open && h.client ? { client: h.client, org: h.org } : null;
+}
+
 async function inTransaction<T>(hold: Hold, a: At, deadline: number, fn: () => Promise<T>): Promise<T> {
   const c = await a.pool.connect();
   Object.assign(hold, { client: c, pool: a.pool, org: a.org });
