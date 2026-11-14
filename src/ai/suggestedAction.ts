@@ -195,7 +195,10 @@ const ACTION_PROMPT =
   '"filters":[{"column":"<column>","op":"=","value":"<value>"}],"chartType":"<optional>","top":<optional N>}}\n' +
   'Name columns EXACTLY as the FACTS list them. A filter is {"column","op","value"} with op one of ' +
   '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +
-  '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; leave "column" out to use a metric\'s own date; for "X vs Y" filter the ' +
+  '{"column":"<date column>","period":"<period>"}, <period> one of today, yesterday, this_week, last_week, this_month, last_month, ' +
+  'this_quarter, last_quarter, this_year, last_year, ytd, qtd, or last_n_days, last_n_weeks, last_n_months, last_n_quarters, ' +
+  'last_n_years with "n":<N> ("last 30 days" is last_n_days with n 30; "last month" is the previous whole month); ' +
+  'leave "column" out to use a metric\'s own date; for "X vs Y" filter the ' +
   'category with "in". A glossary term from the FACTS is the filter {"term":"<term name>"}. "top" keeps the N largest. The spec NEVER contains a computed number. ' +
   'When the FACTS end with a PREVIOUS ANSWER and the question CONTINUES it — adds or changes a filter, ' +
   'the split, a measure, the chart type, the period or the top-N — the spec is {"refine":true,…} carrying ' +

@@ -108,7 +108,6 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/joinResident.ts': { count: 3, how: 'throws' },
   // liveBaseOf: a base filter through adaptFilter, which throws on a term (a base list is sanitized to plain filters first)
   'src/engine/live/liveBase.ts': { count: 1, how: 'throws' },
-  'src/engine/live/liveQuery.ts': { count: 1, how: 'throws' },
   'src/engine/live/liveSpec.ts': { count: 8, how: 'throws' },
   'src/engine/live/semantic/semanticSpec.ts': { count: 1, how: 'throws' }, // a semantic dataset's KPI filters through liveSpec's adaptFilters, which throws on a term step
   'src/engine/lodResident.ts': { count: 1, how: 'throws' },
@@ -121,8 +120,9 @@ export const TERM_SITES: Readonly<Record<string, { count: number; how: TermSiteH
   'src/engine/statsVectors.ts': { count: 1, how: 'throws' },
   // the Prepare fold's dispatch: foldStep rethrows TermNotExpandedError, an unknown step type still skips
   'src/data/transforms.ts': { count: 1, how: 'throws' },
-  // adaptFilter and specFilterSteps callers: a term refuses, never skips
-  'src/ipc/liveAnswers.ts': { count: 3, how: 'throws' },
+  // adaptFilter and specFilterSteps callers: a term refuses, never skips. liveEndsOn (an empty answer's note) reads the row
+  // lock's steps only, as the extract's lockedTable rows do — a term is the question's — through adaptFilters, which throws on one.
+  'src/ipc/liveAnswers.ts': { count: 4, how: 'throws' },
   'src/ipc/semanticValues.ts': { count: 2, how: 'throws' }, // a layer's value list: the lock first (withLockSteps), then liveSpec's adaptFilters, which throws on a term step
   'src/ipc/visualsResident.ts': { count: 1, how: 'throws' },
   // prepare: a Prepare list (or a dataset setting). Must NOT take a term; unchanged, an unknown step is dropped.

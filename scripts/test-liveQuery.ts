@@ -36,6 +36,7 @@ const dashIpc: typeof import('../src/ipc/dashboards') = require('../src/ipc/dash
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const ev: typeof import('../src/engine/live/evaluate') = require('../src/engine/live/evaluate');
+const comp: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
 const cmp: typeof import('./liveParityCompare') = require('./liveParityCompare');
 const metrics: typeof import('../src/server/metrics') = require('../src/server/metrics');
 const { isLiveFigureError }: typeof import('../src/engine/live/liveFigureError') = require('../src/engine/live/liveFigureError');
@@ -103,9 +104,9 @@ async function parity(s: H.OrgSetup): Promise<void> {
       continue;
     }
     const problems = cmp.compareCharts(built.card.data, live.data, () => TOLERANT.has(a.measures[0].aggregation), false);
-    ok(`answer ${a.category} ${show(a.filters)}: equals computeCard's chart, notes and period labels`,
-      problems.length === 0 && show(built.card.notes) === show(live.notes) && show(built.card.filterLabels) === show(live.filterLabels),
-      problems.concat(show([built.card.notes, live.notes, built.card.filterLabels, live.filterLabels])).join(' | '));
+    ok(`answer ${a.category} ${show(a.filters)}: equals computeCard's chart and notes`,
+      problems.length === 0 && show(built.card.notes) === show(live.notes),
+      problems.concat(show([built.card.notes, live.notes])).join(' | '));
   }
 }
 
@@ -150,13 +151,16 @@ async function cache(s: H.OrgSetup): Promise<void> {
   ok('flights: none left in the air', lq.flightsInAir() === 0);
   await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(P, D, 300));
 
-  // The period resolver's MAX() is cached under its own statement: two answers, one MAX().
+  // An answer's period resolves against today, as a dashboard filter's does (ai/answerSpec `answerPeriod`): no MAX() for it.
   H.fakeMod.resetFake();
   const quarter = [{ column: 'd', period: 'last_quarter' as const }];
   await lq.liveAnswer(P, { datasetId: D, category: 'region', measures: [M('amt', 'sum')], filters: quarter, chartType: 'bar', title: 'a' });
   await lq.liveAnswer(P, { datasetId: D, category: 'cat', measures: [M('qty', 'max')], filters: quarter, chartType: 'bar', title: 'b' });
-  const maxes = fake.calls.filter((c) => /AS o_l0/.test(c.sql)).length;
-  ok('latest: two answers over one period column ask MAX() once (cached the same way)', maxes === 1 && fake.calls.length === 3, `${maxes} of ${fake.calls.length}`);
+  const maxes = (): number => fake.calls.filter((c) => /AS o_l0/.test(c.sql)).length;
+  ok('periods: two answers over one period column ask no MAX() — one statement each', maxes() === 0 && fake.calls.length === 2, `${maxes()} of ${fake.calls.length}`);
+  // The latest-day lookup (only an EMPTY answer's note, ipc/liveAnswers) is that MAX(), so the check above can see one.
+  await lq.liveLookup(P, D, (t) => comp.compileLatestDates('d', t.env));
+  ok('NEGATIVE CONTROL: the latest-day lookup is a MAX() the count above would see', maxes() === 1, String(maxes()));
 }
 
 async function failures(s: H.OrgSetup): Promise<void> {

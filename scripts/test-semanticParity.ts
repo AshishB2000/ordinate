@@ -109,12 +109,13 @@ async function refusals(b: Bench): Promise<void> {
   const log: Log = [];
   const a = spec.fromAnswerSpec({ datasetId: b.x.did, category: 'region', measures: [AS_COLUMN.revenue], filters: [{ column: 'd', period: 'last_quarter' }], chartType: 'column', title: 'q' }, b.env.columns, {});
   const noLookups = a.ok ? await es.evaluateSemantic(layerIr(a.ir, ['revenue']), { ...b.env, caps: { lookups: false, binaryCompare: false } }, runner(b, log)) : a;
-  ok('"last quarter" on a layer without lookups is refused (layerLookup), with no question asked', !noLookups.ok && noLookups.code === 'layerLookup' && log.length === 0);
+  // Today's quarter, as a dashboard's (ai/answerSpec answerPeriod): a range in the question, no latest day to look up.
+  ok('"last quarter" on a layer without lookups is answered — ONE question, no lookup', noLookups.ok && noLookups.kind === 'chart' && show(log.map((l) => l.step)) === '["chart"]', show([noLookups, log.map((l) => l.step)]).slice(0, 300));
 
   const binsLog: Log = [];
   const qb = spec.fromAnswerSpec({ datasetId: b.x.did, category: 'qty', measures: [AS_COLUMN.revenue], filters: [{ column: 'd', period: 'last_quarter' }], chartType: 'column', title: 'q' }, b.env.columns, {});
   const binsLatest = qb.ok ? await es.evaluateSemantic(layerIr(qb.ir, ['revenue']), b.env, runner(b, binsLog)) : qb;
-  ok('a refusal costs no question: bins with "last quarter" asks not even the latest day', !binsLatest.ok && binsLatest.code === 'bins' && binsLog.length === 0, show(binsLog.map((l) => l.step)));
+  ok('a refusal costs no question: bins with "last quarter" asks nothing', !binsLatest.ok && binsLatest.code === 'bins' && binsLog.length === 0, show(binsLog.map((l) => l.step)));
 
   // The dataset's base filter (cross-part check 14) is in every question: the same figures as the copy filtered.
   const north = F('region', '=', 'North');

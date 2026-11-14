@@ -30,6 +30,7 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-answersave-'));
+process.env.ORDINATE_TODAY = '2025-01-15'; // the rows are 2023–2024: "last quarter" is 2024-Q4, as a dashboard filter reads it today
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

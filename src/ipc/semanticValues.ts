@@ -41,7 +41,7 @@ export function semanticSpellings(t: LiveTarget, column: string, lock: readonly 
   return lookup(t, column, [...lock], {});
 }
 
-/** The latest day with a value in `column` (a scorecard's anchor), or null. A refusal is null too: the anchor is then today. */
+/** The latest day with a value in `column` (a scorecard's anchor, an empty answer's note), or null. A refusal is null too: the anchor is then today. */
 export async function semanticLatestDay(projectId: string, datasetId: string, column: string): Promise<string | null> {
   let lock;
   try {

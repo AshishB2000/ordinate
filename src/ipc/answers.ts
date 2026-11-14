@@ -4,10 +4,12 @@
 // from the model as an `answer` action carrying a spec (src/ai/answerSpec.ts).
 // Everything after that is the app's: the spec is resolved against the
 // dataset's real columns, the chart is computed by the same buildVizData every
-// visual uses, the card's figures are read off that output (src/ai/answerFacts),
-// and only then is the model asked to NARRATE them — with the card's own
-// ledger as the audit its narration must pass. "Explain" on a tile and the
-// follow-up chips go through the same card, so there is one path for all three.
+// visual uses, and the card's figures are read off that output (src/ai/answerFacts).
+// A dock question makes ONE model call: its one sentence, written before the
+// card exists and with no figure in it, is the turn's text, audited against the
+// facts and the card's own ledger (./copilot). "Explain" on a tile and the
+// follow-up chips go through the same card and have the model NARRATE it
+// (`narrate`), audited the same way, so there is one card path for all three.
 //
 // The spec is what a conversation turn stores; the figures never are. Every
 // render recomputes the card (`answer:card`), exactly like a dashboard's metric
@@ -33,7 +35,7 @@ import type { ChartData } from '../analysis/vizData';
 import type { ValueLabelPairs } from '../analysis/valueLabels';
 import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
 import type { VizEncoding } from '../analysis/visuals';
-import type { FilterStep } from '../data/transforms';
+import type { Cell, FilterStep } from '../data/transforms';
 import { isKeptStep } from '../data/filterList';
 import { isTermStep, type TERM_CODE } from '../data/termStep';
 import { expandAnswerTerms } from '../analysis/termExpand';
@@ -44,8 +46,8 @@ import { navContext } from './modelNavigation';
 import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
-  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, resolveColumn, sanitizeStoredSpec, specFilterSteps, splitCandidates,
-  validateAnswerSpec,
+  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, latestDate, periodsAfterData, resolveColumn, sanitizeStoredSpec, specFilterSteps,
+  splitCandidates, validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
@@ -53,7 +55,10 @@ import { listTerms } from '../analysis/terms';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
 import { sanitizeLearn, suggestFixes } from '../ai/answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
-import { noRowsMatch, valueMatched } from '../ai/answerMessages';
+import { noRowsMatch, periodAfterData, valueMatched } from '../ai/answerMessages';
+import { formatDate } from '../app/format';
+import { daysFromCivil } from '../analysis/categoryKey';
+import { isoFromDays } from '../analysis/dateIntel';
 import { saveCardAsVisual } from './answerSave';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import { previousAnswerBlock } from '../ai/previousAnswer';
@@ -133,6 +138,13 @@ export type Failure = { ok: false; reason: string; code?: LiveFailureCode | type
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
 // ── Computing a card ─────────────────────────────────────────────────────────
+
+/** A date column's latest day over these rows, ISO, or null. */
+function endsOn(columns: { name: string }[], rows: Cell[][], column: string): string | null {
+  const ci = columns.findIndex((c) => c.name === column);
+  const d = ci < 0 ? null : latestDate(rows.map((r) => (r ? r[ci] ?? null : null)));
+  return d ? isoFromDays(daysFromCivil(d.y, d.m, d.d)) : null;
+}
 
 /**
  * Largest first, and at most `top` of them. An answer about categories reads
@@ -257,6 +269,8 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   const notes = (spec.matched ?? []).map((m) => valueMatched(m.said, say(m.column, m.value), m.column)).concat(viz.warnings);
   if (viz.category && viz.category.note) notes.push(viz.category.note);
   notes.push(...labelled.notes, ...said.notes.filter((n) => !labelled.notes.includes(n)));
+  // No rows because the period starts after the caller's rows end (a stale dataset): said, never another period.
+  if (!data.labels.length) notes.push(...periodsAfterData(spec, (column) => endsOn(ds.columns, ds.rows, column)).map((p) => periodAfterData(p.label, ds.name, formatDate(p.ends))));
   // Nothing to draw because a value is not in its column: the nearest stored ones (said by their labels), never a marked column's.
   const near = data.labels.length ? null : nearestValueFixes(spec, held, withheld, say);
 
@@ -347,8 +361,6 @@ export async function specTerms(projectId: string): Promise<SpecTerm[]> {
 }
 
 export interface AnswerTurn {
-  text: string;
-  audit: NumberAudit;
   ledger: LedgerEntry[];
   provenance: copilot.CopilotProvenance;
   spec: AnswerSpec;
@@ -388,8 +400,10 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
 }
 
 /**
- * The dock's `answer` action → a narrated, audited answer turn, or the reason
- * it could not be built (the caller keeps the prose answer and says why).
+ * The dock's `answer` action → the card's spec, ledger and provenance, or the
+ * reason it could not be built (the caller keeps the prose answer and says why).
+ * No second model call: the turn's text is the action's own sentence, which the
+ * caller audits against the facts and this card's ledger.
  *
  * `previous` is the answer a follow-up continues (`previousAnswer`). A spec
  * marked `"refine": true` is merged onto it by the app (ai/answerRefine) and the
@@ -408,7 +422,6 @@ export async function answerFromAction(
   context: { kind?: string; id?: string },
   action: SuggestedAction,
   question: string,
-  guard: Guard,
   previous?: AnswerSpec,
   withheld?: ReadonlySet<string>,
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
@@ -440,11 +453,8 @@ export async function answerFromAction(
   if ('ok' in built) return built;
   // …also when it only became the previous chart once a value was matched to the one it already filtered to.
   if (base && sameChart(base, built.card.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
-  const n = await narrate(projectId, built,
-    `Narrate this chart answer to the question "${question}" in two or three sentences, citing only figures from the facts.`,
-    guard);
   // The card's own spec: the validated one, with any filter value the app matched to what the data holds.
-  return { ok: true, text: n.text, audit: n.audit, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec };
+  return { ok: true, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec };
 }
 
 /** A saved chart (or a dashboard tile's live one) → the spec its card is built from. */

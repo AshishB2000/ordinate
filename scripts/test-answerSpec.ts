@@ -9,7 +9,7 @@
 //      answer's meaning while looking right).
 //   3. CHIPS PER SPEC SHAPE — the follow-ups the app offers are a pure function
 //      of the spec, so each shape's chip set is pinned.
-// Plus the relative periods (resolved against the DATA's latest date) and the
+// Plus the relative periods (resolved against today, as a dashboard filter) and the
 // action-line whitelist for the new `answer` kind.
 //
 //   npm run build:ts && node scripts/test-answerSpec.js
@@ -242,16 +242,118 @@ ok('stored: known fields kept, unknown aggregation / operator dropped, extra key
   && !('extra' in stored), JSON.stringify(stored));
 ok('stored: a non-UUID dataset id is refused', A.sanitizeStoredSpec({ datasetId: '../x', category: 'a', measures: [{ column: 'b', aggregation: 'sum' }] }) === undefined);
 
-// ── Periods: against the DATA's latest date ─────────────────────────────────
+// ── Periods: as a dashboard date filter resolves them — against TODAY ──────
 
-const latest = { y: 2024, m: 12, d: 30 };
-ok('period: last quarter of data ending 2024-12-30 is 2024-Q4', A.resolvePeriod('last_quarter', latest).label === '2024-Q4');
-ok('period: …a year back is 2023-Q4', A.resolvePeriod('last_quarter', latest, 1).label === '2023-Q4');
-ok('period: last month / last year', A.resolvePeriod('last_month', latest).label === '2024-12' && A.resolvePeriod('last_year', latest).label === '2024');
-ok('period bounds: a quarter, a year-end month, a leap February',
-  JSON.stringify(A.periodBounds('quarter', A.resolvePeriod('last_quarter', latest).bucket)) === '{"from":"2024-10-01","to":"2024-12-31"}'
-  && JSON.stringify(A.periodBounds('month', A.resolvePeriod('last_month', latest).bucket)) === '{"from":"2024-12-01","to":"2024-12-31"}'
-  && A.periodBounds('month', A.resolvePeriod('last_month', { y: 2024, m: 2, d: 10 }).bucket).to === '2024-02-29');
+const DI: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
+const GREG = DI.DEFAULT_CALENDAR;
+const P = (period: 'last_month' | 'last_quarter' | 'last_year', today: string, back = 0, cal = GREG) => A.answerPeriod({ period, yearsBack: back }, today, cal);
+ok('period: on 2026-11-07 last quarter is the previous COMPLETE one, 2026-Q3 (never this quarter so far)',
+  JSON.stringify(P('last_quarter', '2026-11-07')) === '{"from":"2026-07-01","to":"2026-09-30","label":"2026-Q3"}', JSON.stringify(P('last_quarter', '2026-11-07')));
+ok('period: …a year back is 2025-Q3; last month 2026-10; last year 2025',
+  P('last_quarter', '2026-11-07', 1).label === '2025-Q3' && P('last_month', '2026-11-07').label === '2026-10' && P('last_year', '2026-11-07').label === '2025');
+ok('period: a leap February, also four years back from another one',
+  P('last_month', '2024-03-10').to === '2024-02-29' && P('last_month', '2028-03-05', 4).to === '2024-02-29' && P('last_month', '2025-03-05').to === '2025-02-28');
+// Fiscal years: a quarter that is no calendar quarter is named by its days; an aligned one keeps the axis's name.
+const FY2 = { ...GREG, fiscalYearStart: 2 };
+const FY4 = { ...GREG, fiscalYearStart: 4 };
+ok('period: fiscal year from February — last quarter on 2026-11-07 is Aug–Oct, named by its days',
+  JSON.stringify(P('last_quarter', '2026-11-07', 0, FY2)) === '{"from":"2026-08-01","to":"2026-10-31","label":"2026-08-01 to 2026-10-31"}', JSON.stringify(P('last_quarter', '2026-11-07', 0, FY2)));
+ok('period: fiscal year from April — last year is Apr 2025–Mar 2026; its last quarter is the calendar\'s 2026-Q3',
+  JSON.stringify(P('last_year', '2026-11-07', 0, FY4)) === '{"from":"2025-04-01","to":"2026-03-31","label":"2025-04-01 to 2026-03-31"}'
+  && P('last_quarter', '2026-11-07', 0, FY4).label === '2026-Q3', JSON.stringify(P('last_year', '2026-11-07', 0, FY4)));
+// Differential: the SAME range a dashboard filter resolves (dateIntel.resolvePeriod), every day of three years, three calendars.
+{
+  let bad = '';
+  for (const cal of [GREG, FY2, FY4]) {
+    for (let day = DI.daysFromIso('2024-01-01')!; day <= DI.daysFromIso('2026-12-31')! && !bad; day += 1) {
+      const today = DI.isoFromDays(day);
+      for (const period of ['last_month', 'last_quarter', 'last_year'] as const) {
+        const mine = P(period, today, 0, cal);
+        const theirs = DI.resolvePeriod({ preset: period }, today, cal)!;
+        if (!Object.is(mine.from, theirs.from) || !Object.is(mine.to, theirs.to)) bad = `${period} ${today} fy${cal.fiscalYearStart}: ${JSON.stringify([mine, theirs])}`;
+      }
+    }
+  }
+  ok('period: every day 2024–2026, three calendars — exactly the dashboard filter\'s range (Object.is)', bad === '', bad);
+  ok('NEGATIVE CONTROL: the old rule (the quarter the data\'s latest date falls in) disagrees on the trace\'s data (one row on 2026-10-15)',
+    !Object.is(P('last_quarter', '2026-11-07').from, DI.resolvePeriod({ preset: 'this_quarter' }, '2026-10-15', GREG)!.from));
+}
+// A week calendar: the dashboard's range again, and the label its date axis prints.
+DI.setCalendar({ ...GREG, calendarType: '445' });
+{
+  const wk = A.answerPeriod({ period: 'last_quarter' }, '2026-11-07', DI.getCalendar());
+  const want = DI.resolvePeriod({ preset: 'last_quarter' }, '2026-11-07', DI.getCalendar())!;
+  ok('period: a retail 4-4-5 calendar — its last quarter, labelled as its axis labels one', wk.from === want.from && wk.to === want.to && /^FY\d+ Q[1-4]$/.test(wk.label), JSON.stringify([wk, want]));
+  const back = A.answerPeriod({ period: 'last_quarter', yearsBack: 1 }, '2026-11-07', DI.getCalendar());
+  ok('period: …a year back is the same fiscal quarter of the year before (by fiscal position)', back.label.endsWith(wk.label.slice(-3)) && back.label !== wk.label, JSON.stringify([wk, back]));
+}
+DI.setCalendar(GREG);
+
+// Every dashboard preset but a custom range: the same range a dashboard filter resolves, a last-N period by its n.
+{
+  const RF: typeof import('../src/ai/answerRefine') = require('../src/ai/answerRefine');
+  const presets = DI.PERIOD_PRESETS.filter((p) => p !== 'custom');
+  let bad = '';
+  for (const cal of [GREG, FY2, FY4]) {
+    for (let day = DI.daysFromIso('2024-01-01')!; day <= DI.daysFromIso('2026-12-31')! && !bad; day += 3) {
+      const today = DI.isoFromDays(day);
+      for (const period of presets) {
+        for (const n of DI.N_PRESETS.has(period) ? [1, 30] : [undefined]) {
+          const mine = A.answerPeriod({ period, n }, today, cal);
+          const theirs = DI.resolvePeriod({ preset: period, n }, today, cal)!;
+          if (!Object.is(mine.from, theirs.from) || !Object.is(mine.to, theirs.to)) bad = `${period} n${n} ${today} fy${cal.fiscalYearStart}: ${JSON.stringify([mine, theirs])}`;
+        }
+      }
+    }
+  }
+  ok(`period: all ${presets.length} presets, 2024–2026, three calendars — exactly the dashboard filter's range (Object.is)`, bad === '', bad);
+  const on = (period: import('../src/ai/answerSpec').AnswerPeriod, n?: number) => A.answerPeriod({ period, n }, '2026-11-10', GREG);
+  ok('period: on 2026-11-10 last 30 days is Oct 11 – Nov 9, named by its days',
+    JSON.stringify(on('last_n_days', 30)) === '{"from":"2026-10-11","to":"2026-11-09","label":"2026-10-11 to 2026-11-09"}', JSON.stringify(on('last_n_days', 30)));
+  ok('period: …this month is 2026-11, this year 2026, year to date runs to today',
+    on('this_month').label === '2026-11' && on('this_year').label === '2026' && JSON.stringify(on('ytd')) === '{"from":"2026-01-01","to":"2026-11-10","label":"2026-01-01 to 2026-11-10"}',
+    JSON.stringify([on('this_month'), on('this_year'), on('ytd')]));
+  ok('NEGATIVE CONTROL: n is read — last 30 days is not last 1 day', on('last_n_days', 30).from !== on('last_n_days', 1).from);
+
+  const filt = (f: Record<string, unknown>) => {
+    const v = A.validateAnswerSpec({ dataset: DS.id, category: 'region', measures: ['revenue'], filters: [f] }, [DS]);
+    return v.ok ? JSON.stringify(v.spec.filters[0]) : `refused: ${v.reason}`;
+  };
+  ok('period filter: "last 30 days" validates with its n',
+    filt({ column: 'order_date', period: 'last_n_days', n: 30 }) === '{"column":"order_date","period":"last_n_days","n":30}', filt({ column: 'order_date', period: 'last_n_days', n: 30 }));
+  ok('period filter: n only where it is read; n capped as a dashboard caps it; a missing n is 1',
+    filt({ column: 'order_date', period: 'this_month', n: 5 }) === '{"column":"order_date","period":"this_month"}'
+    && filt({ column: 'order_date', period: 'last_n_days', n: 99999 }).includes('"n":3660')
+    && filt({ column: 'order_date', period: 'last_n_weeks' }).includes('"n":1'));
+  ok('NEGATIVE CONTROL: a custom range and a made-up period are refused, never dropped',
+    filt({ column: 'order_date', period: 'custom' }).startsWith('refused') && filt({ column: 'order_date', period: 'last_fortnight' }).startsWith('refused'));
+  const stored = A.sanitizeStoredSpec({ datasetId: DS.id, category: 'region', measures: [{ column: 'revenue', aggregation: 'sum' }], chartType: 'bar', title: 't',
+    filters: [{ column: 'order_date', period: 'last_n_months', n: 6, yearsBack: 1 }] });
+  ok('period filter: a stored spec keeps its n and yearsBack', JSON.stringify(stored?.filters) === '[{"column":"order_date","period":"last_n_months","n":6,"yearsBack":1}]', JSON.stringify(stored?.filters));
+  const spec = (n: number) => ({ ...stored!, filters: [{ column: 'order_date', period: 'last_n_days' as const, n }] });
+  ok('sameChart: last 7 days and last 30 days are different charts', !RF.sameChart(spec(7), spec(30)) && RF.sameChart(spec(30), spec(30)));
+  const chip = A.answerChips(spec(30), { columns: COLS, splitCandidates: [] }).find((c) => c.label === 'Same for last year');
+  ok('chip: "Same for last year" keeps the 30 days', JSON.stringify(chip?.spec.filters) === '[{"column":"order_date","period":"last_n_days","n":30,"yearsBack":1}]', JSON.stringify(chip?.spec.filters));
+  ok('prompt: the model is told every period and how to say "last 30 days"',
+    presets.every((p) => sa.CHAT_SYSTEM_PROMPT.includes(p)) && sa.CHAT_SYSTEM_PROMPT.includes('"last 30 days" is last_n_days with n 30'));
+}
+
+// The card's empty-answer note: only a period that starts after the data ends.
+{
+  const q = { filters: [{ column: 'order_date', period: 'last_quarter' as const }] };
+  process.env.ORDINATE_TODAY = '2026-11-07';
+  ok('stale: a dataset ending 2024-12-31 has no rows in 2026-Q3, and says so',
+    JSON.stringify(A.periodsAfterData(q, () => '2024-12-31')) === '[{"label":"2026-Q3","ends":"2024-12-31"}]');
+  ok('NEGATIVE CONTROL: data that reaches into the period (or past it), or no date at all, is no stale note',
+    A.periodsAfterData(q, () => '2026-07-01').length === 0 && A.periodsAfterData(q, () => '2026-10-15').length === 0 && A.periodsAfterData(q, () => null).length === 0);
+  const trace: Cell[][] = [['2026-07-04', 'West', 'Tech', 'A', 1, 1], ['2026-09-30', 'East', 'Tech', 'A', 1, 1], ['2026-10-15', 'West', 'Tech', 'A', 1, 1], ['2025-08-01', 'East', 'Tech', 'A', 1, 1]];
+  const t1 = A.specFilterSteps(q, COLS, trace);
+  ok('steps: the trace — ONE row in the current quarter does not make "last quarter" this quarter',
+    JSON.stringify(t1.steps) === JSON.stringify([{ type: 'filter', column: 'order_date', op: '>=', value: '2026-07-01' }, { type: 'filter', column: 'order_date', op: '<=', value: '2026-09-30' }]) && t1.labels[0] === 'order_date: 2026-Q3', JSON.stringify(t1));
+  const t2 = A.specFilterSteps(q, COLS, trace.map((r) => [String(r[0]).replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1'), ...r.slice(1)]));
+  ok('steps: …and over US dates the `in` list keeps Q3\'s cells only', JSON.stringify(t2.steps[0].values) === '["07/04/2026","09/30/2026"]', JSON.stringify(t2));
+}
+process.env.ORDINATE_TODAY = '2025-01-15'; // the rows below are 2023–2024: "last quarter" is then 2024-Q4
 
 const ROWS: Cell[][] = [
   ['2024-09-30', 'West', 'Tech', 'A', 10, 1],
@@ -281,7 +383,7 @@ const cat = A.answerChips(base, { columns: COLS, splitCandidates: ['category', '
 ok('chips: category answer → split, same for last year, table',
   labels(cat) === 'Split by category | Same for last year | Show as table', labels(cat));
 ok('chips: split re-runs with a series and a stacked chart', cat[0].spec.series === 'category' && cat[0].spec.chartType === 'stacked_column');
-ok('chips: "last year" on an all-time answer narrows to the latest year',
+ok('chips: "last year" on an all-time answer narrows to last year',
   JSON.stringify(cat[1].spec.filters) === '[{"column":"order_date","period":"last_year"}]');
 ok('chips: table is the same spec as a table', cat[2].spec.chartType === 'table' && cat[2].spec.category === 'region');
 ok('chips: the spec they came from is untouched', base.filters.length === 0 && !base.series && base.chartType === 'column');

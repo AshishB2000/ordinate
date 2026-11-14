@@ -10,8 +10,7 @@
 //               retail calendar rolled up from days (`weekRollup`; `day` needs none).
 //   split       the category ranks, the series ranks (a text split), the cells of the kept categories,
 //               and "Other" by series: up to four questions, each counted at the one door.
-//   KPI         one question, no dimension. An answer's "last quarter": the latest day, asked as a
-//               lookup only of a backend that has them (`layerLookup`).
+//   KPI         one question, no dimension. An answer's "last quarter" is a range already (../liveSpec).
 //
 // Refused: number bins (`bins`), a column measure (`columnOnLayer`: aggregating a dimension ourselves
 // goes around the layer), a metric the layer no longer lists (`metricMissing`), and a row lock unless
@@ -21,7 +20,6 @@ import { CATEGORY_CAP } from '../../../analysis/categoryKey';
 import type { Cell } from '../../../data/transforms';
 import type { LiveFilter, LiveIR, LiveRefusal } from '../liveSpec';
 import { columnOf, isMetricMeasure, isRefusal, refuse } from '../liveSpec';
-import { latestColumns } from '../compile';
 import { refuseLayer } from './semanticRefusals';
 import type { SemanticEnv, SemanticFilter, SemanticQuery } from './semanticQuery';
 
@@ -57,7 +55,6 @@ function metricsOf(ir: LiveIR, env: SemanticEnv): string[] | LiveRefusal {
 function whereOf(filters: readonly LiveFilter[], env: SemanticEnv): SemanticFilter[] | LiveRefusal {
   const out: SemanticFilter[] = [];
   for (const f of [...(env.base ?? []), ...filters]) {
-    if (f.kind === 'latest') return refuse('unresolvedPeriod');
     if (!columnOf(env.columns, f.column)) return refuse('unknownColumn', f.column);
     if ('binary' in f && f.binary === true && !env.caps.binaryCompare) return refuseLayer('layerRowPolicy', namesOf(env));
     out.push(f);
@@ -128,30 +125,6 @@ export function planMetric(ir: LiveIR, env: SemanticEnv): { ok: true; query: Sem
   const where = whereOf(ir.filters, env);
   if (isRefusal(where)) return where;
   return { ok: true, query: { dimensions: [], metrics, where, order: [] } };
-}
-
-/**
- * The latest day per column an answer's data-relative period reads ("last quarter"), as lookups: the
- * day dimension alone, latest first, one row. Over the rows a copy would hold, narrowed only by a row
- * lock and the base filters (compile.compileLatestDates). A backend without lookups refuses it.
- */
-export function planLatest(ir: LiveIR, env: SemanticEnv): { ok: true; queries: Array<{ column: string; query: SemanticQuery }> } | LiveRefusal {
-  const names = latestColumns(ir);
-  if (names.length === 0) return { ok: true, queries: [] };
-  if (!env.caps.lookups) return refuseLayer('layerLookup', namesOf(env));
-  const where = whereOf(ir.filters.filter((f) => 'binary' in f && f.binary === true), env);
-  if (isRefusal(where)) return where;
-  const queries: Array<{ column: string; query: SemanticQuery }> = [];
-  for (const column of names) {
-    const col = columnOf(env.columns, column);
-    if (!col) return refuse('unknownColumn', column);
-    if (col.type !== 'date') return refuse('periodNotDate', column);
-    if (!(env.grains.get(column) ?? []).includes('day')) return refuseLayer('layerLookup', namesOf(env));
-    // Not empty: the latest DATE, however the layer orders a NULL.
-    const query: SemanticQuery = { dimensions: [{ name: column, grain: 'day' }], metrics: [], where: [...where, { kind: 'empty', column, negate: true }], order: [{ by: column, desc: true }], limit: 1 };
-    queries.push({ column, query });
-  }
-  return { ok: true, queries };
 }
 
 /**

@@ -95,7 +95,7 @@ export function Transcript({
               learn={t.learn}
               turn={threadId ? { threadId, turnId: t.id } : undefined}
               savedVisualId={t.savedVisualId}
-              narrated={t.text.trim() !== ''}
+              narrated={false}
               question={turns[i - 1]?.role === 'user' ? turns[i - 1].text.slice(0, 300) : undefined}
               onFollowUp={onFollowUp}
             />

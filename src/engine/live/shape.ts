@@ -22,10 +22,10 @@
 // engine that changes an alias's case (Snowflake upper-cases unquoted ones)
 // changes nothing here. A reply of the wrong width is refused, not guessed at.
 
-import type { CategoryInfo, CivilDate, DateGrain } from '../../analysis/categoryKey';
+import type { CategoryInfo, DateGrain } from '../../analysis/categoryKey';
 import { aggWord } from '../../data/aggregations';
 import {
-  CATEGORY_CAP, DATE_GRAINS, OTHER_NOTE, binLabel, binPlan, chooseGrain, civilFromDays, gregorianBucketLabel,
+  CATEGORY_CAP, DATE_GRAINS, OTHER_NOTE, binLabel, binPlan, chooseGrain, gregorianBucketLabel,
 } from '../../analysis/categoryKey';
 import { bucketStartOf, unitOfGrain, weekLabel } from '../../analysis/retailCalendar';
 import type { WeekCal } from '../../analysis/retailCalendar';
@@ -156,17 +156,6 @@ export function readGrain(rows: LiveRows, query: CompiledQuery): DateGrain | Liv
   const counts = {} as Record<DateGrain, number>;
   DATE_GRAINS.forEach((g, i) => { counts[g] = toNumber(rows[0][i]) ?? Infinity; });
   return chooseGrain(counts);
-}
-
-/** The MAX(day) row → the latest civil date per column (null: the column holds no date). */
-export function readLatest(rows: LiveRows, query: CompiledQuery, names: string[]): Record<string, CivilDate | null> | LiveRefusal {
-  if (badWidth(rows, query) || rows.length !== 1 || names.length !== query.columns.length) return refuse('rowShape');
-  const out: Record<string, CivilDate | null> = {};
-  names.forEach((n, i) => {
-    const day = toNumber(rows[0][i]);
-    out[n] = day === null || !Number.isFinite(day) ? null : civilFromDays(day);
-  });
-  return out;
 }
 
 // ── The chart ────────────────────────────────────────────────────────────────

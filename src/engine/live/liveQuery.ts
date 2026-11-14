@@ -21,8 +21,6 @@
 // `maxCacheAgeSec` is the entry's age, read at every lookup (0 = always ask);
 // inside a published /p/ page's request it is never under
 // LIVE_MIN_CACHE_AGE_PUBLIC_SEC (L2.7, `agesOf`).
-// The period resolver's MAX() is cached the same way under its own statement,
-// so every answer over one date column shares one.
 //
 // ONE CALL PER QUESTION. Identical questions asked together share one warehouse
 // call — a "flight" (./liveFlight.ts) — always, even at age 0. A shared call is
@@ -40,7 +38,6 @@
 
 import type { AsOf } from '../../api/asOf';
 import type { AnswerSpec } from '../../ai/answerSpec';
-import { specFilterSteps } from '../../ai/answerSpec';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { ChartData } from '../../analysis/vizData';
 import { recommendChartType } from '../../analysis/vizData';
@@ -54,7 +51,7 @@ import * as trace from '../residentTrace';
 import * as msg from '../liveQueryMessages';
 import * as budget from './liveBudget';
 import type { Compiled, CompiledQuery } from './compile';
-import type { LiveOutcome, LiveRunner, PeriodRange } from './evaluate';
+import type { LiveOutcome, LiveRunner } from './evaluate';
 import { evaluateLive } from './evaluate';
 import { fly } from './liveFlight';
 import type { AdaptOpts, LiveAdapted, LiveIR, LiveRefusal, LiveRefusalCode } from './liveSpec';
@@ -101,11 +98,10 @@ export type LiveMetricReply = { ok: true; value: number | null; warnings: string
 
 /**
  * What `computeCard` builds a card from: the ranked, cut chart (do NOT rank it
- * again), its notes (warnings + the "Other" note, as the card shows them) and
- * the period labels ("order_date: 2024-Q4").
+ * again) and its notes (warnings + the "Other" note, as the card shows them).
  */
 export type LiveAnswerReply =
-  | { ok: true; data: ChartData; category: CategoryInfo; warnings: string[]; notes: string[]; filterLabels: string[]; periodRanges: PeriodRange[]; asOf: AsOf }
+  | { ok: true; data: ChartData; category: CategoryInfo; warnings: string[]; notes: string[]; asOf: AsOf }
   | LiveFailure;
 
 /** A lookup's rows (positional to its statement's columns), dated. */
@@ -165,32 +161,13 @@ function agesOf(t: LiveTarget): Ages {
   };
 }
 
-/** The period resolver's MAX(): cached and shared under its own statement. */
-async function latest(t: LiveTarget, query: CompiledQuery, ages: Ages, shared: AbortSignal, seen: (ms: number) => void): Promise<LiveRows> {
-  const key = keyOf(t, { latest: query.sql, params: query.params });
-  const hit = queryCache.get<{ rows: LiveRows; at: number }>('live', key, { maxAgeMs: ages.lookupMs });
-  if (hit) {
-    seen(hit.at);
-    return hit.rows;
-  }
-  const { value } = await fly(key, shared, async (s) => {
-    const rows = await warehouse(t, query, s);
-    const v = { rows, at: queryCache.now() };
-    queryCache.set(key, v, [t.datasetId], { maxAgeMs: ages.keepMs });
-    return v;
-  });
-  seen(value.at);
-  return value.rows;
-}
-
 /** Ask the warehouse (the flight's body): every statement, then cache a real answer. */
 async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared: AbortSignal): Promise<{ outcome: LiveOutcome; at: string }> {
   let oldest = Infinity;
   const seen = (ms: number): void => {
     if (ms < oldest) oldest = ms;
   };
-  const run: LiveRunner = async (query, step) => {
-    if (step === 'latest') return latest(t, query, ages, shared, seen);
+  const run: LiveRunner = async (query) => {
     const rows = await warehouse(t, query, shared);
     seen(queryCache.now());
     return rows;
@@ -208,7 +185,7 @@ async function answer(t: LiveTarget, ir: LiveIR, key: string, ages: Ages, shared
     // A LiveCallError was logged where it happened; anything else is unexpected, and logged once here.
     throw err instanceof LiveCallError ? err : failed(t, 'failed', safeError(err));
   }
-  // A figure is as old as its oldest statement (a cached MAX() included).
+  // A figure is as old as its oldest statement.
   const at = new Date(Number.isFinite(oldest) ? oldest : queryCache.now()).toISOString();
   if (outcome.ok) queryCache.set(key, { outcome, at } satisfies Answered, [t.datasetId], { maxAgeMs: ages.keepMs });
   return { outcome, at };
@@ -353,16 +330,14 @@ export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: Adap
     category: o.chart.category,
     warnings,
     notes,
-    filterLabels: answerFilterLabels(spec, r.t.columns, o.periodLabels),
-    periodRanges: o.periodRanges ?? [],
     asOf: r.asked.asOf,
   };
 }
 
 /**
  * One lookup statement the compiler builds from the target — not a chart: the
- * answers' case fix (L2.4). Cached and shared like the period MAX() (same key
- * rules, same ages — looked up at `lookupMs`, kept for `keepMs` — one flight),
+ * answers' case fix (L2.4). Cached and shared like a question (same key rules,
+ * looked up at `lookupMs`, kept for `keepMs` — one flight),
  * sent through the one door (./liveWarehouse `warehouse`), and a failure is the last rows cached for it,
  * labelled stale, or a typed error — never an empty list that looks like "no match".
  */
@@ -409,27 +384,6 @@ export async function liveLookup(projectId: string, datasetId: string, build: (t
     const r = fallBack(t, key, err, signal);
     return r.ok ? fail('live_failed', msg.liveWarehouseFailed()) : r;
   }
-}
-
-/**
- * The card's filter labels in spec order, as `specFilterSteps` writes them: a
- * period's ("order_date: 2024-Q4", resolved against the warehouse's latest
- * date — ./evaluate's `periodLabels`, in period order) or the filter's own
- * ("region = North", from `specFilterSteps` itself, which reads no row for one).
- */
-function answerFilterLabels(spec: AnswerSpec, columns: LiveTarget['columns'], periodLabels: string[]): string[] {
-  const periods = periodLabels.slice();
-  const out: string[] = [];
-  for (const f of spec.filters || []) {
-    if ('term' in f || !columns.some((c) => c.name === f.column)) continue;
-    if ('period' in f) {
-      const l = periods.shift();
-      if (l !== undefined) out.push(l);
-    } else {
-      out.push(...specFilterSteps({ filters: [f] }, columns, []).labels);
-    }
-  }
-  return out;
 }
 
 // ── One statement, for the schema sync ───────────────────────────────────────

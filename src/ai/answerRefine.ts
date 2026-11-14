@@ -135,7 +135,7 @@ export function refineSpec(
   return merged;
 }
 
-const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
 
 /**
  * Two specs that draw the same chart: everything but the title, and a measure's

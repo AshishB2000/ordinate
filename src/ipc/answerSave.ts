@@ -7,9 +7,9 @@
 //
 // The visual shows what the card showed WHEN IT WAS SAVED:
 //   - a relative period ("last quarter") is saved as the dates it resolved to
-//     against the data's own latest date (the card's steps), not as a moving
-//     period — a saved visual's own `period` filter follows the calendar's
-//     today, which is a different period from the one the card drew;
+//     when the card was drawn (the card's steps), not as a moving period — a
+//     saved visual's own `period` filter follows today, which moves on from the
+//     period the card drew;
 //   - a top-N on a text axis is saved as a filter to the N categories the card
 //     kept, because a saved visual has no top-N of its own (a number axis's bins
 //     cannot be one filter: there every bin is saved, ranked);

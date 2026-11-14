@@ -82,11 +82,12 @@ const metricSql = (id: CompileDialectId, filters: FilterStep[]) => {
   const answer = spec.fromAnswerSpec({ datasetId: 'x', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [{ column: 'day', period: 'last_month' }] } as never, COLS, { lock: [lockIn] });
   ok('an answer\'s IR carries the lock beside its own filters (never in the spec, so no label names it)', answer.ok && answer.ir.filters.some((f) => 'binary' in f && f.binary === true));
   if (answer.ok) {
-    const latest = comp.compileLatestDates(answer.ir, env('duckdb'));
-    ok('the latest-date anchor is computed over the locked rows only', latest.ok && /WHERE/.test(latest.query.sql) && latest.query.params.some((p) => p.value === SECRET[0]), latest.ok ? latest.query.sql : '');
-    const unlocked = spec.fromAnswerSpec({ datasetId: 'x', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [{ column: 'day', period: 'last_month' }] } as never, COLS);
-    const open = unlocked.ok ? comp.compileLatestDates(unlocked.ir, env('duckdb')) : null;
-    ok('NEGATIVE CONTROL: without a lock the anchor reads every row, as before', !!open && open.ok && !/WHERE/.test(open.query.sql));
+    // An empty answer's latest day (ipc/liveAnswers' note) is read through the lock too: it is the caller's rows' last day.
+    const lockF0 = spec.adaptFilter(lockIn, COLS, {}, []);
+    const latest = comp.compileLatestDates('day', env('duckdb'), lockF0 && !('code' in lockF0) ? [lockF0] : []);
+    ok('the latest day an empty answer names is computed over the locked rows only', latest.ok && /WHERE/.test(latest.query.sql) && latest.query.params.some((p) => p.value === SECRET[0]), latest.ok ? latest.query.sql : '');
+    const open = comp.compileLatestDates('day', env('duckdb'));
+    ok('NEGATIVE CONTROL: without a lock it reads every row', open.ok && !/WHERE/.test(open.query.sql));
   }
   // A distinct count is counted again from rows at every level it folds or ranks at (semantic layer part 5, step 03):
   // each count reads `lv_base`, the one place the source is read, and that read carries the lock.

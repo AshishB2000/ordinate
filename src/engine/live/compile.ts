@@ -2,9 +2,10 @@
 // and its bound parameters. PURE — builds strings, queries nothing.
 // docs/live-data/00-plan.md L2.2 (D3, D4, D7).
 //
-// Five statements, each a cheap question the executor (L2.3) asks in order:
+// Five statements, each a cheap question the executor (L2.3) asks in order
+// (the first only for an empty answer's note, ipc/liveAnswers):
 //
-//   compileLatestDates  MAX(day) per column a data-relative period reads
+//   compileLatestDates  MAX(day) of one date column, under the caller's lock
 //   compileBinRange     min/max of a number category (the bin edges)
 //   compileGrainProbe   distinct buckets per grain (a date axis with no grain)
 //   compileChart        the chart itself — categories, series, measures
@@ -222,37 +223,20 @@ export function compileMetric(ir: LiveIR, env: CompileEnv): Compiled {
 
 // ── The probes ───────────────────────────────────────────────────────────────
 
-/** The distinct columns the IR's data-relative periods read, in IR order. */
-export function latestColumns(ir: LiveIR): string[] {
-  const out: string[] = [];
-  for (const f of ir.filters || []) if (f.kind === 'latest' && !out.includes(f.column)) out.push(f.column);
-  return out;
-}
-
 /**
- * The latest day per period column, as an epoch day. Over every row a copy would hold, not the filtered
- * ones: `answerSpec.latestDate` reads every cell of the column.
+ * The latest day of one date column, as an epoch day: what an empty answer's note says the data ends on
+ * (ipc/liveAnswers). Over every row a copy would hold, not the question's: `answerSpec.latestDate` reads every
+ * cell of the column. Only a row lock (`lock`, row-policy D13) and the dataset's base filters narrow it.
  */
-export function compileLatestDates(ir: LiveIR, env: CompileEnv): Compiled {
-  // Only a row lock and the dataset's base filters narrow the anchor: "last quarter" ends at the latest date the caller may see (row-policy D13).
-  const locked: LiveIR = { ...ir, filters: ir.filters.filter((f) => 'binary' in f && f.binary === true) };
-  const p = prepare(locked, env);
+export function compileLatestDates(column: string, env: CompileEnv, lock: LiveFilter[] = []): Compiled {
+  const probe: LiveIR = { kind: 'metric', category: { column, kind: 'date' }, measures: [], filters: lock, order: 'natural', weekCal: null }; // the column read, for its name checks and a calc's layer
+  const p = prepare(probe, env);
   if (isRefusal(p)) return p;
-  const where = whereOf(p, locked);
+  const where = whereOf(p, probe);
   if (isRefusal(where)) return where;
-  const names = latestColumns(ir);
-  if (names.length === 0) return refuse('badQuery');
-  const sel: string[] = [];
-  const cols: string[] = [];
-  for (let i = 0; i < names.length; i += 1) {
-    if (badName(names[i])) return refuse('badIdentifier');
-    const col = columnOf(p.c.columns, names[i]);
-    if (!col) return refuse('unknownColumn', names[i]);
-    if (col.type !== 'date') return refuse('periodNotDate', col.name);
-    sel.push(`${p.c.d.epochDay(`max(${dateOf(p.c, col)})`)} AS o_l${i}`);
-    cols.push(`o_l${i}`);
-  }
-  return { ok: true, query: p.c.b.finish(`SELECT ${sel.join(', ')} FROM ${p.from}${where}`, p.c.d, cols) };
+  const col = columnOf(p.c.columns, column)!;
+  if (col.type !== 'date') return refuse('periodNotDate', col.name);
+  return { ok: true, query: p.c.b.finish(`SELECT ${p.c.d.epochDay(`max(${dateOf(p.c, col)})`)} AS o_l0 FROM ${p.from}${where}`, p.c.d, ['o_l0']) };
 }
 
 /** min/max of the FILTERED numeric category cells → `categoryKey.binPlan`. */

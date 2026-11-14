@@ -6,9 +6,12 @@
 // the chips — over the warehouse's answer (engine/live/liveQuery.liveAnswer),
 // which is ranked and cut to `top` IN SQL: it is never ranked again here.
 //
-// The three things the extract path reads rows for, live:
-//   - periods ("last quarter") resolve against the warehouse's own latest date,
-//     one cached MAX() (the executor);
+// Periods ("last quarter") read no row on either path: both resolve against
+// today, as a dashboard filter does (ai/answerSpec `answerPeriod`). An EMPTY
+// answer over one asks the warehouse its latest day (one cached MAX(), or a
+// layer's lookup), only to say why there are no rows (`periodsAfterData`).
+//
+// The things the extract path reads rows for, live:
 //   - text-filter case fixing ("west" asked, "West" stored) is a cached lookup,
 //     `SELECT DISTINCT col … WHERE key(col) IN (…) LIMIT 20` — the asked values
 //     bound as parameters, never inlined (engine/live/compile.compileCaseMatches);
@@ -28,25 +31,27 @@ import type { ChartData } from '../analysis/vizData';
 import { tileCaption } from '../analysis/captions';
 import { displayNames } from '../app/catalog';
 import { navContext } from './modelNavigation';
-import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, specFilterSteps } from '../ai/answerSpec';
+import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, periodsAfterData, specFilterSteps } from '../ai/answerSpec';
 import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
 import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import { liveWithheld } from './liveProfile';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import { externalsOf, mirrorsOf, relabelled } from './semanticFigures';
-import { semanticSpellings } from './semanticValues';
+import { semanticLatestDay, semanticSpellings } from './semanticValues';
 import type { LiveFailure } from '../engine/live/liveQuery';
-import { adaptFilter, isRefusal, refuse } from '../engine/live/liveSpec';
+import { adaptFilter, adaptFilters, isRefusal, refuse } from '../engine/live/liveSpec';
 import type { LiveFilter } from '../engine/live/liveSpec';
-import type { PeriodRange } from '../engine/live/evaluate';
-import { compileCaseMatches } from '../engine/live/compile';
+import { compileCaseMatches, compileLatestDates } from '../engine/live/compile';
+import { toNumber } from '../engine/live/shape';
+import { isoFromDays } from '../analysis/dateIntel';
+import { formatDate } from '../app/format';
 import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { MATCH_OPS, MAX_MATCHED } from '../ai/answerValues';
 import type { FilterLabels, ValueMatch } from '../ai/answerValues';
-import { valueMatched } from '../ai/answerMessages';
+import { periodAfterData, valueMatched } from '../ai/answerMessages';
 import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
 
 /** How the case fix compares a stored and an asked value: JS's own trim and lower case. */
@@ -141,45 +146,17 @@ export async function liveCaseFix(
 }
 
 /**
- * The card's filters as steps ("Save as visual", "Open in builder"), in spec
- * order, as `specFilterSteps` writes them: a period as its two inclusive day
- * bounds — the range the warehouse's latest date resolved it to — and a column
- * with no date at all as the extract's empty `in`.
+ * The latest day the caller's rows hold in `column` (ISO), for an EMPTY answer's note — never a figure. Only the row
+ * lock narrows it, as the extract's `lockedTable` rows: a term's steps are the question's. Null when it cannot be said.
  */
-function cardSteps(filters: AnswerFilter[], columns: ParsedColumn[], ranges: PeriodRange[]): FilterStep[] {
-  const steps: FilterStep[] = [];
-  const left = ranges.slice();
-  for (const f of filters) {
-    if ('column' in f && !columns.some((c) => c.name === f.column)) continue; // a term reaches specFilterSteps, which refuses it
-    if (!('period' in f)) {
-      steps.push(...specFilterSteps({ filters: [f] }, columns, []).steps);
-      continue;
-    }
-    const r = left.shift();
-    if (!r) continue;
-    if (r.from === null) steps.push({ type: 'filter', column: f.column, op: 'in', values: [] });
-    else steps.push({ type: 'filter', column: f.column, op: '>=', value: r.from }, { type: 'filter', column: f.column, op: '<=', value: r.to });
-  }
-  return steps;
-}
-
-/**
- * The labels as the extract writes them — from the values AS ASKED (it fixes
- * the steps, not the labels), each period's from the warehouse's answer.
- */
-function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[]): string[] {
-  const out: string[] = [];
-  let i = 0;
-  for (const f of spec.filters) {
-    if ('column' in f && !columns.some((c) => c.name === f.column)) continue;
-    const label = answered[i++];
-    if ('period' in f) {
-      if (label !== undefined) out.push(label);
-    } else {
-      out.push(...specFilterSteps({ filters: [f] }, columns, []).labels);
-    }
-  }
-  return out;
+async function liveEndsOn(projectId: string, meta: DatasetMeta, column: string, lock: readonly FilterStep[]): Promise<string | null> {
+  if (meta.live?.semantic) return semanticLatestDay(projectId, meta.id, column); // a layer's: one lookup, under the caller's lock
+  const r = await liveLookup(projectId, meta.id, (t) => {
+    const f = adaptFilters(lock.filter((s) => s.lock === true), t.columns, {});
+    return f.ok ? compileLatestDates(column, t.env, f.filters) : f;
+  });
+  const day = r.ok && r.rows[0] ? toNumber(r.rows[0][0]) : null;
+  return day === null || !Number.isFinite(day) ? null : isoFromDays(day);
 }
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
@@ -215,28 +192,33 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const caption = tileCaption({ chartType, data, names });
   const additive = sem && mirrors ? spec.measures.every((m) => sem.metrics.find((x) => x.name === mirrors.get(m.metricId ?? '')?.external)?.additive === true)
     : spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
-  const filterLabels = [...cardLabels(spec, meta.columns, r.filterLabels), ...termLabels];
+  const labelsOf = (filters: AnswerFilter[]): string[] => [...specFilterSteps({ filters }, meta.columns, []).labels, ...termLabels]; // a period reads no row (ai/answerSpec)
+  const filterLabels = labelsOf(spec.filters);
   // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
   // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.
   const withheld = await liveWithheld(projectId, meta.id, meta);
   const said = withheldFilters(spec.filters, withheld);
   const factsIn = {
     title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
-    saidFilterLabels: [...cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), ...termLabels], caption, asOf: utcLabel(r.asOf.at),
+    saidFilterLabels: labelsOf(said), caption, asOf: utcLabel(r.asOf.at),
   };
   const facts = cardFacts(factsIn, spec, withheld);
   // As computeCard: what a person reads says the labels (F5), its filters' too; the model's facts keep the stored values.
   const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
   const filterSaid = await filterText(projectId, meta.id, spec.filters, fixed.held);
   const shown = saidFilters(spec.filters, filterSaid, fixed.held);
-  const shownLabels = shown === spec.filters ? filterLabels : [...cardLabels({ ...spec, filters: shown }, meta.columns, r.filterLabels), ...termLabels];
+  const shownLabels = shown === spec.filters ? filterLabels : labelsOf(shown);
+  // As the extract's: no rows because the period starts after the caller's rows end, said, never another period.
+  const ends = new Map<string, string | null>();
+  if (!data.labels.length) for (const f of spec.filters) if ('period' in f && !ends.has(f.column)) ends.set(f.column, await liveEndsOn(projectId, meta, f.column, lock));
+  const stale = periodsAfterData(spec, (column) => ends.get(column) ?? null).map((p) => periodAfterData(p.label, meta.name, formatDate(p.ends)));
   const seen = cardTextAsSeen(labelled.data, { chartType, names }, factsIn, { caption, headline: facts.headline, bullets: facts.bullets }, shownLabels);
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category), ...(await navContext(projectId, spec.datasetId)) }),
-      filterLabels: shownLabels, steps: cardSteps(fixed.filters, meta.columns, r.periodRanges), asOf: r.asOf,
-      notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n))),
+      filterLabels: shownLabels, steps: specFilterSteps({ filters: fixed.filters }, meta.columns, []).steps, asOf: r.asOf,
+      notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n)), stale),
     },
     factsText: facts.text,
     ledger: facts.ledger,
