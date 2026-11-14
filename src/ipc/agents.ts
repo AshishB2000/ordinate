@@ -16,7 +16,7 @@ import { logger } from '../app/logger';
 
 const flagged = (list: Instruction[]) => list.map((i) => (FIGURE_RE.test(i.text) ? { ...i, figure: true as const } : i));
 
-/** One agent as `agent:list` gives it. `instructions` and `tag` are an editor's and an admin's. */
+/** One agent as `agent:list` gives it. `tag` is an admin's: the base `agent:save` takes. */
 async function rowsOf(projectId: string, list: Agent[], usable: Set<string>, rank: number) {
   const topics = new Map((await topicsForReaders(projectId, await listTopics(projectId))).map(({ topic }) => [topic.id, topic] as const));
   const teams = new Map((await orgTeams([...new Set(list.flatMap((a) => a.teamIds))])).map((t) => [t.id, t.name] as const));
@@ -33,7 +33,7 @@ async function rowsOf(projectId: string, list: Agent[], usable: Set<string>, ran
       model: a.model,
       build: a.build,
       teams: a.teamIds.flatMap((id) => (teams.has(id) ? [{ id, name: teams.get(id)! }] : [])),
-      ...(rank >= EDITOR_RANK ? { instructions: flagged(a.instructions) } : {}),
+      instructions: flagged(a.instructions), // editor prose every reader of the agent sees, as the project's own (D5)
       ...(rank >= ADMIN_RANK ? { tag: contentTag('agent', a) } : {}),
     };
   });

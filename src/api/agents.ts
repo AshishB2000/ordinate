@@ -21,8 +21,9 @@ const Agent = z.strictObject({
 
 export const agents = {
   // { agents, preselected, canManage, canInstruct }: the agents the caller may use (an editor and an admin get every
-  // one, `usable` marking theirs), each with its topic's name and dataset ids, teams by name and, for an editor or an
-  // admin, its instructions and the tag `agent:save` takes as `base`. Ids and names only (scripts/rowPolicyReaders.ts: META).
+  // one, `usable` marking theirs), each with its topic's name and dataset ids, teams by name, its instructions (editor
+  // prose, as catalog:instructions) and, for an admin, the tag `agent:save` takes as `base`. Ids and names only
+  // (scripts/rowPolicyReaders.ts: META).
   'agent:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   // Creates without `id`, replaces the settings with one (never the instructions). A topic, model or team that is not
   // there is refused with a sentence; a stale `base` is 409 record_changed.

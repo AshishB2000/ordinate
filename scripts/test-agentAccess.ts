@@ -60,7 +60,7 @@ withServer('agent-access', {}, async (b) => {
   // ── (a) use ───────────────────────────────────────────────────────────────
   const fayList = await must('fay', 'agent:list', { projectId: P });
   ok('Fay, in its team: listed, usable and preselected', fayList.ok && fayList.agents.length === 1 && fayList.agents[0].usable && fayList.preselected === A
-    && fayList.agents[0].teams[0]?.name === 'Finance' && !fayList.canManage && !fayList.canInstruct && !('instructions' in fayList.agents[0]) && !('tag' in fayList.agents[0]), show(fayList));
+    && fayList.agents[0].teams[0]?.name === 'Finance' && !fayList.canManage && !fayList.canInstruct && Array.isArray(fayList.agents[0].instructions) && !('tag' in fayList.agents[0]), show(fayList));
   const fayThread = await must('fay', 'copilot:newThread', { projectId: P, agentId: A });
   ok('…starts a conversation with it', fayThread.ok && fayThread.thread.agentId === A, show(fayThread));
   const fayScope = await b.run(who('fay'), () => agentAsk.askScope(P, A));

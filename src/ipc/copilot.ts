@@ -600,7 +600,7 @@ export function register() {
         const outside = sharing ? null : await outsideTurn(projectId, scope, q, action);
         if (outside) {
           await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
-          const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, provenance: facts.provenance, outside: outside.outside, guidance: guided.used }, target);
+          const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used }, target);
           return {
             ok: true, answer: outside.text, provenance: facts.provenance, turns: stored || [], threadId: target || null, suggestedAction: NO_ACTION,
             ledger, numberAudit: { ok: true, violations: [] }, guidance: guided.used, agent: await agentRef(projectId, kept),
