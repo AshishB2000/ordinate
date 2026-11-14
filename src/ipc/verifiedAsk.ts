@@ -11,16 +11,22 @@ import type { TurnGuidance } from '../ai/turnGuidance';
 /**
  * null when the question is no verified one (the model takes it). A hit whose card fails answers `{ ok: false }`
  * with the reason and falls no further: a model's guess at a verified question is worse than the reason.
+ * `target`: the conversation it lands in, pinned once the card is built. `scope`: an Assistant agent's topic, outside
+ * which no question is a hit (it goes to the model, which says it is out of scope), and its fall-back line, if any.
  */
-export async function verifiedAsk(projectId: string, question: string, threadId: string | undefined) {
-  const hit = exactHit(await verifiedStates(projectId), question);
+export async function verifiedAsk(
+  projectId: string, question: string, target: () => Promise<string | undefined>,
+  scope: { only: ReadonlySet<string> | null; note: string | null } = { only: null, note: null },
+) {
+  const hit = exactHit((await verifiedStates(projectId)).filter((s) => !scope.only || scope.only.has(s.q.spec.datasetId)), question);
   if (!hit) return null;
   const built = await computeCard(projectId, hit.spec);
   if ('ok' in built) return { ok: false as const, error: built.reason };
   const guidance: TurnGuidance = { verifiedId: hit.id, instructions: 0, examples: [] };
-  const r = await appendAnswer(projectId, threadId, question, '', built, built.card.spec, undefined, guidance);
+  const text = scope.note ?? '';
+  const r = await appendAnswer(projectId, await target(), question, text, built, built.card.spec, undefined, guidance);
   return {
-    ok: true as const, answer: '', provenance: built.provenance, turns: r.turns, threadId: r.threadId,
+    ok: true as const, answer: text, provenance: built.provenance, turns: r.turns, threadId: r.threadId,
     suggestedAction: NO_ACTION, ledger: built.ledger, numberAudit: { ok: true as const, violations: [] }, guidance,
   };
 }

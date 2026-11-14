@@ -51,7 +51,8 @@ export const assistant = {
 
   'copilot:history': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional() }), project: byProjectId }),
   'copilot:threads': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
-  'copilot:newThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // `agentId`: the Assistant agent the conversation is with (docs/assistant-agents); one the caller may not use is refused.
+  'copilot:newThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, agentId: Uuid.nullable().optional() }), project: byProjectId }),
   // A conversation is its asker's own, so renaming or deleting it is `read` like starting one;
   // the store acts only on the CALLER's threads (src/ai/copilot.ts `mine`). The title is cut to its cap there.
   'copilot:renameThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid, title: z.string().trim().min(1).max(200) }), project: byProjectId }),
@@ -66,6 +67,8 @@ export const assistant = {
       question: z.string().trim().min(1).max(4000),
       threadId: Uuid.optional(),
       askId: Uuid.optional(),
+      // The agent a conversation this ask STARTS is with; an existing one keeps its own (src/ipc/agentAsk.ts).
+      agentId: Uuid.nullable().optional(),
     }),
     project: byProjectId,
   }),

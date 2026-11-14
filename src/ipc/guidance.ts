@@ -26,7 +26,7 @@ function guided(input: GuidanceInput, examples: string[] = []): Guided {
 }
 
 /** The verified questions worth showing for `question` (D10), as lines and ids. Metadata only; the caller's row lock hides what it hides. */
-async function exampleLines(projectId: string, question: string, datasetId: string | undefined, exclude: string | undefined) {
+async function exampleLines(projectId: string, question: string, datasetId: string | undefined, exclude: string | undefined, first?: ReadonlySet<string>) {
   const states = await verifiedStates(projectId);
   if (!states.length) return { lines: [], ids: [] };
   const ids = [...new Set(states.map((s) => s.q.spec.datasetId))];
@@ -36,7 +36,7 @@ async function exampleLines(projectId: string, question: string, datasetId: stri
   const name = new Map(ids.map((id, i) => [id, metas[i]?.name ?? ''] as const));
   const held = new Map(ids.map((id, i) => [id, withheld[i]] as const));
   return pickExamples(states, {
-    question, datasetId, exclude, names: { dataset: (id) => name.get(id) ?? '', term: (id) => terms.find((t) => t.id === id)?.name ?? '' },
+    question, datasetId, exclude, first, names: { dataset: (id) => name.get(id) ?? '', term: (id) => terms.find((t) => t.id === id)?.name ?? '' },
     withheld: (id) => held.get(id) ?? new Set(),
   });
 }
@@ -54,10 +54,12 @@ async function topicDatasets(projectId: string, id: string): Promise<{ id: strin
  * The block for one `copilot:ask`. `factsKind` is the kind of the facts `buildFacts` built (its provenance), so a
  * context that fell back to the project inventory gets the inventory's guides. Guides: the dataset's own for a
  * dataset, the visual's dataset's for a visual, the first 12 datasets' on Home, a topic's first 12 in its order (part 6; its
- * facts are the inventory's, narrowed); any other kind gets instructions only.
+ * facts are the inventory's, narrowed); any other kind gets instructions only. `agent`: the Assistant agent answering
+ * (docs/assistant-agents): its instructions after the project's, and the verified questions on its topic's datasets first.
  */
 export async function askGuidance(
-  projectId: string, context: { kind?: string; id?: string }, factsKind: string, question?: string, opts: { exclude?: string } = {},
+  projectId: string, context: { kind?: string; id?: string }, factsKind: string, question?: string,
+  opts: { exclude?: string; agent?: { name: string; instructions: string[]; datasets: ReadonlySet<string> | null } } = {},
 ): Promise<Guided> {
   try {
     const file = await load(projectId);
@@ -77,8 +79,9 @@ export async function askGuidance(
       }
     }
     // Verified questions as examples, only for an ask (a question to answer); a failure there costs the examples, not the block.
-    const ex = question ? await exampleLines(projectId, question, factsKind === 'dataset' ? id : undefined, opts.exclude).catch(() => ({ lines: [], ids: [] })) : { lines: [], ids: [] };
-    return guided({ instructions, guides, examples: ex.lines }, ex.ids);
+    const ex = question ? await exampleLines(projectId, question, factsKind === 'dataset' ? id : undefined, opts.exclude, opts.agent?.datasets ?? undefined).catch(() => ({ lines: [], ids: [] })) : { lines: [], ids: [] };
+    const agent = opts.agent ? { name: opts.agent.name, instructions: opts.agent.instructions } : undefined;
+    return guided({ instructions, guides, examples: ex.lines, ...(agent ? { agent } : {}) }, ex.ids);
   } catch (err: any) {
     logger.error('[guidance] left out of the ask:', err && err.message);
     return NONE;

@@ -19,8 +19,12 @@ export const INSTRUCTIONS_BLOCK_MAX = 4000;
 export const GUIDE_OPEN_MAX = 2000;
 export const GUIDE_INVENTORY_MAX = 200;
 
-/** `examples`: verified question lines already written (../ai/verifiedPick), printed after the instructions and guides. */
-export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[]; examples?: string[] }
+/**
+ * `examples`: verified question lines already written (../ai/verifiedPick), printed after the instructions and guides.
+ * `agent`: the Assistant agent answering (docs/assistant-agents rule 4): its own instructions come after the project's,
+ * under a line saying they win where the two disagree, and they are kept first when the block runs out of room.
+ */
+export interface GuidanceInput { instructions: string[]; guides?: { dataset: string; text: string; max: number }[]; examples?: string[]; agent?: { name: string; instructions: string[] } }
 /** The block as one ask uses it: its text, its digits for the number audit, and what it counted (kept on the turn later). */
 export interface Guided { text: string; ledger: LedgerEntry[]; used: TurnGuidance }
 
@@ -35,21 +39,33 @@ export const GUIDANCE_FRAMING = [
 const EXAMPLES_LINE = 'Verified questions — when a question means one of these, answer with its spec:';
 
 /** The fenced block, or '' when nothing is left to print. `instructions`: how many instruction lines it printed. */
-export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number } {
-  const items: string[] = [];
+/** Instruction lines within `room` characters, "(more not shown)" past it; what they used. */
+function instructionLines(raw: readonly string[], room: number): { lines: string[]; used: number; count: number } {
+  const lines: string[] = [];
   let used = 0;
-  let instructions = 0;
-  for (const raw of g.instructions) {
-    const line = `- ${cut(raw, MAX_INSTRUCTION_LEN)}`;
+  for (const text of raw) {
+    const line = `- ${cut(text, MAX_INSTRUCTION_LEN)}`;
     if (line === '- ' || FENCE_RE.test(line)) continue;
-    used += line.length;
-    if (used > INSTRUCTIONS_BLOCK_MAX) {
-      items.push('- (more not shown)');
+    if (used + line.length > room) {
+      lines.push('- (more not shown)');
       break;
     }
-    items.push(line);
-    instructions += 1;
+    used += line.length;
+    lines.push(line);
   }
+  return { lines, used, count: lines.filter((l) => l !== '- (more not shown)').length };
+}
+
+export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number } {
+  // The agent's lines are taken first, so the project's never crowd out the ones that win; both share one limit.
+  const own = instructionLines(g.agent?.instructions ?? [], INSTRUCTIONS_BLOCK_MAX);
+  const project = instructionLines(g.instructions, INSTRUCTIONS_BLOCK_MAX - own.used);
+  const items: string[] = [...project.lines];
+  if (own.lines.length) {
+    const head = `Instructions for the assistant "${oneLine(g.agent?.name ?? '')}" (written by an editor). They come after the project's and WIN where the two disagree:`;
+    items.push(FENCE_RE.test(head) ? 'Instructions for this assistant (written by an editor). They come after the project\'s and WIN where the two disagree:' : head, ...own.lines);
+  }
+  const instructions = project.count + own.count;
   for (const guide of g.guides ?? []) {
     const text = cut(guide.text, guide.max);
     const line = `Guide for "${oneLine(guide.dataset)}" (written by an editor): ${text}`;

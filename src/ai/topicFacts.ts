@@ -28,7 +28,8 @@ import type { ActivityEmit } from '../ipc/copilot';
 
 const CLOSING = '\n\nNo specific dataset/visual/dashboard is open';
 
-export async function topicFacts(projectId: string, id: string, emit: ActivityEmit): Promise<CopilotFacts | null> {
+/** `agent`: an Assistant agent's topic (src/ipc/agentAsk.ts), which it answers from alone; else a topic the screen is on. */
+export async function topicFacts(projectId: string, id: string, emit: ActivityEmit, agent = false): Promise<CopilotFacts | null> {
   const stored = await readTopic(projectId, id);
   if (!stored) return null;
   const { topic } = await topicForReaders(projectId, stored.rec);
@@ -52,7 +53,8 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   }
   const base = copilot.projectFacts(proj ? proj.name : 'Untitled project', { datasets: sets.map((s) => s.name), visuals: [], dashboards: [] }, schemas);
 
-  const lines: string[] = [`Topic: "${topic.name}"${topic.description ? ` — ${topic.description}` : ''}. Its datasets, metrics and terms are listed here; the project holds more, which a question may still name.`];
+  const about = agent ? 'they are all this assistant answers from, and a question about other data is outside them' : 'the project holds more, which a question may still name';
+  const lines: string[] = [`Topic: "${topic.name}"${topic.description ? ` — ${topic.description}` : ''}. Its datasets, metrics and terms are listed here; ${about}.`];
   for (const s of sets) if (s.fields && s.all.length) lines.push(`- ${s.name} also has, outside this topic: ${s.all.join(', ')}`);
   const allMetrics = new Map((await metrics.listMetrics(projectId)).map((m) => [m.id, m]));
   const own = [];

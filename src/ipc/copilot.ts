@@ -61,6 +61,9 @@ import { askGuidance } from './guidance';
 import { verifiedAsk } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
 import { topicFacts } from '../ai/topicFacts';
+import { allowedAction, NO_ACTION } from '../ai/suggestedAction';
+import { agentNames, agentRef } from '../ai/agentAccess';
+import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -75,7 +78,8 @@ import { topicFacts } from '../ai/topicFacts';
 
 // `stats`: the open Statistics panel's analysis SPEC (never figures) — main
 // recomputes it and hands the model the result as facts (src/ai/statsFacts.ts).
-type ContextRef = { kind?: string; id?: string; offset?: number; stats?: unknown };
+// `scoped`: the server's own (an Assistant agent's topic, ./agentAsk.ts); the contract has no such field.
+type ContextRef = { kind?: string; id?: string; offset?: number; stats?: unknown; scoped?: boolean };
 
 // ── Activity stream (feat/ask-activity) ─────────────────────────────────────
 // This app has NO agent loop and NO model tool-calls: copilot:ask computes facts
@@ -222,7 +226,7 @@ export async function buildFacts(
   // work, never a fixed script. `emit` defaults to a no-op, so the unit test
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
-  if (kind === 'topic' && id) { const f = await topicFacts(projectId, id, emit); if (f) return f; } // null (no such topic): the inventory below
+  if (kind === 'topic' && id) { const f = await topicFacts(projectId, id, emit, context.scoped === true); if (f) return f; } // null (no such topic): the inventory below
   // Whole-dataset facts (column summaries, sample rows, insights, a Live sample): refused on a dataset with row access
   // rules (row-policy D9); with a column hidden from the caller, built without it (part 4, D21: ../ai/hiddenFacts).
   const datasetFacts = kind === 'dataset' && id ? await factsOf(projectId, id, async (hidden) => {
@@ -446,8 +450,10 @@ export function register() {
       const resolved = tid && threads.some((t) => t.id === tid) ? tid : (threads.length > 0 ? threads[0].id : null);
       // Its title too: a renamed conversation's name is the stored one, which
       // the turns alone cannot tell the header.
-      const title = threads.find((t) => t.id === resolved)?.title ?? null;
-      return { ok: true, turns, threadId: resolved, title };
+      const shown = threads.find((t) => t.id === resolved);
+      const title = shown?.title ?? null;
+      // …and the Assistant agent it is with (null: the Project assistant), by name even once it is in the Trash.
+      return { ok: true, turns, threadId: resolved, title, agent: await agentRef(projectId, shown?.agentId ?? null) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
@@ -457,7 +463,10 @@ export function register() {
   // no turn bodies. Empty list is a normal answer (no history yet), never an error.
   ipcMain.handle('copilot:threads', async (_e, { projectId }: any = {}) => {
     try {
-      return { ok: true, threads: await copilot.listThreads(projectId) };
+      const threads = await copilot.listThreads(projectId);
+      const names = await agentNames(projectId, threads.flatMap((t) => (t.agentId ? [t.agentId] : [])));
+      // Which agent each was with, for History (a gone one with no Trash entry left is shown as the Project assistant's).
+      return { ok: true, threads: threads.map((t) => (t.agentId && names.has(t.agentId) ? { ...t, agentName: names.get(t.agentId)!.name, ...(names.get(t.agentId)!.gone ? { agentGone: true } : {}) } : t)) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to list Copilot conversations' };
     }
@@ -466,9 +475,12 @@ export function register() {
   // Start a new, empty conversation. Persisted immediately so copilot:ask can be
   // given its id straight away. Titled "Conversation" until its first user turn
   // renames it — no model call names a thread.
-  ipcMain.handle('copilot:newThread', async (_e, { projectId }: any = {}) => {
+  // `agentId`: the Assistant agent it is with (switching agents starts one); one the caller may not use is refused.
+  ipcMain.handle('copilot:newThread', async (_e, { projectId, agentId }: any = {}) => {
     try {
-      const thread = await copilot.createThread(projectId);
+      const scope = agentId ? await askScope(projectId, agentId) : PROJECT_SCOPE;
+      if (agentId && !scope.agent) return { ok: false, error: scope.note || 'Could not start a new conversation' };
+      const thread = await copilot.createThread(projectId, scope.agent?.id);
       if (!thread) return { ok: false, error: 'Could not start a new conversation' };
       return { ok: true, thread };
     } catch (err: any) {
@@ -512,7 +524,7 @@ export function register() {
   // Provenance and every activity step are built from app-computed facts BELOW,
   // independent of the reply text — neither derives a chip or a number from a
   // token.
-  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share }: any = {}) => {
+  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share, agentId }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -546,34 +558,54 @@ export function register() {
       // `share`: only a server caller names one (a report's narrative, ./reportsServer): the contract has no such field. Its
       // answer leaves the app, so only the facts shaped for that path go with it: no thread, no verified or suggested chart.
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
-      const hit = sharing ? null : await verifiedAsk(projectId, q, tid); // a verified question, word for word (./verifiedAsk): no model call
-      if (hit) return hit;
+      // The conversation this lands in decides who answers (docs/assistant-agents rule 11): the one named, else the
+      // caller's latest; with none yet, the one this ask starts, with the agent asked for (./agentAsk.ts decides).
+      const threads = await copilot.listThreads(projectId);
+      const named = !!tid && threads.some((t) => t.id === tid);
+      const into = (named ? threads.find((t) => t.id === tid) : threads[0]) ?? null;
+      const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : agentId);
+      const kept = into ? (into.agentId ?? null) : (scope.agent?.id ?? null); // the agent the conversation is stored with
+      // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation even if something
+      // else creates a newer one between the two writes, and the reply can say which one it wrote to.
+      const pin = async (): Promise<string | undefined> => tid || (await copilot.latestThreadId(projectId)) || (await copilot.createThread(projectId, scope.agent?.id))?.id;
+      const hit = sharing ? null : await verifiedAsk(projectId, q, pin, scope); // a verified question, word for word (./verifiedAsk): no model call
+      if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
       const turns = await copilot.loadHistory(projectId, tid);
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
-      const facts = await buildFacts(projectId, context || {}, emit, q, sharing);
-      const guided = await askGuidance(projectId, context || {}, facts.provenance.kind, q); // the editors' instructions and guide (./guidance), after the facts
+      const asked = await scopedContext(projectId, scope, context || {}); // an agent's topic, unless the screen is inside it
+      const facts = await buildFacts(projectId, asked, emit, q, sharing);
+      const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
+      const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, agent ? { agent } : {}); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.
       // Only for an ask that NAMES its conversation, and finds it: one that names
       // none (a report's narrative page, ./reportsServer) still has the caller's
       // latest replayed, but nobody is looking at that chart and nothing continues it.
-      const named = !!tid && (await copilot.listThreads(projectId)).some((t) => t.id === tid);
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
       const ledger = facts.ledger.concat(guided.ledger, prev ? prev.ledger : []);
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
-      const res = await askCopilot(prior, [facts.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta);
+      const how = { build: scope.agent ? scope.agent.build : true, topic: scope.only !== null };
+      const res = await askCopilot(prior, [facts.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
 
       if (res.ok) {
-        // Pin the target thread BEFORE the first append. Two reasons: the question
-        // and its answer must land in the SAME conversation even if something else
-        // creates a newer thread between the two writes, and the reply can then tell
-        // the renderer which thread it wrote to (it may have been created just now).
-        let target = tid || (await copilot.latestThreadId(projectId)) || undefined;
-        if (!target) target = (await copilot.createThread(projectId))?.id;
+        const target = await pin();
+        // What the reply may act on: an agent that may not build answers or does nothing (rule 8).
+        const action = allowedAction(res.suggestedAction || NO_ACTION, how);
+        // OUT OF SCOPE (rule 10): never an answer from outside the agent's topic, quietly or not. The turn is the
+        // app's own words and the dataset the Project assistant can answer from, found by code (./agentAsk.ts).
+        const outside = sharing ? null : await outsideTurn(projectId, scope, q, action);
+        if (outside) {
+          await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
+          const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, provenance: facts.provenance, outside: outside.outside, guidance: guided.used }, target);
+          return {
+            ok: true, answer: outside.text, provenance: facts.provenance, turns: stored || [], threadId: target || null, suggestedAction: NO_ACTION,
+            ledger, numberAudit: { ok: true, violations: [] }, guidance: guided.used, agent: await agentRef(projectId, kept),
+          };
+        }
 
         // An ANSWER action: the app builds the chart from the spec, and the turn's
         // prose stays this call's one sentence (no second model call), audited
@@ -581,9 +613,9 @@ export function register() {
         // wrote anyway is still flagged (./answers). A spec that does not
         // resolve keeps the prose answer and says plainly why no chart came.
         let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
-        if (!sharing && res.suggestedAction && res.suggestedAction.kind === 'answer') {
+        if (!sharing && action.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
-          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, prev?.spec, prev?.withheld);
+          answer = await answers.answerFromAction(projectId, asked, action, q, prev?.spec, prev?.withheld, scope.only ?? undefined);
         }
 
         // The guard runs BEFORE persistence, so the stored turn carries the note
@@ -598,11 +630,13 @@ export function register() {
         const audited = built ? ledger.concat(built.ledger) : ledger;
         const guarded = refused === null ? guardAnswer(res.text, audited)
           : guardAnswer(`${res.text}\n\n(No chart: ${refused})`, ledger.concat(reasonLedger(refused)));
+        // An agent that fell back says so above the answer (rule 12): the app's line, after the audit of the model's words.
+        const text = scope.note ? `${scope.note}\n\n${guarded.text}` : guarded.text;
 
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const stored = await copilot.appendTurn(projectId, {
           role: 'assistant',
-          text: guarded.text,
+          text,
           provenance: built ? built.provenance : facts.provenance,
           answer: built ? built.spec : undefined,
           // A refused chart's "Did you mean" (./answers): the app's options, kept so a reload still offers them.
@@ -615,16 +649,17 @@ export function register() {
         // turn: a proposal belongs to the turn that produced it and is rebuilt
         // from disk truth as prose only, which is the existing rule.
         return {
-          ok: true, answer: guarded.text, provenance: facts.provenance,
+          ok: true, answer: text, provenance: facts.provenance,
           turns: stored || [], threadId: target || null,
           // An answer is fully handled here, so it proposes nothing further.
-          suggestedAction: answer ? { kind: 'none', intent: '' } : res.suggestedAction || { kind: 'none', intent: '' },
+          suggestedAction: answer ? NO_ACTION : action,
           // App-side records, for tests and the fidelity gate. The renderer shows
           // neither: the ledger is internal, and the audit's finding is already
           // in `answer`. Nothing new reaches a user in this PR.
           ledger: audited,
           numberAudit: guarded.audit,
           guidance: guided.used,
+          agent: await agentRef(projectId, kept),
         };
       }
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };

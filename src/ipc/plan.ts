@@ -7,6 +7,9 @@ import { newRun, skipStep, replaceStep, stopRun, undoRun, canUndo, nextIndex, be
 import type { PlanRun, StepOutcome, UndoReport } from '../ai/planRun';
 import { RUN_DEPS, loadProjectCtx, undoGroup, logRun, fixStep } from '../ai/planExec';
 import * as store from '../ai/planStore';
+import * as copilot from '../ai/copilot';
+import { agentForAsk } from '../ai/agentAccess';
+import { agentAnswersOnly } from '../ai/agentMessages';
 
 // Assistant plans IPC — check a proposed plan, then run it one click at a time.
 // MAIN PROCESS. The model proposed the steps (src/ai/suggestedAction.ts); every
@@ -84,6 +87,10 @@ export function register(): void {
     if (!UUID_RE.test(String(projectId || ''))) return { ok: false, error: 'No project.' };
     const clean = sanitizePlanSteps(steps);
     if (!clean.steps.length) return { ok: false, error: 'The plan has no steps.' };
+    // A plan from a conversation with an Assistant agent that may only answer is refused (docs/assistant-agents rule 8).
+    const conv = typeof threadId === 'string' && threadId ? (await copilot.listThreads(String(projectId))).find((t) => t.id === threadId) : undefined;
+    const { agent } = await agentForAsk(String(projectId), conv?.agentId);
+    if (agent && !agent.build) return { ok: false, error: agentAnswersOnly(agent.name) };
     const run = newRun(randomUUID(), String(projectId), typeof threadId === 'string' ? threadId : '',
       typeof intent === 'string' ? intent.slice(0, 400) : '', clean.steps);
     return snapshot(await store.create(run));

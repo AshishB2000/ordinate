@@ -424,6 +424,7 @@ export async function answerFromAction(
   question: string,
   previous?: AnswerSpec,
   withheld?: ReadonlySet<string>,
+  only?: ReadonlySet<string>, // an Assistant agent's topic: the datasets a spec may name (src/ipc/agentAsk.ts); none, every one
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
   let defaultDatasetId: string | undefined;
   if (context && context.kind === 'dataset' && context.id) defaultDatasetId = context.id;
@@ -431,7 +432,7 @@ export async function answerFromAction(
     const v = await visuals.getVisual(projectId, context.id);
     if (v) defaultDatasetId = v.datasetId;
   }
-  const all = await specDatasets(projectId);
+  const all = (await specDatasets(projectId)).filter((d) => !only || only.has(d.id));
   const defined = await specMetrics(projectId);
   const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
   // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
@@ -455,6 +456,16 @@ export async function answerFromAction(
   if (base && sameChart(base, built.card.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
   // The card's own spec: the validated one, with any filter value the app matched to what the data holds.
   return { ok: true, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec };
+}
+
+/**
+ * The dataset a NEW answer spec names when every dataset of the project counts, or null (a refine, or a spec that names
+ * none the caller may use). Validation only, over metadata: nothing is computed. An agent's out-of-scope check (./agentAsk).
+ */
+export async function namedDataset(projectId: string, action: SuggestedAction): Promise<string | null> {
+  if (!action.spec || isRefine(action.spec)) return null;
+  const v = validateAnswerSpec(action.spec, await specDatasets(projectId), { metrics: await specMetrics(projectId), terms: await specTerms(projectId) });
+  return v.ok ? v.spec.datasetId : null;
 }
 
 /** A saved chart (or a dashboard tile's live one) → the spec its card is built from. */
