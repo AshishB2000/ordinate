@@ -6,8 +6,9 @@
 //      only — no figure of the card), and the stored turn's spec holds the old
 //      filters AND the new one on the same dataset. The card's figures are the
 //      ones every filter together gives. CANARY: a value filtered on a column
-//      marked personal is in NO model call of either turn — the ask or the
-//      narration of its card — while the card a person sees still says it.
+//      marked personal is in NO model call of either turn (ONE call each), nor
+//      in the card facts a narration would read, while the card a person sees
+//      still says it.
 //   2. NEGATIVE CONTROL: in a NEW conversation the same action gets no block and
 //      is an ordinary spec — refused for what it lacks.
 //   3. A new subject keeps nothing but the dataset, and that only after the
@@ -34,6 +35,7 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-followup-'))
 // Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 process.env.ORDINATE_LOCAL_DIR = tmpUserData;
+process.env.ORDINATE_TODAY = '2025-01-15'; // the rows are 2024's: "last quarter" is 2024-Q4, as a dashboard filter reads it today
 
 const A: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
 const B: typeof import('../src/ai/previousAnswer') = require('../src/ai/previousAnswer');
@@ -109,7 +111,7 @@ async function main(): Promise<void> {
     dataset: 'Orders', category: 'region', measures: [{ column: 'revenue', aggregation: 'sum' }],
     filters: [{ column: 'order_date', period: 'last_quarter' }, { column: 'segment', op: '=', value: 'Enterprise' }, { column: 'email', op: '!=', value: CANARY }],
   };
-  replies.push(answerWith('enterprise revenue by region last quarter', FIRST), narration('West leads.'));
+  replies.push(answerWith('enterprise revenue by region last quarter', FIRST));
   const r1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'enterprise revenue by region last quarter, without our test account' });
   const a1: AnswerSpec = lastOf(r1).answer;
   ok('ask: the first answer is stored with its three filters', r1.ok && a1 && a1.filters.length === 3 && a1.datasetId === ds.id, JSON.stringify(lastOf(r1)));
@@ -118,10 +120,10 @@ async function main(): Promise<void> {
 
   const PATCH = { refine: true, filters: [{ column: 'channel', op: '=', value: 'online' }] };
   const INTENT = 'enterprise revenue by region last quarter, online only';
-  replies.push(answerWith(INTENT, PATCH), narration('West still leads.'));
+  replies.push(answerWith(INTENT, PATCH, 'Online only now.'));
   const r2 = await call('copilot:ask', { projectId: pid, context: {}, question: 'now only online', threadId: r1.threadId });
   const a2: AnswerSpec = lastOf(r2).answer;
-  const followUp = sent[2];
+  const followUp = sent[1];
 
   const block = B.previousAnswerBlock(a1, 'Orders', new Set(['email'])).text;
   ok('follow-up: the model call carried the block, after the facts — the one the stored spec gives',
@@ -129,15 +131,17 @@ async function main(): Promise<void> {
   ok('follow-up: the block names the dataset, the columns and the filters in force',
     /dataset "Orders"; category "region"; measures sum\(revenue\); filters: "order_date" in last_quarter, "segment" = "Enterprise", "email" != /.test(block), block);
 
-  // CANARY: the whole text of EVERY model call of both turns — each turn asks, then
-  // narrates its card — replayed turns, facts, block, question.
-  const everything = JSON.stringify(sent);
-  ok('canary: the value filtered on a personal column is in no model call — neither turn\'s ask, nor the narration of either card',
-    sent.length === 4 && !everything.includes(CANARY) && !everything.includes('canary'), everything);
+  // CANARY: the whole text of EVERY model call of both turns — ONE each, its ask — replayed turns, facts, block,
+  // question; and the facts a narration of either card (Explain, a chip) would read.
+  const cardFacts = async (a: AnswerSpec): Promise<string> => (await answers.computeCard(pid, a) as { factsText: string }).factsText;
+  const [facts1, facts2] = [await cardFacts(a1), await cardFacts(a2)];
+  const everything = JSON.stringify(sent) + facts1 + facts2;
+  ok('canary: the value filtered on a personal column is in no model call — neither turn\'s ask — nor in either card\'s facts',
+    sent.length === 2 && !everything.includes(CANARY) && !everything.includes('canary'), everything);
   ok('canary: …the filter is there with its value withheld', block.includes(`"email" != ${notes.WITHHELD}`), block);
   const SAID = `order_date: 2024-Q4; segment = Enterprise; email != ${notes.WITHHELD}; channel = online.`;
-  ok('canary: …and the narration reads the same filter the same way, beside the filters it may read',
-    sent[3].facts.includes(`\nFiltered to: ${SAID}\n`) && sent[3].facts.endsWith(`\n- Filtered to ${SAID}`), sent[3].facts);
+  ok('canary: …and the card\'s facts read the same filter the same way, beside the filters they may read',
+    facts2.includes(`\nFiltered to: ${SAID}\n`) && facts2.endsWith(`\n- Filtered to ${SAID}`), facts2);
   ok('canary: …and the app still has it — the merge kept the value on the server (negative control)',
     JSON.stringify(a1).includes(CANARY) && JSON.stringify(a2).includes(CANARY));
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'none' });
@@ -160,8 +164,8 @@ async function main(): Promise<void> {
   ok('follow-up: the stored spec is the old filters and the new one on the same dataset', r2.ok && a2 && a2.datasetId === ds.id && a2.filters.length === 4
     && sameLeaves(a2.filters.slice(0, 3), a1.filters) && sameLeaves(a2.filters[3], { column: 'channel', op: '=', value: 'online' }), JSON.stringify(a2));
   ok('follow-up: …leaf for leaf the spec the whole question gives', sameLeaves(a2, full), JSON.stringify([a2, full]));
-  ok('follow-up: the turn is in the same conversation, narrated from the new card', r2.threadId === r1.threadId && lastOf(r2).text === 'West still leads.'
-    && /^Filtered to: .*channel = online\.$/m.test(sent[3].facts), sent[3].facts);
+  ok('follow-up: the turn is in the same conversation, its text the follow-up\'s own sentence, over the new card', r2.threadId === r1.threadId && lastOf(r2).text === 'Online only now.'
+    && /^Filtered to: .*channel = online\.$/m.test(facts2), facts2);
 
   // The card: every filter labelled, a carried one exactly as it was when it was asked.
   const card2 = await call('answer:card', { projectId: pid, spec: a2 });
@@ -184,12 +188,12 @@ async function main(): Promise<void> {
   ok('card: …and not the first answer\'s (the follow-up changed the answer on screen)', !Object.is(card2.data.series[0].values[0], card1.data.series[0].values[0]));
 
   // A second follow-up REPLACES a filter, naming its column the way people do.
-  replies.push(answerWith('smb revenue by region last quarter, online only', { refine: true, filters: [{ column: 'Customer Segment', op: '=', value: 'SMB' }] }), narration('East only.'));
+  replies.push(answerWith('smb revenue by region last quarter, online only', { refine: true, filters: [{ column: 'Customer Segment', op: '=', value: 'SMB' }] }));
   const r3 = await call('copilot:ask', { projectId: pid, context: {}, question: 'and for SMB instead?', threadId: r1.threadId });
   const a3: AnswerSpec = lastOf(r3).answer;
   ok('follow-up: a filter named by the column\'s display name replaces the one on that column',
     r3.ok && a3 && sameLeaves(a3.filters, [a2.filters[0], a2.filters[2], a2.filters[3], { column: 'segment', op: '=', value: 'SMB' }]), JSON.stringify(a3));
-  ok('follow-up: …and it was told of the answer before it, not the first one', sent[4].facts.includes('"channel" = "online"'), sent[4].facts);
+  ok('follow-up: …and it was told of the answer before it, not the first one', sent[2].facts.includes('"channel" = "online"'), sent[2].facts);
 
   // ── 2. NEGATIVE CONTROL: a new conversation ───────────────────────────────
   const fresh = (await call('copilot:newThread', { projectId: pid })).thread.id as string;
@@ -204,7 +208,7 @@ async function main(): Promise<void> {
   // ── 3. A new subject ──────────────────────────────────────────────────────
   // No dataset named, two in the project, nothing on screen: the previous answer's.
   const SUBJECT = { category: 'channel', measures: ['revenue'] };
-  replies.push(answerWith('revenue by channel', SUBJECT), narration('Online leads.'));
+  replies.push(answerWith('revenue by channel', SUBJECT));
   const s1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'revenue by channel', threadId: r1.threadId });
   const sub: AnswerSpec = lastOf(s1).answer;
   ok('new subject: a full spec without `refine` keeps nothing of the previous answer — no filter, no split',
@@ -214,7 +218,7 @@ async function main(): Promise<void> {
   const s2 = await call('copilot:ask', { projectId: pid, context: {}, question: 'revenue by channel', threadId: fresh });
   ok('new subject: …where a conversation with no answer yet has no such default (negative control)',
     !lastOf(s2).answer && /No chart: Unknown dataset/.test(lastOf(s2).text), lastOf(s2).text);
-  replies.push(answerWith('plan by region', { category: 'region', measures: ['plan'] }), narration('East leads.'));
+  replies.push(answerWith('plan by region', { category: 'region', measures: ['plan'] }));
   const s3 = await call('copilot:ask', { projectId: pid, context: { kind: 'dataset', id: budget.id }, question: 'plan by region', threadId: r1.threadId });
   ok('new subject: the dataset on screen comes first, the previous answer\'s after it', lastOf(s3).answer?.datasetId === budget.id, JSON.stringify(lastOf(s3)));
 
@@ -293,7 +297,7 @@ async function main(): Promise<void> {
   const z1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'split that by channel', threadId: spoken });
   ok('no-op: a refine that changes nothing is refused — never the previous chart again under the follow-up\'s title',
     z1.ok && !lastOf(z1).answer && lastOf(z1).text === 'Splitting it.\n\n(No chart: The follow-up changed nothing the app could apply.)', lastOf(z1).text);
-  replies.push(answerWith('enterprise revenue by region last quarter, by channel', { refine: true, series: 'channel' }), narration('Online leads.'));
+  replies.push(answerWith('enterprise revenue by region last quarter, by channel', { refine: true, series: 'channel' }));
   const z2 = await call('copilot:ask', { projectId: pid, context: {}, question: 'split that by channel', threadId: spoken });
   ok('no-op: …where the same follow-up in a key the merge reads is drawn (negative control)', lastOf(z2).answer?.series === 'channel', JSON.stringify(lastOf(z2)));
 
@@ -301,7 +305,7 @@ async function main(): Promise<void> {
   const held = await thread(a1);
   replies.push(answerWith('enterprise revenue by region last quarter, west only', {
     refine: true, filters: [{ column: 'email', op: '!=', value: notes.WITHHELD }, { column: 'region', op: '=', value: 'West' }],
-  }), narration('West only.'));
+  }));
   const w1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'now only west', threadId: held });
   const aw: AnswerSpec = lastOf(w1).answer;
   ok('echo: a model that restates the filter it was shown as "(withheld)" does not replace its value',

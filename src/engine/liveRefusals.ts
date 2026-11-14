@@ -91,11 +91,6 @@ export function livePeriodNotDate(column: string): string {
   return t('liveRefusals.is_not_a_date_so_it', { column });
 }
 
-/** A period the executor did not resolve before compiling: a bug, said out loud. */
-export function liveUnresolvedPeriod(): string {
-  return t('liveRefusals.a_period_filter_reached_the_live');
-}
-
 /** A name that cannot be quoted safely (empty, or carrying a NUL). */
 export function liveBadIdentifier(): string {
   return t('liveRefusals.a_table_or_column_name_of');

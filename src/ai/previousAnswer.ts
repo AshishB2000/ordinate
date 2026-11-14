@@ -27,7 +27,7 @@ const quoted = (s: string): string => promptJson(s); // uncut: the model may wri
 const valuesOf = (f: Exclude<AnswerFilter, { period: unknown } | { term: string }>): Cell[] => (f.values ? f.values : f.value !== undefined ? [f.value] : []);
 
 function filterWords(f: Exclude<AnswerFilter, { term: string }>, withheld: ReadonlySet<string>): string {
-  if ('period' in f) return `${quoted(f.column)} in ${f.period}` + (f.yearsBack ? `, yearsBack ${f.yearsBack}` : '');
+  if ('period' in f) return `${quoted(f.column)} in ${f.period}` + (f.n ? `, n ${f.n}` : '') + (f.yearsBack ? `, yearsBack ${f.yearsBack}` : '');
   const values = valuesOf(f);
   if (!values.length) return `${quoted(f.column)} ${f.op}`;
   const said = withheld.has(f.column)

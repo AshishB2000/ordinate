@@ -7,11 +7,10 @@ import type { Cell } from '../../../data/transforms';
 import type { LiveColumn, LiveFilter } from '../liveSpec';
 
 /**
- * A filter the layer applies: an IR filter once its data-relative periods are resolved, with the IR's meaning
- * (compileFilter is the reference). `binary` (a row lock, row-policy D13) only reaches a backend that declares
- * `caps.binaryCompare`; it must compare those values exactly.
+ * A filter the layer applies: an IR filter, with the IR's meaning (compileFilter is the reference). `binary` (a row
+ * lock, row-policy D13) only reaches a backend that declares `caps.binaryCompare`; it must compare those values exactly.
  */
-export type SemanticFilter = Exclude<LiveFilter, { kind: 'latest' }>;
+export type SemanticFilter = LiveFilter;
 
 export interface SemanticQuery {
   /** Grouped by, in order: a layer dimension, a date one at a grain the layer lists for it. */

@@ -62,9 +62,10 @@ export function shapes(ENV: SemanticEnv, qualified?: { dimension: string; metric
   out.push(['an answer: top 5 by value', charted(chartIr({ order: 'value', top: 5 }), ENV).ranks]);
   out.push(['base filters lead the question', charted(chartIr(), { ...ENV, base: [{ kind: 'compare', column: 'tier', op: '=', value: 2 }] }).ranks]);
   if (qualified) out.push(['qualified names: a dimension and a metric', charted(chartIr({ category: { column: qualified.dimension, kind: 'text' }, measures: [{ metric: qualified.metric }] }), ENV).ranks]);
-  const latest = plan.planLatest({ ...chartIr(), filters: [{ kind: 'latest', column: 'd', period: 'last_quarter', yearsBack: 0 } as LiveIR['filters'][number]] }, ENV);
+  // The latest day (an empty answer's note, a scorecard's anchor): one value lookup, latest first.
+  const latest = plan.planValues('d', [], ENV, { desc: true, limit: 1 });
   if (spec.isRefusal(latest)) throw new Error(latest.code);
-  out.push(['lookup: the latest day', latest.queries[0].query]);
+  out.push(['lookup: the latest day', latest]);
   const values = plan.planValues('many', [], ENV, { limit: 200 });
   const days = plan.planValues('d', [], ENV, { desc: true, limit: 1 });
   if (spec.isRefusal(values) || spec.isRefusal(days)) throw new Error('values refused');

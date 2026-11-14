@@ -176,7 +176,7 @@ function encodeSection(): void {
 }
 
 async function checkSection(): Promise<void> {
-  // The runner says, before anything is asked, that Cube cannot express a filter: not even the latest day is looked up.
+  // The runner says, before anything is asked, that Cube cannot express a filter.
   const target = { semantic: { backend: 'cube', model: MODEL, env: ENV } } as unknown as import('../src/engine/live/liveTarget').LiveTarget;
   const check = adapters.semanticRunner(target, new AbortController().signal, () => undefined).check;
   const asked: string[] = [];
@@ -184,14 +184,14 @@ async function checkSection(): Promise<void> {
     asked.push(step);
     return { columns: [], rows: [] };
   }, { check });
-  const ir: LiveIR = { ...shaped.chartIr(), filters: [{ kind: 'contains', column: 'many', value: 'm1' }, { kind: 'latest', column: 'd', period: 'last_quarter', yearsBack: 0 }] };
+  const ir: LiveIR = { ...shaped.chartIr(), filters: [{ kind: 'contains', column: 'many', value: 'm1' }, { kind: 'range', column: 'd', from: '2024-07-01', to: '2024-09-30' }] };
   const r = await es.evaluateSemantic(ir, ENV, run);
-  ok('a filter Cube cannot express is refused before anything is asked (not even "last quarter"\'s latest day)', !r.ok && r.code === 'layerFilter' && asked.length === 0, show([r, asked]));
+  ok('a filter Cube cannot express is refused before anything is asked', !r.ok && r.code === 'layerFilter' && asked.length === 0, show([r, asked]));
   const unchecked = await es.evaluateSemantic(ir, ENV, async (_q, step) => {
     asked.push(step);
     return { columns: ['d'], rows: [] };
   });
-  ok('NEGATIVE CONTROL: a runner without the check asks the latest day first', asked[0] === 'latest' && !unchecked.ok, show(asked));
+  ok('NEGATIVE CONTROL: a runner without the check asks the question', asked[0] === 'chart' && !unchecked.ok, show(asked));
 }
 
 const rowsOf = (r: ReturnType<typeof wire.readLoad>): import('../src/connectors/types').ConnectorRows | null => ('rows' in r ? r : null);

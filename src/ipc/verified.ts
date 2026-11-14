@@ -16,6 +16,7 @@ import { verifiedEnv, verifiedProblem, verifiedStates, type VerifiedState } from
 import { sanitizeStoredSpec, type AnswerFilter, type AnswerSpec } from '../ai/answerSpec';
 import { describeAnswer } from '../ai/answerFacts';
 import { describeFilter } from '../analysis/metricFormat';
+import { describePeriod, getCalendar } from '../analysis/dateIntel';
 import { keyClash, questionKey, sanitizeVerified, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { listVerified, lockedKeys, readVerified, writeVerified } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
@@ -54,11 +55,9 @@ export interface VerifiedRow {
   tag: string;
 }
 
-const PERIOD_WORDS: Record<string, string> = { last_month: 'last month', last_quarter: 'last quarter', last_year: 'last year' };
-
 function filterWords(f: AnswerFilter, termNames: ReadonlyMap<string, string>, hidden: boolean): string[] {
   if ('term' in f) return termNames.has(f.term) ? [termNames.get(f.term) as string] : []; // a deleted term: the problem says so
-  if ('period' in f) return [`${f.column}: ${PERIOD_WORDS[f.period] ?? f.period}${f.yearsBack ? `, ${f.yearsBack} years back` : ''}`];
+  if ('period' in f) return [`${f.column}: ${describePeriod({ preset: f.period, n: f.n }, getCalendar()).toLowerCase()}${f.yearsBack ? `, ${f.yearsBack} years back` : ''}`];
   if (hidden && ('value' in f || 'values' in f)) return [msg.verifiedValuesHidden(f.column)];
   return [describeFilter({ type: 'filter', ...f } as FilterStep)];
 }

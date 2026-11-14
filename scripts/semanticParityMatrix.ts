@@ -144,7 +144,6 @@ export async function answerCase(b: Bench, s: Omit<AnswerSpec, 'datasetId' | 'ch
   if (show(built.card.notes) !== show(notes)) problems.push(`notes ${show(built.card.notes)} vs ${show(notes)}`);
   const live = await b.kit.live(a.ir, b.typed);
   if (!live.ok || live.kind !== 'chart') return problems.concat(`sql path: ${show(live)}`);
-  if (show(live.periodRanges ?? null) !== show(sem.periodRanges ?? null)) problems.push(`periods ${show(live.periodRanges)} vs ${show(sem.periodRanges)}`);
   if (!s.series && show(live.chart.data.labels) !== show(sem.chart.data.labels)) problems.push(`labels ${show(sem.chart.data.labels)} vs the SQL path's ${show(live.chart.data.labels)}`);
   return problems;
 }

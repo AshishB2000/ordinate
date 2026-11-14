@@ -10,7 +10,7 @@ export interface TurnGuidance {
   verifiedId?: string; // UUID of the verified question the answer followed
   instructions: number; // integer 0..MAX_GUIDANCE_INSTRUCTIONS: how many standing instructions applied
   examples: string[]; // UUIDs, at most MAX_GUIDANCE_EXAMPLES
-  narrated?: true; // a verified answer a model was asked to narrate: the app drew it, but "no model call" would be false
+  narrated?: true; // a verified answer a model was asked to narrate (turns stored before verified answers stopped calling one): "no model call" would be false
 }
 
 const MAX_GUIDANCE_INSTRUCTIONS = 40; // instructions.ts MAX_INSTRUCTIONS: the count cannot pass the list it counts

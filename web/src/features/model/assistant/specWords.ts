@@ -21,7 +21,8 @@ function filter(f: unknown, terms: Record<string, string>): string {
   if (!col) return '';
   if (typeof o.period === 'string') {
     const back = typeof o.yearsBack === 'number' ? `, ${o.yearsBack} years back` : '';
-    return `${col} ${o.period.replace(/_/g, ' ')}${back}`;
+    const n = typeof o.n === 'number' ? `_${o.n}_` : '_n_'; // "last_n_days" with n 30 reads "last 30 days"
+    return `${col} ${o.period.replace('_n_', n).replace(/_/g, ' ')}${back}`;
   }
   const op = str(o.op);
   const values = Array.isArray(o.values) ? o.values.map(str).join(', ') : str(o.value);

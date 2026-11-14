@@ -2,10 +2,9 @@
 // D15, D16) — PURE apart from the injected `run`, as ../evaluate's `evaluateLive` is. The twin of that function:
 // the same `LiveOutcome`, shaped by the same ../shape, so labels still come from analysis/categoryKey.
 //
-//   1. An answer's data-relative period: the latest day, asked as a lookup (./semanticPlan planLatest), then
-//      resolved exactly as the SQL path resolves it (../evaluate resolvePeriods).
-//   2. The plan's questions, each through `run` (the executor's runner: the one door, counted).
-//   3. The answers read back into the rows ../shape already labels (`o_g`, `o_s`, `o_m{i}v`, `o_cr`, `o_sr`,
+//   1. The plan's questions, each through `run` (the executor's runner: the one door, counted). An answer's
+//      period is a range already (../liveSpec), as on the SQL path.
+//   2. The answers read back into the rows ../shape already labels (`o_g`, `o_s`, `o_m{i}v`, `o_cr`, `o_sr`,
 //      `o_nc`) and handed to `shapeChart` / `shapeMetric` with a statement that has no SQL.
 //
 // NO ARITHMETIC ON THE LAYER'S FIGURES. "Other" is the layer's answer to its own question, never a sum of the
@@ -17,18 +16,17 @@
 // path ranks it by its total — that total is one more question, and a split already asks four (pinned by
 // test-semanticParity).
 
-import type { CivilDate, DateGrain } from '../../../analysis/categoryKey';
+import type { DateGrain } from '../../../analysis/categoryKey';
 import { CATEGORY_CAP, OTHER_LABEL, civilFromDays, daysFromCivil } from '../../../analysis/categoryKey';
 import type { Cell } from '../../../data/transforms';
 import type { LiveIR, LiveRefusal } from '../liveSpec';
 import { isRefusal, refuse } from '../liveSpec';
 import type { CompiledQuery, LiveKey } from '../compile';
-import type { LiveOutcome, LiveStep, PeriodRange } from '../evaluate';
-import { resolvePeriods } from '../evaluate';
+import type { LiveOutcome, LiveStep } from '../evaluate';
 import type { LiveChart } from '../shape';
 import { shapeChart, shapeMetric, toNumber } from '../shape';
 import type { ChartPlan } from './semanticPlan';
-import { planChart, planLatest, planMetric } from './semanticPlan';
+import { planChart, planMetric } from './semanticPlan';
 import type { SemanticAnswer, SemanticEnv, SemanticQuery } from './semanticQuery';
 import { alignRows, answerColumns } from './semanticQuery';
 
@@ -192,50 +190,27 @@ async function chartRows(ir: LiveIR, plan: ChartPlan, run: SemanticRunner, grain
  * runner's to throw (the executor serves the last cached answer, labelled stale, or a typed error).
  */
 export async function evaluateSemantic(ir: LiveIR, env: SemanticEnv, run: SemanticRunner): Promise<LiveOutcome> {
-  let q = ir;
-  let warnings: string[] = [];
-  let periodLabels: string[] = [];
-  let periodRanges: PeriodRange[] = [];
-  // Refused before anything is asked: a refusal never costs a counted question (the periods resolve to ranges).
-  const asIfResolved = { ...ir, filters: ir.filters.filter((f) => f.kind !== 'latest') };
-  const pre = ir.kind === 'metric' ? planMetric(asIfResolved, env) : planChart(asIfResolved, env);
-  if (isRefusal(pre)) return pre;
+  // Refused before anything is asked: a refusal never costs a counted question.
+  const p = ir.kind === 'metric' ? planMetric(ir, env) : planChart(ir, env);
+  if (isRefusal(p)) return p;
   // A filter the backend cannot express (e1), in every question known before the answers (a split's series ranks too).
-  const unsaid = ('query' in pre ? [pre.query] : [pre.ranks, ...(pre.seriesRanks ? [pre.seriesRanks] : [])]).map((x) => run.check?.(x)).find((r) => r);
+  const unsaid = ('query' in p ? [p.query] : [p.ranks, ...(p.seriesRanks ? [p.seriesRanks] : [])]).map((x) => run.check?.(x)).find((r) => r);
   if (unsaid) return unsaid;
-  const lp = planLatest(ir, env);
-  if (isRefusal(lp)) return lp;
-  if (lp.queries.length) {
-    const latest: Record<string, CivilDate | null> = {};
-    for (const { column, query } of lp.queries) {
-      const rows = await ask(run, query, 'latest');
-      if (isRefusal(rows)) return rows;
-      const day = rows.length === 0 ? null : rows.length === 1 ? dayOf(rows[0][0], 'day') : undefined;
-      if (day === undefined) return refuse('rowShape');
-      latest[column] = day === null ? null : civilFromDays(day);
-    }
-    ({ ir: q, warnings, periodLabels, periodRanges } = resolvePeriods(ir, latest));
-  }
-  const dated = { warnings, periodLabels, ...(periodRanges.length ? { periodRanges } : {}) };
 
-  if (q.kind === 'metric') {
-    const p = planMetric(q, env);
-    if (isRefusal(p)) return p;
+  if ('query' in p) {
     const rows = await ask(run, p.query, 'metric');
     if (isRefusal(rows)) return rows;
-    const value = shapeMetric(rows, synthetic(['o_m0v']), q);
+    const value = shapeMetric(rows, synthetic(['o_m0v']), ir);
     if (isRefusal(value)) return value;
-    return { ok: true, kind: 'metric', value, ...dated };
+    return { ok: true, kind: 'metric', value, warnings: [] };
   }
 
-  const p = planChart(q, env);
-  if (isRefusal(p)) return p;
-  const cat = q.category!;
+  const cat = ir.category!;
   const grain = cat.kind === 'date' ? cat.grain : undefined;
-  const got = await chartRows(q, p, run, grain);
+  const got = await chartRows(ir, p, run, grain);
   if (isRefusal(got)) return got;
   const key: LiveKey = grain ? { kind: 'date', grain } : { kind: 'text' };
-  const chart: LiveChart | LiveRefusal = shapeChart(got.rows, synthetic(got.columns), q, key, env.columns);
+  const chart: LiveChart | LiveRefusal = shapeChart(got.rows, synthetic(got.columns), ir, key, env.columns);
   if (isRefusal(chart)) return chart;
-  return { ok: true, kind: 'chart', chart, ...dated };
+  return { ok: true, kind: 'chart', chart, warnings: [] };
 }

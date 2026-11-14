@@ -4,8 +4,8 @@
 // `warehouse` and `LiveCallError`) when L2.7 took that file to 500 lines.
 //
 // Every warehouse statement a Live dataset sends goes through `warehouse()` —
-// a chart's, a KPI's, an answer's and its period MAX() (./liveQuery), and
-// L2.4's DISTINCT lookups and L2.5's profile and sample statements too — so it
+// a chart's, a KPI's and an answer's (./liveQuery), and the lookups (L2.4's
+// DISTINCT, an empty answer's MAX()) and L2.5's profile and sample too — so it
 // is slotted, limited, counted and timed out in one place:
 //
 //   ./liveBudget acquire     a LIVE_MAX_CONCURRENT slot per org per pod; a

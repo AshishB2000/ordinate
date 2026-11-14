@@ -36,7 +36,8 @@ import { hasTermType, termError, TermNotExpandedError } from '../../data/termSte
 import { termNoJoinHere } from '../../data/termMessages';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
-import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
+import type { AnswerSpec } from '../../ai/answerSpec';
+import { answerPeriod } from '../../ai/answerSpec';
 import type { DateGrain } from '../../analysis/categoryKey';
 import { isDateGrain, sanitizeBins } from '../../analysis/categoryKey';
 import type { WeekCal } from '../../analysis/retailCalendar';
@@ -92,17 +93,15 @@ export type CompareOp = '=' | '!=' | '>' | '<' | '>=' | '<=';
 
 /**
  * A filter the compiler understands. `range` is the RESOLVED form of both kinds
- * of period (inclusive ISO days, either end open); `latest` is a period relative
- * to the data's own latest date (answers' "last quarter"), which the executor
- * resolves with one MAX() query (`resolvePeriods`) before compiling.
+ * of period, a dashboard's and an answer's "last quarter" (inclusive ISO days,
+ * either end open): both resolve here, against today, so the dates are in the IR.
  */
 export type LiveFilter =
   | { kind: 'compare'; column: string; op: CompareOp; value: Cell; binary?: true }
   | { kind: 'contains'; column: string; value: string }
   | { kind: 'empty'; column: string; negate: boolean }
   | { kind: 'in'; column: string; values: Cell[]; negate: boolean; binary?: true }
-  | { kind: 'range'; column: string; from?: string; to?: string }
-  | { kind: 'latest'; column: string; period: AnswerPeriod; yearsBack: number };
+  | { kind: 'range'; column: string; from?: string; to?: string };
 
 /**
  * The whole question. A plain JSON value — the executor's cache key is
@@ -131,7 +130,7 @@ export interface LiveIR {
 export type LiveRefusalCode =
   | 'pivot' | 'cohort' | 'funnel' | 'drivers' | 'facet' | 'map' | 'related' | 'raw'
   | 'noCategory' | 'noMeasure' | 'unknownColumn' | 'notNumeric' | 'unknownAggregation'
-  | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate' | 'unresolvedPeriod'
+  | 'withinKm' | 'containsNumber' | 'dateSeries' | 'periodNotDate'
   | 'badIdentifier' | 'badSource' | 'categoryType' | 'rankOnDate' | 'rowShape' | 'badQuery'
   | 'columnMissing' | 'baseFilter' | 'calculated' | 'baseFilterUnreadable' | 'calculatedUnreadable' | 'calcDialect' | 'calcTooLarge' | 'distinctByWeekCalendar' | 'semanticPending' | LayerRefusalCode;
 
@@ -183,7 +182,6 @@ const MESSAGES: Record<Exclude<LiveRefusalCode, LayerRefusalCode>, Sentence> = {
   },
   dateSeries: { key: 'liveRefusals.a_live_chart_cannot_be_split', param: 'column', text: (c) => msg.liveDateSeriesRefused(c) },
   periodNotDate: { key: 'liveRefusals.is_not_a_date_so_it', param: 'column', text: (c) => msg.livePeriodNotDate(c) },
-  unresolvedPeriod: { key: 'liveRefusals.a_period_filter_reached_the_live', text: () => msg.liveUnresolvedPeriod() },
   badIdentifier: { key: 'liveRefusals.a_table_or_column_name_of', text: () => msg.liveBadIdentifier() },
   badSource: { key: 'liveRefusals.this_live_dataset_has_no_table', text: () => msg.liveBadSource() },
   categoryType: { key: 'liveRefusals.the_category_no_longer_has_the', param: 'column', text: (c) => msg.liveCategoryType(c) },
@@ -440,7 +438,9 @@ export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: Ad
     if ('period' in f) {
       const col = columnOf(columns, f.column)!;
       if (col.type !== 'date') return refuse('periodNotDate', col.name);
-      ir.filters.push({ kind: 'latest', column: col.name, period: f.period, yearsBack: f.yearsBack || 0 });
+      // As a dashboard's period above: resolved NOW (ai/answerSpec `answerPeriod`, the extract's own rule), so the dates are in the IR and the cache key.
+      const p = answerPeriod(f, opts.today ?? todayIso(), getCalendar());
+      ir.filters.push({ kind: 'range', column: col.name, from: p.from, to: p.to });
       continue;
     }
     const step: FilterStep = { type: 'filter', column: f.column, op: f.op };

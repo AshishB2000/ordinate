@@ -9,7 +9,8 @@
 //      growth rate or a total fails, token by token.
 //   3. END TO END through the real handlers (userData in a temp dir,
 //      the model stubbed at analyze.askCopilot): a dock ask whose action is an
-//      `answer` stores the SPEC on the turn and a guarded narration; the card's
+//      `answer` makes ONE model call and stores the SPEC on the turn with that
+//      call's own sentence, audited against the facts and the card; the card's
 //      values equal buildVizData's aggregate exactly (Object.is); Explain works
 //      with no model (bullets, no prose); a chip re-runs with no model call
 //      deciding anything.
@@ -27,6 +28,7 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-answers-'));
 // Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 process.env.ORDINATE_LOCAL_DIR = tmpUserData;
+process.env.ORDINATE_TODAY = '2025-01-15'; // the rows are 2023–2024: "last quarter" is 2024-Q4, as a dashboard filter reads it today
 
 const F: typeof import('../src/ai/answerFacts') = require('../src/ai/answerFacts');
 const audit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');
@@ -162,9 +164,8 @@ async function main(): Promise<void> {
   copilotIpc.register();
   const call = (ch: string, payload: unknown): Promise<any> => handlers.get(ch)!({}, payload);
 
-  // The model, stubbed at its own boundary. First call: the ask, answering with
-  // a spec. Second call: the narration of the card — citing a real figure and
-  // an invented one.
+  // The model, stubbed at its own boundary. ONE call: the ask, answering with a
+  // spec and a sentence that cites a real card figure and an invented one anyway.
   const replies: any[] = [];
   const asked: string[] = [];
   (analyze as any).askCopilot = async (_prior: unknown, factsText: string, q: string) => {
@@ -174,26 +175,23 @@ async function main(): Promise<void> {
   (execConfig as any).executionReady = () => true;
 
   replies.push({
-    ok: true, text: 'Here is revenue by region for the last quarter.',
+    ok: true, text: 'West leads at 160, and revenue grew 12.4%.',
     suggestedAction: {
       kind: 'answer', intent: 'revenue by region last quarter',
       spec: { dataset: 'retail orders', category: 'Region', measures: [{ column: 'Revenue', aggregation: 'sum' }],
         filters: [{ column: 'order date', period: 'last_quarter' }] },
     },
   });
-  replies.push({ ok: true, text: 'West leads at 160, and revenue grew 12.4%.', suggestedAction: { kind: 'none', intent: '' } });
   const r = await call('copilot:ask', { projectId: pid, context: {}, question: 'revenue by region last quarter' });
   const last = r.turns[r.turns.length - 1];
   ok('ask: the answer turn stores the resolved SPEC, not figures',
     r.ok && last.answer && last.answer.category === 'region' && last.answer.datasetId === ds!.id
     && JSON.stringify(last.answer.filters) === '[{"column":"order_date","period":"last_quarter"}]' && !('data' in last.answer),
     JSON.stringify(last));
-  ok('ask: the narration was asked of the CARD\'s facts', asked.length === 2 && /Answer: "Revenue by region last quarter"/.test(asked[1])
-    && /"West"=160/.test(asked[1]), asked[1]); // D3: cells are quoted
-  ok('ask: …which say when the data is from (the dataset\'s import, never refreshed), in UTC',
-    asked[1].includes(`Data as of: ${asOfMod.utcLabel(ds!.createdAt)}.`), asked[1]);
-  ok('ask: the narration is audited against the card — the invented 12.4% is flagged, the real 160 is not',
-    /Contains a figure the app did not compute: 12\.4%$/.test(last.text) && r.numberAudit.violations.length === 1, last.text);
+  ok('ask: ONE model call for a chart answer — no second narration', asked.length === 1 && replies.length === 0, String(asked.length));
+  ok('ask: the turn\'s text is that call\'s sentence, audited against the card too — the invented 12.4% is flagged, the card\'s 160 is not',
+    /^West leads at 160, and revenue grew 12\.4%\./.test(last.text) && /Contains a figure the app did not compute: 12\.4%$/.test(last.text)
+    && r.numberAudit.violations.length === 1 && r.ledger.some((e: { value: number }) => e.value === 160), last.text);
   ok('ask: the answer proposes nothing further', r.suggestedAction.kind === 'none');
   ok('ask: the turn survives a reload with its spec',
     (await copilotStore.loadHistory(pid, r.threadId)).slice(-1)[0].answer?.category === 'region');
@@ -250,6 +248,15 @@ async function main(): Promise<void> {
     rr.ok && rr.threadId === r.threadId && rr.turns[rr.turns.length - 2].text === 'Split by category' && rrLast.answer?.series === 'category');
   const rrCard = await call('answer:card', { projectId: pid, spec: rrLast.answer });
   ok('chip: the split card has one series per category value', rrCard.ok && rrCard.data.series.length >= 2, JSON.stringify(rrCard.data));
+  // A chip with a model ready still narrates its card (`narrate`): the CARD's facts, dated.
+  (execConfig as any).executionReady = () => true;
+  replies.push({ ok: true, text: 'West leads at 160.', suggestedAction: { kind: 'none', intent: '' } });
+  const n0 = asked.length;
+  await call('answer:rerun', { projectId: pid, threadId: r.threadId, spec: last.answer, label: 'Again' });
+  ok('NEGATIVE CONTROL: a chip with a model still narrates — the stub the ONE-call count reads sees that second kind of call, asked of the CARD\'s facts', asked.length === n0 + 1 && /Answer: "Revenue by region last quarter"/.test(asked[n0])
+    && /"West"=160/.test(asked[n0]), asked[n0]); // D3: cells are quoted
+  ok('chip: …which say when the data is from (the dataset\'s import, never refreshed), in UTC',
+    asked[n0].includes(`Data as of: ${asOfMod.utcLabel(ds!.createdAt)}.`), asked[n0]);
   ok('card: a spec over a column that no longer exists says so',
     /no longer a column/.test((await call('answer:card', { projectId: pid, spec: { ...last.answer, category: 'gone' } })).reason));
 

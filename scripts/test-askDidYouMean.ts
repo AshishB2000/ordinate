@@ -9,9 +9,10 @@
 //      A value stored in another case is left as asked, as it always was. Two
 //      candidates, or under 3 characters → nothing changes (negative controls).
 //   2. CANARY. A value on a column marked personal that the APP matched — the
-//      model never wrote it whole — is in no model call: not the narration of
-//      its card, not the follow-up's PREVIOUS ANSWER block. The card a person
-//      sees shows it. Unmarked, the same facts print it (negative control).
+//      model never wrote it whole — is in no model call: not the follow-up's
+//      PREVIOUS ANSWER block, and not the card's facts a narration (Explain, a
+//      chip) would read. The card a person sees shows it. Unmarked, the same
+//      facts print it (negative control).
 //   3. A REFUSED ANSWER. An unknown measure → the reply reads exactly as it did,
 //      and the stored turn carries the app's options; a reload keeps them.
 //      `answer:rerun` with an option appends a normal answer turn, with ONE
@@ -104,9 +105,9 @@ async function main(): Promise<void> {
   const narration = (text: string) => ({ ok: true, text, suggestedAction: { kind: 'none', intent: '' } });
   const lastOf = (r: any) => r.turns[r.turns.length - 1];
   const BY_REGION = { dataset: 'Orders', category: 'region', measures: [{ column: 'net_sales', aggregation: 'sum' }] };
-  /** Ask in a NEW conversation; the model answers with this spec. `narrated`: a chart came, so it is narrated too. */
-  const ask = async (spec: unknown, narrated = true, intent = 'revenue by region'): Promise<any> => {
-    replies.push(answerWith(intent, spec), ...(narrated ? [narration('West leads.')] : []));
+  /** Ask in a NEW conversation; the model answers with this spec — ONE call, chart or not. */
+  const ask = async (spec: unknown, intent = 'revenue by region'): Promise<any> => {
+    replies.push(answerWith(intent, spec));
     return call('copilot:ask', { projectId: pid, context: {}, question: intent, threadId: await thread() });
   };
 
@@ -118,7 +119,8 @@ async function main(): Promise<void> {
   const c1 = await card(a1);
   ok('match: the card says what it did, first among its notes, and labels the filter by the stored value',
     c1.ok && c1.notes[0] === 'Matched "tech" to Technology in category.' && show(c1.filterLabels) === '["category = Technology"]', show([c1.notes, c1.filterLabels]));
-  ok('match: the narration read the stored value (an unmarked column)', /^Filtered to: category = Technology\.$/m.test(sent[1].facts), sent[1].facts);
+  const f1Facts = (await answers.computeCard(pid, a1) as { factsText: string }).factsText;
+  ok('match: the card\'s facts (what a narration reads) say the stored value (an unmarked column)', /^Filtered to: category = Technology\.$/m.test(f1Facts), f1Facts);
 
   const rExact = await ask({ ...BY_REGION, filters: [{ column: 'category', op: '=', value: 'Technology' }] });
   const aExact: AnswerSpec = lastOf(rExact).answer;
@@ -159,19 +161,21 @@ async function main(): Promise<void> {
 
   // ── 2. Canary: a value the APP matched on a marked column ─────────────────
   const from = sent.length;
-  const rc = await ask({ ...BY_REGION, filters: [{ column: 'email', op: '!=', value: SAID }] }, true, 'revenue by region without our test account');
+  const rc = await ask({ ...BY_REGION, filters: [{ column: 'email', op: '!=', value: SAID }] }, 'revenue by region without our test account');
   const ac: AnswerSpec = lastOf(rc).answer;
   ok('canary: the app matched the value — the stored spec holds what the model never wrote whole',
     show(ac.filters) === show([{ column: 'email', op: '!=', value: CANARY }]) && ac.matched?.[0].value === CANARY, show(ac));
-  replies.push(answerWith('revenue by region without our test account, west only', { refine: true, filters: [{ column: 'region', op: '=', value: 'West' }] }), narration('West only.'));
+  replies.push(answerWith('revenue by region without our test account, west only', { refine: true, filters: [{ column: 'region', op: '=', value: 'West' }] }));
   const rf = await call('copilot:ask', { projectId: pid, context: {}, question: 'now only west', threadId: rc.threadId });
   const mine = sent.slice(from);
-  const everything = show(mine);
-  ok('canary: both turns asked and narrated (four model calls), and the follow-up was told of the previous answer',
-    rf.ok && mine.length === 4 && mine[2].facts.includes(B.PREVIOUS_ANSWER) && lastOf(rf).answer.filters.length === 2, String(mine.length));
-  ok('canary: the matched value is in NO model call — neither turn\'s ask, nor the narration of either card', !everything.includes(CANARY) && !everything.includes('canary'), everything);
-  ok('canary: …the filter is there with its value withheld, in the narration and in the block',
-    mine[1].facts.includes(`\nFiltered to: email != ${notes.WITHHELD}.\n`) && mine[2].facts.includes(`"email" != ${notes.WITHHELD}`), mine[1].facts);
+  const narratable = [ac, lastOf(rf).answer].map(async (a) => (await answers.computeCard(pid, a) as { factsText: string }).factsText);
+  const [cardFacts, rfFacts] = await Promise.all(narratable);
+  const everything = show(mine) + cardFacts + rfFacts;
+  ok('canary: both turns asked (ONE model call each), and the follow-up was told of the previous answer',
+    rf.ok && mine.length === 2 && mine[1].facts.includes(B.PREVIOUS_ANSWER) && lastOf(rf).answer.filters.length === 2, String(mine.length));
+  ok('canary: the matched value is in NO model call — neither turn\'s ask — nor in either card\'s facts a narration would read', !everything.includes(CANARY) && !everything.includes('canary'), everything);
+  ok('canary: …the filter is there with its value withheld, in the card\'s facts and in the block',
+    cardFacts.includes(`\nFiltered to: email != ${notes.WITHHELD}.\n`) && mine[1].facts.includes(`"email" != ${notes.WITHHELD}`), cardFacts);
   const cc = await card(ac);
   ok('canary: the card a person sees shows the real value, in its filter and in its note',
     cc.ok && cc.filterLabels[0] === `email != ${CANARY}` && cc.notes[0] === `Matched "${SAID}" to ${CANARY} in email.`, show([cc.filterLabels, cc.notes]));
@@ -182,7 +186,7 @@ async function main(): Promise<void> {
 
   // ── 3. A refused answer ───────────────────────────────────────────────────
   const before = sent.length;
-  const rr = await ask({ dataset: 'Orders', category: 'region', measures: ['sum(sales)'] }, false, 'sales by region');
+  const rr = await ask({ dataset: 'Orders', category: 'region', measures: ['sum(sales)'] }, 'sales by region');
   const refused = lastOf(rr);
   ok('refused: the reply reads exactly as it did', rr.ok && refused.text === 'Here it is.\n\n(No chart: Unknown measure column "sales".)' && !refused.answer && sent.length === before + 1, refused.text);
   const byHand = [await whole({ dataset: 'Orders', category: 'region', measures: ['sum(net_sales)'] }, 'sales by region'), await whole({ dataset: 'Orders', category: 'region', measures: ['sum(sales_tax)'] }, 'sales by region')];
@@ -206,9 +210,9 @@ async function main(): Promise<void> {
   ok('rerun: its card is the card of the question asked with the right name (Object.is on every value)',
     direct.ok && direct.data.labels.length === 2 && sameData(await card(lastOf(run).answer), direct), show(direct.data));
 
-  const none = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['sum(zzzz)'] }, false));
+  const none = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['sum(zzzz)'] }));
   ok('refused: nothing near → no options, and the reply as it was', none.text === 'Here it is.\n\n(No chart: Unknown measure column "zzzz".)' && !('suggest' in none), show(none));
-  const cap = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['net_sales', 'net_sales', 'net_sales', 'net_sales', 'sales'] }, false));
+  const cap = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['net_sales', 'net_sales', 'net_sales', 'net_sales', 'sales'] }));
   ok('refused: a cap is not a name — no options (negative control)', cap.text === 'Here it is.\n\n(No chart: At most 4 measures.)' && !('suggest' in cap), show(cap));
 
   // A refused FOLLOW-UP, in the conversation of the first answer (category = Technology).
@@ -223,7 +227,7 @@ async function main(): Promise<void> {
     f2.text === 'Here it is.\n\n(No chart: Unknown category column "regio".)' && !('suggest' in f2), show(f2));
 
   // An option still carries the filter values as the model said them: matched when it is run.
-  const both = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['sum(sales)'], filters: [{ column: 'category', op: '=', value: 'tech' }] }, false));
+  const both = lastOf(await ask({ dataset: 'Orders', category: 'region', measures: ['sum(sales)'], filters: [{ column: 'category', op: '=', value: 'tech' }] }));
   replies.push(narration('West leads.'));
   const ran = await call('answer:rerun', { projectId: pid, spec: both.suggest.options[0].spec, label: both.suggest.options[0].label });
   ok('rerun: a said value in an option is matched like an answer\'s — and the chart is the exact one\'s',
@@ -268,22 +272,23 @@ async function main(): Promise<void> {
     cUnmarked.ok && cUnmarked.noMatch?.options.map((o) => o.label).join() === 'a@x.test,b@x.test,c@x.test', show(cUnmarked.noMatch));
 
   // ── 5. A chart BY a marked column ─────────────────────────────────────────
-  // Its labels are values of it: the narration reads "(withheld)" for each, as a visual's facts do. The card stands.
+  // Its labels are values of it: the card's facts (what a narration reads) say "(withheld)" for each, as a visual's facts do. The card stands.
   const byEmail = async (spec: Record<string, unknown>) => {
     const at = sent.length;
-    const r = await ask({ dataset: 'Orders', measures: [{ column: 'net_sales', aggregation: 'sum' }], ...spec }, true, 'revenue by customer');
-    return { turn: lastOf(r), told: sent.slice(at) };
+    const r = await ask({ dataset: 'Orders', measures: [{ column: 'net_sales', aggregation: 'sum' }], ...spec }, 'revenue by customer');
+    const facts = (await answers.computeCard(pid, lastOf(r).answer) as { factsText: string }).factsText;
+    return { turn: lastOf(r), told: sent.slice(at), facts };
   };
   const cat = await byEmail({ category: 'email' });
   const catCard = await card(cat.turn.answer);
-  ok('labels: a chart BY a marked column is narrated without one of its values — every label withheld, and said to be',
-    cat.told.length === 2 && !show(cat.told).includes('@x.test') && !show(cat.told).includes('canary')
-    && cat.told[1].facts.includes('(Labels from email are withheld — marked personal or financial data.)') && cat.told[1].facts.includes(`${notes.WITHHELD}=`), cat.told[1]?.facts);
+  ok('labels: a chart BY a marked column reaches no model with one of its values — every label withheld in its facts, and said to be',
+    cat.told.length === 1 && !show(cat.told).includes('@x.test') && !show(cat.told).includes('canary') && !cat.facts.includes('@x.test')
+    && cat.facts.includes('(Labels from email are withheld — marked personal or financial data.)') && cat.facts.includes(`${notes.WITHHELD}=`), cat.facts);
   ok('labels: …the card a person sees keeps them — chart, headline and bullets',
     catCard.ok && catCard.data.labels.includes(CANARY) && catCard.headline.some((h) => h.label.includes('@x.test')) && catCard.bullets.some((b) => b.includes('@x.test')), show(catCard));
   const split = await byEmail({ category: 'region', series: 'email', chartType: 'clustered_column' });
   ok('labels: a SPLIT by a marked column withholds the series names, and keeps the axis',
-    split.told.length === 2 && !show(split.told).includes('@x.test') && split.told[1].facts.includes('"West"=') /* D3: cells are quoted */ && split.told[1].facts.includes('(Labels from email are withheld'), split.told[1]?.facts);
+    split.told.length === 1 && !show(split.told).includes('@x.test') && !split.facts.includes('@x.test') && split.facts.includes('"West"=') /* D3: cells are quoted */ && split.facts.includes('(Labels from email are withheld'), split.facts);
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'none' });
   const open = await answers.computeCard(pid, cat.turn.answer);
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'personal' });
