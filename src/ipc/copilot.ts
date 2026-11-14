@@ -58,7 +58,7 @@ import { termFactsFor } from './terms';
 import { statusFor } from '../analysis/statusStore';
 import { namedIn, vocabularyOrder } from '../analysis/statusNotes';
 import { askGuidance } from './guidance';
-import { verifiedAsk } from './verifiedAsk';
+import { verifiedAsk, verifiedMatch, verifiedScope } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
 import { topicFacts } from '../ai/topicFacts';
 import { allowedAction, NO_ACTION } from '../ai/suggestedAction';
@@ -204,6 +204,12 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
   } catch (_) {
     return [];
   }
+}
+
+/** The conversation without what verified question `id` answered, its question and its card: "Not what I asked" sets them aside. */
+function withoutAnswer(turns: copilot.CopilotTurn[], id: string | undefined): copilot.CopilotTurn[] {
+  if (!id) return turns;
+  return turns.filter((t, i) => t.guidance?.verifiedId !== id && !(t.role === 'user' && turns[i + 1]?.guidance?.verifiedId === id));
 }
 
 // Build the app-computed FACTS + provenance for a { kind, id } reference, reusing
@@ -528,7 +534,7 @@ export function register() {
   // Provenance and every activity step are built from app-computed facts BELOW,
   // independent of the reply text — neither derives a chip or a number from a
   // token.
-  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share, agentId }: any = {}) => {
+  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share, agentId, skipVerified }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -573,15 +579,20 @@ export function register() {
       // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation — the one whose agent
       // answered — even if something else creates a newer one between the two writes, and the reply can say which it was.
       const pin = async (): Promise<string | undefined> => (named ? tid : into?.id) ?? (await copilot.createThread(projectId, scope.agent?.id))?.id;
-      const hit = sharing ? null : await verifiedAsk(projectId, q, pin, scope); // a verified question, word for word (./verifiedAsk): no model call
+      const asked = await scopedContext(projectId, scope, context || {}); // an agent's topic, unless the screen is inside it
+      // A verified question, word for word, on what is open, inside the agent's topic (./verifiedAsk): no model call.
+      // "Not what I asked" on such an answer (`skipVerified`) sends the question to the model instead, without that
+      // verified question as an example and without the answer it gave as the chart a follow-up continues.
+      const only = sharing ? null : await verifiedScope(projectId, asked, scope.only);
+      const passed = skipVerified === true && !sharing ? await verifiedMatch(projectId, q, only) : null;
+      const hit = sharing || skipVerified === true ? null : await verifiedAsk(projectId, q, pin, { ...scope, only });
       if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
-      const turns = await copilot.loadHistory(projectId, tid);
+      const turns = withoutAnswer(await copilot.loadHistory(projectId, tid), passed?.id);
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
-      const asked = await scopedContext(projectId, scope, context || {}); // an agent's topic, unless the screen is inside it
       const facts = await buildFacts(projectId, asked, emit, q, sharing);
       const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
-      const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, agent ? { agent } : {}); // the editors' instructions and guide (./guidance), after the facts
+      const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, { ...(agent ? { agent } : {}), ...(passed ? { exclude: passed.id } : {}) }); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.

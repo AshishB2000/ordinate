@@ -69,6 +69,8 @@ export const assistant = {
       askId: Uuid.optional(),
       // The agent a conversation this ask STARTS is with; an existing one keeps its own (src/ipc/agentAsk.ts).
       agentId: Uuid.nullable().optional(),
+      // "Not what I asked" on an answer from a verified question: the model takes the same question instead.
+      skipVerified: z.boolean().optional(),
     }),
     project: byProjectId,
   }),

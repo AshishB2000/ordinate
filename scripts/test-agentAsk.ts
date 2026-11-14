@@ -8,7 +8,8 @@
 //      inside the topic keeps its own facts, one outside it gives the topic's
 //   3. guidance: the project's instructions, then the agent's under the line that says they win — NEGATIVE CONTROL:
 //      the Project assistant gets no agent line; examples: the topic's verified question first — NEGATIVE CONTROL: not so
-//      for the Project assistant; an exact verified question outside the topic is no hit for the agent
+//      for the Project assistant; an exact verified question outside the topic is no hit for the agent; inside it, only one
+//      on the dataset open on screen
 //   4. model and build: the agent's model is the one asked for (and the choice falls back when it is not enabled);
 //      build off asks with the answer-only prompt, drops a proposed plan, and plan:start refuses its conversation —
 //      NEGATIVE CONTROL: the Project assistant's plan is offered and starts
@@ -129,6 +130,13 @@ async function main(): Promise<void> {
   const exactPa = await ask('Total cost of revenue by region', { threadId: pa.id });
   ok('an exact verified question outside the topic is no hit for the agent: the model is asked (and may say it is outside)', exactOut.ok && sent.length === 1 && exactOut.guidance?.verifiedId === undefined);
   ok('NEGATIVE CONTROL: for the Project assistant it is the app\'s answer, no model', exactPa.ok && sent.length === 1 && exactPa.guidance?.verifiedId === vOrders.q.id);
+  // Both limits at once: inside the agent's topic, only what is open matches. "Amount by vendor" is verified on Invoices.
+  sent.length = 0;
+  const onPayroll = await ask('Amount by vendor', { threadId: finT.id, context: { kind: 'dataset', id: payroll.id } });
+  const onInvoices = await ask('Amount by vendor', { threadId: finT.id, context: { kind: 'dataset', id: invoices.id } });
+  ok('the agent with Payroll open, inside its topic: a verified question on Invoices is no hit, the model is asked',
+    onPayroll.ok && onPayroll.guidance?.verifiedId === undefined && sent.length === 1, JSON.stringify(onPayroll.guidance));
+  ok('NEGATIVE CONTROL: …with Invoices open it is the app\'s answer, no model', onInvoices.ok && onInvoices.guidance?.verifiedId === vInvoices.q.id && sent.length === 1, JSON.stringify(onInvoices.guidance));
 
   // ── 4. model and build ────────────────────────────────────────────────────
   sent.length = 0;

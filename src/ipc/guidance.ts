@@ -42,7 +42,7 @@ async function exampleLines(projectId: string, question: string, datasetId: stri
 }
 
 /** A topic's datasets in its order (gone ones dropped), or null when there is no such topic: the project's then. */
-async function topicDatasets(projectId: string, id: string): Promise<{ id: string; name: string }[] | null> {
+export async function topicDatasets(projectId: string, id: string): Promise<{ id: string; name: string }[] | null> {
   const stored = await readTopic(projectId, id);
   if (!stored) return null;
   const { topic } = await topicForReaders(projectId, stored.rec);

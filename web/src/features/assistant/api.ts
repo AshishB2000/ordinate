@@ -221,8 +221,13 @@ export async function deleteThread(projectId: string, threadId: string): Promise
   return ((await rpc('copilot:deleteThread', { projectId, threadId })) as { ok: boolean }).ok;
 }
 
-/** `agentId`: the agent a conversation this ask STARTS is with (no `threadId`); an existing one keeps its own. */
-export async function ask(projectId: string, context: Ask, question: string, threadId: string, askId: string, agentId?: string | null): Promise<AskReply> {
+/**
+ * `agentId`: the agent a conversation this ask STARTS is with (no `threadId`); an existing one keeps its own.
+ * `skipVerified`: "Not what I asked" on a verified answer, so the model takes the same question.
+ */
+export async function ask(
+  projectId: string, context: Ask, question: string, threadId: string, askId: string, agentId?: string | null, skipVerified = false,
+): Promise<AskReply> {
   return (await rpc('copilot:ask', {
     projectId,
     context: { kind: context.kind, ...(context.id ? { id: context.id } : {}), ...(context.offset ? { offset: context.offset } : {}) },
@@ -230,6 +235,7 @@ export async function ask(projectId: string, context: Ask, question: string, thr
     ...(threadId ? { threadId } : {}),
     askId,
     ...(!threadId && agentId ? { agentId } : {}),
+    ...(skipVerified ? { skipVerified: true } : {}),
   })) as AskReply;
 }
 
