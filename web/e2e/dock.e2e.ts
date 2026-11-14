@@ -218,7 +218,7 @@ if (!dbUrl) {
     await openDock(page);
     const dock = page.getByRole('complementary', { name: 'Assistant' });
     const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
-    await dock.getByRole('button', { name: 'New conversation' }).click(); // chips are the empty conversation's; an earlier test left one with turns
+    await dock.getByRole('button', { name: 'New conversation', exact: true }).click(); // chips are the empty conversation's; an earlier test left one with turns
     await dock.getByRole('button', { name: '✓ Revenue by region' }).waitFor();
     assert.equal(await box.isDisabled(), false, 'a verified question needs no model');
     await dock.getByRole('button', { name: '✓ Revenue by region' }).click();
@@ -246,7 +246,7 @@ if (!dbUrl) {
     await settled(page);
     await openDock(page);
     const dock = page.getByRole('complementary', { name: 'Assistant' });
-    await dock.getByRole('button', { name: 'New conversation' }).click();
+    await dock.getByRole('button', { name: 'New conversation', exact: true }).click();
     await dock.getByRole('button', { name: '✓ Revenue by region' }).waitFor();
     await dock.getByRole('button', { name: 'Open the Assistant full width' }).click();
     await page.waitForURL(/\/assistant\?thread=/);
@@ -581,5 +581,7 @@ if (!dbUrl) {
     assert.doesNotMatch(draftAsk, /USER ANSWERS/, 'Skip sends no answers');
     await review.getByRole('button', { name: 'Discard' }).click();
     await review.waitFor({ state: 'detached' });
-  });
+    // Two loads here carry a whole scripted flow on Home with the dock open (an ask, a plan's four calls, the @ picker's
+    // three lists, a second ask): 25 calls before Assistant agents, and the picker's one `agent:list` per load makes 26.
+  }, { rpcBudget: 26 });
 }
