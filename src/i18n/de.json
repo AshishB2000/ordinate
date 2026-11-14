@@ -611,6 +611,7 @@
   "rebuildMessages.the_screenshot_names_no_measure_for": "Der Screenshot nennt keine Kennzahl für diese Kachel. Wählen Sie eine Spalte.",
   "rebuildMessages.this_is_the_dashboard_s_own": "Das ist der eigene Titel des Dashboards. Er benennt das Dashboard, statt eine Kachel zu belegen. Stellen Sie ihn wieder her, um ihn als Notiz zu behalten.",
   "rebuildMessages.this_note_has_no_heading_to": "Diese Notiz hat keine Überschrift, die bleiben könnte.",
+  "recordLockMessages.this_could_not_be_read_try": null,
   "recordLockMessages.this_could_not_be_saved_try": null,
   "recordLockMessages.this_is_being_saved_by_someone": null,
   "recordLockMessages.this_is_too_large_to_save": "Das ist zu groß zum Speichern (über 32 MB).",

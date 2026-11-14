@@ -17,3 +17,8 @@ export function recordTooLarge(): string {
 export function recordNotSaved(): string {
   return t('recordLockMessages.this_could_not_be_saved_try');
 }
+
+/** A store's read failed on the database (src/ai/copilotRows.ts): the reply says this, the log says why. */
+export function recordUnreadable(): string {
+  return t('recordLockMessages.this_could_not_be_read_try');
+}

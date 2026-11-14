@@ -14,6 +14,10 @@
 //      these figures; it NEVER computes or invents one — the analyze→compute→
 //      display contract, generalized from ai/datasetPrompt.buildDatasetSummaryText.
 //
+// With DATABASE_URL the conversations are rows instead (./copilotRows,
+// docs/assistant-threads/00-design.md): each public function below checks its
+// input here, then hands the store work there. Without it, copilot.json.
+//
 // DUAL-UUID note (honest read): only `projectId` is ever concatenated into a
 // filesystem path, so only it needs the traversal guard (copied verbatim from
 // projects.ts). Each turn AND each thread still gets a generated randomUUID()
@@ -36,6 +40,7 @@ import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
 import { sanitizeGuidance, type TurnGuidance } from './turnGuidance';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
+import * as rows from './copilotRows';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -129,7 +134,7 @@ export interface CopilotFacts {
 }
 
 // Ring-cap so one conversation can't grow unbounded.
-const MAX_TURNS = 200;
+export const MAX_TURNS = 200;
 
 // Ring-cap on conversations per project, per member. 50 is deliberate, not a round number
 // pulled from the air: the whole file is read and rewritten on EVERY append, so
@@ -137,7 +142,7 @@ const MAX_TURNS = 200;
 // 200 turns × ~1 KB of text is a ~10 MB read+parse+write per turn — already the
 // point where an append stops feeling instant. A user with 50 live conversations
 // in one project wants projects, not more threads. Least-recently-used drops first.
-const MAX_THREADS = 50;
+export const MAX_THREADS = 50;
 
 // Titles are truncated to 60 chars — enough for a sidebar row at the hub's width,
 // and a hard cut with no ellipsis: an ellipsis in stored data would come back as
@@ -147,7 +152,7 @@ const MAX_TITLE = 60;
 
 // Used when a thread has no user turn to name it (a brand-new thread, or a v1
 // file whose only turns were assistant turns).
-const FALLBACK_TITLE = 'Conversation';
+export const FALLBACK_TITLE = 'Conversation';
 
 // The id given to the ONE thread a v1 file migrates into. It must be STABLE, not a
 // randomUUID(): normalize() runs on every read and the migration is not written
@@ -168,11 +173,11 @@ function getProjectsBase(): string {
 // reaches a filesystem path — an id like ".." or "../../foo" would otherwise escape
 // userData/projects. Copied verbatim from projects.ts / datasets.ts.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isValidId(id: unknown): id is string {
+export function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-function copilotFilePath(projectId: string): string {
+export function copilotFilePath(projectId: string): string {
   return path.join(getProjectsBase(), projectId, 'copilot.json');
 }
 
@@ -205,7 +210,7 @@ function normalizeProvenance(p: any): CopilotProvenance | undefined {
 
 // Re-sanitize a stored turn list (drop non-object turns, clamp role, coerce text
 // to string, keep/repair id + createdAt, whitelist provenance), then ring-cap.
-function normalizeTurns(raw: any): CopilotTurn[] {
+export function normalizeTurns(raw: any): CopilotTurn[] {
   const list = Array.isArray(raw) ? raw : [];
   const turns: CopilotTurn[] = [];
   for (const t of list) {
@@ -237,7 +242,7 @@ function normalizeTurns(raw: any): CopilotTurn[] {
 // A thread's title is the first USER turn, hard-truncated. NEVER a model call:
 // naming a conversation is not worth a token, a latency spike, or a figure the
 // model could smuggle into a label. Whitespace-only text doesn't count as a name.
-function titleFromTurns(turns: CopilotTurn[]): string {
+export function titleFromTurns(turns: CopilotTurn[]): string {
   const first = turns.find((t) => t.role === 'user' && t.text.trim() !== '');
   return first ? clampTitle(first.text.trim()) : FALLBACK_TITLE;
 }
@@ -326,6 +331,7 @@ export async function init(): Promise<void> {
 // migrated here, on the read, so no caller ever sees the old shape.
 export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
   if (!isValidId(projectId)) return [];
+  if (rows.on()) return rows.loadThreads(projectId);
   try {
     const rawText = await recordFs.readFile(copilotFilePath(projectId), 'utf8');
     return normalize(JSON.parse(rawText));
@@ -369,6 +375,7 @@ function mostRecent(threads: CopilotThread[]): CopilotThread | null {
 // reverse of the on-disk order. Reverse BEFORE sorting: Array.sort is stable, so
 // same-millisecond ties then come out in the same order mostRecent() would pick.
 export async function listThreads(projectId: string): Promise<CopilotThreadSummary[]> {
+  if (rows.on()) return isValidId(projectId) ? rows.listThreads(projectId) : [];
   const threads = mine(await loadThreads(projectId));
   return threads
     .slice()
@@ -380,6 +387,7 @@ export async function listThreads(projectId: string): Promise<CopilotThreadSumma
 // The id of the thread a bare loadHistory()/appendTurn() targets, or null when the
 // project has no conversation yet.
 export async function latestThreadId(projectId: string): Promise<string | null> {
+  if (rows.on()) return isValidId(projectId) ? rows.latestThreadId(projectId) : null;
   const t = mostRecent(mine(await loadThreads(projectId)));
   return t ? t.id : null;
 }
@@ -394,6 +402,7 @@ export async function createThread(projectId: string): Promise<CopilotThreadSumm
   if (!parent) return null;
 
   const now = new Date().toISOString();
+  if (rows.on()) return rows.createThread(projectId, now);
   const thread: CopilotThread = {
     id: randomUUID(),
     title: FALLBACK_TITLE,
@@ -432,6 +441,7 @@ async function writeThreads(projectId: string, threads: CopilotThread[]): Promis
 // unchanged. An unknown threadId falls back to the most recent thread rather than
 // erroring: a stale id in a reopened window should show a conversation, not a void.
 export async function loadHistory(projectId: string, threadId?: string): Promise<CopilotTurn[]> {
+  if (rows.on()) return isValidId(projectId) ? rows.loadHistory(projectId, threadId) : [];
   const threads = mine(await loadThreads(projectId));
   const target = (threadId && threads.find((t) => t.id === threadId)) || mostRecent(threads);
   return target ? target.turns : [];
@@ -468,6 +478,7 @@ export async function appendTurn(
   if (learn) record.learn = learn;
   const guidance = role === 'assistant' ? sanitizeGuidance(turn && turn.guidance) : undefined;
   if (guidance) record.guidance = guidance;
+  if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {
     const own = mine(threads);
@@ -509,6 +520,7 @@ export async function appendTurn(
 // first user turn — a marker field if anyone wants "Conversation" to stick.
 export async function renameThread(projectId: string, threadId: string, title: string): Promise<CopilotThreadSummary | null> {
   if (!isValidId(projectId) || typeof title !== 'string' || title.trim() === '') return null;
+  if (rows.on()) return rows.renameThread(projectId, threadId, clampTitle(title));
   return changeThreads(projectId, async (threads) => {
     const target = mine(threads).find((t) => t.id === threadId);
     if (!target) return null;
@@ -523,6 +535,7 @@ export async function renameThread(projectId: string, threadId: string, title: s
 // assistant turn whose stored answer draws the very chart that was saved. False: nothing marked.
 export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(visualId)) return false;
+  if (rows.on()) return rows.markSaved(projectId, threadId, turnId, spec, visualId);
   return changeThreads(projectId, async (threads) => {
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
     if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
@@ -537,6 +550,7 @@ export async function markSaved(projectId: string, threadId: string, turnId: str
 // id gets, so a delete can never say whether someone else's conversation exists.
 export async function deleteThread(projectId: string, threadId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
+  if (rows.on()) return rows.deleteThread(projectId, threadId);
   return changeThreads(projectId, async (threads) => {
     const target = mine(threads).find((t) => t.id === threadId);
     if (!target) return false;
@@ -545,11 +559,15 @@ export async function deleteThread(projectId: string, threadId: string): Promise
   });
 }
 
-// Delete a project's copilot.json. Returns true on success — a missing file is
-// success (force), an invalid id is false.
+// Delete every member's conversations in a project (copilot.json, or the rows). Returns true on
+// success — nothing to delete is success (force), an invalid id is false.
 export async function clearHistory(projectId: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   try {
+    if (rows.on()) {
+      await rows.clearHistory(projectId);
+      return true;
+    }
     const file = copilotFilePath(projectId);
     await recordFs.locked(file, () => recordFs.rm(file, { force: true })); // not undone by an append in flight
     return true;

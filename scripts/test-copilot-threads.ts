@@ -9,9 +9,13 @@
 // disk, because a migration that only works in memory is not a migration. Style
 // follows test-copilot.ts / test-datasetsMigration.ts: point userData
 // (ORDINATE_LOCAL_DIR) at a temp dir, run the REAL module, no framework.
+//
+// Sections 6–10 are scripts/copilotStoreChecks.ts, which scripts/test-copilotRows.ts runs on the
+// Postgres rows as well.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { oneMember, twoMembers } from './copilotStoreChecks';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -189,112 +193,8 @@ async function main(): Promise<void> {
       (await copilot.createThread('00000000-0000-0000-0000-000000000000')) === null);
   }
 
-  // ── 6. Many threads: isolation, titling, and "most recent" resolution ────────
-  {
-    const p = await projects.createProject('Multi project');
-    const a = await copilot.createThread(p.id);
-    ok('createThread returns a summary with a UUID id', a !== null && UUID_RE.test(a.id));
-    ok('a brand-new thread is titled Conversation', a !== null && a.title === 'Conversation');
-    ok('a brand-new thread has no turns', a !== null && a.turnCount === 0);
-
-    await copilot.appendTurn(p.id, { role: 'user', text: 'Question A' }, a!.id);
-    const b = await copilot.createThread(p.id);
-    await copilot.appendTurn(p.id, { role: 'user', text: 'Question B' }, b!.id);
-
-    ok('threads stay separate', (await copilot.loadHistory(p.id, a!.id)).length === 1 &&
-      (await copilot.loadHistory(p.id, b!.id)).length === 1);
-    ok('each thread keeps its own turn', (await copilot.loadHistory(p.id, a!.id))[0].text === 'Question A');
-    ok('the first user turn renames the thread',
-      (await copilot.listThreads(p.id)).find((t) => t.id === a!.id)!.title === 'Question A');
-    ok('a bare loadHistory targets the most recent thread',
-      (await copilot.loadHistory(p.id))[0].text === 'Question B');
-    ok('listThreads is newest-touched first', (await copilot.listThreads(p.id))[0].id === b!.id);
-
-    // Touching the OLDER thread makes it the most recent one again.
-    await copilot.appendTurn(p.id, { role: 'user', text: 'Back to A' }, a!.id);
-    ok('appending to an older thread makes it most recent again',
-      (await copilot.latestThreadId(p.id)) === a!.id);
-    ok('a bare appendTurn now targets that thread',
-      (await copilot.appendTurn(p.id, { role: 'assistant', text: 'Answer A2' }))!.length === 3);
-
-    // An unknown threadId falls back to the most recent thread, never errors.
-    const stale = await copilot.loadHistory(p.id, '99999999-9999-4999-8999-999999999999');
-    ok('an unknown threadId falls back to the most recent thread', stale.length === 3);
-  }
-
-  // ── 7. MAX_TURNS (200) still holds PER THREAD ───────────────────────────────
-  {
-    const p = await projects.createProject('Turn cap project');
-    const t = await copilot.createThread(p.id);
-    let list: Awaited<ReturnType<typeof copilot.appendTurn>> = [];
-    for (let i = 0; i < 205; i += 1) {
-      list = await copilot.appendTurn(p.id, { role: 'user', text: 'msg ' + i }, t!.id);
-    }
-    ok('MAX_TURNS caps a thread at 200', list !== null && list.length === 200);
-    ok('the turn ring keeps the NEWEST turns',
-      list !== null && list[list.length - 1].text === 'msg 204' && list[0].text === 'msg 5');
-    ok('the turn cap survives a reload', (await copilot.loadHistory(p.id, t!.id)).length === 200);
-    ok('the title survives its naming turn falling out of the ring',
-      (await copilot.listThreads(p.id))[0].title === 'msg 0');
-  }
-
-  // ── 8. MAX_THREADS (50) — oldest-created drops first ────────────────────────
-  {
-    const p = await projects.createProject('Thread cap project');
-    for (let i = 0; i < 55; i += 1) {
-      const t = await copilot.createThread(p.id);
-      await copilot.appendTurn(p.id, { role: 'user', text: 'thread ' + i }, t!.id);
-    }
-    const list = await copilot.listThreads(p.id);
-    ok('MAX_THREADS caps a project at 50 conversations', list.length === 50);
-    const titles = new Set(list.map((t) => t.title));
-    ok('the thread ring dropped the OLDEST conversations',
-      !titles.has('thread 0') && !titles.has('thread 4') && titles.has('thread 5'));
-    ok('the thread ring kept the newest conversation', titles.has('thread 54'));
-    ok('the thread cap survives a reload', (await copilot.loadThreads(p.id)).length === 50);
-  }
-
-  // ── 8b. renameThread / deleteThread ─────────────────────────────────────────
-  {
-    const p = await projects.createProject('Rename and delete project');
-    const a = (await copilot.createThread(p.id))!;
-    await copilot.appendTurn(p.id, { role: 'user', text: 'first question' }, a.id);
-    const b = (await copilot.createThread(p.id))!;
-    await copilot.appendTurn(p.id, { role: 'user', text: 'second question' }, b.id);
-    const order = async () => JSON.stringify((await copilot.listThreads(p.id)).map((t) => [t.id, t.updatedAt]));
-    const titleOf = async (id: string) => (await copilot.loadThreads(p.id)).find((t) => t.id === id)?.title;
-    const before = await order();
-
-    const renamed = await copilot.renameThread(p.id, a.id, '  Q3\n board   pack  ');
-    ok('renameThread returns the summary with the title cleaned to one line',
-      renamed !== null && renamed.title === 'Q3 board pack' && renamed.id === a.id && renamed.turnCount === 1, JSON.stringify(renamed));
-    ok('a rename is not a touch: order and updatedAt are unchanged', (await order()) === before);
-    ok('the rename survives a reload', (await titleOf(a.id)) === 'Q3 board pack');
-    ok('the other conversation keeps its own title', (await titleOf(b.id)) === 'second question');
-    await copilot.appendTurn(p.id, { role: 'user', text: 'a later question' }, a.id);
-    ok('a later turn does not re-derive a renamed title', (await titleOf(a.id)) === 'Q3 board pack');
-    ok('a long title is cut at 60', (await copilot.renameThread(p.id, a.id, 'x'.repeat(200)))?.title === 'x'.repeat(60));
-    ok('an empty title renames nothing', (await copilot.renameThread(p.id, a.id, ' \n ')) === null && (await titleOf(a.id)) === 'x'.repeat(60));
-    ok('an unknown thread renames nothing', (await copilot.renameThread(p.id, '11111111-1111-4111-8111-111111111111', 'x')) === null);
-    ok('renameThread rejects a traversal projectId', (await copilot.renameThread('..', a.id, 'x')) === null);
-
-    ok('deleteThread removes the conversation', (await copilot.deleteThread(p.id, a.id)) === true);
-    const left = await copilot.listThreads(p.id);
-    ok('…and only that one: the other keeps its turns', left.length === 1 && left[0].id === b.id && left[0].turnCount === 1, JSON.stringify(left));
-    ok('its turns are gone: its id now resolves to the most recent conversation',
-      (await copilot.loadHistory(p.id, a.id)).map((t) => t.text).join() === 'second question');
-    ok('the delete survives a reload', (await copilot.loadThreads(p.id)).length === 1);
-    ok('deleting it again is false', (await copilot.deleteThread(p.id, a.id)) === false);
-    ok('deleteThread rejects a traversal projectId', (await copilot.deleteThread('..', b.id)) === false && (await copilot.loadThreads(p.id)).length === 1);
-  }
-
-  // ── 9. clearHistory still wipes everything ──────────────────────────────────
-  {
-    ok('clearHistory returns true', (await copilot.clearHistory(proj.id)) === true);
-    ok('clearHistory removes every conversation', (await copilot.listThreads(proj.id)).length === 0);
-    ok('clearHistory leaves loadHistory empty', (await copilot.loadHistory(proj.id)).length === 0);
-    ok('clearHistory rejects a traversal projectId', (await copilot.clearHistory('..')) === false);
-  }
+  // ── 6–9. The store's rules (scripts/copilotStoreChecks.ts: the rows run them too) ──
+  await oneMember('file');
 
   // ── 10. NV-34: the cap is per member — another member's threads never evict yours ──
   {
@@ -304,19 +204,7 @@ async function main(): Promise<void> {
     const as = (email: string) => <T>(fn: () => T): T => context.runInContext({ user: { email, role: 'viewer' }, org: { id: 'acme' } }, 'nv34', fn);
     const boss = as('boss@acme.test');
     const vic = as('vic@acme.test');
-    const p = await boss(() => projects.createProject('Shared project'));
-    const mine = (await boss(() => copilot.createThread(p.id)))!;
-    await boss(() => copilot.appendTurn(p.id, { role: 'user', text: 'boss question' }, mine.id));
-    for (let i = 0; i < 50; i += 1) await vic(() => copilot.createThread(p.id));
-    ok('NV-34: 50 new threads by another member leave the owner\'s conversation',
-      (await boss(() => copilot.listThreads(p.id))).some((t) => t.id === mine.id)
-        && (await boss(() => copilot.loadHistory(p.id, mine.id))).map((t) => t.text).join() === 'boss question');
-    const vicFirst = (await vic(() => copilot.listThreads(p.id))).at(-1)!.id;
-    await vic(() => copilot.createThread(p.id));
-    const vicNow = await vic(() => copilot.listThreads(p.id));
-    ok('NV-34 control: a member\'s own 51st thread still evicts their own oldest', vicNow.length === 50 && !vicNow.some((t) => t.id === vicFirst));
-    ok('NV-34: …and the file keeps both members\' conversations after a reload',
-      (await boss(() => copilot.loadThreads(p.id))).length === 51);
+    await twoMembers('file', boss, vic);
 
     // ── 11. A newer release's `guidance` on an assistant turn survives every thread write ──
     // copilot.json holds EVERY member's threads, so one member's append rewrites all of them: the re-save
