@@ -87,7 +87,9 @@ export default function HomePage() {
   // the last one, asked where you left it. If it cannot be made, the page opens on the most recent, as before.
   const openNew = async () => {
     if (projectId) pickDockProject(projectId);
-    const id = projectId ? await newThread(projectId, agentId).catch(() => '') : '';
+    // Asked before the agents are known: wait for them, so the preselected one starts it.
+    const agent = agentList.isPending && projectId && picked?.projectId !== projectId ? ((await agentList.refetch()).data?.preselected ?? null) : agentId;
+    const id = projectId ? await newThread(projectId, agent).catch(() => '') : '';
     void navigate(id ? `${ASSISTANT_PATH}?thread=${id}` : ASSISTANT_PATH);
   };
   // Asked on the Assistant's own page, full width. A suggestion points it at the dataset it names, in Home's project.

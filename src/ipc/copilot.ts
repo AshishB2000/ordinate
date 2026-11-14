@@ -465,8 +465,12 @@ export function register() {
     try {
       const threads = await copilot.listThreads(projectId);
       const names = await agentNames(projectId, threads.flatMap((t) => (t.agentId ? [t.agentId] : [])));
-      // Which agent each was with, for History (a gone one with no Trash entry left is shown as the Project assistant's).
-      return { ok: true, threads: threads.map((t) => (t.agentId && names.has(t.agentId) ? { ...t, agentName: names.get(t.agentId)!.name, ...(names.get(t.agentId)!.gone ? { agentGone: true } : {}) } : t)) };
+      // Which agent each was with, for History, by name; one deleted (in the Trash, or gone from it) is marked so.
+      const named = (t: copilot.CopilotThreadSummary) => {
+        const n = t.agentId ? names.get(t.agentId) : undefined;
+        return t.agentId ? { ...t, ...(n ? { agentName: n.name } : {}), ...(!n || n.gone ? { agentGone: true } : {}) } : t;
+      };
+      return { ok: true, threads: threads.map(named) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to list Copilot conversations' };
     }
@@ -564,10 +568,11 @@ export function register() {
       const named = !!tid && threads.some((t) => t.id === tid);
       const into = (named ? threads.find((t) => t.id === tid) : threads[0]) ?? null;
       const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : agentId);
-      const kept = into ? (into.agentId ?? null) : (scope.agent?.id ?? null); // the agent the conversation is stored with
-      // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation even if something
-      // else creates a newer one between the two writes, and the reply can say which one it wrote to.
-      const pin = async (): Promise<string | undefined> => tid || (await copilot.latestThreadId(projectId)) || (await copilot.createThread(projectId, scope.agent?.id))?.id;
+      // The agent the conversation is stored with, as the reply names it: none for a token or a share, which keep the Project assistant (rule 13).
+      const kept = scope === PROJECT_SCOPE ? null : into ? (into.agentId ?? null) : (scope.agent?.id ?? null);
+      // Pinned BEFORE the first append, so a question and its answer land in the SAME conversation — the one whose agent
+      // answered — even if something else creates a newer one between the two writes, and the reply can say which it was.
+      const pin = async (): Promise<string | undefined> => (named ? tid : into?.id) ?? (await copilot.createThread(projectId, scope.agent?.id))?.id;
       const hit = sharing ? null : await verifiedAsk(projectId, q, pin, scope); // a verified question, word for word (./verifiedAsk): no model call
       if (hit) return { ...hit, agent: await agentRef(projectId, kept) };
       if (!execConfig.assistantOn()) return { ok: false, notReady: true, error: assistantOff() };
@@ -592,12 +597,12 @@ export function register() {
       const res = await askCopilot(prior, [facts.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
 
       if (res.ok) {
-        const target = await pin();
         // What the reply may act on: an agent that may not build answers or does nothing (rule 8).
         const action = allowedAction(res.suggestedAction || NO_ACTION, how);
         // OUT OF SCOPE (rule 10): never an answer from outside the agent's topic, quietly or not. The turn is the
         // app's own words and the dataset the Project assistant can answer from, found by code (./agentAsk.ts).
         const outside = sharing ? null : await outsideTurn(projectId, scope, q, action);
+        const target = await pin(); // after the out-of-scope lookup, so one that fails leaves no new conversation behind
         if (outside) {
           await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
           const stored = await copilot.appendTurn(projectId, { role: 'assistant', text: outside.text, outside: outside.outside, guidance: guided.used }, target);

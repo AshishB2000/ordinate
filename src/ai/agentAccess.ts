@@ -2,9 +2,10 @@
 // (docs/assistant-agents/00-design.md, rules 2, 3, 5, 7, 11, 12). MAIN PROCESS ONLY. Code decides all of it, never a
 // model: the ONE place an ask's agent is resolved (`agentForAsk`), so a later router or Slack door asks here too.
 //
-// May use: the caller is in one of the agent's teams, or is a project admin (an org admin is one everywhere), so an
-// admin can try an agent before its teams do. An agent never grants: what it answers from is still read through the
-// caller's own doors, row locks and hidden columns.
+// May use: the caller is in one of the agent's teams, or edits the project (an editor, a project admin, an org admin),
+// so the people who write an agent's instructions can try it in the test chat before its teams do ("What people
+// see"). An agent never grants: what it answers from is still read through the caller's own doors, row locks and
+// hidden columns, so trying one shows an editor nothing they could not already read.
 
 import { readAgent, listAgents, MAX_AGENTS, MAX_AGENT_NAME, PROJECT_ASSISTANT, type Agent, type AgentInput } from './agents';
 import * as msg from './agentMessages';
@@ -18,7 +19,7 @@ export const EDITOR_RANK = 2;
 
 /** May a caller of `rank` in `teams` use `agent`? */
 export function mayUse(agent: Pick<Agent, 'teamIds'>, rank: number, teams: readonly string[]): boolean {
-  return rank >= ADMIN_RANK || agent.teamIds.some((t) => teams.includes(t));
+  return rank >= EDITOR_RANK || agent.teamIds.some((t) => teams.includes(t));
 }
 
 /**
@@ -103,7 +104,9 @@ export async function agentProblem(projectId: string, input: AgentInput, exceptI
   if (!exceptId && others.length >= MAX_AGENTS) return { field: 'name', error: msg.tooManyAgents(MAX_AGENTS) };
   if (typeof input.topicId === 'string' && !(await readTopic(projectId, input.topicId))) return { field: 'topicId', error: msg.agentTopicGone() };
   const m = input.model as { provider: string; model: string } | null | undefined;
-  if (m) {
+  // A model kept as it was is not checked again: one no longer enabled just falls back (rule 7), and must not block a rename.
+  const was = exceptId ? (await readAgent(projectId, exceptId))?.rec.model : null;
+  if (m && !(was && was.provider === m.provider && was.model === m.model)) {
     // Only a model members may use now (Admin → AI): without a database none is, so none can be named.
     const models = aiConfig.enabled() ? (await aiConfig.memberView()).models : [];
     if (!models.some((x) => x.provider === m.provider && x.model === m.model)) return { field: 'model', error: msg.agentModelNotEnabled() };

@@ -7,7 +7,7 @@ import * as trash from '../app/trash';
 import { contentTag } from '../app/editConflict';
 import { FIGURE_RE, type Instruction, type InstructionOp } from '../app/instructions';
 import { listTopics, topicsForReaders } from '../analysis/topics';
-import { changeAgentInstructions, saveAgent, updateAgent, type Agent, type AgentInput } from '../ai/agents';
+import { changeAgentInstructions, readAgent, saveAgent, updateAgent, type Agent, type AgentInput } from '../ai/agents';
 import { ADMIN_RANK, agentProblem, agentsFor, EDITOR_RANK, preselect } from '../ai/agentAccess';
 import { agentNotFound, agentNotSaved, agentsNotRead } from '../ai/agentMessages';
 import * as copilot from '../ai/copilot';
@@ -20,7 +20,7 @@ const flagged = (list: Instruction[]) => list.map((i) => (FIGURE_RE.test(i.text)
 async function rowsOf(projectId: string, list: Agent[], usable: Set<string>, rank: number) {
   const topics = new Map((await topicsForReaders(projectId, await listTopics(projectId))).map(({ topic }) => [topic.id, topic] as const));
   const teams = new Map((await orgTeams([...new Set(list.flatMap((a) => a.teamIds))])).map((t) => [t.id, t.name] as const));
-  return list.map((a) => {
+  return Promise.all(list.map(async (a) => {
     const t = a.topicId ? topics.get(a.topicId) : undefined;
     return {
       id: a.id,
@@ -34,9 +34,10 @@ async function rowsOf(projectId: string, list: Agent[], usable: Set<string>, ran
       build: a.build,
       teams: a.teamIds.flatMap((id) => (teams.has(id) ? [{ id, name: teams.get(id)! }] : [])),
       instructions: flagged(a.instructions), // editor prose every reader of the agent sees, as the project's own (D5)
-      ...(rank >= ADMIN_RANK ? { tag: contentTag('agent', a) } : {}),
+      // The tag of the record AS STORED, from one read (../app/editConflict): what agent:save compares its base with.
+      ...(rank >= ADMIN_RANK ? { tag: (await readAgent(projectId, a.id))?.tag ?? contentTag('agent', a) } : {}),
     };
-  });
+  }));
 }
 
 export function register(): void {

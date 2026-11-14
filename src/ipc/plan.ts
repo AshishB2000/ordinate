@@ -8,7 +8,7 @@ import type { PlanRun, StepOutcome, UndoReport } from '../ai/planRun';
 import { RUN_DEPS, loadProjectCtx, undoGroup, logRun, fixStep } from '../ai/planExec';
 import * as store from '../ai/planStore';
 import * as copilot from '../ai/copilot';
-import { agentForAsk } from '../ai/agentAccess';
+import { askScope } from './agentAsk';
 import { agentAnswersOnly } from '../ai/agentMessages';
 
 // Assistant plans IPC — check a proposed plan, then run it one click at a time.
@@ -89,7 +89,7 @@ export function register(): void {
     if (!clean.steps.length) return { ok: false, error: 'The plan has no steps.' };
     // A plan from a conversation with an Assistant agent that may only answer is refused (docs/assistant-agents rule 8).
     const conv = typeof threadId === 'string' && threadId ? (await copilot.listThreads(String(projectId))).find((t) => t.id === threadId) : undefined;
-    const { agent } = await agentForAsk(String(projectId), conv?.agentId);
+    const { agent } = await askScope(String(projectId), conv?.agentId); // a personal API token keeps the Project assistant (rule 13)
     if (agent && !agent.build) return { ok: false, error: agentAnswersOnly(agent.name) };
     const run = newRun(randomUUID(), String(projectId), typeof threadId === 'string' ? threadId : '',
       typeof intent === 'string' ? intent.slice(0, 400) : '', clean.steps);

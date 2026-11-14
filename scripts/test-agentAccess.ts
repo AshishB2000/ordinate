@@ -4,7 +4,7 @@
 //   (a) use: Fay, in its team, lists it, has it preselected, starts a conversation with it, and the ask resolves it;
 //       Vic, a viewer outside its teams, sees none, and the server refuses it — newThread over RPC and the ask's own
 //       resolution (the Project assistant, with the line) — NEGATIVE CONTROL: the same calls as Fay succeed;
-//       a project admin outside its teams may use it, to try it
+//       an editor or a project admin outside its teams may use it, to try it (the test chat)
 //   (b) roles: a viewer (in its team or not) cannot save or delete one (403); an editor changes its instructions but
 //       cannot save its teams, topic, model or build (403) nor restore it from the Trash — NEGATIVE CONTROL: the admin can
 //   (c) a team or a model that is not the org's is refused; the agent's model answers while it is enabled in Admin → AI,
@@ -85,7 +85,7 @@ withServer('agent-access', {}, async (b) => {
     ok(`a viewer (${v}) cannot save, delete or instruct it (403)`, s.status === 403 && d.status === 403 && i.status === 403, `${s.status} ${d.status} ${i.status}`);
   }
   const edList = await must('ed', 'agent:list', { projectId: P });
-  ok('an editor sees every agent with its instructions, not usable by him, and cannot manage', edList.agents.length === 1 && edList.agents[0].usable === false
+  ok('an editor outside its teams sees every agent with its instructions, may use it to try it, and cannot manage', edList.agents.length === 1 && edList.agents[0].usable === true && edList.preselected === null
     && Array.isArray(edList.agents[0].instructions) && !('tag' in edList.agents[0]) && edList.canInstruct && !edList.canManage, show(edList));
   const edI = await must('ed', 'agent:instructions', { projectId: P, id: A, op: { kind: 'add', text: 'Revenue means recognized revenue' } });
   ok('an editor changes its instructions', edI.ok === true && edI.instructions[0].text === 'Revenue means recognized revenue', show(edI));
@@ -124,6 +124,11 @@ withServer('agent-access', {}, async (b) => {
   await b.pool.query(`DELETE FROM org_ai_models WHERE org_id = $1 AND model = 'agent-model'`, [ORG]);
   const fell = await b.run(who('fay'), async () => aiConfig.resolve((await agentAsk.askScope(P, A)).agent?.model));
   ok('…and once it is no longer enabled, the person\'s own (the default)', fell.ok && fell.model === 'house-model', show(fell));
+  const now = (await must('boss', 'agent:list', { projectId: P })).agents[0];
+  const kept = await must('boss', 'agent:save', { projectId: P, id: A, base: now.tag, agent: { ...IN, description: 'Costs', model: { provider: 'gateway', model: 'agent-model' } } });
+  ok('a model no longer enabled, kept as it was, does not block another change', kept.ok === true, show(kept));
+  const anew = await must('boss', 'agent:save', { projectId: P, agent: { ...IN, name: 'Another', model: { provider: 'gateway', model: 'agent-model' } } });
+  ok('NEGATIVE CONTROL: naming it anew is refused', anew.ok === false && anew.field === 'model', show(anew));
 
   // ── (d) conversations as rows ─────────────────────────────────────────────
   const row = await b.pool.query<{ agent_id: string | null }>('SELECT agent_id::text FROM assistant_threads WHERE org_id = $1 AND id = $2', [ORG, fayThread.thread.id]);

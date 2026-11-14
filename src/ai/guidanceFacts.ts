@@ -57,8 +57,10 @@ function instructionLines(raw: readonly string[], room: number): { lines: string
 }
 
 export function guidanceBlock(g: GuidanceInput): { text: string; ledger: LedgerEntry[]; instructions: number } {
-  // The agent's lines are taken first, so the project's never crowd out the ones that win; both share one limit.
-  const own = instructionLines(g.agent?.instructions ?? [], INSTRUCTIONS_BLOCK_MAX);
+  // Both lists share the one limit. When both need more than it, each keeps at least half (the project's apply to every
+  // agent, rule 4; the agent's are the ones that win); what one leaves, the other uses.
+  const half = INSTRUCTIONS_BLOCK_MAX / 2;
+  const own = instructionLines(g.agent?.instructions ?? [], Math.max(half, INSTRUCTIONS_BLOCK_MAX - instructionLines(g.instructions, INSTRUCTIONS_BLOCK_MAX).used));
   const project = instructionLines(g.instructions, INSTRUCTIONS_BLOCK_MAX - own.used);
   const items: string[] = [...project.lines];
   if (own.lines.length) {

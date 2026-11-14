@@ -16,7 +16,7 @@ export interface AgentRow {
   id: string;
   name: string;
   description?: string;
-  /** May the caller use it: in one of its teams, or a project admin. */
+  /** May the caller use it: in one of its teams, or an editor or admin of the project (to try it). */
   usable: boolean;
   /** Its topic, by name, with its datasets' ids; null: all data. */
   topic: { id: string; name: string; datasetIds: string[] } | null;
@@ -61,7 +61,7 @@ export const usableAgents = (list: AgentList | undefined): AgentRow[] => (list?.
 /** What a conversation's agent is called, as History writes it. */
 export function agentName(t: { agentId?: string; agentName?: string; agentGone?: boolean }): string {
   if (!t.agentId) return PROJECT_ASSISTANT;
-  const name = t.agentName || 'An assistant';
+  const name = t.agentName || 'An assistant'; // gone for good from the Trash too: no name left
   return t.agentGone ? `${name} (deleted)` : name;
 }
 

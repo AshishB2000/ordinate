@@ -88,6 +88,10 @@ import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
 import { statusFor, type StatusState } from '../analysis/statusStore';
 import { instructionsGuidance } from './guidance';
 import { verifiedMark } from './verifiedMark'; // "✓ Verified", by comparison at every draw (part 3 D9)
+// A cycle (./agentAsk imports this module): only used inside handlers, never at load.
+import { askScope } from './agentAsk';
+import type { Agent } from '../ai/agents';
+import { outsideTopic } from '../ai/agentMessages';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -294,10 +298,11 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
 /** `asked`: a model was called (one was ready), whether or not its words were kept. */
-export async function narrate(projectId: string, built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit; asked: boolean }> {
+/** `agent`: the Assistant agent of the conversation (./agentAsk): its instructions after the project's, its model while enabled. */
+export async function narrate(projectId: string, built: Built, question: string, guard: Guard, agent?: Agent | null): Promise<{ text: string; audit: NumberAudit; asked: boolean }> {
   if (!execConfig.assistantOn() || !(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT, asked: false };
-  const g = await instructionsGuidance(projectId); // the editors' instructions follow the card's facts (./guidance)
-  const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question);
+  const g = await instructionsGuidance(projectId, agent ? { name: agent.name, instructions: agent.instructions.map((i) => i.text) } : undefined); // the editors' instructions follow the card's facts (./guidance)
+  const res = await askCopilot([], [built.factsText, g.text].filter(Boolean).join('\n\n'), question, undefined, { model: agent?.model });
   if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT, asked: true };
   return { ...guard(res.text, built.ledger.concat(g.ledger)), asked: true };
 }
@@ -585,13 +590,17 @@ export function register(guard: Guard): void {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
+      const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+      // In an Assistant agent's conversation the agent narrates (./agentAsk), and a chart outside its topic is not its to
+      // give: refused before anything is computed.
+      const scope = await askScope(projectId, tid ? (await copilot.listThreads(projectId)).find((t) => t.id === tid)?.agentId : undefined);
+      if (scope.only && scope.topic && !scope.only.has(s.datasetId)) return { ok: false, reason: outsideTopic(scope.topic.name) };
       const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
       const n = await narrate(projectId, built,
         `Narrate this chart answer ("${s.title}") in two or three sentences, citing only figures from the facts.`,
-        guard);
-      const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
+        guard, scope.agent);
       const r = await appendAnswer(projectId, tid, userText, n.text, built, built.card.spec, sanitizeLearn(learn, built.card.spec));
       return { ok: true, turns: r.turns, threadId: r.threadId };
     } catch (err: any) {

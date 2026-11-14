@@ -645,6 +645,18 @@ already moved can show up as a conversation of its own.
 project that has moved. They stay in the tables, and come back when you upgrade again, together with
 whatever the older release saved in the meantime.
 
+## Assistant agents (`0024_assistant_agents`)
+
+A project can have several assistants: each a topic, its own instructions, a model, whether it may
+build, and the teams that use it ([design](../assistant-agents/00-design.md)). An agent is a record,
+`projects/<id>/agents/<id>.json`, and travels in project bundles and backups. The migration only adds
+one nullable column, `assistant_threads.agent_id`: the agent a conversation is with, empty for the
+Project assistant, which is what every earlier conversation stays.
+
+**Rolling back.** The older release ignores the column and the agent records: every conversation is
+the Project assistant's again, and a bundle that holds agents is refused by it. Upgrading again brings
+the agents back as they were.
+
 ## Compose
 
 From a checkout:

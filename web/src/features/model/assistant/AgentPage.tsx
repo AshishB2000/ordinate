@@ -284,7 +284,7 @@ function AgentForm({ projectId, row, canManage, canInstruct, back, onBack, onCre
               )}
               <p className={g.help}>
                 {canManage && !allTeams.length && !targets.isPending ? 'No teams in this organization yet: an org admin makes them in Admin → People. ' : ''}
-                Its teams find it picked for them. Project admins can use every assistant, to try it first.
+                Its teams find it picked for them. The project's editors and admins can use every assistant, to try it first.
               </p>
             </dd>
           </dl>

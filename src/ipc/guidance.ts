@@ -88,10 +88,10 @@ export async function askGuidance(
   }
 }
 
-/** The instructions alone: a narration and the other contexts. */
-export async function instructionsGuidance(projectId: string): Promise<Guided> {
+/** The instructions alone: a narration and the other contexts. `agent`: the Assistant agent narrating, its own after the project's. */
+export async function instructionsGuidance(projectId: string, agent?: { name: string; instructions: string[] }): Promise<Guided> {
   try {
-    return guided({ instructions: ((await load(projectId)).instructions ?? []).map((i) => i.text) });
+    return guided({ instructions: ((await load(projectId)).instructions ?? []).map((i) => i.text), ...(agent ? { agent } : {}) });
   } catch (err: any) {
     logger.error('[guidance] left out of the narration:', err && err.message);
     return NONE;

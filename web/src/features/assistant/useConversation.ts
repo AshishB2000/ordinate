@@ -313,7 +313,9 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:'))); // last turn's proposal is superseded
     let r: Awaited<ReturnType<typeof ask>>;
     try {
-      r = await ask(pid, on, q, into, askId, withAgent);
+      // A first question asked before the agents are known (handed from Home, typed at once) waits for the preselection.
+      const answering = !into && agentList.isPending ? ((await agentList.refetch()).data?.preselected ?? null) : withAgent;
+      r = await ask(pid, on, q, into, askId, answering);
     } catch {
       r = { ok: false, error: 'Something went wrong. Try again.' };
     }
@@ -345,11 +347,13 @@ export function useConversation(where: HandedTo, first: OpenThread | null = null
 
   async function followUp(spec: Record<string, unknown>, label: string, learn?: Learn): Promise<void> {
     if (!pid) return;
-    const r = (await rpc('answer:rerun', { projectId: pid, ...(shownThread ? { threadId: shownThread } : {}), spec: spec as { datasetId: string }, label, ...(learn ? { learn } : {}) }).catch(() => null)) as
+    // The first answer of all (a verified chip in the empty state) starts its conversation with the agent shown.
+    const into = shownThread || (agentId ? await newThread(pid, agentId).catch(() => '') : '');
+    const r = (await rpc('answer:rerun', { projectId: pid, ...(into ? { threadId: into } : {}), spec: spec as { datasetId: string }, label, ...(learn ? { learn } : {}) }).catch(() => null)) as
       | { ok: true; turns: Turn[]; threadId: string | null }
       | { ok: false; reason?: string }
       | null;
-    if (r && r.ok) setTurns(r.turns, r.threadId);
+    if (r && r.ok) setTurns(r.turns, r.threadId, into && !shownThread ? refOf(agentId) : undefined);
     else toast((r && !r.ok && r.reason) || 'Could not run that follow-up.', { kind: 'error' });
   }
 

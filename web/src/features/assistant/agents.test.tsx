@@ -158,6 +158,24 @@ describe('agents in the dock', () => {
     expect(calls.find((c) => c.channel === 'copilot:ask')?.payload).not.toHaveProperty('agentId');
   });
 
+  it('the first verified chip, before any conversation, starts it with the preselected agent; one outside its topic is not offered', async () => {
+    const spec = (datasetId: string, title: string) => ({ datasetId, category: 'vendor', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column', title });
+    const row = (id: string, datasetId: string, question: string) => ({ id, question, phrasings: [], datasetId, datasetName: '', describe: '', filters: [], spec: spec(datasetId, question), verifiedBy: 'a', verifiedAt: new Date().toISOString(), runs: true, tag: 't' });
+    const calls = serve({
+      ...base(AGENTS, FIN),
+      'verified:list': { body: { ok: true, broken: 0, questions: [row('v1', 'd1', 'Amount by vendor'), row('v2', 'd2', 'Revenue by region')] } },
+      'copilot:newThread': { body: { ok: true, thread: { id: T1, title: 'Conversation', updatedAt: '', turnCount: 0, agentId: FIN } } },
+      'answer:rerun': { body: { ok: true, turns: [], threadId: T1 } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    await waitFor(() => expect(picked(dock)).toBe('Finance assistant'));
+    expect(within(dock).queryByRole('button', { name: '✓ Revenue by region' })).toBeNull(); // Orders is outside its topic
+    fireEvent.click(await within(dock).findByRole('button', { name: '✓ Amount by vendor' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'answer:rerun')?.payload).toMatchObject({ projectId: PID, threadId: T1 }));
+    expect(calls.find((c) => c.channel === 'copilot:newThread')?.payload).toEqual({ projectId: PID, agentId: FIN });
+  });
+
   it('History names each conversation\'s agent once this person has one', async () => {
     const threads = [
       { id: T1, title: 'Payroll', updatedAt: new Date().toISOString(), turnCount: 2, agentId: FIN, agentName: 'Finance assistant' },

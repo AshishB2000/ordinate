@@ -190,8 +190,8 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
     ok('…an agent the caller may no longer use is passed over', access.preselect([finance, ops], [uuid(103)], sales.id) === ops.id);
     ok('…in no team: the Project assistant', access.preselect(usable, [uuid(999)], null) === null);
     ok('may use: a team member', access.mayUse(finance, 1, [uuid(101)]));
-    ok('NEGATIVE CONTROL: may use: not a viewer outside its teams, nor an editor', !access.mayUse(finance, 1, [uuid(102)]) && !access.mayUse(finance, 2, []));
-    ok('may use: a project admin, to try it', access.mayUse(finance, 3, []));
+    ok('NEGATIVE CONTROL: may use: not a viewer outside its teams, nor one in no team', !access.mayUse(finance, 1, [uuid(102)]) && !access.mayUse(finance, 1, []));
+    ok('may use: an editor or a project admin, to try it in the test chat', access.mayUse(finance, 2, []) && access.mayUse(finance, 3, []));
   }
 
   await app.close();

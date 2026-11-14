@@ -13,7 +13,11 @@
 //      build off asks with the answer-only prompt, drops a proposed plan, and plan:start refuses its conversation —
 //      NEGATIVE CONTROL: the Project assistant's plan is offered and starts
 //   5. a deleted agent: its conversation stays readable and the next question goes to the Project assistant, with the
-//      line saying so; restored from the Trash, it answers again
+//      line saying so; restored from the Trash, it answers again; purged, its conversations are marked deleted
+//   6. a follow-up chip in its conversation: outside the topic refused before anything is drawn, inside narrated by the
+//      agent — NEGATIVE CONTROL: the Project assistant's draws and narrates it
+//   7. a stale conversation id lands in the latest conversation, whose agent answered
+//   8. the instructions' room: full lists each keep half — NEGATIVE CONTROL: a short project list leaves the rest
 //
 //   npm run build:ts && node scripts/test-agentAsk.js
 
@@ -40,6 +44,7 @@ const trash: typeof import('../src/app/trash') = require('../src/app/trash');
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const verified: typeof import('../src/ipc/verified') = require('../src/ipc/verified');
+const guidance: typeof import('../src/ai/guidanceFacts') = require('../src/ai/guidanceFacts');
 
 type Sent = { facts: string; q: string; opts: import('../src/ai/suggestedAction').AskOptions | undefined };
 
@@ -164,6 +169,42 @@ async function main(): Promise<void> {
   sent.length = 0;
   const back = await ask('Show me everything', { threadId: finT.id });
   ok('restored: it answers again, from its topic, with no line', back.ok && !/Orders/.test(head(sent[0].facts)) && sent[0].opts?.topic === true && !back.answer.includes('Project assistant answered'), back.answer);
+
+  // ── 6. a follow-up chip in an agent's conversation ───────────────────────
+  sent.length = 0;
+  const before = (await call('copilot:history', { projectId: pid, threadId: finT.id })).turns.length;
+  const outsideChip = await call('answer:rerun', { projectId: pid, threadId: finT.id, spec: spec(orders, 'region', 'revenue'), label: 'Revenue by region' });
+  ok('a chart outside the topic is refused in the agent\'s conversation, before anything is drawn or asked', outsideChip.ok === false && outsideChip.reason === msg.outsideTopic('Finance')
+    && sent.length === 0 && (await call('copilot:history', { projectId: pid, threadId: finT.id })).turns.length === before, JSON.stringify(outsideChip));
+  const insideChip = await call('answer:rerun', { projectId: pid, threadId: finT.id, spec: spec(invoices, 'vendor', 'amount'), label: 'Amount by vendor' });
+  ok('…one inside it is narrated by the agent: its model, its instructions after the project\'s', insideChip.ok && sent.length === 1 && stableModel(sent[0].opts?.model) === 'gateway/finance-model'
+    && /Revenue means recognized revenue/.test(sent[0].facts) && /Revenue means booked deals/.test(sent[0].facts), JSON.stringify(sent[0]?.opts));
+  sent.length = 0;
+  const paChip = await call('answer:rerun', { projectId: pid, threadId: pa.id, spec: spec(orders, 'region', 'revenue'), label: 'Revenue by region' });
+  ok('NEGATIVE CONTROL: the Project assistant\'s conversation draws it, with the person\'s own model', paChip.ok && sent.length === 1 && sent[0].opts?.model === undefined && !/recognized revenue/.test(sent[0].facts));
+
+  // ── 7. where an ask lands ────────────────────────────────────────────────
+  const stale = '00000000-0000-4000-8000-00000000dead';
+  const latest = (await call('copilot:threads', { projectId: pid })).threads[0];
+  const landed = await ask('Anything else?', { threadId: stale });
+  ok('a stale conversation id lands in the latest conversation, whose agent answered, and says so', landed.ok && landed.threadId === latest.id && (landed.agent?.id ?? null) === (latest.agentId ?? null), JSON.stringify([landed.threadId, latest]));
+
+  // ── 8. an agent gone for good ────────────────────────────────────────────
+  const temp = (await agents.saveAgent(pid, { name: 'Temporary assistant', topicId: null, model: null, build: true, teamIds: [] }))!;
+  const tempT = (await call('copilot:newThread', { projectId: pid, agentId: temp.id })).thread;
+  await trash.trashRecord(pid, 'agent', temp.id);
+  await trash.purge(pid, 'agent', temp.id);
+  const row = (await call('copilot:threads', { projectId: pid })).threads.find((t: { id: string }) => t.id === tempT.id);
+  ok('a conversation whose agent was purged is marked deleted, with no name to show', row?.agentId === temp.id && row.agentGone === true && !('agentName' in row), JSON.stringify(row));
+  ok('…and its history says the same', (await call('copilot:history', { projectId: pid, threadId: tempT.id })).agent?.gone === true);
+
+  // ── 9. the instructions' room ────────────────────────────────────────────
+  const long = (tag: string) => Array.from({ length: 40 }, (_, i) => `${tag} rule ${String(i).padStart(2, '0')}: ${'x'.repeat(260)}`);
+  const both = guidance.guidanceBlock({ instructions: long('Project'), agent: { name: 'Finance assistant', instructions: long('Agent') } });
+  const count = (tag: string) => both.text.split('\n').filter((l) => l.startsWith(`- ${tag} rule`)).length;
+  ok('full lists: each keeps at least half the room — the project\'s apply to every agent, the agent\'s win', count('Project') >= 6 && count('Agent') >= 6 && both.text.length < guidance.INSTRUCTIONS_BLOCK_MAX + 1200, `${count('Project')} / ${count('Agent')}`);
+  const lone = guidance.guidanceBlock({ instructions: ['Revenue means booked deals'], agent: { name: 'Finance assistant', instructions: long('Agent') } });
+  ok('NEGATIVE CONTROL: a short project list leaves its room to the agent\'s', lone.text.includes('Revenue means booked deals') && lone.text.split('\n').filter((l) => l.startsWith('- Agent rule')).length > count('Agent'));
 }
 
 const stableModel = (m: { provider: string; model: string } | null | undefined): string => (m ? `${m.provider}/${m.model}` : '');
