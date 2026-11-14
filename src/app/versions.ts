@@ -67,7 +67,7 @@ export interface VersionMeta {
   thumb?: Array<{ x: number; y: number; w: number; h: number; type: string }>;
 }
 
-export function isVersionType(t: unknown): t is DiffType { // every file record but a verified question and a topic, which keep no history
+export function isVersionType(t: unknown): t is DiffType { // every file record but a verified question, a topic and an agent, which keep no history
   return typeof t === 'string' && TYPES.has(t);
 }
 

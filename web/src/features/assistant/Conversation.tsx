@@ -14,10 +14,12 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { buttonClass } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { mineModel } from './api';
+import { AgentPicker } from './AgentPicker';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
 import { modelLabel } from './DockParts';
@@ -27,6 +29,7 @@ import { ThreadActionDialog } from './ThreadActions';
 import { Transcript } from './Transcript';
 import type { Conversation } from './useConversation';
 import { VerifiedChips } from './VerifiedChips';
+import a from './Agent.module.css';
 import s from './Dock.module.css';
 import w from './Wide.module.css';
 
@@ -55,7 +58,20 @@ function Notice({ c }: { c: Conversation }) {
       </div>
     );
   }
+  if (c.agentNote) {
+    return (
+      <div className={a.agentNote} role="status" data-testid="agent-note">
+        <Icon name="info" size={12} />
+        <span>{c.agentNote}</span>
+      </div>
+    );
+  }
   return null;
+}
+
+/** Which Assistant answers, beside the composer: shown only when this person may use an agent (rule 1). */
+function AgentPick({ c }: { c: Conversation }) {
+  return <AgentPicker agents={c.agents} value={c.agentNote ? null : c.agentId} disabled={!c.pid || !!c.pending} onChange={(id) => void c.pickAgent(id)} />;
 }
 
 /** The turns, and what the last reply offers to do next. */
@@ -65,7 +81,16 @@ function Turns({ c }: { c: Conversation }) {
   if (!pid) return null;
   return (
     <>
-      <Transcript turns={c.turns} pending={pending} lastSteps={c.lastSteps} projectId={pid} threadId={c.shownThread} onFollowUp={c.followUp} />
+      <Transcript
+        turns={c.turns}
+        pending={pending}
+        lastSteps={c.lastSteps}
+        projectId={pid}
+        threadId={c.shownThread}
+        onFollowUp={c.followUp}
+        agentName={c.agent?.name ?? c.history.data?.agent?.name}
+        onAskProject={(q) => void c.askProject(q)}
+      />
       {canEdit && c.getData && !pending && (
         <div className={s.getData} data-testid="dock-get-data">
           <Link className={buttonClass('primary', 'sm')} to={`/data/import?project=${pid}`}>Import a file</Link>
@@ -124,7 +149,18 @@ function Suggestions({ c, className, pill }: { c: Conversation; className: strin
 function ConversationComposer({ c, layout, className }: { c: Conversation; layout: Layout; className?: string }) {
   const pid = c.pid;
   // The page is the whole project's, so "what you're looking at" means nothing there.
-  const placeholder = layout === 'page' && pid && c.ready && c.enabled && !c.pinned ? (c.empty ? 'Ask about your data, or say what to build…' : 'Ask a follow-up, or say what to build…') : c.placeholder;
+  // An agent that only answers is never asked to build (docs/assistant-agents rule 8).
+  const build = !c.agent || c.agent.build;
+  const placeholder =
+    layout === 'page' && pid && c.ready && c.enabled && !c.pinned
+      ? c.empty
+        ? c.agent
+          ? c.placeholder
+          : 'Ask about your data, or say what to build…'
+        : build
+          ? 'Ask a follow-up, or say what to build…'
+          : 'Ask a follow-up…'
+      : c.placeholder;
   return (
     <Composer
       layout={layout}
@@ -132,7 +168,9 @@ function ConversationComposer({ c, layout, className }: { c: Conversation; layou
       inputRef={c.input}
       projectId={pid}
       status={c.status.data}
-      context={c.context}
+      fixedModel={c.fixedModel && c.agent ? { model: c.fixedModel, by: c.agent.name } : undefined}
+      agentPick={<AgentPick c={c} />}
+      context={c.about}
       pinned={c.pinned !== null}
       onPin={(p) => c.setPin(p && pid ? { projectId: pid, context: p } : null)}
       text={c.text}
@@ -170,7 +208,7 @@ export function ConversationBody({ c, layout, intro }: { c: Conversation; layout
   const verified = c.empty && c.enabled && !!c.pid;
 
   if (layout === 'dock') {
-    const mine = mineModel(c.status.data);
+    const mine = c.fixedModel ?? mineModel(c.status.data);
     return (
       <>
         <div className={s.stage} ref={c.stage} data-testid="dock-messages">

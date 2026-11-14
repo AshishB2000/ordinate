@@ -11,6 +11,8 @@
 
 import { useRef, useState } from 'react';
 import { Icon } from '../../ui/icons/Icon';
+import { AgentPicker } from '../assistant/AgentPicker';
+import type { AgentRow } from '../assistant/agents';
 import { AiNotReady } from '../assistant/AiNotReady';
 import { useAiStatus, useVerifiedChips, type VerifiedChip } from '../assistant/api';
 import { VerifiedChips } from '../assistant/VerifiedChips';
@@ -32,12 +34,27 @@ function Sentence({ p }: { p: Starter }) {
   );
 }
 
-export function AskBar({ prompts, onAsk, projectId, onRun }: { prompts: Starter[]; onAsk: (question: string, about?: About) => void; projectId?: string; onRun?: (c: VerifiedChip) => void }) {
+export interface AskBarProps {
+  prompts: Starter[];
+  onAsk: (question: string, about?: About) => void;
+  projectId?: string;
+  onRun?: (c: VerifiedChip) => void;
+  /** The Assistant agents this person may use; with none, no picker and nothing changes (docs/assistant-agents rule 1). */
+  agents?: readonly AgentRow[];
+  /** The one the next question goes to; null: the Project assistant. */
+  agentId?: string | null;
+  onAgent?: (id: string | null) => void;
+}
+
+export function AskBar({ prompts, onAsk, projectId, onRun, agents = [], agentId = null, onAgent }: AskBarProps) {
   const [q, setQ] = useState('');
   const [about, setAbout] = useState<About | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const ai = useAiStatus();
-  const verified = useVerifiedChips(projectId);
+  const all = useVerifiedChips(projectId);
+  // An agent's verified answers are its topic's (as in the composer): one outside it is the Project assistant's.
+  const topic = agents.find((x) => x.id === agentId)?.topic;
+  const verified = topic ? all.filter((v) => topic.datasetIds.includes(v.spec.datasetId)) : all;
   const submit = () => {
     const text = q.trim();
     if (!text) return;
@@ -59,6 +76,16 @@ export function AskBar({ prompts, onAsk, projectId, onRun }: { prompts: Starter[
           submit();
         }}
       >
+        {onAgent && (
+          <AgentPicker
+            agents={agents}
+            value={agentId}
+            onChange={(id) => {
+              onAgent(id);
+              input.current?.focus();
+            }}
+          />
+        )}
         {about && (
           <span className={s.askAbout} data-testid="ask-about">
             <span className={s.askAboutName}>@{about.name}</span>

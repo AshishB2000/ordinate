@@ -10,6 +10,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../ui/icons/Icon';
+import { OutsideCard } from './AgentPicker';
 import { AnswerCard } from './AnswerCard';
 import type { ActivityStep, Provenance, Turn } from './api';
 import { DidYouMean, type Learn } from './DidYouMean';
@@ -71,6 +72,8 @@ export function Transcript({
   threadId,
   onFollowUp,
   aside,
+  agentName,
+  onAskProject,
 }: {
   turns: readonly Turn[];
   pending: Pending | null;
@@ -82,6 +85,10 @@ export function Transcript({
   onFollowUp: (spec: Record<string, unknown>, label: string, learn?: Learn) => Promise<void>;
   /** More under an answer, after its provenance line (the Data model's test chat: how it was found). `asked`: the turn before. */
   aside?: (t: Turn, asked?: Turn) => ReactNode;
+  /** The Assistant agent this conversation is with, which an out-of-scope reply is signed by. */
+  agentName?: string;
+  /** An out-of-scope reply's one click: the question before it, to the Project assistant in a new conversation. */
+  onAskProject?: (question: string) => void;
 }) {
   return (
     <>
@@ -100,7 +107,16 @@ export function Transcript({
               onFollowUp={onFollowUp}
             />
           )}
-          {(t.role === 'user' || !t.answer || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>}
+          {t.role === 'assistant' && t.outside ? (
+            <OutsideCard
+              agent={agentName || 'This assistant'}
+              text={t.text}
+              busy={!!pending}
+              onAsk={onAskProject && turns[i - 1]?.role === 'user' ? () => onAskProject(turns[i - 1].text) : undefined}
+            />
+          ) : (
+            (t.role === 'user' || !t.answer || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>
+          )}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
           {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}
           {t.role === 'assistant' && t.provenance && <div className={s.provenance}>{provenanceLine(t.provenance)}</div>}

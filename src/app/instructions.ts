@@ -74,22 +74,28 @@ function storable(raw: string): string {
   return text;
 }
 
+/**
+ * `list` after one change, stamped now, or THROWS the sentence to show. The one rule set for every instruction list: the
+ * project's below, and an Assistant agent's (src/ai/agents.ts). `tooMany` words a full list for its owner.
+ */
+export function applyInstructionOp(list: readonly Instruction[], op: InstructionOp, tooMany: (max: number) => string = instructionTooMany): Instruction[] {
+  const text = op.kind === 'remove' ? '' : storable(op.text);
+  const stamp = { updatedBy: clip(osUser(), MAX_BY), updatedAt: new Date().toISOString() };
+  if (op.kind === 'add') {
+    if (list.length >= MAX_INSTRUCTIONS) throw new Error(tooMany(MAX_INSTRUCTIONS));
+    return [...list, { id: randomUUID(), text, ...stamp }];
+  }
+  const at = list.findIndex((i) => i.id.toLowerCase() === op.id.toLowerCase());
+  if (at < 0) throw new Error(instructionGone());
+  return op.kind === 'edit' ? list.map((i, k) => (k === at ? { id: i.id, text, ...stamp } : i)) : list.filter((_, k) => k !== at);
+}
+
 /** One change, read fresh under the catalog's lock; the whole list after it. THROWS the catalog's sentence, storing nothing. */
 export async function changeInstructions(projectId: string, op: InstructionOp): Promise<Instruction[]> {
   if (!isValidId(projectId)) throw new Error(instructionGone());
-  const text = op.kind === 'remove' ? '' : storable(op.text);
+  if (op.kind !== 'remove') storable(op.text); // refused before the catalog is locked
   return mutateCatalog(projectId, (file) => {
-    const list = file.instructions ?? [];
-    const stamp = { updatedBy: clip(osUser(), MAX_BY), updatedAt: new Date().toISOString() };
-    let next: Instruction[];
-    if (op.kind === 'add') {
-      if (list.length >= MAX_INSTRUCTIONS) throw new Error(instructionTooMany(MAX_INSTRUCTIONS));
-      next = [...list, { id: randomUUID(), text, ...stamp }];
-    } else {
-      const at = list.findIndex((i) => i.id.toLowerCase() === op.id.toLowerCase());
-      if (at < 0) throw new Error(instructionGone());
-      next = op.kind === 'edit' ? list.map((i, k) => (k === at ? { id: i.id, text, ...stamp } : i)) : list.filter((_, k) => k !== at);
-    }
+    const next = applyInstructionOp(file.instructions ?? [], op);
     if (next.length) file.instructions = next;
     else delete file.instructions;
     return next;

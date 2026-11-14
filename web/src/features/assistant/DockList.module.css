@@ -74,6 +74,8 @@
 }
 .rowMeta {
   composes: shortcut from '../../ui/floating.module.css';
+  flex: none;
+  white-space: nowrap; /* beside an agent's name too */
 }
 .empty {
   padding: var(--sp-12) var(--sp-8);

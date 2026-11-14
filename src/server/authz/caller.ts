@@ -83,6 +83,42 @@ async function resolve(projectId: string): Promise<Caller> {
   return { restricted: true, userId: row ? row.id : null, teamIds: row && Array.isArray(row.teams) ? row.teams : [] };
 }
 
+/**
+ * The caller's effective rank on `projectId` (3 admin, 2 editor, 1 viewer, 0 none), by the rule `authorize` applies:
+ * an org admin is a project admin everywhere. The rank `authorize` seeded for this request, else one query. Never an
+ * authorization decision by itself (the route made that); a screen's and an agent's "may they" (src/ai/agentAccess.ts).
+ */
+export async function rankOn(projectId: string): Promise<number> {
+  const who = ctx();
+  if (who.user.role === 'admin') return 3;
+  const seeded = perRequest(ranks).get(projectId.toLowerCase());
+  return seeded !== undefined ? seeded : grantRank(poolOf(), who, projectId.toLowerCase());
+}
+
+/** Every team the caller is in, whatever their rank (ids, lowercase). None without Postgres (the dev admin's only). */
+export async function callerTeamIds(): Promise<string[]> {
+  const pool = poolOf();
+  if (!pool) return [];
+  const who = ctx();
+  const r = await pool.query<{ id: string }>(
+    `SELECT tm.team_id::text AS id FROM team_members tm JOIN users u ON u.id = tm.user_id
+      WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL`,
+    [who.org.id, who.user.email],
+  );
+  return r.rows.map((row) => row.id.toLowerCase());
+}
+
+/** The caller's org's teams among `ids` (every one when `ids` is absent), by name: what an agent may name. */
+export async function orgTeams(ids?: readonly string[]): Promise<{ id: string; name: string }[]> {
+  const pool = poolOf();
+  if (!pool) return [];
+  const r = await pool.query<{ id: string; name: string }>(
+    'SELECT id::text, name FROM teams WHERE org_id = $1 AND ($2::uuid[] IS NULL OR id = ANY($2::uuid[])) ORDER BY name',
+    [ctx().org.id, ids ? [...ids] : null],
+  );
+  return r.rows.map((row) => ({ id: row.id.toLowerCase(), name: row.name }));
+}
+
 /** The caller on `projectId`: unrestricted (org admin, project editor or admin), or restricted with their ids. */
 export function callerOn(projectId: string): Promise<Caller> {
   const who = ctx();

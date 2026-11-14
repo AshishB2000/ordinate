@@ -12,10 +12,10 @@ import * as path from 'path';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
 
-export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified' | 'topic';
+export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert' | 'term' | 'verified' | 'topic' | 'agent';
 export type FileRecordType = Exclude<RecordType, 'alert'>;
 
-export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified', 'topic'];
+export const RECORD_TYPES: readonly RecordType[] = ['dataset', 'visual', 'dashboard', 'metric', 'report', 'alert', 'term', 'verified', 'topic', 'agent'];
 
 export const RECORD_DIR: Record<FileRecordType, string> = {
   dataset: 'datasets',
@@ -26,6 +26,7 @@ export const RECORD_DIR: Record<FileRecordType, string> = {
   term: 'terms', // a glossary term (semantic D10)
   verified: 'verified', // a verified question (semantic part 3 D7): a spec, never a figure
   topic: 'topics', // a team's short list of the project's data (semantic part 6 D14); no version history
+  agent: 'agents', // an Assistant agent: a topic, instructions, a model, actions and teams (docs/assistant-agents); no version history
 };
 
 export function isRecordType(v: unknown): v is RecordType {

@@ -235,7 +235,8 @@ async function main(): Promise<void> {
     ok('a turn with no guidance has no guidance key (byte-identical)', !('guidance' in (await reload({}))) && !('guidance' in rawThreads().flatMap((t) => t.turns).at(-1)));
     ok('NEGATIVE CONTROL: an unknown turn key is still dropped', !('foo' in (await reload({ foo: 1 }))) && !('foo' in rawThreads().flatMap((t) => t.turns).at(-1)));
 
-    ok('a count past 40 drops the guidance whole', sanitizeGuidance({ instructions: 41, examples: [] }) === undefined);
+    // 80: the project's 40 instructions and an Assistant agent's 40 (src/ai/agents.ts).
+    ok('a count past 80 drops the guidance whole', sanitizeGuidance({ instructions: 81, examples: [] }) === undefined && sanitizeGuidance({ instructions: 80, examples: [] })?.instructions === 80);
     ok('…so does a negative, fractional or non-number count', [-1, 1.5, '3', null, undefined].every((n) => sanitizeGuidance({ instructions: n, examples: [E1] }) === undefined));
     ok('…and a value that is no object', [null, 'x', 7, [], undefined].every((v) => sanitizeGuidance(v) === undefined));
     ok('0 and 40 are kept', sanitizeGuidance({ instructions: 0, examples: [] })!.instructions === 0 && sanitizeGuidance({ instructions: 40, examples: [] })!.instructions === 40);

@@ -10,7 +10,7 @@ import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { DRAFT_DASHBOARD_SYSTEM_PROMPT } from '../analysis/analysisPlan';
 import { streamProvider } from './analyzeStream';
 import { DEFAULT_MODEL, errNoKey, resolveByok } from './byok';
-import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction } from './suggestedAction';
+import { chatSystemPrompt, makeActionFilter, splitAction, type AskOptions, type SuggestedAction } from './suggestedAction';
 // Prompts with no dedicated parser of their own live in ./prompts.ts; the capture
 // envelope below stays here, next to parseReply(), which reads its answer.
 import {
@@ -524,9 +524,9 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
 // Route one request to the API-key provider that is set up (local CLI models
 // were the desktop app's, and went with it at T8.1).
 // Returns the shared { rawText } | { error } shape regardless of provider.
-export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, _opts?: { prose?: boolean }): Promise<CallResult> {
+export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, opts?: { prose?: boolean; model?: AskOptions['model'] }): Promise<CallResult> {
   systemPrompt = withLanguage(systemPrompt); // Settings → Language: one line, absent in English
-  const creds = await resolveByok();
+  const creds = await resolveByok(opts?.model); // an Assistant agent's model, while it is enabled
   if (creds.error) return { error: creds.error };
   return callProvider(creds.provider, systemPrompt, messages, creds, onDelta);
 }
@@ -587,7 +587,7 @@ export async function explainText(userPrompt: string): Promise<{ ok: true; text:
 export async function askCopilot(
   historyTurns: { role: 'user' | 'assistant'; text: string }[],
   contextFacts: string,
-  question: string, onDelta?: (delta: string) => void,
+  question: string, onDelta?: (delta: string) => void, o: AskOptions = {},
 ): Promise<{ ok: true; text: string; suggestedAction: SuggestedAction } | TypedError> {
   if (!(await execConfig.executionReady())) return notReady();
   const prior: NeutralMsg[] = (Array.isArray(historyTurns) ? historyTurns : [])
@@ -600,7 +600,7 @@ export async function askCopilot(
   // The action line is withheld from the stream and stripped from the stored text
   // (./suggestedAction) — the user only ever sees prose.
   const filter = makeActionFilter(onDelta);
-  const { rawText, error } = await dispatch(CHAT_SYSTEM_PROMPT, messages, filter.onDelta, { prose: true });
+  const { rawText, error } = await dispatch(chatSystemPrompt({ build: o.build !== false, topic: !!o.topic }), messages, filter.onDelta, { prose: true, model: o.model });
   // Release the tail held back in case it was the start of a marker.
   filter.flush();
   if (error) return error;

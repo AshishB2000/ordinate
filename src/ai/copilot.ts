@@ -74,6 +74,8 @@ export interface CopilotTurn {
   savedVisualId?: string;
   /** How this answer was guided (./turnGuidance): ids and counts, kept for a later release. Assistant turns only. */
   guidance?: TurnGuidance;
+  /** An Assistant agent's out-of-scope reply (src/ipc/agentAsk.ts): the dataset the Project assistant can answer from. */
+  outside?: { dataset: string };
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -86,6 +88,8 @@ export interface CopilotThread {
   // Server only: the member who started it. A project's members share one
   // copilot.json, but a conversation is its owner's alone (see `mine`).
   owner?: string;
+  /** The Assistant agent it belongs to (./agents.ts, rule 11); absent: the Project assistant. */
+  agentId?: string;
 }
 
 // What listThreads() hands the renderer — no turn bodies, so a sidebar of 50
@@ -95,6 +99,8 @@ export interface CopilotThreadSummary {
   title: string;
   updatedAt: string;
   turnCount: number;
+  /** Absent: the Project assistant. */
+  agentId?: string;
 }
 
 // The whole on-disk file. v1 was { projectId, turns, schemaVersion: 1 } — a single
@@ -114,6 +120,7 @@ export interface NewCopilotTurn {
   suggest?: AnswerSuggest;
   learn?: AnswerLearn;
   guidance?: TurnGuidance;
+  outside?: { dataset: string };
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -208,6 +215,13 @@ function normalizeProvenance(p: any): CopilotProvenance | undefined {
   return prov;
 }
 
+/** A dataset name the out-of-scope card names: one line, as a dataset's name is cut. */
+function sanitizeOutside(raw: unknown): { dataset: string } | undefined {
+  const d = (raw as { dataset?: unknown } | null)?.dataset;
+  const dataset = typeof d === 'string' ? d.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+  return dataset ? { dataset } : undefined;
+}
+
 // Re-sanitize a stored turn list (drop non-object turns, clamp role, coerce text
 // to string, keep/repair id + createdAt, whitelist provenance), then ring-cap.
 export function normalizeTurns(raw: any): CopilotTurn[] {
@@ -233,6 +247,8 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
     const guidance = role === 'assistant' ? sanitizeGuidance(t.guidance) : undefined;
     if (guidance) turn.guidance = guidance;
+    const outside = role === 'assistant' && !answer ? sanitizeOutside(t.outside) : undefined;
+    if (outside) turn.outside = outside;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -298,6 +314,7 @@ export function normalize(data: any): CopilotThread[] {
       updatedAt: typeof t.updatedAt === 'string' && t.updatedAt ? t.updatedAt : createdAt,
       turns,
       ...(typeof t.owner === 'string' && t.owner ? { owner: t.owner } : {}),
+      ...(isValidId(t.agentId) ? { agentId: t.agentId } : {}),
     });
   }
   // Defensive cap on load too, in case a file predates a lower MAX_THREADS.
@@ -380,9 +397,12 @@ export async function listThreads(projectId: string): Promise<CopilotThreadSumma
   return threads
     .slice()
     .reverse()
-    .map((t) => ({ id: t.id, title: t.title, updatedAt: t.updatedAt, turnCount: t.turns.length }))
+    .map((t) => summaryOf(t))
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
 }
+
+const summaryOf = (t: CopilotThread): CopilotThreadSummary =>
+  ({ id: t.id, title: t.title, updatedAt: t.updatedAt, turnCount: t.turns.length, ...(t.agentId ? { agentId: t.agentId } : {}) });
 
 // The id of the thread a bare loadHistory()/appendTurn() targets, or null when the
 // project has no conversation yet.
@@ -396,25 +416,28 @@ export async function latestThreadId(projectId: string): Promise<string | null> 
 // switch to it (and copilot:ask can target it) before a single turn exists. It is
 // titled FALLBACK_TITLE until its first user turn renames it. Returns null on an
 // invalid projectId or a missing parent project — same guard as appendTurn.
-export async function createThread(projectId: string): Promise<CopilotThreadSummary | null> {
+// `agentId`: the Assistant agent it is with (the caller checked they may use it); none, the Project assistant.
+export async function createThread(projectId: string, agentId?: string | null): Promise<CopilotThreadSummary | null> {
   if (!isValidId(projectId)) return null;
+  const agent = isValidId(agentId) ? agentId : undefined;
   const parent = await projects.getProject(projectId);
   if (!parent) return null;
 
   const now = new Date().toISOString();
-  if (rows.on()) return rows.createThread(projectId, now);
+  if (rows.on()) return rows.createThread(projectId, now, agent);
   const thread: CopilotThread = {
     id: randomUUID(),
     title: FALLBACK_TITLE,
     createdAt: now,
     updatedAt: now,
     turns: [],
+    ...(agent ? { agentId: agent } : {}),
   };
   const who = ownerNow();
   if (who !== undefined) thread.owner = who;
   return changeThreads(projectId, async (threads) => {
     await writeThreads(projectId, [...threads, thread]);
-    return { id: thread.id, title: thread.title, updatedAt: thread.updatedAt, turnCount: 0 };
+    return summaryOf(thread);
   });
 }
 
@@ -478,6 +501,8 @@ export async function appendTurn(
   if (learn) record.learn = learn;
   const guidance = role === 'assistant' ? sanitizeGuidance(turn && turn.guidance) : undefined;
   if (guidance) record.guidance = guidance;
+  const outside = role === 'assistant' && !answer ? sanitizeOutside(turn && turn.outside) : undefined;
+  if (outside) record.outside = outside;
   if (rows.on()) return rows.appendTurn(projectId, record, threadId);
 
   return changeThreads(projectId, async (threads) => {
@@ -526,7 +551,7 @@ export async function renameThread(projectId: string, threadId: string, title: s
     if (!target) return null;
     target.title = clampTitle(title);
     await writeThreads(projectId, threads);
-    return { id: target.id, title: target.title, updatedAt: target.updatedAt, turnCount: target.turns.length };
+    return summaryOf(target);
   });
 }
 

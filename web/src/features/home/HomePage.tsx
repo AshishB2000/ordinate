@@ -12,6 +12,7 @@
 // The project Home speaks for is the current one — the top bar's switcher's
 // (../projects/current), as on every project-scoped screen.
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
 import { ASSISTANT_PATH } from '../assistant/DockParts';
@@ -20,6 +21,7 @@ import { useMe } from '../auth/api';
 import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { newThread, type VerifiedChip } from '../assistant/api';
+import { usableAgents, useAgents } from '../assistant/agents';
 import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
@@ -73,13 +75,21 @@ export default function HomePage() {
   const recent = useRecent();
   // New and "Bring in some data" change the project: an editor's.
   const canEdit = useCanEdit(projectId);
-  // Building is offered only to an editor; asking is anyone's.
-  const prompts = suggestPrompts(ov.data?.datasets ?? [], canEdit);
-  // What starts on Home starts a new conversation, in Home's project, opened by its id: never the last one, asked
-  // where you left it. If it cannot be made, the page opens on the most recent, as before.
+  // Which Assistant answers (docs/assistant-agents): the one preselected for this person until they pick another.
+  const agentList = useAgents(projectId);
+  const [picked, setPicked] = useState<{ projectId: string; id: string | null } | null>(null);
+  const agentId = picked && picked.projectId === projectId ? picked.id : (agentList.data?.preselected ?? null);
+  // Building is offered only to an editor; asking is anyone's. An agent's suggestions are its topic's datasets (as in the
+  // composer): one outside it is the Project assistant's.
+  const topic = usableAgents(agentList.data).find((x) => x.id === agentId)?.topic;
+  const prompts = suggestPrompts((ov.data?.datasets ?? []).filter((d) => !topic || topic.datasetIds.includes(d.id)), canEdit);
+  // What starts on Home starts a new conversation, in Home's project, with that Assistant, opened by its id: never
+  // the last one, asked where you left it. If it cannot be made, the page opens on the most recent, as before.
   const openNew = async () => {
     if (projectId) pickDockProject(projectId);
-    const id = projectId ? await newThread(projectId).catch(() => '') : '';
+    // Asked before the agents are known: wait for them, so the preselected one starts it.
+    const agent = agentList.isPending && projectId && picked?.projectId !== projectId ? ((await agentList.refetch()).data?.preselected ?? null) : agentId;
+    const id = projectId ? await newThread(projectId, agent).catch(() => '') : '';
     void navigate(id ? `${ASSISTANT_PATH}?thread=${id}` : ASSISTANT_PATH);
   };
   // Asked on the Assistant's own page, full width. A suggestion points it at the dataset it names, in Home's project.
@@ -107,7 +117,15 @@ export default function HomePage() {
           {canEdit && <NewMenu projectId={projectId} />}
         </div>
       </header>
-      <AskBar prompts={prompts} onAsk={ask} projectId={projectId} onRun={run} />
+      <AskBar
+        prompts={prompts}
+        onAsk={ask}
+        projectId={projectId}
+        onRun={run}
+        agents={usableAgents(agentList.data)}
+        agentId={agentId}
+        onAgent={(id) => projectId && setPicked({ projectId, id })}
+      />
       <YourNumbers projectId={projectId} />
       <GetStarted noData={ov.isSuccess && ov.data.datasets.length === 0} />
       {cur.status === 'success' && !project && (

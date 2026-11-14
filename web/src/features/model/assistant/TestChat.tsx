@@ -16,6 +16,8 @@ import { ask, deleteThread, newThread, renameThread, useAiStatus, useHistory, us
 import { Transcript, type Pending } from '../../assistant/Transcript';
 import { toast } from '../../../ui/Toast';
 import { HowAnswered } from './HowAnswered';
+import { AgentPicker } from '../../assistant/AgentPicker';
+import { usableAgents, useAgents } from '../../assistant/agents';
 import { useVerified } from './api';
 import type { TermSummary } from '../terms/api';
 import a from './Assistant.module.css';
@@ -26,7 +28,11 @@ export const TEST_THREAD = 'Data model test';
 export function TestChat({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const threads = useThreads(projectId, true);
-  const found = threads.data?.find((x) => x.title === TEST_THREAD);
+  // Which Assistant to try (docs/assistant-agents): the Project assistant, or an agent before its teams use it. Each has its own test thread.
+  const agents = usableAgents(useAgents(projectId).data);
+  const [picked, setPicked] = useState<string | null>(null);
+  const agentId = agents.some((x) => x.id === picked) ? picked : null;
+  const found = threads.data?.find((x) => x.title === TEST_THREAD && (x.agentId ?? null) === agentId);
   const tid = found?.id ?? '';
   const history = useHistory(tid ? projectId : null, tid);
   const status = useAiStatus();
@@ -52,7 +58,7 @@ export function TestChat({ projectId }: { projectId: string }) {
   /** This caller's thread, made and named now if there is none. */
   async function thread(): Promise<string> {
     if (tid) return tid;
-    const id = await newThread(projectId);
+    const id = await newThread(projectId, agentId);
     if (!id || !(await renameThread(projectId, id, TEST_THREAD))) throw new Error('Could not start the test conversation.');
     return id;
   }
@@ -120,6 +126,12 @@ export function TestChat({ projectId }: { projectId: string }) {
           threadId={tid}
           onFollowUp={followUp}
           aside={(turn) => <HowAnswered turn={turn} verified={rows} terms={terms} />}
+          agentName={agents.find((x) => x.id === agentId)?.name}
+          onAskProject={(question) => {
+            setPicked(null); // the Project assistant's own test thread, with the question ready to ask
+            setText(question);
+            box.current?.focus();
+          }}
         />
       </div>
     );
@@ -154,6 +166,7 @@ export function TestChat({ projectId }: { projectId: string }) {
             void send();
           }}
         >
+          <AgentPicker agents={agents} value={agentId} disabled={!!pending} onChange={setPicked} />
           <Textarea
             ref={box}
             aria-label="Question to try"

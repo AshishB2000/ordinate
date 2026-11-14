@@ -1,0 +1,166 @@
+/* The composer's agent picker and an agent's out-of-scope card (AgentPicker.tsx). Theme tokens only, so both themes
+   follow. The picker is the kit's select without its box until it is pointed at; an agent other than the Project
+   assistant wears the accent, so who answers is never in doubt. */
+
+/* Who answers comes before the model: it keeps its name, the model's gives way first. */
+.pick {
+  flex: 0 0 auto;
+  max-width: 60%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: var(--sp-8);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+}
+.pick > svg {
+  flex: none;
+}
+.pick .select {
+  width: auto;
+  max-width: 220px;
+  min-width: 0;
+  padding: 0 var(--sp-4);
+  border-color: transparent;
+  background: none;
+  color: inherit;
+  font-weight: 500;
+}
+.pick .select:hover,
+.pick .select[data-state='open'] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.picked {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.picked .select:hover,
+.picked .select[data-state='open'] {
+  background: transparent;
+  color: var(--accent-text);
+}
+
+/* ── Out of scope ───────────────────────────────────────────────────── */
+.outside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+}
+.outsideHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-bottom: 2px;
+}
+.outsideMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--accent-text);
+}
+.outsideAgent {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--accent-text);
+}
+.outsideLine {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-strong);
+}
+.outsideOffer {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.outsideAsk {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: var(--ctl-sm);
+  margin-top: var(--sp-8);
+  padding: 0 var(--sp-12);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: var(--t-13);
+  font-weight: 600;
+  cursor: pointer;
+}
+.outsideAsk:hover {
+  background: var(--accent-2);
+}
+.outsideAsk:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+.outsideAsk:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* A conversation whose agent was deleted, or is no longer this person's: who answers now. */
+.agentNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: 1.45;
+}
+.agentNote > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* History: which agent a conversation was with. */
+.rowAgent {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  line-height: 18px;
+}
+.rowAgentOn {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* …and under a title in the page's conversations column. */
+.lineAgent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-11);
+  font-weight: 500;
+  color: var(--muted);
+}
+.lineAgentOn {
+  color: var(--accent-text);
+}

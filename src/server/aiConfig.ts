@@ -142,20 +142,27 @@ async function modelRows(c: PoolClient, org: string): Promise<ModelRow[]> {
 
 const toModel = (r: ModelRow): AiModel => ({ provider: r.provider, model: r.model, label: r.label, isDefault: r.is_default });
 
-async function member(c: PoolClient, org: string): Promise<MemberView> {
+type Pick = { provider: string; model: string } | null | undefined;
+
+/** The model that answers: `prefer` (an Assistant agent's) while enabled, else the member's pick while enabled, else the default. */
+export function chooseModel(models: readonly AiModel[], prefer: Pick, pick: Pick): AiModel | undefined {
+  const find = (p: Pick): AiModel | undefined => (p ? models.find((m) => m.provider === p.provider && m.model === p.model) : undefined);
+  return find(prefer) ?? find(pick) ?? models.find((m) => m.isDefault) ?? models[0];
+}
+
+async function member(c: PoolClient, org: string, prefer?: Pick): Promise<MemberView> {
   const models = (await modelRows(c, org)).filter((r) => r.verified).map(toModel);
   const pick = (await c.query<{ provider: string; model: string }>(
     'SELECT provider, model FROM user_ai_model WHERE org_id = $1 AND user_email = $2', [org, ctx().user.email])).rows[0];
-  const chosen = (pick && models.find((m) => m.provider === pick.provider && m.model === pick.model))
-    ?? models.find((m) => m.isDefault) ?? models[0];
+  const chosen = chooseModel(models, prefer, pick);
   const mine = chosen ? { provider: chosen.provider, model: chosen.model } : null;
   if (mine) return { ready: true, models, mine };
   return { ready: false, reason: aiKeys.keyStoreUnavailable() ? 'no_key_store' : 'no_model', models, mine };
 }
 
-/** What the caller may use, and what answers them. */
-export async function memberView(): Promise<MemberView> {
-  return asOrg(member);
+/** What the caller may use, and what answers them (`prefer`: an Assistant agent's model, while enabled). */
+export async function memberView(prefer?: Pick): Promise<MemberView> {
+  return asOrg((c, org) => member(c, org, prefer));
 }
 
 /** The org's whole setup, for Admin → AI. Never a key. */
@@ -194,8 +201,8 @@ export async function credentials(provider: string): Promise<{ apiKey: string | 
 }
 
 /** The model a call runs on for the caller, with its credentials — or why there is none. */
-export async function resolve(): Promise<Fail | { ok: true; provider: string; model: string; apiKey: string | null; baseUrl: string }> {
-  const view = await memberView();
+export async function resolve(prefer?: Pick): Promise<Fail | { ok: true; provider: string; model: string; apiKey: string | null; baseUrl: string }> {
+  const view = await memberView(prefer);
   if (!view.mine) return { ok: false, error: msg.aiNotSetUp() };
   const { provider, model } = view.mine;
   const cred = await credentials(provider);

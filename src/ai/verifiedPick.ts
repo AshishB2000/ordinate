@@ -36,11 +36,13 @@ export function rawSpec(spec: AnswerSpec, names: Names): Record<string, unknown>
 
 export interface PickOptions {
   question: string; datasetId?: string; exclude?: string; names: Names;
+  /** An Assistant agent's topic datasets: their questions next after the context's dataset (docs/assistant-agents rule 9). */
+  first?: ReadonlySet<string>;
   /** Columns whose values never reach this caller's prompt, per dataset. */
   withheld: (datasetId: string) => ReadonlySet<string>;
 }
 
-/** Up to 5 example lines: the context's dataset first, then the most words shared with the question, then the newest. */
+/** Up to 5 example lines: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest. */
 export function pickExamples(states: VerifiedState[], o: PickOptions): { lines: string[]; ids: string[] } {
   const asked = new Set(words(o.question));
   const shared = (q: VerifiedQuestion): number => words(q.question).filter((w) => asked.has(w)).length;
@@ -49,7 +51,7 @@ export function pickExamples(states: VerifiedState[], o: PickOptions): { lines: 
     const w = o.withheld(s.q.spec.datasetId);
     return !(hasValueFilter(s.q.spec) && s.q.spec.filters.some((f) => 'column' in f && !('period' in f) && w.has(f.column)));
   }).map((s) => s.q);
-  const rank = (q: VerifiedQuestion): number => (q.spec.datasetId === o.datasetId ? 0 : 1);
+  const rank = (q: VerifiedQuestion): number => (q.spec.datasetId === o.datasetId ? 0 : o.first?.has(q.spec.datasetId) ? 1 : 2);
   eligible.sort((a, b) => rank(a) - rank(b) || shared(b) - shared(a)
     || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) || (a.id < b.id ? -1 : 1));
   const lines: string[] = [], ids: string[] = [];

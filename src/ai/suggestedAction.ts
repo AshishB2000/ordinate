@@ -68,8 +68,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'rebuild' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'rebuild', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'rebuild' | 'outside' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'rebuild', 'outside', 'none'] as const; // 'outside': an Assistant agent's only (chatSystemPrompt)
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -165,9 +165,10 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 // below rather than inlined so the test can assert the whitelist and the marker
 // in the prompt are the SAME constants the parser validates against — a prompt
 // that drifts from its parser is the failure mode this pairing prevents.
-const ACTION_PROMPT =
+const LINE_HEAD =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
-  ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
+  ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n';
+const BUILD_KINDS =
   'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, import, rebuild, plan, none. Use "dashboard" when the ' +
   'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
   'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
@@ -186,7 +187,8 @@ const ACTION_PROMPT =
   ACTION_MARKER + ' {"kind":"style","intent":"<intent>","preset":"<preset>"}\n' +
   'where <preset> is EXACTLY one of: clean, executive, dense, dark. Lowercase, one word, ' +
   'nothing else. Pick the closest of the four; never name a colour, never write CSS, and never ' +
-  'invent a preset. If none of the four fits what they asked for, use kind "none" instead. ' +
+  'invent a preset. If none of the four fits what they asked for, use kind "none" instead. ';
+const ANSWER_SPEC =
   'Use "answer" when the question can be answered with ONE chart of the data in the FACTS ' +
   '("revenue by region last quarter", "top 5 products by profit", "how did West do vs East"). ' +
   'For "answer" ONLY, the line carries a spec, all on the same single line:\n' +
@@ -204,16 +206,29 @@ const ACTION_PROMPT =
   'the split, a measure, the chart type, the period or the top-N — the spec is {"refine":true,…} carrying ' +
   'ONLY what changes: the app keeps the rest, so do not repeat it. A filter in it replaces the one on the ' +
   'same column; "dropFilters":["<column>"] removes filters; "series":null removes the split; the intent ' +
-  'restates the whole question as it now stands. A new subject is a full spec without "refine". ' +
+  'restates the whole question as it now stands. A new subject is a full spec without "refine". ';
+const ANSWER_PROSE =
   'When the kind is "answer", your prose is ONE short sentence saying what the chart shows, with no ' +
-  'figures at all — the app computes and displays them. When the kind is "import", the app shows ' +
+  'figures at all — the app computes and displays them.';
+const IMPORT_PROSE =
+  ' When the kind is "import", the app shows ' +
   'the Import, Paste and Connect buttons under your reply: your prose is ONE short sentence, and it ' +
-  'never asks for a file name or tells them where to click.' + PLAN_PROMPT + ' ' +
-  'This line is machine-read and never shown; write nothing after it.';
+  'never asks for a file name or tells them where to click.';
+const LINE_END = 'This line is machine-read and never shown; write nothing after it.';
+const ACTION_PROMPT = LINE_HEAD + BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + IMPORT_PROSE + PLAN_PROMPT + ' ' + LINE_END;
 
-/** The chat system prompt. Lives here so the answer contract and the action
- *  contract are one thing — they are read together and must change together. */
-export const CHAT_SYSTEM_PROMPT =
+// An Assistant agent (docs/assistant-agents): one that may not build is offered only "answer" (rule 8), and one with a
+// topic is told that a question outside it is "outside" — which the app, not the model, then looks up (rule 10).
+const ANSWER_KINDS =
+  'where <kind> is one of: answer, none. Use "none" for an ordinary question that needs no chart; <intent> is a short ' +
+  'restatement of the question, or "" when kind is none. This assistant only answers questions: it never builds, imports ' +
+  'or plans anything, so never propose that. ';
+const OUTSIDE =
+  ' This assistant answers from its topic alone: the FACTS are all of it. When the question needs data the FACTS do not ' +
+  'hold, do not answer it from anything else: write ONE short sentence saying it is not in this assistant\'s data, with no ' +
+  'figures, and use the kind "outside" (its <intent> is the question, restated). The app then offers the Project assistant.';
+
+const CHAT_HEAD =
   'You are the Ordinate Assistant, a data analysis assistant for the user\'s current workspace. ' +
   'You are given FACTS about the active project/dataset/visual/dashboard — columns, types, ' +
   'already-computed statistics, sample rows, and computed chart/metric values. ' +
@@ -221,8 +236,32 @@ export const CHAT_SYSTEM_PROMPT =
   'GROUND every claim in the facts provided. NEVER invent, round, or recompute any number — use ' +
   'ONLY the exact figures given to you; if a number you need is not in the facts, say you don\'t ' +
   'have it rather than estimating. When the data is ambiguous or insufficient to answer, say so ' +
-  'plainly. Prefer insight over restating the numbers.' +
-  ACTION_PROMPT;
+  'plainly. Prefer insight over restating the numbers.';
+
+/** The chat system prompt. Lives here so the answer contract and the action
+ *  contract are one thing — they are read together and must change together. */
+export const CHAT_SYSTEM_PROMPT = CHAT_HEAD + ACTION_PROMPT;
+
+/**
+ * The chat prompt for one ask: CHAT_SYSTEM_PROMPT itself for the Project assistant. An agent that may not build is
+ * offered "answer" and "none" only; one with a topic is told what "outside" is for.
+ */
+export function chatSystemPrompt(o: { build: boolean; topic: boolean }): string {
+  if (o.build && !o.topic) return CHAT_SYSTEM_PROMPT;
+  const kinds = o.build
+    ? BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + IMPORT_PROSE + PLAN_PROMPT
+    : ANSWER_KINDS + ANSWER_SPEC + ANSWER_PROSE;
+  return CHAT_HEAD + LINE_HEAD + kinds + (o.topic ? OUTSIDE : '') + ' ' + LINE_END;
+}
+
+/** An Assistant agent's ask (src/ipc/agentAsk.ts): its model if set, whether it may build, whether it has a topic. */
+export interface AskOptions { model?: { provider: string; model: string } | null; build?: boolean; topic?: boolean }
+
+/** What an agent's ask may act on: an agent that may not build gets an answer or nothing, whatever the model wrote (rule 8). */
+export function allowedAction(a: SuggestedAction, o: { build: boolean; topic: boolean }): SuggestedAction {
+  if (a.kind === 'outside') return o.topic ? a : NO_ACTION;
+  return o.build || a.kind === 'answer' ? a : NO_ACTION;
+}
 
 /**
  * Validate one action object off the wire. Everything unrecognised → 'none'.

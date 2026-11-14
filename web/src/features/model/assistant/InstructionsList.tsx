@@ -138,18 +138,41 @@ function Row({ item, canEdit, editing, onEdit, onDone, change }: {
   );
 }
 
-export function InstructionsList({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
-  const q = useInstructions(projectId);
-  const mutation = useChangeInstruction(projectId);
-  const change = (op: InstructionOp) => mutation.mutateAsync(op);
+/** A list of instructions as a reader sees it: what loads it, and its one change at a time. */
+export interface InstructionSource {
+  isPending: boolean;
+  isError: boolean;
+  error: Error | null;
+  data: Instruction[] | undefined;
+  refetch: () => unknown;
+}
+
+export interface InstructionsEditorProps {
+  source: InstructionSource;
+  change: (op: InstructionOp) => Promise<string | null>;
+  canEdit: boolean;
+  /** The section heading's id: unique on the page. */
+  headingId: string;
+  title: string;
+  sub: string;
+  /** The empty state's sentence, for an editor and for a reader. */
+  empty: { editor: string; reader: string };
+  foot: string;
+}
+
+/**
+ * The one instructions list: the project's (`InstructionsList`, below) and an Assistant agent's (AgentPage.tsx), by the
+ * same rules on the server (src/app/instructions.ts) and the same rows here.
+ */
+export function InstructionsEditor({ source: q, change, canEdit, headingId, title, sub, empty, foot }: InstructionsEditorProps) {
   // 'new' = the add row is open; an id = that row is being edited. One at a time.
   const [open, setOpen] = useState<string | null>(null);
   const close = () => setOpen(null);
   const list = q.data ?? [];
 
   let body;
-  if (q.isPending) body = <SkeletonRows rows={3} label="Loading the instructions" />;
-  else if (q.isError) body = <ErrorState heading={3} title="The instructions could not be loaded" message={q.error.message || 'Try again.'} onRetry={() => void q.refetch()} />;
+  if (q.isPending) body = <SkeletonRows rows={3} label={`Loading the ${title.toLowerCase()}`} />;
+  else if (q.isError) body = <ErrorState heading={3} title={`The ${title.toLowerCase()} could not be loaded`} message={q.error?.message || 'Try again.'} onRetry={() => void q.refetch()} />;
   else if (!list.length && open !== 'new') {
     body = (
       <EmptyState
@@ -164,16 +187,14 @@ export function InstructionsList({ projectId, canEdit }: { projectId: string; ca
           )
         }
       >
-        {canEdit
-          ? `Write the rules your team follows, like ${EXAMPLE}, and every Assistant answer follows them.`
-          : `The rules your team follows, like ${EXAMPLE}, go here, and every Assistant answer follows them. An editor of this project can add instructions.`}
+        {canEdit ? empty.editor : empty.reader}
       </EmptyState>
     );
   } else {
     body = (
       <div className={a.card}>
         {!!list.length && (
-          <ol className={a.list} aria-label="Instructions">
+          <ol className={a.list} aria-label={title}>
             {list.map((item) => (
               <Row key={item.id} item={item} canEdit={canEdit} editing={open === item.id} onEdit={() => setOpen(item.id)} onDone={close} change={change} />
             ))}
@@ -186,23 +207,23 @@ export function InstructionsList({ projectId, canEdit }: { projectId: string; ca
         )}
         <p className={a.foot}>
           <Icon name="info" size={12} />
-          The Assistant reads these in order, with the guide of the dataset it is reading, before every answer, chart explanation and dashboard draft. They shape its choices and words; every figure still comes from your data.
+          {foot}
         </p>
       </div>
     );
   }
 
   return (
-    <section className={a.section} aria-labelledby="instructions-h">
+    <section className={a.section} aria-labelledby={headingId}>
       <div className={a.head}>
         <div>
           <div className={a.titleRow}>
-            <h2 className={a.title} id="instructions-h">
-              Instructions
+            <h2 className={a.title} id={headingId}>
+              {title}
             </h2>
             {!!list.length && <Badge>{list.length}</Badge>}
           </div>
-          <p className={a.sub}>Everyone in this project, and their Assistant, reads these.</p>
+          <p className={a.sub}>{sub}</p>
         </div>
         {canEdit && !!list.length && open !== 'new' && (
           <Button icon="plus" onClick={() => setOpen('new')}>
@@ -212,5 +233,25 @@ export function InstructionsList({ projectId, canEdit }: { projectId: string; ca
       </div>
       {body}
     </section>
+  );
+}
+
+export function InstructionsList({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+  const q = useInstructions(projectId);
+  const mutation = useChangeInstruction(projectId);
+  return (
+    <InstructionsEditor
+      source={q}
+      change={(op) => mutation.mutateAsync(op)}
+      canEdit={canEdit}
+      headingId="instructions-h"
+      title="Instructions"
+      sub="Everyone in this project, and their Assistant, reads these."
+      empty={{
+        editor: `Write the rules your team follows, like ${EXAMPLE}, and every Assistant answer follows them.`,
+        reader: `The rules your team follows, like ${EXAMPLE}, go here, and every Assistant answer follows them. An editor of this project can add instructions.`,
+      }}
+      foot="The Assistant reads these in order, with the guide of the dataset it is reading, before every answer, chart explanation and dashboard draft. They shape its choices and words; every figure still comes from your data. Every agent reads them too, before its own."
+    />
   );
 }

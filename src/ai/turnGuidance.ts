@@ -8,12 +8,12 @@ import { isValidId } from '../app/ids';
 
 export interface TurnGuidance {
   verifiedId?: string; // UUID of the verified question the answer followed
-  instructions: number; // integer 0..MAX_GUIDANCE_INSTRUCTIONS: how many standing instructions applied
+  instructions: number; // integer 0..MAX_GUIDANCE_INSTRUCTIONS: how many standing instructions applied (the project's and an agent's)
   examples: string[]; // UUIDs, at most MAX_GUIDANCE_EXAMPLES
   narrated?: true; // a verified answer a model was asked to narrate (turns stored before verified answers stopped calling one): "no model call" would be false
 }
 
-const MAX_GUIDANCE_INSTRUCTIONS = 40; // instructions.ts MAX_INSTRUCTIONS: the count cannot pass the list it counts
+const MAX_GUIDANCE_INSTRUCTIONS = 80; // instructions.ts MAX_INSTRUCTIONS twice: the project's list and an agent's (src/ai/agents.ts)
 const MAX_GUIDANCE_EXAMPLES = 5;
 
 /** Undefined for anything that is no object or whose count is no integer in range; a bad id or example is dropped alone. */

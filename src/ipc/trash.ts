@@ -2,6 +2,9 @@ import { ipcMain } from './bus';
 import * as trash from '../app/trash';
 import * as scheduler from '../app/refreshScheduler';
 import { readsPublishedOnly } from '../analysis/analysis';
+import { rankOn } from '../server/authz/caller';
+import { ADMIN_RANK } from '../ai/agentAccess';
+import { agentRestoreAdminOnly } from '../ai/agentMessages';
 
 // Trash IPC — list, restore, delete for good, empty. The deletes that PUT
 // things here are the record types' own `*:delete` handlers, each of which now
@@ -21,8 +24,11 @@ export function register(): void {
     return (await readsPublishedOnly(String(projectId || ''))) ? items.filter((e) => e.type !== 'dashboard') : items;
   });
 
-  ipcMain.handle('trash:restore', async (_e, { projectId, type, id }: any = {}) =>
-    trash.restore(String(projectId || ''), type, String(id || '')));
+  // An Assistant agent is a project admin's to create and delete (docs/assistant-agents rule 5), so to bring back too.
+  ipcMain.handle('trash:restore', async (_e, { projectId, type, id }: any = {}) => {
+    if (type === 'agent' && (await rankOn(String(projectId || ''))) < ADMIN_RANK) return { ok: false, error: agentRestoreAdminOnly(), restored: [] };
+    return trash.restore(String(projectId || ''), type, String(id || ''));
+  });
 
   ipcMain.handle('trash:purge', async (_e, { projectId, type, id }: any = {}) =>
     ({ ok: await trash.purge(String(projectId || ''), type, String(id || '')) }));

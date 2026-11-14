@@ -31,6 +31,8 @@ export function recordChanged(type: SaveKind): string {
       return t('editConflictMessages.this_verified_question_was_changed_in');
     case 'topic':
       return t('editConflictMessages.this_topic_was_changed_in_another');
+    case 'agent':
+      return t('editConflictMessages.this_assistant_was_changed_in_another');
     default:
       return t('editConflictMessages.this_was_changed_in_another_tab');
   }

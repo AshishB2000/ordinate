@@ -37,12 +37,13 @@ export async function modelStatus(): Promise<ModelStatus> {
   return { ready: true, provider, model: execConfig.getByokProvider(provider).model };
 }
 
-// Resolve the caller's provider, model + credentials, or return an error.
-export async function resolveByok(): Promise<
+// Resolve the caller's provider, model + credentials, or return an error. `prefer`: an Assistant agent's model, used while
+// it is one the org admin enabled (src/server/aiConfig.ts); without a database there is no such list, so never.
+export async function resolveByok(prefer?: { provider: string; model: string } | null): Promise<
   | { error: TypedError }
   | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string }> {
   if (aiConfig.enabled()) {
-    const r = await aiConfig.resolve();
+    const r = await aiConfig.resolve(prefer);
     if (!r.ok) return { error: { ok: false, errorType: 'auth', message: r.error } };
     return { provider: r.provider, apiKey: r.apiKey, baseUrl: r.baseUrl, model: r.model };
   }
