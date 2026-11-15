@@ -13,6 +13,20 @@ import { rpc } from './contract';
 const Provider = z.enum(AI_PROVIDERS);
 const ModelId = z.string().trim().min(1).max(200);
 
+/**
+ * The fingerprint (embedding) models meaning search may use, 768 numbers each (src/ai/fingerprints.ts).
+ * A gateway's is typed in. Anthropic has no embedding API, so it has none.
+ */
+export const FINGERPRINT_MODELS = {
+  openai: ['text-embedding-3-small', 'text-embedding-3-large'],
+  gemini: ['gemini-embedding-001', 'gemini-embedding-2'],
+} as const;
+const FingerprintPick = z.discriminatedUnion('provider', [
+  z.strictObject({ provider: z.literal('openai'), model: z.enum(FINGERPRINT_MODELS.openai) }),
+  z.strictObject({ provider: z.literal('gemini'), model: z.enum(FINGERPRINT_MODELS.gemini) }),
+  z.strictObject({ provider: z.literal('gateway'), model: ModelId }),
+]);
+
 export const ai = {
   // { ready, reason?, models, mine, copilotEnabled, keyStore } — the caller's models, never a key.
   'ai:status': rpc({ access: 'read', org: true, input: z.undefined() }),
@@ -42,4 +56,9 @@ export const ai = {
       defaultIndex: z.number().int().min(0).max(49),
     }),
   }),
+  // The org's fingerprint model for meaning search (ai:admin's `fingerprintModel`); null turns it off, the default.
+  // Its provider must be connected. Saving sends nothing to the provider.
+  'ai:setFingerprintModel': rpc({ access: 'admin', org: true, input: z.strictObject({ pick: FingerprintPick.nullable() }) }),
+  // Fingerprints one short sample with `pick`, saved or not: { ok, dimensions, ms } or the provider's sentence.
+  'ai:testFingerprint': rpc({ access: 'admin', org: true, input: z.strictObject({ pick: FingerprintPick }) }),
 } as const;

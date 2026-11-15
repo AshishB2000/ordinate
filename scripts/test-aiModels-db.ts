@@ -24,6 +24,10 @@
 //              never sees the stored key (ai:connect, byok:saveProvider, then
 //              byok:test / providerModels); NEGATIVE CONTROL: the same URL
 //              without a key still connects (NV-8)
+//   fingerprint meaning search's model: off by default, admin only, real ids
+//              on a connected provider only; Test embeds one sample through
+//              the stored key (768 numbers, a latency) or names a wrong size;
+//              disconnecting its provider turns it off
 //
 // Needs a Postgres it may CREATE DATABASE (and ROLE) on; without DATABASE_URL
 // it prints one skip line.
@@ -91,7 +95,7 @@ const NEEDLES = spellings(CANARY);
 const leaks = (hay: string): boolean => NEEDLES.some((n) => hay.toLowerCase().includes(n));
 
 // ── A stub Anthropic API: lists two models, answers OK, refuses `sk-bad` ────
-const stub = { calls: 0, models: [] as string[] };
+const stub = { calls: 0, models: [] as string[], embeds: [] as { url: string; auth: string; body: { model: string; input: string[]; dimensions: number } }[] };
 const provider = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += c.toString()));
@@ -107,7 +111,18 @@ const provider = http.createServer((req, res) => {
       res.end(JSON.stringify({ data: [{ id: 'claude-sonnet-a', display_name: 'Claude Stub A', created_at: 2 }, { id: 'claude-haiku-b', display_name: 'Claude Stub B', created_at: 1 }] }));
       return;
     }
+    if (req.url?.endsWith('/embeddings')) { // OpenAI's and a gateway's: 768 numbers, or 1536 for a model named so
+      const b = JSON.parse(body) as { model: string; input: string[]; dimensions: number };
+      stub.embeds.push({ url: req.url, auth: String(req.headers.authorization), body: b });
+      const dims = b.model.includes('1536') ? 1536 : 768;
+      res.end(JSON.stringify({ data: b.input.map((_, index) => ({ index, embedding: Array.from({ length: dims }, (_v, i) => (i === index ? 1 : 0)) })) }));
+      return;
+    }
     stub.models.push(String((JSON.parse(body || '{}') as { model?: string }).model));
+    if (req.url?.endsWith('/chat/completions')) { // an OpenAI-shaped connection test
+      res.end(JSON.stringify({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }));
+      return;
+    }
     res.end(JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }));
   });
 });
@@ -311,6 +326,41 @@ function allFiles(dir: string): string {
     ok('picks: the same email in org beta has no pick and no models', beta.mine === null && beta.models.length === 0 && (await call('beta', 'boss@beta.test', 'ai:status')).body.ready === false, show(beta));
     ok('picks: removing the picked model falls back to the default', (await boss('ai:setModels', { models: [two[0]], defaultIndex: 0 })).body.ok === true
       && modelOf(await as(VIC, () => byok.resolveByok())) === 'claude-sonnet-a' && (await q('SELECT 1 FROM user_ai_model')).length === 0);
+
+    // ── Fingerprint model (meaning search) ──────────────────────────────────
+    const FP = { provider: 'openai', model: 'text-embedding-3-small' };
+    ok('fingerprint: off by default (ai:admin, currentFingerprintModel)', (await boss('ai:admin')).body.fingerprintModel === null
+      && (await as(BOSS, async () => aiConfig.currentFingerprintModel())) === null);
+    const fpDenied = await Promise.all([vic('ai:setFingerprintModel', { pick: FP }), vic('ai:testFingerprint', { pick: FP })]);
+    ok('fingerprint: a viewer gets 403 on setFingerprintModel and testFingerprint', fpDenied.every((r) => r.status === 403), show(fpDenied.map((r) => r.status)));
+    const fpBad = await Promise.all([
+      boss('ai:setFingerprintModel', { pick: { provider: 'anthropic', model: 'claude-sonnet-a' } }),
+      boss('ai:setFingerprintModel', { pick: { provider: 'openai', model: 'gpt-4o' } }),
+      boss('ai:testFingerprint', { pick: { provider: 'anthropic', model: 'claude-sonnet-a' } }),
+    ]);
+    ok('fingerprint: the contract refuses Anthropic (no embedding API) and an id OpenAI does not make (400)', fpBad.every((r) => r.status === 400), show(fpBad.map((r) => r.status)));
+    const fpOff = await boss('ai:setFingerprintModel', { pick: FP });
+    ok('fingerprint: a provider that is not connected is refused, and nothing is stored or sent', fpOff.body.ok === false
+      && (await boss('ai:admin')).body.fingerprintModel === null && stub.embeds.length === 0, show(fpOff.body));
+    ok('fingerprint: connect OpenAI (its chat test, on the stub)', (await boss('ai:connect', { provider: 'openai', apiKey: CANARY, baseUrl: `${stubUrl}/v1` })).body.ok === true);
+    ok('fingerprint: saving the pick sends nothing to embed', (await boss('ai:setFingerprintModel', { pick: FP })).body.ok === true && stub.embeds.length === 0);
+    ok('fingerprint: …ai:admin and currentFingerprintModel() name it', show((await boss('ai:admin')).body.fingerprintModel) === show(FP)
+      && show(await as(BOSS, async () => aiConfig.currentFingerprintModel())) === show(FP));
+    const fpTest = await boss('ai:testFingerprint', { pick: FP });
+    const fpSent = stub.embeds.at(-1);
+    ok('fingerprint: Test embeds one sample through the stored key → 768 dimensions and a latency', fpTest.body.ok === true && fpTest.body.dimensions === 768
+      && Number.isInteger(fpTest.body.ms) && fpSent?.url === '/v1/embeddings' && fpSent.auth === `Bearer ${CANARY}` && fpSent.body.dimensions === 768
+      && fpSent.body.input.length === 1, show({ reply: fpTest.body, sent: fpSent?.body }));
+    await boss('ai:connect', { provider: 'gateway', baseUrl: `${stubUrl}/gw`, model: 'gw-chat' });
+    const fpWide = await boss('ai:testFingerprint', { pick: { provider: 'gateway', model: 'acme/embed-1536' } });
+    ok('fingerprint: a gateway model of the wrong size answers with the catalog sentence', fpWide.body.ok === false
+      && fpWide.body.message === 'This model returns 1,536 dimensions; meaning search needs 768.' && stub.embeds.at(-1)?.url === '/gw/embeddings', show(fpWide.body));
+    ok('fingerprint: null turns it off', (await boss('ai:setFingerprintModel', { pick: null })).body.ok === true && (await boss('ai:admin')).body.fingerprintModel === null);
+    await boss('ai:setFingerprintModel', { pick: FP });
+    await boss('ai:disconnect', { provider: 'gateway' });
+    ok('fingerprint NEGATIVE CONTROL: disconnecting another provider keeps it', show((await boss('ai:admin')).body.fingerprintModel) === show(FP));
+    await boss('ai:disconnect', { provider: 'openai' });
+    ok('fingerprint: disconnecting its provider turns meaning search off', (await boss('ai:admin')).body.fingerprintModel === null);
 
     // ── Disconnect leaves no pick pointing at nothing ───────────────────────
     await vic('ai:setMine', { provider: 'anthropic', model: 'claude-sonnet-a' });

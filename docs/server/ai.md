@@ -46,6 +46,15 @@ OpenAI-compatible gateway on a private address needs `SSRF_ALLOW` for its range.
    model, or a new one). Only models on this list are ever offered or used. A model the provider
    releases tomorrow stays off until you add it, so cost stays in your hands.
 3. **Choose the default.** One model is the default. A member who has not picked one gets it.
+4. **Meaning search (optional).** *Fingerprint model for meaning search* lets the Assistant find a
+   dataset, metric or term by what a question means, not only its words. It is **off** until you
+   pick a model, and nothing is sent to a provider before then. Pick OpenAI
+   `text-embedding-3-small` (about $0.02 per million tokens, OpenAI's guide, November 2026) or
+   `-large`, Gemini `gemini-embedding-001` or `gemini-embedding-2`, or type a gateway's model id.
+   Anthropic has no embedding model, so it needs one of the others connected. **Test** sends one
+   short sample and shows its size (768) and how long it took, or the provider's error. **Save**
+   sends nothing. Once a model is saved, item names and descriptions go to that provider. Choosing
+   another model later fingerprints every item again in the background.
 
 ## What members see
 

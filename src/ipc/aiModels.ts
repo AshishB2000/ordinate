@@ -10,6 +10,7 @@ import { ipcMain } from './bus';
 import * as execConfig from '../app/execConfig';
 import { testProvider } from '../ai/analyze';
 import { listModels } from '../ai/models';
+import { testFingerprint } from '../ai/fingerprints';
 import * as aiConfig from '../server/aiConfig';
 import { keyStoreUnavailable } from '../server/aiKeys';
 import { AI_PROVIDERS } from '../api/admin';
@@ -57,6 +58,7 @@ export function register(): void {
       keyStore: keyStoreUnavailable(),
       providers: AI_PROVIDERS.map((provider) => ({ provider, connected: false, saved: false, hasKey: false, baseUrl: '', verifiedAt: null })),
       models: [],
+      fingerprintModel: null,
     };
   });
 
@@ -77,5 +79,16 @@ export function register(): void {
   ipcMain.handle('ai:setModels', async (_e, { models, defaultIndex }: { models: { provider: string; model: string; label: string }[]; defaultIndex: number }) => {
     if (!aiConfig.enabled()) return noStore();
     return pushed(await aiConfig.setModels(models, defaultIndex));
+  });
+
+  // Meaning search's fingerprint model: only Admin → AI shows it, so nothing is pushed to the docks.
+  ipcMain.handle('ai:setFingerprintModel', async (_e, { pick }: { pick: aiConfig.FingerprintPick | null }) => {
+    if (!aiConfig.enabled()) return noStore();
+    return aiConfig.setFingerprintModel(pick);
+  });
+
+  ipcMain.handle('ai:testFingerprint', async (_e, { pick }: { pick: aiConfig.FingerprintPick }) => {
+    if (!aiConfig.enabled()) return noStore();
+    return testFingerprint(pick);
   });
 }

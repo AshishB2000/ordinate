@@ -180,6 +180,8 @@ export interface AiAdmin {
   keyStore: string | null;
   providers: AiProviderState[];
   models: AiModelRow[];
+  /** Meaning search's fingerprint model, or null: off. */
+  fingerprintModel: { provider: 'openai' | 'gemini' | 'gateway'; model: string } | null;
 }
 
 /** A provider's live list (`ai:providerModels`, src/ai/models.ts). */
@@ -275,7 +277,7 @@ export function useWrite<C extends Channel, R extends Result = Result>(
  * dock re-reads it), and hands the reply on — a refusal or a failed test is
  * shown where it happened, not as a toast.
  */
-export function useAiWrite<C extends 'ai:connect' | 'ai:disconnect' | 'ai:setModels'>(channel: C, onDone?: (reply: AiOutcome) => void) {
+export function useAiWrite<C extends 'ai:connect' | 'ai:disconnect' | 'ai:setModels' | 'ai:setFingerprintModel'>(channel: C, onDone?: (reply: AiOutcome) => void) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (input: RpcInput<C>) => (await rpc(channel, ...([input] as RpcArgs<C>))) as AiOutcome,

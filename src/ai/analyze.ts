@@ -170,7 +170,7 @@ export function errRateLimit(): TypedError {
 export function errProvider(): TypedError {
   return { ok: false, errorType: 'provider', message: 'The model provider had an error. Try again.' };
 }
-function errBadReply(): TypedError {
+export function errBadReply(): TypedError {
   return { ok: false, errorType: 'bad_reply', message: "Couldn't read the model's response. Try again." };
 }
 // Distinct from errBadReply: the provider hit the max_tokens cap and cut the reply

@@ -19,6 +19,7 @@ import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { PROVIDER_LABEL } from '../assistant/api';
+import { AiFingerprintCard } from './AiFingerprintCard';
 import { AiModelsDialog } from './AiModelsDialog';
 import { aiWhy, useAiAdmin, useAiWrite, type AiAdmin, type AiModelRow, type AiProviderState } from './api';
 import s from './Admin.module.css';
@@ -287,6 +288,7 @@ export function AiTab() {
           </ul>
         </div>
         <ModelsCard data={ai.data} />
+        <AiFingerprintCard data={ai.data} />
       </>
     );
   }
