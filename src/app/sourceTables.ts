@@ -200,6 +200,40 @@ export async function readSourceDoc(projectId: string, connId: string, docId: st
   return isValidId(projectId) && isValidId(connId) && isValidId(docId) ? readDoc(docPath(projectId, connId, docId)) : null;
 }
 
+/** Records by path in ONE query (recordFs.readMany), each parsed; a missing or damaged one is left out (damage logged, never fatal). */
+async function readManyJson(paths: string[]): Promise<Map<string, unknown>> {
+  const out = new Map<string, unknown>();
+  for (const [p, body] of await recordFs.readMany(paths)) {
+    try {
+      out.set(p, JSON.parse(body));
+    } catch (err) {
+      logger.error('[sourceTables] Skipping an unreadable record:', path.basename(p), err instanceof Error ? err.message : err);
+    }
+  }
+  return out;
+}
+
+/** Several connections' indexes in one read (the Assistant's table facts): by connection id, an empty list for one with none. */
+export async function readSourceIndexes(projectId: string, connIds: readonly string[]): Promise<Map<string, SourceIndexEntry[]>> {
+  const ids = [...new Set(connIds)].filter(isValidId);
+  if (!isValidId(projectId) || !ids.length) return new Map();
+  const raw = await readManyJson(ids.map((c) => indexPath(projectId, c)));
+  return new Map(ids.map((c) => [c, sanitizeIndex(raw.get(indexPath(projectId, c)))]));
+}
+
+/** Several docs by id in one read, keyed `connId:docId`; a gone or damaged one is left out. */
+export async function readSourceDocs(projectId: string, refs: readonly { connId: string; docId: string }[]): Promise<Map<string, SourceTableDoc>> {
+  const valid = refs.filter((r) => isValidId(r.connId) && isValidId(r.docId));
+  if (!isValidId(projectId) || !valid.length) return new Map();
+  const raw = await readManyJson(valid.map((r) => docPath(projectId, r.connId, r.docId)));
+  const out = new Map<string, SourceTableDoc>();
+  for (const r of valid) {
+    const doc = sanitizeSourceDoc(raw.get(docPath(projectId, r.connId, r.docId)));
+    if (doc) out.set(`${r.connId}:${r.docId}`, doc);
+  }
+  return out;
+}
+
 /** What a person typed: each present field replaces the stored one, an absent one keeps it. */
 export interface SourcePatch { owner?: string; refresh?: string; requiredFilters?: string; guide?: string }
 const HUMAN = ['owner', 'refresh', 'requiredFilters', 'guide'] as const;

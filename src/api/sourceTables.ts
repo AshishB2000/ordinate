@@ -27,7 +27,7 @@ export const sourceTables = {
     project: byProjectId,
   }),
   'sourceTable:delete': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
-  // Read the table's facts from the warehouse, on an editor's click only (60 an hour per connection, any pod).
+  // Read the table's facts from the warehouse, on an editor's click (60 an hour per connection, any pod, shared with a Live dataset's daily sync).
   'sourceTable:read': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),
   // A source table's lineage, from its doc: records only. `lineage:get` is unchanged.
   'sourceTable:lineage': rpc({ access: 'write', input: z.strictObject(Doc), project: byProjectId }),

@@ -218,7 +218,8 @@ ClickHouse and Databricks have no `describeTable` today (`src/connectors/http.ts
   (the SSRF guard; BigQuery and Snowflake pin their own fixed hosts, the HTTP family its typed one),
   `buildContext`'s 30 s and row clamps, `safeError` on every failure, a limit on every statement,
   the table name bound or whitelisted and quoted as each `describeTable` does today.
-- **Only on an editor's click** (`sourceTable:read`), never on view, refresh or schedule.
+- **Only on an editor's click** (`sourceTable:read`), never on view, refresh or schedule. (Since the Assistant's phase A,
+  also on a Live dataset's daily schema sync, for its stale docs: docs/assistant/00-design.md, "Table facts".)
 - **At most 60 reads per connection per hour per org (my call)**, across pods, by `counters.take`
   (`src/server/counters.ts`). Past it: a sentence with the wait.
 - **Not a Live statement.** There is no Live dataset to target, so it does not take `warehouse()`

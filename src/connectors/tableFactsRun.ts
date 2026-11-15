@@ -1,7 +1,8 @@
 // The facts door — MAIN PROCESS ONLY (docs/semantic-layer/02-source-tables.md, D6, D15).
 //
-// The ONE way the app reads a warehouse table's comments, keys and partitions: `sourceTable:read`
-// calls it on an editor's click and nothing else does. It is built like `describeTable` in
+// The ONE way the app reads a warehouse table's comments, keys and partitions: `readFacts`
+// (src/ipc/sourceTableRead.ts) calls it on an editor's click and on a Live dataset's daily schema
+// sync, and nothing else does. It is built like `describeTable` in
 // connectionRun: the bounded context, the SSRF guard, every error through safeError. It takes the
 // connector's `tableFacts` when it has one and `describeTable` otherwise (never both), then redacts
 // every string in the answer and cuts it to the whitelist, because a warehouse can store a

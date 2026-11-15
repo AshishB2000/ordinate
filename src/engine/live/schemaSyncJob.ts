@@ -10,7 +10,9 @@
 //                  waits for it and answers what it found;
 //   daily          the scheduler's tick (src/app/refreshScheduler.ts) hands the
 //                  Live datasets it skips for refresh to `queueDueSchemaSyncs`:
-//                  one whose `schemaSyncedAt` is 24 h old gets a sync job.
+//                  one whose `schemaSyncedAt` is 24 h old gets a sync job, which
+//                  also re-reads its source tables' stale facts once the sync
+//                  lands (src/ipc/sourceFactsRefresh.ts).
 //
 // ONE AT A TIME PER DATASET, three ways, the refresh path's own: a start on
 // this pod is held in `starting` until its job lands; a job of this dataset
@@ -33,6 +35,7 @@ import * as msg from '../liveProfileMessages';
 import type { SyncReply } from './schemaSync';
 import { syncLiveSchema } from './schemaSync';
 import { logger } from '../../app/logger';
+import { refreshSourceFacts } from '../../ipc/sourceFactsRefresh';
 
 /** A Live dataset's schema is synced again after a day. */
 export const SYNC_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -133,6 +136,7 @@ export async function startSchemaSync(projectId: string, id: string, opts: { sch
         const locked = await withRefreshLock(id, () => syncLiveSchema(projectId, id, jctx.signal));
         if (!locked.ran) return { ok: false, code: 'already_running', error: msg.liveSyncRunning() };
         if (!locked.value.ok) throw new SyncFailed(locked.value);
+        if (opts.scheduled) await refreshSourceFacts(projectId, id, Date.now(), jctx.signal); // the daily visit also re-reads stale table facts; never throws
         return locked.value;
       },
       resultOf: (r) => ({ message: jobLine(r) }),
