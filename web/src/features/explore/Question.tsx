@@ -83,9 +83,11 @@ const Add = ({ label, text, ...rest }: { label: string; text: string }) => (
   </button>
 );
 
-export function Question({ projectId, datasetId, fields, question, onChange, onFields }: {
+export function Question({ projectId, datasetId, table, fields, question, onChange, onFields }: {
   projectId: string;
   datasetId: string;
+  /** A source table's connection (`datasetId` its doc): its filter values are asked of it. */
+  table?: string;
   fields: readonly Field[];
   question: Q;
   onChange: (next: Q) => void;
@@ -265,6 +267,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
         <FilterDialog
           projectId={projectId}
           datasetId={datasetId}
+          table={table}
           column={editing.column}
           type={editingType}
           existing={question.filters[editing.index]}

@@ -85,6 +85,12 @@ const VizDataInput = z.strictObject({
   ...FigureAskFields,
 });
 
+/**
+ * A source table target (Explore, phase D; src/ipc/sourceAnswers.ts onSourceTable): `datasetId` is the table doc's id and
+ * `table` its connection's, as AnswerSpec.table. Asked inside the table's Live view; editors only, a viewer's refused first.
+ */
+const TableTarget = { table: Uuid.optional() };
+
 /** What a visual IS, as `visual:save` stores it; `visual:update` takes any part of it. */
 const Definition = {
   name: z.string().max(200),
@@ -138,13 +144,13 @@ export const visuals = {
   // nothing. Filters are transform `filter` steps, re-sanitized by the
   // handler. `params` / `share` / `analytics` / `asOf` / `currency` join with
   // the screens that send them.
-  'visual:data': rpc({ access: 'read', input: VizDataInput, project: byProjectId }),
+  'visual:data': rpc({ access: 'read', input: VizDataInput.extend(TableTarget), project: byProjectId }),
   // Server only (T2.1): up to 50 `visual:data` requests of one project in one
   // call, answered in order — what a page of charts sends instead of one RPC
   // per tile (web/src/api/visuals.ts batches them; plan §9's budget).
   'visual:dataBatch': rpc({
     access: 'read',
-    input: z.strictObject({ projectId: Uuid, items: z.array(VizDataInput.omit({ projectId: true })).min(1).max(50) }),
+    input: z.strictObject({ projectId: Uuid, items: z.array(VizDataInput.omit({ projectId: true }).extend(TableTarget)).min(1).max(50) }),
     project: byProjectId,
   }),
 
@@ -194,7 +200,7 @@ export const visuals = {
   // (resolveDrill) and pages, searches and sorts in SQL; a refusal says why.
   'visual:rows': rpc({ access: 'read', input: z.strictObject({ ...Drill, page: DrillPage.optional() }), project: byProjectId }),
   // Semantic layer part 6: a clicked mark → the exact steps behind it and the next level (src/ipc/drillDown.ts). No metricId: a KPI does not drill.
-  'visual:drillDown': rpc({ access: 'read', input: z.strictObject({ ...Drill, mark: z.strictObject({ category: Cell, series: Cell.optional() }) }).omit({ metricId: true }), project: byProjectId }),
+  'visual:drillDown': rpc({ access: 'read', input: z.strictObject({ ...Drill, ...TableTarget, mark: z.strictObject({ category: Cell, series: Cell.optional() }) }).omit({ metricId: true }), project: byProjectId }),
   // Server only: the same row set as a CSV download (T0.4 token), Share-policy shaped.
   'visual:rowsDownload': rpc({
     access: 'read',

@@ -30,6 +30,8 @@ export interface SourceConn {
   readsFacts: boolean;
   /** Reading runs on a warehouse that a read can start (Databricks). */
   factsWake?: true;
+  /** The connection is asked live: Explore answers its tables with no dataset (phase D). */
+  live?: true;
   rows: SourceRow[];
 }
 export interface SourceTodo {
@@ -86,10 +88,12 @@ export interface SourceGot {
 export const LIST = 'sourceTable:list';
 export const GET = 'sourceTable:get';
 
-export const useSourceTables = (projectId: string) =>
+/** `enabled: false` asks nothing (a viewer's Explore: the channel is an editor's). */
+export const useSourceTables = (projectId: string, enabled = true) =>
   useQuery({
     queryKey: [LIST, projectId],
     queryFn: async () => okOr((await rpc(LIST, { projectId })) as SourceList | Fail, 'Source tables'),
+    enabled,
   });
 
 /** One doc: Overview, Columns and Guide. Records only. */

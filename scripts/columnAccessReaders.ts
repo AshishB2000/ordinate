@@ -76,7 +76,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'dataSearch:query': 'SKIP',
   'dataset:columns': 'MARK', // a hidden column marked hidden: true (columnAccess.markHidden); test-columnRedact
   'dataset:composePreview': 'NET',
-  'dataset:distinct': 'GATE', // distinctFor: the column and the parent picks are the question
+  'dataset:distinct': 'GATE', // distinctFor: the column and the parent picks are the question. A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'dataset:list': 'REDACT',
   'dataset:liveSchema': 'REDACT', // closedToCaller: no sample values; test-columnRedact
   'dataset:page': 'DROP', // pageFor: hidden cells null in place, named in `hidden`; a search, sort or filter on one refuses
@@ -92,7 +92,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',
-  'explore:suggest': 'MARK', // fields and suggestions from metadata; `hidden` names the columns hidden from the caller (p4-07's Explore chip)
+  'explore:suggest': 'MARK', // fields and suggestions from metadata; `hidden` names the columns hidden from the caller (p4-07's Explore chip). A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'folder:of': 'META', // whether an id is in a folder the caller cannot open: no cell, label or figure
   'format:colors:get': 'REDACT', // no colours of a column hidden on any dataset (rowAccess.hiddenAnywhere); test-columnRedact
   'formula:check': 'NET',
@@ -221,9 +221,9 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'versions:figures': 'GATE',
   'versions:get': 'NET',
   'versions:list': 'META',
-  'visual:data': 'GATE',
-  'visual:dataBatch': 'GATE',
-  'visual:drillDown': 'GATE', // the steps behind a mark: a drill naming a hidden column is refused (ipc/drillDown); its grain lookup is visual:data's
+  'visual:data': 'GATE', // A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
+  'visual:dataBatch': 'GATE', // A source table target (`table` per item, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
+  'visual:drillDown': 'GATE', // the steps behind a mark: a drill naming a hidden column is refused (ipc/drillDown); its grain lookup is visual:data's. A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'visual:get': 'REDACT', // visualForCaller: one naming a hidden column loses its labels and those filter values; test-columnRedact
   'visual:list': 'META',
   'visual:preview': 'GATE',

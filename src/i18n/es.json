@@ -812,6 +812,7 @@
   "semanticMessages.this_connection_has_no_semantic_layer": "Esta conexión no tiene una capa semántica de la que añadir un conjunto de datos.",
   "semanticMessages.this_question_needs_the_latest_date": "Esta pregunta necesita la fecha más reciente o los valores almacenados de {dataset}, que {layer} no puede consultar.",
   "semanticMessages.your_access_to_is_limited_to": "Su acceso a {dataset} está limitado a algunas filas y {layer} no puede aplicar ese límite con exactitud, así que no se muestra ninguna cifra.",
+  "sourceAnswerMessages.a_warehouse_table_has_no_list": null,
   "sourceAnswerMessages.has_no_link_to_yet_so": "{from} aún no tiene un vínculo con {to}, así que no se pueden combinar. Revisa el vínculo de abajo.",
   "sourceAnswerMessages.is_on_a_connection_ordinate_does": "{table} está en una conexión que Ordinate no consulta en vivo, así que primero hay que copiarla a Ordinate.",
   "sourceAnswerMessages.keep_this_answer_as_a_dataset": "Guarda primero esta respuesta como conjunto de datos: una respuesta leída directamente de una tabla del almacén no se guarda tal cual.",

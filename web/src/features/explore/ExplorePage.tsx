@@ -3,7 +3,9 @@
 // the gates and their designed states: projects loading or failed, no project,
 // datasets loading or failed, no datasets (an editor's import doors, a viewer's
 // sentence). Then the URL is made whole — `?project=&dataset=` — and the
-// workbench (./Explorer) takes over.
+// workbench (./Explorer) takes over. An editor may also open a source table
+// (Assistant phase D): `?dataset=<its doc>&table=<its connection>`, from the
+// Source tables list; with no dataset at all, the first live one opens.
 
 import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -15,7 +17,9 @@ import { Skeleton } from '../../ui/Skeleton';
 import { useNavigation } from '../model/navigation';
 import { read as rememberedTopic } from '../model/topics/rememberTopic';
 import { importPath } from '../home/homeText';
-import { useRoles } from '../projects/api';
+import { useCanEdit, useRoles } from '../projects/api';
+import { useSourceTables } from '../model/sources/api';
+import { exploreTables } from './api';
 import { useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
 import { VizIcon } from '../visuals/VizIcon';
@@ -59,29 +63,42 @@ function ProjectExplore({ projectId }: { projectId: string }) {
   const topics = nav.data?.topics ?? [];
   const topic = topics.find((t) => t.id === (urlTopic ?? remembered));
   const first = topic?.datasets.map((t) => list.find((d) => d.id === t.id)).find(Boolean);
-  const dataset = list.find((d) => d.id === asked) ?? first ?? list[0];
+  // Source tables are an editor's (the list is too): a viewer's `?table=` falls back to a dataset, as a gone one does.
+  const roles = useRoles();
+  const canEdit = useCanEdit(projectId);
+  const sources = useSourceTables(projectId, canEdit);
+  const tables = canEdit ? exploreTables(sources.data) : [];
+  const urlTable = params.get('table');
+  const inUrl = urlTable ? tables.find((t) => t.connId === urlTable && t.docId === asked) : undefined;
+  const dataset = inUrl ? undefined : (list.find((d) => d.id === asked) ?? first ?? list[0]);
+  const table = inUrl ?? (dataset ? undefined : tables.find((t) => t.live));
 
-  // The URL names the project and the dataset on screen, so a copied link opens them. A question
+  // The URL names the project and the dataset (or table) on screen, so a copied link opens them. A question
   // asked of another dataset (or of one that is gone) does not survive the switch: its fields differ.
-  // A remembered pick waits for the topic list, so the page does not open on one dataset and jump to another.
-  const waiting = datasets.isPending || (nav.isPending && !!(urlTopic || remembered));
-  const id = waiting ? undefined : dataset?.id;
+  // A remembered pick waits for the topic list, so the page does not open on one dataset and jump to another;
+  // a table named in the URL (or a project with no dataset) waits for the roles and the editor's table list.
+  const tablesWait = (!!urlTable || (datasets.isSuccess && !list.length)) && (roles.isPending || (canEdit && sources.isPending));
+  const waiting = datasets.isPending || (nav.isPending && !!(urlTopic || remembered)) || tablesWait;
+  const id = waiting ? undefined : (table?.docId ?? dataset?.id);
+  const conn = table?.connId ?? null;
   const named = params.get('project');
   const adopt = !urlTopic && topic ? topic.id : null; // a remembered pick joins the URL, by replace
   useEffect(() => {
-    if (!id || (named === projectId && asked === id && !adopt)) return;
+    if (!id || (named === projectId && asked === id && urlTable === conn && !adopt)) return;
     setParams(
       (p) => {
         const n = new URLSearchParams(p);
         n.set('project', projectId);
         n.set('dataset', id);
+        if (conn) n.set('table', conn);
+        else n.delete('table');
         if (asked && asked !== id) n.delete('q');
         if (adopt) n.set('topic', adopt);
         return n;
       },
       { replace: true },
     );
-  }, [id, named, asked, adopt, projectId, setParams]);
+  }, [id, conn, named, asked, urlTable, adopt, projectId, setParams]);
 
   if (waiting) return <ExploreSkeleton />;
   if (datasets.isError) {
@@ -91,8 +108,12 @@ function ProjectExplore({ projectId }: { projectId: string }) {
       </Page>
     );
   }
+  if (table) {
+    const asDataset = { id: table.docId, name: table.table, ...(table.live ? { mode: 'live' as const } : {}) };
+    return <Explorer key={`${table.connId}:${table.docId}`} projectId={projectId} datasets={list} dataset={asDataset} tables={tables} table={table} topics={topics} topic={topic} />;
+  }
   if (!dataset) return <NoData projectId={projectId} />;
-  return <Explorer key={dataset.id} projectId={projectId} datasets={list} dataset={dataset} topics={topics} topic={topic} />;
+  return <Explorer key={dataset.id} projectId={projectId} datasets={list} dataset={dataset} tables={tables} topics={topics} topic={topic} />;
 }
 
 /** No dataset yet: what Explore will do, and — for an editor — the doors that bring data in. */

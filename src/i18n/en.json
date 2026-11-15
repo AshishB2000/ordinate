@@ -809,6 +809,7 @@
   "semanticMessages.this_connection_has_no_semantic_layer": "This connection has no semantic layer to add a dataset from.",
   "semanticMessages.this_question_needs_the_latest_date": "This question needs the latest date or the stored values of {dataset}, which {layer} can't look up.",
   "semanticMessages.your_access_to_is_limited_to": "Your access to {dataset} is limited to some rows, and {layer} can't apply that limit exactly, so no figure is shown.",
+  "sourceAnswerMessages.a_warehouse_table_has_no_list": "A warehouse table has no list of values until it is kept as a dataset. Filter it by a condition, or keep it to list them.",
   "sourceAnswerMessages.has_no_link_to_yet_so": "{from} has no link to {to} yet, so they can't be combined. Check the link below.",
   "sourceAnswerMessages.is_on_a_connection_ordinate_does": "{table} is on a connection Ordinate does not ask live, so it has to be copied into Ordinate first.",
   "sourceAnswerMessages.keep_this_answer_as_a_dataset": "Keep this answer as a dataset first: an answer read straight from a warehouse table is not saved as it is.",

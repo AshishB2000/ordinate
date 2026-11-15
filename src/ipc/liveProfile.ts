@@ -26,6 +26,8 @@ import type { FilterStep } from '../data/transforms';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
+import { isSourceView } from '../data/sourceView';
+import { tableValuesOnKeep } from '../ai/sourceAnswerMessages';
 import { declaredColumns } from '../data/liveCalcs';
 import { LOW_CARDINALITY, profileDistinct, profileOf, type LiveProfile, type ProfileDistinct, type UnlistedReason } from '../data/liveProfile';
 import { formatNumber } from '../app/format';
@@ -129,7 +131,8 @@ export async function liveDistinct(projectId: string, datasetId: string, column:
   if (meta.live?.semantic) return semanticDistinct(projectId, datasetId, column, req); // no sample: one question to the layer (part 7 b2)
   await gateRows(projectId, datasetId); // the sample is of every row: never to a restricted caller, never fanned out (row-policy D9)
   const r = profileDistinct(meta, column, req);
-  return typeof r === 'string' ? { ok: false, code: 'live_refused', reason: r, error: UNLISTED[r]() } : r;
+  // A source table's view is never synced: its values come with the sample its kept dataset's first sync reads.
+  return typeof r === 'string' ? { ok: false, code: 'live_refused', reason: r, error: isSourceView(projectId, datasetId) ? tableValuesOnKeep() : UNLISTED[r]() } : r;
 }
 
 /**

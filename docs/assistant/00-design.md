@@ -420,9 +420,55 @@ refusal plain (NEGATIVE CONTROL: the editor's card). Vitest: `web/src/features/a
 `web/e2e/source-tables.e2e.ts` step 5, the table's answer in the dock, kept, and the link card, in both themes
 (`dock-source-table`, `dock-source-kept`, `dock-link`).
 
-**Left:** Explore on a source table (the picker, `explore:suggest` and `visual:data` taking a table target through the
-same view); a warehouse probe for a link with a Live side; a source answer's turn is reopened under its view, so a
-caller who is no longer an editor gets no figures (a hide).
+### Explore, as built (phase D)
+
+An editor explores a documented warehouse table as if it were a dataset, with no dataset made
+(`web/src/features/explore/`, `src/ipc/sourceAnswers.ts` `onSourceTable`).
+
+- **The target** is D1's convention: `datasetId` is the table doc's id and `table` its connection's, as
+  `AnswerSpec.table`. Five read contracts take an optional `table: Uuid`: `explore:suggest`, `visual:data`,
+  `visual:dataBatch` (per item), `dataset:distinct` and `visual:drillDown`. Each handler wraps its body in
+  `onSourceTable`, which builds the table's view (`sourceView`) and runs the body inside `withSourceViews`; with no
+  `table`, the body as it was. So the figures take the doors a Live dataset takes: the fields are
+  `exploreSuggest` over the view's columns (its facts typed by `liveColumns`); a chart is `vizDataFor` → `liveVizData` →
+  `warehouse()` (bind parameters, `LIVE_MAX_CONCURRENT`, the daily limit counted under the view's id, the `orgKey` cache
+  keyed on the facts' read time, the required date range, no JS fallback); a drill is `visual:drillDown`'s, its grain
+  lookup the chart's own question. Nothing new computes a figure.
+- **Filter values.** A view has its facts' types as a profile but no sample, so `dataset:distinct` is the Live door's
+  typed refusal (`live_refused`, `notSampled`), in the table's own sentence: *A warehouse table has no list of values
+  until it is kept as a dataset. Filter it by a condition, or keep it to list them.* The Condition tab still filters.
+  No warehouse statement is spent on a picker.
+- **The picker** lists, after the datasets, the Source tables list's documented tables whose columns were read
+  (`sourceTable:list`, `write`, so only an editor's page asks it; its connection head now says `live` when
+  `isLiveOffered`). The URL is `?dataset=<doc>&table=<connection>`; a project with no dataset opens its first live
+  table. The header says *Warehouse table, not a dataset*; Save as visual and Open in the builder are not offered.
+- **Copy first.** A table on a connection not asked live is listed *Copy first*; opened, the page says *Copy RETURNS
+  into Ordinate first* with a link to its connection and asks the server nothing. The server refuses every input on
+  it with `needs: 'copy'` all the same.
+- **Keep as a dataset** (`explore:keepTable`, `write`, `src/ipc/sourceKeep.ts`) is the Assistant's keep without a
+  turn: `createLiveDataset` (columns from the warehouse catalog, first schema sync queued, named as the table). Explore
+  then opens the new dataset with the same question.
+- **Viewers** get no table in the picker (the list is never asked) and a `?table=` link opens a dataset. Every
+  table-target input from a viewer is *This dataset no longer exists.*, answered before any read: `sourceView` asks
+  the role first, so no doc, connection or warehouse is read and nothing is counted. Keep is 403.
+- **Classified:** the five read contracts keep their row and column classes, noted with the table target
+  (`scripts/rowPolicyReaders.ts`, `scripts/columnAccessReaders.ts`). `test-liveSafetyNet` §7 calls every read contract
+  whose input takes `table` (found from the contracts) on a view: fields, charts and a drill answer, dated live;
+  filter values refuse, typed.
+- **Tested** in `scripts/test-exploreSourceTables.ts` (both modes): the list's `live` flag; fields equal to a Live
+  dataset of the table; every chart figure, alone and in a batch, Object.is the Live dataset's and the extract's, one
+  statement counted under the view's id, the cache on a second ask, nothing hydrated, no dataset made, NEGATIVE CONTROL a
+  spent daily limit; filter values the unsampled Live dataset's refusal; the drill the Live dataset's; copy first on
+  every input; keep makes one Live dataset whose fields and figures are the table's. With Postgres: the viewer's five
+  inputs refused before any read (spies on the doc and connection reads, the fake warehouse, the budget), no reply
+  holding the table's name, its connection's, a facts-only column or a figure; keep 403; NEGATIVE CONTROL the editor's.
+  Vitest: `web/src/features/explore/sourceTable.test.tsx`. e2e: `web/e2e/source-tables.e2e.ts` step 6, desktop and phone
+  (`explore-source-table`, `-answer`, `-copy`, `-kept`, `-phone`).
+
+**Left:** a warehouse probe for a link with a Live side; a source answer's turn is reopened under its view, so a
+caller who is no longer an editor gets no figures (a hide); filter values on a table (a sample would be a warehouse
+read per picker, so it waits for keep); viewers on tables their teams were given (E8). When shared folders merge,
+`scripts/folderReaders.ts` classifies the five changed read contracts too.
 
 ## Access is given to teams
 
@@ -881,7 +927,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 | A | Word search over the whole Data model; follow links and table facts in the prompt (built: [Follow the links, Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies (built: [The SQL lane](#two-ways-to-answer)) | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line (built, step 4) | pgvector and a fingerprint model; otherwise stays on A |
-| D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link: built for the Assistant ([as built](#source-tables-keeping-and-the-missing-link-as-built-phase-d)); Explore not yet | nothing new |
+| D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link: built ([Assistant](#source-tables-keeping-and-the-missing-link-as-built-phase-d), [Explore](#explore-as-built-phase-d)) | nothing new |
 | E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
 | F | SQL on Live datasets and source tables ([design](../live-data/01-live-sql.md)) | row rules, hidden columns and cost limits applied in the warehouse |
 | G | Ask-an-editor notifications, "Answered from ▾", "Also on", Alert me: built ([as built](#ask-an-editor-and-alert-me-as-built-phase-g)) | nothing new |

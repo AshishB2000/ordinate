@@ -29,6 +29,8 @@
 //    other row reader above still refuses, typed. Before it, they refuse (1).
 //
 // 6. A SEMANTIC DATASET (part 7 b2): every reader refuses it, typed; a picker's list is its layer's (control: § 4).
+// 7. A SOURCE TABLE TARGET (Assistant phase D, Explore): every read contract whose input takes `table` answers from the
+//    table's Live view (fields, charts, a drill) or refuses, typed (filter values: a view has no sample).
 //
 //   npm run build:ts && node scripts/test-liveSafetyNet.js
 
@@ -96,8 +98,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
       columns: COLUMNS,
       origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', sql: SQL_CANARY },
     });
-    if (!extract || !live || !gone) throw new Error('fixture not saved');
-    return { projectId, extract: extract.id, live: live.id, gone: gone.id };
+    if (!extract || !live || !gone || !conn) throw new Error('fixture not saved');
+    return { projectId, extract: extract.id, live: live.id, gone: gone.id, connId: conn.id };
   });
   const P = seed.projectId;
   duck.forbidSyncOnMainThread();
@@ -499,6 +501,38 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   }
   ok(`profiled → every other row reader (${others}) still refuses, typed — a profile is not rows`, stillRefused === others && others > 30, `${stillRefused}/${others}`);
   ok(`profiled → the ${ROUTED.size} routed doors still answer from the warehouse`, routedAnswered === ROUTED.size, `${routedAnswered}/${ROUTED.size}`);
+
+  // 7. A SOURCE TABLE TARGET (docs/assistant/00-design.md, phase D, Explore): every read contract whose input takes `table`
+  // reads that table's in-memory Live view, never a row — its fields answer, the routed doors answer from the warehouse
+  // (dated live), its filter values refuse, typed. A new channel that takes `table` must join TABLE_READERS.
+  const apiMod: typeof import('../src/api') = require('../src/api');
+  const store: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+  const docId = await context.runInContext(ADMIN, 'source-doc', async () => {
+    const made = await store.createSourceDoc(P, seed.connId, 'live_net_orders', {});
+    if (!made.ok) throw new Error('fixture: a source doc');
+    const facts = COLUMNS.map((c) => ({ name: c.name, type: c.type === 'number' ? 'DOUBLE' : c.type === 'date' ? 'DATE' : 'VARCHAR' }));
+    await store.updateSourceDoc(P, seed.connId, made.docId, (d) => ({ ...d, facts: { columns: facts, readAt: new Date().toISOString(), readBy: ADMIN.user.email } }));
+    return made.docId;
+  });
+  const onTable = { datasetId: docId, table: seed.connId };
+  const TABLE_READERS: [string, unknown, boolean][] = [
+    ['explore:suggest', { projectId: P, ...onTable }, true],
+    ['visual:data', { projectId: P, ...onTable, encoding: enc }, true],
+    ['visual:dataBatch', { projectId: P, items: [{ ...onTable, encoding: enc }] }, true],
+    ['visual:drillDown', { projectId: P, ...onTable, encoding: { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }] }, mark: { category: '2024-01' } }, true],
+    ['dataset:distinct', { projectId: P, ...onTable, column: 'region' }, false],
+  ];
+  type Shape = Record<string, unknown> | undefined;
+  const takesTable = Object.entries(apiMod.contracts as unknown as Record<string, { access: string; input: { shape?: Shape } }>).filter(([, c]) => {
+    const sh = c.input.shape;
+    const item = ((sh?.items as { element?: { shape?: Shape } } | undefined)?.element?.shape);
+    return c.access === 'read' && (!!sh && 'table' in sh || !!item && 'table' in item);
+  }).map(([ch]) => ch).sort();
+  ok('7. every read contract that takes a source table target is called below', JSON.stringify(takesTable) === JSON.stringify(TABLE_READERS.map(([ch]) => ch).sort()), JSON.stringify(takesTable));
+  for (const [channel, payload, answers] of TABLE_READERS) {
+    const r = await post(channel, payload);
+    ok(`7. Source table → ${channel} ${answers ? 'ANSWERS from its Live view' : 'refuses, typed (a view has no sample)'}`, answers ? r.status === 200 && answered(r.value) : isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
+  }
 
   // getDataset itself: throws on Live, a typed error; the metadata read does not.
   await context.runInContext(ADMIN, 'direct', async () => {

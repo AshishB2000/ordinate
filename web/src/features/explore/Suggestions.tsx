@@ -19,16 +19,17 @@ import s from './Start.module.css';
 /** A thumbnail's own look comes from ChartThumb; a stable object, or it redraws on every render. */
 const PLAIN = {};
 
-function Card({ projectId, datasetId, live, suggestion, onPick }: {
+function Card({ projectId, datasetId, table, live, suggestion, onPick }: {
   projectId: string;
   datasetId: string;
+  table?: string;
   live: boolean;
   suggestion: Suggestion;
   onPick: (s: Suggestion) => void;
 }) {
   const { chartType, encoding } = suggestion;
   const drawable = !live && !NO_THUMB.has(chartType);
-  const answer = useAnswer(drawable ? { projectId, datasetId, encoding, filters: [] } : undefined, false);
+  const answer = useAnswer(drawable ? { projectId, datasetId, ...(table ? { table } : {}), encoding, filters: [] } : undefined, false);
   const [drawn, setDrawn] = useState(false);
   const onDrawn = useCallback(() => setDrawn(true), []);
   const data = answer.data?.data;
@@ -53,9 +54,11 @@ function Card({ projectId, datasetId, live, suggestion, onPick }: {
   );
 }
 
-export function Suggestions({ projectId, datasetId, datasetName, live, suggestions, onPick }: {
+export function Suggestions({ projectId, datasetId, table, datasetName, live, suggestions, onPick }: {
   projectId: string;
   datasetId: string;
+  /** A source table's connection (`datasetId` its doc). */
+  table?: string;
   datasetName: string;
   live: boolean;
   suggestions: readonly Suggestion[];
@@ -83,7 +86,7 @@ export function Suggestions({ projectId, datasetId, datasetName, live, suggestio
       <ul className={s.cards} aria-label="Suggested questions">
         {suggestions.map((sg) => (
           <li key={JSON.stringify(sg)}>
-            <Card projectId={projectId} datasetId={datasetId} live={live} suggestion={sg} onPick={onPick} />
+            <Card projectId={projectId} datasetId={datasetId} table={table} live={live} suggestion={sg} onPick={onPick} />
           </li>
         ))}
       </ul>

@@ -3,9 +3,15 @@
 // loadVizData, so the thumbnails a page asks for in one tick go out as one
 // `visual:dataBatch` — for every figure on the page. Both data channels run
 // the server's `vizDataFor`. Nothing here computes, sums or sorts a figure.
+//
+// An editor may also explore a SOURCE TABLE with no dataset (Assistant phase D): every call then sends `table` (its
+// connection) beside `datasetId` (its doc), and the server reads the table's Live view. The tables are the Source
+// tables list's documented, read ones; Keep as a dataset (`explore:keepTable`) makes its Live dataset.
 
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
 import { rpc, RpcError } from '../../api/client';
+import { okOr, type Fail } from '../data/api';
+import type { SourceList } from '../model/sources/api';
 import { loadVizData } from '../../api/visuals';
 import { replyError } from '../live/refusal';
 import type { Encoding, FilterStep, Preview } from '../visuals/api';
@@ -36,11 +42,28 @@ type SuggestReply =
     }
   | { ok: false; error?: string };
 
-export function useExploreFields(projectId: string, datasetId: string, topicId?: string) {
+/** A source table Explore can open: `live` when its connection is asked live, else it must be copied first. */
+export interface ExploreTable {
+  connId: string;
+  docId: string;
+  table: string;
+  connection: string;
+  live: boolean;
+}
+
+/** The documented tables whose columns were read, from the Source tables list (an editor's). */
+export const exploreTables = (list: SourceList | undefined): ExploreTable[] =>
+  (list?.connections ?? []).flatMap((c) =>
+    c.rows.flatMap((r) => (r.docId && r.readAt ? [{ connId: c.connId, docId: r.docId, table: r.table, connection: c.name, live: !!c.live }] : [])),
+  );
+
+/** `table`: the connection of the source table `datasetId` names. `enabled: false` (a table to copy first) asks nothing. */
+export function useExploreFields(projectId: string, datasetId: string, topicId?: string, table?: string, enabled = true) {
   return useQuery({
-    queryKey: ['explore:suggest', projectId, datasetId, topicId ?? null],
+    queryKey: ['explore:suggest', projectId, datasetId, topicId ?? null, table ?? null],
+    enabled,
     queryFn: async (): Promise<Fields> => {
-      const r = (await rpc('explore:suggest', { projectId, datasetId, ...(topicId ? { topicId } : {}) })) as SuggestReply;
+      const r = (await rpc('explore:suggest', { projectId, datasetId, ...(topicId ? { topicId } : {}), ...(table ? { table } : {}) })) as SuggestReply;
       if (!r.ok) throw new Error(r.error || 'The fields could not be read.');
       return {
         fields: [
@@ -60,6 +83,8 @@ export function useExploreFields(projectId: string, datasetId: string, topicId?:
 export interface Ask extends Partial<FigureAsk> {
   projectId: string;
   datasetId: string;
+  /** A source table's question: its connection (`datasetId` is then its doc). */
+  table?: string;
   encoding: Encoding;
   filters: FilterStep[];
 }
@@ -85,5 +110,12 @@ export function useAnswer(ask: Ask | undefined, keep = true) {
     staleTime: 30_000,
     // A refusal is about the question, not the wire: only a network failure or a server error is worth asking again.
     retry: (n, err) => n < 2 && err instanceof RpcError && (err.status === 0 || err.status >= 500),
+  });
+}
+
+/** Keep as a dataset: the table's Live dataset, made by the server; its id. */
+export function useKeepTable(projectId: string) {
+  return useMutation({
+    mutationFn: async (t: ExploreTable) => okOr((await rpc('explore:keepTable', { projectId, datasetId: t.docId, table: t.connId })) as { ok: true; datasetId: string } | Fail, 'Keep as a dataset'),
   });
 }

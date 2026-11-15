@@ -21,6 +21,8 @@ export { drillableAxis };
 export interface DrillProps {
   projectId: string;
   datasetId: string;
+  /** A source table's connection (`datasetId` its doc). */
+  table?: string;
   question: Question;
   reply: Preview | undefined;
   chartType: string;
@@ -31,7 +33,7 @@ export interface DrillProps {
   onLabel?: (column: string, value: string | number, label: string) => void;
 }
 
-export function useExploreDrill({ projectId, datasetId, question, reply, chartType, hierarchies, ladder, onChange, onLabel }: DrillProps): { onMark?: PanelMark; sheet: ReactNode } {
+export function useExploreDrill({ projectId, datasetId, table, question, reply, chartType, hierarchies, ladder, onChange, onLabel }: DrillProps): { onMark?: PanelMark; sheet: ReactNode } {
   const [offer, setOffer] = useState<{ mark: string | number; shown: string } | null>(null);
   const busy = useRef(false);
   const axis = reply ? drillableAxis({ chartType, encoding: question.encoding, category: reply.category, hierarchies, ladder }) : null;
@@ -41,7 +43,7 @@ export function useExploreDrill({ projectId, datasetId, question, reply, chartTy
       if (busy.current) return;
       busy.current = true;
       try {
-        const r = await drillDown({ projectId, datasetId, encoding: question.encoding, filters: liveFilters(question.filters), mark: { category: mark } });
+        const r = await drillDown({ projectId, datasetId, ...(table ? { table } : {}), encoding: question.encoding, filters: liveFilters(question.filters), mark: { category: mark } });
         if (!r.ok) toast(DRILL_FAILED, { kind: 'error' });
         else if (!r.available) toast(r.reason);
         else {
@@ -52,7 +54,7 @@ export function useExploreDrill({ projectId, datasetId, question, reply, chartTy
         busy.current = false;
       }
     },
-    [projectId, datasetId, question, onChange, onLabel],
+    [projectId, datasetId, table, question, onChange, onLabel],
   );
 
   if (!axis || !reply) return { sheet: null };

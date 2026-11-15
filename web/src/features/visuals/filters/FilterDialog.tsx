@@ -51,11 +51,12 @@ const NUM_OPS = [
   { value: 'not_empty', label: 'is not empty' },
 ];
 
-function useDistinct(projectId: string, datasetId: string, column: string, limit: number, search: string, enabled = true) {
+function useDistinct(projectId: string, datasetId: string, table: string | undefined, column: string, limit: number, search: string, enabled = true) {
   return useQuery({
-    queryKey: ['dataset:distinct', projectId, datasetId, column, limit, search],
-    // A Live dataset answers from its schema sync's sample (L2.5): `approximate`, with the sample's size.
-    queryFn: () => distinctValues({ projectId, datasetId, column, limit, ...(search ? { search } : {}) }),
+    queryKey: ['dataset:distinct', projectId, datasetId, column, limit, search, table ?? null],
+    // A Live dataset answers from its schema sync's sample (L2.5): `approximate`, with the sample's size. A source table
+    // (Explore, `table`) has no sample: the server says so.
+    queryFn: () => distinctValues({ projectId, datasetId, column, limit, ...(search ? { search } : {}), ...(table ? { table } : {}) }),
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -64,6 +65,7 @@ function useDistinct(projectId: string, datasetId: string, column: string, limit
 export function FilterDialog({
   projectId,
   datasetId,
+  table,
   column,
   type: declared,
   existing,
@@ -73,6 +75,8 @@ export function FilterDialog({
 }: {
   projectId: string;
   datasetId: string;
+  /** Explore on a source table: its connection (`datasetId` is its doc). */
+  table?: string;
   column: string;
   type: string;
   existing?: FilterStep;
@@ -106,9 +110,9 @@ export function FilterDialog({
     return () => window.clearTimeout(t);
   }, [typed]);
 
-  const list = useDistinct(projectId, datasetId, column, PAGE, search, mode === 'values');
+  const list = useDistinct(projectId, datasetId, table, column, PAGE, search, mode === 'values');
   // One bounded peek decides which date input is honest: ISO strings compare as dates, anything else as text.
-  const probe = useDistinct(projectId, datasetId, column, 20, '', type === 'date');
+  const probe = useDistinct(projectId, datasetId, table, column, 20, '', type === 'date');
   const isoDates = !probe.data || probe.data.values.length === 0 || probe.data.values.every((v) => /^\d{4}-\d{2}-\d{2}/.test(v));
 
   const ops = type === 'text' ? TEXT_OPS : NUM_OPS;
