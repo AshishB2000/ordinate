@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:17
+          image: pgvector/pgvector:pg17-trixie # postgres:17 plus pgvector, as Compose's
           env:
             - { name: POSTGRES_USER, value: ordinate }
             - { name: POSTGRES_DB, value: ordinate }

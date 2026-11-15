@@ -41,9 +41,12 @@ jobs:
     runs-on: ubuntu-latest
     # The metadata DB (Phase 7, T3.1). scripts/test-db-*.ts create and drop
     # their own scratch databases on it; without DATABASE_URL they skip.
+    # pgvector's image: postgres:17 (Debian trixie) plus the `vector` extension,
+    # which 0029_pgvector.sql creates; ORDINATE_EXPECT_PGVECTOR below makes
+    # scripts/test-vectorStore.ts fail if it is ever missing.
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17-trixie
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: ordinate_test
@@ -87,6 +90,7 @@ jobs:
         run: npm test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/ordinate_test
+          ORDINATE_EXPECT_PGVECTOR: '1'
           STORAGE_URL: s3://ordinate-ci
           S3_ENDPOINT: http://localhost:9000
           AWS_ACCESS_KEY_ID: minioadmin
@@ -111,7 +115,7 @@ jobs:
     # database, so the URL is the superuser's maintenance database.
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17-trixie # as the check job's
         env:
           POSTGRES_PASSWORD: postgres
           # connections.e2e saves a source with a canary password (to prove it never

@@ -254,7 +254,7 @@ AI agents over MCP and API tokens act as their person and get that person's role
 ## Behind the scenes
 
 - Everything stays in Postgres. No separate vector database.
-- Every searched item gets a fingerprint in one small pgvector table, remade only when its text
+- Every searched item gets a fingerprint in one small pgvector table (`assistant_search_vectors`, 0029), remade only when its text
   changes. Without pgvector or a configured fingerprint model, search is words only.
 - The index is refreshed when an editor verifies a question; a metric, term or dataset description
   is edited; a dbt or Ossie import runs; the connection job pulls new table info.
@@ -422,18 +422,25 @@ Now:
 | 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
 | 6c | A caller with a hidden column: its dataset and metric checks off the index |
-| 7 | Fingerprints and the rank merge (phase C): not started, see below |
+| 7a | pgvector where Ordinate runs, optional everywhere (`0029_pgvector`): CI, the nightly, the release boot, Compose and the chart's kind run use `pgvector/pgvector:pg17-trixie`; the extension and `assistant_search_vectors` are made only where present; `src/server/vectorStore.ts` |
+| 7b | Fingerprints and the rank merge (phase C): next, see below |
 
 **Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
 5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
 
-**Why 7 waits.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words merge by
-rank). Three things are missing, each the owner's call:
+**What 7b still needs.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words
+merge by rank). pgvector is done (7a); two things are left, each the owner's call:
 
-- **pgvector.** CI's `postgres:17` image, the Compose and Helm defaults and a plain local Postgres have no `vector`
-  extension, and creating it needs a superuser. Without it in CI, the vector path would ship with no test that runs
-  it, against "every fast path keeps its reference". Options: `pgvector/pgvector:pg17` in CI and the deploy
-  defaults, with the extension created only where present (a missing one leaves search on words).
+- **pgvector (7a, done).** CI's check and web jobs, the e2e nightly, the release boot check, Compose and the chart's kind
+  run use `pgvector/pgvector:pg17-trixie` (`postgres:17`, which is trixie, plus the extension). `0029_pgvector` creates
+  the extension only where Postgres offers it and the role may, catching any error inside its DO block, and
+  `assistant_search_vectors` (org, project, item, model, text hash, `vector(768)`, HNSW over cosine, forced RLS) only
+  where it then exists. Every model's fingerprint is 768 numbers. An extension created later gets its table from the
+  app through the same function, `ordinate_ensure_vector_store()`; `vectorStatus()` says which case a database is in
+  (`no_database`, `no_extension`, `not_created`, `no_table`). `test-vectorStore` runs the 768-dimension round trip
+  through the HNSW index, the later install, a role that may not create the extension, and, with
+  `ORDINATE_EXPECT_PGVECTOR=1` as in CI, fails when pgvector is missing. A managed Postgres creates it by hand
+  ([upgrade.md](../server/upgrade.md#pgvector-for-meaning-search-0029_pgvector)); without it, search stays on words.
 - **The fingerprint model** (the open question below): which provider's embedding model, picked in Admin → AI like the
   chat models, from the org's own API keys. No surprise network calls, nothing installed at run time.
 - **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
