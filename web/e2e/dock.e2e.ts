@@ -208,7 +208,7 @@ if (!dbUrl) {
     assert.equal(vq.ok, true, JSON.stringify(vq));
     await page.reload();
     await settled(page);
-    await card.getByText('✓ Verified · dev@local', { exact: true }).waitFor();
+    await card.getByText('✓ Verified · Dev', { exact: true }).waitFor(); // the verifier by name, never the address
     await shots('dock-verified');
     await call('verified:delete', { projectId: pid, id: vq.question?.id }); // the sample as it was, for the rest of the file
     await open.click();
@@ -251,7 +251,11 @@ if (!dbUrl) {
     await cards.first().getByText(/✓ Verified/).waitFor();
     await box.fill('sales by region');
     await box.press('Enter');
-    await cards.nth(1).getByText(/✓ Verified/).waitFor();
+    // A phrasing asked word for word: the card says which verified question it matched, as verified, in place of the badge.
+    const matched = cards.nth(1).getByTestId('verified-matched');
+    await matched.getByText(/^✓ Matched (.+'s|a) verified question: “Revenue by region”$/).waitFor();
+    assert.equal(await matched.getByRole('button', { name: 'Not what I asked' }).count(), 0, 'no model to take it: no way out offered');
+    assert.equal(await cards.nth(1).getByText(/✓ Verified/).count(), 0, 'one line, not a badge beside it');
     await box.fill('revenue by state');
     await box.press('Enter');
     await dock.getByText('Connect a model to ask anything else.').waitFor();

@@ -1,5 +1,6 @@
 // "✓ Verified · <who>" on an answer card (semantic part 3 D9): the server's `verified` on the `answer:card` reply,
-// and nothing without it. The card never decides it.
+// and nothing without it. The card never decides it. With the server's `kind` (an answer turn that matched the
+// question, or drew it from an example) one line says how, in place of the badge.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -47,5 +48,25 @@ describe('The verified mark', () => {
     draw(CARD);
     await screen.findByText('Orders');
     expect(screen.queryByText(/Verified/)).toBeNull();
+    expect(screen.queryByTestId('verified-matched')).toBeNull();
+  });
+
+  it('no verifier recorded: the badge names nobody', async () => {
+    draw({ ...CARD, verified: { ...MARK, by: '' } });
+    expect((await screen.findByText(/✓ Verified/)).textContent).toBe('✓ Verified');
+  });
+
+  it('matched: one line with the verifier and the question as verified, and no badge beside it', async () => {
+    draw({ ...CARD, verified: { ...MARK, by: 'Priya', kind: 'matched' } });
+    const line = await screen.findByTestId('verified-matched');
+    expect(line.textContent).toBe('✓ Matched Priya\'s verified question: “Revenue by region”');
+    expect(screen.queryByText(/✓ Verified/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save as verified' })).toBeNull();
+  });
+
+  it('based on: the model drew an example it was shown; no name recorded reads "a verified question"', async () => {
+    draw({ ...CARD, verified: { ...MARK, by: '', kind: 'based_on' } });
+    expect((await screen.findByTestId('verified-matched')).textContent).toBe('✓ Based on a verified question: “Revenue by region”');
+    expect(screen.queryByText(/✓ Verified/)).toBeNull();
   });
 });
