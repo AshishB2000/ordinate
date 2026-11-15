@@ -723,6 +723,56 @@ the next question on a new pod rebuilds it.
 index stale when the older release saves one of those records; its own rebuilds are marked with the older
 version, so upgrading again rebuilds the index once and misses nothing.
 
+## pgvector, for meaning search (`0029_pgvector`)
+
+Meaning search (finding "sales" when the metric is called Revenue) keeps a fingerprint of each searched
+item in one table, `assistant_search_vectors`, which needs the Postgres extension
+[pgvector](https://github.com/pgvector/pgvector) (0.5 or later). **The extension is optional.**
+Without it nothing fails: the Assistant's search stays on words, as in earlier releases.
+
+**Rolling out.** The migration adds one function, `ordinate_ensure_vector_store()`. Then, only where
+your Postgres offers pgvector and Ordinate's role may create it, it creates the extension and the table
+(an HNSW index, row-level security as the other Assistant tables). Where either is missing, it logs a
+notice and goes on. It reads no record.
+
+- **Compose** now runs `pgvector/pgvector:pg17-trixie` instead of `postgres:17`. That image is
+  `postgres:17` with pgvector added and is run the same way (pgvector's README): the same environment,
+  entrypoint and data directory (`/var/lib/postgresql/data`), the same Postgres major version, and the
+  same Debian release. `postgres:17` is built on Debian trixie, and so is the `-trixie` tag (the plain
+  `pg17` tag is bookworm). An existing `postgres` volume therefore opens as it is: `docker compose up -d`
+  recreates the container on the same volume, and the server's migration creates the extension, because
+  the Compose database user is the image's superuser. The two images can carry different 17.x patch
+  releases, and Postgres keeps one data format across a major version. If
+  Postgres logs `collation version mismatch` after the swap, the volume was made on another Debian
+  (before `postgres:17` moved to trixie). Run `REINDEX DATABASE ordinate;` and then
+  `ALTER DATABASE ordinate REFRESH COLLATION VERSION;`. If the server was upgraded while the compose file
+  still named `postgres:17`, the migration found no pgvector; after the swap, run
+  `docker compose exec postgres psql -U ordinate -d ordinate -c 'CREATE EXTENSION vector;'`.
+- **Helm** brings no Postgres: yours is RDS, Cloud SQL, Azure or your own. pgvector is not a trusted
+  extension. Ordinate's role, an ordinary role that owns its database
+  ([eks.md](eks.md#rds)), cannot create it, so the migration skips it. To turn meaning search on,
+  connect to Ordinate's database as an admin role and create the extension, before or after the upgrade:
+
+| Postgres | Create it as | Statement |
+|---|---|---|
+| RDS for PostgreSQL | the master user (`rds_superuser`) | `CREATE EXTENSION vector;` |
+| Cloud SQL for PostgreSQL | a `cloudsqlsuperuser` user, such as `postgres` | `CREATE EXTENSION vector;` |
+| Azure Database for PostgreSQL (flexible server) | the admin user, after adding `VECTOR` to the server parameter `azure.extensions` | `CREATE EXTENSION vector;` |
+| Your own Postgres | a superuser, once pgvector is installed on the server | `CREATE EXTENSION vector;` |
+
+Created before the upgrade, the migration makes the table. Created after it, Ordinate makes the table
+itself the next time it checks for pgvector, as its own role, with the same function. Nothing needs a
+restart. Ordinate never creates the extension outside the migration.
+
+**A `pg_dump` of a database with pgvector** holds the extension and the table, so restore it into a
+Postgres that offers pgvector. The fingerprints are derived, so dropping the table and the extension
+before the dump is also fine.
+
+**Rolling back.** The older release ignores the function, the extension and the table. They stay,
+unused, and upgrading again uses them. Keep the pgvector image while the extension exists: on Compose,
+going back to `postgres:17` would leave a table whose type the server can no longer load. To go back,
+first run `DROP TABLE assistant_search_vectors; DROP EXTENSION vector;`.
+
 ## Compose
 
 From a checkout:

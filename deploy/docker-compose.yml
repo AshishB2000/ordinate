@@ -24,7 +24,9 @@ x-minio-creds: &minio-creds
 
 services:
   postgres:
-    image: postgres:17
+    # postgres:17 plus pgvector (meaning search, 0029_pgvector.sql): the same Postgres 17 on the same Debian
+    # (trixie), so a volume made by postgres:17 opens unchanged (docs/server/upgrade.md, 0029).
+    image: pgvector/pgvector:pg17-trixie
     restart: unless-stopped
     environment:
       POSTGRES_USER: ordinate

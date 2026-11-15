@@ -59,7 +59,7 @@ jobs:
     # The boot check's metadata DB. The server migrates it on start.
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17-trixie # as ci.yml's: the boot runs 0029 with the extension
         env:
           POSTGRES_PASSWORD: release-smoke
         ports: ['5432:5432']
