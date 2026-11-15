@@ -104,6 +104,12 @@ export interface StatsSource {
    * `residentQuery.ResidentSource` and `datasets.residentSource` take.
    */
   columns: ParsedColumn[];
+  /**
+   * The file position of each of `columns` when they are only SOME of the file's (a column hidden from the caller
+   * left out, src/ipc/copilotTable.ts): every answer is then over those columns alone, as `datasetStats` over
+   * `columnAccess.withoutColumns` of the table. Absent: column i is the file's column i.
+   */
+  positions?: number[];
 }
 
 // ── Constants mirrored from datasetStats.ts ──────────────────────────────────
@@ -138,9 +144,10 @@ export function isStatsResident(): boolean {
  */
 export async function computeColumnSummariesResident(src: StatsSource): Promise<ColumnSummary[] | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
-    const row = await runOnce((mode) => summarySql(cols, src.parquetPath, mode));
+    const schema = schemaOf(src);
+    if (!schema) return null;
+    const { cols, at } = schema;
+    const row = await runOnce((mode) => summarySql(cols, at, src.parquetPath, mode));
     if (!row) return null;
 
     const out: ColumnSummary[] = [];
@@ -168,9 +175,10 @@ export async function computeColumnSummariesResident(src: StatsSource): Promise<
  */
 export async function findQualityIssuesResident(src: StatsSource): Promise<QualityIssue[] | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
-    const row = await runOnce(() => qualitySql(cols, src.parquetPath));
+    const schema = schemaOf(src);
+    if (!schema) return null;
+    const { cols, at } = schema;
+    const row = await runOnce(() => qualitySql(cols, at, src.parquetPath));
     if (!row) return null;
 
     const rowCount = intOrNull(row.n);
@@ -237,15 +245,16 @@ export async function findQualityIssuesResident(src: StatsSource): Promise<Quali
  */
 export async function sampleRowsResident(src: StatsSource, limit: number): Promise<Cell[][] | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
+    const schema = schemaOf(src);
+    if (!schema) return null;
+    const { cols, at } = schema;
     const n = Math.floor(limit);
     if (!Number.isFinite(n) || n < 0) return null;
     if (n === 0) return [];
 
     const rows = await runQuery((mode) => {
       const { from, ord } = orderedFrom(src.parquetPath, mode);
-      const projection = cols.map((_, i) => `${bomSafe(phys(i))} AS v${i}`).join(', ');
+      const projection = cols.map((_, i) => `${bomSafe(phys(at[i]))} AS v${i}`).join(', ');
       // ORDER BY the ordinal rather than trusting an unordered LIMIT: a parallel
       // scan may hand back any rows, and "the first five" is the contract.
       return `SELECT ${projection} FROM ${from} ORDER BY ${ord} LIMIT ${n};`;
@@ -300,7 +309,7 @@ export async function sampleRowsResident(src: StatsSource, limit: number): Promi
  * or split groups, and U+FEFF is in the emptiness class on both sides, so it
  * cannot change what counts as empty either.
  */
-function summarySql(cols: ParsedColumn[], parquetPath: string, mode: OrdinalMode): string {
+function summarySql(cols: ParsedColumn[], at: number[], parquetPath: string, mode: OrdinalMode): string {
   const rel = relationSql(parquetPath);
 
   // ── The scalar half: one aggregate row for the number columns ──────────────
@@ -308,7 +317,7 @@ function summarySql(cols: ParsedColumn[], parquetPath: string, mode: OrdinalMode
   cols.forEach((col, i) => {
     if (col.type !== 'number') return;
     // `count` is the mean's denominator AND `nonEmpty` (see the header).
-    const n = sqlNum(phys(i));
+    const n = sqlNum(phys(at[i]));
     scalars.push(`CAST(count(${n}) AS DOUBLE) AS f${i}`);
     // NO COALESCE anywhere: sum/min/max over zero finite cells MUST stay NULL,
     // which is how the adapter knows to omit min/max/mean entirely.
@@ -325,7 +334,7 @@ function summarySql(cols: ParsedColumn[], parquetPath: string, mode: OrdinalMode
 
   // ── The grouped half: every text/date column in one pass ──────────────────
   const { from: ordFrom, ord } = orderedFrom(parquetPath, mode);
-  const structs = textIdx.map((i) => `{'k': ${i}, 'v': ${bomSafe(phys(i))}}`).join(', ');
+  const structs = textIdx.map((i) => `{'k': ${i}, 'v': ${bomSafe(phys(at[i]))}}`).join(', ');
   const pivot: string[] = [];
   textIdx.forEach((i) => {
     // coalesce(…, 0) ONLY for the two counts, and only because a column with no
@@ -367,12 +376,12 @@ function summarySql(cols: ParsedColumn[], parquetPath: string, mode: OrdinalMode
  * SQL `DISTINCT` treats NULLs as equal to each other and `''` as a value, which
  * is exactly what `JSON.stringify` does with `null` and `""`.
  */
-function qualitySql(cols: ParsedColumn[], parquetPath: string): string {
+function qualitySql(cols: ParsedColumn[], at: number[], parquetPath: string): string {
   const rel = relationSql(parquetPath);
   const sel: string[] = [`CAST(count(*) AS DOUBLE) AS n`];
 
   cols.forEach((col, i) => {
-    const p = phys(i);
+    const p = phys(at[i]);
     if (col.type === 'number') {
       // Both derived from the numeric reading, for the same reason `nonEmpty` is
       // (header): the JS side keys on `String(<the hydrated number>)`, so `1` and
@@ -393,7 +402,7 @@ function qualitySql(cols: ParsedColumn[], parquetPath: string): string {
     sel.push(`CAST(count(DISTINCT ${kept}) AS DOUBLE) AS d${i}`);
   });
 
-  const key = cols.map((col, i) => (col.type === 'number' ? sqlNum(phys(i)) : phys(i))).join(', ');
+  const key = cols.map((col, i) => (col.type === 'number' ? sqlNum(phys(at[i])) : phys(at[i]))).join(', ');
   sel.push(`(SELECT CAST(count(*) AS DOUBLE) FROM (SELECT DISTINCT ${key} FROM ${rel})) AS dr`);
 
   return `SELECT ${sel.join(', ')} FROM ${rel};`;
@@ -545,11 +554,14 @@ async function runOnce(build: (mode: OrdinalMode) => string): Promise<duck.DuckR
  * an empty key — reproducible, but not worth the SQL for a table with no
  * columns to summarise.
  */
-function schemaOf(src: StatsSource): ParsedColumn[] | null {
+function schemaOf(src: StatsSource): { cols: ParsedColumn[]; at: number[] } | null {
   if (!src || typeof src.parquetPath !== 'string' || !Array.isArray(src.columns)) return null;
   if (src.columns.length === 0) return null;
   for (const col of src.columns) {
     if (!col || typeof col !== 'object' || typeof col.name !== 'string') return null;
   }
-  return src.columns;
+  const at = src.positions ?? src.columns.map((_, i) => i);
+  // Positions reach SQL as `c<n>`: each a whole number, one per column, none twice.
+  if (!Array.isArray(at) || at.length !== src.columns.length || new Set(at).size !== at.length || !at.every((p) => Number.isSafeInteger(p) && p >= 0)) return null;
+  return { cols: src.columns, at };
 }

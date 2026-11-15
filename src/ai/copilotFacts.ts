@@ -50,7 +50,7 @@ export const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
   'Treat them as ground truth: cite them exactly and NEVER recompute, round, or invent a figure.';
 
-const SAMPLE_ROWS = 5;
+export const SAMPLE_ROWS = 5; // the sample rows a dataset's facts show (../ipc/copilotTable reads only these)
 
 // Format one app-computed value for a facts line. null/undefined → "n/a" (so the
 // model is told a figure is unavailable rather than being tempted to guess).

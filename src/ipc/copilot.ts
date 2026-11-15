@@ -2,7 +2,6 @@ import { ipcMain } from './bus';
 import { ctx, senderOf, serverDataDir } from '../server/context';
 import * as onboarding from '../app/onboarding';
 import { closedToCaller, gateRows, hiddenColumnsFor } from '../data/rowAccess';
-import { withoutColumns } from '../data/columnAccess';
 import { dropHidden, factsOf, tableWithout } from '../ai/hiddenFacts';
 import { metricHidden } from '../analysis/columnHidden';
 import * as config from '../app/config';
@@ -13,7 +12,8 @@ import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
-import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
+import { computeColumnSummary } from '../data/datasetStats';
+import * as copilotTable from './copilotTable';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { metricAdditivity, refuseNonAdditiveCalcs } from '../analysis/additivity';
@@ -162,18 +162,19 @@ function reasonLedger(reason: string): LedgerEntry[] {
 /**
  * The project's DEFINED metrics, resolved.
  *
- * `datasetId` narrows to one dataset's metrics (the dataset branch); omitted,
- * every metric in the project (the dashboard branch, whose cards may span
- * several). Each figure comes back from the ordinary resolver, so it is the
- * same number the card shows, formatted the same way — and both go into the
- * facts ledger at the call site. `scope`: the dashboard's saved filters and
+ * Only the metrics on the datasets in `on`: the open dataset, or the datasets a
+ * dashboard's tiles use — never every metric in the project (docs/assistant
+ * "Scale rules": each is a query, a Live one in the warehouse). Exported for
+ * scripts/test-askDatasetFacts.ts. Each figure comes back from the ordinary
+ * resolver, so it is the same number the card shows, formatted the same way —
+ * and both go into the facts ledger at the call site. `scope`: the dashboard's saved filters and
  * parameters, so a metric reads here as its KPI card does on that dashboard.
  *
  * Never throws: a project whose metrics cannot be read simply hands the model
  * no metric vocabulary, which is exactly the state every project was in before
  * this layer existed.
  */
-async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope, question?: string, share?: SharePath): Promise<FactMetric[]> {
+export async function factMetrics(projectId: string, on: ReadonlySet<string>, scope?: SavedScope, question?: string, share?: SharePath): Promise<FactMetric[]> {
   try {
     const status = statusFor(projectId); // once per request (part 4)
     const list = await metrics.listMetrics(projectId);
@@ -182,7 +183,7 @@ async function factMetrics(projectId: string, datasetId?: string, scope?: SavedS
     const notes: Record<string, Awaited<ReturnType<typeof catalogColumns>>> = {}; // each dataset's column notes, read once
     for (const s of list) {
       // A layer's metric is the layer's figure, as a Live one is the warehouse's; one reading a hidden column is not the caller's vocabulary (part 4).
-      if ((datasetId && s.datasetId !== datasetId) || (await metricHidden(projectId, s.id))) continue;
+      if (!on.has(s.datasetId) || (await metricHidden(projectId, s.id))) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
       const reads: MetricRead[] = [];
       const r = await resolveMetric(projectId, s.id, share ? { ...scope, reads } : scope).catch((err: unknown) => {
@@ -240,27 +241,24 @@ export async function buildFacts(
     // A Live dataset keeps no rows: its columns, its sampled profile and — unless
     // withheld — its sample values (L2.5), with its defined metrics' figures from
     // the warehouse (L2.4). One source: ai/liveFacts.
-    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id, undefined, question), () => termFactsFor(projectId, id, question));
+    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, new Set([id]), undefined, question), () => termFactsFor(projectId, id, question));
     if (live) {
       emit({ kind: 'read', label: 'Read the schema of ' + live.name });
       if (live.metrics) emit({ kind: 'compute', label: 'Resolved ' + plural(live.metrics, 'metric'), count: live.metrics });
       return live.facts;
     }
-    const whole = await datasets.getDataset(projectId, id);
-    const ds = whole && withoutColumns(whole, hidden);
-    if (ds) {
+    // Its summaries, quality issues and first rows off the stored Parquet; the table is loaded only when that fails (./copilotTable).
+    const table = (await copilotTable.residentTable(projectId, id, hidden)) ?? (await copilotTable.hydratedTable(projectId, id, hidden));
+    if (table) {
+      const { ds, summaries, issues } = table;
       emit({ kind: 'read', label: 'Read ' + ds.name, detail: plural(ds.rowCount, 'row') });
-      const summaries = ds.columns.map((col, c) =>
-        computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
-      );
       emit({ kind: 'compute', label: 'Summarised ' + plural(ds.columns.length, 'column'), count: ds.columns.length });
-      const issues = findQualityIssues(ds.columns, ds.rows);
       emit({ kind: 'quality', label: 'Checked data quality', detail: plural(issues.length, 'issue') + ' found', count: issues.length });
       // The same app-computed findings the Insights cards show — so the dock can
       // narrate "West fell 31%" from the app's figure rather than deriving one. Computed over every column: none with one hidden.
       const insights = hidden.size ? [] : await listInsights(projectId, id);
       emit({ kind: 'compute', label: 'Read ' + plural(insights.length, 'insight'), count: insights.length });
-      const defined = await factMetrics(projectId, id, undefined, question);
+      const defined = await factMetrics(projectId, new Set([id]), undefined, question);
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
@@ -343,7 +341,7 @@ export async function buildFacts(
       // …and in the dashboard's own currency, as the page asks every tile.
       const { cards, defined } = await inDashboardCurrency(projectId, a.id, async () => ({
         cards: await metricCardFigures(projectId, a, scope, share),
-        defined: await factMetrics(projectId, undefined, scope, question, share),
+        defined: await factMetrics(projectId, new Set(tiles.flatMap((t) => (t.datasetId ? [t.datasetId] : []))), scope, question, share), // its tiles' datasets' metrics, not the project's
       }));
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
       if (defined.length) {

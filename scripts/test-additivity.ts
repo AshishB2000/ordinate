@@ -272,7 +272,9 @@ async function main(): Promise<void> {
   ok('the dataset facts: an average is marked', lineOf(onDataset, 'Avg basket').includes("Can't be added up across groups or over time."), lineOf(onDataset, 'Avg basket'));
   ok('the dataset facts: a stock is marked over time only', lineOf(onDataset, 'Stock').includes("Can't be added up over time.") && !lineOf(onDataset, 'Stock').includes('across groups'), lineOf(onDataset, 'Stock'));
   ok('NEGATIVE CONTROL: the dataset facts leave a sum and an unknown unmarked', lineOf(onDataset, 'Revenue') !== '' && !lineOf(onDataset, 'Revenue').includes('added up') && lineOf(onDataset, 'Ratio k') !== '' && !lineOf(onDataset, 'Ratio k').includes('added up'), lineOf(onDataset, 'Ratio k'));
-  const withK2 = (await analysisStore.saveAnalysis(pid, { name: 'With k', sheets: [{ id: randomUUID(), name: 'Main', cards: [] }], parameters: [{ name: 'k', kind: 'number', value: 2 }] } as never))!;
+  // One tile on Sales: a dashboard's facts carry the metrics of the datasets its tiles use.
+  const onSales = { type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: ds, column: 'amount', aggregation: 'sum', label: 'Amount' } };
+  const withK2 = (await analysisStore.saveAnalysis(pid, { name: 'With k', sheets: [{ id: randomUUID(), name: 'Main', cards: [onSales] }], parameters: [{ name: 'k', kind: 'number', value: 2 }] } as never))!;
   const onDashboard = (await ipcCopilot.buildFacts(pid, { kind: 'analysis', id: withK2.id })).text;
   const saved = savedScope(withK2).params;
   ok('the dashboard facts: a parameter formula is read with its saved values', lineOf(onDashboard, 'Ratio k').includes("Can't be added up") && lineOf(onDashboard, 'Scaled') !== '' && !lineOf(onDashboard, 'Scaled').includes('added up'), lineOf(onDashboard, 'Ratio k'));
