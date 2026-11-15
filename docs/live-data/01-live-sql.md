@@ -400,6 +400,47 @@ F1 and F2 can merge before phase B and D land on `develop`; F3 needs B, F5 needs
   vocabulary of `runLive` is `{id, names}` per table and `targetsOf` resolves each through `liveTarget`: phase D's
   in-memory view goes in there, and its names in `tablesFor`.
 
+### F4 as built
+
+- **Files:** `src/engine/live/liveSql.ts` (`runLiveSql` split into `prepared`: targets, the gate, parse, translate, the
+  binder, the dropped columns; and `checkLiveSql`, which takes those steps and the print under every table's lock, and
+  stops: no cache, no flight, no dry run, no warehouse), `src/ipc/answerSql.ts` (Verify's vocabulary; `liveSqlProblem`),
+  `src/ipc/verifiedSql.ts` (`sqlProblem`, the save, the re-ask), the web card (`AnswerSql.tsx`: Verify on a Live table for
+  editors, `SaveAsVerified`'s own `useCanEdit`). One sentence deleted (Verify on Live "isn't available yet"), from the
+  catalog and the four drafts; none added.
+- **Saved:** Verify sends the question and the text only (the contract has no list). With no vocabulary,
+  `runAnswerSql` takes the datasets the text names by the gate's own lineage (`extractDeps` over `projectNames`, the
+  list `compile()` would read): none Live is phase B unchanged; all Live is F, once, for the editor (usually a cache hit:
+  they just asked it); some is F-D9's refusal. Kept: `sql: {text, datasetIds}`, the datasets the TRANSLATOR read
+  (`ir.views`), so a word naming another dataset (an alias) is not one. No `SQL_PER_HOUR`: Verify writes no statement.
+- **Matched and re-run:** the verified index is unchanged (it keys words, not engines). Asked word for word,
+  `verifiedSqlAsk` runs `runAnswerSql` with the record's datasets as the vocabulary: translated for the asker, the column
+  gate on their words, printed under THEIR lock, so East and West send two statements under two cache keys and a second
+  East is a hit. No model call, no `SQL_PER_HOUR`. On a failure the translate-only check decides the sentence: a
+  breakage is *This verified SQL no longer runs: …*; anything else (their hidden column or rules, the daily limit, the
+  dry run's ceiling, a timeout) is the executor's own sentence. A dataset gone, or a set now part Live part copy
+  (F-D9), is a metadata problem: the model takes the question, as for a chart's.
+- **The Verified page's check** (`sqlProblem` deep) on a Live question is `checkLiveSql` for the viewer of the page: a
+  translator, binder or printer refusal (a column the schema sync dropped reads `"tier" is not a column here.`, since
+  the sync removes it from the declared columns and keeps it in `missingColumns` only for charts, KPIs and alerts), a
+  dataset gone or a connection gone is broken; a refusal with no code (the row rules' or the column gate's) is that
+  caller's access, not a breakage, as on a copy. MCP's `answer_verified_question` refuses SQL questions as before.
+- **Tests:** `test-liveSqlVerified` — without a database 18 checks: Verify keeps the translator's datasets (CONTROL: the
+  lexer alone keeps the alias's dataset too); the admin and a viewer from whom `amt` is hidden ask it word for word, no
+  model call, each card `Object.is` to F2's reference and marked verified; a verified question naming `amt` is the column
+  gate's sentence for the viewer and runs on their Verified page (CONTROL: the admin's table); the page's check sends no
+  statement and no dry run; a column dropped by a real schema sync over the fake is reported, naming it, with the fake's
+  call count unchanged, and asking it says why with nothing sent (CONTROLS: it ran before the sync; a question on the
+  same table not naming it still runs); MCP refuses. With `DATABASE_URL` 29: two viewers, two locks, two statements,
+  each `Object.is` to the reference under its own lock, East again a hit (CONTROL: serving West the entry East's
+  statement left fails the comparison); the page's check under a lock sends nothing; and on Postgres through the real
+  `amazon-redshift` connector, verified in one statement, checked in none, asked word for word ≡ the reference, no host,
+  database or password in a reply. `test-liveSafetyNet`: Verify over Live moves from "refuses, typed" to routed
+  (`getDataset` never called) and the page's check sends nothing; over a gone connection it refuses.
+- **What F5 needs:** a source table has no record, so `extractDeps` over `projectNames` never names one, and a verified
+  question names datasets: Keep (phase D's `sourceKeep`) before Verify, then this path as is. `checkLiveSql` and
+  `runLiveSql` share `prepared`, where `targetsOf` is the one place a source view's target goes in.
+
 **Waits on the owner:** F7 runs Snowflake and BigQuery only where `warehouse-nightly.yml`'s
 `SNOWFLAKE_*` and `BIGQUERY_*` secrets are set. **They are not today**: the run of 2026-11-15
 (43735675013) skipped both warehouses for want of them. They must be added (on

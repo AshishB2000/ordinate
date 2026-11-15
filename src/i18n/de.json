@@ -81,7 +81,6 @@
   "answerSqlMessages.the_sql_reads_which_this_answer": "Das SQL liest „{name}“, das diese Antwort nicht gewählt hat.",
   "answerSqlMessages.this_verified_question_is_answered_with": "Diese verifizierte Frage wird mit SQL beantwortet, das MCP nicht ausführt. Stellen Sie sie im Assistenten.",
   "answerSqlMessages.this_verified_sql_no_longer_runs": "Dieses verifizierte SQL läuft nicht mehr: {reason}",
-  "answerSqlMessages.verifying_an_sql_answer_that_reads": "Eine SQL-Antwort, die einen Live-Datensatz liest, kann noch nicht verifiziert werden; diese bleibt daher ungeprüft.",
   "assistantCheckMessages.a_check_is_already_running_for": "Für dieses Projekt läuft bereits eine Prüfung.",
   "assistantCheckMessages.checking_the_assistant": "Assistent wird geprüft",
   "assistantCheckMessages.connect_a_model_to_check_the": "Verbinde ein Modell, um den Assistenten zu prüfen.",

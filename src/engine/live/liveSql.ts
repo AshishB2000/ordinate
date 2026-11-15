@@ -31,6 +31,9 @@
 // SQL_PER_HOUR (30 Live SQL answers per member per connection, across pods, ../../server/counters) is taken by the
 // lane BEFORE the model writes a statement (`takeSqlHour`), so a refusal costs no model call and no statement.
 //
+// `checkLiveSql` (F4, the Verified page's check of a verified Live SQL question) takes every step up to the print, under
+// the same locks, and stops there: no cache, no flight, no dry run, no warehouse call.
+//
 // The printed SQL names the warehouse's tables (or an editor's defining query): it never leaves the server (F-D13).
 // A failure is a catalog sentence; the warehouse's own words go to the log, through safeError (R-L6).
 
@@ -161,6 +164,36 @@ async function unbound(text: string, env: SqlEnv): Promise<string | null> {
  * name outside it is no table), asked of their warehouse: the result table, or why not, in a sentence.
  */
 export async function runLiveSql(projectId: string, text: string, tables: readonly LiveSqlTable[]): Promise<LiveSqlReply> {
+  const p = await prepared(projectId, text, tables);
+  if (!('ir' in p)) return p;
+  try {
+    return await underLocks(projectId, p.ir, 0, [], (locks) => ask(projectId, p.ir, p.views, locks));
+  } catch (err) {
+    if (isRowPolicyError(err)) return { ok: false, error: err.message };
+    throw err;
+  }
+}
+
+/**
+ * Why `text` would not run for the caller over `tables`, or null: every step of `runLiveSql` up to the print, under
+ * each table's lock, and NO warehouse call (F4: the Verified page's check of a Live SQL question).
+ */
+export async function checkLiveSql(projectId: string, text: string, tables: readonly LiveSqlTable[]): Promise<LiveSqlFailure | null> {
+  const p = await prepared(projectId, text, tables);
+  if (!('ir' in p)) return p;
+  try {
+    return await underLocks(projectId, p.ir, 0, [], async (locks) => {
+      const printed = printLiveSql(p.ir, p.views.map((v, i) => ({ env: v.env, lock: locks[i]?.steps ?? [] })), p.views[0].dialect);
+      return printed.ok ? null : refused(opOf(p.views[0].dialect), printed.message);
+    });
+  } catch (err) {
+    if (isRowPolicyError(err)) return { ok: false, error: err.message };
+    throw err;
+  }
+}
+
+/** Targets, the gate, parse, translate, bind and the dropped columns: the IR and each table read's target, or why not. Sends nothing. */
+async function prepared(projectId: string, text: string, tables: readonly LiveSqlTable[]): Promise<{ ir: LiveSqlIR; views: LiveTarget[] } | LiveSqlFailure> {
   if (text.length > MAX_SQL_TEXT) return refused(opOf(undefined), msg.sqlTooLong(MAX_SQL_TEXT.toLocaleString('en-US')));
   const ids = tables.map((t) => t.id);
   const targets = await targetsOf(projectId, ids);
@@ -186,12 +219,7 @@ export async function runLiveSql(projectId: string, text: string, tables: readon
     const gone = missingRefusal(views[i].live.missingColumns, v.columns); // a column the schema sync found dropped (L2.5)
     if (gone) return refused(op, gone.message);
   }
-  try {
-    return await underLocks(projectId, ir, 0, [], (locks) => ask(projectId, ir, views, locks));
-  } catch (err) {
-    if (isRowPolicyError(err)) return { ok: false, error: err.message };
-    throw err;
-  }
+  return { ir, views };
 }
 
 /** Every table read under its own lock (F-D10), nested: `body` runs inside all of them with their locks, in `ir.views` order. */

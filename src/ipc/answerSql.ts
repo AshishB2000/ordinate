@@ -18,7 +18,7 @@ import * as sqlDatasets from '../engine/sqlDatasets';
 import * as datasets from '../data/datasets';
 import { gateRows, hiddenColumnsFor, isRowPolicyError } from '../data/rowAccess';
 import { isLive } from '../data/liveDataset';
-import { liveSqlClosed, runLiveSql, takeSqlHour } from '../engine/live/liveSql';
+import { checkLiveSql, liveSqlClosed, runLiveSql, takeSqlHour, type LiveSqlTable } from '../engine/live/liveSql';
 import * as lmsg from '../engine/liveSqlMessages';
 import { listRelationships } from '../analysis/relationships';
 import { tableFacts } from '../app/tableDocs';
@@ -137,12 +137,15 @@ const nameOf = async (projectId: string, id: string): Promise<string> => (await 
 
 /**
  * `text` run through the Query tab's gate (`runSql`, as `sql:run` runs it) for the caller, reading only datasets of
- * `allowed` (null: any of the project's, an editor's Verify): the card and the datasets it read (the gate's deps), or
- * the gate's, the net's or the engine's sentence.
+ * `allowed` (null: any of the project's, an editor's Verify), or over Live datasets through phase F: the card and the
+ * datasets it read (the gate's deps, or those the translator resolved), or the gate's, the net's or the engine's sentence.
  */
 export async function runAnswerSql(projectId: string, text: string, allowed: readonly string[] | null, title: string): Promise<{ ok: true; card: SqlCard; deps: string[] } | Failure> {
-  const live = allowed ? await liveCount(projectId, allowed) : 0; // null (an editor's Verify): the gate, which refuses Live (F4)
-  if (allowed && live) return live < allowed.length ? { ok: false, reason: lmsg.sqlMixedEngines() } : runLive(projectId, text, allowed, title);
+  // null (an editor's Verify, F4): the datasets the text names by the gate's own lineage, never a browser's list. When
+  // one is Live they are the vocabulary of phase F; else the gate takes the text over any of the project's datasets.
+  const vocab = allowed ?? sqlDatasets.extractDeps(text, await sqlDatasets.projectNames(projectId));
+  const live = await liveCount(projectId, vocab);
+  if (live) return live < vocab.length ? { ok: false, reason: lmsg.sqlMixedEngines() } : runLive(projectId, text, vocab, title);
   const res = await sqlDatasets.runSql(projectId, text, [], sqlDatasets.PREVIEW_ROWS);
   if (!res.ok) return { ok: false, reason: res.error }; // the gate's sentence, as the Query tab shows it (a Live one is typed by the route)
   const stray = allowed && res.deps.find((id) => !allowed.includes(id));
@@ -158,15 +161,29 @@ export async function runAnswerSql(projectId: string, text: string, allowed: rea
  * names only those names — the statement the warehouse ran never leaves the server (F-D13).
  */
 async function runLive(projectId: string, text: string, allowed: readonly string[], title: string): Promise<{ ok: true; card: SqlCard; deps: string[] } | Failure> {
-  const cat = await sqlDatasets.projectNames(projectId);
-  const tables = allowed.map((id) => {
-    const e = cat.find((x) => x.id === id);
-    return { id, names: e ? [e.slug, ...(e.alias ? [e.alias] : [])] : [] };
-  });
-  const r = await runLiveSql(projectId, text, tables);
+  const r = await runLiveSql(projectId, text, await liveVocabulary(projectId, allowed));
   if (!r.ok) return { ok: false, reason: r.error, ...(r.code ? { code: r.code } : {}) };
   const names = await Promise.all(r.deps.map((id) => nameOf(projectId, id)));
   return { ok: true, deps: r.deps, card: { ...cardOf({ title, sql: text, datasets: names, columns: r.columns, rows: r.rows, truncated: r.truncated }), asOf: r.asOf } };
+}
+
+/** Each dataset of `ids` under the names the second call was given (the gate's: the slug, the exact name). */
+async function liveVocabulary(projectId: string, ids: readonly string[]): Promise<LiveSqlTable[]> {
+  const cat = await sqlDatasets.projectNames(projectId);
+  return ids.map((id) => {
+    const e = cat.find((x) => x.id === id);
+    return { id, names: e ? [e.slug, ...(e.alias ? [e.alias] : [])] : [] };
+  });
+}
+
+/**
+ * Why `text` over the Live datasets `ids` would not run for the caller, translated, bound and printed under their locks
+ * with NO warehouse call (F4: the Verified page's check); or null. `code` absent: the row rules' own refusal, the
+ * caller's access rather than a breakage.
+ */
+export async function liveSqlProblem(projectId: string, text: string, ids: readonly string[]): Promise<Failure | null> {
+  const r = await checkLiveSql(projectId, text, await liveVocabulary(projectId, ids));
+  return r && { ok: false, reason: r.error, ...(r.code ? { code: r.code } : {}) };
 }
 
 /** An SQL turn's card now, under the caller's access: Refresh, and a conversation that brought none. */
