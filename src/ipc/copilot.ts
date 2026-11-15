@@ -56,7 +56,8 @@ import { allowedAction, NO_ACTION } from '../ai/suggestedAction';
 import { agentNames, agentRef } from '../ai/agentAccess';
 import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk';
 import { keepReads } from './askMemo';
-import { snapshotFor, turnsForBrowser } from './answerSnapshots';
+import { snapshotFor, sqlSnapshotFor, turnsForBrowser } from './answerSnapshots';
+import { sqlAnswer } from './answerSql';
 import { homeFacts } from './homeFacts';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
@@ -536,8 +537,8 @@ export function register() {
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
       const ledger = facts.ledger.concat(linked.ledger, tables.ledger, guided.ledger, prev ? prev.ledger : []);
-      // The single, real model call — the ONLY 'model' step, bracketing the one
-      // narration this app makes. No agent loop, so there is nothing else to say.
+      // The real model call — a 'model' step, bracketing the one narration this app
+      // makes. No agent loop; only an SQL answer (below) makes a second call, which writes SQL.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
       const how = { build: scope.agent ? scope.agent.build : true, topic: scope.only !== null };
       const res = await askCopilot(prior, [facts.text, linked.text, tables.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
@@ -563,10 +564,17 @@ export function register() {
         // against the facts AND that chart's own ledger, so a figure the model
         // wrote anyway is still flagged (./answers). A spec that does not
         // resolve keeps the prose answer and says plainly why no chart came.
-        let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
+        let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | Awaited<ReturnType<typeof sqlAnswer>> | null = null;
         if (!sharing && action.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
           answer = await answers.answerFromAction(projectId, asked, action, q, prev?.spec, prev?.withheld, scope.only ?? undefined);
+        }
+        // The form cannot say it (outcome F, ./answerSql): a SECOND call writes one statement over the picked datasets'
+        // full details, and the Query tab's gate runs it. Its figures are DuckDB's; the turn's words stay this call's sentence.
+        if (!sharing && action.kind === 'sql') {
+          emit({ kind: 'model', label: 'Asked the model to write SQL' });
+          answer = await sqlAnswer(projectId, action, q, scope.only ?? undefined, scope.agent?.model);
+          if (answer.ok) emit({ kind: 'compute', label: 'Ran the SQL through the Query tab\'s checks' });
         }
 
         // The guard runs BEFORE persistence, so the stored turn carries the note
@@ -577,23 +585,26 @@ export function register() {
         // what it QUOTES may be the model's words (Unknown dataset "…"), and a
         // figure written into a name is a figure the model wrote.
         const refused = answer && !answer.ok ? answer.reason : null;
-        const built = answer && answer.ok ? answer : null;
+        const built = answer && answer.ok && 'spec' in answer ? answer : null;
+        const sqlBuilt = answer && answer.ok && 'sql' in answer ? answer : null;
         const audited = built ? ledger.concat(built.ledger) : ledger;
         const guarded = refused === null ? guardAnswer(res.text, audited)
           : guardAnswer(`${res.text}\n\n(No chart: ${refused})`, ledger.concat(reasonLedger(refused)));
         // An agent that fell back says so above the answer (rule 12): the app's line, after the audit of the model's words.
         const text = scope.note ? `${scope.note}\n\n${guarded.text}` : guarded.text;
 
-        const snapshot = built ? await snapshotFor(projectId, built.card, built.spec) : undefined; // the card as computed, kept with the turn
+        const snapshot = built ? await snapshotFor(projectId, built.card, built.spec) // the card as computed, kept with the turn
+          : sqlBuilt ? await sqlSnapshotFor(projectId, sqlBuilt.card, sqlBuilt.sql) : undefined;
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
         const stored = await copilot.appendTurn(projectId, {
           role: 'assistant',
           text,
           provenance: built ? built.provenance : facts.provenance,
           answer: built ? built.spec : undefined,
+          sql: sqlBuilt ? sqlBuilt.sql : undefined,
           snapshot,
           // A refused chart's "Did you mean" (./answers): the app's options, kept so a reload still offers them.
-          suggest: answer && !answer.ok ? answer.suggest : undefined,
+          suggest: answer && !answer.ok && 'suggest' in answer ? answer.suggest : undefined,
           guidance: guided.used,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question

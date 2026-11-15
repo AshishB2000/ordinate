@@ -31,7 +31,7 @@ import * as versions from './versions';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
 import * as recordFs from './recordFs';
-import { listVerified, lockedKeys } from '../analysis/verifiedQuestions';
+import { listBoth, lockedKeys } from '../analysis/verifiedQuestions';
 import { keyClash } from '../analysis/verifiedRules';
 import { verifiedRestoreTaken } from '../analysis/verifiedMessages';
 
@@ -178,7 +178,8 @@ async function restoreNow(projectId: string, type: RecordType, id: string): Prom
   const rec = await store.readEntry(projectId, type, id);
   if (!rec) return { ok: false, error: 'That item is no longer in the trash.', restored };
   if (type === 'verified') {
-    const taken = keyClash(await listVerified(projectId), [rec.question, ...(Array.isArray(rec.phrasings) ? rec.phrasings : [])]);
+    const both = await listBoth(projectId); // a chart's question or an SQL one
+    const taken = keyClash([...both.spec, ...both.sql].map((t) => t.rec), [rec.question, ...(Array.isArray(rec.phrasings) ? rec.phrasings : [])]);
     if (taken !== null) return { ok: false, error: verifiedRestoreTaken(taken), restored }; // it stays in the Trash
   }
 

@@ -4,11 +4,17 @@
 //
 // A verified question holds an answer SPEC, never a figure: every figure is drawn by `computeCard` when it is
 // asked, so new rows move the answer with them. Periods stay relative and a glossary term stays a reference.
+//
+// A verified SQL question (the SQL lane, docs/assistant/00-design.md) holds `sql` in place of `spec`: the statement
+// and the datasets it reads, by id, run again through the Query tab's gate when it is asked (../ipc/verifiedSql). It is
+// a record of the same kind in the same folder and index; `sanitizeVerified` reads it as no chart's question (null),
+// as a pod older than this release does, and `sanitizeVerifiedSql` reads only it.
 
 import { squash } from '../app/columnNames';
 import { isValidId } from '../app/ids';
 import { sanitizeStoredSpec } from '../ai/answerSpec';
 import type { AnswerSpec } from '../ai/answerSpec';
+import { sanitizeSqlTurn } from '../ai/answerSql';
 
 export const MAX_QUESTION = 300;
 export const MAX_PHRASINGS = 8;
@@ -43,14 +49,41 @@ export function questionKey(s: string): string {
   return squash(line(s, MAX_QUESTION));
 }
 
+/** The statement of a verified SQL question and the datasets it reads (the gate's deps when it was saved), by id. */
+export interface VerifiedSql { text: string; datasetIds: string[] }
+
+/** A verified question answered with SQL: `sql` where a chart's question has `spec`. */
+export interface VerifiedSqlQuestion extends Omit<VerifiedQuestion, 'spec'> { sql: VerifiedSql }
+
+/** Either kind, where only the words and the stamps are read (a key check, a row of the list). */
+export type AnyVerified = VerifiedQuestion | VerifiedSqlQuestion;
+export const isSqlQuestion = (q: AnyVerified): q is VerifiedSqlQuestion => 'sql' in q;
+
 /** A stored or saved record, re-sanitized; null when it is not one (no id, no question, no spec that reads). */
 export function sanitizeVerified(raw: unknown): VerifiedQuestion | null {
   if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const question = line(o.question, MAX_QUESTION);
-  const stored = sanitizeStoredSpec(o.spec);
-  if (!isValidId(o.id) || !isValidId(o.projectId) || !question || !stored) return null;
+  const stored = sanitizeStoredSpec((raw as Record<string, unknown>).spec);
+  const w = stored ? wordsOf(raw as Record<string, unknown>) : null;
+  if (!stored || !w) return null;
   const { matched: _m, ...spec } = stored;
+  const { id, projectId, question, phrasings, ...stamps } = w;
+  return { id, projectId, question, phrasings, spec: { ...spec, title: question }, ...stamps };
+}
+
+/** A stored or saved SQL question, re-sanitized; null when it is not one. A record with a `spec` is a chart's question. */
+export function sanitizeVerifiedSql(raw: unknown): VerifiedSqlQuestion | null {
+  if (!raw || typeof raw !== 'object' || 'spec' in raw) return null;
+  const sql = sanitizeSqlTurn({ ...((raw as { sql?: object }).sql ?? {}), title: '' });
+  const w = sql ? wordsOf(raw as Record<string, unknown>) : null;
+  if (!sql || !w) return null;
+  const { id, projectId, question, phrasings, ...stamps } = w;
+  return { id, projectId, question, phrasings, sql: { text: sql.text, datasetIds: sql.datasetIds }, ...stamps };
+}
+
+/** Everything but the answer, in the stored key order (the answer goes after `phrasings`); null with no id or no question. */
+function wordsOf(o: Record<string, unknown>): Omit<VerifiedQuestion, 'spec'> | null {
+  const question = line(o.question, MAX_QUESTION);
+  if (!isValidId(o.id) || !isValidId(o.projectId) || !question) return null;
   const keys = new Set([questionKey(question)]);
   const phrasings: string[] = [];
   for (const p of Array.isArray(o.phrasings) ? o.phrasings : []) {
@@ -61,12 +94,11 @@ export function sanitizeVerified(raw: unknown): VerifiedQuestion | null {
     phrasings.push(s);
   }
   const createdAt = stamp(o.createdAt, MAX_AT);
-  const q: VerifiedQuestion = {
+  const q: Omit<VerifiedQuestion, 'spec'> = {
     id: o.id as string,
     projectId: o.projectId as string,
     question,
     phrasings,
-    spec: { ...spec, title: question },
     verifiedBy: stamp(o.verifiedBy, MAX_BY),
     verifiedAt: stamp(o.verifiedAt, MAX_AT),
     createdAt,
@@ -78,8 +110,8 @@ export function sanitizeVerified(raw: unknown): VerifiedQuestion | null {
   return q;
 }
 
-/** The first of `texts` whose key another question or phrasing of the project already holds, or null. */
-export function keyClash(list: readonly VerifiedQuestion[], texts: readonly string[], exceptId?: string): string | null {
+/** The first of `texts` whose key another question or phrasing of the project already holds (either kind), or null. */
+export function keyClash(list: ReadonlyArray<Pick<AnyVerified, 'id' | 'question' | 'phrasings'>>, texts: readonly string[], exceptId?: string): string | null {
   const taken = new Set(list.filter((q) => q.id !== exceptId).flatMap((q) => [q.question, ...q.phrasings].map(questionKey)));
   return texts.find((s) => {
     const k = questionKey(s);

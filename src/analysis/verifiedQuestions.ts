@@ -3,6 +3,10 @@
 //
 // The store mirrors ./terms.ts: both ids UUID-checked before either reaches a path, atomic writes, a corrupt
 // file skipped, the edit-conflict tag, and a sanitize that runs again on every read.
+//
+// A verified SQL question (./verifiedRules `VerifiedSqlQuestion`) is a file of the same folder: the chart readers
+// (`listTagged`, `readManyTagged`) skip it as a pod older than this release does, and the `…Both` readers return each
+// kind from the same one read.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -10,7 +14,7 @@ import { randomUUID } from 'crypto';
 import { isValidId, projectDir, RECORD_DIR } from '../app/recordKinds';
 import * as recordFs from '../app/recordFs';
 import { contentTag, lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
-import { sanitizeVerified, type VerifiedQuestion } from './verifiedRules';
+import { sanitizeVerified, sanitizeVerifiedSql, type VerifiedQuestion, type VerifiedSqlQuestion } from './verifiedRules';
 
 const dirOf = (projectId: string): string => path.join(projectDir(projectId), RECORD_DIR.verified);
 const fileOf = (projectId: string, id: string): string => path.join(dirOf(projectId), id + '.json');
@@ -23,46 +27,81 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 
 // any: parsed stored JSON
 const normalize = (projectId: string) => (data: any): VerifiedQuestion | null => sanitizeVerified(data && typeof data === 'object' ? { ...data, projectId } : null);
+const normalizeSql = (projectId: string) => (data: any): VerifiedSqlQuestion | null => sanitizeVerifiedSql(data && typeof data === 'object' ? { ...data, projectId } : null); // any: parsed stored JSON
 
-/** Every question of the project with the tag of what is stored, newest `updatedAt` first. A corrupt file is skipped. */
-export async function listTagged(projectId: string): Promise<Tagged<VerifiedQuestion>[]> {
-  if (!isValidId(projectId)) return [];
+/** Each kind of question, as read from one listing or one read. */
+export interface Both { spec: Tagged<VerifiedQuestion>[]; sql: Tagged<VerifiedSqlQuestion>[] }
+
+const newestFirst = <T extends { rec: { updatedAt: string } }>(a: T, b: T): number => (a.rec.updatedAt < b.rec.updatedAt ? 1 : a.rec.updatedAt > b.rec.updatedAt ? -1 : 0);
+
+/** Every question of the project of either kind with the tag of what is stored, newest `updatedAt` first. A corrupt file is skipped. */
+export async function listBoth(projectId: string): Promise<Both> {
+  const out: Both = { spec: [], sql: [] };
+  if (!isValidId(projectId)) return out;
   let records;
   try {
     records = await recordFs.listRecords(dirOf(projectId));
   } catch (_) {
-    return []; // none yet
+    return out; // none yet
   }
-  const out: Tagged<VerifiedQuestion>[] = [];
   for await (const r of records) {
     const id = r.name.slice(0, -5);
-    const t = isValidId(id) ? await readTagged('verified', r.text, normalize(projectId)) : null; // a stray or temp file, or a corrupt one: null
-    if (t && t.rec.id === id) out.push(t);
+    if (!isValidId(id)) continue; // a stray or temp file
+    const t = bothFromBody(projectId, r.text); // a corrupt one: null
+    if (t && t.spec && t.spec.rec.id === id) out.spec.push(t.spec);
+    if (t && t.sql && t.sql.rec.id === id) out.sql.push(t.sql);
   }
-  return out.sort((a, b) => (a.rec.updatedAt < b.rec.updatedAt ? 1 : a.rec.updatedAt > b.rec.updatedAt ? -1 : 0));
+  out.spec.sort(newestFirst);
+  out.sql.sort(newestFirst);
+  return out;
 }
 
-/** A stored record's text as `readVerified` reads it (re-sanitized, with its tag), or null when it is not a question. */
-export function verifiedFromBody(projectId: string, body: string): Tagged<VerifiedQuestion> | null {
+/** Every chart question of the project with the tag of what is stored, newest `updatedAt` first. A corrupt file, or an SQL question, is skipped. */
+export async function listTagged(projectId: string): Promise<Tagged<VerifiedQuestion>[]> {
+  return (await listBoth(projectId)).spec;
+}
+
+/** A stored record's text (or a listed record's lazy text) read as either kind, in one parse; null when it is no question. */
+function bothFromBody(projectId: string, body: string | (() => string)): { spec?: Tagged<VerifiedQuestion>; sql?: Tagged<VerifiedSqlQuestion> } | null {
   try {
-    const data: unknown = JSON.parse(body);
-    const rec = normalize(projectId)(data);
-    return rec ? { rec, tag: contentTag('verified', data) } : null;
+    const data: unknown = JSON.parse(typeof body === 'string' ? body : body());
+    const spec = normalize(projectId)(data);
+    if (spec) return { spec: { rec: spec, tag: contentTag('verified', data) } };
+    const sql = normalizeSql(projectId)(data);
+    return sql ? { sql: { rec: sql, tag: contentTag('verified', data) } } : null;
   } catch (_) {
     return null;
   }
 }
 
-/** The questions `ids`, in that order, from ONE read; a missing, corrupt or misnamed one is left out, as `listTagged` leaves it. */
-export async function readManyTagged(projectId: string, ids: readonly string[]): Promise<Tagged<VerifiedQuestion>[]> {
-  if (!isValidId(projectId)) return [];
+/** A stored record's text as `readVerified` reads it (re-sanitized, with its tag), or null when it is not a chart question. */
+export function verifiedFromBody(projectId: string, body: string): Tagged<VerifiedQuestion> | null {
+  return bothFromBody(projectId, body)?.spec ?? null;
+}
+
+/** A stored record's text as an SQL question, or null when it is not one. */
+export function verifiedSqlFromBody(projectId: string, body: string): Tagged<VerifiedSqlQuestion> | null {
+  return bothFromBody(projectId, body)?.sql ?? null;
+}
+
+/** The questions `ids` of either kind, in that order, from ONE read; a missing, corrupt or misnamed one is left out, as `listBoth` leaves it. */
+export async function readManyBoth(projectId: string, ids: readonly string[]): Promise<Both> {
+  const out: Both = { spec: [], sql: [] };
+  if (!isValidId(projectId)) return out;
   const valid = ids.filter((id) => isValidId(id));
   const bodies = await recordFs.readMany(valid.map((id) => fileOf(projectId, id)));
-  return valid.flatMap((id) => {
+  for (const id of valid) {
     const body = bodies.get(fileOf(projectId, id));
-    const t = body === undefined ? null : verifiedFromBody(projectId, body);
-    return t && t.rec.id === id ? [t] : [];
-  });
+    const t = body === undefined ? null : bothFromBody(projectId, body);
+    if (t && t.spec && t.spec.rec.id === id) out.spec.push(t.spec);
+    if (t && t.sql && t.sql.rec.id === id) out.sql.push(t.sql);
+  }
+  return out;
+}
+
+/** The chart questions `ids`, in that order, from ONE read; a missing, corrupt or misnamed one (or an SQL question) is left out, as `listTagged` leaves it. */
+export async function readManyTagged(projectId: string, ids: readonly string[]): Promise<Tagged<VerifiedQuestion>[]> {
+  return (await readManyBoth(projectId, ids)).spec;
 }
 
 /** Every question of the project, newest `updatedAt` first. A corrupt file is skipped. */
@@ -83,6 +122,24 @@ export async function readVerified(projectId: string, id: string): Promise<Tagge
 
 export async function getVerified(projectId: string, id: string): Promise<VerifiedQuestion | null> {
   return (await readVerified(projectId, id))?.rec ?? null;
+}
+
+/** The SQL question `id`, or null (none, or a chart's question). */
+export async function getVerifiedSql(projectId: string, id: string): Promise<VerifiedSqlQuestion | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return (await readTagged('verified', fileOf(projectId, id), normalizeSql(projectId)))?.rec ?? null;
+}
+
+/** Store a NEW SQL question under its id (one atomic write); null when an id is bad, `q` is not one, or the id is taken. */
+export async function writeVerifiedSql(projectId: string, q: VerifiedSqlQuestion): Promise<VerifiedSqlQuestion | null> {
+  const next = sanitizeVerifiedSql({ ...q, projectId });
+  if (!isValidId(projectId) || !next) return null;
+  const file = fileOf(projectId, next.id);
+  const held = await readManyBoth(projectId, [next.id]);
+  if (held.spec.length || held.sql.length) return null; // a new question only: an SQL one is never edited in place
+  await fs.promises.mkdir(dirOf(projectId), { recursive: true });
+  await writeJsonAtomic(file, next);
+  return next;
 }
 
 /**

@@ -38,7 +38,7 @@ import { after } from 'node:test';
 import pg from 'pg';
 import type { Page } from 'playwright';
 // The provider stub and what it was asked; the four it reassigns or appends to are read live.
-import { ANSWER, ASK_CHART, ASK_MISS, ASK_REFINE, ON_SCREEN, ON_SCREEN_ANSWER, askedModels, draftAsk, draftCalls, lastAsk, stubUrl } from './dockStub.ts';
+import { ANSWER, ASK_CHART, ASK_MISS, ASK_REFINE, ASK_SQL, ON_SCREEN, ON_SCREEN_ANSWER, SQL_TEXT, askedModels, draftAsk, draftCalls, lastAsk, sqlCalls, stubUrl } from './dockStub.ts';
 
 const ADMIN = 'boss@acme.test';
 
@@ -494,6 +494,24 @@ if (!dbUrl) {
     await box.press('Enter');
     await answersShown.nth(cardsBefore + 1).locator('canvas').waitFor();
     assert.equal(await dock.getByRole('group', { name: /^Did you mean/ }).count(), 1, 'asked again, the same words chart outright — no second "Did you mean"');
+
+    // ── A question one chart cannot say: SQL the AI wrote, run through the Query tab's checks ──
+    // Two calls: the answer names the dataset, then a second call writes the statement. The card is the server's
+    // table, marked Not checked, with its SQL a click away and no way to keep it as a chart.
+    await box.fill(ASK_SQL);
+    await box.press('Enter');
+    const sqlCard = dock.getByTestId('answer-sql');
+    await sqlCard.getByText('Not checked · SQL written by the AI', { exact: true }).waitFor();
+    assert.equal(sqlCalls.length, 1, 'one second call wrote the SQL');
+    await sqlCard.getByRole('button', { name: 'Show SQL' }).click();
+    assert.equal(await sqlCard.getByTestId('answer-sql-text').textContent(), SQL_TEXT);
+    await sqlCard.getByText(/^Not a chart: /).waitFor();
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await sqlCard.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300); // the colour transition
+      await page.screenshot({ path: path.join(SCREENS, `dock-sql-${theme}.png`), fullPage: true });
+    }
 
     // ── Rename and delete a conversation ────────────────────────────────────
     // ⋯ renames the one on screen; the header then shows the STORED name, which a

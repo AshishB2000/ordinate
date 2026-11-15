@@ -296,6 +296,20 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   const sqlRun = await post('sql:run', { projectId: P, sql: 'SELECT count(*) AS n FROM "Orders live"' });
   bodies.push(sqlRun.body);
   ok('Live → SQL over datasets (sql:run) refuses, typed', isRefusal(sqlRun), `${sqlRun.status} ${sqlRun.body.slice(0, 240)}`);
+  // The Assistant's SQL lane (src/ipc/answerSql.ts) reads rows through that gate: an SQL answer's Refresh and a verified
+  // SQL question's save, each refused on a Live dataset and answering on the extract (the negative control).
+  const sqlOver = (name: string) => `SELECT region, sum(sales) AS s FROM "${name}" GROUP BY region`;
+  const sqlTurn = (d: string, name: string) => context.runInContext(ADMIN, `sql-turn-${d}`, async () => {
+    const t = (await copilot.createThread(P))!;
+    return { threadId: t.id, turnId: (await copilot.appendTurn(P, { role: 'assistant', text: '', sql: { text: sqlOver(name), datasetIds: [d], title: 'Sales by region' } }, t.id))!.at(-1)!.id };
+  });
+  for (const [d, name, isLive] of [[seed.live, 'Orders live', true], [seed.extract, 'Orders copy', false]] as const) {
+    const refreshed = await post('answer:refresh', { projectId: P, ...(await sqlTurn(d, name)) });
+    const saved = await post('verified:save', { projectId: P, input: { question: `Sales by region in SQL ${++asked}`, sql: sqlOver(name) } });
+    bodies.push(refreshed.body, saved.body);
+    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → an SQL answer's refresh ${isLive ? 'refuses, typed' : 'answers'}`, isLive ? isRefusal(refreshed) : refreshed.value?.ok === true, `${refreshed.status} ${refreshed.body.slice(0, 240)}`);
+    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → verifying SQL over it ${isLive ? 'refuses, typed' : 'saves'}`, isLive ? isRefusal(saved) : saved.value?.ok === true, `${saved.status} ${saved.body.slice(0, 240)}`);
+  }
   // Scenarios compute from metric values.
   const scen = await post('scenario:create', { projectId: P, input: { name: 'What if', baseMetricIds: [recs.live.metricId], drivers: [] } });
   const scenarioId = String((scen.value?.scenario as { id?: string } | undefined)?.id ?? '');

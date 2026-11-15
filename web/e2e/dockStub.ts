@@ -63,6 +63,13 @@ const REFINE = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: `${ASK_CHA
 export const ASK_MISS = 'Total net revenue by region';
 const MISS = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: ASK_MISS, spec: { dataset: 'Sales', category: 'region', measures: [{ column: 'net revenue', aggregation: 'sum' }] } })}`;
 
+/** A question one chart cannot say: the first call names the dataset (the SQL lane), the second writes the statement. */
+export const ASK_SQL = 'How far is each region from the average revenue?';
+export const SQL_TEXT = 'SELECT region, revenue - avg(revenue) OVER () AS from_average FROM sales ORDER BY region';
+const SQL_ACTION = `\n@@ACTION ${JSON.stringify({ kind: 'sql', intent: ASK_SQL, datasets: ['Sales'] })}`;
+/** The second call's system prompts, in order (src/ai/answerSql.ts SQL_SYSTEM_PROMPT). */
+export const sqlCalls: string[] = [];
+
 /** The provider stub: lists two models, a connectivity test gets "OK", a draft gets QUESTIONS when its prompt allows them and DRAFT when it does not, a streamed ask gets ANSWER and GET_DATA (or a chart, its refine, a plan or a dashboard proposal when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
@@ -85,13 +92,15 @@ const stub = http.createServer((req, res) => {
         draftAsk = asked;
         draftCalls.push({ asking, facts: asked });
       }
+      const writing = system.includes('DuckDB SQL statement'); // the SQL lane's second call
+      if (writing) sqlCalls.push(system);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ content: [{ type: 'text', text: asking ? JSON.stringify(QUESTIONS) : drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
+      res.end(JSON.stringify({ content: [{ type: 'text', text: asking ? JSON.stringify(QUESTIONS) : drafting ? JSON.stringify(DRAFT) : writing ? SQL_TEXT : 'OK' }], stop_reason: 'end_turn' }));
       return;
     }
     lastAsk = asked;
     // ASK_MISS first: a later ask carries the PREVIOUS ANSWER block, whose title may quote ASK_CHART.
-    const chart = asked.includes(ASK_MISS) ? ['Here is net revenue by region.', MISS]
+    const chart = asked.includes(ASK_SQL) ? ['This is each region against the average.', SQL_ACTION] : asked.includes(ASK_MISS) ? ['Here is net revenue by region.', MISS]
       : asked.includes(ASK_REFINE) ? ['Narrowing it down.', REFINE] : asked.includes(ASK_CHART) ? ['Here is revenue by region.', CHART] : null;
     const parts = chart ?? (asked.includes(ON_SCREEN)
       ? ON_SCREEN_ANSWER

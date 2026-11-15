@@ -7,18 +7,22 @@
 //
 // A caller row access rules close the dataset to gets a question whose spec compares with a row value (a hidden
 // one) as its words only: no spec, and its value filters worded without a value (REDACT).
+//
+// A verified SQL question (./verifiedSql) is saved from `input.sql`, a new one only, and listed after the charts' as
+// its words, the datasets it reads and whether it runs: never its SQL, never a spec, so it offers no edit.
 
 import { randomUUID } from 'crypto';
 import type { z } from 'zod';
 import { ipcMain } from './bus';
 import { computeCard } from './answers';
-import { verifiedEnvFor, verifiedProblem, verifiedStates, type VerifiedState } from './verifiedState';
+import { statesOf, verifiedEnv, verifiedEnvFor, verifiedProblem, type VerifiedState } from './verifiedState';
+import { saveVerifiedSql, sqlRow, sqlRows } from './verifiedSql';
 import { sanitizeStoredSpec, type AnswerFilter, type AnswerSpec } from '../ai/answerSpec';
 import { describeAnswer } from '../ai/answerFacts';
 import { describeFilter } from '../analysis/metricFormat';
 import { describePeriod, getCalendar } from '../analysis/dateIntel';
 import { keyClash, questionKey, sanitizeVerified, type VerifiedQuestion } from '../analysis/verifiedRules';
-import { listVerified, lockedKeys, readVerified, writeVerified } from '../analysis/verifiedQuestions';
+import { listBoth, lockedKeys, readVerified, writeVerified } from '../analysis/verifiedQuestions';
 import * as msg from '../analysis/verifiedMessages';
 import { listTerms } from '../analysis/terms';
 import * as datasets from '../data/datasets';
@@ -33,6 +37,7 @@ import { checkFor, startCheck } from './assistantCheck';
 type Input = z.infer<typeof VerifiedInput>;
 type Field = 'question' | 'phrasings' | 'spec';
 type Saved = { ok: true; q: VerifiedQuestion } | { ok: false; error: string; field?: Field; code?: string };
+type SpecInput = Input & { spec: NonNullable<Input['spec']> };
 
 export interface VerifiedRow {
   id: string;
@@ -53,6 +58,8 @@ export interface VerifiedRow {
   problem?: string;
   /** The edit dialog's `base`. */
   tag: string;
+  /** Answered with SQL (./verifiedSql): no spec, no edit. */
+  sql?: true;
 }
 
 function filterWords(f: AnswerFilter, termNames: ReadonlyMap<string, string>, hidden: boolean): string[] {
@@ -88,7 +95,7 @@ async function rowsFor(projectId: string, states: VerifiedState[]): Promise<Veri
  * The save's body (also the sample project's seed): checks, draws once, then stores. `at`: an edit in place of `at.id`,
  * refused 409 `record_changed` (thrown) when `at.base` is not the stored tag.
  */
-export async function saveVerifiedQuestion(projectId: string, input: Input, at?: { id: string; base?: string }): Promise<Saved> {
+export async function saveVerifiedQuestion(projectId: string, input: SpecInput, at?: { id: string; base?: string }): Promise<Saved> {
   const spec = sanitizeStoredSpec(input.spec);
   if (!spec) return { ok: false, error: msg.verifiedNotRead(), field: 'spec' };
   if (!questionKey(input.question)) return { ok: false, error: msg.verifiedNoWords(), field: 'question' };
@@ -107,7 +114,8 @@ export async function saveVerifiedQuestion(projectId: string, input: Input, at?:
   if (!q) return { ok: false, error: msg.verifiedGone() };
   // The key check and the write under one lock (the draw stays outside it): two saves of one question cannot both pass.
   return lockedKeys(projectId, async (): Promise<Saved> => {
-    const taken = keyClash(await listVerified(projectId), [q.question, ...q.phrasings], at?.id);
+    const both = await listBoth(projectId); // an SQL question's words are taken too
+    const taken = keyClash([...both.spec, ...both.sql].map((t) => t.rec), [q.question, ...q.phrasings], at?.id);
     if (taken !== null) return { ok: false, error: msg.verifiedTaken(taken), field: taken === q.question ? 'question' : 'phrasings' };
     const saved = await writeVerified(projectId, q, at?.base);
     return saved ? { ok: true, q: saved } : { ok: false, error: msg.verifiedGone() };
@@ -116,15 +124,26 @@ export async function saveVerifiedQuestion(projectId: string, input: Input, at?:
 
 export function register(): void {
   ipcMain.handle('verified:list', async (_e, { projectId, datasetId }: { projectId: string; datasetId?: string }) => {
-    const states = await verifiedStates(projectId);
-    const first = (s: VerifiedState): number => (s.q.spec.datasetId === datasetId ? 0 : 1);
-    const ordered = datasetId ? states.slice().sort((a, b) => first(a) - first(b)) : states; // stable: newest within each
-    return { ok: true, broken: states.filter((s) => s.problem !== null).length, questions: await rowsFor(projectId, ordered) };
+    const both = await listBoth(projectId); // one listing, both kinds
+    const states = await statesOf(projectId, both.spec, await verifiedEnv(projectId));
+    const restricted = await restrictedOn(projectId);
+    // A restricted caller's tag is of what they got, as `rowOf` makes it: the stored one would confirm a guessed SQL text.
+    const sql = (await sqlRows(projectId, both.sql)).map((r) => (restricted ? { ...r, tag: contentTag('verified', { question: r.question, phrasings: r.phrasings, note: r.note }) } : r));
+    const rows = [...await rowsFor(projectId, states), ...sql];
+    const first = (r: VerifiedRow): number => (r.datasetId === datasetId ? 0 : 1);
+    const ordered = datasetId ? rows.slice().sort((a, b) => first(a) - first(b)) : rows; // stable: newest within each
+    return { ok: true, broken: rows.filter((r) => !r.runs).length, questions: ordered };
   });
 
   // A stale `base` throws ERECORDCHANGED: the route's 409 `record_changed`, with the catalog's sentence and the current tag.
   ipcMain.handle('verified:save', async (_e, { projectId, id, base, input }: { projectId: string; id?: string; base?: string; input: Input }) => {
-    const r = await saveVerifiedQuestion(projectId, input, id ? { id, base } : undefined);
+    if (input.sql !== undefined) {
+      if (id) return { ok: false, error: msg.verifiedNotRead(), field: 'spec' }; // an SQL question is never edited in place
+      const r = await saveVerifiedSql(projectId, { question: input.question, phrasings: input.phrasings, note: input.note, sql: input.sql });
+      return r.ok ? { ok: true, question: await sqlRow(projectId, r.q, contentTag('verified', r.q), null) } : r;
+    }
+    if (!input.spec) return { ok: false, error: msg.verifiedNotRead(), field: 'spec' };
+    const r = await saveVerifiedQuestion(projectId, { ...input, spec: input.spec }, id ? { id, base } : undefined);
     if (!r.ok) return r;
     const [question] = await rowsFor(projectId, [{ q: r.q, problem: null, hidden: false, tag: contentTag('verified', r.q) }]); // its saver may write: never hidden
     return { ok: true, question };

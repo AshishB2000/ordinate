@@ -116,10 +116,11 @@ async function world(): Promise<World> {
 
 /** Count verified-record reads while `fn` runs: listings, single reads (or records read by a listing's page) and paths in batch reads. */
 async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; lists: number; files: number; batched: number }> {
-  const [list, readFile, readMany, listRecords] = [store.listTagged, recordFs.readFile, recordFs.readMany, recordFs.listRecords];
+  const [list, both, readFile, readMany, listRecords] = [store.listTagged, store.listBoth, recordFs.readFile, recordFs.readMany, recordFs.listRecords];
   let lists = 0, files = 0, batched = 0;
   const verifiedPath = (p: unknown) => typeof p === 'string' && /[\\/]verified[\\/]/.test(p);
   (store as { listTagged: unknown }).listTagged = (p: string) => { lists++; return list(p); };
+  (store as { listBoth: unknown }).listBoth = (p: string) => { lists++; return both(p); }; // a chart's questions and the SQL ones, in one listing
   (recordFs as { readFile: unknown }).readFile = (p: string, enc?: BufferEncoding) => { if (verifiedPath(p)) files++; return (readFile as (p: string, e?: BufferEncoding) => Promise<unknown>)(p, enc); };
   (recordFs as { readMany: unknown }).readMany = (ps: readonly string[]) => { batched += ps.filter(verifiedPath).length; return readMany(ps); };
   (recordFs as { listRecords: unknown }).listRecords = async (dir: string) => {
@@ -130,6 +131,7 @@ async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; lists: number; 
     return { out: await fn(), lists, files, batched };
   } finally {
     (store as { listTagged: unknown }).listTagged = list;
+    (store as { listBoth: unknown }).listBoth = both;
     (recordFs as { readFile: unknown }).readFile = readFile;
     (recordFs as { readMany: unknown }).readMany = readMany;
     (recordFs as { listRecords: unknown }).listRecords = listRecords;

@@ -12,6 +12,7 @@ import { useState, type ReactNode } from 'react';
 import { Icon } from '../../ui/icons/Icon';
 import { OutsideCard } from './AgentPicker';
 import { AnswerCard } from './AnswerCard';
+import { AnswerSql } from './AnswerSql';
 import type { ActivityStep, Provenance, Turn } from './api';
 import { DidYouMean, type Learn } from './DidYouMean';
 import s from './Dock.module.css';
@@ -113,6 +114,15 @@ export function Transcript({
               asking={!!pending}
             />
           )}
+          {t.role === 'assistant' && t.sql && (
+            <AnswerSql
+              projectId={projectId}
+              turn={threadId ? { threadId, turnId: t.id } : undefined}
+              sql={t.sql}
+              card={t.card}
+              question={turns[i - 1]?.role === 'user' ? turns[i - 1].text.slice(0, 300) : undefined}
+            />
+          )}
           {t.role === 'assistant' && t.outside ? (
             <OutsideCard
               agent={agentName || 'This assistant'}
@@ -121,7 +131,7 @@ export function Transcript({
               onAsk={onAskProject && turns[i - 1]?.role === 'user' ? () => onAskProject(turns[i - 1].text) : undefined}
             />
           ) : (
-            (t.role === 'user' || !t.answer || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>
+            (t.role === 'user' || !(t.answer || t.sql) || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>
           )}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
           {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}

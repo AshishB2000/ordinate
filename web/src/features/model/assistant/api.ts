@@ -63,6 +63,8 @@ export interface VerifiedRow {
   runs: boolean;
   problem?: string;
   tag: string;
+  /** Answered with SQL (src/ipc/verifiedSql.ts): no spec, so no edit, and not one the Assistant check asks (it compares chart specs). */
+  sql?: true;
 }
 export type VerifiedField = 'question' | 'phrasings' | 'spec';
 type ListReply = { ok: true; broken: number; questions: VerifiedRow[] } | Fail;

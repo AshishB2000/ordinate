@@ -54,6 +54,7 @@
 import type { DashboardStylePreset } from '../analysis/dashboards';
 import { PLAN_PROMPT, MAX_PLAN_CHARS, sanitizePlanSteps } from './planSteps';
 import type { PlanStep } from './planSteps';
+import { actionSqlPrompt, sqlActionOf } from './answerSql';
 
 /** The marker opening the action line. Chosen to be something no prose answer
  *  would produce on its own, and to survive a model that strips markdown. */
@@ -68,8 +69,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'rebuild' | 'outside' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'rebuild', 'outside', 'none'] as const; // 'outside': an Assistant agent's only (chatSystemPrompt)
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'sql' | 'story' | 'plan' | 'import' | 'rebuild' | 'outside' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'sql', 'story', 'plan', 'import', 'rebuild', 'outside', 'none'] as const; // 'outside': an Assistant agent's only (chatSystemPrompt)
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -155,6 +156,7 @@ export interface SuggestedAction {
   steps?: PlanStep[];
   /** How many entries of the model's plan were not steps at all. */
   droppedSteps?: number;
+  datasets?: string[]; // an 'sql' answer's ONLY (./answerSql): the datasets it reads, by name as the FACTS give them
 }
 
 /** What an absent or unusable action means. Never null — callers switch on
@@ -169,7 +171,7 @@ const LINE_HEAD =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n';
 const BUILD_KINDS =
-  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, import, rebuild, plan, none. Use "dashboard" when the ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, sql, import, rebuild, plan, none. Use "dashboard" when the ' +
   'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
   'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
@@ -224,12 +226,12 @@ const IMPORT_PROSE =
   'the Import, Paste and Connect buttons under your reply: your prose is ONE short sentence, and it ' +
   'never asks for a file name or tells them where to click.';
 const LINE_END = 'This line is machine-read and never shown; write nothing after it.';
-const ACTION_PROMPT = LINE_HEAD + BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + IMPORT_PROSE + PLAN_PROMPT + ' ' + LINE_END;
+const ACTION_PROMPT = LINE_HEAD + BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + actionSqlPrompt(ACTION_MARKER) + IMPORT_PROSE + PLAN_PROMPT + ' ' + LINE_END; // the SQL lane: ./answerSql
 
 // An Assistant agent (docs/assistant-agents): one that may not build is offered only "answer" (rule 8), and one with a
 // topic is told that a question outside it is "outside" — which the app, not the model, then looks up (rule 10).
 const ANSWER_KINDS =
-  'where <kind> is one of: answer, none. Use "none" for an ordinary question that needs no chart; <intent> is a short ' +
+  'where <kind> is one of: answer, sql, none. Use "none" for an ordinary question that needs no chart; <intent> is a short ' +
   'restatement of the question, or "" when kind is none. This assistant only answers questions: it never builds, imports ' +
   'or plans anything, so never propose that. ';
 const OUTSIDE =
@@ -258,8 +260,8 @@ export const CHAT_SYSTEM_PROMPT = CHAT_HEAD + ACTION_PROMPT;
 export function chatSystemPrompt(o: { build: boolean; topic: boolean }): string {
   if (o.build && !o.topic) return CHAT_SYSTEM_PROMPT;
   const kinds = o.build
-    ? BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + IMPORT_PROSE + PLAN_PROMPT
-    : ANSWER_KINDS + ANSWER_SPEC + ANSWER_PROSE;
+    ? BUILD_KINDS + ANSWER_SPEC + ANSWER_PROSE + actionSqlPrompt(ACTION_MARKER) + IMPORT_PROSE + PLAN_PROMPT
+    : ANSWER_KINDS + ANSWER_SPEC + ANSWER_PROSE + actionSqlPrompt(ACTION_MARKER);
   return CHAT_HEAD + LINE_HEAD + kinds + (o.topic ? OUTSIDE : '') + ' ' + LINE_END;
 }
 
@@ -269,7 +271,7 @@ export interface AskOptions { model?: { provider: string; model: string } | null
 /** What an agent's ask may act on: an agent that may not build gets an answer or nothing, whatever the model wrote (rule 8). */
 export function allowedAction(a: SuggestedAction, o: { build: boolean; topic: boolean }): SuggestedAction {
   if (a.kind === 'outside') return o.topic ? a : NO_ACTION;
-  return o.build || a.kind === 'answer' ? a : NO_ACTION;
+  return o.build || a.kind === 'answer' || a.kind === 'sql' ? a : NO_ACTION; // an SQL answer is an answer
 }
 
 /**
@@ -315,6 +317,7 @@ export function validateAction(raw: unknown): SuggestedAction {
     if (size > MAX_SPEC_CHARS) return NO_ACTION;
     return { kind, intent, spec: spec as Record<string, unknown> };
   }
+  if (kind === 'sql') return sqlActionOf(intent, o.datasets) ?? NO_ACTION; // worth exactly as much as the datasets it names
 
   // A 'plan' is worth exactly as much as its steps, like an answer and its spec.
   if (kind === 'plan') {
