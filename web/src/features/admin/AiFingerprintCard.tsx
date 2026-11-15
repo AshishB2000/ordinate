@@ -2,7 +2,8 @@
 // "Meaning search"): the org's embedding model, from a connected OpenAI,
 // Gemini or gateway key. OFF until an admin picks one here; saving sends
 // nothing, Test fingerprints one short sample and shows the server's size and
-// latency (or the provider's sentence). Anthropic has no embedding API.
+// latency (or the provider's sentence). Anthropic has no embedding API. Below the pick, whether the database can hold
+// fingerprints and how far the job has got (./FingerprintCoverage).
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -16,6 +17,7 @@ import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { PROVIDER_LABEL } from '../assistant/api';
 import { aiWhy, useAiWrite, type AiAdmin, type AiOutcome } from './api';
+import { FingerprintCoverage } from './FingerprintCoverage';
 import s from './Admin.module.css';
 
 type Pick = NonNullable<RpcInput<'ai:setFingerprintModel'>['pick']>;
@@ -134,7 +136,8 @@ export function AiFingerprintCard({ data }: { data: AiAdmin }) {
           {error || (result && !result.ok ? aiWhy(result) : `The test did not run: ${test.error?.message ?? ''}`)}
         </p>
       )}
-      <p className={s.meta}>Picking another model later fingerprints every item again in the background. Until it has, items are found by their words.</p>
+      <FingerprintCoverage model={saved ? `${saved.provider}:${saved.model}` : null} />
+      <p className={s.fpStatus}>Picking another model later fingerprints every item again in the background. Until it has, items are found by their words.</p>
     </div>
   );
 }

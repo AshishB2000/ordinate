@@ -18,9 +18,10 @@ import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
 import { allWords, kindOrd } from '../app/assistantSearchRank';
 import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+import type { NearTo } from './vectorStore';
 
 /** Bump when what a record describes to changes (the words, the parts): every marker is then stale, and each source rebuilds once. */
-export const ASSISTANT_SEARCH_VERSION = 3; // 2: base parts carry their exact-lookup keys (0028); 3: a dataset's hiding keys
+export const ASSISTANT_SEARCH_VERSION = 4; // 2: base parts carry their exact-lookup keys (0028); 3: a dataset's hiding keys; 4: each part's text (0030)
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
@@ -97,18 +98,18 @@ async function insertRows(c: PoolClient, org: string, projectId: string, source:
   if (!rows.length) return;
   await c.query(
     `INSERT INTO assistant_search (org_id, project_id, source, path, grp, ord, grp_hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated,
-       audience, name_words, alias_words, text_words, all_words, certified, retired, keys)
+       audience, name_words, alias_words, text_words, all_words, certified, retired, keys, text)
      SELECT $1, $2, $3, u.path, u.grp, u.ord, u.hash, u.item, u.kind, u.kind_ord, u.base, u.id, u.dataset_id, u.conn_id, u.name, u.updated, u.audience,
-       ${ARRAY('u.nw')}, ${ARRAY('u.aw')}, ${ARRAY('u.tw')}, ${ARRAY('u.allw')}, u.certified, u.retired, ${ARRAY('u.ks')}
+       ${ARRAY('u.nw')}, ${ARRAY('u.aw')}, ${ARRAY('u.tw')}, ${ARRAY('u.allw')}, u.certified, u.retired, ${ARRAY('u.ks')}, u.text
      FROM unnest($4::text[], $5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::int[], $11::bool[], $12::text[], $13::text[], $14::text[],
-       $15::text[], $16::text[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[], $22::bool[], $23::bool[], $24::text[])
-       AS u(path, grp, ord, hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated, audience, nw, aw, tw, allw, certified, retired, ks)`,
+       $15::text[], $16::text[], $17::text[], $18::text[], $19::text[], $20::text[], $21::text[], $22::bool[], $23::bool[], $24::text[], $25::text[])
+       AS u(path, grp, ord, hash, item, kind, kind_ord, base, id, dataset_id, conn_id, name, updated, audience, nw, aw, tw, allw, certified, retired, ks, text)`,
     [
       org, projectId, source, rows.map((r) => r.path), rows.map((r) => r.grp), rows.map((r) => r.ord), rows.map((r) => r.hash), rows.map((r) => r.item),
       rows.map((r) => r.kind), rows.map((r) => kindOrd(r.kind)), rows.map((r) => r.base), rows.map((r) => r.id), rows.map((r) => r.datasetId),
       rows.map((r) => r.connId), rows.map((r) => r.name), rows.map((r) => r.updated), rows.map((r) => r.audience), rows.map((r) => joined(r.nameWords)),
       rows.map((r) => joined(r.aliasWords)), rows.map((r) => joined(r.textWords)), rows.map((r) => joined(allWords(r))), rows.map((r) => r.certified),
-      rows.map((r) => r.retired), rows.map((r) => joined(r.keys)),
+      rows.map((r) => r.retired), rows.map((r) => joined(r.keys)), rows.map((r) => r.text),
     ],
   );
 }
@@ -211,13 +212,20 @@ async function built<T>(projectId: string, rowsUnder: RowsUnder, fn: (c: PoolCli
 const SCORE = `SELECT 4 * count(*) FILTER (WHERE a = ANY(p.name_words)) + 2 * count(*) FILTER (WHERE a = ANY(p.alias_words))
   + count(*) FILTER (WHERE a = ANY(p.text_words)) AS score FROM unnest($3::text[]) AS a`;
 
+// An item's result from its parts (../app/assistantSearchRank hitOf): its base part's fields, every part's score.
+const HIT = `min(p.kind) FILTER (WHERE p.base) AS kind, min(p.id) FILTER (WHERE p.base) AS id,
+  min(p.dataset_id) FILTER (WHERE p.base) AS dataset_id, min(p.conn_id) FILTER (WHERE p.base) AS conn_id,
+  min(p.name) FILTER (WHERE p.base) AS name, sum(s.score)::int AS score`;
+type HitRow = { kind: ModelKind; id: string; dataset_id: string | null; conn_id: string | null; name: string; score: number };
+const hitOf = (x: HitRow): ModelHit => ({
+  kind: x.kind, id: x.id, ...(x.dataset_id !== null ? { datasetId: x.dataset_id } : {}), ...(x.conn_id !== null ? { connId: x.conn_id } : {}), name: x.name, score: x.score,
+});
+
 /** `limit` items after `offset`, in ../app/assistantSearchRank rankParts order, for `asked` (deduplicated words). Null without a database. */
 export function rankedPage(projectId: string, asked: readonly string[], o: RankOptions, offset: number, limit: number, rowsUnder: RowsUnder): Promise<ModelHit[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
-      `SELECT p.item, min(p.kind) FILTER (WHERE p.base) AS kind, min(p.id) FILTER (WHERE p.base) AS id,
-         min(p.dataset_id) FILTER (WHERE p.base) AS dataset_id, min(p.conn_id) FILTER (WHERE p.base) AS conn_id,
-         min(p.name) FILTER (WHERE p.base) AS name, sum(s.score)::int AS score, bool_or(p.certified) AS certified,
+      `SELECT p.item, ${HIT}, bool_or(p.certified) AS certified,
          min(p.kind_ord) FILTER (WHERE p.base) AS kind_ord, max(p.updated) FILTER (WHERE p.base) AS updated
        FROM assistant_search p CROSS JOIN LATERAL (${SCORE}) s
        WHERE p.org_id = $1 AND p.project_id = $2 AND p.item = ANY(ARRAY(
@@ -231,9 +239,43 @@ export function rankedPage(projectId: string, asked: readonly string[], o: RankO
        LIMIT $7 OFFSET $8`,
       [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, limit, offset, o.exceptDatasetIds ?? null],
     );
-    return (r.rows as Array<{ kind: ModelKind; id: string; dataset_id: string | null; conn_id: string | null; name: string; score: number }>).map((x) => ({
-      kind: x.kind, id: x.id, ...(x.dataset_id !== null ? { datasetId: x.dataset_id } : {}), ...(x.conn_id !== null ? { connId: x.conn_id } : {}), name: x.name, score: x.score,
-    }));
+    return (r.rows as HitRow[]).map(hitOf);
+  });
+}
+
+/**
+ * The `k` items whose fingerprint (`to.model`'s, 0029) is nearest the question's by cosine, no farther than
+ * `to.maxDistance`, that the caller may find under `o` — a base part of an allowed kind, dataset and audience (the words
+ * query's WHERE), none retired — nearest first, then by key, each scored by its words for `asked`:
+ * ../app/assistantSearchRank nearItems. Null without a database.
+ *
+ * EXACT, within the project: every allowed item's distance is computed in a MATERIALIZED CTE, so the planner never
+ * takes the HNSW index. Filtered by org, project, model and access, that index's scan stopped before any row passed
+ * and returned NONE (measured on the budget's project, pgvector 0.8.7, iterative scan on). The allowed items are an
+ * array built once (as the words query's), so a fresh table with no statistics plans the same.
+ * shortcut: linear in the project's fingerprints (23 ms for 8,000 candidates at 768 numbers); upgrade to an index
+ * per project (or pgvector's filtered scans, when they return what the filter needs) past ~50,000 items a project.
+ */
+export function nearestPage(projectId: string, asked: readonly string[], o: RankOptions, to: NearTo, k: number, rowsUnder: RowsUnder): Promise<ModelHit[] | null> {
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      `WITH d AS MATERIALIZED (
+         SELECT v.item, v.embedding ${to.place.op} $7::${to.place.type} AS d FROM assistant_search_vectors v
+         WHERE v.org_id = $1 AND v.project_id = $2 AND v.model = $8
+           AND v.item = ANY(ARRAY(SELECT b.item FROM assistant_search b WHERE b.org_id = $1 AND b.project_id = $2 AND b.base AND b.audience = ANY($4::text[])
+             AND ($5::text[] IS NULL OR b.kind = ANY($5::text[])) AND ($6::text[] IS NULL OR b.dataset_id = ANY($6::text[]))
+             AND ($10::text[] IS NULL OR b.dataset_id IS NULL OR b.dataset_id <> ALL($10::text[]))))
+           AND v.item <> ALL(ARRAY(SELECT x.item FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.retired))),
+       near AS MATERIALIZED (SELECT item, d FROM d WHERE d <= $11 ORDER BY d, item LIMIT $9)
+       SELECT h.*, n.d FROM (
+         SELECT p.item, ${HIT} FROM assistant_search p CROSS JOIN LATERAL (${SCORE}) s
+         WHERE p.org_id = $1 AND p.project_id = $2 AND p.item = ANY(ARRAY(SELECT item FROM near))
+         GROUP BY p.item) h
+       JOIN near n ON n.item = h.item
+       ORDER BY n.d, h.item`,
+      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, to.literal, to.model, k, o.exceptDatasetIds ?? null, to.maxDistance],
+    );
+    return (r.rows as HitRow[]).map(hitOf);
   });
 }
 

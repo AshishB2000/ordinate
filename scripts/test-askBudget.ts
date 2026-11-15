@@ -25,6 +25,8 @@
 //   6. Q8: the facts of one Home question, built alone (no model call), timed and printed with their parts.
 //   5. SAME REPLY: in every case, memo on and off, the model is sent the same facts, and the reply's answer, chart,
 //      provenance, action, ledger, audit and guidance are the same, with Object.is.
+//   7. MEANING ON (PR 7c; pgvector, ORDINATE_EXPECT_PGVECTOR=1 fails without it): a fake fingerprint model, every item
+//      fingerprinted by the job, then cases (a) to (e) again: ONE embed call each, and their own ceilings.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-askBudget.js
 
@@ -101,6 +103,16 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
   reopen: at(22, 4),
+};
+// PR 7c, meaning search ON (a fake fingerprint model, all 19,998 items and questions fingerprinted): ONE embed call a
+// question; per search one nearest-items query beside the words one, and the examples' nearest questions; once an ask,
+// whether the project has fingerprints. Off (above), the counts are the same as before 7c.
+const CEILING_ON: Record<string, { queries: number; reads: number }> = {
+  home: at(107, 153), // off: 89 / 154
+  dataset: at(94, 118), // off: 88 / 123
+  agent: at(84, 136), // off: 75 / 136
+  viewer: at(135, 7_350), // off: 114 / 7,299
+  dashboard: at(119, 182), // off: 112 / 183
 };
 
 interface World { P: string; orders: string; agent: string; board: string }
@@ -327,6 +339,48 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('NEGATIVE CONTROL: the comparison can tell facts apart (Home, a dataset and the agent\'s topic differ)',
     !Object.is(factsOf.get('home'), factsOf.get('dataset')) && !Object.is(factsOf.get('home'), factsOf.get('agent')));
   await reopenCase(w, fresh, line);
+  await meaningOn(cases, once, line);
+}
+
+/** The cases again with meaning search on: a fake model (no network), every item fingerprinted by the job first. */
+async function meaningOn(cases: Array<[string, Role, object, string | undefined, unknown]>, once: (role: Role, extra: object, agentId: string | undefined) => Promise<{ queries: number; reads: number; tables: number; ms: number; out: any }>,
+  line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
+  const vstore: typeof import('../src/server/vectorStore') = require('../src/server/vectorStore');
+  if (!(await vstore.vectorStatus(0)).table) {
+    ok('pgvector is installed for the meaning cases (ORDINATE_EXPECT_PGVECTOR=1)', process.env.ORDINATE_EXPECT_PGVECTOR !== '1');
+    return console.log('  skip the meaning cases: no pgvector table');
+  }
+  const fp: typeof import('../src/ai/fingerprints') = require('../src/ai/fingerprints');
+  const aiConfig: typeof import('../src/server/aiConfig') = require('../src/server/aiConfig');
+  const job: typeof import('../src/server/fingerprintJob') = require('../src/server/fingerprintJob');
+  const crypto: typeof import('crypto') = require('crypto');
+  const dim = (w: string): number => crypto.createHash('sha256').update(w).digest().readUInt32BE(0) % 768;
+  const fake = (t: string): Float32Array => { const v = new Float32Array(768); for (const w of t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) v[dim(w)] = 1; v[dim(t)] += 1; return fp.unit(Array.from(v)) as Float32Array; };
+  let embeds = 0, sent = 0;
+  (fp as { fingerprint: unknown }).fingerprint = async (texts: string[], _p: unknown, o: { purpose?: string }) => {
+    if (o.purpose === 'query') embeds++;
+    else sent += texts.length;
+    return { ok: true, vectors: texts.map(fake) };
+  };
+  (aiConfig as { currentFingerprintModel: unknown }).currentFingerprintModel = () => ({ provider: 'openai', model: 'text-embedding-3-small' });
+  const t0 = Date.now();
+  while (await as('admin', () => job.fingerprintOrg(Infinity, 5_000)));
+  console.log(`  fingerprinted ${sent} items and questions in ${Date.now() - t0} ms`);
+  const store: typeof import('../src/server/fingerprintStore') = require('../src/server/fingerprintStore');
+  const t1 = Date.now();
+  const more = await as('admin', () => job.fingerprintOrg());
+  const t2 = Date.now();
+  const cover = await as('admin', () => store.coverage('openai:text-embedding-3-small'));
+  console.log(`  a job run with nothing to send ${t2 - t1} ms; Admin → AI's coverage (${cover.fingerprinted} of ${cover.items}) ${Date.now() - t2} ms`);
+  ok('meaning on: the job, run again, sends nothing; the coverage counts every item', !more && sent === cover.items && cover.fingerprinted === cover.items, JSON.stringify({ sent, cover }));
+  for (const [name, role, extra, agentId] of cases) {
+    if (!CEILING_ON[name]) continue;
+    embeds = 0;
+    const on = await once(role, extra, agentId);
+    line(name + ' (meaning on)', on);
+    ok(`${name}, meaning on: the ask answers, with ONE embed call (${embeds}), ${on.queries} queries ≤ ${CEILING_ON[name].queries} and ${on.reads} record reads ≤ ${CEILING_ON[name].reads}`,
+      on.out.ok === true && embeds === 1 && on.queries <= CEILING_ON[name].queries && on.reads <= CEILING_ON[name].reads);
+  }
 }
 
 /**

@@ -358,6 +358,32 @@
   margin-left: auto;
   padding-top: 22px;
 }
+/* The fingerprint card's status line (pgvector's state, or how far the job has got) and its closing note: they wrap. */
+.fpStatus {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.fpStatus > svg {
+  flex: none;
+  margin-top: 0.2em;
+}
+.fpDone {
+  color: var(--ok-text);
+}
+.fpSkel {
+  width: 18rem;
+  max-width: 100%;
+  height: 0.75rem;
+}
+.fpLink {
+  color: var(--accent);
+  white-space: nowrap;
+}
 /* The fingerprint model's pick: the select (and a gateway's id) growing, Test and Save at the end. */
 .aiPick {
   display: flex;

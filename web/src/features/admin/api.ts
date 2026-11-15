@@ -198,6 +198,20 @@ export const aiWhy = (r: AiOutcome): string => r.error || [r.message, r.detail].
 
 export const useAiAdmin = () => useQuery({ queryKey: ['ai:admin'], queryFn: async () => (await rpc('ai:admin')) as AiAdmin });
 
+/** `ai:fingerprintStatus`: whether pgvector's table is there (else why not), and how many items the model has fingerprinted. */
+export interface FingerprintStatus {
+  vectors: 'ready' | 'no_database' | 'no_extension' | 'not_created' | 'no_table';
+  items: number | null;
+  fingerprinted: number | null;
+}
+/** Read again every 30 s while the job is still fingerprinting; keyed by the model, so saving another reads it at once. */
+export const useFingerprintStatus = (model: string | null) =>
+  useQuery({
+    queryKey: ['ai:fingerprintStatus', model],
+    queryFn: async () => (await rpc('ai:fingerprintStatus')) as FingerprintStatus,
+    refetchInterval: (q) => (q.state.data && q.state.data.items !== null && q.state.data.fingerprinted !== q.state.data.items ? 30_000 : false),
+  });
+
 export type Created = { ok: true; id: string; name: string; prefix: string; createdAt: string; expiresAt: string; token: string } | { ok: false; error: string };
 
 /** A write's reply: `{ ok }`, or why not. */

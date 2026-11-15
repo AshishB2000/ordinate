@@ -11,6 +11,8 @@ import * as execConfig from '../app/execConfig';
 import { testProvider } from '../ai/analyze';
 import { listModels } from '../ai/models';
 import { testFingerprint } from '../ai/fingerprints';
+import { coverage, modelKey } from '../server/fingerprintStore';
+import { vectorStatus, type VectorReason } from '../server/vectorStore';
 import * as aiConfig from '../server/aiConfig';
 import { keyStoreUnavailable } from '../server/aiKeys';
 import { AI_PROVIDERS } from '../api/admin';
@@ -91,4 +93,14 @@ export function register(): void {
     if (!aiConfig.enabled()) return noStore();
     return testFingerprint(pick);
   });
+
+  ipcMain.handle('ai:fingerprintStatus', async (): Promise<FingerprintStatus> => {
+    const st = await vectorStatus();
+    const pick = aiConfig.enabled() ? aiConfig.currentFingerprintModel() : null;
+    if (!st.table) return { vectors: st.reason ?? 'no_table', items: null, fingerprinted: null };
+    return { vectors: 'ready', ...(pick ? await coverage(modelKey(pick)) : { items: null, fingerprinted: null }) };
+  });
 }
+
+/** Admin → AI's meaning search line: whether pgvector's table is there, and the current model's coverage. */
+export interface FingerprintStatus { vectors: 'ready' | VectorReason; items: number | null; fingerprinted: number | null }

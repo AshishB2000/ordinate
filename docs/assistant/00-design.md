@@ -54,19 +54,23 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 
 ### Step 3: what is searched
 
-The question is searched as typed, no spell-correcting. Each item is ranked by meaning and by
-words; the higher score wins. Without pgvector or a fingerprint model, everything falls back to
-words (phase A works with words only). **Access is applied before ranking**, so hidden columns,
-rows a person may not see, and tables their teams weren't given never reach the prompt.
+The question is searched as typed, no spell-correcting. Each item is ranked by words and, with
+fingerprints, by meaning; the two rankings merge by rank (PR 7c, below), never by comparing their
+scores. Without pgvector, a fingerprint model or the project's fingerprints, it is words alone,
+exactly as before. **Access is applied before ranking**, so hidden columns, rows a person may not
+see, and tables their teams weren't given never reach the prompt.
 
 | Searched | How | Notes |
 |---|---|---|
-| Verified questions | meaning + words | fingerprinted when an editor verifies |
+| Verified questions | meaning + words | the examples; fingerprinted by the job after an editor verifies. Step 2's match stays exact |
 | Metrics | meaning + words | certified first, retired left out |
 | Glossary terms | meaning + words | other names included |
 | Datasets + columns | meaning + words | "also called" names and descriptions included |
 | Values (Acme, West) | words | text columns Ordinate already indexes |
 | Source tables | meaning + words | the project's connections; viewers only on tables their teams were given |
+
+Meaning + words is real since PR 7c, for everything step 3's index holds and the verified examples
+("Meaning search, as built", below).
 
 **Follow the links.** For each dataset found, add the datasets linked to it in Relationships, up to
 two links away, only in the direction that can't repeat rows.
@@ -350,8 +354,10 @@ AI agents over MCP and API tokens act as their person and get that person's role
 ## Behind the scenes
 
 - Everything stays in Postgres. No separate vector database.
-- Every searched item gets a fingerprint in one small pgvector table (`assistant_search_vectors`, 0029), remade only when its text
-  changes. Without pgvector or a configured fingerprint model, search is words only.
+- Every searched item gets a fingerprint in one small pgvector table (`assistant_search_vectors`, 0029), made by a job, never
+  by a save, and remade only when its text changes: each row keeps the sha256 of the text it was made from, and the job
+  sends only the items whose hash or model does not match. Without pgvector or a configured fingerprint model, search is
+  words only, and nothing is sent anywhere.
 - The index is refreshed when an editor verifies a question; a metric, term or dataset description
   is edited; a dbt or Ossie import runs; the connection job pulls new table info.
 - Verified questions are an index, `verified_keys` (0026): one row per wording, rewritten in the same
@@ -407,9 +413,11 @@ worst places:
   person's own row and column checks run after ranking, on the few results.
 - **Meaning and words merge by rank** (reciprocal rank fusion: 1/(60 + rank) in each list, summed),
   never by comparing their scores. Without fingerprints it is words alone.
-- **Fingerprints are made by a job**, never inside a save: the save stores the text's hash, a job
-  claims what needs one (`SKIP LOCKED`), each row records the model that made it, and a model
-  change refingerprints in the background. Until then an item is found by its words.
+- **Fingerprints are made by a job**, never inside a save: the save keeps step 3's index as before,
+  the job (claimed through the jobs table, `SKIP LOCKED`) works out each item's text and its hash
+  from the index's rows and sends only what has no row of that hash and model, each row records the
+  model that made it, and a model change refingerprints in the background. Until then an item is
+  found by its words.
 - **Row values never go into Postgres.** "Acme" and "West" are matched in the engine, on the
   top-ranked datasets' text columns, under the person's row lock; on a Live dataset through the
   warehouse door or not at all.
@@ -520,15 +528,15 @@ Now:
 | 6c | A caller with a hidden column: its dataset and metric checks off the index |
 | 6d | A formula metric's names off the index; `metricsByName` in one pass |
 | 7a | pgvector where Ordinate runs, optional everywhere (`0029_pgvector`): CI, the nightly, the release boot, Compose and the chart's kind run use `pgvector/pgvector:pg17-trixie`; the extension and `assistant_search_vectors` are made only where present; `src/server/vectorStore.ts` |
-| 7b | The fingerprint model (Admin → AI, off by default) and `rankFusion.fuse`: done; 7c, the fingerprint job and the ask path, next |
+| 7b | The fingerprint model (Admin → AI, off by default) and `rankFusion.fuse` |
+| 7c | The fingerprint job, meaning and words merged on the ask path (step 3 and the verified examples), and the coverage in Admin → AI: done |
 
 **Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
 5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
 
-**What 7b still needs.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words
-merge by rank). pgvector (7a) and the fingerprint model (7b) are done; the job and the ask path (7c) are next:
+**Meaning search, as built (7a, 7b, 7c).**
 
-- **pgvector (7a, done).** CI's check and web jobs, the e2e nightly, the release boot check, Compose and the chart's kind
+- **pgvector (7a).** CI's check and web jobs, the e2e nightly, the release boot check, Compose and the chart's kind
   run use `pgvector/pgvector:pg17-trixie` (`postgres:17`, which is trixie, plus the extension). `0029_pgvector` creates
   the extension only where Postgres offers it and the role may, catching any error inside its DO block, and
   `assistant_search_vectors` (org, project, item, model, text hash, `vector(768)`, HNSW over cosine, forced RLS) only
@@ -538,8 +546,58 @@ merge by rank). pgvector (7a) and the fingerprint model (7b) are done; the job a
   through the HNSW index, the later install, a role that may not create the extension, and, with
   `ORDINATE_EXPECT_PGVECTOR=1` as in CI, fails when pgvector is missing. A managed Postgres creates it by hand
   ([upgrade.md](../server/upgrade.md#pgvector-for-meaning-search-0029_pgvector)); without it, search stays on words.
-- **The fingerprint model:** decided and built in 7b part 1 (see "Open questions"): picked in Admin → AI from the org's
-  own OpenAI, Gemini or gateway key, off by default, with `src/ai/rankFusion.ts` for the merge.
+- **The fingerprint model (7b):** picked in Admin → AI from the org's own OpenAI, Gemini or gateway key, off by default
+  (see "Open questions"), with `src/ai/rankFusion.ts` for the merge.
+- **The job (7c, `src/server/fingerprintJob.ts`, `fingerprintStore.ts`).** `search:fingerprints`, one row per org in the
+  jobs table, every 2 minutes: a run is the runner's claim (`FOR UPDATE SKIP LOCKED` under a heartbeat lease), so two
+  pods never run one org's job at once; no second lock is taken. With a model and the table, it finds each project's
+  items whose (text hash, model) has no row in ONE query over the index's own rows (no record read), sends at most 500
+  texts a run, 100 a request with purpose `document` (Gemini's `RETRIEVAL_DOCUMENT`), and saves each batch as it comes
+  back; past 500 the runner queues it again at once, behind other orgs' due rows. An item's text is what a person reads,
+  stored on its index rows when they are written (`text`, `0030_search_text`; never a value): its name, other names
+  and description, after its dataset's name for a column or a metric ("Online orders · region — also called Sales
+  region, territory — Where the order shipped"), so identically named columns of two datasets get two fingerprints;
+  cut at 1,000 code points (`itemText`, the SQL's reference). A verified question's is the question as written. A
+  writer of the release before (no `text`) drops its source's marker through 0030's trigger, as 0028's does for keys.
+  Retired items get none. A project the model covers loses every other model's rows and those of
+  items gone, so a model change refingerprints in the background and the search reads only the current model's rows.
+  A failing provider (network, 429, 401, 5xx) stops the run; what was not saved is sent by the next one, logged once
+  per org and code, never a text. A batch it REFUSES (400, 413, 422) is sent again one text at a time: the others are
+  saved, and each text refused alone gets an attempt (`assistant_search_vector_failures`, 0030, by item, model and
+  text hash); after 3 it is skipped for a day, logged once, and a changed text starts afresh. Three refused alone and
+  none taken is the provider refusing everything: the run stops and nothing is held against a text. No model: nothing
+  is read, nothing is sent.
+- **The question (7c, `src/ipc/meaning.ts`).** With a model, the table and fingerprints of that model in the project, the
+  question is fingerprinted ONCE per ask (purpose `query`, 2 s, joined to the request's signal) and kept for the ask. Any
+  failure, from the provider or a query, is words only, logged once by its code. Step 2's exact match is untouched.
+- **The merge (7c).** `nearestPage` takes the 50 items nearest the question by cosine within the project, no less
+  similar than the model's floor (below), under the words query's own access `WHERE` (audience, kinds, datasets in or
+  out, retired left out); `fuse([words' first 50,
+  meaning's 50], k = 60)` is the head, the rest follow by words, and a column hidden from the caller, or a metric or term
+  on one, is dropped after, a page at a time, as before. The verified examples merge the same way (`nearestIds`), then
+  keep their tiers: the open dataset's questions, then the agent's topic's, then the rest. `test-meaningSearch` holds
+  both to a JS reference (`fuse` over the words reference and a cosine in JS over the stored vectors), with exact
+  distances by construction.
+- **Meaning never invents a match.** Below a model's least similarity, an item is not near at all: a question sharing
+  no word and no meaning with anything gets nothing. Per model (`src/ai/fingerprints.ts` `MIN_SIMILARITY`), not
+  calibrated against a provider here (the tests use a fake): 0.35 for OpenAI `text-embedding-3-small` and `-large` and
+  Gemini `gemini-embedding-001` and `gemini-embedding-2`, 0.5 for a gateway's model, whose scale is unknown;
+  `MEANING_MIN_SIMILARITY` overrides them all ([configuration.md](../server/configuration.md#assistant)). And where a
+  result means "offer this", an agent's outside-the-topic offer and "Did you mean", an item found by meaning alone
+  (words score 0) never qualifies: meaning reorders what the words found there, it does not add.
+- **Exact, not HNSW.** Filtered by org, project, model and access, the HNSW index's scan stopped before any row passed
+  and returned none (the budget's project, pgvector 0.8.7, iterative scan on); with a fresh table and no statistics, the
+  first form planned a 48 s nested loop. So the distances are computed exactly for the project's allowed items, inside a
+  MATERIALIZED CTE the planner cannot turn into an index scan, the allowed items an array built once as the words
+  query's: 23 ms for 8,000 candidates and 13 ms for 5,000 questions, with or without statistics. The HNSW index stays,
+  unused (see "Open questions").
+- **Measured** (`test-askBudget`, 2,000 datasets, 5,000 metrics, 2,000 terms, 5,000 verified questions; 19,998 texts):
+  the first fill took 27 to 31 s with a fake model (no network), a run with nothing to send 52 to 69 ms, Admin → AI's
+  coverage 44 to 55 ms. With meaning on, each case makes ONE embed call; queries and reads, off → on: Home 89 / 154 →
+  103 / 154; a dataset 88 / 123 → 94 / 118; an agent 75 / 136 → 84 / 136; the restricted viewer 114 / 7,299 → 131 /
+  7,299; a dashboard 112 / 183 → 119 / 182. A Home question took about 42 ms off and 128 ms on.
+- **Admin → AI** shows the coverage under the model (`ai:fingerprintStatus`: "Fingerprinted 1,234 of 1,300 items", read
+  again every 30 s until done), or why there is nowhere to keep fingerprints, with the upgrade note's link.
 - **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
   6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
   differential can hold to.
@@ -619,6 +677,12 @@ source table can answer, a question needing an undefined link, and a question on
 
 ## Open questions
 
+- **Meaning search's index (PR 7c).** The project's fingerprints are scanned exactly: linear, 23 ms at 8,000
+  candidates. Past about 50,000 items in one project, measure an index per project (or pgvector's filtered scans,
+  once they return what the filter needs) against the exact scan, which stays the reference.
+- **Meaning's floor per model (PR 7c).** 0.35 (OpenAI, Gemini) and 0.5 (a gateway's) are defaults, not
+  measurements: no provider is called in this repo's tests. Calibrate each on a real project's questions (pairs that
+  should and should not match) and move the table; `MEANING_MIN_SIMILARITY` is the operator's override meanwhile.
 - **Fingerprint model (phase C): answered (PR 7b).** The org's own OpenAI, Gemini or gateway key,
   picked in Admin → AI and off until an admin does: OpenAI `text-embedding-3-small` / `-large`,
   Gemini `gemini-embedding-001` / `gemini-embedding-2`, or a gateway's id; 768 numbers each,

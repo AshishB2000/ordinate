@@ -125,6 +125,15 @@ Bounds on what a connection may cost in the warehouse it reads. See [live-data.m
 | `REFRESH_HOOK_MIN_INTERVAL_SEC` | The least gap, in seconds, between two calls of one [refresh URL](live-data.md#refresh-url). A call inside it gets `429` with `Retry-After` and starts nothing. Kept in Postgres, so it holds across every pod. Each refresh URL has its own clock; per client IP, refresh URL calls also share a bucket the size of `RATE_LIMIT_LOGIN_PER_MINUTE`. | `60` | — | no |
 | `FRESH_ON_ASK_WAIT_MS` | How long a chart, KPI or answer on a stale copy with "Fresh on ask" waits for its incremental pull, in milliseconds. Landed in time: the answer has the new rows. Not yet: the answer comes from the copy marked "refreshing…", and open dashboards redraw when the rows land. `0` never waits. At most `30000`; keep it well under `RPC_TIMEOUT_SECONDS`. See [live-data.md](live-data.md#fresh-on-ask). | `5000` | — | no |
 
+## Assistant
+
+Meaning search (finding "sales" when the metric is called Revenue) runs only where an org admin picked a fingerprint
+model in Admin → AI and Postgres has pgvector ([upgrade.md](upgrade.md#pgvector-for-meaning-search-0029_pgvector)).
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `MEANING_MIN_SIMILARITY` | The least cosine similarity (0 to 1) an item needs to be found by meaning, for every fingerprint model. Below it, meaning neither adds nor moves an item; words still find it. Raise it if questions bring back unrelated items, lower it if synonyms are missed. An agent's outside-the-topic offer and "Did you mean" never name an item found by meaning alone, whatever this is. | unset: per model, 0.35 for OpenAI `text-embedding-3-*` and Gemini embeddings, 0.5 for a gateway's model | — | no |
+
 ## DuckDB
 
 Each org gets its own DuckDB worker, locked to that org's directory and S3 prefix before it answers.

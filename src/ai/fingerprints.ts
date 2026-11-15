@@ -34,18 +34,48 @@ export interface FingerprintModel {
   readonly provider: string;
   readonly model: string;
 }
-export type Fingerprints = { ok: true; vectors: Float32Array[] } | TypedError;
+/** A failure carries the provider's HTTP status when it answered (a 400 for one text, a 429, a 500). */
+export type Fingerprints = { ok: true; vectors: Float32Array[] } | (TypedError & { status?: number });
+/**
+ * `purpose`: what the texts are for, where the provider asks (Gemini's taskType RETRIEVAL_DOCUMENT or RETRIEVAL_QUERY;
+ * the others take none). `timeoutMs`: each request's, joined to the caller's signal. `quiet`: the caller logs a
+ * failure itself (once, by its code), so none is logged here.
+ */
+export interface FingerprintOptions { purpose?: 'document' | 'query'; timeoutMs?: number; quiet?: boolean }
 
 const fail = (errorType: string, message: string): TypedError => ({ ok: false, errorType, message });
 
+/**
+ * The least cosine similarity an item found by meaning alone needs (src/ipc/meaning.ts): below it, meaning neither adds
+ * an item nor moves one. Per model, as `provider:model`. NOT calibrated here (no provider is called in this repo's
+ * tests): 0.35 for OpenAI's text-embedding-3 and Gemini's embeddings, where a short unrelated pair usually scores well
+ * under it and a paraphrase above; 0.5 for any other (a gateway's), whose scale is unknown. MEANING_MIN_SIMILARITY
+ * (0 to 1) overrides all of them (docs/server/configuration.md).
+ */
+export const MIN_SIMILARITY: Readonly<Record<string, number>> = {
+  'openai:text-embedding-3-small': 0.35,
+  'openai:text-embedding-3-large': 0.35,
+  'gemini:gemini-embedding-001': 0.35,
+  'gemini:gemini-embedding-2': 0.35,
+};
+export const DEFAULT_MIN_SIMILARITY = 0.5;
+
+/** `pick`'s floor: MEANING_MIN_SIMILARITY when it is a number from 0 to 1, else MIN_SIMILARITY's, else the default. */
+export function minSimilarity(pick: FingerprintModel): number {
+  const raw = process.env.MEANING_MIN_SIMILARITY;
+  const set = raw === undefined || raw.trim() === '' ? NaN : Number(raw);
+  return set >= 0 && set <= 1 ? set : (MIN_SIMILARITY[`${pick.provider}:${pick.model}`] ?? DEFAULT_MIN_SIMILARITY);
+}
+
 /** One request's wire shape: OpenAI's /embeddings (a gateway's too) or Gemini's batchEmbedContents. */
-function embedRequest(pick: FingerprintModel, texts: readonly string[], apiKey: string | null, baseUrl: string): { url: string; headers: Record<string, string>; body: unknown } {
+function embedRequest(pick: FingerprintModel, texts: readonly string[], apiKey: string | null, baseUrl: string, purpose?: FingerprintOptions['purpose']): { url: string; headers: Record<string, string>; body: unknown } {
   if (pick.provider === 'gemini') {
     const model = `models/${pick.model}`;
+    const task = purpose ? { taskType: purpose === 'query' ? 'RETRIEVAL_QUERY' : 'RETRIEVAL_DOCUMENT' } : {};
     return {
       url: `${baseUrl}/models/${encodeURIComponent(pick.model)}:batchEmbedContents`,
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey ?? '' },
-      body: { requests: texts.map((text) => ({ model, content: { parts: [{ text }] }, outputDimensionality: FINGERPRINT_DIMS })) },
+      body: { requests: texts.map((text) => ({ model, content: { parts: [{ text }] }, outputDimensionality: FINGERPRINT_DIMS, ...task })) },
     };
   }
   return {
@@ -87,30 +117,32 @@ async function reason(res: Response, apiKey: string | null): Promise<string> {
   return why.length > 300 ? `${why.slice(0, 300)}…` : why;
 }
 
-async function batch(pick: FingerprintModel, texts: readonly string[], apiKey: string | null, baseUrl: string): Promise<Fingerprints> {
+async function batch(pick: FingerprintModel, texts: readonly string[], apiKey: string | null, baseUrl: string, o: FingerprintOptions): Promise<Fingerprints> {
   const label = ADAPTERS[pick.provider].label;
-  const req = embedRequest(pick, texts, apiKey, baseUrl);
+  const req = embedRequest(pick, texts, apiKey, baseUrl, o.purpose);
   const outer = ctx().signal;
-  const signal = outer ? AbortSignal.any([outer, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(o.timeoutMs ?? TIMEOUT_MS);
+  const signal = outer ? AbortSignal.any([outer, timeout]) : timeout;
+  const log = o.quiet ? () => undefined : (...a: unknown[]) => logger.error('[fingerprint]', label, ...a);
   let res: Response;
   try {
     res = await providerFetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body), signal });
   } catch (err) {
     const e = err as Error;
-    logger.error('[fingerprint]', label, e.name === 'TimeoutError' ? 'request timed out' : `fetch error: ${redactSecrets(String(e.message), apiKey ? { apiKey } : undefined)}`);
+    log(e.name === 'TimeoutError' ? 'request timed out' : `fetch error: ${redactSecrets(String(e.message), apiKey ? { apiKey } : undefined)}`);
     return errNetwork();
   }
   if (!res.ok) {
     const why = await reason(res, apiKey);
-    logger.error('[fingerprint]', label, 'error', res.status, why || '(no detail)');
+    log('error', res.status, why || '(no detail)');
     const detail = `${label} · ${res.status}${why ? ` · ${why}` : ''}`;
-    if (res.status === 401 || res.status === 403) return { ...errAuth(), detail };
-    if (res.status === 429) return { ...errRateLimit(), detail };
-    return { ...errProvider(), detail };
+    if (res.status === 401 || res.status === 403) return { ...errAuth(), detail, status: res.status };
+    if (res.status === 429) return { ...errRateLimit(), detail, status: res.status };
+    return { ...errProvider(), detail, status: res.status };
   }
   const raw = vectorsOf(pick.provider, await res.json().catch(() => null));
   if (!raw || raw.length !== texts.length) {
-    logger.error('[fingerprint]', label, 'reply had', raw ? raw.length : 'no', 'vectors for', texts.length, 'texts');
+    log('reply had', raw ? raw.length : 'no', 'vectors for', texts.length, 'texts');
     return errBadReply();
   }
   const vectors: Float32Array[] = [];
@@ -128,7 +160,7 @@ async function batch(pick: FingerprintModel, texts: readonly string[], apiKey: s
  * `texts`' fingerprints, in order, from `pick` — the org's model
  * (currentFingerprintModel()). Null is off: refused, and nothing is sent.
  */
-export async function fingerprint(texts: readonly string[], pick: FingerprintModel | null): Promise<Fingerprints> {
+export async function fingerprint(texts: readonly string[], pick: FingerprintModel | null, o: FingerprintOptions = {}): Promise<Fingerprints> {
   if (!pick) return fail('off', msg.fingerprintOff());
   if (!['openai', 'gemini', 'gateway'].includes(pick.provider)) return fail('no_model', msg.fingerprintNoModel());
   if (texts.length === 0) return { ok: true, vectors: [] };
@@ -137,7 +169,7 @@ export async function fingerprint(texts: readonly string[], pick: FingerprintMod
   if (!baseUrl || (pick.provider !== 'gateway' && !cred.apiKey)) return fail('no_key', msg.fingerprintNeedsProvider(ADAPTERS[pick.provider].label));
   const vectors: Float32Array[] = [];
   for (let i = 0; i < texts.length; i += FINGERPRINT_BATCH) {
-    const r = await batch(pick, texts.slice(i, i + FINGERPRINT_BATCH), cred.apiKey, baseUrl);
+    const r = await batch(pick, texts.slice(i, i + FINGERPRINT_BATCH), cred.apiKey, baseUrl, o);
     if (!r.ok) return r;
     vectors.push(...r.vectors);
   }

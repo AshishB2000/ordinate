@@ -23,15 +23,21 @@ import { questionKey, type VerifiedQuestion } from '../analysis/verifiedRules';
 import { getTerm } from '../analysis/terms';
 import { withheldColumns } from '../app/sharePolicy';
 import { words } from '../ai/answerSuggest';
-import { eligibleExample, exactHit, NOTHING_TAKEN, pickExamples, takeExamples, type Names, type PickOptions } from '../ai/verifiedPick';
+import { eligibleExample, exactHit, examplesHead, NOTHING_TAKEN, pickExamples, takeExamples, tierOf, type Names, type PickOptions } from '../ai/verifiedPick';
+import { MEANING_K, cut } from '../app/assistantSearchRank';
+import { clean } from '../app/searchMatch';
+import { meaningOf, nearOrWords } from './meaning';
 import { statesOf, verifiedEnvFor, verifiedStates, type VerifiedState } from './verifiedState';
+
+/** A question as it is fingerprinted (0030 `text`): as written, trimmed, at most 1,000 code points. */
+export const questionText = (question: string): string => cut(clean(question).trim());
 
 /** What a stored question puts in the index: its question and each phrasing, by key; the question's words. */
 export const describeVerified: index.DescribeVerified = (projectId, id, body) => {
   const q = verifiedFromBody(projectId, body)?.rec;
   if (!q || q.id !== id) return []; // `listTagged` skips a misnamed record: so does the index
   return [q.question, ...q.phrasings].map((text, ord) => ({
-    ord, key: questionKey(text), datasetId: q.spec.datasetId, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [],
+    ord, key: questionKey(text), datasetId: q.spec.datasetId, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
   }));
 };
 index.useVerifiedDescriber(describeVerified);
@@ -135,30 +141,77 @@ class Lookups {
   readonly withheld = (id: string): ReadonlySet<string> => this.held.get(id) ?? new Set();
 }
 
-/** REFERENCE: every question of the project, checked, then `pickExamples`. */
-export async function referenceExamples(projectId: string, a: ExampleAsk): Promise<Examples> {
+/** REFERENCE: every question of the project, checked, then `pickExamples`. `near`: the ids nearest by meaning (the differential's), merged in as the index does. */
+export async function referenceExamples(projectId: string, a: ExampleAsk, near?: readonly string[]): Promise<Examples> {
   const states = await verifiedStates(projectId);
   if (!states.length) return { lines: [], ids: [] };
   const look = new Lookups(projectId);
   await look.cover(states);
-  return pickExamples(states, { ...a, names: look.names(), withheld: look.withheld });
+  return pickExamples(states, { ...a, names: look.names(), withheld: look.withheld, ...(near ? { near } : {}) });
 }
 
-/** INDEXED: the index ranks every question in `exampleOrder`; records are read and checked a batch at a time until five are taken. */
+type Pages = AsyncGenerator<index.Ranked[] | null>;
+
+/** The index's exampleOrder, BATCH at a time from `from`. */
+async function* ranked(projectId: string, order: index.ExampleOrder, from: number): Pages {
+  for (let offset = from; ; offset += BATCH) {
+    const page = await index.rankedIds(projectId, order, offset, BATCH, rowsUnder);
+    yield page;
+    if (!page || page.length < BATCH) return;
+  }
+}
+
+/**
+ * With meaning: ../ai/verifiedPick examplesWithMeaning, paged. The head's questions of a tier no later question can
+ * precede come first, so the usual ask reads no page past the head; then each page of exampleOrder, merged by tier.
+ */
+async function* withMeaning(projectId: string, order: index.ExampleOrder, near: readonly index.Ranked[], tier: (datasetId: string) => number): Pages {
+  const words = await index.rankedIds(projectId, order, 0, MEANING_K, rowsUnder);
+  if (!words) {
+    yield null;
+    return;
+  }
+  const head = examplesHead(words, near, tier, MEANING_K);
+  const inHead = new Set(head.map((r) => r.id));
+  const tail = words.length === MEANING_K; // every later question's tier is the last one's or after
+  let i = 0;
+  const upTo = (t: number): index.Ranked[] => { const from = i; while (i < head.length && tier(head[i].datasetId) <= t) i++; return head.slice(from, i); };
+  yield upTo(tail ? tier(words[MEANING_K - 1].datasetId) : Infinity);
+  if (!tail) return;
+  for await (const page of ranked(projectId, order, MEANING_K)) {
+    if (!page) {
+      yield null;
+      return;
+    }
+    yield page.flatMap((t) => (inHead.has(t.id) ? [] : [...upTo(tier(t.datasetId)), t]));
+  }
+  yield head.slice(i);
+}
+
+/** INDEXED: the index ranks every question in `exampleOrder` (with meaning, merged); records are read and checked a batch at a time until five are taken. */
 export async function indexedExamples(projectId: string, a: ExampleAsk): Promise<Examples | null> {
   const order = { asked: [...new Set(words(a.question))], datasetId: a.datasetId, first: a.first ? [...a.first] : undefined };
+  const to = await meaningOf(projectId, a.question);
+  const near = to && (await nearOrWords(() => index.nearestIds(projectId, to, MEANING_K, rowsUnder)));
   const look = new Lookups(projectId);
   let taken = NOTHING_TAKEN;
-  for (let offset = 0; !taken.done; offset += BATCH) {
-    const ids = await index.rankedIds(projectId, order, offset, BATCH, rowsUnder);
-    if (!ids) return null;
-    if (!ids.length) break;
-    const states = await checked(projectId, await readManyTagged(projectId, ids));
+  let batch: string[] = [];
+  const take = async (): Promise<void> => {
+    const states = await checked(projectId, await readManyTagged(projectId, batch));
+    batch = [];
     await look.cover(states);
     const o = { exclude: a.exclude, withheld: look.withheld };
     taken = takeExamples(states.filter((s) => eligibleExample(s, o)).map((s) => s.q), look.names(), taken); // already in order
-    if (ids.length < BATCH) break;
+  };
+  for await (const page of near ? withMeaning(projectId, order, near, tierOf(a)) : ranked(projectId, order, 0)) {
+    if (!page) return null;
+    for (const r of page) {
+      batch.push(r.id);
+      if (batch.length === BATCH) await take();
+      if (taken.done) return { lines: taken.lines, ids: taken.ids };
+    }
   }
+  if (batch.length) await take();
   return { lines: taken.lines, ids: taken.ids };
 }
 

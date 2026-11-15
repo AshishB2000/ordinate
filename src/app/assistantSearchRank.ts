@@ -11,6 +11,11 @@
 //           description, summed over the item's parts. Words are deduplicated per field and per question.
 //   order   score, then certified first, then kind (dataset, metric, term, column, table), then the newest, then
 //           the item key — every string compared by code unit, as Postgres "C" does.
+//   meaning with fingerprints (PR 7c), the K items nearest the question's are a second list (`nearItems`), merged with
+//           the first K by words by rank (../ai/rankFusion), then the rest by words (`withMeaning`). An item's
+//           fingerprint is made from `itemText`.
+
+import { fuse } from '../ai/rankFusion';
 
 export const MODEL_KINDS = ['dataset', 'metric', 'term', 'column', 'table'] as const;
 export type ModelKind = (typeof MODEL_KINDS)[number];
@@ -35,6 +40,8 @@ export interface Part {
   retired: boolean;
   /** Exact-lookup keys (0028), base parts only: hashed names and `d:<dataset>`. No part of the rank. */
   keys: string[];
+  /** What a person reads of this part (0030): names and a description as written, at most TEXT_MAX. Fingerprinted, never ranked. */
+  text: string;
 }
 
 export interface ModelHit { kind: ModelKind; id: string; datasetId?: string; connId?: string; name: string; score: number }
@@ -69,32 +76,113 @@ function seen(ps: readonly Part[], audiences: ReadonlySet<string>): Part[] | nul
   return bases.some((p) => audiences.has(p.audience)) && !ps.some((p) => p.retired) ? bases : null;
 }
 
-/** THE REFERENCE: every item found for `asked` (deduplicated words), best first. */
-export function rankParts(parts: readonly Part[], asked: readonly string[], o: RankOptions): ModelHit[] {
-  const want = new Set(asked);
+/** An item's result, from its base parts, scored by every part's words. */
+function hitOf(bases: readonly Part[], ps: readonly Part[], want: ReadonlySet<string>): ModelHit {
+  const dataset = bases.flatMap((p) => (p.datasetId === null ? [] : [p.datasetId]));
+  const conn = bases.flatMap((p) => (p.connId === null ? [] : [p.connId]));
+  return {
+    kind: least(bases.map((p) => p.kind)) as ModelKind, id: least(bases.map((p) => p.id)), ...(dataset.length ? { datasetId: least(dataset) } : {}),
+    ...(conn.length ? { connId: least(conn) } : {}), name: least(bases.map((p) => p.name)), score: ps.reduce((n, p) => n + partScore(p, want), 0),
+  };
+}
+
+/** May a part be found under `o`? Its kind, its dataset and its audience. */
+function allowed(o: RankOptions): (p: Part) => boolean {
   const aud = new Set<string>(o.audiences);
   const kinds = o.kinds ? new Set<string>(o.kinds) : null;
   const ds = o.datasetIds ? new Set(o.datasetIds) : null;
   const ex = o.exceptDatasetIds ? new Set(o.exceptDatasetIds) : null;
+  return (p) => aud.has(p.audience) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId)))
+    && (!ex || p.datasetId === null || !ex.has(p.datasetId));
+}
+
+/** THE REFERENCE: every item found for `asked` (deduplicated words), best first. */
+export function rankParts(parts: readonly Part[], asked: readonly string[], o: RankOptions): ModelHit[] {
+  const want = new Set(asked);
+  const aud = new Set<string>(o.audiences);
+  const may = allowed(o);
   const out: Keyed[] = [];
   for (const [item, ps] of byItem(parts)) {
-    const found = ps.some((p) => aud.has(p.audience) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId)))
-      && (!ex || p.datasetId === null || !ex.has(p.datasetId)) && partScore(p, want) > 0);
+    const found = ps.some((p) => may(p) && partScore(p, want) > 0);
     const bases = found ? seen(ps, aud) : null;
     if (!bases) continue;
-    const dataset = bases.flatMap((p) => (p.datasetId === null ? [] : [p.datasetId]));
-    const conn = bases.flatMap((p) => (p.connId === null ? [] : [p.connId]));
-    const kind = least(bases.map((p) => p.kind)) as ModelKind;
-    out.push({
-      hit: {
-        kind, id: least(bases.map((p) => p.id)), ...(dataset.length ? { datasetId: least(dataset) } : {}), ...(conn.length ? { connId: least(conn) } : {}),
-        name: least(bases.map((p) => p.name)), score: ps.reduce((n, p) => n + partScore(p, want), 0),
-      },
-      certified: ps.some((p) => p.certified), kindOrd: kindOrd(kind), updated: most(bases.map((p) => p.updated)), item,
-    });
+    const hit = hitOf(bases, ps, want);
+    out.push({ hit, certified: ps.some((p) => p.certified), kindOrd: kindOrd(hit.kind), updated: most(bases.map((p) => p.updated)), item });
   }
   return out.sort((a, b) => b.hit.score - a.hit.score || Number(b.certified) - Number(a.certified) || a.kindOrd - b.kindOrd
     || byCode(b.updated, a.updated) || byCode(a.item, b.item)).map((k) => k.hit);
+}
+
+// ── Meaning (PR 7c) ─────────────────────────────────────────────────────────
+
+/** How many items each list brings to the merge: the nearest by meaning, and the best by words. */
+export const MEANING_K = 50;
+/** An item's text is cut to this many code points before it is fingerprinted. */
+export const TEXT_MAX = 1000;
+
+/** A result's item key, as its parts name it: `dataset:<id>`, `column:<dataset>/<name>`, `table:<connection>/<doc>`. */
+export const itemKey = (h: Pick<ModelHit, 'kind' | 'id' | 'datasetId' | 'connId'>): string =>
+  `${h.kind}:${h.kind === 'column' ? `${h.datasetId ?? ''}/` : h.kind === 'table' ? `${h.connId ?? ''}/` : ''}${h.id}`;
+
+/** `t` cut to TEXT_MAX code points (Postgres `left` counts the same). */
+export const cut = (t: string): string => (t.length <= TEXT_MAX ? t : Array.from(t).slice(0, TEXT_MAX).join(''));
+
+/** A name, its other names and a description, as a person reads them: "West coast, also called Pacific — Orders shipped west". */
+export function phrase(name: string, aka: readonly string[], about: string): string {
+  const called = aka.map((a) => a.trim()).filter(Boolean);
+  const head = [name.trim(), called.length ? `also called ${called.join(', ')}` : ''].filter(Boolean).join(', ');
+  return cut([head, about.trim()].filter(Boolean).join(' — '));
+}
+
+/** The kinds whose text starts with their dataset's name: a column, a metric. */
+const ON_DATASET: ReadonlySet<ModelKind> = new Set(['column', 'metric']);
+
+/**
+ * THE REFERENCE of the text an item is fingerprinted from (../server/fingerprintStore ITEM_TEXT): each part's `text`,
+ * the base part first, joined by " — ", after its dataset's name and " · " for a column or a metric, cut to TEXT_MAX
+ * code points. An item has one base part and at most one other with text (catalog.json's).
+ */
+export function itemText(ps: readonly Part[], datasetName: (id: string) => string | undefined): string {
+  const bases = ps.filter((p) => p.base);
+  const body = [...bases, ...ps.filter((p) => !p.base)].map((p) => p.text).filter(Boolean).join(' — ');
+  if (!body || !bases.length) return '';
+  const kind = least(bases.map((p) => p.kind)) as ModelKind;
+  const dataset = bases.flatMap((p) => (p.datasetId === null ? [] : [p.datasetId]));
+  const on = ON_DATASET.has(kind) && dataset.length ? datasetName(least(dataset)) : undefined;
+  return cut(on ? `${on} · ${body}` : body);
+}
+
+/** THE REFERENCE: each fingerprinted item's text, by key (retired ones and those with no text left out, as the job does). */
+export function itemTexts(parts: readonly Part[]): Map<string, string> {
+  const items = byItem(parts);
+  const datasetName = (id: string): string | undefined => {
+    const names = (items.get(`dataset:${id}`) ?? []).filter((p) => p.base).map((p) => p.name);
+    return names.length && least(names) ? least(names) : undefined;
+  };
+  const out = new Map<string, string>();
+  for (const [item, ps] of items) {
+    const t = ps.some((p) => p.base) && !ps.some((p) => p.retired) ? itemText(ps, datasetName) : '';
+    if (t) out.set(item, t);
+  }
+  return out;
+}
+
+/**
+ * THE REFERENCE of the nearest-by-meaning query (../server/assistantSearchIndex nearestPage): the items with a
+ * fingerprint (`distance` by key) no farther than `maxDistance` that the caller may find under `o` — a base part of an allowed kind, dataset and audience,
+ * none retired — nearest first, then by key, `k` of them, each scored by its words for `asked`.
+ */
+export function nearItems(parts: readonly Part[], asked: readonly string[], o: RankOptions, distance: (item: string) => number | undefined, k: number, maxDistance: number): ModelHit[] {
+  const want = new Set(asked);
+  const may = allowed(o);
+  const out: Array<{ hit: ModelHit; d: number; item: string }> = [];
+  for (const [item, ps] of byItem(parts)) {
+    const d = distance(item);
+    const bases = ps.filter((p) => p.base);
+    if (d === undefined || d > maxDistance || !bases.some(may) || ps.some((p) => p.retired)) continue;
+    out.push({ hit: hitOf(bases, ps, want), d, item });
+  }
+  return out.sort((a, b) => a.d - b.d || byCode(a.item, b.item)).slice(0, k).map((x) => x.hit);
 }
 
 /** What Home counts: no columns (a column hidden from the caller would be counted, and nothing needs the number). */
@@ -133,4 +221,18 @@ export function keyedItems(parts: readonly Part[], kind: KeyedKind, keys: readon
 export function newestItems(parts: readonly Part[], kind: KeyedKind, limit: number, retired = false): KeyedItem[] {
   const gone = retired ? new Set<string>() : new Set(parts.filter((p) => p.retired).map((p) => p.item));
   return bases(parts, kind).filter((p) => !gone.has(p.item)).sort((a, b) => byCode(b.updated, a.updated) || byItemKey(a, b)).slice(0, limit).map(keyed);
+}
+
+/** The words list's first MEANING_K and the meaning list, merged by rank (../ai/rankFusion, k = 60): the head of a ranking with meaning. */
+export function fusedHead(words: readonly ModelHit[], near: readonly ModelHit[]): ModelHit[] {
+  const by = new Map<string, ModelHit>();
+  for (const h of [...near, ...words]) by.set(itemKey(h), h);
+  return fuse([words.slice(0, MEANING_K).map(itemKey), near.map(itemKey)], { k: 60 }).flatMap((f) => by.get(f.key) ?? []);
+}
+
+/** THE REFERENCE of a ranking with meaning: `fusedHead`, then the rest of `words` (all of them, best first) not in it. */
+export function withMeaning(words: readonly ModelHit[], near: readonly ModelHit[]): ModelHit[] {
+  const head = fusedHead(words, near);
+  const inHead = new Set(head.map(itemKey));
+  return [...head, ...words.slice(MEANING_K).filter((h) => !inHead.has(itemKey(h)))];
 }

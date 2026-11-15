@@ -232,6 +232,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useLiveUsageDb(pool, cfg.auth.mode === 'dev');
       // Any pod serves any request (docs/any-pod): the abuse counters, file tokens and staged imports are rows, swept by a job.
       (require('./sharedState') as typeof import('./sharedState')).wireSharedState(pool, app.log, cfg.auditRetentionDays);
+      // Meaning search's fingerprints, made by a job per org, never inside a save (PR 7c): nothing is sent until an admin picks a model.
+      (require('./fingerprintJob') as typeof import('./fingerprintJob')).wireFingerprints();
       // Connection passwords/tokens: the encrypted store (T5.3), never the
       // per-org config.json. Without a master key there is no store, and a
       // connection secret is refused (src/app/configSecrets.ts).

@@ -86,7 +86,8 @@ export async function matchOutside(
 ): Promise<{ id: string; name: string } | null> {
   const hits = await search(projectId, question, { kinds: ['dataset', 'column', 'metric', 'term'], limit: OUTSIDE_HITS, exceptDatasetIds: [...only] });
   const score = new Map<string, number>();
-  for (const h of hits) if (h.datasetId && !only.has(h.datasetId)) score.set(h.datasetId, (score.get(h.datasetId) ?? 0) + h.score);
+  // A hit found by meaning alone (no word, score 0) never qualifies: meaning may reorder what the words found, not offer more.
+  for (const h of hits) if (h.score > 0 && h.datasetId && !only.has(h.datasetId)) score.set(h.datasetId, (score.get(h.datasetId) ?? 0) + h.score);
   for (const [id] of [...score].sort((a, b) => b[1] - a[1])) { // stable: an equal score keeps the better-ranked first
     if (!(await canRead(projectId, id))) continue;
     const meta = await datasets.getDatasetMeta(projectId, id);

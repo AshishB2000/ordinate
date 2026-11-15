@@ -773,6 +773,23 @@ unused, and upgrading again uses them. Keep the pgvector image while the extensi
 going back to `postgres:17` would leave a table whose type the server can no longer load. To go back,
 first run `DROP TABLE assistant_search_vectors; DROP EXTENSION vector;`.
 
+## Meaning search's text and the fingerprint job (`0030_search_text`)
+
+Meaning search fingerprints what a person reads of an item (its name, other names and description, after its
+dataset's name for a column or a metric) and a verified question as written. The migration adds a `text` column to
+the two Assistant indexes (`assistant_search`, `verified_keys`), each with a constant default, so no table is
+rewritten, and one small table, `assistant_search_vector_failures`, for texts the provider refused. It needs no
+pgvector. Nothing is sent to any provider until an org admin picks a fingerprint model in Admin → AI.
+
+**Rolling out.** Each project's two indexes are rebuilt once, with their text, on its first question after the
+upgrade. A pod of the release before still running saves records without the text; a trigger sees that and marks that
+part of the index stale, so the next question on a new pod rebuilds it. Where a fingerprint model is set, the
+`search:fingerprints` job (every 2 minutes per org) then fingerprints every item again, as their texts are new;
+until it has, items are found by their words.
+
+**Rolling back.** The older release ignores the columns and the table. The trigger stays and marks an index stale
+when the older release saves one of those records, so upgrading again rebuilds it once and misses nothing.
+
 ## Compose
 
 From a checkout:
