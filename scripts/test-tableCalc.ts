@@ -156,6 +156,16 @@ function testCharts(): void {
   ok('chart yoy: a non-date category yields nulls and says why',
      notDate.series[0].values.every((v) => v === null) && w3.some((x) => /date category/.test(x)), JSON.stringify(w3));
 
+  // Along a date axis the cells run in TIME order: an extract's axis comes first-seen; the empty bucket is last, as on Live.
+  const seen = { labels: ['2024-03', '', '2024-01', '2024-02'], series: [{ name: 'sum of r', values: [3, 100, 1, 2] }] };
+  const runEnc = (kind: 'running_total' | 'diff' | 'index') => ({ category: 'd', values: [{ column: 'r', aggregation: 'sum', calc: { kind, along: 'across' as const } }] });
+  eq('chart: a running total along a first-seen date axis adds in time order, the empty bucket last',
+     tc.applyChartCalcs(seen, runEnc('running_total'), { kind: 'date', grain: 'month' }).series[0].values, [6, 106, 1, 3]);
+  eq('chart: …a difference reads the calendar too', tc.applyChartCalcs(seen, runEnc('diff'), { kind: 'date', grain: 'month' }).series[0].values, [1, 97, null, 1]);
+  eq('chart: …and an index', tc.applyChartCalcs(seen, runEnc('index'), { kind: 'date', grain: 'month' }).series[0].values, [300, 10000, 100, 200]);
+  eq('chart NEGATIVE CONTROL: a text axis keeps the order it came in', tc.applyChartCalcs(seen, runEnc('running_total'), { kind: 'text' }).series[0].values, [3, 103, 104, 106]);
+  ok('chart: a date axis already in time order is run as it is', [['2023', '2024', ''], ['2024-Q1', '2024-Q2'], ['2024-01-01', '2024-01-08']].every((l) => l.every((x, i) => i === 0 || tc.byTime(l[i - 1], x) < 0)));
+
   const w4: string[] = [];
   const rawEnc = { category: 'c', values: [{ column: 'x', aggregation: 'none', calc: { kind: 'running_total' as const, along: 'across' as const } }] };
   ok('chart: never on raw rows — an all-none chart is untouched, with a warning',

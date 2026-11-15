@@ -1,4 +1,4 @@
-// The ANSWER spec — MAIN PROCESS, PURE: no fs, no model.
+// The ANSWER spec — MAIN PROCESS, no fs of its own, no model (a calc's refusals are catalog sentences, ./answerCalc).
 //
 // When a question in the dock or Home's ask bar is answerable from data
 // ("revenue by region last quarter", "top 5 products by profit"), the model's
@@ -40,6 +40,9 @@ import { matchTerm } from './termFacts';
 import type { SpecTerm } from './termFacts';
 import type { ValueMatch } from './answerValues';
 import { NUMBER_AGGREGATIONS } from '../data/aggregations';
+import { sanitizeTableCalc } from '../analysis/tableCalc';
+// A measure's `calc`, read as the engine's table calculation; its refusals are catalog sentences (./answerMessages).
+import { DATE_ORDER_KINDS, readAnswerCalc } from './answerCalc';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,7 @@ function periodFilter(column: string, period: AnswerPeriod, n: unknown, yearsBac
 export interface AnswerSpec {
   datasetId: string;
   category: string;
+  /** A measure's `calc` is "Calculate as": the engine's table calculation, kept as a visual's measure keeps it (./answerCalc). */
   measures: VizMeasure[];
   series?: string;
   filters: AnswerFilter[];
@@ -371,6 +375,14 @@ export function validateAnswerSpec(
     series = s.name;
   }
 
+  const top = typeof o.top === 'number' ? o.top : typeof o.limit === 'number' ? o.limit : NaN;
+  const cut = Number.isInteger(top) && top > 0 && cat.type !== 'date' ? Math.min(top, MAX_TOP) : undefined;
+  for (const [i, m] of measuresRaw.entries()) { // "Calculate as" (./answerCalc), on the measure as a visual keeps it
+    const calc = readAnswerCalc(m && typeof m === 'object' ? (m as Record<string, unknown>).calc : undefined, i, { date: cat.type === 'date', split: !!series, top: cut });
+    if (typeof calc === 'string') return { ok: false, reason: calc };
+    if (calc) measures[i] = { ...measures[i], calc };
+  }
+
   const filtersRaw = Array.isArray(o.filters) ? o.filters : [];
   if (filtersRaw.length > MAX_FILTERS) return { ok: false, reason: `At most ${MAX_FILTERS} filters.` };
   const filters: AnswerFilter[] = [];
@@ -405,8 +417,7 @@ export function validateAnswerSpec(
     title: cleanTitle(opts.title) || defaultTitle(measures, cat.name),
   };
   if (series) spec.series = series;
-  const top = typeof o.top === 'number' ? o.top : typeof o.limit === 'number' ? o.limit : NaN;
-  if (Number.isInteger(top) && top > 0 && cat.type !== 'date') spec.top = Math.min(top, MAX_TOP);
+  if (cut) spec.top = cut;
   // A date axis's roll-up, when the spec carries one: a refined answer keeps its chart's (./answerRefine).
   if (isDateGrain(o.grain) && cat.type === 'date') spec.grain = o.grain;
   return { ok: true, spec };
@@ -448,9 +459,13 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   const measures: VizMeasure[] = (Array.isArray(o.measures) ? o.measures : [])
     .filter((m: any) => m && typeof m.column === 'string' && typeof m.aggregation === 'string' && (AGG_ALIASES[m.aggregation] === m.aggregation))
     .slice(0, MAX_MEASURES)
-    .map((m: any) => (typeof m.metricId === 'string' && UUID_RE.test(m.metricId)
-      ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }
-      : { column: m.column, aggregation: m.aggregation }));
+    .map((m: any) => {
+      const out: VizMeasure = typeof m.metricId === 'string' && UUID_RE.test(m.metricId)
+        ? { column: m.column, aggregation: m.aggregation, metricId: m.metricId }
+        : { column: m.column, aggregation: m.aggregation };
+      const calc = sanitizeTableCalc(m.calc); // a table calculation, whitelisted as a visual's (analysis/tableCalc)
+      return calc ? { ...out, calc } : out;
+    });
   if (!measures.length) return undefined;
   const filters: AnswerFilter[] = [];
   for (const f of Array.isArray(o.filters) ? o.filters.slice(0, MAX_FILTERS) : []) {
@@ -655,6 +670,11 @@ export function answerChips(
 ): AnswerChip[] {
   const chips: AnswerChip[] = [];
   const catCol = ctx.columns.find((c) => c.name === spec.category);
+  // A measure's calc (./answerCalc) a chip must not take away from under it: a kind run in date order needs a
+  // date category, and YoY the year before. diff, pct_diff and index compare within the axis, so a year
+  // earlier has its own previous and first periods: those keep every chip.
+  const kinds = new Set(spec.measures.flatMap((m) => (m.calc ? [m.calc.kind] : [])));
+  const dateOrder = [...kinds].some((k) => DATE_ORDER_KINDS.has(k));
 
   if (!spec.series) {
     const split = ctx.splitCandidates.find((c) => c !== spec.category);
@@ -675,17 +695,19 @@ export function answerChips(
   // A next level that is none of `columns` (a column hidden from the caller, part 4) is no chip.
   const down = ctx.hierarchies && nextLevel(ctx.hierarchies, spec.category);
   const finer = ctx.ladder && spec.grain && catCol?.type === 'date' ? nextGrain(ctx.ladder, spec.grain) : null;
-  if (down && ctx.columns.some((c) => c.name === down.next)) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
+  const regroup = down && ctx.columns.some((c) => c.name === down.next && (!dateOrder || c.type === 'date'));
+  if (down && regroup) chips.push({ label: `By ${down.next}`, spec: { ...spec, category: down.next, title: cleanTitle(`${spec.title} by ${down.next}`) } });
   else if (finer) chips.push({ label: `By ${grainWord(finer, ctx.ladder!)}`, spec: { ...spec, grain: finer } });
 
   const periodIdx = spec.filters.findIndex((f) => 'period' in f);
   const dateCol = ctx.columns.find((c) => c.type === 'date');
-  if (periodIdx >= 0) {
+  const lastYear = !kinds.has('yoy'); // YoY already sets each period against the year before; a year's cut leaves it none
+  if (lastYear && periodIdx >= 0) {
     const f = spec.filters[periodIdx] as PeriodFilter;
     const filters = spec.filters.slice();
     filters[periodIdx] = { ...f, yearsBack: (f.yearsBack || 0) + 1 };
     chips.push({ label: 'Same for last year', spec: { ...spec, filters, title: cleanTitle(`${spec.title}, a year earlier`) } });
-  } else if (dateCol && dateCol.name !== spec.category) {
+  } else if (lastYear && dateCol && dateCol.name !== spec.category) {
     chips.push({
       label: 'Same for last year',
       spec: {

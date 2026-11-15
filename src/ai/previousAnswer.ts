@@ -62,7 +62,7 @@ export function previousAnswerBlock(
   const parts = [
     `dataset ${quoted(datasetName)}`,
     `category ${quoted(spec.category)}` + (spec.grain ? ` by ${spec.grain}` : ''),
-    `measures ${spec.measures.map((m) => `${m.aggregation}(${m.column})`).join(', ')}`,
+    `measures ${spec.measures.map((m) => `${m.aggregation}(${m.column})${m.calc ? ` as ${m.calc.kind}${m.calc.window ? ` over ${m.calc.window}` : ''}` : ''}`).join(', ')}`,
   ];
   if (spec.series) parts.push(`split by ${quoted(spec.series)}`);
   // A glossary term is a reference the model is not shown (the card names it); every other filter is.
@@ -72,7 +72,7 @@ export function previousAnswerBlock(
   parts.push(`chart ${spec.chartType}`);
   const text = `${PREVIOUS_ANSWER} (the chart the user is looking at; names only):\n${parts.join('; ')}.`;
 
-  const settings: number[] = spec.top ? [spec.top] : [];
+  const settings: number[] = [...(spec.top ? [spec.top] : []), ...spec.measures.flatMap((m) => (m.calc?.window ? [m.calc.window] : []))];
   const words: string[] = [datasetName, spec.category, spec.series ?? '', ...spec.measures.map((m) => m.column)];
   for (const f of spec.filters) {
     if ('term' in f) continue;

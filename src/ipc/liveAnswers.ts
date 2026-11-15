@@ -48,6 +48,7 @@ import { formatDate } from '../app/format';
 import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 import { withChartFigures } from '../analysis/chartShapes';
+import { applyChartCalcs } from '../analysis/tableCalc';
 import { figureAsk } from '../analysis/figureAsk';
 import { MATCH_OPS, MAX_MATCHED } from '../ai/answerValues';
 import type { FilterLabels, ValueMatch } from '../ai/answerValues';
@@ -186,8 +187,11 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   const catCol = meta.columns.find((c) => c.name === spec.category);
   const isDate = !!catCol && catCol.type === 'date';
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
-  // The figures the card draws (analysis/chartShapes), off the warehouse's answer — and its caption reads them.
-  const data: ChartData = withChartFigures({ labels: r.data.labels, series: r.data.series }, figureAsk(chartType));
+  // A measure's "Calculate as" on the warehouse's totals, as a Live visual's reply (analysis/tableCalc); then the figures the card
+  // draws (analysis/chartShapes) — and its caption reads them.
+  const encoding = { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) };
+  const calcNotes: string[] = [];
+  const data: ChartData = withChartFigures(applyChartCalcs({ labels: r.data.labels, series: r.data.series }, encoding, r.category, calcNotes), figureAsk(chartType));
   const names = await displayNames(projectId, meta.id).catch(() => ({}));
   const caption = tileCaption({ chartType, data, names });
   const additive = sem && mirrors ? spec.measures.every((m) => sem.metrics.find((x) => x.name === mirrors.get(m.metricId ?? '')?.external)?.additive === true)
@@ -204,7 +208,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
   };
   const facts = cardFacts(factsIn, spec, withheld);
   // As computeCard: what a person reads says the labels (F5), its filters' too; the model's facts keep the stored values.
-  const labelled = await labelCardData(projectId, meta.id, { category: spec.category, values: spec.measures, ...(spec.series ? { series: spec.series } : {}) }, data);
+  const labelled = await labelCardData(projectId, meta.id, encoding, data);
   const filterSaid = await filterText(projectId, meta.id, spec.filters, fixed.held);
   const shown = saidFilters(spec.filters, filterSaid, fixed.held);
   const shownLabels = shown === spec.filters ? filterLabels : labelsOf(shown);
@@ -218,7 +222,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data: labelled.data, ...seen,
       chips: answerChips(spec, { columns: meta.columns, splitCandidates: liveSplitCandidates(meta, spec.category), ...(await navContext(projectId, spec.datasetId)) }),
       filterLabels: shownLabels, steps: specFilterSteps({ filters: fixed.filters }, meta.columns, []).steps, asOf: r.asOf,
-      notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n)), stale),
+      notes: (spec.matched ?? []).map((m) => valueMatched(m.said, saidValue(filterSaid, fixed.held, m.column, m.value), m.column)).concat(r.notes, calcNotes, labelled.notes, filterSaid.notes.filter((n) => !labelled.notes.includes(n)), stale),
     },
     factsText: facts.text,
     ledger: facts.ledger,

@@ -31,6 +31,7 @@ import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import { buildVizData } from '../analysis/vizData';
+import { applyChartCalcs, type CalcSeries } from '../analysis/tableCalc';
 import type { ChartData } from '../analysis/vizData';
 import type { ValueLabelPairs } from '../analysis/valueLabels';
 import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
@@ -152,19 +153,21 @@ function endsOn(columns: { name: string }[], rows: Cell[][], column: string): st
  * best ranked; a date axis keeps time order and never takes a top-N.
  */
 function ranked(data: ChartData, top?: number): ChartData {
-  const first = data.series[0];
+  const first: CalcSeries | undefined = data.series[0];
   if (!first) return data;
+  const by = first.raw ?? first.values; // the figures, never a calculated one: rank 1 is the largest
   const order = data.labels.map((_, i) => i).sort((a, b) => {
-    const va = first.values[a];
-    const vb = first.values[b];
+    const va = by[a];
+    const vb = by[b];
     if (typeof va !== 'number') return typeof vb === 'number' ? 1 : a - b;
     if (typeof vb !== 'number') return -1;
     return vb - va || a - b;
   });
   const keep = top && top > 0 ? order.slice(0, top) : order;
+  const pick = <T>(xs: T[]): T[] => keep.map((i) => xs[i]);
   return {
-    labels: keep.map((i) => data.labels[i]),
-    series: data.series.map((s) => ({ name: s.name, values: keep.map((i) => s.values[i]) })),
+    labels: pick(data.labels),
+    series: data.series.map((s: CalcSeries) => ({ name: s.name, values: pick(s.values), ...(s.calc && s.raw ? { raw: pick(s.raw), calc: s.calc } : {}) })),
   };
 }
 
@@ -204,7 +207,7 @@ function withTermRefs(built: Built, x: AnswerTerms): Built {
 async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null, terms: Pick<AnswerTerms, 'steps' | 'labels'> = { steps: [], labels: [] }, hidden: ReadonlySet<string> = new Set()): Promise<Built | Failure> {
   const asMeasures = { category: asked.category, values: asked.measures };
   const snapshot = (await pendingMeasureRefusal(projectId, asMeasures)) ?? (await snapshotMeasureRefusal(projectId, asMeasures, asked.datasetId)) // part 5's shapes first; extract and Live alike
-    ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up (D7)
+    ?? (await figureRefusal(projectId, asked.datasetId, { ...asMeasures, ...(asked.series ? { series: asked.series } : {}) }, asked.chartType)); // a waterfall, Pareto or 100% stack adds its measure up, as a running total or a share does (D7)
   if (snapshot) return { ok: false, reason: snapshot };
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here. A term's steps join the lock: never skipped.
   const sayable = loose ? await labelsSaid(projectId, asked.datasetId, asked.filters) : undefined; // value labels a just-written spec may say (part 3 D6)
@@ -236,7 +239,8 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
 
   const catCol = ds.columns.find((c) => c.name === spec.category);
   const isDate = !!catCol && catCol.type === 'date';
-  let data: ChartData = { labels: viz.data.labels, series: viz.data.series };
+  // A measure's "Calculate as" (ai/answerCalc): on the aggregated grid, by the function a visual's reply goes through (`visual:data`).
+  let data: ChartData = applyChartCalcs({ labels: viz.data.labels, series: viz.data.series }, encoding, viz.category, viz.warnings);
   if (!isDate) data = ranked(data, spec.top);
 
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);

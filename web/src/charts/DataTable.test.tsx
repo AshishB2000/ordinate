@@ -18,4 +18,16 @@ describe('<DataTable>', () => {
     expect(within(rows[0]!).getAllByRole('cell').map((c) => c.textContent)).toEqual(['1,234.57', '1']);
     expect(within(rows[1]!).getAllByRole('cell').map((c) => c.textContent)).toEqual(['n/a', '2']);
   });
+
+  it('says a table calculation as its kind, the figure it came from beside it (an answer card\'s "calc")', () => {
+    render(
+      <DataTable
+        label="Share by region"
+        data={{ labels: ['East', 'West'], series: [{ name: 'Revenue', values: [0.25, 0.75], raw: [1000, 3000], calc: { kind: 'pct_of_total', along: 'across' } }, { name: 'Orders', values: [3, 4] }] }}
+      />,
+    );
+    const rows = within(screen.getByRole('table', { name: 'Share by region' })).getAllByRole('row').slice(1);
+    expect(within(rows[0]!).getAllByRole('cell').map((c) => c.textContent)).toEqual(['25.0% of total · 1.0K', '3']);
+    expect(within(rows[1]!).getAllByRole('cell').map((c) => c.textContent)).toEqual(['75.0% of total · 3.0K', '4']);
+  });
 });

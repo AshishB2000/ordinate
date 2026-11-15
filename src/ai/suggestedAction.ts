@@ -188,6 +188,14 @@ const BUILD_KINDS =
   'where <preset> is EXACTLY one of: clean, executive, dense, dark. Lowercase, one word, ' +
   'nothing else. Pick the closest of the four; never name a colour, never write CSS, and never ' +
   'invent a preset. If none of the four fits what they asked for, use kind "none" instead. ';
+// A measure's "Calculate as" (./answerCalc): the engine's table calculations, by their ids (analysis/tableCalc TABLE_CALC_KINDS).
+const ANSWER_CALC =
+  'A measure may carry "calc", which the app works out after the totals: running_total; pct_of_total (each one\'s share); ' +
+  'diff or pct_diff (against the previous period); rank_competition (1 is the largest; rank_dense leaves no gaps); percentile; ' +
+  'moving_avg or moving_sum (with "window":<periods>, default 3); yoy (against the same period a year earlier, so never filter ' +
+  'the date to a single year); index (the first period is 100). Write {"column":"<column>","aggregation":"sum","calc":"<kind>"}, ' +
+  'or "calc":{"kind":"moving_avg","window":3}. Every kind but pct_of_total, the ranks and percentile needs a date category; a ' +
+  'calc never goes with "top"; "along":"down" works it out down the split instead of along the category. ';
 const ANSWER_SPEC =
   'Use "answer" when the question can be answered with ONE chart of the data in the FACTS ' +
   '("revenue by region last quarter", "top 5 products by profit", "how did West do vs East"). ' +
@@ -202,6 +210,7 @@ const ANSWER_SPEC =
   'last_n_years with "n":<N> ("last 30 days" is last_n_days with n 30; "last month" is the previous whole month); ' +
   'leave "column" out to use a metric\'s own date; for "X vs Y" filter the ' +
   'category with "in". A glossary term from the FACTS is the filter {"term":"<term name>"}. "top" keeps the N largest. The spec NEVER contains a computed number. ' +
+  ANSWER_CALC +
   'When the FACTS end with a PREVIOUS ANSWER and the question CONTINUES it — adds or changes a filter, ' +
   'the split, a measure, the chart type, the period or the top-N — the spec is {"refine":true,…} carrying ' +
   'ONLY what changes: the app keeps the rest, so do not repeat it. A filter in it replaces the one on the ' +
