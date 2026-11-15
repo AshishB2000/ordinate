@@ -96,7 +96,7 @@ export async function liveChart(projectId: string, meta: DatasetMeta, encoding: 
   const mirrors = meta.live?.semantic ? await mirrorsOf(projectId, meta.id, (enc.values || []).map((v) => v && v.metricId)) : null;
   const r = await liveVizData(projectId, meta.id, encoding, filters, mirrors ? { mirrors: externalsOf(mirrors) } : {});
   if (!r.ok) return r;
-  return { ok: true, data: mirrors ? relabelled(r.data, enc, mirrors) : r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category, asOf: r.asOf };
+  return { ok: true, data: mirrors ? relabelled(r.data, enc, mirrors) : r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category, asOf: r.asOf, ...(r.notes ? { notes: r.notes } : {}) };
 }
 
 /** `computeCardMetric`'s number on a Live dataset, dated. Throws `LiveFigureError` when there is none to give. */
@@ -105,7 +105,7 @@ export async function liveCardMetric(
   meta: DatasetMeta,
   spec: { column: string; aggregation: MetricAggregation } | { metric: string },
   filters: FilterStep[],
-): Promise<{ ok: true; value: number | null; asOf: AsOf }> {
+): Promise<{ ok: true; value: number | null; asOf: AsOf; notes?: string[] }> {
   const touched = ['column' in spec ? spec.column : undefined, ...(filters || []).map((f) => f && f.column)].filter((n): n is string => typeof n === 'string');
   // A layer's metric is the layer's figure, never converted here.
   const pre = await preRefusal(projectId, meta, touched,
@@ -113,5 +113,5 @@ export async function liveCardMetric(
   if (pre) throw new LiveFigureError(pre);
   const r = await liveMetric(projectId, meta.id, spec, filters);
   if (!r.ok) throw new LiveFigureError(r);
-  return { ok: true, value: r.value, asOf: r.asOf };
+  return { ok: true, value: r.value, asOf: r.asOf, ...(r.notes ? { notes: r.notes } : {}) };
 }

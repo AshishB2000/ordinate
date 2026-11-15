@@ -69,6 +69,7 @@ import { refuseLayer } from './semantic/semanticRefusals';
 import type { SemanticQuery } from './semantic/semanticQuery';
 import { alignRows, answerColumns } from './semantic/semanticQuery';
 import { hiddenColumnsFor } from '../../data/rowAccess';
+import * as dateRange from './liveDateRange';
 
 // The one door every Live statement goes through (./liveWarehouse.ts): L2.4's
 // lookups and L2.5's profile send theirs through it too, never runLiveBound.
@@ -88,13 +89,13 @@ export interface LiveFailure {
   reason?: LiveRefusalCode | 'tooManyGroups' | 'dailyLimit' | 'asOf' | 'fx' | 'snapshot';
 }
 
-/** `vizDataFor`'s success shape, dated. */
+/** `vizDataFor`'s success shape, dated. `notes`: what the figure says beside it (a required date range, ./liveDateRange). */
 export type LiveVizReply =
-  | { ok: true; data: ChartData; recommendedShape: string; warnings: string[]; category: CategoryInfo; asOf: AsOf }
+  | { ok: true; data: ChartData; recommendedShape: string; warnings: string[]; category: CategoryInfo; asOf: AsOf; notes?: string[] }
   | LiveFailure;
 
 /** `computeCardMetric`'s number, dated. */
-export type LiveMetricReply = { ok: true; value: number | null; warnings: string[]; asOf: AsOf } | LiveFailure;
+export type LiveMetricReply = { ok: true; value: number | null; warnings: string[]; asOf: AsOf; notes?: string[] } | LiveFailure;
 
 /**
  * What `computeCard` builds a card from: the ranked, cut chart (do NOT rank it
@@ -264,8 +265,8 @@ async function layerRows(t: LiveTarget, q: SemanticQuery, shared: AbortSignal): 
   return rows;
 }
 
-/** Resolve the target, adapt, ask: the part every door shares. `names`: the columns the question reads. */
-async function run(projectId: string, datasetId: string, names: string[], adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; t: LiveTarget } | LiveFailure> {
+/** Resolve the target, adapt, add a range the table requires (./liveDateRange), ask: the part every door shares. `names`: the columns the question reads. */
+async function run(projectId: string, datasetId: string, names: string[], adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; notes: string[]; t: LiveTarget } | LiveFailure> {
   const found = await liveTarget(projectId, datasetId);
   if (!found.ok) return unavailable(found);
   const t = found.target;
@@ -276,7 +277,8 @@ async function run(projectId: string, datasetId: string, names: string[], adapt:
   if (layer) return layer;
   const a = adapt(t);
   if (!a.ok) return refused(dialectOf(t), a);
-  return { asked: await ask(t, a.ir), warnings: a.warnings, t };
+  const r = dateRange.withRequiredRange(a.ir, t.requiredDates, t.env.base);
+  return { asked: await ask(t, r.ir), warnings: a.warnings, notes: r.notes, t };
 }
 
 // ── The three doors ──────────────────────────────────────────────────────────
@@ -295,6 +297,7 @@ export async function liveVizData(projectId: string, datasetId: string, encoding
     warnings: r.warnings.concat(o.warnings),
     category: o.chart.category,
     asOf: r.asked.asOf,
+    ...(r.notes.length ? { notes: r.notes } : {}),
   };
 }
 
@@ -312,7 +315,7 @@ export async function liveMetric(
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
   if (o.kind !== 'metric') return refused(dialectOf(r.t), refuse('badQuery'));
-  return { ok: true, value: o.value, warnings: r.warnings.concat(o.warnings), asOf: r.asked.asOf };
+  return { ok: true, value: o.value, warnings: r.warnings.concat(o.warnings), asOf: r.asked.asOf, ...(r.notes.length ? { notes: r.notes } : {}) };
 }
 
 /** An AI answer's chart: `computeCard`'s question on a Live dataset — ranked and cut in the warehouse. */
@@ -323,7 +326,7 @@ export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: Adap
   const o = r.asked.outcome;
   if (o.kind !== 'chart') return refused(dialectOf(r.t), refuse('badQuery'));
   const warnings = r.warnings.concat(o.warnings);
-  const notes = o.chart.category.note ? warnings.concat(o.chart.category.note) : warnings.slice();
+  const notes = (o.chart.category.note ? warnings.concat(o.chart.category.note) : warnings.slice()).concat(r.notes);
   return {
     ok: true,
     data: o.chart.data,

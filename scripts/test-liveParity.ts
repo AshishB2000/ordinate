@@ -109,6 +109,8 @@ async function main(): Promise<void> {
 
   await pins.run({ pid: x.pid, ok, live: mx.parityKit(x, fx.runDuck).live, env: report.envs.typed, stored: x.stored, engine: fx.duckEngine });
   await (require('./liveParityBase') as typeof import('./liveParityBase')).baseFilterCase(x, fx.duckEngine.run, report.envs.typed, ok);
+  // A date range on a key column as a half-open range on the raw column (compileFilter RAW_RANGE_DIALECTS, off for every warehouse).
+  await (require('./liveParityRawRange') as typeof import('./liveParityRawRange')).rawRangeCase(x, fx.duckEngine.run, report.envs.typed, ok);
   // Live calculated fields (part 8 step 04) against the same formulas as Prepare steps on a copy.
   await (require('./liveParityCalcs') as typeof import('./liveParityCalcs')).calcCase(x, fx.duckEngine.run, report.envs.typed, ok);
 }

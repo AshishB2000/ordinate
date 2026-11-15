@@ -655,3 +655,6 @@ scripts/**/*.js
 /src/analysis/geoMatch.js
 /src/analysis/sizeLayout.js
 /src/analysis/themeModel.js
+
+# The warehouse nightly's pruning measurement (scripts/warehousePruning.ts)
+warehouse-pruning.json

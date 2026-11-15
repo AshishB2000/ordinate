@@ -400,6 +400,15 @@ pull request and against a ClickHouse container every night. Each run also check
 fields: 400 formulas against the formula engine, row by row (2,000 on PostgreSQL and ClickHouse), and
 the matrix's calculated-field charts and KPIs.
 
+Last, it **measures date-filter pruning** (`scripts/warehousePruning.ts`): one count over a month
+of a partitioned or clustered table's date column, compiled the way Live sends it today (the column
+cast to a date) and as a plain range on the raw column, priced without running either — a BigQuery
+dry run's bytes, a Snowflake `SYSTEM$EXPLAIN_PLAN_JSON`'s partitions and bytes. The figures go to
+the run's summary and, as JSON, to `WAREHOUSE_PRUNING_OUT` (default `warehouse-pruning.json`; the
+nightly keeps it as the `warehouse-pruning` artifact). They never fail the run; an error does.
+[docs/assistant/00-design.md](../assistant/00-design.md), "Live date filters on key columns", says how
+to read them.
+
 The **semantic parity matrix** runs the same way against Cube every night: a Cube server over
 PostgreSQL seeded with the fixture, both in containers (`scripts/fixtures/cube/compose.yml`, the
 image pinned by digest), asked by `scripts/test-semanticCubeLive.ts` with `CUBE_URL` and
@@ -444,6 +453,9 @@ in [configuration.md](configuration.md).
 | `BIGQUERY_DATASET` | no | The default dataset, listed first. |
 | `BIGQUERY_LOCATION` | no | Where jobs run, as in the connection form. |
 | `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below. Leave it unset unless you want that probe; never grant write access to the account a real connection uses. |
+| `SNOWFLAKE_PRUNING_TABLE`, `SNOWFLAKE_PRUNING_COLUMN` | both or neither | The table (as the connection names it) and its date or timestamp column the pruning measurement prices, ideally a clustering key. Without them, Snowflake's measurement is skipped. |
+| `BIGQUERY_PRUNING_TABLE`, `BIGQUERY_PRUNING_COLUMN` | both or neither | The same for BigQuery. Without them, a public table partitioned by hour that requires a partition filter is priced. |
+| `SNOWFLAKE_PRUNING_MONTH`, `BIGQUERY_PRUNING_MONTH` | no | The month priced, `YYYY-MM`. Defaults to the public table's own month, else last month. |
 
 Run it locally:
 

@@ -37,7 +37,10 @@
 // statements through its runBound against the extract path, over a fixture
 // held in literals — the accounts are never written. With SNOWFLAKE_SEMANTIC_VIEW,
 // Snowflake then runs the semantic parity matrix against that view
-// (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip.
+// (warehouseLiveSnowflakeSemantic.ts); without it, that part prints its skip. Last, the pruning
+// measurement (warehousePruning.ts): the same date-filtered count in the cast form and the raw-range
+// form, bytes or partitions from a dry run / EXPLAIN, printed and written as JSON — never failed on
+// its numbers. It reads *_PRUNING_TABLE, *_PRUNING_COLUMN and *_PRUNING_MONTH (see that file).
 //
 //   npm run build:ts && node scripts/test-warehouseLive.js      (with the variables above)
 
@@ -65,7 +68,7 @@ type Plan<T> = { run: true; config: T } | { run: false; why: string; missing?: s
 
 function snowflakePlan(env: Env): Plan<SnowflakeConfig> {
   const names = ['SNOWFLAKE_ACCOUNT', 'SNOWFLAKE_USER', 'SNOWFLAKE_WAREHOUSE', 'SNOWFLAKE_ROLE', 'SNOWFLAKE_PRIVATE_KEY', 'SNOWFLAKE_PRIVATE_KEY_PASSPHRASE',
-    'SNOWFLAKE_PAT', 'SNOWFLAKE_DATABASE', 'SNOWFLAKE_SCHEMA', 'SNOWFLAKE_SEMANTIC_VIEW'];
+    'SNOWFLAKE_PAT', 'SNOWFLAKE_DATABASE', 'SNOWFLAKE_SCHEMA', 'SNOWFLAKE_SEMANTIC_VIEW', 'SNOWFLAKE_PRUNING_TABLE', 'SNOWFLAKE_PRUNING_COLUMN', 'SNOWFLAKE_PRUNING_MONTH'];
   if (!names.some(env)) return { run: false, why: 'no SNOWFLAKE_* variable is set' };
   const missing = ['SNOWFLAKE_ACCOUNT', 'SNOWFLAKE_USER', 'SNOWFLAKE_WAREHOUSE', 'SNOWFLAKE_ROLE'].filter((n) => !env(n));
   if (!env('SNOWFLAKE_PRIVATE_KEY') && !env('SNOWFLAKE_PAT')) missing.push('SNOWFLAKE_PRIVATE_KEY or SNOWFLAKE_PAT');
@@ -87,7 +90,7 @@ function snowflakePlan(env: Env): Plan<SnowflakeConfig> {
 }
 
 function bigqueryPlan(env: Env): Plan<BigqueryConfig> {
-  const names = ['BIGQUERY_KEY_JSON', 'BIGQUERY_PROJECT', 'BIGQUERY_DATASET', 'BIGQUERY_LOCATION', 'BIGQUERY_SCRATCH_DATASET'];
+  const names = ['BIGQUERY_KEY_JSON', 'BIGQUERY_PROJECT', 'BIGQUERY_DATASET', 'BIGQUERY_LOCATION', 'BIGQUERY_SCRATCH_DATASET', 'BIGQUERY_PRUNING_TABLE', 'BIGQUERY_PRUNING_COLUMN', 'BIGQUERY_PRUNING_MONTH'];
   if (!names.some(env)) return { run: false, why: 'no BIGQUERY_* variable is set' };
   if (!env('BIGQUERY_KEY_JSON')) return { run: false, why: 'only some BIGQUERY_* variables are set', missing: ['BIGQUERY_KEY_JSON'] };
   const config: BigqueryConfig = { keyJson: env('BIGQUERY_KEY_JSON') };
@@ -168,6 +171,25 @@ async function main(): Promise<void> {
       }
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
       if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
+      // The pruning measurement (warehousePruning.ts): numbers only, never a failure on them.
+      const pruning = require('./warehousePruning') as typeof import('./warehousePruning');
+      const measures = [
+        ['Snowflake', 'snowflake', sf.run ? () => (require('./warehouseLiveSnowflake') as typeof import('./warehouseLiveSnowflake')).snowflakeConnection(sf.config) : null, pruning.measureSnowflake],
+        ['BigQuery', 'bigquery', bq.run ? () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).bigqueryConnection(bq.config) : null, pruning.measureBigquery],
+      ] as const;
+      for (const [name, wh, connOf, measure] of measures) {
+        if (!connOf) continue;
+        const p = pruning.pruningPlan(env, wh);
+        if (!p.run) {
+          if (p.missing) ok(`${name} pruning: its variables are set together (missing: ${p.missing.join(', ')})`, false, p.why);
+          else console.log(`skip ${name} pruning measurement: ${p.why} (scripts/warehousePruning.ts)`);
+          summary(`- ${name} pruning: ${p.missing ? '**FAILED**' : 'skipped'} — ${p.why}`);
+          continue;
+        }
+        const conn = connOf();
+        await runOne(`${name} pruning`, () => measure(conn.values, conn.secrets, p.plan));
+      }
+      pruning.writePruning();
     });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });

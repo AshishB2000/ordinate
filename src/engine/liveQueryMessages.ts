@@ -57,3 +57,8 @@ export function liveDailyLimit(limit: string): string {
 export function liveMemberDailyLimit(share: string): string {
   return t('liveQueryMessages.you_have_used_your_share_of', { share });
 }
+
+/** A question on a table that requires a date range got the default one (engine/live/liveDateRange). `period` is its name, e.g. "Last 12 months". */
+export function liveRequiredRange(period: string): string {
+  return t('liveQueryMessages.this_table_needs_a_date_range', { period });
+}

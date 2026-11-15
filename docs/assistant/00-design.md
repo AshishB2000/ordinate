@@ -168,11 +168,37 @@ must be copied first, so an editor sees *Copy returns into Ordinate?* and a view
 **Live date filters on key columns.** The compiler wraps a date column in a cast before comparing
 (`CAST(c AS DATE)` on Snowflake and Redshift, `SAFE_CAST` on BigQuery, `try_cast` on Databricks,
 `toDate32` on ClickHouse; `dateOf` in `src/engine/live/compileFilter.ts`). On a `TIMESTAMP` sort or
-partition key that may stop the warehouse skipping data. Planned: a plain half-open range on the
-raw column when it is a sort or partition key, and a date filter always added where the table
-requires one (*Last 12 months: this table needs a date range*). **Not measured yet**: measure
-pruning first (bytes scanned before and after on one Snowflake and one BigQuery table), and keep the
-Live/extract parity tests green.
+partition key that may stop the warehouse skipping data. Two parts are built
+(`src/engine/live/liveDateRange.ts`, `compileFilter.ts`):
+
+- **A required date range is always there.** When a Live dataset's source table doc says a filter on
+  one of its date columns is required (the stored fact `partition.required`, BigQuery's
+  `require_partition_filter`, or the editor's *Required filters* line naming the column), a question
+  with no filter on that column gets *Last 12 months* on it (`REQUIRED_RANGE`: the date control's
+  preset, the 12 complete months before this one) and the figure says so: *Last 12 months: this table
+  needs a date range*. It is added once, in the executor's shared step (`liveQuery` `run`), so answers,
+  charts and KPI tiles get it alike; the sentence is the chart's and tile's `notes` and the card's. A
+  question that already filters the column (its own filter, a lock or a base filter) is left alone, and
+  so is a table with no such fact. The facts are records only: no warehouse call.
+- **A half-open range on the raw column, built and OFF.** With the table's facts naming the column a
+  partition, sort or cluster key, a range can compile as `col >= start AND col < end + 1 day`, every
+  day bound, typed for the column: a DATE against a DATE, a timestamp against a DATE the engine
+  promotes in the session zone (the zone its cast reads), BigQuery's TIMESTAMP against a TIMESTAMP. A
+  date stored as text, a column that is no key, or a bound that is not an ISO day keeps the cast. The
+  switch is per dialect, `RAW_RANGE_DIALECTS`, and it is **empty**: no warehouse gets the raw form
+  until its numbers say the cast costs it. The parity suite turns it on for DuckDB and holds the raw
+  form to the extract (every period filter and boundary days) and to the cast form on TIMESTAMP and
+  TIMESTAMPTZ keys under a New York session, across both DST days (`scripts/liveParityRawRange.ts`).
+
+**The numbers** come from the warehouse nightly (`scripts/warehousePruning.ts`): the same one-month
+count compiled in both forms, priced by a BigQuery dry run (bytes processed) and a Snowflake
+`SYSTEM$EXPLAIN_PLAN_JSON` (partitions assigned of total, bytes assigned). Neither runs the query, and
+the numbers never fail the run. They are in the run's summary and the `warehouse-pruning` artifact.
+BigQuery measures a public table partitioned by hour that requires a partition filter; Snowflake
+measures once `SNOWFLAKE_PRUNING_TABLE` and `_COLUMN` name a table clustered on a timestamp. How to read
+them: the raw range well under the cast form (or the cast form refused for want of partition
+elimination) means that dialect's cast stops pruning; run the live parity matrix on that engine with
+the dialect in `RAW_RANGE_DIALECTS`, and add it if both agree. Equal means leave the dialect alone.
 
 ## Access is given to teams
 
@@ -539,7 +565,10 @@ source table can answer, a question needing an undefined link, and a question on
   Gemini `gemini-embedding-001` / `gemini-embedding-2`, or a gateway's id; 768 numbers each,
   normalized by the server; Anthropic has none. A Test action checks one sample. Details, the cost
   note and the rank merge: `docs/ai-models/00-plan.md`, "Meaning search".
-- **Date-filter pruning (phase A).** Unmeasured; see above. If the cast doesn't hurt pruning on a
-  given warehouse, leave that dialect alone.
+- **Date-filter pruning (phase A).** Built, switched off, and measured each night; see above. No
+  dialect is in `RAW_RANGE_DIALECTS` until its nightly numbers show the cast costing bytes. If the cast
+  doesn't hurt pruning on a given warehouse, leave that dialect alone. Not covered yet: a Live lookup
+  (the answers' case fix, latest-date probes) gets no required range, and a required partition column
+  that is not a declared date (an integer range, BigQuery's `_PARTITIONTIME`) gets none either.
 - **Folders and `/p/` links (phase E).** A published dashboard keeps working for its audience;
   whether moving its folder should warn about published links too.
