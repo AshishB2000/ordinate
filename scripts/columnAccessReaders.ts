@@ -88,6 +88,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'drivers:explain': 'NET',
   'drivers:explainAlert': 'NET',
   'drivers:explainPoint': 'NET',
+  'editors:ask': 'META', // the caller's own words to the project's editors; no cell, label or figure of a dataset
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',

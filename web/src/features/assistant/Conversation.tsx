@@ -19,6 +19,7 @@ import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { mineModel } from './api';
+import { AskAnEditor } from './AskAnEditor';
 import { AgentPicker } from './AgentPicker';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
@@ -99,6 +100,8 @@ function Turns({ c }: { c: Conversation }) {
           <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
         </div>
       )}
+      {/* Outcome D for a viewer: nothing they may read has it, so they ask the editors (./AskAnEditor). */}
+      {!canEdit && c.getData && !pending && <AskAnEditor projectId={pid} question={c.turns.findLast((t) => t.role === 'user')?.text ?? ''} reason="missing" />}
       {canEdit && c.rebuildOffer && !pending && (
         <div className={s.getData} data-testid="dock-rebuild">
           <Link className={buttonClass('primary', 'sm')} to={`/analyses/${pid}/rebuild${c.context.kind === 'dataset' && c.context.id ? `?dataset=${c.context.id}` : ''}`}>

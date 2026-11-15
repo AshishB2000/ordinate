@@ -160,6 +160,17 @@ if (!dbUrl) {
     assert.match((await also.getByRole('link').first().getAttribute('href')) ?? '', new RegExp(`^/analyses/${pid}/[0-9a-f-]{36}$`), 'the sample dashboard shows this dataset');
     await shots('dock-also-on');
     await page.keyboard.press('Escape');
+    // Keep it as an alert (step 8): the existing dialog on the server's subject and threshold; nothing is saved here.
+    await card.getByRole('button', { name: 'Alert me' }).click();
+    const alerting = page.getByRole('dialog', { name: 'Alert me…' });
+    await alerting.getByText(/together, under this answer's filters\.$/).waitFor();
+    assert.match(await alerting.getByRole('textbox', { name: 'Value' }).inputValue(), /^-?\d/, 'a threshold to start from, the server\'s');
+    for (const theme of ['light', 'dark'] as const) { // the dialog is modal: the dock behind it is hidden, so no scroll to the card
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(SCREENS, `dock-alert-me-${theme}.png`), fullPage: true });
+    }
+    await page.keyboard.press('Escape');
     const save = card.getByRole('button', { name: 'Save as visual' });
     await save.waitFor(); // this member may edit (dev sign-in is an admin)
     await shots('dock-save-visual');

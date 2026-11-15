@@ -406,6 +406,7 @@ export const MAIN_FILES = [
   'src/app/ossieMessages.ts',
   'src/ai/answerSnapshotMessages.ts',
   'src/server/folderMessages.ts',
+  'src/analysis/answerAlertMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

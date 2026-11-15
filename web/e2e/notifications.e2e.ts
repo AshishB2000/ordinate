@@ -126,5 +126,21 @@ if (!adminUrl) {
     } finally {
       await b.close();
     }
+
+    // "Ask an editor" (docs/assistant/00-design.md, phase G): B sends what the Assistant's composer
+    // sends (its states are Vitest's: web/src/features/assistant/askEditor.test.tsx). A's open tab
+    // shows the notice, A's bell lists it under "Asked for data", and the row opens Connections.
+    await page.goto('/');
+    await settled(page);
+    const asked = await call(BEA, 'editors:ask', { projectId: pid, question: 'Returns by reason last month', reason: 'missing', note: 'For the Q4 review' });
+    assert.equal(asked.ok, true, JSON.stringify(asked));
+    await page.getByText('Bea asked the editors of Shared KPIs for data').waitFor();
+    await page.getByRole('button', { name: /^Notifications: \d+ unseen$/ }).click();
+    const inbox = page.getByRole('dialog', { name: 'Notifications' });
+    await inbox.getByRole('button', { name: /Bea asked for data, new: Returns by reason last month\. Opens Connections/ }).waitFor();
+    await screensInPlace(page, SCREENS, 'notifications-asked');
+    await inbox.getByRole('button', { name: /Bea asked for data/ }).click();
+    await page.waitForURL(new RegExp(`/connections/${pid}$`));
+    console.log(`rpc: A's Home + bell ${rpc.loads.at(-1)?.rpcs ?? 0}`);
   });
 }

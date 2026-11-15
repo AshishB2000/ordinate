@@ -83,8 +83,8 @@ above is how a folder like HR gets Metabase's stricter behaviour.
 | D16 | **Publish records what the copy reads** (`published.reads`: dataset ids) and **refuses to start sharing a dataset the publisher cannot open**: a dataset in the new `reads` that the publisher cannot open and the previous copy did not read is refused (`folder`, reason `publish`). The dialog lists the folders whose data the dashboard will show outside them. | Publishing is the moment a dataset's figures leave its folder. Nobody grants what they cannot see. |
 | D17 | **Recipients and pushes narrow to who can open the anchor**: subscription and email recipients, alert pushes, refresh pushes, mention pickers and notices, request notices. Published `/p/` pages and signed embeds are unchanged: their audience is the link's. | A `/p/` page is a snapshot whose audience was chosen at Publish (resolves the Assistant design's open question; the move warning names the link). |
 | D18 | **Writes check the item's folder at Edit**; creating needs Edit on the target folder. Saved visuals, metrics, terms and verified questions are written with Edit on their dataset's folder; adding a card to a dashboard needs its dataset open (view). New items land in the folder the request names, else their first parent dataset's folder (a copy, a SQL or composed dataset, a duplicate), else Everyone. | "Can edit: also add, change and move items in it." A derived dataset never leaks a restricted parent into Everyone. |
-| D19 | **Connection tables are per team, per project, apart from folders** (`team_tables`, 0035). Nothing is ticked by default. They decide what a project **viewer** may ask about; editors and admins answer from every table, as in phase D. | Metabase keeps data access apart from collections. Tables are where data comes from; folders hold what people made. |
-| D20 | **Dashboard requests are Postgres rows** (`dashboard_requests`, 0036) holding the answers' chart forms, never a figure. Nothing is created until an editor approves. | A request is a per-person item listed across projects by state, like a mention. "Nothing else is created yet" stays literally true, and no dashboard reader learns a card that points at a table with no dataset. |
+| D19 | **Connection tables are per team, per project, apart from folders** (`team_tables`, 0036). Nothing is ticked by default. They decide what a project **viewer** may ask about; editors and admins answer from every table, as in phase D. | Metabase keeps data access apart from collections. Tables are where data comes from; folders hold what people made. |
+| D20 | **Dashboard requests are Postgres rows** (`dashboard_requests`, 0037) holding the answers' chart forms, never a figure. Nothing is created until an editor approves. | A request is a per-person item listed across projects by state, like a mention. "Nothing else is created yet" stays literally true, and no dashboard reader learns a card that points at a table with no dataset. |
 | D21 | **No setting.** Readers are inert until a folder exists; the channels that make folders merge only after a release with the readers is tagged (D22). Nothing is ticked by default; request email is off until a person turns it on. | A flag would not make a rollback safe; release order does. |
 | D22 | **The readers ship a release before the writers.** E1–E6 make every reader apply folders while nothing can create one; E7 (the folder channels and screens) merges after a release with E1–E6 is tagged. | The p4-01a pattern in `docs/server/upgrade.md`: a pod that cannot apply a folder must never run beside one that can make it. |
 
@@ -223,7 +223,7 @@ paths that checked Edit first (D18).
 
 | Index | Anchor | WHERE for a restricted caller |
 |---|---|---|
-| ⌘K `search_entries` (0022) | new `anchor_kind`, `anchor_id` (0033): a dataset or dashboard id; `project` for connections; `many` for reports, stories and alerts without a dashboard | `NOT EXISTS (placement of lower(anchor) in a folder <> ALL($open))`; a dashboard row's audience by level: `editor` rows where the folder is in `$edit`, `viewer` rows where it is in `$viewOnly`; `many` rows checked by id after ranking, a page at a time; `NULL` anchors (an older pod's row) never returned. `INDEX_VERSION` 3 rebuilds each source once. |
+| ⌘K `search_entries` (0022) | new `anchor_kind`, `anchor_id` (0034): a dataset or dashboard id; `project` for connections; `many` for reports, stories and alerts without a dashboard | `NOT EXISTS (placement of lower(anchor) in a folder <> ALL($open))`; a dashboard row's audience by level: `editor` rows where the folder is in `$edit`, `viewer` rows where it is in `$viewOnly`; `many` rows checked by id after ranking, a page at a time; `NULL` anchors (an older pod's row) never returned. `INDEX_VERSION` 3 rebuilds each source once. |
 | Assistant `assistant_search` (0027) | `dataset_id` (a dataset's own id on its rows) | the same anti-join on `dataset_id`, in `rankedPage`, `foundItems` and `keyedItems`; table rows as today (`audience`) until E8 |
 | Verified `verified_keys` (0026) | `dataset_id` | the same anti-join in the lookup and the examples' ranking |
 | `countKinds`, `countModel` | as above | the counts are of what the caller can open (Home, `projects:overview`) |
@@ -367,7 +367,7 @@ extended with `opsEditorView` (an editor at view level reads only published copi
   plan reads (`joinPlan.planReads`). No lineage climb (a refresh reads parents as the system) and no
   relationship walk beyond the plan. `analysis:publish`, the scheduled re-publish and the Ready
   migration store it as `published.reads`; `sanitizePublished` keeps it.
-- `dashboard_reads` (0034) is derived from that field by a pure describer in the record's write
+- `dashboard_reads` (0035) is derived from that field by a pure describer in the record's write
   transaction, the 0022 pattern. A write by a pod that does not set `ordinate.folders = 'on'` fires
   a trigger that deletes that dashboard's rows and the project's marker, so an older pod can only
   narrow reach. A copy without `reads` (published before this) is computed when the marker is
@@ -384,7 +384,7 @@ extended with `opsEditorView` (an editor at view level reads only published copi
 
 ### The model
 
-`team_tables` rows (0035), per project, team and connection: a **schema** row (all its tables,
+`team_tables` rows (0036), per project, team and connection: a **schema** row (all its tables,
 those added later included) or a **table** row (the schema and name exactly as `listTables` returns
 them), each **include** or **exclude**, and on an include table row the **hidden columns**. A table
 is given to a team when it has an include table row, or an include schema row and no exclude table
@@ -472,10 +472,11 @@ row-level security on `ordinate.org` like 0020 and later, org ids `text`, ids co
 | Migration | What |
 |---|---|
 | 0032 `folders` (E1, as built) | `folders (org_id, project_id, id, parent_id NULL, name, share_figures bool default true, created_by, created_at)`, `id <> project_id`, names 1–120 characters, and a generated `parent_folder` (= `NULLIF(parent_id, project_id)`) with a foreign key to the parent, so a parent in another project and deleting a folder that has subfolders are refused (a whole subtree goes in one statement); a unique index on `(org_id, project_id, coalesce(parent_id, <the zero uuid>), lower(name))`; `folder_grants (org_id, project_id, folder_id, team_id, level CHECK IN ('view','edit'))`, PK `(org_id, project_id, folder_id, team_id)`, an index by team, with `(team_id, org_id)` → `teams` ON DELETE CASCADE and → `folders` ON DELETE CASCADE; `folder_items (org_id, project_id, kind, item_id text, folder_id, moved_by, moved_at)`, PK `(org_id, project_id, kind, item_id)`, `item_id` lowercase-checked, → `folders` ON DELETE RESTRICT; an index on `(org_id, project_id, folder_id)` |
-| 0033 `search_anchors` | `search_entries.anchor_kind`, `anchor_id` (nullable, no default rewrite) |
-| 0034 `dashboard_reads` | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; the trigger on `records` for writers without `ordinate.folders` |
-| 0035 `team_tables` | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, team → `teams` ON DELETE CASCADE |
-| 0036 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own; `users.request_email boolean NOT NULL DEFAULT false` |
+| 0033 `editor_asks` (Ask an editor, as built) | `editor_asks (org_id, user_email, id, project_id, asker, question, reason, note, created_at, seen_at)`, forced RLS; `users.request_email boolean NOT NULL DEFAULT false` ("Email me when a viewer asks for data"; dashboard requests reuse it) |
+| 0034 `search_anchors` | `search_entries.anchor_kind`, `anchor_id` (nullable, no default rewrite) |
+| 0035 `dashboard_reads` | `dashboard_reads (org_id, project_id, analysis_id, dataset_id)`, an index by dataset; `dashboard_reads_built (org_id, project_id, version)`; the trigger on `records` for writers without `ordinate.folders` |
+| 0036 `team_tables` | `team_tables (org_id, project_id, team_id, conn_id, schema, table_name NULL, include bool, hidden text[], granted_by, granted_at)`, unique on `(org_id, project_id, team_id, conn_id, schema, coalesce(table_name, ''))`, team → `teams` ON DELETE CASCADE |
+| 0037 `dashboard_requests` | the table above with indexes for an approver's open list and a requester's own (`users.request_email`, off by default, is already there: Ask an editor's 0033 made it, and requests use the same switch) |
 
 `kind` in `folder_items` has no CHECK: the app validates it (`dataset`, `dashboard`), so a later
 placed kind needs no constraint change.
@@ -493,7 +494,7 @@ placed kind needs no constraint change.
   ignores the tables and shows everything. If a rollback is unavoidable, a project admin first moves
   every item back to Everyone (**Share → Folders → Move everything to Everyone**, part of E7), which
   makes the rollback widen nothing. Rolling back between releases that both carry the readers is
-  safe: the tables stay, and an older pod's dashboard writes only narrow reach (the 0034 trigger).
+  safe: the tables stay, and an older pod's dashboard writes only narrow reach (the 0035 trigger).
 
 ## The PR plan
 
@@ -505,13 +506,13 @@ Each PR is one review, with its tests in the same PR, and classifies the contrac
 | E1 | 0032; `src/server/authz/folders.ts` (resolver, placements, `openerEmails`, `wholeProject`); `FolderError`, the route's 409, the web's `refusalOf`, the catalog sentences; `scripts/folderReaders.ts` with every read and write contract | `test-folderAccess`; safety net section 1 |
 | E2 | The stores and the doors for datasets, dashboards and what follows them: caller-aware lists and reads by id, per-dashboard audience (D8), `folderGate` in the doors, the storage net, `folder:of` and the bookmark sentences | safety net 2–5 and 7 with planted rows; `test-dashboardDraftsViewer` + `opsEditorView`; the row-policy and column-access nets unchanged |
 | E3 | Everything around them: comments, mentions, Trash, versions, lineage, topics, recent, starred, numbers, Home, `projects:overview`, pushes, recipients, MCP | safety net 9–10; `test-mentions` with a mention of someone who cannot open the target |
-| E4 | Indexes: 0033 and ⌘K anchors, the WHERE on `assistant_search` and `verified_keys`, counts | safety net 6; `test-searchIndex`, `test-assistantSearch`, `test-verifiedIndex` per caller; `test-askBudget` ceilings (+1 at most); `test-askNoProjectLists` with an Ops viewer |
-| E5 | Reach: `publishedReads`, `published.reads`, 0034 and its trigger and rebuild, the publish refusal, `share_figures` | `test-dashboardReads`; safety net 4 |
+| E4 | Indexes: 0034 and ⌘K anchors, the WHERE on `assistant_search` and `verified_keys`, counts | safety net 6; `test-searchIndex`, `test-assistantSearch`, `test-verifiedIndex` per caller; `test-askBudget` ceilings (+1 at most); `test-askNoProjectLists` with an Ops viewer |
+| E5 | Reach: `publishedReads`, `published.reads`, 0035 and its trigger and rebuild, the publish refusal, `share_figures` | `test-dashboardReads`; safety net 4 |
 | E6 | Writes: every `EDIT` and `CREATE` contract, `folderId` on create inputs, derived defaults, model import and export, pipelines, relationships | safety net 8 |
 | — | **Release tag** with E1–E6 (D22), and the upgrade.md section | |
 | E7 | `src/api/folders.ts`: `folder:tree`, `folder:create`, `folder:rename`, `folder:delete`, `folder:setShareFigures`, `folder:access`, `folder:grant`, `folder:moveImpact`, `folder:move`; the rail, chips, Move dialog, Share → Folders, Admin → Teams → Folders, empty states; *Move everything to Everyone* | `test-folderChannels` (depth, names, delete-empty, admin-only top level, the move hash); safety net 11; `folders.e2e.ts` in both themes |
-| E8 | Connection tables: 0035, `teamTables:*`, the Tables screen, index keys for tables, the viewer answer and Explore path (with or after phase D) | `test-teamTables` (include, exclude, schema, union, hidden columns); safety net: an unticked table's name in no viewer reply or prompt |
-| E9 | Dashboard requests: 0036, `src/api/requests.ts`, Home rows, the review page, pushes and email | `test-dashboardRequests`; `requests.e2e.ts` |
+| E8 | Connection tables: 0036, `teamTables:*`, the Tables screen, index keys for tables, the viewer answer and Explore path (with or after phase D) | `test-teamTables` (include, exclude, schema, union, hidden columns); safety net: an unticked table's name in no viewer reply or prompt |
+| E9 | Dashboard requests: 0037, `src/api/requests.ts`, Home rows, the review page, pushes and email | `test-dashboardRequests`; `requests.e2e.ts` |
 
 E2 to E6 can land in any order after E1, but each must be in before the release tag. E8 and E9 do
 not depend on E7 and may merge after the tag in either order.

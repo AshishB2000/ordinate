@@ -1,7 +1,8 @@
 // @mentions over RPC (docs/notifications/00-design.md §5.10-5.13): the picker's
 // people, the caller's "Mentioned you" list on Home and its seen marks, and the
 // caller's own "Email me when someone mentions me". Every one is the CALLER's;
-// the address is ctx()'s, never the input's.
+// the address is ctx()'s, never the input's. "Ask an editor" rides the same path
+// (./asks.ts): its send, its rows in the bell, and "Email me when a viewer asks for data".
 
 import * as comments from '../../app/comments';
 import type { Comment } from '../../app/commentModel';
@@ -12,6 +13,7 @@ import { aDeletedRecord, mentionsOff } from '../mentionMessages';
 import { registry } from '../rpc';
 import { currentReaders, labelFor, mentionsOn, peopleIn } from './people';
 import { emailMe, listMine, markGone, markSeen, setEmailMe, unseenCount } from './store';
+import { askEditors, listAsks, requestEmail, setRequestEmail, type AskReason } from './asks';
 
 /** People the picker offers. */
 export const PICKER_MAX = 8;
@@ -104,15 +106,19 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
 
 export function register(): void {
   registry.handle('comment:mentionable', async (_e, { projectId, q }: { projectId: string; q: string }) => ({ ok: true as const, ...(await mentionable(projectId, q)) }));
-  registry.handle('mentions:list', async () => ({ ok: true as const, ...(await homeMentions()) }));
+  // The bell's two lists of the caller's own: comments that name them, and viewers' asks of a project they edit (./asks).
+  registry.handle('mentions:list', async () => ({ ok: true as const, ...(await homeMentions()), asks: mentionsOn() ? await listAsks(HOME_MAX) : [] }));
   registry.handle('mentions:seen', async (_e, input: { projectId: string; id: string } | { through: string }) => {
     if (!mentionsOn()) return { ok: true as const };
     await markSeen('through' in input ? { through: input.through } : { projectId: input.projectId, pieceId: input.id });
     return { ok: true as const };
   });
-  registry.handle('mentions:prefs', async () => ({ ok: true as const, available: mentionsOn(), mail: mailReady(), emailMe: mentionsOn() ? await emailMe() : false }));
-  registry.handle('mentions:setPrefs', async (_e, { emailMe: on }: { emailMe: boolean }) => {
+  registry.handle('mentions:prefs', async () => ({
+    ok: true as const, available: mentionsOn(), mail: mailReady(), emailMe: mentionsOn() ? await emailMe() : false, requestEmail: mentionsOn() ? await requestEmail() : false,
+  }));
+  registry.handle('mentions:setPrefs', async (_e, input: { emailMe: boolean } | { requestEmail: boolean }) => {
     if (!mentionsOn()) return { ok: false as const, error: mentionsOff() };
-    return { ok: await setEmailMe(on === true) };
+    return { ok: 'requestEmail' in input ? await setRequestEmail(input.requestEmail === true) : await setEmailMe(input.emailMe === true) };
   });
+  registry.handle('editors:ask', async (_e, input: { projectId: string; question: string; reason: AskReason; note?: string }) => askEditors(input.projectId, input));
 }

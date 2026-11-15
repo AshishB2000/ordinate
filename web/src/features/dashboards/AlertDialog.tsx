@@ -3,7 +3,8 @@
 // figure itself (the server's dashboard:metric, so the dialog is provably about
 // the number on screen), then Threshold / Change / Anomaly, and Target when the metric has one. "Test" asks the
 // server whether the rule would fire now; Save stores it. Whether a rule fires
-// is always decided by the server (src/analysis/alerts.ts).
+// is always decided by the server (src/analysis/alerts.ts). An Assistant answer opens it too
+// (assistant/AlertFromAnswer.tsx), with the server's subject, a threshold to start from and what it covers.
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -31,6 +32,10 @@ export interface AlertSubject {
   filters: Step[];
   analysisId?: string;
   cardId?: string;
+  /** A threshold to start from, the server's (`alerts:fromAnswer`): an Assistant answer's "Alert me". */
+  threshold?: { op: string; value: number };
+  /** What the one number covers, in the server's words, when it is not the card on screen. */
+  scope?: string;
 }
 
 /** A KPI card as the dialog's subject; null when it has nothing to watch. A period or funnel metric's card has no column: its metric is watched. */
@@ -77,8 +82,9 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
   const dates = (cols.data?.columns ?? []).filter((c) => c.type === 'date');
   const write = useAlertWrite(projectId);
   const [mode, setMode] = useState<AlertRule['compare']>(existing?.compare ?? 'threshold');
-  const [op, setOp] = useState<string>(existing?.threshold?.op ?? '<');
-  const [value, setValue] = useState(existing?.threshold ? String(existing.threshold.value) : '');
+  const [op, setOp] = useState<string>(existing?.threshold?.op ?? subject.threshold?.op ?? '<');
+  const start = existing?.threshold ?? subject.threshold;
+  const [value, setValue] = useState(start ? String(start.value) : '');
   const [dir, setDir] = useState<string>(existing?.change?.direction ?? 'down');
   const [pct, setPct] = useState(existing?.change ? String(existing.change.pct) : '10');
   const [vs, setVs] = useState<string>(existing?.change?.vs ?? 'previous_refresh');
@@ -177,6 +183,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
         <span className={s.alLabel}>{label}</span>
         <span className={s.alValue}>{current.isPending ? '…' : (current.data?.display ?? (cur === null ? '—' : fmtWith(cur, 'auto')))}</span>
       </div>
+      {subject.scope && <p className={s.note}>{subject.scope}</p>}
       <Tabs value={mode} onValueChange={(v) => setMode(v as AlertRule['compare'])}>
         <TabList label="Kind of alert">
           <Tab value="threshold">Threshold</Tab>
