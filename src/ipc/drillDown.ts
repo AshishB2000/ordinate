@@ -23,6 +23,7 @@ import { drillInputs } from './drillScope';
 import type { DrillRequest } from './drillScope';
 import { resolveDrill } from './visuals';
 import { gateColumnsReply } from './columnDoors';
+import { onSourceTable } from './sourceAnswers';
 import { drillFailed, drillFinestDate, drillHiddenLevel, drillLastLevel, drillNoHierarchy, drillNotThisChart } from './drillMessages';
 
 /** `label`: the mark as people read it (a value label, a period); `next`: the next level's column, or the date grain. */
@@ -69,10 +70,11 @@ export async function drillDown(projectId: string, datasetId: string, req: Drill
 }
 
 export function register(): void {
-  ipcMain.handle('visual:drillDown', async (_e, { projectId, datasetId, encoding, filters, mark, params }: Record<string, unknown> = {}): Promise<DrillDownReply> => {
+  // `table`: a source table's chart (Explore, phase D), drilled inside its Live view (./sourceAnswers onSourceTable).
+  ipcMain.handle('visual:drillDown', async (_e, { projectId, datasetId, encoding, filters, mark, params, table }: Record<string, unknown> = {}): Promise<DrillDownReply> => {
     try {
       const [p, d] = [String(projectId ?? ''), String(datasetId ?? '')];
-      return await gateColumnsReply(p, d, async () => [], [encoding, filters], (hidden) => drillDown(p, d, { encoding, filters, mark, params }, hidden));
+      return await onSourceTable(p, d, table, () => gateColumnsReply(p, d, async () => [], [encoding, filters], (hidden) => drillDown(p, d, { encoding, filters, mark, params }, hidden)));
     } catch (err) {
       return { ok: false, error: (err instanceof Error && err.message) || drillFailed() };
     }

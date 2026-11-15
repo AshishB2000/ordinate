@@ -331,7 +331,7 @@ async function channels(): Promise<void> {
   ok('get: built from it, in dataset order', g.ok === true && g.datasets.map((d: Reply) => d.id).join() === [liveId, copyId].join() && g.datasets.map((d: Reply) => d.name).join() === 'Live,Live (copy)', JSON.stringify(g.datasets));
   ok('get: rebuilt key by key, no dismissed', JSON.stringify(Object.keys(g.doc).sort()) === '["docId","guide","owner","refresh","requiredFilters","table","updatedAt","updatedBy"]' && g.doc.table === T && g.doc.owner === 'Data' && g.doc.docId === s.docId);
   ok('get: the tag is the stored one, the stamp is the caller', g.tag === s.tag && g.doc.updatedBy === ORG_A.user.email);
-  ok('get: the connection it is on, and what a read can do', JSON.stringify(g.connection) === JSON.stringify({ connId: C, name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, label: 'Fake warehouse (tests)', readsFacts: true }));
+  ok('get: the connection it is on, what a read can do, and that it is asked live (Explore, phase D)', JSON.stringify(g.connection) === JSON.stringify({ connId: C, name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, label: 'Fake warehouse (tests)', readsFacts: true, live: true }));
   const lst = (await post('sourceTable:list', { projectId: P })).value;
   ok('list: the row is now documented and keeps its datasets', ((r) => r.docId === s.docId && r.owner === 'Data' && r.datasetIds.length === 2)(lst.connections.find((c: Reply) => c.connId === C).rows.find((r: Reply) => r.table === T)) && !lst.todo.some((t: Reply) => t.table === T && t.kind === 'used_no_doc'));
 

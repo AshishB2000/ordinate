@@ -40,9 +40,11 @@ const LIVE_POOL = POOL.filter((t) => !LIVE_OFF_CHARTS.has(t));
 
 type Data = ChartDataShape & { geo?: MapGeo | null };
 
-export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdit, question, onChange, hierarchies, ladder }: {
+export function Answer({ projectId, datasetId, table, datasetName, live, isDate, canEdit, question, onChange, hierarchies, ladder }: {
   projectId: string;
   datasetId: string;
+  /** A source table's connection (`datasetId` its doc): every figure is asked of it. */
+  table?: string;
   datasetName: string;
   live: boolean;
   /** The group-by is a date (the server's declared type, from explore:suggest). */
@@ -58,7 +60,10 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
   const asked = (live ? LIVE_POOL : POOL).includes(question.chartType) ? question.chartType : '';
   // A waterfall, Pareto, 100% stack… draws the server's figures, which come only when the ask names the type (docs/chart-figures).
-  const ask: Ask = useMemo(() => ({ projectId, datasetId, encoding: e, filters: liveFilters(question.filters), ...figureAsk(asked) }), [projectId, datasetId, e, question.filters, asked]);
+  const ask: Ask = useMemo(
+    () => ({ projectId, datasetId, ...(table ? { table } : {}), encoding: e, filters: liveFilters(question.filters), ...figureAsk(asked) }),
+    [projectId, datasetId, table, e, question.filters, asked],
+  );
   const answer = useAnswer(ask);
   const colors = useColorMap(projectId);
   const [extras, setExtras] = useState<string[]>([]);
@@ -82,7 +87,7 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const labels = useRef(new Map<string, string>());
   const at = (column: string, value: string | number) => `${datasetId}\u0000${column}\u0000${value}`;
   const onLabel = (column: string, value: string | number, label: string) => void labels.current.set(at(column, value), label);
-  const drill = useExploreDrill({ projectId, datasetId, question, reply: stale ? undefined : reply, chartType: current, hierarchies, ladder, onChange, onLabel });
+  const drill = useExploreDrill({ projectId, datasetId, table, question, reply: stale ? undefined : reply, chartType: current, hierarchies, ladder, onChange, onLabel });
   const crumbs = stale ? null : crumbsOf(question, hierarchies, (c, v) => labels.current.get(at(c, v)) ?? v);
 
   /** A region map names its regions (the level the server saw in the labels); leaving one drops them. */
@@ -131,7 +136,8 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
         )}
         <div className={answer.isFetching && data ? `${s.chart} ${s.dim}` : s.chart} aria-busy={answer.isFetching || undefined}>
           {refusal !== null ? (
-            <LiveRefusal refusal={answer.error} projectId={projectId} datasetId={datasetId} />
+            // A table has no copy to make here: it is kept as a dataset first (the header).
+            <LiveRefusal refusal={answer.error} projectId={projectId} datasetId={table ? undefined : datasetId} />
           ) : answer.isError ? (
             <ErrorState compact heading={3} title="This question could not be answered" message={answer.error.message} onRetry={() => void answer.refetch()} />
           ) : !reply || !data || (FIGURE_TYPES.has(current) && reply.ask !== figureAskKey(current)) ? (

@@ -103,6 +103,18 @@ export async function inSourceTable<T>(projectId: string, spec: Pick<AnswerSpec,
   return strict ? v : fn();
 }
 
+/**
+ * A channel's call on a source table target (Explore, phase D): `table` names the connection and `datasetId` the table's
+ * doc, as `AnswerSpec.table` does. `fn` runs inside the table's view, so every door it reaches answers the view as a Live
+ * dataset; with no `table`, `fn` as it is. A table that cannot be answered from is `{ ok: false, error }` and `fn` never
+ * runs: a viewer's before any doc, connection or warehouse read (`sourceView` asks the role first).
+ */
+export async function onSourceTable<T>(projectId: string, datasetId: unknown, table: unknown, fn: () => Promise<T>): Promise<T | { ok: false; error: string; needs?: 'copy' }> {
+  if (table === undefined) return fn();
+  const v = await sourceView(projectId, String(table), String(datasetId ?? ''));
+  return v.ok ? withSourceViews(projectId, [v.table.view], fn) : { ok: false, error: v.reason, ...(v.needs ? { needs: v.needs } : {}) };
+}
+
 /** The tables an editor's Home question offers (./homeFacts `homePicks`, once per ask). None for anything else. */
 async function homeTables(projectId: string, context: { kind?: string } | undefined, question: string): Promise<SourceTable[]> {
   if (context?.kind || !(await seesSourceNames(projectId))) return []; // a viewer's ask reads nothing more

@@ -305,6 +305,7 @@ export const WRITES: Readonly<Record<string, FolderClass>> = {
   'events:importCsv': 'PROJECT',
   'events:save': 'PROJECT',
   'events:setCalendars': 'PROJECT',
+  'explore:keepTable': 'CREATE', // Explore's Keep as a dataset: the Live dataset of a source table (phase D), as answer:keepTable
   'format:colors:assign': 'PROJECT',
   'format:colors:palette': 'PROJECT',
   'format:colors:reset': 'PROJECT',

@@ -3,18 +3,24 @@
 // either the suggested questions or the answer and its table. The question is
 // the URL's (./useExploreSpec); every edit is a new URL, so a link reproduces
 // it and Back undoes it. The browser computes nothing.
+//
+// On a source table (an editor's, Assistant phase D) every call names it (`table`), the header offers Keep as a
+// dataset, which makes its Live dataset and opens it with the same question; a table on a connection not asked live
+// asks nothing and says it must be copied in first.
 
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router';
 import type { DatasetSummary } from '../../api/datasets';
 import { PageHead } from '../../app/blocks';
-import { Button } from '../../ui/Button';
+import { Button, buttonClass } from '../../ui/Button';
 import { DialogClose } from '../../ui/Dialog';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { Sheet } from '../../ui/Sheet';
 import { Skeleton, SkeletonRows } from '../../ui/Skeleton';
-import { ErrorState } from '../../ui/States';
+import { EmptyState, ErrorState } from '../../ui/States';
+import { toast } from '../../ui/Toast';
 import { useCanEdit } from '../projects/api';
 import { navFor, useNavigation, type NavTopic } from '../model/navigation';
 import { endAtHidden } from '../visuals/drill/drillApi';
@@ -22,7 +28,7 @@ import { write as rememberTopic } from '../model/topics/rememberTopic';
 import { dateLadder } from '../../../../src/analysis/drillLevels.ts';
 import { ScopedChip } from '../data/RowAccessOff';
 import { Answer } from './Answer';
-import { useExploreFields, type Suggestion } from './api';
+import { useExploreFields, useKeepTable, type ExploreTable, type Suggestion } from './api';
 import { AskBox } from './AskBox';
 import { FieldList } from './FieldList';
 import { Question, roleWord } from './Question';
@@ -36,17 +42,24 @@ export function Explorer({
   projectId,
   datasets,
   dataset,
+  tables = [],
+  table,
   topics = [],
   topic,
 }: {
   projectId: string;
   datasets: readonly DatasetSummary[];
-  dataset: DatasetSummary;
+  /** The dataset on screen — or, with `table`, that table as one (its doc's id, its name, Live when it is asked live). */
+  dataset: Pick<DatasetSummary, 'id' | 'name' | 'mode' | 'scoped'>;
+  /** The editor's source tables, offered after the datasets; `table` is the one on screen. */
+  tables?: readonly ExploreTable[];
+  table?: ExploreTable;
   /** The project's topics (`model:navigation`), and the one narrowing this page: it only orders and narrows lists (D15). */
   topics?: readonly NavTopic[];
   topic?: NavTopic;
 }) {
-  const fields = useExploreFields(projectId, dataset.id, topic?.id);
+  const copyFirst = !!table && !table.live; // nothing to ask: its rows must be copied in first
+  const fields = useExploreFields(projectId, dataset.id, topic?.id, table?.connId, !copyFirst);
   const { question, setQuestion } = useExploreSpec();
   const [, setParams] = useSearchParams();
   const canEdit = useCanEdit(projectId);
@@ -59,17 +72,43 @@ export function Explorer({
   const name = dataset.name || 'Untitled dataset';
   const kindOf = (column: string) => list.find((f) => f.name === column)?.kind;
 
-  // Another dataset is another question: its fields differ.
-  const pickDataset = (id: string) =>
+  // Another dataset is another question: its fields differ. A table's option is `<connection>:<doc>`.
+  const pickDataset = (value: string) =>
     setParams((p) => {
       const n = new URLSearchParams(p);
-      n.set('dataset', id);
+      const [conn, doc] = value.includes(':') ? value.split(':') : [null, value];
+      n.set('dataset', doc);
+      if (conn) n.set('table', conn);
+      else n.delete('table');
       n.delete('q');
       return n;
     });
+  const tableValue = (t: ExploreTable) => `${t.connId}:${t.docId}`;
+  // Keep as a dataset: the table's Live dataset, opened in its place with the same question (its fields are the table's).
+  const client = useQueryClient();
+  const keep = useKeepTable(projectId);
+  const keepTable = (t: ExploreTable) =>
+    keep.mutate(t, {
+      onSuccess: ({ datasetId }) =>
+        void (async () => {
+          await client.refetchQueries({ queryKey: ['dataset:list', projectId] }); // the page finds it in the list it opens from
+          void client.invalidateQueries({ queryKey: ['sourceTable:list', projectId] });
+          toast(`Kept “${t.table}” as a Live dataset.`, { kind: 'success' });
+          setParams((p) => {
+            const n = new URLSearchParams(p);
+            n.set('dataset', datasetId);
+            n.delete('table');
+            return n;
+          });
+        })(),
+      onError: (err) => toast(err.message, { kind: 'error' }),
+    });
   // The topic's datasets in its order, then the open one if it is outside; everything else stays one click away ("All datasets").
   const listed = topic ? topic.datasets.flatMap((t) => datasets.filter((d) => d.id === t.id)) : datasets;
-  const options = listed.some((d) => d.id === dataset.id) ? listed : [...listed, dataset];
+  const options = [
+    ...(table || listed.some((d) => d.id === dataset.id) ? listed : [...listed, dataset]).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' })),
+    ...tables.map((t) => ({ value: tableValue(t), label: t.table, hint: t.live ? `Table on ${t.connection}` : 'Copy first' })),
+  ];
   const topicFields = topic?.datasets.find((t) => t.id === dataset.id)?.fields;
   const pickTopic = (id: string) =>
     setParams((p) => {
@@ -93,8 +132,8 @@ export function Explorer({
           )}
         </div>
       )}
-      <Select label="Dataset" size="sm" value={dataset.id} options={options.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))} onValueChange={pickDataset} />
-      {fields.isPending ? (
+      <Select label="Dataset" size="sm" value={table ? tableValue(table) : dataset.id} options={options} onValueChange={pickDataset} />
+      {copyFirst ? null : fields.isPending ? (
         <SkeletonRows rows={9} label="Loading the fields" />
       ) : fields.isError ? (
         <ErrorState compact heading={3} title="The fields could not be read" message={fields.error.message} onRetry={() => void fields.refetch()} />
@@ -116,13 +155,32 @@ export function Explorer({
                 Live
               </span>
             )}
+            {table && (
+              <span className={s.liveTag} data-source-table="">
+                <Icon name="table" size={12} />
+                Warehouse table, not a dataset
+              </span>
+            )}
             {dataset.scoped && <ScopedChip columns={!!fields.data?.hidden.length} />}
           </>
         }
+        actions={
+          table?.live && (
+            <Button variant="primary" icon="plus" loading={keep.isPending} onClick={() => keepTable(table)}>
+              Keep as a dataset
+            </Button>
+          )
+        }
         sub={
-          <p>
-            Ask <b className={s.subName}>{name}</b> a question: pick its fields, or start from a suggestion. Every figure is computed by the app.
-          </p>
+          copyFirst ? (
+            <p>
+              <b className={s.subName}>{name}</b> is a table on {table.connection}.
+            </p>
+          ) : (
+            <p>
+              Ask <b className={s.subName}>{name}</b> a question: pick its fields, or start from a suggestion. Every figure is computed by the app.
+            </p>
+          )
         }
       />
       <AskBox projectId={projectId} topic={topic} />
@@ -131,37 +189,55 @@ export function Explorer({
           {rail}
         </aside>
         <div className={s.main}>
-          <Question projectId={projectId} datasetId={dataset.id} fields={list} question={question} onChange={setQuestion} onFields={() => setSheet(true)} />
-          {isComplete(question) ? (
-            <Answer
-              projectId={projectId}
-              datasetId={dataset.id}
-              datasetName={name}
-              live={live}
-              isDate={list.find((f) => f.name === e.category)?.kind === 'date'}
-              canEdit={canEdit}
-              question={question}
-              onChange={setQuestion}
-              hierarchies={hierarchies}
-              ladder={nav.data?.dateLadder ?? dateLadder(false)}
-            />
+          {copyFirst ? (
+            <EmptyState
+              icon="database"
+              title={`Copy ${table.table} into Ordinate first`}
+              actions={
+                <Link className={buttonClass('primary')} to={`/connections/${projectId}/${table.connId}`}>
+                  <Icon name="plug" />
+                  <span>Open {table.connection}</span>
+                </Link>
+              }
+            >
+              {`It is on ${table.connection}, a connection Ordinate does not ask live, so its rows have to be copied in before Explore can answer from it.`}
+            </EmptyState>
           ) : (
             <>
-              {(e.category || e.values.length > 0) && (
-                <p className={s.prompt} role="status">
-                  <Icon name="info" size={16} />
-                  {e.values.length ? 'Choose what to group by, and the answer appears here.' : 'Add a measure, and the answer appears here.'}
-                </p>
+              <Question projectId={projectId} datasetId={dataset.id} table={table?.connId} fields={list} question={question} onChange={setQuestion} onFields={() => setSheet(true)} />
+              {isComplete(question) ? (
+                <Answer
+                  projectId={projectId}
+                  datasetId={dataset.id}
+                  table={table?.connId}
+                  datasetName={name}
+                  live={live}
+                  isDate={list.find((f) => f.name === e.category)?.kind === 'date'}
+                  canEdit={canEdit && !table} // a table's answer is kept as a dataset first (the header), then saved
+                  question={question}
+                  onChange={setQuestion}
+                  hierarchies={hierarchies}
+                  ladder={nav.data?.dateLadder ?? dateLadder(false)}
+                />
+              ) : (
+                <>
+                  {(e.category || e.values.length > 0) && (
+                    <p className={s.prompt} role="status">
+                      <Icon name="info" size={16} />
+                      {e.values.length ? 'Choose what to group by, and the answer appears here.' : 'Add a measure, and the answer appears here.'}
+                    </p>
+                  )}
+                  {fields.data ? (
+                    <Suggestions projectId={projectId} datasetId={dataset.id} table={table?.connId} datasetName={name} live={live} suggestions={fields.data.suggestions} onPick={take} />
+                  ) : fields.isPending ? (
+                    <div className={cards.cards} role="status" aria-busy="true" aria-label="Loading the suggestions">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <Skeleton key={i} className={cards.cardSkel} />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               )}
-              {fields.data ? (
-                <Suggestions projectId={projectId} datasetId={dataset.id} datasetName={name} live={live} suggestions={fields.data.suggestions} onPick={take} />
-              ) : fields.isPending ? (
-                <div className={cards.cards} role="status" aria-busy="true" aria-label="Loading the suggestions">
-                  {Array.from({ length: 6 }, (_, i) => (
-                    <Skeleton key={i} className={cards.cardSkel} />
-                  ))}
-                </div>
-              ) : null}
             </>
           )}
         </div>

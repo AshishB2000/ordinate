@@ -62,7 +62,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'dataSearch:query': 'SKIP',
   'dataset:columns': 'META',
   'dataset:composePreview': 'NET',
-  'dataset:distinct': 'LOCKED',
+  'dataset:distinct': 'LOCKED', // A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'dataset:list': 'REDACT',
   'dataset:liveSchema': 'REDACT',
   'dataset:page': 'LOCKED',
@@ -78,7 +78,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',
-  'explore:suggest': 'META',
+  'explore:suggest': 'META', // A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'folder:of': 'META', // whether a dataset or dashboard id is in a folder the caller cannot open: no row, no figure, no name
   'format:colors:get': 'REDACT',
   'formula:check': 'EXPLICIT',
@@ -207,9 +207,9 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'versions:figures': 'DOOR',
   'versions:get': 'EXPLICIT',
   'versions:list': 'META',
-  'visual:data': 'DOOR',
-  'visual:drillDown': 'DOOR', // the steps behind a mark; its grain is the chart's own answer, read through vizDataFor
-  'visual:dataBatch': 'DOOR',
+  'visual:data': 'DOOR', // A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
+  'visual:drillDown': 'DOOR', // the steps behind a mark; its grain is the chart's own answer, read through vizDataFor. A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
+  'visual:dataBatch': 'DOOR', // A source table target (`table` per item, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'visual:get': 'REDACT',
   'visual:list': 'META',
   'visual:preview': 'DOOR',

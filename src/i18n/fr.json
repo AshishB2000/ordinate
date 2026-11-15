@@ -812,6 +812,7 @@
   "semanticMessages.this_connection_has_no_semantic_layer": "Cette connexion n’a pas de couche sémantique à partir de laquelle ajouter un jeu de données.",
   "semanticMessages.this_question_needs_the_latest_date": "Cette question a besoin de la date la plus récente ou des valeurs enregistrées de {dataset}, que {layer} ne peut pas consulter.",
   "semanticMessages.your_access_to_is_limited_to": "Votre accès à {dataset} est limité à certaines lignes, et {layer} ne peut pas appliquer exactement cette limite, donc aucun chiffre n’est affiché.",
+  "sourceAnswerMessages.a_warehouse_table_has_no_list": null,
   "sourceAnswerMessages.has_no_link_to_yet_so": "{from} n’a pas encore de lien avec {to}, ils ne peuvent donc pas être combinés. Vérifiez le lien ci-dessous.",
   "sourceAnswerMessages.is_on_a_connection_ordinate_does": "{table} se trouve sur une connexion qu’Ordinate n’interroge pas en direct : il faut d’abord la copier dans Ordinate.",
   "sourceAnswerMessages.keep_this_answer_as_a_dataset": "Conservez d’abord cette réponse comme jeu de données : une réponse lue directement dans une table de l’entrepôt n’est pas enregistrée telle quelle.",

@@ -16,9 +16,11 @@ import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { readTopic, topicForReaders } from '../analysis/topics';
 import { hiddenColumnsFor } from '../data/rowAccess';
 import { isExternalDefinition, listMetrics } from '../analysis/metrics';
+import { onSourceTable } from './sourceAnswers';
 
 export function register(): void {
-  ipcMain.handle('explore:suggest', async (_e, { projectId, datasetId, topicId }: { projectId?: string; datasetId?: string; topicId?: string } = {}) => {
+  // `table`: a source table's view (./sourceAnswers onSourceTable), its fields its doc's facts as a Live dataset declares them.
+  ipcMain.handle('explore:suggest', (_e, { projectId, datasetId, topicId, table }: { projectId?: string; datasetId?: string; topicId?: string; table?: string } = {}) => onSourceTable(String(projectId ?? ''), datasetId, table, async () => {
     const meta = await datasets.getDatasetMeta(String(projectId ?? ''), String(datasetId ?? ''));
     if (!meta) return { ok: false, error: liveDatasetMissing() };
     const hidden = [...(await hiddenColumnsFor(String(projectId), meta.id))];
@@ -30,5 +32,5 @@ export function register(): void {
     const fields = t && (await topicForReaders(String(projectId), t.rec)).topic.datasets.find((d) => d.id === meta.id)?.fields; // as readers get it: gone fields left out
     if (!fields) return { ok: true, ...all };
     return { ok: true, ...all, suggestions: exploreSuggest(meta.columns.filter((c) => fields.includes(c.name)), layer).suggestions };
-  });
+  }));
 }

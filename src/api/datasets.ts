@@ -190,6 +190,8 @@ export const datasets = {
       search: z.string().max(200).optional(),
       // Parent picks of a cascading picker (p6-05a): plain filter steps, narrowed server side (ipc/distinctNarrow).
       filters: z.array(z.looseObject({ type: z.literal('filter'), column: z.string().max(512), op: z.string().max(16) })).max(6).optional(),
+      // A source table's column (Explore, phase D): `datasetId` its doc, `table` its connection (src/ipc/sourceAnswers.ts onSourceTable).
+      table: Uuid.optional(),
     }),
     project: byProjectId,
   }),

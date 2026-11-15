@@ -59,6 +59,7 @@ import { filledPcts } from '../data/profileView';
 import { refreshLive } from './liveDatasets';
 import { isLive, isLiveDatasetError } from '../data/liveDataset';
 import { liveDistinct } from './liveProfile';
+import { onSourceTable } from './sourceAnswers';
 
 /**
  * A dataset as a grid draws it: name, row count and typed columns — never the
@@ -474,7 +475,8 @@ export function register() {
   // This exists so the renderer stops hydrating a whole table to collect at most
   // 200 options. Never throws; an unreadable dataset yields no values, which the
   // caller already renders as "no values to filter on".
-  ipcMain.handle('dataset:distinct', async (_e, { projectId, datasetId, column, limit, search, filters }: any = {}) => {
+  // `table`: a source table's column (Explore, phase D), read inside its Live view: a view has no sample, so it says so.
+  ipcMain.handle('dataset:distinct', (_e, { projectId, datasetId, column, limit, search, filters, table }: any = {}) => onSourceTable(projectId, datasetId, table, async () => {
     try {
       const col = typeof column === 'string' ? column : '';
       const cap = typeof limit === 'number' && limit > 0 ? limit : MAX_DISTINCT;
@@ -498,7 +500,7 @@ export function register() {
       if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no values" would be a silent answer
       return { values: [], total: 0 };
     }
-  });
+  }));
 
   // ── One column's median, for the column-profile panel ─────────────────────
   //

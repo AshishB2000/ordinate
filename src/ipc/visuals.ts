@@ -61,6 +61,7 @@ import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
 import { withValueLabels } from './valueLabelReplies';
+import { onSourceTable } from './sourceAnswers';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -643,12 +644,13 @@ export function register() {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
   }));
-  ipcMain.handle('visual:data', (_e, args: any = {}) => vizData(args));
+  // `table`: a source table's question (Explore, phase D), asked inside its Live view (./sourceAnswers onSourceTable).
+  ipcMain.handle('visual:data', (_e, { table, ...args }: any = {}) => onSourceTable(args.projectId, args.datasetId, table, () => vizData(args)));
   // Server: several charts of ONE project in one round trip (a page of tiles —
   // web/src/api/visuals.ts batches the requests a page makes in one tick). Each
   // item is exactly a `visual:data` request, answered by the same function, in order.
   ipcMain.handle('visual:dataBatch', async (_e, { projectId, items }: any = {}) =>
-    Promise.all((Array.isArray(items) ? items : []).map((it: any) => vizData({ ...it, projectId }))));
+    Promise.all((Array.isArray(items) ? items : []).map(({ table, ...it }: any) => onSourceTable(projectId, it.datasetId, table, () => vizData({ ...it, projectId })))));
 
   // ── The rows behind one mark (drill-down) ────────────────────────────────
   //

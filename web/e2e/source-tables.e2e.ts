@@ -15,6 +15,10 @@
 //   5. The Assistant (phase D): an answer read straight from the table, in the dock, says it is a warehouse table and
 //      offers only Keep as a dataset; kept, it is drawn on the new Live dataset with Save as visual (dock-source-*.png);
 //      and the checked-link card of outcome E, laid on the conversation (dock-link-*.png).
+//   6. Explore (phase D): the table picked as if it were a dataset, its fields and a question answered Live through its
+//      view, every figure the Live dataset's own; a table on a connection not asked live says to copy it in and asks
+//      nothing; Keep as a dataset opens the new Live dataset with the same question (explore-source-*.png); and at
+//      phone width the answer fits (explore-source-phone-*.png).
 //   Both themes of each state are written to __screens__/model-sources*.png.
 //
 //   npm --prefix web run e2e -- source-tables
@@ -22,7 +26,8 @@
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
 import { e2e, screens, screensInPlace, settled, withLiveDataset, type Session } from './fixtures.ts';
-import { phoneFits } from './phoneFits.ts';
+import { PHONE, phoneFits } from './phoneFits.ts';
+import { encodeQuestion } from '../src/features/explore/spec.ts';
 
 withLiveDataset();
 
@@ -310,3 +315,85 @@ e2e('source tables: an editor answered straight from the table, then kept as a d
   await checked.waitFor({ state: 'detached' });
   await page.unroute('**/api/rpc/copilot%3Ahistory');
 });
+
+const BY_REGION = { chartType: 'column', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' as const }] }, filters: [] };
+
+/** Explore on the table, asking `q` when given. */
+const exploreAt = (P: string, C: string, q?: typeof BY_REGION) => `/explore?project=${P}&dataset=${docId}&table=${C}${q ? `&q=${encodeQuestion(q)}` : ''}`;
+
+e2e('source tables: Explore on the table, no dataset, then kept as one', async (s) => {
+  // Assistant phase D in Explore (docs/assistant/00-design.md, "Explore, as built"): the table's fields from its facts, a
+  // question answered Live through its in-memory view, Keep as a dataset making the Live dataset Explore then opens.
+  const { page } = s;
+  const { P, C } = ids(s);
+  const liveId = s.server.sample.live?.datasetId;
+  assert.ok(docId && liveId, 'test 1 read the table; the server has its Live dataset');
+  const asked = channels(page);
+  await page.goto(exploreAt(P, C));
+  await ready(page);
+  await page.getByText('Warehouse table, not a dataset').waitFor();
+  await page.getByRole('heading', { name: 'Start with a question' }).waitFor();
+  const rail = page.getByRole('complementary', { name: 'Fields' });
+  await rail.getByRole('button', { name: 'amount', exact: true }).waitFor();
+  await screens(page, 'explore-source-table');
+
+  // A question, answered Live: the table's figures are the Live dataset's (the server's own reply to the same question).
+  await page.goto(exploreAt(P, C, BY_REGION));
+  await ready(page);
+  await page.getByRole('heading', { level: 2, name: 'Total amount by region' }).waitFor();
+  await page.locator('[data-chart-type="column"] canvas').waitFor();
+  const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+  const live = (await (await page.request.post(`${s.server.base}/api/rpc/visual:data`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId: P, datasetId: liveId, encoding: BY_REGION.encoding }] } })).json()) as { data: { labels: string[] } };
+  const table = page.getByRole('table', { name: 'Total amount by region, as a table' });
+  assert.ok(live.data.labels.length === 4, JSON.stringify(live.data.labels));
+  for (const label of live.data.labels) await table.getByRole('rowheader', { name: label, exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Save as visual' }).count(), 0, 'nothing to save until it is a dataset');
+  assert.ok(!asked.includes('dataset:copyLive') && !asked.includes('visual:save'), 'no copy, no save');
+  await screens(page, 'explore-source-answer');
+
+  // A table on a connection not asked live: the page says to copy it in and asks nothing about it.
+  await page.route('**/api/rpc/sourceTable%3Alist', async (r) => {
+    const res = await r.fetch();
+    const j = (await res.json()) as { connections: { live?: true }[] };
+    j.connections = j.connections.map(({ live: _l, ...c }) => c);
+    await r.fulfill({ response: res, json: j });
+  });
+  const before = asked.length;
+  await page.goto(exploreAt(P, C, BY_REGION));
+  await page.getByRole('heading', { name: `Copy ${TABLE} into Ordinate first` }).waitFor();
+  await ready(page);
+  assert.deepEqual(asked.slice(before).filter((c) => c === 'explore:suggest' || c.startsWith('visual:')), [], 'a table to copy first is asked nothing');
+  await screens(page, 'explore-source-copy');
+  await page.unroute('**/api/rpc/sourceTable%3Alist');
+
+  // Keep as a dataset: the Live dataset is made and opened in its place, with the same question.
+  await page.goto(exploreAt(P, C, BY_REGION));
+  await ready(page);
+  await page.getByRole('button', { name: 'Keep as a dataset' }).click();
+  await page.waitForURL((u) => u.searchParams.get('dataset') !== docId && !u.searchParams.has('table'));
+  const kept = new URL(page.url()).searchParams;
+  assert.ok(kept.get('q'), 'the question stays');
+  await page.getByRole('button', { name: 'Save as visual' }).waitFor();
+  assert.equal(await page.getByText('Warehouse table, not a dataset').count(), 0);
+  await page.locator('[data-chart-type="column"] canvas').waitFor();
+  await ready(page);
+  await screens(page, 'explore-source-kept');
+});
+
+e2e(
+  'source tables: Explore on the table at phone width',
+  async (s) => {
+    const { page } = s;
+    const { P, C } = ids(s);
+    assert.ok(docId, 'test 1 read the table');
+    await page.goto(exploreAt(P, C, BY_REGION));
+    await ready(page);
+    await page.getByRole('heading', { level: 2, name: 'Total amount by region' }).waitFor();
+    await page.locator('[data-chart-type="column"] canvas').waitFor();
+    const misfits: string[] = [];
+    await phoneFits(page, misfits, 'Explore on a source table');
+    await screens(page, 'explore-source-phone');
+    assert.deepEqual(misfits, []);
+  },
+  { device: PHONE },
+);

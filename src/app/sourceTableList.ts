@@ -2,7 +2,7 @@
 // D4, D5): per connection, the union of the documented tables (the index) and the tables datasets are
 // built from (D9). Records only: no warehouse call, no dataset hydrated. Editor-only, like its channels.
 
-import { getConnector } from '../connectors';
+import { getConnector, isLiveOffered } from '../connectors';
 import * as connections from '../connectors/connections';
 import type { Connection } from '../connectors/connections';
 import { estimateLabel } from '../connectors/bigqueryShape';
@@ -16,7 +16,8 @@ export type SourceTodoKind = 'used_no_doc' | 'never_read' | 'no_owner' | 'no_gui
 const RANK: readonly SourceTodoKind[] = ['used_no_doc', 'never_read', 'no_owner', 'no_guide', 'stale_read'];
 
 export interface SourceRow { docId?: string; table: string; owner: string; hasGuide: boolean; readAt?: string; datasetIds: string[] }
-export interface SourceConn { connId: string; name: string; connectorId: string; label: string; readsFacts: boolean; factsWake?: true; rows: SourceRow[] }
+/** `live`: this connection is asked live (`isLiveOffered`), so Explore answers its tables with no dataset (phase D). */
+export interface SourceConn { connId: string; name: string; connectorId: string; label: string; readsFacts: boolean; factsWake?: true; live?: true; rows: SourceRow[] }
 export interface SourceTodo { connId: string; docId?: string; table: string; kind: SourceTodoKind }
 export interface UsedDataset { id: string; name: string }
 
@@ -30,7 +31,7 @@ export function readsFactsOf(def: ConnectorDef | null): boolean {
 /** A connection as the tab names it (an editor reads the stored name), with its connector's label: the tab asks no catalog. */
 export function connectionHead(c: Connection): Omit<SourceConn, 'rows'> {
   const def = getConnector(c.connectorId);
-  return { connId: c.id, name: c.name, connectorId: c.connectorId, label: def?.label ?? c.connectorId, readsFacts: readsFactsOf(def), ...(def?.factsWake ? { factsWake: true as const } : {}) };
+  return { connId: c.id, name: c.name, connectorId: c.connectorId, label: def?.label ?? c.connectorId, readsFacts: readsFactsOf(def), ...(def?.factsWake ? { factsWake: true as const } : {}), ...(isLiveOffered(def, c.values) ? { live: true as const } : {}) };
 }
 
 /** A doc as `:get` and `:read` reply, built key by key (`dismissed` never leaves). The server formats the size; the web never divides it. */
