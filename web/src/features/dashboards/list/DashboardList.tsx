@@ -3,7 +3,9 @@
 // two tabs: Published (published ones, a badge on those with edits not live yet) and Drafts (never published). A
 // viewer's gallery holds published dashboards only — the server's rule — so they get the grid alone, with no tab and
 // nothing to create. `?tab=` keeps the tab; `?new=1[&dataset=<id>]` opens the new-dashboard wizard (the palette's New
-// dashboard, a dataset page's), and the old Analyses address sends both here.
+// dashboard, a dataset page's), and the old Analyses address sends both here. With shared folders (docs/team-folders)
+// the rail sits beside the grid: a card moves by Move to… or a drag onto it, and what is made here lands in the folder
+// picked (a duplicate stays in its original's).
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -24,6 +26,7 @@ import { LineageDrawer } from '../../data/LineageDrawer';
 import { TagFilterBar, tagsOf, useActiveTag } from '../../data/tags';
 import { useCanEdit } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
+import { FolderEmpty, FolderLayout, useFolderView, type FolderView } from '../../folders/FolderView';
 import { CreateActions } from './CreateActions';
 import { DashboardCard, editPath, nameOf, refOf, type CardAsk } from './DashboardCard';
 import { DeleteDialog, RenameDialog, UnpublishDialog } from './ListDialogs';
@@ -54,6 +57,7 @@ function Grid({ label, items, tags, ...card }: {
   tags: TagIndex | undefined;
   projectId: string;
   canEdit: boolean;
+  view: FolderView;
   onAsk: (what: CardAsk, item: GalleryItem) => void;
 }) {
   const [tag, setTag] = useActiveTag();
@@ -72,13 +76,17 @@ function Grid({ label, items, tags, ...card }: {
   );
 }
 
-/** "Duplicate": the draft as it stands, as a new draft — `analysis:create` from `analysis:open`, as Save mine as a copy does. */
-async function duplicate(projectId: string, item: GalleryItem): Promise<Analysis> {
+/**
+ * "Duplicate": the draft as it stands, as a new draft — `analysis:create` from `analysis:open`, as Save mine as a copy
+ * does — in its original's folder (`folderId`) when the caller adds there, else Everyone.
+ */
+async function duplicate(projectId: string, item: GalleryItem, folderId?: string): Promise<Analysis> {
   const open = (await rpc('analysis:open', { projectId, id: item.id })) as OpenReply;
   if (!open.ok) throw new Error(failure(open, 'The dashboard could not be read.'));
   const d = open.analysis;
   const made = (await rpc('analysis:create', {
     projectId, name: `${d.name || 'Untitled dashboard'} (copy)`.slice(0, 200), sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style,
+    ...(folderId ? { folderId } : {}),
   })) as Analysis | { ok: false; error: string };
   if (!('id' in made)) throw new Error(failure(made, 'The copy could not be made.'));
   return made;
@@ -93,6 +101,7 @@ export function DashboardList({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
   // Creating, renaming, publishing and deleting are an editor's; a viewer opens and reads.
   const canEdit = useCanEdit(projectId);
+  const view = useFolderView(projectId, 'dashboard');
   const [params, setParams] = useSearchParams();
   const [wizard, setWizard] = useState<{ datasetId?: string } | null>(() => (params.get('new') ? { datasetId: params.get('dataset') ?? undefined } : null));
   useEffect(() => {
@@ -110,10 +119,11 @@ export function DashboardList({ projectId }: { projectId: string }) {
     );
   }, [params, setParams]);
   const [drafting, setDrafting] = useState<{ datasetId?: string } | null>(null);
-  const [asked, setAsked] = useState<{ what: Exclude<CardAsk, 'duplicate'>; item: GalleryItem } | null>(null);
+  const [asked, setAsked] = useState<{ what: Exclude<CardAsk, 'duplicate' | 'move'>; item: GalleryItem } | null>(null);
   const refresh = () => void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
 
-  const items = q.data ?? [];
+  const all = q.data ?? [];
+  const items = view.filter(all, (d) => d.id);
   const published = items.filter((d) => d.status !== 'draft');
   const drafts = items.filter((d) => d.status === 'draft');
   const want = params.get('tab');
@@ -130,8 +140,10 @@ export function DashboardList({ projectId }: { projectId: string }) {
     );
 
   const onAsk = (what: CardAsk, item: GalleryItem) => {
+    if (what === 'move') return view.move([{ kind: 'dashboard', id: item.id, name: item.name || 'Untitled dashboard' }]);
     if (what !== 'duplicate') return setAsked({ what, item });
-    duplicate(projectId, item).then(
+    const at = view.folderOf(item.id);
+    duplicate(projectId, item, view.canMove(item.id) && at !== projectId ? at : undefined).then(
       (made) => {
         refresh();
         pick('drafts');
@@ -156,11 +168,12 @@ export function DashboardList({ projectId }: { projectId: string }) {
   // The Assistant's doors are shut, and say why, until a model is connected (execMenu.ts gateAssistantDoors).
   const aiReady = !!key.data?.ready;
   const aiWhy = key.isPending ? 'Checking whether a model is set up…' : AI_NOT_READY;
-  const grid = { tags: tags.data, projectId, canEdit, onAsk };
+  const grid = { tags: tags.data, projectId, canEdit, onAsk, view };
 
   let body;
   if (q.isPending) body = <Loading />;
   else if (q.isError) body = <ErrorState title="Dashboards could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
+  else if (view.selected && !items.length) body = <FolderEmpty view={view} noun="dashboard" actions={canEdit && <CreateActions projectId={projectId} aiReady={aiReady} aiWhy={aiWhy} onCreate={() => setWizard({})} onDraft={() => setDrafting({})} />} />;
   else if (!items.length && canEdit) {
     body = (
       <FirstDashboard projectId={projectId} ai={key.data} aiWhy={aiWhy} datasets={datasets.data ?? []} onCreate={() => setWizard({})} onDraft={(datasetId) => setDrafting({ datasetId })} />
@@ -195,11 +208,13 @@ export function DashboardList({ projectId }: { projectId: string }) {
     <Page
       title="Dashboards"
       sub={canEdit ? 'Every dashboard starts as a draft that only editors and admins see. Publish it to show it to everyone in the project.' : 'The dashboards published in this project.'}
-      actions={canEdit && q.data?.length !== 0 && <CreateActions projectId={projectId} aiReady={aiReady} aiWhy={aiWhy} onCreate={() => setWizard({})} onDraft={() => setDrafting({})} />}
+      actions={canEdit && q.data?.length !== 0 && !(view.selected && !items.length) && <CreateActions projectId={projectId} aiReady={aiReady} aiWhy={aiWhy} onCreate={() => setWizard({})} onDraft={() => setDrafting({})} />}
     >
-      {body}
-      {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
-      {drafting && canEdit && <DraftFlow projectId={projectId} datasetId={drafting.datasetId} onClose={() => setDrafting(null)} />}
+      <FolderLayout view={view} ids={all.map((d) => d.id)} allLabel="All dashboards">
+        {body}
+      </FolderLayout>
+      {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} folderId={view.landing} onClose={() => setWizard(null)} />}
+      {drafting && canEdit && <DraftFlow projectId={projectId} datasetId={drafting.datasetId} folderId={view.landing} onClose={() => setDrafting(null)} />}
       {asked?.what === 'lineage' && <LineageDrawer projectId={projectId} type="dashboard" id={asked.item.id} name={nameOf(asked.item)} onClose={() => setAsked(null)} />}
       {asked?.what === 'rename' && <RenameDialog projectId={projectId} item={asked.item} onDone={refresh} onClose={() => setAsked(null)} />}
       {asked?.what === 'unpublish' && <UnpublishDialog projectId={projectId} item={asked.item} onClose={() => setAsked(null)} />}

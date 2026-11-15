@@ -13,6 +13,8 @@ import { GalleryPreview } from '../../analyses/GalleryPreview';
 import type { TagIndex } from '../../data/api';
 import { TagChips, tagsOf } from '../../data/tags';
 import { displayName } from '../../home/homeText';
+import { dragItem } from '../../folders/FolderRail';
+import { FolderTag, type FolderView } from '../../folders/FolderView';
 import a from '../../analyses/Analyses.module.css';
 import s from './List.module.css';
 
@@ -23,7 +25,7 @@ export const editPath = (projectId: string, id: string) => `/analyses/${projectI
 export const nameOf = (item: GalleryItem) => item.name || 'Untitled dashboard';
 
 /** What the card's ⋯ asks of the page: the steps that need a dialog or a write. */
-export type CardAsk = 'duplicate' | 'rename' | 'lineage' | 'unpublish' | 'delete';
+export type CardAsk = 'duplicate' | 'rename' | 'lineage' | 'unpublish' | 'delete' | 'move';
 
 /** "2 sheets · Published Oct 27 by Ana" for what readers see; "2 sheets · Edited 5 min ago" for a draft or unpublished edits. */
 export function metaOf(item: GalleryItem): string {
@@ -33,7 +35,7 @@ export function metaOf(item: GalleryItem): string {
   return `${sheets} · Published ${ago(item.publishedAt ?? item.updatedAt)}${by}`;
 }
 
-function editorMenu(projectId: string, item: GalleryItem, go: (to: string) => void, ask: (what: CardAsk) => void): MenuEntry[] {
+function editorMenu(projectId: string, item: GalleryItem, go: (to: string) => void, ask: (what: CardAsk) => void, movable: boolean): MenuEntry[] {
   const live = item.status !== 'draft';
   const view = viewPath(projectId, item.id);
   return [
@@ -43,6 +45,7 @@ function editorMenu(projectId: string, item: GalleryItem, go: (to: string) => vo
     { kind: 'separator' },
     { label: 'Duplicate', icon: 'copy', onSelect: () => ask('duplicate') },
     { label: 'Rename', icon: 'type-text', onSelect: () => ask('rename') },
+    ...(movable ? [{ label: 'Move to…', icon: 'folder' as const, onSelect: () => ask('move') }] : []),
     { label: 'History', icon: 'history', onSelect: () => go(`/versions/${projectId}/dashboard/${item.id}`) },
     { label: 'Lineage', icon: 'lineage', onSelect: () => ask('lineage') },
     { kind: 'separator' },
@@ -60,23 +63,27 @@ function CopyLink({ projectId, item }: { projectId: string; item: GalleryItem })
   return <IconButton icon="link" size="sm" label={`Copy link to ${nameOf(item)}`} onClick={() => void copy()} />;
 }
 
-export function DashboardCard({ projectId, item, tags, canEdit, onAsk }: {
+export function DashboardCard({ projectId, item, tags, canEdit, onAsk, view }: {
   projectId: string;
   item: GalleryItem;
   tags: TagIndex | undefined;
   canEdit: boolean;
   onAsk: (what: CardAsk, item: GalleryItem) => void;
+  /** Shared folders: the card's tag under All, Move to… and the drag onto the rail. */
+  view?: FolderView;
 }) {
   const navigate = useNavigate();
   const name = nameOf(item);
+  const movable = canEdit && !!view?.canMove(item.id);
   return (
-    <li className={a.card}>
+    <li className={a.card} draggable={movable || undefined} onDragStart={movable ? (e) => dragItem(e, { kind: 'dashboard', id: item.id, name }) : undefined}>
       <Link className={a.body} to={item.status === 'draft' ? editPath(projectId, item.id) : viewPath(projectId, item.id)}>
         <GalleryPreview projectId={projectId} item={item} />
         <span className={a.name}>{name}</span>
         <span className={a.meta}>
           {item.status === 'edited' && <Badge tone="warn">Edits not live</Badge>}
           <span>{metaOf(item)}</span>
+          {view && <FolderTag view={view} id={item.id} />}
         </span>
         <TagChips tags={tagsOf(tags, refOf(item))} />
       </Link>
@@ -86,7 +93,7 @@ export function DashboardCard({ projectId, item, tags, canEdit, onAsk }: {
             label={`${name} options`}
             align="end"
             trigger={<IconButton icon="more-horizontal" label={`${name} options`} size="sm" />}
-            items={editorMenu(projectId, item, (to) => void navigate(to), (what) => onAsk(what, item))}
+            items={editorMenu(projectId, item, (to) => void navigate(to), (what) => onAsk(what, item), movable)}
           />
         ) : (
           <CopyLink projectId={projectId} item={item} />

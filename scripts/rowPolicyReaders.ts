@@ -80,6 +80,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'events:list': 'META',
   'explore:suggest': 'META', // A source table target (`table`, Explore phase D): editors only, read inside its in-memory Live view; a viewer's is refused before any read (test-exploreSourceTables)
   'folder:of': 'META', // whether a dataset or dashboard id is in a folder the caller cannot open: no row, no figure, no name
+  'folder:tree': 'META', // folder names, levels, teams' names and which item ids sit where: no row, no figure
   'format:colors:get': 'REDACT',
   'formula:check': 'EXPLICIT',
   'formula:functions': 'META',

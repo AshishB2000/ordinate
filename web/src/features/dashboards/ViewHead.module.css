@@ -138,3 +138,10 @@
   outline-offset: -2px;
   border-radius: var(--r-sm);
 }
+/* The folder chip (docs/team-folders): which folder, and who opens it. Nothing while the project has no folders. */
+.folder {
+  margin-top: var(--sp-8);
+}
+.folder:empty {
+  display: none;
+}

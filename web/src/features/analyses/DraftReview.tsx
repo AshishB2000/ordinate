@@ -121,12 +121,12 @@ export function Review({ draft, projectId }: { draft: PlanPreview; projectId: st
  * Build an approved draft through the same `analysis:buildPlan` an Assistant proposal uses; the user's name wins.
  * `look` is the brief's: a preset id the server applies, or none for the workspace's default.
  */
-export async function buildDraft(projectId: string, draft: PlanPreview, preferredName?: string, look?: LookId | ''): Promise<string | null> {
+export async function buildDraft(projectId: string, draft: PlanPreview, preferredName?: string, look?: LookId | '', folderId?: string): Promise<string | null> {
   const name = (preferredName || '').trim();
   try {
     let id: string | undefined;
     if (draft.plan) {
-      const r = (await rpc('analysis:buildPlan', { projectId, plan: name ? { ...draft.plan, name } : draft.plan, ...(look ? { style: look } : {}) })) as BuildReply;
+      const r = (await rpc('analysis:buildPlan', { projectId, plan: name ? { ...draft.plan, name } : draft.plan, ...(look ? { style: look } : {}), ...(folderId ? { folderId } : {}) })) as BuildReply;
       if (!r.ok) throw new Error(r.error);
       id = (r.analysis as Analysis | undefined)?.id; // a reply is data: guard the shape, not the type
       // Built, but the reply named no dashboard: say where to look rather than claim a failure (anBuildDraft).
@@ -164,6 +164,7 @@ export function DraftFlow({
   intent,
   preferredName,
   brief: given,
+  folderId,
   onClose,
 }: {
   projectId: string;
@@ -171,6 +172,8 @@ export function DraftFlow({
   intent?: string;
   preferredName?: string;
   brief?: Brief;
+  /** Where the dashboard lands (shared folders D18); else Everyone. */
+  folderId?: string;
   onClose: () => void;
 }) {
   const [brief, setBrief] = useState<Brief>(given ?? DEFAULT_BRIEF);
@@ -211,7 +214,7 @@ export function DraftFlow({
   const create = async () => {
     if (!reply || !reply.ok || 'questions' in reply) return;
     setBuilding(true);
-    const id = await buildDraft(projectId, reply, preferredName, brief.look);
+    const id = await buildDraft(projectId, reply, preferredName, brief.look, folderId);
     setBuilding(false);
     void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
     if (id) {

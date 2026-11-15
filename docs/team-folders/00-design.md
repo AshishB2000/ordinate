@@ -455,8 +455,69 @@ index to the reference, now per caller.
   the pipeline, MCP's `create_visual` and verified SQL questions (over Plain and Orders: opsEditorView, who edits Plain
   and views Orders, may not delete or make one; one that also reads HR is opsLead's as a missing one), each with its
   control; and the cost above. E5's D16 case now has padmin make its draft: ed may not add a card on HR (D18).
-- **Left for E7**: the folder channels (`folder:move` writes `folder_items` as `placeFirst` does), `folderId` in the web's
-  create dialogs, and placing a duplicate dashboard when one exists.
+- **Left for E7** (done there, below): the folder channels (`folder:move` writes `folder_items` as `placeFirst` does),
+  `folderId` in the web's create dialogs, and placing a duplicate dashboard when one exists.
+
+### The folder channels and screens, as built (E7)
+
+- **Channels** (`src/api/folders.ts`, handlers `src/ipc/folders.ts`; every one project-scoped by `projectId`):
+
+  | Channel | Access | Rule (beyond the route's role) |
+  |---|---|---|
+  | `folder:tree` | read | the folders the caller opens (an admin: all, `adminOnly` when no team of theirs was given its root), each with their level, a top-level folder's teams and switch, items placed (the Trash included); `placed`: where each item in an open folder sits. Empty, `available: false`, without Postgres |
+  | `folder:create` | write | `parentId` null: a top-level folder, rank 3 only; the project id or a folder: Edit on it. Depth ≤ 5 below its root, ≤ 1,000 a project, names unique among siblings whatever the case (0032's index answers a race, as `name taken`) |
+  | `folder:rename`, `folder:delete` | write | a top-level folder rank 3, a subfolder Edit on it; delete takes the folder and its empty subfolders in one statement, `not_empty` when any holds an item (Trash included; 0032's RESTRICT backs it) |
+  | `folder:setShareFigures`, `folder:grant` | admin | top-level folders only; a team of the org |
+  | `folder:access` | admin | Share → Folders: each top-level folder, its grants with head counts (members with a project role), the people they add up to, the org's teams |
+  | `folder:moveImpact`, `folder:move` | write | Edit where each item is and where it goes (`closed` / `edit`); `from` moves everything placed in a folder and under it (a delete's "Move its items to…"), and `from` = the project id is *Move everything to Everyone* (rank 3, to Everyone only) |
+
+  Folder writes run under a per-project advisory lock (the cap and depth are counted under it). Non-refusal answers are
+  `{ok:false, error}` in the catalog's words (`src/server/folderMessages.ts`, translated). A deleted project's folders,
+  grants and placements go with it (`dropFolders`, beside `dropGrants`).
+- **The move warning and its hash** (`src/server/authz/folderMove.ts`): one transaction reads the tree, the grants and
+  every member folders restrict (`folderPeople.membersOn`: not an org or project admin, a project role), and runs the
+  resolver's rule per person (`folderPeople.levelAt`, held `Object.is`-equal to `accessFrom` over every rank, grant and
+  membership). Per item: who loses it (grouped by the source root's teams, or Everyone), who gains it, who drops to
+  view or rises to edit; moved dashboards on a published site; subscription email recipients (a channel's users and
+  teams) who lose it; dashboards in other folders whose published copy reads a moved dataset (0035, built first when
+  unbuilt — so a dataset leaving Everyone has its reach known) and whether the destination's root shares figures. The
+  reply carries counts and team names, never an address. The hash is sha256 over the answer **and** the people behind
+  it by email (a member swapped in a team changes it though no count moves) and the caller. `folder:move` computes it
+  again, refuses `move_changed` unless equal, then writes the rows in one statement (to Everyone: deletes them), as
+  `placeFirst` does. No index row changes (D1); `dashboard_reads` needs nothing (it joins placements at query time).
+- **Screens** (`web/src/features/folders/`, one lazy chunk with Data and Dashboards; Share → Folders its own):
+  - **The rail** (`FolderRail`, `FolderView`): beside Data's datasets and the Dashboards grid when the project has a
+    folder besides Everyone — *All datasets / dashboards* (an addition: the default view keeps every item the caller
+    opens, each row tagged with its folder), Everyone and its subfolders, then the top-level folders, nested, with
+    counts, a lock and *Admin access* for an admin's. `?folder=` filters; the heading says who it is shared with; an
+    empty folder has its own state (*Import into this folder* / Create). At phone width it is a row of pills.
+    New subfolder, Rename and Delete sit on each row's ⋯ where the caller may.
+  - **Move to…** (`MoveDialog`): from a dataset row, a dashboard card's ⋯, the item's chip, or a drag onto the rail
+    (the dialog opens with the destination picked). The warning loads for the destination picked; Move is off until it
+    has; a `move_changed` refusal shows the server's sentence and the new warning.
+  - **The chip** (`FolderChip`) on the dataset page and the dashboard view: *In Finance · Finance can view, Finance leads
+    can edit*; a button to Move for whoever edits where it is.
+  - **Share → Folders** (`SharedFolders`, a tab of the project admin's Share dialog): each top-level folder as a card
+    with its teams at *Can view* / *Can edit*, *Give it to a team*, the reach switch, Rename and Delete; New folder;
+    *Move everything to Everyone* (with the warning) while anything is placed. **Admin → Teams → ⋯ → Folders…**
+    (`TeamFolders`): per project, the team's level on each top-level folder, through `folder:grant`.
+  - **Where creates land** (D18): the rail's folder, when the caller edits it, goes as `folderId` on `analysis:create`
+    (New dashboard), `analysis:buildPlan` (Draft with AI), `dataset:composeSave` (import, paste, combine) and
+    `input:create`; a duplicated dashboard is created in its original's folder.
+- **Cost**: each page with the rail, the chip or Share → Folders asks `folder:tree` once (one transaction, three
+  statements); a project without folders shows nothing new. Initial JS 206 KB gzip.
+- **Tests**: `test-folderChannels` (both modes): the per-person rule against the resolver; admin-only top level,
+  subfolders by Edit, depth 5 under a root and under Everyone, names, delete-empty with the Trash, grants and the
+  switch, the tree naming nothing closed, the hash refusing a stale warning and a made-up one, Edit on both ends,
+  *Move everything to Everyone*, a deleted project leaving nothing — each with its NEGATIVE CONTROL. **Safety net 11**
+  (`scripts/folderNetMoves.ts`): no top-level folder by an editor, no grant by a viewer or an editor; Orders → HR warns
+  that Ops and Ops leads lose it and the Finance board stops showing it; after a grant changed, the warning's hash
+  refuses and nothing moves; the move's change, per person over `folder:of` on the next request, is exactly the
+  warning's people, and finViewer's reach goes as warned; NEGATIVE CONTROL: moving back reopens it to the same people.
+  Vitest `folders.test.tsx`; e2e `folders.e2e.ts` (Postgres, both themes, phone width).
+- **Left for later**: the Publish and embed dialogs' *shows data from folders …* list and *including people who can't
+  open Finance*, and the subscription dialog's *2 recipients can't open this dashboard* (E5's, still to do: the move
+  warning already says both); folder search in the rail; moving folders themselves (only items move).
 
 ### Pushes, mentions and recipients (D17)
 

@@ -114,7 +114,7 @@ export function tagFolderRefusals<T>(reply: T): T {
 const capOf = (rank: number): FolderLevel => (rank >= 3 ? 'manage' : rank === 2 ? 'edit' : rank === 1 ? 'view' : 'none');
 
 /** `id`'s root: Everyone, a top-level folder's row, or null (not a folder here, a broken chain, too deep). */
-function rootOf(projectId: string, id: string, byId: ReadonlyMap<string, FolderRow>): FolderRow | 'everyone' | null {
+export function rootOf(projectId: string, id: string, byId: ReadonlyMap<string, FolderRow>): FolderRow | 'everyone' | null {
   if (id === projectId) return 'everyone';
   let f = byId.get(id);
   let depth = 0;

@@ -12,7 +12,8 @@ import { Icon } from '../../ui/icons/Icon';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { CapturesTab } from './CapturesTab';
 import { CatalogTab } from './CatalogTab';
-import { DatasetList } from './DatasetList';
+import { DatasetList, importHref } from './DatasetList';
+import { useFolderView } from '../folders/FolderView';
 import { DataSearch } from './DataSearch';
 import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
@@ -32,6 +33,7 @@ export default function DataSection() {
   // With no datasets the empty card holds Import / Paste: the header shows them once, not twice (dsList.ts).
   const empty = useDatasets(projectId).data?.length === 0;
   const canEdit = useCanEdit(projectId);
+  const landing = useFolderView(projectId, 'dataset').landing; // the folder picked in the rail: imports land there
   const asked = params.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   // The URL names the project: the shell's switcher shows it (T2.2).
@@ -59,7 +61,7 @@ export default function DataSection() {
           </Link>
           {tab === 'datasets' && !empty && canEdit && (
             <>
-              <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
+              <Link className={buttonClass('ghost')} to={importHref(projectId, landing, '&source=paste')}>
                 Paste data
               </Link>
               {/* The 40 databases, warehouses and apps (T2.5) are a connection, not an upload. */}
@@ -67,7 +69,7 @@ export default function DataSection() {
                 <Icon name="plug" />
                 <span>Connect a database</span>
               </Link>
-              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+              <Link className={buttonClass('primary')} to={importHref(projectId, landing)}>
                 Import file
               </Link>
             </>

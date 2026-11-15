@@ -1,7 +1,9 @@
 // The Datasets tab (dsList.ts): one row per saved dataset — name (with the
 // red quality dot and its tags), rows, source, "Data as of" with the refresh
 // schedule and the anomaly watch, and the row's actions. A failed refresh
-// leaves the stored table as it was; its reason stays on the row.
+// leaves the stored table as it was; its reason stays on the row. With shared
+// folders (docs/team-folders) the folder rail sits beside it, and a row moves
+// by Move to… or by dragging it onto the rail.
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -20,6 +22,8 @@ import { useTags, useWrite } from './api';
 import { freshness, fromControl, NOT_REFRESHABLE, rowsOf, SCHEDULES, sourceLabel } from './format';
 import { BehindBadge, cadenceOptions } from './cadence';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from './tags';
+import { FolderEmpty, FolderLayout, FolderTag, useFolderView, type FolderView } from '../folders/FolderView';
+import { dragItem } from '../folders/FolderRail';
 import s from './Data.module.css';
 
 type Outcome = { busy?: boolean; message?: string; error?: boolean };
@@ -123,8 +127,12 @@ export function useRefresh(projectId: string) {
   return { state, run };
 }
 
-function Row({ projectId, d, outcome, onRefresh, onDelete, tags, canEdit }: {
+/** Import into the folder picked in the rail, when the caller adds to it. */
+export const importHref = (projectId: string, folder: string | undefined, more = '') => `/data/import?project=${projectId}${more}${folder ? `&folder=${folder}` : ''}`;
+
+function Row({ projectId, d, outcome, onRefresh, onDelete, tags, canEdit, view }: {
   projectId: string;
+  view: FolderView;
   /** An editor's row: the schedule, Refresh, New visual, Combine and Trash. A viewer's row opens the dataset. */
   canEdit: boolean;
   d: DatasetSummary;
@@ -136,14 +144,17 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags, canEdit }: {
   const navigate = useNavigate();
   const href = `/data/${projectId}/${d.id}`;
   const failedHint = d.lastRefreshStatus === 'error' ? d.lastRefreshError || 'The last refresh failed.' : undefined;
+  const movable = view.canMove(d.id);
+  const item = { kind: 'dataset' as const, id: d.id, name: d.name };
   return (
-    <tr className={s.clickRow} onClick={(e) => !fromControl(e.target) && void navigate(href)}>
+    <tr className={s.clickRow} onClick={(e) => !fromControl(e.target) && void navigate(href)} draggable={movable || undefined} onDragStart={movable ? (e) => dragItem(e, item) : undefined}>
       <td>
         <span className={s.nameCell}>
           <QualityDot n={d.qualityFailing} />
           <Link className={s.nameLink} to={href}>
             {d.name}
           </Link>
+          <FolderTag view={view} id={d.id} />
           <TagChips tags={tags} />
         </span>
       </td>
@@ -188,6 +199,7 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags, canEdit }: {
                 Combine
               </Link>
             )}
+            {movable && <IconButton icon="folder" size="sm" label={`Move ${d.name} to another folder`} onClick={() => view.move([item])} />}
             <IconButton icon="trash" size="sm" label={`Move ${d.name} to the Trash`} onClick={onDelete} />
           </span>
         )}
@@ -204,41 +216,46 @@ export function DatasetList({ projectId }: { projectId: string }) {
   const refresh = useRefresh(projectId);
   const [all, setAll] = useState(false);
   const canEdit = useCanEdit(projectId);
+  const view = useFolderView(projectId, 'dataset');
 
   if (q.isPending) return <SkeletonRows rows={6} label="Loading datasets" />;
   if (q.isError) return <ErrorState heading={3} title="Datasets could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
-  if (q.data.length === 0) {
+  const ids = q.data.map((d) => d.id);
+  if (q.data.length === 0 && !view.selected) {
     return (
-      <EmptyState
-        icon="database"
-        heading={3}
-        title="No datasets yet"
-        actions={
-          canEdit && (
-            <>
-              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-                Import file
-              </Link>
-              <Link className={buttonClass('secondary')} to={`/connections/${projectId}`}>
-                <Icon name="plug" />
-                <span>Connect a database</span>
-              </Link>
-              <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
-                Paste data
-              </Link>
-            </>
-          )
-        }
-      >
-        {canEdit
-          ? 'Import a CSV, JSON or Excel file, paste data straight in, or connect a database, warehouse or app. Each saves a structured dataset in this project.'
-          : 'An editor of this project can import a file, paste data in or connect a database. You have view-only access.'}
-      </EmptyState>
+      <FolderLayout view={view} ids={ids} allLabel="All datasets">
+        <EmptyState
+          icon="database"
+          heading={3}
+          title="No datasets yet"
+          actions={
+            canEdit && (
+              <>
+                <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                  Import file
+                </Link>
+                <Link className={buttonClass('secondary')} to={`/connections/${projectId}`}>
+                  <Icon name="plug" />
+                  <span>Connect a database</span>
+                </Link>
+                <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
+                  Paste data
+                </Link>
+              </>
+            )
+          }
+        >
+          {canEdit
+            ? 'Import a CSV, JSON or Excel file, paste data straight in, or connect a database, warehouse or app. Each saves a structured dataset in this project.'
+            : 'An editor of this project can import a file, paste data in or connect a database. You have view-only access.'}
+        </EmptyState>
+      </FolderLayout>
     );
   }
   const tagged = (d: DatasetSummary) => tagsOf(tags.data, `dataset:${d.id}`);
   const present = [...new Set(q.data.flatMap((d) => tagged(d).map((t) => t.name)))];
-  const shown = tag ? q.data.filter((d) => tagged(d).some((t) => t.name === tag)) : q.data;
+  const inFolder = view.filter(q.data, (d) => d.id);
+  const shown = tag ? inFolder.filter((d) => tagged(d).some((t) => t.name === tag)) : inFolder;
   const refreshable = q.data.filter((d) => d.originKind);
 
   // Sequential, not all at once: one slow source must not stall the rest, and
@@ -252,48 +269,69 @@ export function DatasetList({ projectId }: { projectId: string }) {
     toast(`Refreshed ${results.length - failed} of ${results.length}${failed ? ` · ${failed} failed` : ''}`, { kind: failed ? 'error' : 'success' });
   };
 
+  if (view.selected && inFolder.length === 0) {
+    return (
+      <FolderLayout view={view} ids={ids} allLabel="All datasets">
+        <FolderEmpty
+          view={view}
+          noun="dataset"
+          actions={
+            canEdit && (
+              <Link className={buttonClass('primary')} to={importHref(projectId, view.landing)}>
+                Import into this folder
+              </Link>
+            )
+          }
+        />
+      </FolderLayout>
+    );
+  }
+
   return (
-    <section className={s.section} aria-label="Datasets">
-      <div className={s.listBar}>
-        <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
-        {canEdit && refreshable.length > 0 && (
-          <Button size="sm" icon="refresh" loading={all} className={s.barEnd} onClick={() => void refreshAll()}>
-            Refresh all
-          </Button>
-        )}
-      </div>
-      <div className={s.card}>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col" className={s.num}>
-                Rows
-              </th>
-              <th scope="col">Source</th>
-              <th scope="col">Data as of</th>
-              <th scope="col" className={s.actions}>
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((d) => (
-              <Row
-                key={d.id}
-                projectId={projectId}
-                canEdit={canEdit}
-                d={d}
-                tags={tagged(d)}
-                outcome={refresh.state[d.id]}
-                onRefresh={() => void refresh.run(d.id)}
-                onDelete={() => remove.ask(d)}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {remove.dialog}
-    </section>
+    <FolderLayout view={view} ids={ids} allLabel="All datasets">
+      <section className={s.section} aria-label="Datasets">
+        <div className={s.listBar}>
+          <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
+          {canEdit && refreshable.length > 0 && (
+            <Button size="sm" icon="refresh" loading={all} className={s.barEnd} onClick={() => void refreshAll()}>
+              Refresh all
+            </Button>
+          )}
+        </div>
+        <div className={s.card}>
+          <table className={s.table}>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col" className={s.num}>
+                  Rows
+                </th>
+                <th scope="col">Source</th>
+                <th scope="col">Data as of</th>
+                <th scope="col" className={s.actions}>
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((d) => (
+                <Row
+                  key={d.id}
+                  projectId={projectId}
+                  canEdit={canEdit}
+                  view={view}
+                  d={d}
+                  tags={tagged(d)}
+                  outcome={refresh.state[d.id]}
+                  onRefresh={() => void refresh.run(d.id)}
+                  onDelete={() => remove.ask(d)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {remove.dialog}
+      </section>
+    </FolderLayout>
   );
 }

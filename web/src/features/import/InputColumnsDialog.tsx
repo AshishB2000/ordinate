@@ -6,6 +6,7 @@
 // every definition; the checks here only shape the form.
 
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { rpc } from '../../api/client';
 import { Button, IconButton } from '../../ui/Button';
 import { Checkbox } from '../../ui/Choice';
@@ -13,6 +14,7 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { EmptyState } from '../../ui/States';
+import { landingFolder } from '../folders/api';
 import { useLookupChoices, type ColType, type InputColumn, type TableReply } from './api';
 import s from './Import.module.css';
 
@@ -60,6 +62,7 @@ interface Props {
 
 export function InputColumnsDialog({ projectId, mode, datasetId, columns = [], onClose, onDone }: Props) {
   const creating = mode === 'create';
+  const folderId = landingFolder(useSearchParams()[0]); // the Data rail's folder (docs/team-folders D18)
   const choices = useLookupChoices(projectId, datasetId, true);
   const [name, setName] = useState('');
   const [template, setTemplate] = useState('');
@@ -88,7 +91,7 @@ export function InputColumnsDialog({ projectId, mode, datasetId, columns = [], o
     });
     try {
       if (creating) {
-        const r = (await rpc('input:create', { projectId, name: name.trim(), columns: defs })) as { ok: true; id: string } | { ok: false; error: string };
+        const r = (await rpc('input:create', { projectId, name: name.trim(), columns: defs, ...(folderId ? { folderId } : {}) })) as { ok: true; id: string } | { ok: false; error: string };
         if (!r.ok) return setError(r.error);
         onDone(r.id);
       } else if (datasetId) {

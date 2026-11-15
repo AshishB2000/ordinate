@@ -43,6 +43,7 @@ import { ColumnAccessSection } from './ColumnAccessSection';
 import { RowAccessOff, ScopedChip } from './RowAccessOff';
 import { useCan } from '../projects/api';
 import { useFolderClosed } from '../live/folderClosed';
+import { FolderChip } from '../folders/FolderChip';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots', 'access', 'about'] as const;
 type TabId = (typeof TABS)[number];
@@ -116,6 +117,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = nul
             {live && <LiveBadge maxCacheAgeSec={source.data?.maxCacheAgeSec} />}
             {scoped && <ScopedChip columns={scoped === 'columns'} />}
             <TagChips tags={tagsOf(tags.data, `dataset:${id}`)} max={4} />
+            <FolderChip projectId={projectId} kind="dataset" id={id} name={name} />
           </>
         }
         sub={

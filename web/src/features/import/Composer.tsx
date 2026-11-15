@@ -10,11 +10,12 @@
 
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { formatNumber } from '../../../../src/app/format.ts';
 import { Button } from '../../ui/Button';
 import { toast } from '../../ui/Toast';
 import { composePreview, composeSave, type ComposeInput } from './api';
+import { landingFolder } from '../folders/api';
 import { joinsOf, mappingSteps, missingKey, retypeOf, type ChainTable, type ColMap, type Link } from './composerModel';
 import { ComposerChain } from './ComposerChain';
 import { ComposerPreview } from './ComposerPreview';
@@ -44,6 +45,8 @@ const plural = (n: number, one: string) => `${formatNumber(n)} ${one}${n === 1 ?
 export function Composer({ projectId, start, onBack }: { projectId: string; start: ComposerStart; onBack: () => void }) {
   const navigate = useNavigate();
   const client = useQueryClient();
+  // The folder picked on the Data page's rail (docs/team-folders D18): the server lands it there, or refuses.
+  const folderId = landingFolder(useSearchParams()[0]);
   const [base, setBase] = useState<ChainTable | null>(start.base);
   const [links, setLinks] = useState<Link[]>([]);
   const [map, setMap] = useState<Record<string, ColMap>>({});
@@ -90,6 +93,7 @@ export function Composer({ projectId, start, onBack }: { projectId: string; star
         ...(start.sourceKind ? { sourceKind: start.sourceKind } : {}),
         ...(start.origin ? { origin: start.origin } : {}),
         ...(retypeOf(raw, map) ? { retype: retypeOf(raw, map) } : {}),
+        ...(folderId ? { folderId } : {}),
       });
       if (!r.ok) {
         toast(r.canceled ? 'Import cancelled.' : r.error || 'The dataset could not be saved.', { kind: r.canceled ? 'info' : 'error' });

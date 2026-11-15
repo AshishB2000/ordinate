@@ -2,9 +2,10 @@
 // which role, and — for a project admin — adding a person or team, changing
 // a role, removing one. The owner team's grant is fixed here (ownership moves
 // in Admin → Projects), and so is your own (no locking yourself out by a
-// slip). Anyone who can open the project may see the list.
+// slip). Anyone who can open the project may see the list. A project admin
+// also gets Folders (docs/team-folders): which teams open which folder.
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Badge } from '../../ui/Badge';
 import { Button, IconButton } from '../../ui/Button';
 import { Combobox } from '../../ui/Combobox';
@@ -12,11 +13,15 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
+import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useMe } from '../auth/api';
 import { useAccess, useChange, useShareTargets, type Grant, type ProjectRow, type Role } from './api';
 import s from './Projects.module.css';
+
+// Its own chunk: only a project admin's Share dialog reaches it.
+const SharedFolders = lazy(() => import('../folders/SharedFolders').then((m) => ({ default: m.SharedFolders })));
 
 const ROLES: readonly { value: Role; label: string }[] = [
   { value: 'viewer', label: 'Viewer' },
@@ -33,6 +38,7 @@ type Member = { userId: string } | { teamId: string };
 const memberOf = (g: { kind: 'user' | 'team'; id: string }): Member => (g.kind === 'user' ? { userId: g.id } : { teamId: g.id });
 
 export function ShareDialog({ project, admin, onClose }: { project: ProjectRow; admin: boolean; onClose: () => void }) {
+  const [tab, setTab] = useState('people');
   const access = useAccess(project.id);
   const me = useMe().data?.user?.email;
   const targets = useShareTargets(project.id, admin);
@@ -107,10 +113,41 @@ export function ShareDialog({ project, admin, onClose }: { project: ProjectRow; 
     );
   }
 
+  const people = (
+    <div className={s.dialogBody}>
+      {admin && (
+        <div className={s.addRow}>
+          {targets.isError ? (
+            <ErrorState compact heading={3} title="The org's people could not be loaded" message={targets.error.message} />
+          ) : (
+            <>
+              <Combobox
+                label="Add a person or team"
+                placeholder={targets.isPending ? 'Loading…' : 'Search people and teams'}
+                emptyText="Everyone already has access"
+                value={pick}
+                onValueChange={setPick}
+                options={options}
+                disabled={targets.isPending}
+              />
+              <Select label="Role" value={role} onValueChange={(v) => setRole(v as Role)} options={ROLES} className={s.roleSelect} />
+              <Button variant="primary" icon="plus" disabled={!pick} loading={share.isPending} onClick={add}>
+                Add
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      {admin && <p className={s.hint}>{ROLE_HINT[role]}</p>}
+      {list}
+    </div>
+  );
+
   return (
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
+      size={admin ? 'lg' : 'md'}
       title={admin ? `Share ${project.name}` : `Who has access to ${project.name}`}
       description={admin ? 'Org admins can always open it. Everyone else needs a grant here, directly or through a team.' : 'Only a project admin can change this.'}
       footer={
@@ -119,33 +156,26 @@ export function ShareDialog({ project, admin, onClose }: { project: ProjectRow; 
         </DialogClose>
       }
     >
-      <div className={s.dialogBody}>
-        {admin && (
-          <div className={s.addRow}>
-            {targets.isError ? (
-              <ErrorState compact heading={3} title="The org's people could not be loaded" message={targets.error.message} />
-            ) : (
-              <>
-                <Combobox
-                  label="Add a person or team"
-                  placeholder={targets.isPending ? 'Loading…' : 'Search people and teams'}
-                  emptyText="Everyone already has access"
-                  value={pick}
-                  onValueChange={setPick}
-                  options={options}
-                  disabled={targets.isPending}
-                />
-                <Select label="Role" value={role} onValueChange={(v) => setRole(v as Role)} options={ROLES} className={s.roleSelect} />
-                <Button variant="primary" icon="plus" disabled={!pick} loading={share.isPending} onClick={add}>
-                  Add
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-        {admin && <p className={s.hint}>{ROLE_HINT[role]}</p>}
-        {list}
-      </div>
+      {admin ? (
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabList label="Share">
+            <Tab value="people" icon="user">
+              People and teams
+            </Tab>
+            <Tab value="folders" icon="folder">
+              Folders
+            </Tab>
+          </TabList>
+          <TabPanel value="people">{people}</TabPanel>
+          <TabPanel value="folders">
+            <div className={s.dialogBody}>
+              <Suspense fallback={<SkeletonRows rows={3} label="Loading folders" />}>{tab === 'folders' && <SharedFolders projectId={project.id} />}</Suspense>
+            </div>
+          </TabPanel>
+        </Tabs>
+      ) : (
+        people
+      )}
     </Dialog>
   );
 }

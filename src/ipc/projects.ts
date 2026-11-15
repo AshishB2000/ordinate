@@ -106,6 +106,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     if (ok) await (require('../ai/copilot') as typeof import('../ai/copilot')).clearHistory(id);
     // Server: who could open it goes with it (src/server/authz/share.ts).
     if (ok && serverDataDir() !== null) await (require('../server/authz/share') as typeof import('../server/authz/share')).dropGrants(id);
+    // …and its folders, their grants and placements (docs/team-folders, "Folders, items and moves").
+    if (ok && serverDataDir() !== null) await (require('../server/authz/folderTree') as typeof import('../server/authz/folderTree')).dropFolders(id);
     return { ok };
   });
 
