@@ -22,6 +22,7 @@ import { statsFacts } from '../ai/statsFacts';
 import type { StatsFactItem } from '../ai/statsFacts';
 import type { CopilotFacts } from '../ai/copilot';
 import { commitSteps } from './datasets';
+import { inReach } from '../server/authz/folderGate';
 import { randomUUID } from 'crypto';
 import * as analysis from '../analysis/analysis';
 import * as config from '../app/config';
@@ -281,9 +282,12 @@ export function register(): void {
       // Dated by its dataset (L0.2, data/figureAsOf) like every other tile, inside the as-of scope.
       const steps = tileFilters(filters, params);
       // The dashboard terms it leaves out, said on the tile; a refusal is computeStatsTile's own (it expands again).
-      const left = spec && typeof spec === 'object' ? (await expandTerms(projectId, spec.datasetId, steps).catch(() => null))?.notes ?? [] : [];
-      return withNotes(await stampAsOf(await computeStatsTile(projectId, spec, steps, share === 'export' ? 'export' : undefined),
-        projectId, [spec && typeof spec === 'object' ? spec.datasetId : undefined]), left);
+      const ds = spec && typeof spec === 'object' && typeof spec.datasetId === 'string' ? spec.datasetId : '';
+      // A dashboard's figures: a dataset the caller only reaches answers, in its figure scope (docs/team-folders D9).
+      return await inReach(projectId, ds, async () => {
+        const left = ds ? (await expandTerms(projectId, ds, steps).catch(() => null))?.notes ?? [] : [];
+        return withNotes(await stampAsOf(await computeStatsTile(projectId, spec, steps, share === 'export' ? 'export' : undefined), projectId, [ds || undefined]), left);
+      });
     } catch (err) {
       return fail(err, 'Could not compute this tile.');
     }

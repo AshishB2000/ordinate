@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import { lockedMetric } from './rowDoors';
+import { inReach } from '../server/authz/folderGate'; // a dataset the caller only reaches answers its figures (docs/team-folders D9)
 import * as dashboards from '../analysis/dashboards';
 import * as answerKey from '../data/answerKey';
 import * as queryCache from '../engine/queryCache';
@@ -281,7 +282,7 @@ export function register() {
   // paths consume its output. The response shape is byte-identical either way.
   // `asOf` (view state, data/asOf.ts): the dataset read as of that time.
   // `share` (server-side callers only, as metric:value's): the figure is about to leave the app — judged first.
-  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  ipcMain.handle('dashboard:metric', async (_e, { projectId, datasetId, column, aggregation, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, () => inReach(projectId, datasetId, async () => {
     try {
       const hidden = isSharePath(share) && share !== 'bundle' ? await kpiHidden(projectId, [{ datasetId, column, aggregation }], share) : '';
       if (hidden) return { ok: false, error: hidden, hiddenByPolicy: true };
@@ -300,5 +301,5 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric', ...liveCodeOf(err) };
     }
-  })));
+  }))));
 }

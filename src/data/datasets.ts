@@ -435,7 +435,7 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
 
 /** `text`: the record's text read already (recordFs.readMany), in place of a readFile: what readFile gives, or what it throws. */
 export async function getDatasetMeta(projectId: string, id: string, strict = false, text?: () => string): Promise<DatasetMeta | null> {
-  if (!isValidId(projectId) || !isValidId(id) || !(await opens(projectId, 'dataset', id))) return null; // closed: as missing (D12)
+  if (!isValidId(projectId) || !isValidId(id) || !(await opens(projectId, 'dataset', id))) return null; // closed: as missing (D12); reached, only in a figure scope (D9)
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
   try {

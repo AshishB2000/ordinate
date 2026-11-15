@@ -40,7 +40,7 @@ export function announceRefreshed(o: Omit<Refreshed, 'ok'>): void {
     // here should load server delivery where a test runs without it.
     const schedules = require('../server/jobs/schedules') as typeof import('../server/jobs/schedules');
     const payload: Refreshed = { projectId: o.projectId, datasetId: o.datasetId, name: o.name, ok: true, rowsBefore: o.rowsBefore, rowsAfter: o.rowsAfter };
-    schedules.pushToReaders(o.projectId, REFRESHED_CHANNEL, payload, { kind: 'dataset', id: o.datasetId }); // those who open it (team-folders D17)
+    schedules.pushToReaders(o.projectId, REFRESHED_CHANNEL, payload, { kind: 'dataset', id: o.datasetId, reach: true }); // those who open it (team-folders D17), and who reach it (D9)
   } catch (_) {
     // Outside a request or a job (no org to address): nobody to tell.
   }

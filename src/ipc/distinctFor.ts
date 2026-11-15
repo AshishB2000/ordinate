@@ -30,5 +30,5 @@ export function distinctFor(projectId: string, datasetId: string, column: string
     }
     const ds = await datasets.getDataset(projectId, datasetId);
     return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, r) : null;
-  }, [column, req.filters]);
+  }, [column, req.filters], 'figures'); // a control's values and a series' periods are figures: a reached dataset answers (docs/team-folders D9)
 }

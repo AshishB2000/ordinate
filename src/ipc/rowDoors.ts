@@ -41,7 +41,7 @@ import { expandTerms } from '../analysis/termExpand';
 import type { TermExpansion } from '../analysis/termExpand';
 import { isTermNotExpandedError, termRefusal } from '../data/termStep';
 import { gateColumns, gateColumnsReply, once } from './columnDoors';
-import { folderGate } from '../server/authz/folderGate';
+import { folderGate, type FigureScope } from '../server/authz/folderGate';
 import { folderRefusal, isFolderError } from '../server/authz/folders';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
@@ -141,15 +141,21 @@ type Refusal = ReturnType<typeof rowPolicyRefusal>;
 type TermRefusal = ReturnType<typeof termRefusal>;
 type FolderRefusal = ReturnType<typeof folderRefusal>;
 
-/** Shared folders' door check (docs/team-folders D9) as a chart door answers it: the refusal as a reply, or null. */
+/** Shared folders' door check (docs/team-folders D9) as a chart door answers it: the refusal as a reply, or null (open or reached). */
 export async function folderRefused(projectId: string, datasetId: string, reads?: () => Promise<readonly string[]>): Promise<FolderRefusal | null> {
+  return folderScoped(projectId, datasetId, reads, async () => null);
+}
+
+/** `fn` behind shared folders' door check (D9), in its figure scope (a reached dataset reads there); the refusal as a reply instead. */
+export async function folderScoped<R>(projectId: string, datasetId: string, reads: (() => Promise<readonly string[]>) | undefined, fn: () => Promise<R>): Promise<R | FolderRefusal> {
+  let inScope: FigureScope;
   try {
-    await folderGate(projectId, datasetId, reads);
-    return null;
+    inScope = await folderGate(projectId, datasetId, reads);
   } catch (err) {
     if (isFolderError(err)) return folderRefusal(err.reason);
     throw err;
   }
+  return inScope(fn);
 }
 
 /** The lock, or the refusal as a reply (a chart door answers `{ok:false}`; it never throws a figure's failure). */
@@ -199,10 +205,8 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   const filters = expanded.steps; // its notes are the caller's: vizDataFor expands first, so none are left here
   const reads = once(chartReadsOf(projectId, datasetId, encoding, filters));
   // Shared folders FIRST (docs/team-folders D9): the dataset and every one the question reads, before every cache key.
-  const closed = await folderRefused(projectId, datasetId, reads);
-  if (closed) return closed;
   // A hidden column next: before the lock, the related gate, the Live split and the answer cache (./columnDoors).
-  return gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async (hidden) => {
+  return folderScoped(projectId, datasetId, reads, () => gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async (hidden) => {
     // Key drivers rank every text column, named or not: refused while any is hidden here (and a fan-out build remembers it).
     if (encoding && encoding.drivers && hidden.size) return refusalInScope('hidden');
     const lock = await lockOrRefusal(projectId, datasetId);
@@ -216,7 +220,7 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
     if (await reachesOther(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
     // The builder's sample is drawn over the whole table and reports its size: never under a lock.
     return withRowLock(datasetId, () => body(projectId, datasetId, encoding, withLockSteps(lock, filters), { ...opts, sample: false }));
-  });
+  }));
 }
 
 /** `computeCardMetric` under the rules: a refusal THROWS, as a Live KPI's failure does (an ok:false reads as "dataset gone"). */
@@ -228,22 +232,24 @@ export async function lockedMetric<S extends { column: string } | { metric: stri
   params: P,
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
-  await folderGate(projectId, datasetId); // shared folders first (docs/team-folders D9): a refusal throws
-  const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
-  const steps = expanded.steps;
-  const column = 'column' in spec ? spec.column : undefined; // none: a semantic dataset's layer metric (part 7 b2)
-  const reads = once(() => metricReads(projectId, datasetId, column ?? '', steps));
-  await folderGate(projectId, datasetId, reads); // and every dataset it reads, before the answer cache
-  const snapshot = (spec as { snapshot?: unknown }).snapshot; // its date and entity are read too (part 1 D8, part 5 D11)
-  return gateColumns(projectId, datasetId, reads, [column, snapshot, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
-    const lock = await rowLockFor(projectId, datasetId);
-    if (!lock) {
-      const why = await relatedClosed(projectId, datasetId, reads);
-      if (why) throw new RowPolicyError(why);
-      return withNotes(await body(projectId, datasetId, spec, steps, params), expanded.notes);
-    }
-    if (await reachesOther(projectId, datasetId, null, [column, steps], column)) throw new RowPolicyError('related');
-    return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, steps), params)), expanded.notes);
+  // Shared folders first (docs/team-folders D9): a refusal throws; a reached dataset reads in the figure scope.
+  return (await folderGate(projectId, datasetId))(async () => {
+    const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
+    const steps = expanded.steps;
+    const column = 'column' in spec ? spec.column : undefined; // none: a semantic dataset's layer metric (part 7 b2)
+    const reads = once(() => metricReads(projectId, datasetId, column ?? '', steps));
+    const snapshot = (spec as { snapshot?: unknown }).snapshot; // its date and entity are read too (part 1 D8, part 5 D11)
+    // And every dataset it reads, before the answer cache; then a hidden column (./columnDoors), a refusal throwing.
+    return (await folderGate(projectId, datasetId, reads))(() => gateColumns(projectId, datasetId, reads, [column, snapshot, steps], async () => {
+      const lock = await rowLockFor(projectId, datasetId);
+      if (!lock) {
+        const why = await relatedClosed(projectId, datasetId, reads);
+        if (why) throw new RowPolicyError(why);
+        return withNotes(await body(projectId, datasetId, spec, steps, params), expanded.notes);
+      }
+      if (await reachesOther(projectId, datasetId, null, [column, steps], column)) throw new RowPolicyError('related');
+      return withNotes(await withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, steps), params)), expanded.notes);
+    }));
   });
 }
 
@@ -251,13 +257,15 @@ export async function lockedMetric<S extends { column: string } | { metric: stri
  * Any door whose body takes the lock itself (an answer card, the grid page, distinct, profile): the column gate
  * on `question` first (./columnDoors; a refusal throws), then the lock, in its scope. `hidden`: the columns of
  * `datasetId` hidden from the caller, which the body must not hand over (a row reader nulls or drops them).
+ * `folders`: `figures` for a figure door (the rows behind a mark, a control's values), which a reached dataset
+ * answers (docs/team-folders D9); `open` (the default) for content beyond figures, which refuses it `figures_only`.
  */
-export async function withLockOf<R>(projectId: string, datasetId: string, body: (lock: Lock | null, hidden: ReadonlySet<string>) => Promise<R>, question: unknown = []): Promise<R> {
-  await folderGate(projectId, datasetId); // shared folders first (docs/team-folders D9); what else it reads meets the storage net
-  return gateColumns(projectId, datasetId, async () => [], question, async (hidden) => {
+export async function withLockOf<R>(projectId: string, datasetId: string, body: (lock: Lock | null, hidden: ReadonlySet<string>) => Promise<R>, question: unknown = [], folders: 'figures' | 'open' = 'open'): Promise<R> {
+  // Shared folders first (docs/team-folders D9); what else it reads meets the storage net.
+  return (await folderGate(projectId, datasetId, undefined, folders))(() => gateColumns(projectId, datasetId, async () => [], question, async (hidden) => {
     const lock = await rowLockFor(projectId, datasetId);
     return lock ? withRowLock(datasetId, () => body(lock, hidden)) : body(null, hidden);
-  });
+  }));
 }
 
 /** A hydrated table folded through the lock FIRST, so every helper after it sees entitled rows only. */

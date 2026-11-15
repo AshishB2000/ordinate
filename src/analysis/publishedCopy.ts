@@ -42,12 +42,19 @@ export interface PublishedCopy {
   versionKey?: string;
   /** contentTag('dashboard', draft) at Publish. */
   contentHash: string;
+  /**
+   * Every dataset the copy reads (./publishedReads), lowercase and sorted: what its viewers reach (docs/team-folders D9).
+   * Absent on a copy published before reach, which dashboard_reads' rebuild works out without writing it back.
+   */
+  reads?: string[];
 }
 
 /** never published · published and the draft is what was published · published, and the draft has moved since. */
 export type DashboardStatus = 'draft' | 'published' | 'edited';
 
 const VERSION_KEY_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d{1,3})?$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_READS = 1000;
 
 /** Whitelist a stored (untrusted) copy, as normalize() does every other field. Anything unusable → none. */
 export function sanitizePublished(raw: unknown, mint: () => string): PublishedCopy | undefined {
@@ -63,7 +70,21 @@ export function sanitizePublished(raw: unknown, mint: () => string): PublishedCo
     ...(typeof o.publishedBy === 'string' && o.publishedBy ? { publishedBy: o.publishedBy.slice(0, 320) } : {}),
     ...(typeof o.versionKey === 'string' && VERSION_KEY_RE.test(o.versionKey) ? { versionKey: o.versionKey } : {}),
     contentHash: o.contentHash.slice(0, 100),
+    ...(Array.isArray(o.reads) ? { reads: [...new Set(o.reads.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).map((x) => x.toLowerCase()))].sort().slice(0, MAX_READS) } : {}),
   };
+}
+
+/** The datasets a stored dashboard record's published copy reads ([] for none), or null for a copy without `reads`. Pure. */
+export function copyReadsOf(body: string): string[] | null {
+  let data: { published?: unknown; ready?: unknown } | null;
+  try {
+    data = JSON.parse(body);
+  } catch (_) {
+    return [];
+  }
+  const copy = sanitizePublished(data?.published, () => '');
+  if (copy) return copy.reads ?? null;
+  return data?.ready === true ? null : []; // a Ready dashboard is published as it stands (analysis.ts normalize)
 }
 
 /** The content an editor's save writes, as a copy of `a` (charts not frozen — the caller does that). */

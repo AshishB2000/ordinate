@@ -46,7 +46,8 @@ import { logger } from '../app/logger';
 import { callerOn } from '../server/authz/caller';
 import { atLeast } from '../server/authz/folders';
 import { levelOfItem, levelsOf } from '../server/authz/folderGate';
-import { asPublished, audienceCopy, copyOf, sanitizePublished, statusOf, type DashboardStatus, type PublishedCopy } from './publishedCopy';
+import { asPublished, audienceCopy, copyOf, copyReadsOf, sanitizePublished, statusOf, type DashboardStatus, type PublishedCopy } from './publishedCopy';
+import { useDashboardReadsDescriber } from '../server/dashboardReads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 export interface Analysis {
@@ -189,6 +190,10 @@ function normalize(data: any, projectId: string): Analysis {
   return withViews(a, data.views, data.defaultViewId);
 }
 
+const reads = () => require('./publishedReads') as typeof import('./publishedReads'); // lazy: it reads this store
+// What each dashboard's copy reads, kept beside the record (dashboard_reads, 0035; docs/team-folders D9).
+useDashboardReadsDescriber({ describe: (_p, body) => copyReadsOf(body), legacy: (p, body) => reads().bodyReads(p, body) });
+
 const audience = new AsyncLocalStorage<true>();
 
 /**
@@ -230,7 +235,8 @@ async function migrateReady(projectId: string, id: string, data: any): Promise<a
       if (!sanitizePublished(stored.published, randomUUID)) {
         const a = normalize({ ...stored, ready: undefined }, projectId);
         const { frozenSheets } = require('./publishDashboard') as typeof import('./publishDashboard'); // lazy: it imports this store
-        stored.published = { ...copyOf(a, a.updatedAt, undefined), sheets: await frozenSheets(projectId, a.sheets) };
+        const sheets = await frozenSheets(projectId, a.sheets);
+        stored.published = { ...copyOf(a, a.updatedAt, undefined), sheets, reads: await reads().publishedReads(projectId, { sheets, filters: a.filters }) };
       }
       delete stored.ready;
       return true;

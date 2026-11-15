@@ -26,6 +26,7 @@
 
 import { metricHidden } from '../analysis/columnHidden';
 import { ipcMain } from './bus';
+import { inMetricReach } from '../analysis/publishedReads';
 import { distinctFor } from './distinctFor';
 import { isRowPolicyError } from '../data/rowAccess';
 import { rowPolicyRefusal } from '../data/rowPolicyError';
@@ -531,7 +532,8 @@ export function register() {
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
   // `share` (server-side callers only — a report, a send; the contract has no such field): the figure is about to
   // LEAVE the app, so the Share policy judges the columns it was totalled from (publish/kpiPolicy), as visual:data's does.
-  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  // A metric on a dataset the caller only reaches resolves in its figure scope (docs/team-folders D9): a dashboard's KPI.
+  ipcMain.handle('metric:value', async (_e, { projectId, id, filters, params, asOf, currency, share }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, () => inMetricReach(projectId, id, async () => {
     try {
       const values = paramValues(params);
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
@@ -549,7 +551,7 @@ export function register() {
       if (isRowPolicyError(err)) return rowPolicyRefusal(err.reason); // typed, so a tile never shows its stored column instead
       return { ok: false, error: err?.message || 'Failed to compute the metric', ...liveCodeOf(err) };
     }
-  })));
+  }))));
 
   /**
    * The editor's live preview: a figure for a definition that has NOT been

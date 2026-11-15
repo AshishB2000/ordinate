@@ -24,6 +24,7 @@ import { inOrg as inOrgOf, readOnceInOrg } from '../db/orgTx';
 import { tagRefusals } from '../../data/refusalTag';
 import * as msg from '../folderMessages';
 import { rankOn } from './caller';
+import { buildReads, readersIn, type RowsUnder } from '../dashboardReads';
 import { readerEmails, writerEmails } from './index';
 
 export type FolderLevel = 'none' | 'view' | 'edit' | 'manage';
@@ -330,37 +331,59 @@ const LEVELS_FOR: Readonly<Record<'view' | 'edit', string[]>> = { view: ['view',
  * `writerEmails` narrowed to the anchor's root folder, for a push or a recipient list (D17). Everyone: exactly
  * those two. A top-level folder: org admins, project admins, and members whose project role reaches `min`
  * and whose team holds `min` on it. An unresolvable folder: admins only. Outside a request (jobs): takes its org.
+ * `anchor.reach` (a dataset, at view, with `rowsUnder` to build 0035 by): its reachers too (D9) — those who open a
+ * dashboard whose published copy reads it, when its top-level folder shares figures.
  */
-export async function openerEmails(pool: Pool, org: string, projectId: string, anchor: { kind: PlacedKind; id: string }, min: 'view' | 'edit'): Promise<string[]> {
+export async function openerEmails(pool: Pool, org: string, projectId: string, anchor: { kind: PlacedKind; id: string; reach?: boolean }, min: 'view' | 'edit', rowsUnder?: RowsUnder): Promise<string[]> {
   checkKind(anchor.kind);
   const p = projectId.toLowerCase();
-  const out = await inOrgOf(pool, org, async (c): Promise<string[] | null> => {
-    const placed = await c.query<{ folder_id: string }>(
-      'SELECT folder_id::text AS folder_id FROM folder_items WHERE org_id = $1 AND project_id = $2 AND kind = $3 AND item_id = $4',
-      [org, p, anchor.kind, anchor.id.toLowerCase()],
-    );
-    const folder = placed.rows[0]?.folder_id;
-    const root = folder ? rootOf(p, folder, new Map((await treeOf(c, org, p, null)).map((r) => [r.id, r]))) : 'everyone';
-    if (root === 'everyone') return null;
-    const r = await c.query<{ email: string }>(
-      `SELECT u.email FROM users u
-        WHERE u.org_id = $1 AND u.disabled_at IS NULL
-          AND (u.role = 'admin'
-               OR EXISTS (SELECT 1 FROM project_grants g
-                           WHERE g.org_id = u.org_id AND g.project_id = $2 AND g.role = 'admin'
-                             AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id)))
-               OR (EXISTS (SELECT 1 FROM project_grants g
-                            WHERE g.org_id = u.org_id AND g.project_id = $2 AND g.role = ANY($3::text[])
-                              AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id)))
-                   AND EXISTS (SELECT 1 FROM folder_grants fg
-                                WHERE fg.org_id = u.org_id AND fg.project_id = $2 AND fg.folder_id = $4::uuid
-                                  AND fg.level = ANY($5::text[])
-                                  AND fg.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))))
-        ORDER BY u.email`,
-      [org, p, ROLES_FOR[min], root === null ? null : root.id, LEVELS_FOR[min]],
-    );
-    return r.rows.map((row) => row.email);
-  });
-  if (out) return out;
-  return min === 'edit' ? writerEmails(pool, org, p) : readerEmails(pool, org, p);
+  const d = anchor.id.toLowerCase();
+  const reach = anchor.reach === true && anchor.kind === 'dataset' && min === 'view' && !!rowsUnder;
+  for (let attempt = 0; ; attempt++) {
+    const out = await inOrgOf(pool, org, async (c): Promise<string[] | null | 'unbuilt'> => {
+      const placed = await c.query<{ folder_id: string }>(
+        'SELECT folder_id::text AS folder_id FROM folder_items WHERE org_id = $1 AND project_id = $2 AND kind = $3 AND item_id = $4',
+        [org, p, anchor.kind, d],
+      );
+      const folder = placed.rows[0]?.folder_id;
+      if (!folder) return null;
+      const tree = new Map((await treeOf(c, org, p, null)).map((r) => [r.id, r]));
+      const root = rootOf(p, folder, tree);
+      if (root === 'everyone') return null;
+      const roots = root === null ? [] : [root.id];
+      if (reach && root !== null && root.shareFigures) {
+        const by = await readersIn(c, org, p, [d]);
+        if (!by.built && attempt === 0) return 'unbuilt';
+        for (const f of by.readers.get(d) ?? []) {
+          const r = f === p ? 'everyone' : rootOf(p, f, tree);
+          if (r === 'everyone') return null; // a dashboard in Everyone reads it: every reader reaches it
+          if (r) roots.push(r.id);
+        }
+      }
+      const r = await c.query<{ email: string }>(
+        `SELECT u.email FROM users u
+          WHERE u.org_id = $1 AND u.disabled_at IS NULL
+            AND (u.role = 'admin'
+                 OR EXISTS (SELECT 1 FROM project_grants g
+                             WHERE g.org_id = u.org_id AND g.project_id = $2 AND g.role = 'admin'
+                               AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id)))
+                 OR (EXISTS (SELECT 1 FROM project_grants g
+                              WHERE g.org_id = u.org_id AND g.project_id = $2 AND g.role = ANY($3::text[])
+                                AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id)))
+                     AND EXISTS (SELECT 1 FROM folder_grants fg
+                                  WHERE fg.org_id = u.org_id AND fg.project_id = $2 AND fg.folder_id = ANY($4::uuid[])
+                                    AND fg.level = ANY($5::text[])
+                                    AND fg.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))))
+          ORDER BY u.email`,
+        [org, p, ROLES_FOR[min], roots, LEVELS_FOR[min]],
+      );
+      return r.rows.map((row) => row.email);
+    });
+    if (out === 'unbuilt') {
+      await buildReads(p, rowsUnder as RowsUnder); // once; a project still unbuilt after it is read as it stands
+      continue;
+    }
+    if (out) return out;
+    return min === 'edit' ? writerEmails(pool, org, p) : readerEmails(pool, org, p);
+  }
 }

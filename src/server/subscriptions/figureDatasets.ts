@@ -39,9 +39,11 @@ import type { Delivery } from './deliver';
 import { wholeProject } from '../authz/folders';
 const DATASET_KEY = /datasetids?$/i;
 const VISUAL_KEY = /visualids?$/i;
+const METRIC_KEY = /metricids?$/i;
 const MAX_DEPTH = 40;
 
-interface Found { all: Set<string>; datasets: Set<string>; visuals: Set<string> }
+/** `metrics`, when asked: the ids under a `…metricId(s)` key (src/analysis/publishedReads). */
+export interface Found { all: Set<string>; datasets: Set<string>; visuals: Set<string>; metrics?: Set<string> }
 
 /** Every UUID anywhere in `v`; those under a dataset- or visual-id key (or in such an array) noted. Too deep → throws. */
 export function collectIds(v: unknown, out: Found, key = '', depth = 0): void {
@@ -52,6 +54,7 @@ export function collectIds(v: unknown, out: Found, key = '', depth = 0): void {
     out.all.add(id);
     if (DATASET_KEY.test(key)) out.datasets.add(id);
     if (VISUAL_KEY.test(key)) out.visuals.add(id);
+    if (out.metrics && METRIC_KEY.test(key)) out.metrics.add(id);
   } else if (Array.isArray(v)) {
     for (const x of v) collectIds(x, out, key, depth + 1);
   } else if (v && typeof v === 'object') {

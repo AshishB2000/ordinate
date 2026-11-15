@@ -886,6 +886,23 @@ folder restricts (a hide, never a leak), and there is no such person until folde
 when the older release saves one of those records; its own rebuilds carry its older version, so upgrading again rebuilds once and
 misses nothing.
 
+## What each dashboard shows, for shared folders (`0035_dashboard_reads`)
+
+Part of the shared-folders readers (`docs/team-folders/00-design.md`, D9): a dataset in a folder someone cannot open
+still shows its figures on a dashboard they can open, when the dashboard's published copy reads it. From this release
+**Publish** records which datasets the copy reads (`published.reads`), and every save keeps a row per dashboard and
+dataset in `dashboard_reads`, in the same transaction. Nothing changes for anyone: no folder can be made yet, and
+without one nothing reads these rows. Without `DATABASE_URL` nothing changes either.
+
+**Rolling out.** The migration adds two tables and two triggers on `records`. It reads no record and rewrites no
+dashboard. A copy published before this release has no `reads`; each project works them out from the copies' charts
+and metrics the first time someone needs them, once, without writing the dashboards. A pod of an older release still
+running saves dashboards without these rows; the triggers drop that dashboard's rows and mark the project stale, so a
+dashboard can only show fewer charts outside its folder until a new pod rebuilds them, never more.
+
+**Rolling back.** The older release ignores the tables and the copies' `reads`. The triggers stay and mark a
+project stale when the older release saves a dashboard, so upgrading again rebuilds what it changed.
+
 ## Compose
 
 From a checkout:

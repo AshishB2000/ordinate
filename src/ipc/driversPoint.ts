@@ -29,6 +29,8 @@ import { fxScope, fxVizContext } from './fxQuery';
 import { vizDataFor } from './visuals';
 import { chartScope } from '../analysis/metricTimeScope';
 import { runDrivers } from './drivers';
+import { folderGate } from '../server/authz/folderGate';
+import { isFolderError } from '../server/authz/folders';
 import type { DriversResult } from './drivers';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,6 +57,7 @@ const text = (v: unknown): string | undefined => (typeof v === 'string' ? v : un
 /** The whole answer for one pointed-at bucket. EXPORTED for scripts/test-driversPoint.ts. */
 export async function explainPoint(projectId: string, req: PointRequest): Promise<PointReply> {
   const datasetId = req.datasetId;
+  await folderGate(projectId, datasetId, undefined, 'open'); // the drivers read rows beyond a chart's figures: a reached dataset refuses (docs/team-folders D9)
   if (await liveMetaOf(projectId, datasetId)) {
     const r = refuse('drivers');
     return { ok: false, code: 'live_refused', error: r.message, reason: r.code };
@@ -96,6 +99,7 @@ export function register(): void {
       if (typeof req.datasetId !== 'string' || !UUID_RE.test(req.datasetId)) return { ok: false, error: 'Dataset not found' };
       return await explainPoint(projectId, req as PointRequest);
     } catch (err: any) { // any: a handler's throw
+      if (isFolderError(err)) throw err; // the route's 409 `folder`
       return { ok: false, error: err?.message || 'Could not explain the change.' };
     }
   });

@@ -13,6 +13,8 @@
 //    scripts/folderNetSends.ts, each with its negative control.
 // 6 (E4, with DATABASE_URL): the indexes — ⌘K, the Assistant's search by words and meaning, the counts, the verified
 //    lookup and the history — per person against their references, on Finance's canaries (scripts/folderNetIndexes.ts).
+// 4's reach (E5, with DATABASE_URL): a dataset read by a dashboard the caller opens answers its figures and nothing
+//    else, the publish refusal, the refresh push — scripts/folderNetReach.ts, each with its negative control.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-folderSafetyNet.js
 
