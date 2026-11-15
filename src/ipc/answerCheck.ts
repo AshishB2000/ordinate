@@ -28,10 +28,13 @@ export async function vocabulary(projectId: string, want: VocabularyWant): Promi
 /** At most this many datasets step 3 finds for a dataset name that missed: "Did you mean"'s candidates. */
 const NEAR_DATASETS = 20;
 
-/** The datasets step 3 finds for `said` (a dataset name that resolved to none), inside `only` when there is one. */
+/**
+ * The datasets step 3 finds for `said` (a dataset name that resolved to none), inside `only` when there is one: by its
+ * words only (score > 0). "Did you mean" offers them, and meaning may reorder what the words found, not offer more.
+ */
 async function nearDatasets(projectId: string, said: string, only?: ReadonlySet<string>): Promise<string[]> {
   const hits = await searchModel(projectId, said, { kinds: ['dataset'], limit: NEAR_DATASETS, ...(only ? { datasetIds: [...only] } : {}) });
-  return hits.map((h) => h.id);
+  return hits.flatMap((h) => (h.score > 0 ? [h.id] : []));
 }
 
 /**

@@ -270,7 +270,7 @@ async function olderPodLeg(pool: Pool, w: World): Promise<void> {
   const write = async (keys: boolean): Promise<void> => {
     const c = await pool.connect();
     try {
-      await c.query(`BEGIN; SELECT set_config('ordinate.org', 'acme', true), set_config('ordinate.assistant_search', 'on', true)${keys ? ", set_config('ordinate.assistant_search_keys', 'on', true)" : ''}`);
+      await c.query(`BEGIN; SELECT set_config('ordinate.org', 'acme', true), set_config('ordinate.assistant_search', 'on', true)${keys ? ", set_config('ordinate.assistant_search_keys', 'on', true), set_config('ordinate.search_text', 'on', true)" : ''}`);
       await c.query(`UPDATE records SET body = body WHERE org_id = 'acme' AND path = $1`, [`projects/${w.P}/metrics/${w.revenue}.json`]);
       await c.query('COMMIT');
     } finally {

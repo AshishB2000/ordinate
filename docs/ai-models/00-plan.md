@@ -265,7 +265,7 @@ These come from CLAUDE.md, with the extra ones for this work:
 - Found by `test-aiModels-db`: the legacy import borrowed a second pool connection while holding one,
   which deadlocks a full pool. It now reads the old policy on its own transaction's client.
 
-## Meaning search: the fingerprint model (phase C, PR 7b part 1)
+## Meaning search: the fingerprint model (phase C, PR 7b; the job and the ask path, PR 7c)
 
 Answers the "fingerprint model" open question in `docs/assistant/00-design.md`. A fingerprint is
 an embedding of an item's text (a dataset, column, metric, term or verified question), made by the
@@ -279,7 +279,7 @@ org's own provider key. Nothing is installed on the server and nothing runs loca
 | **Normalized here** | Every vector is scaled to length 1 by the server, whatever the provider: OpenAI's are already unit length, `gemini-embedding-001` cut to 768 is not, and a gateway may not be. |
 | **Requests** | Through `providerFetch` (the SSRF guard), at most 100 texts each, a 30 s timeout joined to the request's abort signal. The key is sent in a header (Gemini's `x-goog-api-key` too, not the `?key=` the chat call uses) and cut out of any provider reason before it is logged or returned. |
 | **Storage** | `fingerprintModel` in the org's settings document (`src/app/config.ts`, the `org_config` row), behind `aiConfig.currentFingerprintModel()` / `setFingerprintModel()`. No migration. Its provider must be connected; disconnecting that provider turns meaning search off. |
-| **Changing it** | Saving another model sends nothing. Part 2's background job refingerprints every item; until it has, items are found by their words. |
+| **Changing it** | Saving another model sends nothing. The background job (PR 7c) refingerprints every item; until it has, items are found by their words, and the old model's rows are never read. |
 
 `text-embedding-004` was left out: Google's deprecations page lists it as shut down on 14 January 2026.
 
@@ -291,6 +291,35 @@ handler; and `ai:testFingerprint {pick}`, which fingerprints one short sample an
 **Cost.** OpenAI's embeddings guide (read 15 November 2026) works out to about $0.02 per million
 tokens for `text-embedding-3-small` and about $0.13 for `-large`. At roughly 50 tokens per item,
 10,000 items is about 500,000 tokens, so about one cent. Gemini's price was not checked.
+
+**What turning it on costs (PR 7c).** Two kinds of request, both with the org's key, none before an admin picks a model:
+
+- **One per question.** An ask on a project with fingerprints sends the question once (purpose `query`, a 2 s timeout;
+  on any failure the answer goes on by words). About 10 tokens: at `text-embedding-3-small` prices, a million questions
+  is about 20 cents. On the database, each search adds one nearest-items query (23 ms at 8,000 candidates in a project)
+  and each ask one check that the project has fingerprints.
+- **The job's batches.** `search:fingerprints` runs every 2 minutes per org and sends only items whose text changed or
+  have no fingerprint of the current model: at most 500 texts a run, 100 a request, so the first fill of a project of
+  20,000 items is 40 runs back to back (each queued again at once while there is more). Afterwards a run with nothing to
+  send costs one query per project (52 ms at that size) and no request. Picking another model fills everything again.
+- Admin → AI shows "Fingerprinted N of M items" under the model while the job works, and why there is nowhere to keep
+  fingerprints when the database has no pgvector.
+
+**What it fingerprints and how near counts (PR 7c).** An item's natural text (its name, other names and description,
+after its dataset's name for a column or a metric), stored on the index rows when they are written (`0030_search_text`);
+a verified question as written. An item counts as near only at or above its model's least cosine similarity, and
+an agent's outside-the-topic offer and "Did you mean" never name an item found by meaning alone:
+
+| Model | Least similarity |
+|---|---|
+| OpenAI `text-embedding-3-small`, `text-embedding-3-large` | 0.35 |
+| Gemini `gemini-embedding-001`, `gemini-embedding-2` | 0.35 |
+| A gateway's model | 0.5 (its scale is unknown) |
+| `MEANING_MIN_SIMILARITY` set | that, for every model |
+
+Chosen, not measured: a short unrelated pair usually scores well under 0.35 with these models and a paraphrase above
+it; no provider is called in this repo's tests, so calibrate on a real project before moving them. A text the provider
+refuses alone (400, 413, 422) is retried at most 3 times, then skipped for a day; a changed text starts afresh.
 
 **Rank merge** (`src/ai/rankFusion.ts`, pure): `fuse(lists, {k = 60, limit})` scores each item
 Σ 1/(k + rank) over the lists it is in (rank from 1), ties by its rank in the first list (words),

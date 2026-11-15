@@ -16,6 +16,8 @@
 //   errors    401, 429, 500 and a dropped socket are typed; an aborted request
 //             signal stops the call
 //   canary    a planted key echoed back by the provider is in no reply or log line
+//   options   purpose: Gemini's taskType RETRIEVAL_DOCUMENT / RETRIEVAL_QUERY (OpenAI's body unchanged); quiet: no
+//             log line; timeoutMs: a provider that never answers fails after it
 //
 //   npm run build:ts && node scripts/test-fingerprints.js
 
@@ -54,7 +56,10 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   if (init?.signal?.aborted) throw Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
   const req: Seen = { url: String(url), headers: { ...(init?.headers as Record<string, string>) }, body: JSON.parse(String(init?.body ?? 'null')) };
   seen.push(req);
-  return reply(req);
+  const signal = init?.signal;
+  if (!signal) return reply(req);
+  const aborted = new Promise<Response>((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: (signal.reason as Error | undefined)?.name ?? 'AbortError' }))));
+  return Promise.race([reply(req), aborted]);
 }) as typeof fetch;
 
 const json = (v: unknown, status = 200): Response => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
@@ -118,6 +123,16 @@ const GATEWAY = { provider: 'gateway', model: 'acme/embed-768' };
     ok('gemini: the key in x-goog-api-key, not in the URL', g?.headers['x-goog-api-key'] === CANARY && !g.url.includes('key=') && !g.url.includes(CANARY));
     ok('vectors: Gemini\'s truncated 3-4-0… is normalized to 0.6-0.8-0…', gem.ok && Object.is(gem.vectors[0][0], Math.fround(0.6)) && Object.is(gem.vectors[0][1], Math.fround(0.8))
       && gem.vectors[1].slice(2).every((x) => x === 0), gem.ok ? String(gem.vectors[0].slice(0, 3)) : show(gem));
+    seen = [];
+    await fp.fingerprint(['Revenue'], GEMINI, { purpose: 'document' });
+    await fp.fingerprint(['sales by region'], GEMINI, { purpose: 'query' });
+    ok('purpose: Gemini gets taskType RETRIEVAL_DOCUMENT for a document and RETRIEVAL_QUERY for a question', seen[0]?.body.requests[0].taskType === 'RETRIEVAL_DOCUMENT'
+      && seen[1]?.body.requests[0].taskType === 'RETRIEVAL_QUERY', show(seen.map((r) => r.body.requests[0].taskType)));
+    ok('purpose NEGATIVE CONTROL: none given, none sent', !('taskType' in g.body.requests[0]));
+    reply = openaiOk();
+    seen = [];
+    await fp.fingerprint(['t1'], OPENAI, { purpose: 'query' });
+    ok('purpose: OpenAI takes none, so its body is unchanged', show(seen[0]?.body) === show({ model: 'text-embedding-3-small', input: ['t1'], dimensions: 768, encoding_format: 'float' }), show(seen[0]?.body));
     ok('vectors: unit() scales any vector to length 1', (() => {
       const u = fp.unit([1, 2, 3, 4]);
       return !!u && Math.abs(Math.hypot(...u) - 1) < 1e-6;
@@ -167,6 +182,14 @@ const GATEWAY = { provider: 'gateway', model: 'acme/embed-768' };
     ok('canary: in no log line', logged.length > 0 && !logged.includes(CANARY), logged);
     ok('canary NEGATIVE CONTROL: the log did carry the echoing reply (key cut out) and the socket error', logged.includes('Incorrect API key provided: ***')
       && logged.includes('ECONNREFUSED while sending ***'), logged);
+    const before = logged.length;
+    reply = () => new Response('upstream exploded', { status: 500 });
+    const hushed = await fp.fingerprint(['t1'], OPENAI, { quiet: true });
+    ok('quiet: a failure is still typed, and nothing is logged here (the caller logs it once)', !hushed.ok && hushed.errorType === 'provider' && logged.length === before, logged.slice(before));
+    reply = () => new Promise<Response>(() => undefined); // never answers
+    const t0 = Date.now();
+    const slow = await fp.fingerprint(['t1'], OPENAI, { timeoutMs: 50, quiet: true });
+    ok('timeoutMs: a provider that never answers is a network error after the timeout given', !slow.ok && slow.errorType === 'network' && Date.now() - t0 < 5_000, show(slow));
 
     // ── Admin → AI's Test ──────────────────────────────────────────────────
     reply = openaiOk();

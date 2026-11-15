@@ -233,6 +233,41 @@ describe('Admin → AI → fingerprint model for meaning search', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Connect gateway before adding its models.');
   });
 
+  const STATUS = 'ai:fingerprintStatus';
+  it('says when the database has no pgvector, why meaning search stays on words, and links the upgrade note', async () => {
+    serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: OPENAI_ON }, [STATUS]: { body: { vectors: 'no_extension', items: null, fingerprinted: null } } });
+    open();
+    expect(await screen.findByText(/Meaning search needs the pgvector extension on your database\./)).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'How to add pgvector' }) as HTMLAnchorElement;
+    expect(link.href).toMatch(/docs\/server\/upgrade\.md#pgvector-for-meaning-search-0029_pgvector$/);
+    expect(link.target).toBe('_blank');
+  });
+
+  it('with a model saved, shows how far the job has got', async () => {
+    serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: { ...OPENAI_ON, fingerprintModel: SMALL } }, [STATUS]: { body: { vectors: 'ready', items: 1300, fingerprinted: 1234 } } });
+    open();
+    expect(await screen.findByText(/^Fingerprinted 1,234 of 1,300 items\./)).toBeTruthy();
+  });
+
+  it('…and once every item is done, says so', async () => {
+    serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: { ...OPENAI_ON, fingerprintModel: SMALL } }, [STATUS]: { body: { vectors: 'ready', items: 1300, fingerprinted: 1300 } } });
+    open();
+    expect(await screen.findByText('All 1,300 items are fingerprinted.')).toBeTruthy();
+  });
+
+  it('with no model, a ready database adds no line; the status loads with a skeleton and fails with a retry', async () => {
+    let fail = true;
+    const calls = serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: OPENAI_ON }, [STATUS]: () => (fail ? { status: 500, body: { error: 'boom' } } : { body: { vectors: 'ready', items: null, fingerprinted: null } }) });
+    open();
+    expect(await screen.findByRole('status', { name: 'Loading meaning search status' })).toBeTruthy();
+    expect((await screen.findByRole('alert')).textContent).toContain('The meaning search status did not load.');
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.queryByText(/fingerprinted/i)).toBeNull();
+    expect(calls.filter((c) => c.channel === STATUS).length).toBeGreaterThanOrEqual(2);
+  });
+
   it('a saved model shows On; choosing Off and saving sends null', async () => {
     const calls = serve({ '/api/auth/me': { body: ADMIN }, 'ai:admin': { body: { ...OPENAI_ON, fingerprintModel: SMALL } }, 'ai:setFingerprintModel': { body: { ok: true } } });
     open();

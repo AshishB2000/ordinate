@@ -13,14 +13,15 @@
 import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
+import type { NearTo } from './vectorStore';
 
 /** Bump when what a record describes to changes (`questionKey`, `words`): every marker is then stale, and each project rebuilds once. */
-export const VERIFIED_INDEX_VERSION = 1;
+export const VERIFIED_INDEX_VERSION = 2; // 2: ord 0's text, the question as written (0030)
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
-/** One wording of a question: ord 0 the question (with its `words`), 1.. its phrasings (no words). */
-export interface KeyRow { ord: number; key: string; datasetId: string; updated: string; words: string[] }
+/** One wording of a question: ord 0 the question (with its `words`, and its `text` as written: what is fingerprinted), 1.. its phrasings (neither). */
+export interface KeyRow { ord: number; key: string; datasetId: string; updated: string; words: string[]; text: string }
 /** The rows of the record at projects/<projectId>/verified/<id>.json; none for a body that is no question of that id. */
 export type DescribeVerified = (projectId: string, id: string, body: string) => KeyRow[];
 export type RowsUnder = (c: PoolClient, org: string, rel: string, after: string, limit: number, maxBytes: number) => Promise<Array<{ rel: string; body: string | null }>>;
@@ -67,11 +68,11 @@ async function guarded(c: PoolClient, fn: () => Promise<void>): Promise<boolean>
 async function insertRows(c: PoolClient, org: string, projectId: string, rows: ReadonlyArray<KeyRow & { id: string }>): Promise<void> {
   if (!rows.length) return;
   await c.query(
-    `INSERT INTO verified_keys (org_id, project_id, id, ord, key, dataset_id, updated, words)
-     SELECT $1, $2, u.id, u.ord, u.key, u.dataset_id, u.updated, CASE WHEN u.words = '' THEN '{}'::text[] ELSE string_to_array(u.words, ' ') END
-     FROM unnest($3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[]) AS u(id, ord, key, dataset_id, updated, words)`,
+    `INSERT INTO verified_keys (org_id, project_id, id, ord, key, dataset_id, updated, words, text)
+     SELECT $1, $2, u.id, u.ord, u.key, u.dataset_id, u.updated, CASE WHEN u.words = '' THEN '{}'::text[] ELSE string_to_array(u.words, ' ') END, u.text
+     FROM unnest($3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[]) AS u(id, ord, key, dataset_id, updated, words, text)`,
     [org, projectId, rows.map((r) => r.id), rows.map((r) => r.ord), rows.map((r) => r.key), rows.map((r) => r.datasetId), rows.map((r) => r.updated),
-      rows.map((r) => r.words.join(' '))], // `words` splits on anything but letters, marks and digits: none holds a space
+      rows.map((r) => r.words.join(' ')), rows.map((r) => r.text)], // `words` splits on anything but letters, marks and digits: none holds a space
   );
 }
 
@@ -174,17 +175,42 @@ export interface ExampleOrder { asked: readonly string[]; datasetId?: string; fi
  * The ids of `projectId`'s questions in ../ai/verifiedPick `exampleOrder`: the context's dataset, an agent's topic,
  * the most words shared with the question (`asked`, deduplicated), the newest, then the id. `limit` after `offset`.
  */
-export function rankedIds(projectId: string, o: ExampleOrder, offset: number, limit: number, rowsUnder: RowsUnder): Promise<string[] | null> {
+export function rankedIds(projectId: string, o: ExampleOrder, offset: number, limit: number, rowsUnder: RowsUnder): Promise<Ranked[] | null> {
   // shortcut: the shared words are counted for every question of the project (linear, in Postgres: 9.7 ms at 5,000), upgrade to a GIN prefilter on `words` past ~20,000 questions per project.
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
-      `SELECT id FROM verified_keys
+      `SELECT id, dataset_id FROM verified_keys
        WHERE org_id = $1 AND project_id = $2 AND ord = 0
        ORDER BY CASE WHEN dataset_id = $3 THEN 0 WHEN dataset_id = ANY($4::text[]) THEN 1 ELSE 2 END,
          (SELECT count(*) FROM unnest(words) AS w WHERE w = ANY($5::text[])) DESC, updated DESC, id
        LIMIT $6 OFFSET $7`,
       [org, projectId, o.datasetId ?? null, o.first ?? [], o.asked, limit, offset],
     );
-    return r.rows.map((x: { id: string }) => x.id);
+    return r.rows.map((x: { id: string; dataset_id: string }) => ({ id: x.id, datasetId: x.dataset_id }));
+  });
+}
+
+/** A question as the example rankings return it: its id and the dataset its chart is on. */
+export interface Ranked { id: string; datasetId: string }
+
+/** A question's key among the fingerprints (0029's `item`). */
+export const verifiedItem = (id: string): string => `verified:${id}`;
+
+/**
+ * The `k` questions whose fingerprint (`to.model`'s) is nearest the question's by cosine, no farther than
+ * `to.maxDistance`, nearest first, then by key.
+ * Null without a database. Exact within the project, as ./assistantSearchIndex nearestPage (and why).
+ */
+export function nearestIds(projectId: string, to: NearTo, k: number, rowsUnder: RowsUnder): Promise<Ranked[] | null> {
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      `WITH d AS MATERIALIZED (
+         SELECT v.item, v.embedding ${to.place.op} $3::${to.place.type} AS d FROM assistant_search_vectors v
+         WHERE v.org_id = $1 AND v.project_id = $2 AND v.model = $4 AND v.item >= 'verified:' AND v.item < 'verified;')
+       SELECT k.id, k.dataset_id FROM d JOIN verified_keys k ON k.org_id = $1 AND k.project_id = $2 AND k.id = substr(d.item, 10) AND k.ord = 0
+       WHERE d.d <= $6 ORDER BY d.d, d.item LIMIT $5`,
+      [org, projectId, to.literal, to.model, k, to.maxDistance],
+    );
+    return r.rows.map((x: { id: string; dataset_id: string }) => ({ id: x.id, datasetId: x.dataset_id }));
   });
 }

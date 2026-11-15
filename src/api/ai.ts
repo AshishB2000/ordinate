@@ -61,4 +61,8 @@ export const ai = {
   'ai:setFingerprintModel': rpc({ access: 'admin', org: true, input: z.strictObject({ pick: FingerprintPick.nullable() }) }),
   // Fingerprints one short sample with `pick`, saved or not: { ok, dimensions, ms } or the provider's sentence.
   'ai:testFingerprint': rpc({ access: 'admin', org: true, input: z.strictObject({ pick: FingerprintPick }) }),
+  // Meaning search's coverage: { vectors: 'ready' | why not (no_database, no_extension, not_created, no_table),
+  // items, fingerprinted } — the org's searched items with a text, and how many have a fresh fingerprint of its model
+  // (null with no model or no table). Counts only: no item, no text.
+  'ai:fingerprintStatus': rpc({ access: 'admin', org: true, input: z.undefined() }),
 } as const;

@@ -11,6 +11,10 @@
 // What is per person is never in the index: a column hidden from the caller (../data/rowAccess hiddenColumnsFor), and a
 // metric or term that reads one (../analysis/columnHidden, as the Assistant's vocabulary leaves them out), are dropped
 // from the ranked results here, a page at a time, and from the counts, the same way on both paths.
+//
+// MEANING (PR 7c, ./meaning): with fingerprints, the index also finds the MEANING_K items nearest the question under
+// the same access WHERE, merges them with the first MEANING_K by words by rank, and the rest follow by words; the
+// hidden ones are dropped after, as above. The reference takes the distances it is given (`distance`) the same way.
 
 import { createHash } from 'crypto';
 import * as recordFs from '../app/recordFs';
@@ -35,7 +39,8 @@ import { datasetFilePath } from '../data/datasetRecord';
 import { readTexts } from '../app/recordTexts';
 import { metricHidden, termHidden } from '../analysis/columnHidden';
 import { searchWords, searchWordsOf } from '../ai/modelWords';
-import { MODEL_KINDS, foundItems, keyedItems, newestItems, noCounts, rankParts } from '../app/assistantSearchRank';
+import { MEANING_K, MODEL_KINDS, foundItems, fusedHead, itemKey, itemTexts, keyedItems, nearItems, newestItems, noCounts, phrase, rankParts, withMeaning } from '../app/assistantSearchRank';
+import { meaningOf, nearOrWords } from './meaning';
 import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
 
 export type { KeyedItem, ModelCounts, ModelHit, ModelKind } from '../app/assistantSearchRank';
@@ -57,7 +62,7 @@ export function _setIndexed(on: boolean): void {
 const stamp = (v: unknown): string => (typeof v === 'string' ? clean(v) : '');
 const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 function part(p: Pick<Part, 'item' | 'kind'> & Partial<Part>): Part {
-  return { grp: '', base: false, id: '', datasetId: null, connId: null, name: '', updated: '', audience: 'all', nameWords: [], aliasWords: [], textWords: [], certified: false, retired: false, keys: [], ...p };
+  return { grp: '', base: false, id: '', datasetId: null, connId: null, name: '', updated: '', audience: 'all', nameWords: [], aliasWords: [], textWords: [], certified: false, retired: false, keys: [], text: '', ...p };
 }
 
 // ── Exact-lookup keys (0028): a name as the answer validator compares it (../ai/answerSpec resolveDataset and
@@ -94,8 +99,8 @@ export function datasetParts(s: Pick<datasets.DatasetSummary, 'id' | 'name' | 'u
   if (id.length > MAX_KEY) return [];
   const updated = stamp(s.updatedAt);
   return [
-    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)), keys: [...namesKeys([text(s.name)]), ...hiding] }),
-    ...columnNames(columns).map((name) => part({ item: `column:${id}/${name}`, kind: 'column', base: true, id: name, datasetId: id, name, updated, nameWords: searchWords(name) })),
+    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)), keys: [...namesKeys([text(s.name)]), ...hiding], text: phrase(clean(text(s.name)), [], '') }),
+    ...columnNames(columns).map((name) => part({ item: `column:${id}/${name}`, kind: 'column', base: true, id: name, datasetId: id, name, updated, nameWords: searchWords(name), text: phrase(name, [], '') })),
   ];
 }
 
@@ -104,6 +109,7 @@ export function metricParts(m: metrics.MetricSummary): Part[] {
   return id.length > MAX_KEY ? [] : [part({
     item: `metric:${id}`, kind: 'metric', base: true, id, datasetId: clean(String(m.datasetId)), name: clean(text(m.name)), updated: stamp(m.updatedAt),
     nameWords: searchWords(text(m.name)), textWords: searchWords(text(m.description)), keys: [lowerKey(text(m.name)), ...onKeys(clean(String(m.datasetId)))],
+    text: phrase(clean(text(m.name)), [], clean(text(m.description))),
   })];
 }
 
@@ -113,12 +119,14 @@ export function termParts(t: terms.TermSummary): Part[] {
     item: `term:${id}`, kind: 'term', base: true, id, datasetId: clean(String(t.datasetId)), name: clean(text(t.name)), updated: stamp(t.updatedAt),
     nameWords: searchWords(text(t.name)), aliasWords: searchWordsOf(t.aliases), textWords: searchWords(text(t.description)),
     keys: [...namesKeys([text(t.name), ...t.aliases.filter((a) => typeof a === 'string')]), ...onKeys(clean(String(t.datasetId)))],
+    text: phrase(clean(text(t.name)), t.aliases.filter((a) => typeof a === 'string').map(clean), clean(text(t.description))),
   })];
 }
 
 /** A connection's documented tables, for editors only: a viewer never reads a warehouse table's name (p2-01). */
 export const tableParts = (connId: string, entries: readonly SourceIndexEntry[]): Part[] => entries.map((e) => part({
   item: `table:${connId}/${e.docId}`, kind: 'table', base: true, id: e.docId, connId, name: clean(e.table), audience: 'editor', nameWords: searchWords(e.table),
+  text: phrase(clean(e.table), [], ''),
 }));
 
 /**
@@ -130,12 +138,14 @@ export function catalogParts(file: catalog.CatalogFile): Part[] {
   const ids = new Set([...Object.keys(file.records).flatMap((k) => (k.startsWith('dataset:') ? [k.slice('dataset:'.length)] : [])), ...Object.keys(file.columns)]);
   for (const ds of ids) {
     const grp = `d:${ds}`;
-    const about = searchWords(file.records[`dataset:${ds}`]?.description ?? '');
-    if (about.length) out.push(part({ grp, item: `dataset:${ds}`, kind: 'dataset', datasetId: ds, textWords: about }));
+    const description = clean(file.records[`dataset:${ds}`]?.description ?? '');
+    const about = searchWords(description);
+    if (about.length) out.push(part({ grp, item: `dataset:${ds}`, kind: 'dataset', datasetId: ds, textWords: about, text: phrase('', [], description) }));
     for (const [name, doc] of Object.entries(file.columns[ds] ?? {})) {
       const aliasWords = searchWordsOf([doc.displayName, ...doc.aliases]);
       const textWords = searchWords(doc.description);
-      if (aliasWords.length || textWords.length) out.push(part({ grp, item: `column:${ds}/${clean(name)}`, kind: 'column', datasetId: ds, aliasWords, textWords }));
+      const text = phrase('', [doc.displayName, ...doc.aliases].map(clean), clean(doc.description)); // never the example or value labels: values
+      if (aliasWords.length || textWords.length) out.push(part({ grp, item: `column:${ds}/${clean(name)}`, kind: 'column', datasetId: ds, aliasWords, textWords, text }));
     }
   }
   for (const [ref, doc] of Object.entries(file.status ?? {})) {
@@ -213,21 +223,29 @@ function hiddenCheck(projectId: string): (h: Pick<ModelHit, 'kind' | 'id' | 'dat
   };
 }
 
-/** The first `limit` ranked results the caller may see, read `page` by page, so a page of hidden ones reads the next. Null when a page is. */
-function visible(projectId: string, limit: number, page: (offset: number, n: number) => Promise<ModelHit[] | null>): Promise<ModelHit[] | null> {
+/**
+ * The first `limit` ranked results the caller may see: `head` first, then `page` by page (null: none) less what `head`
+ * holds, so a page of hidden ones reads the next. Null when a page is.
+ */
+function visible(projectId: string, limit: number, page: ((offset: number, n: number) => Promise<ModelHit[] | null>) | null, head: readonly ModelHit[] = []): Promise<ModelHit[] | null> {
   return recordFs.withReadMemo(async () => {
     const hidden = hiddenCheck(projectId);
     // A restricted caller's column checks read each result's dataset record: one query a page (an editor's read none).
     const reads = inFanOut() || (await restrictedOn(projectId));
     const n = Math.max(limit, BATCH);
     const out: ModelHit[] = [];
-    for (let offset = 0; out.length < limit; offset += n) {
-      const batch = await page(offset, n);
-      if (!batch) return null;
+    const take = async (batch: readonly ModelHit[]): Promise<void> => {
       if (reads) await recordFs.readMany([...new Set(batch.flatMap((h) => (h.kind === 'column' && h.datasetId && isValidId(h.datasetId) ? [datasetFilePath(projectId, h.datasetId)] : [])))]);
       for (const h of batch) {
         if (out.length < limit && !(await hidden(h))) out.push(h);
       }
+    };
+    for (let i = 0; i < head.length && out.length < limit; i += n) await take(head.slice(i, i + n));
+    const had = new Set(head.map(itemKey));
+    for (let offset = 0; page && out.length < limit; offset += n) {
+      const batch = await page(offset, n);
+      if (!batch) return null;
+      await take(had.size ? batch.filter((h) => !had.has(itemKey(h))) : batch);
       if (batch.length < n) break;
     }
     return out;
@@ -268,21 +286,37 @@ async function prefetch(projectId: string, items: ReadonlyArray<{ kind: CountedK
   };
 }
 
-/** REFERENCE: every store read, ranked in JS, then what the caller may see. */
-export async function referenceModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[]> {
+/**
+ * REFERENCE: every store read, ranked in JS, then what the caller may see. `meaning` (each item's distance to the
+ * question, by key, none for no fingerprint; and the farthest that counts) merges meaning in as the index does: only the
+ * differential gives it, from the stored vectors.
+ */
+export async function referenceModel(projectId: string, question: string, o: SearchOptions, meaning?: { distance: (item: string) => number | undefined; maxDistance: number }): Promise<ModelHit[]> {
   const asked = searchWords(question);
   if (!isValidId(projectId) || !asked.length) return [];
-  const ranked = rankParts(await storeParts(projectId), asked, await rankOptions(projectId, o));
+  const parts = await storeParts(projectId);
+  const opts = await rankOptions(projectId, o);
+  const words = rankParts(parts, asked, opts);
+  const ranked = meaning ? withMeaning(words, nearItems(parts, asked, opts, meaning.distance, MEANING_K, meaning.maxDistance)) : words;
   return (await visible(projectId, limitOf(o), async (offset, n) => ranked.slice(offset, offset + n))) ?? [];
 }
 
-/** INDEXED: the same answer from the index. Null without a database (or for an id not as records store it). */
+/** REFERENCE of what the fingerprint job sends: each item's text, by key (../app/assistantSearchRank itemText). */
+export const referenceTexts = async (projectId: string): Promise<Map<string, string>> => itemTexts(await storeParts(projectId));
+
+/** INDEXED: the same answer from the index, with meaning when there are fingerprints. Null without a database (or for an id not as records store it). */
 export async function indexedModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[] | null> {
   if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
   const asked = searchWords(question);
   if (!isValidId(projectId) || !asked.length) return [];
   const opts = await rankOptions(projectId, o);
-  return visible(projectId, limitOf(o), (offset, n) => index.rankedPage(projectId, asked, opts, offset, n, recordFs.rowsUnder));
+  const page = (offset: number, n: number): Promise<ModelHit[] | null> => index.rankedPage(projectId, asked, opts, offset, n, recordFs.rowsUnder);
+  const to = await meaningOf(projectId, question);
+  const near = to && (await nearOrWords(() => index.nearestPage(projectId, asked, opts, to, MEANING_K, recordFs.rowsUnder)));
+  if (!near) return visible(projectId, limitOf(o), page);
+  const words = await page(0, MEANING_K);
+  if (!words) return null;
+  return visible(projectId, limitOf(o), words.length < MEANING_K ? null : (offset, n) => page(MEANING_K + offset, n), fusedHead(words, near));
 }
 
 export async function referenceCount(projectId: string): Promise<ModelCounts> {

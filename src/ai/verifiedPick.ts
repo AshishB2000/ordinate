@@ -8,6 +8,8 @@
 import type { AnswerFilter, AnswerSpec } from './answerSpec';
 import { words } from './answerSuggest';
 import { promptJson } from './promptText';
+import { fuse } from './rankFusion';
+import { MEANING_K } from '../app/assistantSearchRank';
 import { hasValueFilter, questionKey, type VerifiedQuestion } from '../analysis/verifiedRules';
 import type { VerifiedState } from '../ipc/verifiedState';
 
@@ -53,9 +55,42 @@ export function eligibleExample(s: VerifiedState, o: Pick<PickOptions, 'exclude'
 export function exampleOrder(o: Pick<PickOptions, 'question' | 'datasetId' | 'first'>): (a: VerifiedQuestion, b: VerifiedQuestion) => number {
   const asked = new Set(words(o.question));
   const shared = (q: VerifiedQuestion): number => words(q.question).filter((w) => asked.has(w)).length;
-  const rank = (q: VerifiedQuestion): number => (q.spec.datasetId === o.datasetId ? 0 : o.first?.has(q.spec.datasetId) ? 1 : 2);
+  const tier = tierOf(o);
+  const rank = (q: VerifiedQuestion): number => tier(q.spec.datasetId);
   return (a, b) => rank(a) - rank(b) || shared(b) - shared(a)
     || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) || (a.id < b.id ? -1 : 1);
+}
+
+/** A question's tier in `exampleOrder`, by its chart's dataset: the context's 0, an agent's topic 1, any other 2. */
+export const tierOf = (o: Pick<PickOptions, 'datasetId' | 'first'>) => (datasetId: string): number => (datasetId === o.datasetId ? 0 : o.first?.has(datasetId) ? 1 : 2);
+
+// ── With meaning (PR 7c) ───────────────────────────────────────────────────
+// The first MEANING_K questions in exampleOrder and the MEANING_K nearest the question by meaning are merged by rank
+// (./rankFusion), then put in tier order (stable): the HEAD. The rest of exampleOrder follows, each tier's head
+// questions before that tier's others. The examples are then taken from that order as from exampleOrder.
+
+export interface Ranked { id: string; datasetId: string }
+
+/** The head of the examples' order with meaning: `words` (in exampleOrder, its first `k` used) and `near` fused, by tier. */
+export function examplesHead<T extends Ranked>(words: readonly T[], near: readonly T[], tier: (datasetId: string) => number, k: number): T[] {
+  const by = new Map<string, T>();
+  for (const r of [...near, ...words]) by.set(r.id, r);
+  const fused = fuse([words.slice(0, k).map((r) => r.id), near.map((r) => r.id)], { k: 60 }).flatMap((f) => by.get(f.key) ?? []);
+  return fused.map((r, i) => ({ r, i, t: tier(r.datasetId) })).sort((a, b) => a.t - b.t || a.i - b.i).map((x) => x.r);
+}
+
+/** THE REFERENCE of the order with meaning (../ipc/verifiedLookup pages it): the head, then the rest of `words` (all of them), merged by tier, the head first within one. */
+export function examplesWithMeaning<T extends Ranked>(words: readonly T[], near: readonly T[], tier: (datasetId: string) => number, k: number): T[] {
+  const head = examplesHead(words, near, tier, k);
+  const inHead = new Set(head.map((r) => r.id));
+  const out: T[] = [];
+  let i = 0;
+  for (const t of words.slice(k)) {
+    if (inHead.has(t.id)) continue;
+    while (i < head.length && tier(head[i].datasetId) <= tier(t.datasetId)) out.push(head[i++]);
+    out.push(t);
+  }
+  return [...out, ...head.slice(i)];
 }
 
 /** The example lines taken so far; `done` once five are taken or the block is full, so no later question could join. */
@@ -80,8 +115,18 @@ export function takeExamples(sorted: readonly VerifiedQuestion[], names: Names, 
   return { lines, ids, total, done: ids.length >= MAX_EXAMPLES };
 }
 
-/** Up to 5 example lines: the context's dataset first, then an agent's topic, then the most words shared with the question, then the newest. */
-export function pickExamples(states: VerifiedState[], o: PickOptions): { lines: string[]; ids: string[] } {
-  const t = takeExamples(states.filter((s) => eligibleExample(s, o)).map((s) => s.q).sort(exampleOrder(o)), o.names);
+/**
+ * Up to 5 example lines: the context's dataset first, then an agent's topic, then the most words shared with the
+ * question, then the newest. `near` (ids nearest by meaning, best first; the reference's): merged as above, `k` each.
+ */
+export function pickExamples(states: VerifiedState[], o: PickOptions & { near?: readonly string[]; k?: number }): { lines: string[]; ids: string[] } {
+  let sorted = states.map((s) => s.q).sort(exampleOrder(o));
+  if (o.near) {
+    const of = new Map(sorted.map((q) => [q.id, q]));
+    const ranked = (q: VerifiedQuestion): Ranked & { q: VerifiedQuestion } => ({ id: q.id, datasetId: q.spec.datasetId, q });
+    sorted = examplesWithMeaning(sorted.map(ranked), o.near.flatMap((id) => { const q = of.get(id); return q ? [ranked(q)] : []; }), tierOf(o), o.k ?? MEANING_K).map((r) => r.q);
+  }
+  const ok = new Set(states.filter((s) => eligibleExample(s, o)).map((s) => s.q.id));
+  const t = takeExamples(sorted.filter((q) => ok.has(q.id)), o.names);
   return { lines: t.lines, ids: t.ids };
 }
