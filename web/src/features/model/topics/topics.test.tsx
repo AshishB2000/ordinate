@@ -216,7 +216,10 @@ describe('The Data model: topics', () => {
     const router = renderApp(`/model/${P}?tab=metrics&topic=${SALES}`);
     await pick('Edit Sales…');
     const d = await drawer();
-    fireEvent.click(await within(d).findByRole('button', { name: 'Delete' }));
+    // Delete is disabled until topic:get lands: a click before then does nothing, and no confirm would ever open.
+    const del = (await within(d).findByRole('button', { name: 'Delete' })) as HTMLButtonElement;
+    await waitFor(() => expect(del.disabled).toBe(false), LAZY);
+    fireEvent.click(del);
     const ask = await screen.findByRole('dialog', { name: 'Delete “Sales”?' }, LAZY); // a lazy chunk: slow on a loaded CI runner
     fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(calls.some((c) => c.channel === 'topic:delete')).toBe(true));
