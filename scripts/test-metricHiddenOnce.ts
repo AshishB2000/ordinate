@@ -5,7 +5,9 @@
 // No database: without Postgres a viewer is restricted with no entitlement, so *Staff*'s rule on `salary` hides it.
 //   1. LINEAR: one specMetrics call as the restricted viewer, in one request, reads at most 5·M + 10 metric records
 //      (its own list and reads, the hidden check's one metricsByName, one read per metric).
-//   2. NEGATIVE CONTROL: with the memo off (the old shape) the same call reads more than M²/2.
+//   2. A formula metric asked once per metric (as a list asks), in one request, reads at most 5·M + 10 too. NEGATIVE
+//      CONTROL: with the memo off (the old shape) that reads more than M²/2. (Only a formula reads other metrics: the
+//      names it says, or without step 3's index every metric.)
 //   3. SAME ANSWERS: specMetrics' ids, and every metricHidden boolean, Object.is-equal memo on and off; and hidden is
 //      what each metric reads (sum of salary, a formula naming one, a filter on it: hidden; a count: not).
 //   4. An unrestricted caller (an org admin) reads no metric record for the hidden check.
@@ -106,17 +108,23 @@ void (async () => {
     const on = await metricReads(() => asViewer(() => answers.specMetrics(P)));
     ok(`one specMetrics call as a restricted viewer reads at most 5·M + 10 metric records (M=${M})`, on.reads <= 5 * M + 10, on.reads);
 
-    // 2. NEGATIVE CONTROL
+    // 2. a formula asked per metric; NEGATIVE CONTROL
+    const formula = ids[ids.length - 3]; // Pay per head
+    const perMetric = () => asViewer(() => Promise.all(ids.map(() => hiddenMod.metricHidden(P, formula))));
+    const repeated = await metricReads(perMetric);
+    ok(`a formula metric asked once per metric reads at most 5·M + 10 metric records (${repeated.reads})`, repeated.reads <= 5 * M + 10 && repeated.out.every((h) => h === true), repeated.reads);
     hiddenMod._setHiddenMemo(false);
     let off: { out: Array<{ id: string }>; reads: number };
+    let offRepeated: { reads: number };
     let offAnswers: { spec: string[]; hidden: boolean[] };
     try {
       off = await metricReads(() => asViewer(() => answers.specMetrics(P)));
+      offRepeated = await metricReads(perMetric);
       offAnswers = await ask(P, ids);
     } finally {
       hiddenMod._setHiddenMemo(true);
     }
-    ok(`NEGATIVE CONTROL: with the memo off the same call reads more than M²/2 (${M * M / 2})`, off.reads > (M * M) / 2, off.reads);
+    ok(`NEGATIVE CONTROL: with the memo off the same reads more than M²/2 (${M * M / 2})`, offRepeated.reads > (M * M) / 2, offRepeated.reads);
 
     // 3. same answers
     const onAnswers = await ask(P, ids);

@@ -129,7 +129,12 @@ export async function hiddenColumnsFor(projectId: string, id: string): Promise<R
 
 const anywhere = new WeakMap<object, Map<string, Promise<ReadonlySet<string>>>>();
 
-/** Every column name hidden from the caller on any dataset of the project (`hiddenColumnsFor`'s union), once per request: conservative on purpose, a false hide never a leak. */
+/**
+ * Every column name hidden from the caller on any dataset of the project (`hiddenColumnsFor`'s union), once per request:
+ * conservative on purpose, a false hide never a leak. Over only the datasets step 3's index says may hide one (with
+ * column rules, built from one, or past the walk: ../ipc/assistantSearch hidingModel), the others' being empty; without
+ * the index, or when its query fails, over every dataset, the reference (scripts/test-hiddenIndex.ts holds them equal).
+ */
 export function hiddenAnywhere(projectId: string): Promise<ReadonlySet<string>> {
   const memo = memoOf(anywhere);
   const key = `${inFanOut() ? 'fanout' : 'caller'}\0${projectId}`;
@@ -138,8 +143,11 @@ export function hiddenAnywhere(projectId: string): Promise<ReadonlySet<string>> 
     hit = (async () => {
       const out = new Set<string>();
       if (!isValidId(projectId) || (!inFanOut() && !(await restrictedOn(projectId)))) return out;
-      const datasets = require('./datasets') as typeof import('./datasets'); // lazy: the dataset store calls into this module
-      for (const d of await datasets.listDatasets(projectId)) for (const c of await hiddenColumnsFor(projectId, d.id)) out.add(c);
+      // Lazy: the dataset store calls into this module, and the index's describer reads the stores.
+      const datasets = require('./datasets') as typeof import('./datasets');
+      const search = require('../ipc/assistantSearch') as typeof import('../ipc/assistantSearch');
+      const ids = (await search.hidingModel(projectId)) ?? (await datasets.listDatasets(projectId)).map((d) => d.id);
+      for (const id of ids) for (const c of await hiddenColumnsFor(projectId, id)) out.add(c);
       return out;
     })();
     memo.set(key, hit);

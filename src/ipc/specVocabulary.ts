@@ -7,6 +7,7 @@ import * as datasets from '../data/datasets';
 import * as metrics from '../analysis/metrics';
 import { hiddenColumnsFor } from '../data/rowAccess';
 import { dropHidden } from '../ai/hiddenFacts';
+import { mentionable } from '../data/columnAccess';
 import { metricHidden } from '../analysis/columnHidden';
 import { loadShared as loadCatalog } from '../app/catalog';
 import { shownNames, taughtNames } from '../app/columnNames';
@@ -207,4 +208,32 @@ export async function metricsNamedAs(projectId: string, ids: readonly string[]):
   const all = [...new Set([...own, ...hits.map((h) => h.id)])].filter((id) => isValidId(id));
   const textOf = await readTexts(all.map(file));
   return all.flatMap((id) => parsed(textOf, file(id), (b) => metrics.summaryOf(projectId, b)) ?? []).sort(metricOrder);
+}
+
+/** A formula with more stretches than this reads every metric instead (../data/columnAccess mentionable). */
+const MAX_SAID = 2_000;
+
+/**
+ * What `metricsByName(projectId).values()` holds of the names `formula` says (../analysis/columnHidden: matched as
+ * mentionsHidden matches): the first metric of each lower-cased name in listMetrics' order, its full record, in that
+ * order. Each stretch of the formula is looked up by its name key, a candidate only; the records read decide, by the
+ * rule metricsByName applies, so the metrics a name holds are all read. Null without the index, or for a formula of
+ * more than MAX_SAID stretches: the caller reads every metric.
+ */
+export async function metricsSaidIn(projectId: string, formula: string): Promise<metrics.Metric[] | null> {
+  if (!indexedFor(projectId)) return null;
+  const said = mentionable(formula, MAX_SAID);
+  const hits = said && (said.length ? await keyedModel(projectId, 'metric', said.map(lowerKey)) : []);
+  if (!hits) return null;
+  const file = (id: string) => metrics.metricFilePath(projectId, id);
+  const ids = [...new Set(hits.map((h) => h.id))].filter((id) => isValidId(id));
+  const textOf = await readTexts(ids.map(file));
+  const byName = new Map<string, metrics.Metric>();
+  for (const s of ids.flatMap((id) => parsed(textOf, file(id), (b) => metrics.summaryOf(projectId, b)) ?? []).sort(metricOrder)) {
+    const key = s.name.toLowerCase();
+    if (byName.has(key)) continue;
+    const full = await metrics.getMetric(projectId, s.id, textOf(file(s.id)));
+    if (full) byName.set(key, full);
+  }
+  return [...byName.values()];
 }

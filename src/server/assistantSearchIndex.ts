@@ -20,7 +20,7 @@ import { allWords, kindOrd } from '../app/assistantSearchRank';
 import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
 
 /** Bump when what a record describes to changes (the words, the parts): every marker is then stale, and each source rebuilds once. */
-export const ASSISTANT_SEARCH_VERSION = 2; // 2: base parts carry their exact-lookup keys (0028)
+export const ASSISTANT_SEARCH_VERSION = 3; // 2: base parts carry their exact-lookup keys (0028); 3: a dataset's hiding keys
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
@@ -258,6 +258,43 @@ export function keyedItems(projectId: string, kind: KeyedKind, keys: readonly st
       [org, projectId, kind, keys],
     );
     return (r.rows as Array<{ id: string; dataset_id: string | null }>).map((x) => ({ id: x.id, datasetId: x.dataset_id }));
+  });
+}
+
+/** A dataset base part's hiding keys (../ipc/assistantSearch hidingKeys): the record holds column rules (any `columnAccess`), or another id's. */
+export const RULED_KEY = 'col:rules';
+/** Written by a release that writes the hiding keys: a dataset part without it (an older pod's write) is a candidate itself. */
+export const KNOWN_KEY = 'col:known';
+/** A dataset the record is built from (../data/upstream parentsOfRecord): its rows carry what that one hides. */
+export const upKey = (id: string): string => `up:${id}`;
+
+/**
+ * The datasets whose hidden columns can be non-empty for anyone (../data/rowAccess hiddenAnywhere reads only these), by
+ * the hiding keys of their base parts (../ipc/assistantSearch hidingKeys). hiddenColumnsFor is non-empty only for a
+ * dataset with column rules, one built from a dataset that hides a column (or that cannot be read), or one whose walk
+ * upstream runs past `depth` (../data/columnGate upstreamHides). So, a superset of those: every dataset marked ruled or
+ * written without these keys, every one built from a dataset the index does not hold (gone, in the Trash, unreadable,
+ * an id written in another case), everything built from those at any depth, and every one with a chain of more than
+ * `depth` parents above it. Null without a database.
+ */
+export function hidingDatasets(projectId: string, depth: number, rowsUnder: RowsUnder): Promise<string[] | null> {
+  const UP = upKey('');
+  return built(projectId, rowsUnder, async (c, org) => {
+    const r = await c.query(
+      `WITH RECURSIVE
+         ds AS MATERIALIZED (SELECT id, keys FROM assistant_search WHERE org_id = $1 AND project_id = $2 AND base AND kind = 'dataset'),
+         edge AS MATERIALIZED (SELECT d.id AS child, substr(k, ${UP.length + 1}) AS parent FROM ds d CROSS JOIN LATERAL unnest(d.keys) AS k WHERE k LIKE '${UP}%'),
+         down (id) AS (
+           SELECT id FROM ds WHERE $3 = ANY(keys) OR NOT ($4 = ANY(keys))
+           UNION SELECT e.child FROM edge e WHERE NOT EXISTS (SELECT 1 FROM ds WHERE ds.id = e.parent)
+           UNION SELECT e.child FROM down JOIN edge e ON e.parent = down.id),
+         tall (id, n) AS (
+           SELECT child, 1 FROM edge
+           UNION SELECT e.child, t.n + 1 FROM tall t JOIN edge e ON e.parent = t.id WHERE t.n <= $5)
+       SELECT id FROM down UNION SELECT id FROM tall WHERE n > $5`,
+      [org, projectId, RULED_KEY, KNOWN_KEY, depth],
+    );
+    return (r.rows as Array<{ id: string }>).map((x) => x.id);
   });
 }
 
