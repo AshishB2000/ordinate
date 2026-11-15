@@ -34,6 +34,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'analysis:open': 'ITEM',
   'analysis:previewPlan': 'OPEN', // a template mapping's previews: authoring, not a dashboard's reach
   'analysis:tiles': 'FIGURE',
+  'answer:alsoOn': 'LIST', // the dashboards showing an open dataset: dashboards in closed folders left out
   'answer:card': 'OPEN',
   'answer:explain': 'FIGURE',
   'answer:refresh': 'ASK',
