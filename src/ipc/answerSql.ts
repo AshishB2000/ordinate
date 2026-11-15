@@ -2,8 +2,11 @@
 //
 // An `sql` action names datasets (../ai/answerSql). Here they are resolved for the caller as a chart spec's dataset is
 // (./answerCheck `vocabulary`: step 3's index, an agent's topic), and refused BEFORE any SQL is written when the gate
-// would refuse them: a Live dataset (`requireExtract`'s sentence; SQL on Live is phase F), and row access rules or a
-// column hidden from the caller (the storage net `gateRows`, the very check `sql:run`'s NET class rests on). Then the
+// would refuse them: row access rules or a column hidden from the caller (the storage net `gateRows`, the very check
+// `sql:run`'s NET class rests on). Live datasets take phase F's path instead (docs/live-data/01-live-sql.md, F3:
+// ../engine/live/liveSql): the statement is translated, printed under each table's lock without the caller's hidden
+// columns, and asked of the warehouse; a Live dataset beside a copied one, or two connections, is refused (F-D9), and
+// SQL_PER_HOUR is taken before the model writes a statement. Then the
 // full details of only those datasets (every column and type as SQL sees it, the key, the size, the links between them)
 // go in ONE more model call, which writes one statement. That statement runs through `runSql`, the Query tab's own
 // `sql:run`: compile()'s gate (one read-only statement; FROM only datasets, CTEs and value generators), the caller's
@@ -13,9 +16,10 @@
 import * as analyze from '../ai/analyze';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import * as datasets from '../data/datasets';
-import { gateRows, isRowPolicyError } from '../data/rowAccess';
+import { gateRows, hiddenColumnsFor, isRowPolicyError } from '../data/rowAccess';
 import { isLive } from '../data/liveDataset';
-import { liveRefusedMessage } from '../data/liveMessages';
+import { liveSqlClosed, runLiveSql, takeSqlHour } from '../engine/live/liveSql';
+import * as lmsg from '../engine/liveSqlMessages';
 import { listRelationships } from '../analysis/relationships';
 import { tableFacts } from '../app/tableDocs';
 import { viewColumns } from '../engine/datasetView';
@@ -66,12 +70,19 @@ async function picked(projectId: string, names: readonly string[], only?: Readon
   return { ok: true, ids };
 }
 
+/** How many of `ids` are Live: none (the extract lane), all (phase F, ../engine/live/liveSql), or some (refused, F-D9). */
+async function liveCount(projectId: string, ids: readonly string[]): Promise<number> {
+  let n = 0;
+  for (const id of ids) if (isLive(await datasets.getDatasetMeta(projectId, id))) n += 1;
+  return n;
+}
+
 /** Why the gate would refuse these datasets to the caller, in its own sentence, before a statement is written for them; or null. */
 export async function closedWhy(projectId: string, ids: readonly string[]): Promise<string | null> {
+  for (const id of ids) if (!(await datasets.getDatasetMeta(projectId, id))) return msg.sqlNoDataset(id);
+  const live = await liveCount(projectId, ids);
+  if (live) return live < ids.length ? lmsg.sqlMixedEngines() : liveSqlClosed(projectId, ids); // one connection, each table's gate and lock
   for (const id of ids) {
-    const meta = await datasets.getDatasetMeta(projectId, id);
-    if (!meta) return msg.sqlNoDataset(id);
-    if (isLive(meta)) return liveRefusedMessage(); // compile's requireExtract, said before a model call is spent on it
     try {
       await gateRows(projectId, id); // the storage net residentSource applies in compile(): row rules, a hidden column
     } catch (err) {
@@ -82,24 +93,33 @@ export async function closedWhy(projectId: string, ids: readonly string[]): Prom
   return null;
 }
 
-/** The second call's facts: the picked datasets under the gate's own names (`projectNames`), and the links among them. */
+/**
+ * The second call's facts: the picked datasets under the gate's own names (`projectNames`), and the links among them.
+ * A Live dataset's are its VISIBLE columns as the warehouse view types them (F-D7), with no size: the model is never
+ * told a column hidden from the caller exists (a copied dataset hiding one never gets this far: `closedWhy`).
+ */
 export async function tablesFor(projectId: string, ids: readonly string[]): Promise<string> {
   const cat = await sqlDatasets.projectNames(projectId); // the names compile() resolves: one listing, kept for the question
   const tableOf = new Map<string, string>();
+  const hiddenOf = new Map<string, ReadonlySet<string>>();
   const tables: SqlTable[] = [];
   for (const id of ids) {
     const [e, meta] = [cat.find((x) => x.id === id), await datasets.getDatasetMeta(projectId, id)]; // the picked datasets' records only
     if (!e || !meta) continue;
     const doc = await tableFacts(projectId, id);
+    const hidden = await hiddenColumnsFor(projectId, id);
+    const live = isLive(meta);
     tableOf.set(id, e.slug);
+    hiddenOf.set(id, hidden);
     tables.push({
-      table: e.slug, name: e.name, rows: meta.rowCount, ...(doc?.key ? { key: doc.key } : {}), ...(doc?.grain ? { grain: doc.grain } : {}),
-      columns: viewColumns(meta.columns).map((c) => ({ name: c.name, type: c.type })),
+      table: e.slug, name: e.name, ...(live ? { live: true } : { rows: meta.rowCount }), ...(doc?.key && !hidden.has(doc.key) ? { key: doc.key } : {}), ...(doc?.grain ? { grain: doc.grain } : {}),
+      columns: (live ? meta.columns : viewColumns(meta.columns)).filter((c) => !hidden.has(c.name)).map((c) => ({ name: c.name, type: c.type })),
     });
   }
   const links: SqlLink[] = (await listRelationships(projectId)).flatMap((r) => {
     const [from, to] = [tableOf.get(r.from.datasetId), tableOf.get(r.to.datasetId)];
-    return from && to ? [{ from, fromColumn: r.from.column, to, toColumn: r.to.column, oneToOne: r.cardinality === 'one_to_one' }] : [];
+    const shown = !hiddenOf.get(r.from.datasetId)?.has(r.from.column) && !hiddenOf.get(r.to.datasetId)?.has(r.to.column);
+    return from && to && shown ? [{ from, fromColumn: r.from.column, to, toColumn: r.to.column, oneToOne: r.cardinality === 'one_to_one' }] : [];
   });
   return tablesBlock(tables, links);
 }
@@ -121,6 +141,8 @@ const nameOf = async (projectId: string, id: string): Promise<string> => (await 
  * the gate's, the net's or the engine's sentence.
  */
 export async function runAnswerSql(projectId: string, text: string, allowed: readonly string[] | null, title: string): Promise<{ ok: true; card: SqlCard; deps: string[] } | Failure> {
+  const live = allowed ? await liveCount(projectId, allowed) : 0; // null (an editor's Verify): the gate, which refuses Live (F4)
+  if (allowed && live) return live < allowed.length ? { ok: false, reason: lmsg.sqlMixedEngines() } : runLive(projectId, text, allowed, title);
   const res = await sqlDatasets.runSql(projectId, text, [], sqlDatasets.PREVIEW_ROWS);
   if (!res.ok) return { ok: false, reason: res.error }; // the gate's sentence, as the Query tab shows it (a Live one is typed by the route)
   const stray = allowed && res.deps.find((id) => !allowed.includes(id));
@@ -128,6 +150,23 @@ export async function runAnswerSql(projectId: string, text: string, allowed: rea
   if (!res.deps.length) return { ok: false, reason: msg.sqlReadsNone() }; // a statement over no dataset is a model's figures
   const names = await Promise.all(res.deps.map((id) => nameOf(projectId, id)));
   return { ok: true, deps: res.deps, card: cardOf({ title, sql: text, datasets: names, columns: res.columns, rows: res.rows, truncated: res.truncated }) };
+}
+
+/**
+ * `text` over Live datasets (F3, ../engine/live/liveSql): `allowed` is its whole vocabulary, each dataset under the names
+ * the second call was given; every figure is the warehouse's, dated live. The card shows the text as written, which
+ * names only those names — the statement the warehouse ran never leaves the server (F-D13).
+ */
+async function runLive(projectId: string, text: string, allowed: readonly string[], title: string): Promise<{ ok: true; card: SqlCard; deps: string[] } | Failure> {
+  const cat = await sqlDatasets.projectNames(projectId);
+  const tables = allowed.map((id) => {
+    const e = cat.find((x) => x.id === id);
+    return { id, names: e ? [e.slug, ...(e.alias ? [e.alias] : [])] : [] };
+  });
+  const r = await runLiveSql(projectId, text, tables);
+  if (!r.ok) return { ok: false, reason: r.error, ...(r.code ? { code: r.code } : {}) };
+  const names = await Promise.all(r.deps.map((id) => nameOf(projectId, id)));
+  return { ok: true, deps: r.deps, card: { ...cardOf({ title, sql: text, datasets: names, columns: r.columns, rows: r.rows, truncated: r.truncated }), asOf: r.asOf } };
 }
 
 /** An SQL turn's card now, under the caller's access: Refresh, and a conversation that brought none. */
@@ -147,6 +186,9 @@ export async function sqlAnswer(
   if (!pick.ok) return pick;
   const why = await closedWhy(projectId, pick.ids);
   if (why) return { ok: false, reason: why };
+  // SQL_PER_HOUR (F3): taken before the model writes a statement, so a refusal costs no model call and no warehouse statement.
+  const hour = (await liveCount(projectId, pick.ids)) ? await takeSqlHour(projectId, pick.ids) : null;
+  if (hour) return { ok: false, reason: hour, code: 'live_refused' };
   const written = await writeSql(await tablesFor(projectId, pick.ids), question, model);
   if (typeof written !== 'string') return written;
   const title = (action.intent || question).replace(/\s+/g, ' ').trim().slice(0, 300) || 'Answer';

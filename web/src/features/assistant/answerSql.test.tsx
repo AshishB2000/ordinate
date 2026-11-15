@@ -110,6 +110,17 @@ describe('AnswerSql', () => {
     expect(sent.input.question).toBe('Which customers ordered more than once?');
   });
 
+  it('a table the warehouse answered (Live) is not offered Verify, even to an editor; an extract one is', () => {
+    serve({});
+    role.editor = true;
+    draw({ ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'live' } });
+    expect(screen.getByTestId('answer-sql-unchecked').textContent).toBe(NOT_CHECKED);
+    expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull();
+    cleanup();
+    draw({ ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'extract' } }); // NEGATIVE CONTROL: the same card off our copy
+    expect(screen.getByRole('button', { name: 'Verify' })).toBeTruthy();
+  });
+
   it('a verified statement says who verified it, and is neither Not checked nor offered Verify', () => {
     serve({});
     role.editor = true;
@@ -140,5 +151,16 @@ describe('AnswerSql', () => {
     serve({ 'answer:refresh': { ok: false, reason: 'Row access rules limit what you see in “Orders”.' } });
     draw(undefined);
     expect(await screen.findByText('Row access rules limit what you see in “Orders”.')).toBeTruthy();
+  });
+
+  it('a Live table not kept says the warehouse answered it, dated; a kept one by its kept time', () => {
+    serve({});
+    draw({ ...TABLE, asOf: { at: '2026-11-15T02:05:00Z', mode: 'live' }, snapshot: { asOf: null, periods: [] } });
+    expect(screen.getByTestId('as-of').textContent).toMatch(/^Live · /);
+    expect(screen.getByTestId('answer-live')).toBeTruthy();
+    cleanup();
+    draw({ ...TABLE, asOf: { at: '2026-11-15T09:10:00Z', mode: 'live' } });
+    expect(screen.getByTestId('answer-kept')).toBeTruthy();
+    expect(screen.getAllByTestId('as-of')).toHaveLength(1); // the kept time's, not a second caption
   });
 });

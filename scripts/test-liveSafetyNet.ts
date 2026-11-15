@@ -10,7 +10,8 @@
 //    see ROW_READERS) is called against a Live dataset over the test harness's
 //    fake warehouse (scripts/liveFakeConnector.ts). The doors L2.4 routes —
 //    charts, KPI tiles, answers and what funnels into them (ROUTED) — must
-//    ANSWER, with a live-dated figure. Every other one must answer the typed
+//    ANSWER, with a live-dated figure — and, from phase F (F3), an SQL answer's
+//    Refresh, never hydrating the record. Every other one must answer the typed
 //    refusal: HTTP 409 `live_dataset` with the catalog's sentence, or a
 //    handler's own `{ok:false, code:'live_dataset' | 'live_refused'}` (a pivot,
 //    cohort or funnel is the compiler's refusal; a picker with no list of values
@@ -298,19 +299,47 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   const sqlRun = await post('sql:run', { projectId: P, sql: 'SELECT count(*) AS n FROM "Orders live"' });
   bodies.push(sqlRun.body);
   ok('Live → SQL over datasets (sql:run) refuses, typed', isRefusal(sqlRun), `${sqlRun.status} ${sqlRun.body.slice(0, 240)}`);
-  // The Assistant's SQL lane (src/ipc/answerSql.ts) reads rows through that gate: an SQL answer's Refresh and a verified
-  // SQL question's save, each refused on a Live dataset and answering on the extract (the negative control).
+  // The Assistant's SQL lane (src/ipc/answerSql.ts). An SQL answer's Refresh over a Live dataset is ROUTED (phase F, F3:
+  // src/engine/live/liveSql.ts): the warehouse's table, dated live, and the record never hydrated — getDataset is never
+  // called (CONTROL: one planted in the lane's path fails the check). Verifying SQL over Live still refuses, typed (F4).
+  // On the extract both answer (the negative control).
   const sqlOver = (name: string) => `SELECT region, sum(sales) AS s FROM "${name}" GROUP BY region`;
   const sqlTurn = (d: string, name: string) => context.runInContext(ADMIN, `sql-turn-${d}`, async () => {
     const t = (await copilot.createThread(P))!;
     return { threadId: t.id, turnId: (await copilot.appendTurn(P, { role: 'assistant', text: '', sql: { text: sqlOver(name), datasetIds: [d], title: 'Sales by region' } }, t.id))!.at(-1)!.id };
   });
+  const sqlDatasets: typeof import('../src/engine/sqlDatasets') = require('../src/engine/sqlDatasets');
+  const realGet = datasets.getDataset;
+  let hydrated = 0;
+  (datasets as { getDataset: unknown }).getDataset = (...a: Parameters<typeof realGet>) => { hydrated++; return realGet(...a); };
+  /** Routed: the warehouse's table (5 regions), dated live, with no getDataset on the way. */
+  const routed = (r: { value: Record<string, unknown> | null }, calls: number): boolean =>
+    r.value?.ok === true && r.value.kind === 'sql' && (r.value.rows as unknown[])?.length === 5 && (r.value.asOf as { mode?: string } | undefined)?.mode === 'live' && calls === 0;
+  try {
+    const liveRefresh = await post('answer:refresh', { projectId: P, ...(await sqlTurn(seed.live, 'Orders live')) });
+    bodies.push(liveRefresh.body);
+    ok('Live → an SQL answer\'s refresh is ROUTED (F3): the warehouse\'s table, dated live, getDataset never called', routed(liveRefresh, hydrated), `${hydrated} ${liveRefresh.status} ${liveRefresh.body.slice(0, 240)}`);
+    const goneRefresh = await post('answer:refresh', { projectId: P, ...(await sqlTurn(seed.gone, 'Orders gone')) });
+    bodies.push(goneRefresh.body);
+    ok('Live, connection gone → an SQL answer\'s refresh is a typed failure, no table', isRefusal(goneRefresh) && !goneRefresh.body.includes('rows'), `${goneRefresh.status} ${goneRefresh.body.slice(0, 240)}`);
+    const realNames = sqlDatasets.projectNames;
+    (sqlDatasets as { projectNames: unknown }).projectNames = async (pid: string) => { await datasets.getDataset(pid, seed.live); return realNames(pid); };
+    hydrated = 0;
+    const planted = await post('answer:refresh', { projectId: P, ...(await sqlTurn(seed.live, 'Orders live')) });
+    (sqlDatasets as { projectNames: unknown }).projectNames = realNames;
+    bodies.push(planted.body);
+    ok('NEGATIVE CONTROL: a getDataset planted in the lane\'s path fails the check (counted, and no table)', hydrated === 1 && !routed(planted, hydrated), `${hydrated} ${planted.body.slice(0, 200)}`);
+  } finally {
+    (datasets as { getDataset: unknown }).getDataset = realGet;
+  }
   for (const [d, name, isLive] of [[seed.live, 'Orders live', true], [seed.extract, 'Orders copy', false]] as const) {
-    const refreshed = await post('answer:refresh', { projectId: P, ...(await sqlTurn(d, name)) });
     const saved = await post('verified:save', { projectId: P, input: { question: `Sales by region in SQL ${++asked}`, sql: sqlOver(name) } });
-    bodies.push(refreshed.body, saved.body);
-    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → an SQL answer's refresh ${isLive ? 'refuses, typed' : 'answers'}`, isLive ? isRefusal(refreshed) : refreshed.value?.ok === true, `${refreshed.status} ${refreshed.body.slice(0, 240)}`);
-    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → verifying SQL over it ${isLive ? 'refuses, typed' : 'saves'}`, isLive ? isRefusal(saved) : saved.value?.ok === true, `${saved.status} ${saved.body.slice(0, 240)}`);
+    bodies.push(saved.body);
+    ok(`${isLive ? 'Live' : 'NEGATIVE CONTROL: the extract'} → verifying SQL over it ${isLive ? 'refuses, typed (F4)' : 'saves'}`, isLive ? isRefusal(saved) : saved.value?.ok === true, `${saved.status} ${saved.body.slice(0, 240)}`);
+    if (isLive) continue;
+    const refreshed = await post('answer:refresh', { projectId: P, ...(await sqlTurn(d, name)) });
+    bodies.push(refreshed.body);
+    ok('NEGATIVE CONTROL: the extract → an SQL answer\'s refresh answers, from the copy', refreshed.value?.ok === true && !refreshed.value.asOf, `${refreshed.status} ${refreshed.body.slice(0, 240)}`);
   }
   // Scenarios compute from metric values.
   const scen = await post('scenario:create', { projectId: P, input: { name: 'What if', baseMetricIds: [recs.live.metricId], drivers: [] } });

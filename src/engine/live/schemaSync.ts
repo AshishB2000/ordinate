@@ -41,11 +41,11 @@ import type { DeclaredColumn } from '../../data/liveSchema';
 import { announceRefreshed } from '../../data/refreshEvents';
 import { scanDataset } from '../../app/privacyStore';
 import { missingDependents } from '../../analysis/liveDependents';
-import { estimateLive } from '../../connectors/liveRun';
+import { estimateLive, liveBytesCap } from '../../connectors/liveRun';
 import { safeError } from '../../connectors/types';
 import { readLiveSchema } from '../../ipc/liveDatasets';
 import { loadInput } from '../../ipc/lineage';
-import { liveQueryTimeoutMs, maxBytesBilled } from '../../server/env';
+import { liveQueryTimeoutMs } from '../../server/env';
 import * as queryCache from '../queryCache';
 import * as trace from '../residentTrace';
 import * as msg from '../liveProfileMessages';
@@ -108,21 +108,6 @@ function timeoutMs(): number {
   }
 }
 
-/**
- * What one live query may bill, and so what the sample's estimate may say:
- * LIVE_MAX_BYTES_BILLED, or the connection's own lower ceiling where it has one
- * (BigQuery's "Max bytes billed per query" — the connector refuses a run past it).
- */
-function bytesCap(values: Record<string, unknown>): number {
-  let cap: number;
-  try {
-    cap = maxBytesBilled(process.env.LIVE_MAX_BYTES_BILLED);
-  } catch {
-    cap = maxBytesBilled(undefined);
-  }
-  const own = Number(values.maxBytesBilled);
-  return Number.isSafeInteger(own) && own > 0 ? Math.min(cap, own) : cap;
-}
 
 /** A warehouse call that did not answer → the typed failure (the call already logged its reason). */
 function callFailure(t: LiveTarget, err: unknown): SampleFailure {
@@ -165,7 +150,7 @@ async function attempt(t: LiveTarget, env: CompileEnv, plan: SamplePlan, signal:
     trace.recordLive(opOf(t), 'failed', 'estimate');
     return { outcome: { ok: false, code: 'live_failed', error: msg.liveSampleFailed() } };
   }
-  if (est && est.bytes > bytesCap(t.values)) {
+  if (est && est.bytes > liveBytesCap(t.values)) {
     trace.recordLive(opOf(t), 'refused');
     return { outcome: { ok: false, code: 'live_refused', reason: 'tooCostly', error: msg.liveSampleTooCostly(), bytes: est.bytes } };
   }

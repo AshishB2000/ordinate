@@ -34,7 +34,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open that show a dataset: no cell, label or figure of it
   'answer:card': 'GATE',
   'answer:explain': 'GATE',
-  'answer:refresh': 'GATE', // an SQL answer's turn: its SQL through sql:run's gate, refused with a column hidden (NET); test-answerSql
+  'answer:refresh': 'GATE', // an SQL answer's turn: its SQL through sql:run's gate, refused with a column hidden (NET); over Live datasets (F3) the column gate on every table, the view without the hidden columns; test-answerSql, test-liveSqlAnswers
   'answer:rerun': 'GATE',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -64,7 +64,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'connections:list': 'REDACT',
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts. An SQL answer is refused on a dataset hiding a column from the caller, before any SQL is written (NET, src/ipc/answerSql.ts); test-answerSql
+  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts. An SQL answer is refused on a dataset hiding a column from the caller, before any SQL is written (NET, src/ipc/answerSql.ts); test-answerSql. Over Live datasets (F3) the second call is told the visible columns only and a statement naming a hidden one gets the gate's `hidden`; test-liveSqlAnswers
   'copilot:deleteThread': 'META',
   'copilot:history': 'REDACT', // a kept answer card is not sent once a column is hidden from the caller since (src/ipc/answerSnapshots.ts `accessPrint`); test-answerSnapshots
   'copilot:newThread': 'META',

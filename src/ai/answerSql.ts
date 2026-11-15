@@ -14,6 +14,7 @@ import { isValidId } from '../app/ids';
 import type { ColumnType, ParsedColumn } from '../data/parse';
 import type { Cell } from '../data/transforms';
 import type { ChartData } from '../analysis/vizData';
+import type { AsOf } from '../api/asOf';
 
 /** The most datasets one SQL answer reads: the first call names them, the second gets every column of each. */
 export const MAX_SQL_DATASETS = 4;
@@ -65,12 +66,24 @@ export interface SqlTable {
   /** The identifier the gate exposes it under (../engine/sqlDatasets `projectNames`' slug). */
   table: string;
   name: string;
-  rows: number;
+  /** Its size; none for a Live dataset (`live`), whose rows are the warehouse's. */
+  rows?: number;
+  live?: true;
   /** One row per this column (the table doc's key), and the grain sentence. */
   key?: string;
   grain?: string;
   columns: Array<Pick<ParsedColumn, 'name' | 'type'>>;
 }
+
+/**
+ * Told with the tables when one is Live (docs/live-data/01-live-sql.md, F3): its statement is translated for the source
+ * warehouse, which takes a narrower SQL (F1's allow-list) and reads dates as DATE (F-D7). Guidance only: the translator
+ * refuses what it does not take, whatever the model writes.
+ */
+export const LIVE_SQL_RULES =
+  'A table marked Live is read in its source warehouse, so the statement must use plain SQL only: a "date" column of a Live ' +
+  'table is already a DATE (no CAST needed); no WITH RECURSIVE, LATERAL, QUALIFY, PIVOT, GROUPING SETS, VALUES, table ' +
+  'functions, lists or structs, regex functions, lower, upper, length, substring, round, now() or ILIKE.';
 
 /** A relationship between two of the tables, many FROM rows to one TO row (or one to one). */
 export interface SqlLink { from: string; fromColumn: string; to: string; toColumn: string; oneToOne: boolean }
@@ -82,12 +95,13 @@ const ident = (name: string): string => (/^[a-z_][a-z0-9_]*$/.test(name) ? name 
 export function tablesBlock(tables: readonly SqlTable[], links: readonly SqlLink[]): string {
   const lines = ['TABLES'];
   for (const t of tables) {
-    const about = [`the dataset ${JSON.stringify(t.name)}`, `${t.rows.toLocaleString('en-US')} rows`];
+    const about = [`the dataset ${JSON.stringify(t.name)}`, t.live ? 'Live' : `${(t.rows ?? 0).toLocaleString('en-US')} rows`];
     if (t.key) about.push(`one row per ${ident(t.key)}`);
     else if (t.grain) about.push(t.grain.slice(0, 120));
     lines.push(`- ${ident(t.table)} (${about.join(' · ')})`);
     lines.push(`    ${t.columns.map((c) => `${ident(c.name)} ${c.type}`).join(', ')}`);
   }
+  if (tables.some((t) => t.live)) lines.push(`NOTE: ${LIVE_SQL_RULES}`);
   if (links.length) {
     lines.push('LINKS');
     for (const l of links) {
@@ -144,4 +158,6 @@ export interface SqlCard {
   bullets: string[];
   /** A label column and one number column, short enough to draw: that chart too. */
   chart?: { type: 'column' | 'line'; data: ChartData };
+  /** Over Live datasets: when the warehouse answered, cached or stale (../engine/live/liveSql). */
+  asOf?: AsOf;
 }

@@ -7,7 +7,8 @@
 // It is not a chart: it cannot be saved as a visual, put on a dashboard or alerted on, and says so where those would be.
 //
 // Like ./AnswerCard, a conversation's answer brings the table it kept (`card`), dated with Refresh (./AnswerKept); one it
-// did not bring (too big to keep, or the person's access changed) runs again through `answer:refresh` and is kept.
+// did not bring (too big to keep, or the person's access changed) runs again through `answer:refresh` and is kept. Over
+// Live datasets (docs/live-data/01-live-sql.md, F3) the warehouse answered it: a card not kept says so ("Live · 2:05 AM").
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -19,6 +20,8 @@ import type { GridColumn } from '../../ui/DataGrid/DataGrid';
 import type { Cell } from '../../ui/DataGrid/pageCache';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
+import { AsOfCaption } from '../../ui/AsOf';
+import type { AsOf } from '../../ui/asOfView';
 import { day } from '../data/format';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
@@ -45,6 +48,8 @@ export interface SqlCard {
   chart?: { type: string; data: ChartDataShape };
   verified?: { id: string; question: string; by: string; at: string };
   snapshot?: Kept;
+  /** Over Live datasets: when the warehouse answered, cached or stale. */
+  asOf?: AsOf;
 }
 
 /** What an SQL answer turn stores (src/ai/answerSql.ts `SqlTurn`): the statement, the datasets it read, its title. */
@@ -120,6 +125,7 @@ export function AnswerSql({ projectId, turn, sql, card: kept, question }: {
         <div className={s.meta}>
           <span className={s.dataset}>{card.datasets.join(', ')}</span>
           {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
+          {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}
           {card.verified ? (
             <span className={s.verified} title={`Verified ${day.format(new Date(card.verified.at))}: ${card.verified.question}`}>
               ✓ Verified · {card.verified.by}
@@ -172,7 +178,8 @@ export function AnswerSql({ projectId, turn, sql, card: kept, question }: {
               {table ? 'Hide table' : 'Show table'}
             </Button>
           )}
-          {!card.verified && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
+          {/* Verifying SQL that a warehouse answered comes with phase F's F4: until then the server only refuses it. */}
+          {!card.verified && card.asOf?.mode !== 'live' && <SaveAsVerified projectId={projectId} sql={card.sql} question={question ?? ''} label="Verify" />}
           <span className={q.notChart}>{NOT_A_CHART}</span>
         </div>
       </div>

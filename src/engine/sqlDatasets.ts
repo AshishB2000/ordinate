@@ -205,7 +205,7 @@ interface Compiled {
 }
 
 /** Top-level `;` removed: with exactly one statement they are only ever leading or trailing. */
-function stripSemicolons(sql: string): string {
+export function stripSemicolons(sql: string): string {
   let out = sql;
   for (const t of lexSql(sql).reverse()) {
     if (t.kind === 'punct' && t.text === ';') out = out.slice(0, t.start) + ' ' + out.slice(t.end);
