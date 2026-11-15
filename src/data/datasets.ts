@@ -434,13 +434,13 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
   storageVersion?: string;
 };
 
-export async function getDatasetMeta(projectId: string, id: string, strict = false): Promise<DatasetMeta | null> {
+/** `text`: the record's text read already (recordFs.readMany), in place of a readFile: what readFile gives, or what it throws. */
+export async function getDatasetMeta(projectId: string, id: string, strict = false, text?: () => string): Promise<DatasetMeta | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
   try {
-    const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
-    const data = JSON.parse(raw);
+    const data = JSON.parse(text ? text() : await recordFs.readFile(datasetFilePath(projectId, id), 'utf8'));
     const version: unknown = data?.storageVersion; // read before isValidDataset narrows `data` to Dataset
     if (!isValidDataset(data)) return null;
     // Deliberately does NOT hydrate and does NOT migrate. Migration is a write,

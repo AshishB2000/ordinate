@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import type { z } from 'zod';
 import { ipcMain } from './bus';
 import { computeCard } from './answers';
-import { verifiedEnv, verifiedProblem, verifiedStates, type VerifiedState } from './verifiedState';
+import { verifiedEnvFor, verifiedProblem, verifiedStates, type VerifiedState } from './verifiedState';
 import { sanitizeStoredSpec, type AnswerFilter, type AnswerSpec } from '../ai/answerSpec';
 import { describeAnswer } from '../ai/answerFacts';
 import { describeFilter } from '../analysis/metricFormat';
@@ -99,7 +99,7 @@ export async function saveVerifiedQuestion(projectId: string, input: Input, at?:
     verifiedBy: osUser(), verifiedAt: now, createdAt: now, updatedAt: now, schemaVersion: 1,
   });
   if (!draft) return { ok: false, error: msg.verifiedNoWords(), field: 'question' };
-  const problem = verifiedProblem(draft, await verifiedEnv(projectId));
+  const problem = verifiedProblem(draft, await verifiedEnvFor(projectId, [draft]));
   if (problem) return { ok: false, error: problem, field: 'spec' };
   const built = await computeCard(projectId, draft.spec); // row lock, Live door; a stored spec is drawn as it stands
   if ('ok' in built) return { ok: false, error: msg.verifiedDoesNotDraw(built.reason), field: 'spec', ...(built.code ? { code: built.code } : {}) };

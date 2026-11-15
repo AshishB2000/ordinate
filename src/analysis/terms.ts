@@ -67,7 +67,7 @@ function termsDir(projectId: string): string {
   return path.join(appPaths.userData(), 'projects', projectId, 'terms');
 }
 
-function termFile(projectId: string, id: string): string {
+export function termFile(projectId: string, id: string): string {
   return path.join(termsDir(projectId), id + '.json');
 }
 
@@ -151,13 +151,14 @@ export async function listTerms(projectId: string): Promise<TermSummary[]> {
 }
 
 /** The record and the tag of what is stored, from ONE read (../app/editConflict). */
-export async function readTerm(projectId: string, id: string): Promise<Tagged<Term> | null> {
+/** `text`: the record's text read already (recordFs.readMany), in place of a readFile: what readFile gives, or what it throws. */
+export async function readTerm(projectId: string, id: string, text?: () => string): Promise<Tagged<Term> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('term', termFile(projectId, id), (d) => (isValidTerm(d) ? normalize(d, projectId) : null));
+  return readTagged('term', text ?? termFile(projectId, id), (d) => (isValidTerm(d) ? normalize(d, projectId) : null));
 }
 
-export async function getTerm(projectId: string, id: string): Promise<Term | null> {
-  return (await readTerm(projectId, id))?.rec ?? null;
+export async function getTerm(projectId: string, id: string, text?: () => string): Promise<Term | null> {
+  return (await readTerm(projectId, id, text))?.rec ?? null;
 }
 
 /** How a definition words each of `filters`: a glossary term by its name (a record read per term), any other step by `words`. */

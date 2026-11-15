@@ -10,7 +10,7 @@ import type { AnswerSpec } from '../ai/answerSpec';
 import { closedToCaller } from '../data/rowAccess';
 import { listVerified } from '../analysis/verifiedQuestions';
 import { hasValueFilter } from '../analysis/verifiedRules';
-import { verifiedEnv, verifiedProblem } from './verifiedState';
+import { verifiedEnvFor, verifiedProblem } from './verifiedState';
 
 export interface VerifiedMark { id: string; question: string; by: string; at: string }
 
@@ -18,7 +18,7 @@ export async function verifiedMark(projectId: string, spec: AnswerSpec): Promise
   const drawn = { ...spec, chartType: '' };
   // The comparison first, on the records alone: the metadata check runs only for a card that matches one.
   const q = (await listVerified(projectId)).find((v) => sameChart({ ...v.spec, chartType: '' }, drawn));
-  if (!q || verifiedProblem(q, await verifiedEnv(projectId)) !== null) return {};
+  if (!q || verifiedProblem(q, await verifiedEnvFor(projectId, [q])) !== null) return {};
   if (hasValueFilter(q.spec) && (await closedToCaller(projectId, q.spec.datasetId, { rowsOnly: true }))) return {};
   return { verified: { id: q.id, question: q.question, by: q.verifiedBy, at: q.verifiedAt } };
 }

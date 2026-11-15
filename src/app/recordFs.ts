@@ -424,25 +424,30 @@ function refused(p: string): NodeJS.ErrnoException {
 /**
  * Several records for a READ-ONLY caller: one query with the DB, one read each
  * without. Path → text; a path that is missing, unreadable or past its limits is
- * simply absent. No memo and no lock: what it returns may be stale a moment later.
+ * simply absent. No lock: what it returns may be stale a moment later. Inside
+ * `withReadMemo` it reads what the memo holds from there, and seeds it with the rest, as listRecords' pages do.
  */
 export async function readMany(paths: readonly string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const byRel = new Map<string, string>();
   const files: string[] = [];
   let first: At | null = null;
+  const seen = memo.getStore();
   for (const p of paths) {
     const a = rec(p);
-    if (a && !isTmp(a.rel)) {
+    if (a && !isTmp(a.rel) && !seen?.has('row\0' + keyOf(a))) {
       first ??= a;
       byRel.set(a.rel, p);
-    } else files.push(p);
+    } else files.push(p); // a file, or a record the memo holds: readFile
   }
   if (first) {
     const r = await sql(first, 'SELECT path, body FROM records WHERE org_id = $1 AND path = ANY($2::text[])', [[...byRel.keys()]]);
     for (const row of r.rows as Array<{ path: string; body: string }>) {
       const p = byRel.get(row.path);
-      if (p && !overLimit(p, row.body)) out.set(p, row.body);
+      if (!p || overLimit(p, row.body)) continue;
+      out.set(p, row.body);
+      const k = 'row\0' + first.org + '\0' + row.path;
+      if (seen && !seen.has(k)) seen.set(k, Promise.resolve(row.body));
     }
   }
   await Promise.all(files.map((p) => readFile(p, 'utf8').then((t) => { out.set(p, t); }, () => undefined)));

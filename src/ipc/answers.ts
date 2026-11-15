@@ -18,9 +18,7 @@
 // Registered from ./copilot's register(), which hands over its number guard —
 // the guard is a safety control and there is exactly one of it.
 
-import { hiddenColumnsFor } from '../data/rowAccess';
-import { dropHidden } from '../ai/hiddenFacts';
-import { metricHidden } from '../analysis/columnHidden';
+import { specDatasetsOf, specMetricsFrom, specTermOf } from './specVocabulary';
 import { ipcMain } from './bus';
 import { keepReads, perAsk } from './askMemo';
 import { lockedTable, withLockOf } from './rowDoors';
@@ -82,11 +80,10 @@ import { withChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { snapshotMeasureRefusal } from '../analysis/snapshotGuards';
 import { figureRefusal } from '../analysis/additivity';
-import { pendingMeasureRefusal, pendingMetric } from '../analysis/pendingKinds';
+import { pendingMeasureRefusal } from '../analysis/pendingKinds';
 import { chartScope } from '../analysis/metricTimeScope';
 import { hasVia } from '../analysis/joinPlan';
-import { retiredNotes, vocabularyOrder } from '../analysis/statusNotes';
-import { statusFor, type StatusState } from '../analysis/statusStore';
+import { retiredNotes } from '../analysis/statusNotes';
 import { instructionsGuidance } from './guidance';
 import { verifiedMark } from './verifiedMark'; // "✓ Verified", by comparison at every draw (part 3 D9)
 // A cycle (./agentAsk imports this module): only used inside handlers, never at load.
@@ -319,58 +316,14 @@ export async function narrate(projectId: string, built: Built, question: string,
  * The three vocabularies are built once per question (./askMemo `perAsk`), for
  * the caller (a hidden column is no word of theirs). Their readers never change them.
  */
-export const specDatasets = (projectId: string): Promise<SpecDataset[]> => perAsk(`specDatasets\0${projectId}`, () => specDatasetsNow(projectId));
-
-async function specDatasetsNow(projectId: string): Promise<SpecDataset[]> {
-  const list = await datasets.listDatasets(projectId);
-  const metas = await Promise.all(list.map((d) => datasets.getDatasetMeta(projectId, d.id)));
-  const docs = (await loadCatalog(projectId)).columns;
-  const out: SpecDataset[] = [];
-  for (const m of metas) {
-    if (!m) continue;
-    const columns = dropHidden(m.columns, await hiddenColumnsFor(projectId, m.id)); // a hidden column is no word a spec may use (part 4, D21)
-    out.push({ id: m.id, name: m.name, columns, names: taughtNames(columns, docs[m.id]), shown: shownNames(columns, docs[m.id]) });
-  }
-  return out;
-}
-
-const statusField = async (status: ReturnType<typeof statusFor>, ref: string): Promise<{ status?: { state: StatusState } }> => {
-  const st = await status(ref);
-  return st ? { status: { state: st.state } } : {};
-};
+export const specDatasets = (projectId: string): Promise<SpecDataset[]> =>
+  perAsk(`specDatasets\0${projectId}`, async () => specDatasetsOf(projectId, (await datasets.listDatasets(projectId)).map((d) => d.id)));
 
 /** The saved metrics a spec may name. Exported for scripts/test-snapshot.ts. */
-export const specMetrics = (projectId: string): Promise<SpecMetric[]> => perAsk(`specMetrics\0${projectId}`, () => specMetricsNow(projectId));
-
-async function specMetricsNow(projectId: string): Promise<SpecMetric[]> {
-  const out: SpecMetric[] = [];
-  try {
-    const status = statusFor(projectId);
-    for (const s of await metrics.listMetrics(projectId)) {
-      // A layer's metric (part 7 mirror): named, it is a measure of its own semantic dataset, by id.
-      if (metrics.isExternalDefinition(s.definition)) {
-        out.push({ id: s.id, name: s.name, datasetId: s.datasetId, external: true, ...await statusField(status, `metric:${s.id}`) });
-        continue;
-      }
-      // Part 5's shapes are not named by a model on this release; one reading a hidden column is not the caller's (part 4).
-      if (!metrics.isSimpleDefinition(s.definition) || pendingMetric(s) || (await metricHidden(projectId, s.id))) continue;
-      const full = await metrics.getMetric(projectId, s.id);
-      out.push({
-        id: s.id, name: s.name, datasetId: s.datasetId,
-        column: s.definition.column, aggregation: s.definition.aggregation,
-        // A snapshot is not a plain total either: named, it is that metric, never a bare column measure.
-        hasFilters: !!(full && (full.filters.length || (metrics.isSimpleDefinition(full.definition) && full.definition.snapshot))),
-        ...(s.timeColumn ? { timeColumn: s.timeColumn } : {}),
-        ...await statusField(status, `metric:${s.id}`),
-      });
-    }
-  } catch (_) { /* no metric vocabulary — the spec must name columns */ }
-  return vocabularyOrder(out, () => true); // certified first; the validator keeps a retired one, which still computes
-}
+export const specMetrics = (projectId: string): Promise<SpecMetric[]> => perAsk(`specMetrics\0${projectId}`, () => specMetricsFrom(projectId, () => metrics.listMetrics(projectId)));
 
 /** The glossary terms a spec may name (semantic D10): names and aliases only, no filter value. */
-export const specTerms = (projectId: string): Promise<SpecTerm[]> =>
-  perAsk(`specTerms\0${projectId}`, async () => (await listTerms(projectId)).map((t) => ({ id: t.id, name: t.name, aliases: t.aliases, datasetId: t.datasetId })));
+export const specTerms = (projectId: string): Promise<SpecTerm[]> => perAsk(`specTerms\0${projectId}`, async () => (await listTerms(projectId)).map(specTermOf));
 
 export interface AnswerTurn {
   ledger: LedgerEntry[];
