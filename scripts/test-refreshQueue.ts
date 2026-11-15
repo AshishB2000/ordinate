@@ -200,7 +200,8 @@ async function main(): Promise<void> {
   // The tick's `now` is when the run was QUEUED: ten minutes before it lands.
   reported.length = 0;
   await sched.tickNow(Date.now() - 10 * MIN);
-  await until(() => reported.length === 1 && jobs.snapshot().active.length === 0);
+  // g's own outcome: a late report from section 2 must not stand in for it (one did on a loaded CI runner).
+  await until(() => reported.some((o) => names.get(o.datasetId) === 'g') && jobs.snapshot().active.length === 0);
   const g = await auto('g');
   ok('3. a run that landed 10 min after it was queued recorded that length', typeof g?.lastAutoMs === 'number' && g.lastAutoMs >= 10 * MIN, JSON.stringify(g));
   const list3 = await datasets.listDatasets(pid);
@@ -262,9 +263,12 @@ async function main(): Promise<void> {
   await schedule('k2', 'hourly', new Date(Date.now() - 3 * 60 * MIN).toISOString());
   held.add('k1');
   started.length = 0;
-  const tick6 = sched.tickNow(Date.now(), Date.now() + 100);
+  // The budget must be long enough for the tick to BEGIN k1 on a slow runner (100 ms was not, on CI: it began nothing),
+  // and run out while k1 is held: wait past it once k1 is parked.
+  const BUDGET = 2_000;
+  const tick6 = sched.tickNow(Date.now(), Date.now() + BUDGET);
   await until(() => parked().includes('k1'));
-  await sleep(200); // the budget runs out while k1 is fetching
+  await sleep(BUDGET + 200); // the budget runs out while k1 is fetching
   release('k1');
   const out6 = await tick6;
   ok('6. past its budget the tick finishes the refresh it began and begins no other', out6.map((o) => names.get(o.datasetId)).join() === 'k1' && !started.includes('k2'), JSON.stringify(out6));
