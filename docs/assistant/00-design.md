@@ -166,6 +166,29 @@ measure, grouping, filters and period.*
 | E | Needs an undefined link | the checked-link card above; viewers: *These can't be combined yet. [Ask an editor]* |
 | F | The form can't express it | a second AI call writes one SQL statement, Not checked |
 
+**The "Matched" line (phase C, built).** An answer whose chart is a working verified question's says
+how it got there, in one line under the card's head, in place of the *✓ Verified · Maria* badge:
+
+| How the answer came to that chart | The card says |
+|---|---|
+| asked word for word (step 2, the turn's `guidance.verifiedId`) | *✓ Matched Maria's verified question: "Revenue by region"* and **Not what I asked** (where a model can take it) |
+| the model drew a verified question it was shown as an example (`guidance.examples`) | *✓ Based on Maria's verified question: "Revenue by region"* |
+| neither: a chip, Explore, a model that got there alone | the badge, *✓ Verified · Maria* |
+
+- **By comparison only** (`src/ipc/verifiedMark.ts`): the card's spec draws the question's chart
+  (`sameChart`, chart type aside), worked out at every delivery from the ids the turn keeps, never
+  stored. An example in the prompt alone claims nothing. A question deleted, broken, edited to
+  another chart, or hidden from the caller (row rules close its dataset and it compares with a
+  value) is claimed nowhere, on a reopened conversation too. **Not what I asked** is the turn's,
+  not the line's: it stays on every word-for-word answer, alone where the line is gone or the card
+  cannot be drawn.
+- **The question as verified**, not as asked. **The verifier by name**: the address's local part in
+  words, as mentions show people (`personName`: "maria.lopez@…" → "Maria Lopez"), in the badge too;
+  never the address. Viewers get the name, since `verified:list` already names the verifier to
+  them. No verifier recorded: *a verified question*.
+- The server sends `verified: {id, question, by, at, kind}`, `kind` `matched` or `based_on`; React
+  writes the sentence. `test-matchedLine`, both modes.
+
 ## Two ways to answer
 
 The AI uses the two tools a person already has, and picks the chart builder whenever it can.
@@ -675,7 +698,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 | 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
 | A | Word search over the whole Data model; follow links and table facts in the prompt (built: [Follow the links, Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
-| C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
+| C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line (built, step 4) | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |
 | E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
 | F | SQL on Live datasets and source tables ([design](../live-data/01-live-sql.md)) | row rules, hidden columns and cost limits applied in the warehouse |

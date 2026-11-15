@@ -770,7 +770,8 @@ e2e('data model: assistant test chat', async (s) => {
 
   await chat.getByRole('textbox', { name: 'Question to try' }).fill('revenue by region');
   await chat.getByRole('button', { name: 'Ask' }).click();
-  await chat.getByText('✓ Verified').waitFor();
+  // Asked word for word as a verified question: the card says which one it matched (in place of "✓ Verified").
+  await chat.getByTestId('verified-matched').filter({ hasText: /✓ Matched .+'s verified question: “Revenue by region”/ }).waitFor();
   await chat.getByText('A verified question — no model call.').waitFor();
   const cards = chat.getByTestId('answer-card');
   assert.equal(await cards.count(), 1);

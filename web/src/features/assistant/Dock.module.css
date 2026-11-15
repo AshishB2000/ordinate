@@ -272,16 +272,6 @@
   color: var(--text-dim);
 }
 
-/* An answer from a verified question, and the way out when it is not what was meant. */
-.matched {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-4) var(--sp-8);
-  font-size: var(--t-11);
-  color: var(--text-dim);
-}
-
 /* ── Activity: the app showing its work, never persisted ────────────────── */
 .activity {
   display: flex;

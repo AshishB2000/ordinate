@@ -27,7 +27,12 @@
 // reply, nothing derived.
 //
 // A card whose spec is a working verified question's says so, "✓ Verified · who" (part 3 D9): the server's
-// `verified`, worked out at every draw, never the card's own guess.
+// `verified`, worked out at every draw, never the card's own guess. On an answer turn that came from that question
+// the server says how (`kind`), and one line under the head says it instead of the badge (docs/assistant/00-design.md
+// step 4 A): asked word for word, "Matched Ana's verified question: “…”"; drawn by the model from an example it was
+// shown, "Based on Ana's verified question: “…”". No name recorded: "a verified question". Not what I asked is the
+// turn's (`onNotThis`, a verified match), not the line's: it stays, alone, where the question was deleted since or the
+// card cannot be drawn.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -88,8 +93,9 @@ export interface Card {
   learn?: CardLearn;
   /** The visual its turn records, handed back only while it exists. */
   savedVisualId?: string;
-  /** Its spec is a working verified question's (semantic part 3 D9): worked out by the server at every draw. */
-  verified?: { id: string; question: string; by: string; at: string };
+  /** Its spec is a working verified question's (semantic part 3 D9): worked out by the server at every draw. `by`: the
+   * verifier's name ('' when none was recorded); `kind`: its turn matched it word for word, or drew it from an example. */
+  verified?: { id: string; question: string; by: string; at: string; kind?: 'matched' | 'based_on' };
   /** A conversation's answer: what it kept. None on a card of no turn. */
   snapshot?: Kept;
   /** The columns it reads, as the card names them ("sum of Revenue", "Region"): "Answered from ▾". */
@@ -109,6 +115,8 @@ export function AnswerCard({
   narrated,
   question,
   onFollowUp,
+  onNotThis,
+  asking = false,
 }: {
   projectId: string;
   spec: { datasetId: string; title?: string } & Record<string, unknown>;
@@ -123,6 +131,10 @@ export function AnswerCard({
   /** What was asked (the turn before): prefills "Save as verified". */
   question?: string;
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
+  /** "Not what I asked": the turn was a verified match, so the same words can go to the model. None: no button. */
+  onNotThis?: () => void;
+  /** An ask is under way: Not what I asked waits. */
+  asking?: boolean;
 }) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -144,6 +156,11 @@ export function AnswerCard({
   const [table, setTable] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const title = typeof spec.title === 'string' && spec.title ? spec.title : 'Answer';
+  const notThis = onNotThis && (
+    <Button size="sm" variant="ghost" disabled={asking} onClick={onNotThis}>
+      Not what I asked
+    </Button>
+  );
 
   if (!kept && q.isPending) {
     return (
@@ -162,6 +179,7 @@ export function AnswerCard({
       <div className={`${s.card} ${s.error}`}>
         <div className={s.title}>{title}</div>
         <LiveRefusal refusal={failed} projectId={projectId} datasetId={spec.datasetId} />
+        {notThis && <div className={s.matched}>{notThis}</div>}
       </div>
     );
   }
@@ -170,10 +188,13 @@ export function AnswerCard({
       <div className={`${s.card} ${s.error}`}>
         <div className={s.title}>{title}</div>
         <div className={s.note}>{(card && !card.ok && card.reason) || 'This answer could not be drawn.'}</div>
+        {notThis && <div className={s.matched}>{notThis}</div>}
       </div>
     );
   }
   const snap = card.snapshot;
+  const v = card.verified;
+  const how = v?.kind && `${v.kind === 'matched' ? 'Matched' : 'Based on'} ${v.by ? `${v.by}'s` : 'a'} verified question: “${v.question}”`;
   return (
     <div className={s.card} data-testid="answer-card">
       <div className={s.head}>
@@ -184,9 +205,9 @@ export function AnswerCard({
           {/* A kept card is dated by when it was computed; one computed now by its data's time, as before. */}
           {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
           {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}
-          {card.verified && (
+          {card.verified && !card.verified.kind && (
             <span className={s.verified} title={`Verified ${day.format(new Date(card.verified.at))}: ${card.verified.question}`}>
-              ✓ Verified · {card.verified.by}
+              ✓ Verified{card.verified.by && ` · ${card.verified.by}`}
             </span>
           )}
           {card.filterLabels.map((f) => (
@@ -201,6 +222,19 @@ export function AnswerCard({
           ))}
         </div>
       </div>
+      {how ? (
+        <div className={s.matched} data-testid="verified-matched">
+          <span>
+            <span className={s.tick} aria-hidden="true">
+              ✓{' '}
+            </span>
+            {how}
+          </span>
+          {notThis}
+        </div>
+      ) : (
+        notThis && <div className={s.matched}>{notThis}</div>
+      )}
       {snap?.accessChanged && (
         <div className={s.changed} role="status" data-testid="answer-access-changed">
           {ACCESS_CHANGED}

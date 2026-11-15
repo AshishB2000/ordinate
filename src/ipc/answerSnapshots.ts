@@ -13,7 +13,8 @@
 // snapshots gets its first one the same way, dated then. A card too big to keep is computed on every open.
 //
 // Not kept, worked out at every delivery as `answer:card` does (`liveBits`): whether its saved visual still
-// exists, its name to remember, its "✓ Verified", what "Answered from" says of its source to this caller
+// exists, its name to remember, its "✓ Verified" (with the turn's guidance: whether it matched a verified question or
+// drew one it was shown, ./verifiedMark `kind`), what "Answered from" says of its source to this caller
 // (./answerSources). Saved visuals and dashboards are untouched.
 
 import { createHash } from 'crypto';
@@ -82,11 +83,11 @@ export async function learnState(projectId: string, datasetId: string, learn: An
 }
 
 /** What a card says that is not a figure, worked out now for the turn it draws (as `answer:card` does). */
-async function liveBits(projectId: string, spec: AnswerSpec, turn: Pick<copilot.CopilotTurn, 'learn' | 'savedVisualId'>): Promise<Record<string, unknown>> {
+async function liveBits(projectId: string, spec: AnswerSpec, turn: Pick<copilot.CopilotTurn, 'learn' | 'savedVisualId' | 'guidance'>): Promise<Record<string, unknown>> {
   const said = sanitizeLearn(turn.learn, spec);
   const taught = said ? await learnState(projectId, spec.datasetId, said) : undefined;
   const saved = turn.savedVisualId && (await visuals.getVisual(projectId, turn.savedVisualId)) ? turn.savedVisualId : undefined;
-  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(await verifiedMark(projectId, spec)), ...(await answeredFrom(projectId, spec.datasetId)) };
+  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(await verifiedMark(projectId, spec, turn.guidance)), ...(await answeredFrom(projectId, spec.datasetId)) };
 }
 
 const delivered = async (projectId: string, card: object, spec: AnswerSpec, turn: copilot.CopilotTurn, view: KeptView) =>

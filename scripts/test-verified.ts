@@ -220,8 +220,8 @@ const caught = async (f: () => Promise<unknown>): Promise<unknown> => f().then((
   const SEG = { ...SPEC, category: 'segment' }; // the spec of segQ, "Revenue by segment"
   const VQ: string = segQ.body?.question?.id ?? '';
   const marked = await card(SEG);
-  ok('the identical spec is marked, with the question, who and when', marked?.verified?.id === VQ && marked.verified.question === 'Revenue by segment'
-    && marked.verified.by === TEST_USER && !Number.isNaN(Date.parse(marked.verified.at)), JSON.stringify(marked?.verified));
+  ok('the identical spec is marked, with the question, who (by name, not the address) and when', marked?.verified?.id === VQ && marked.verified.question === 'Revenue by segment'
+    && marked.verified.by === 'Ana' && !Number.isNaN(Date.parse(marked.verified.at)), JSON.stringify(marked?.verified));
   ok('another chart type is still that answer', (await card({ ...SEG, chartType: 'bar' }))?.verified?.id === VQ);
   ok('a client cannot claim it', (await card({ ...SPEC, verified: { id: VQ, question: 'x', by: 'x', at: T } }))?.verified === undefined);
   ok('…and a stored turn keeps no mark', !('verified' in (answerSpec.sanitizeStoredSpec({ ...SEG, verified: { id: VQ } }) ?? {})));

@@ -9,7 +9,6 @@
 // quiet one-line summary above the answer, dropped by the next ask or reload.
 
 import { useState, type ReactNode } from 'react';
-import { buttonClass } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { OutsideCard } from './AgentPicker';
 import { AnswerCard } from './AnswerCard';
@@ -85,7 +84,7 @@ export function Transcript({
   /** The conversation on screen ('' before it has one): a saved answer is recorded on its turn. */
   threadId: string;
   onFollowUp: (spec: Record<string, unknown>, label: string, learn?: Learn) => Promise<void>;
-  /** "Not what I asked" under an answer from a verified question: ask the model the same question. None: no button. */
+  /** "Not what I asked" on an answer that matched a verified question (`guidance.verifiedId`), in its card: ask the model the same question. None: no button. */
   onNotThis?: (question: string) => void;
   /** More under an answer, after its provenance line (the Data model's test chat: how it was found). `asked`: the turn before. */
   aside?: (t: Turn, asked?: Turn) => ReactNode;
@@ -110,6 +109,8 @@ export function Transcript({
               narrated={false}
               question={turns[i - 1]?.role === 'user' ? turns[i - 1].text.slice(0, 300) : undefined}
               onFollowUp={onFollowUp}
+              onNotThis={onNotThis && t.guidance?.verifiedId && turns[i - 1]?.role === 'user' ? () => onNotThis(turns[i - 1].text) : undefined}
+              asking={!!pending}
             />
           )}
           {t.role === 'assistant' && t.outside ? (
@@ -124,14 +125,6 @@ export function Transcript({
           )}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
           {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}
-          {t.role === 'assistant' && t.guidance?.verifiedId && onNotThis && turns[i - 1]?.role === 'user' && (
-            <div className={s.matched} data-testid="verified-matched">
-              <span>Same words as a verified question, so this is its chart.</span>
-              <button type="button" className={buttonClass('ghost', 'sm')} disabled={!!pending} onClick={() => onNotThis(turns[i - 1].text)}>
-                Not what I asked
-              </button>
-            </div>
-          )}
           {t.role === 'assistant' && t.provenance && <div className={s.provenance}>{provenanceLine(t.provenance)}</div>}
           {aside && t.role === 'assistant' && aside(t, turns[i - 1])}
         </div>

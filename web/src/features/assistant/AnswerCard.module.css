@@ -84,6 +84,20 @@
   color: var(--ok-text);
   white-space: nowrap;
 }
+/* How an answer came to a verified question's chart: matched word for word, or drawn from an example. */
+.matched {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text-dim);
+}
+.tick {
+  font-weight: 600;
+  color: var(--ok-text);
+}
 .filter {
   font-size: var(--t-11);
   padding: 1px var(--sp-8);
