@@ -1,16 +1,17 @@
 // The dock's History: every conversation in the project, behind the header's
 // clock. The title's dropdown holds the few most recent; this is the rest —
 // searchable by title, grouped by when each was last touched. The list, its
-// order and the turn counts are the server's (`copilot:threads`); the search
-// filters TITLES only.
+// order and the turn counts are the server's (`copilot:threads`), a page at a
+// time with "Load more" under it (`MoreThreads`, the wide page's list too); the
+// search filters the TITLES loaded so far.
 
 import { useRef, useState } from 'react';
-import { IconButton } from '../../ui/Button';
+import { Button, IconButton } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { Popover, PopoverClose } from '../../ui/Popover';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
-import { threadTitle, turnsLabel, useThreads, type ThreadSummary } from './api';
+import { threadTitle, turnsLabel, useThreads, type Threads, type ThreadSummary } from './api';
 import { agentName } from './agents';
 import type { ThreadAct } from './ThreadActions';
 import a from './Agent.module.css';
@@ -35,6 +36,26 @@ export function groupThreads(threads: readonly ThreadSummary[], now: Date): Thre
     groups[at >= today ? 0 : at >= yesterday ? 1 : 2].threads.push(t);
   }
   return groups.filter((g) => g.threads.length > 0);
+}
+
+/** Under a list of conversations: "Load more" while the server has older ones, and that page's own loading and error states. */
+export function MoreThreads({ threads, className }: { threads: Threads; className?: string }) {
+  if (threads.isFetchingNextPage) return <SkeletonRows rows={3} label="Loading more conversations" />;
+  if (threads.isFetchNextPageError) {
+    return <ErrorState compact heading={3} title="More conversations could not load" message="Check your connection and try again." onRetry={() => void threads.fetchNextPage()} />;
+  }
+  if (!threads.hasNextPage) return null;
+  return (
+    <Button size="sm" variant="ghost" icon="chevron-down" block className={className} onClick={() => void threads.fetchNextPage()}>
+      Load more
+    </Button>
+  );
+}
+
+/** What a list of conversations says when it shows none: a search that matched nothing (older ones may be unloaded yet), or no conversation at all. */
+export function noneText(needle: string, more: boolean): string {
+  if (!needle) return 'No conversations yet. Ask something to start one.';
+  return more ? 'None of these match. Load more to search older ones.' : 'No conversation matches that search.';
 }
 
 export interface HistoryProps {
@@ -91,8 +112,10 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct
       <Input size="sm" icon="search" aria-label="Search conversations" placeholder="Search conversations" value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className={s.list}>
         {threads.isPending && <SkeletonRows rows={4} label="Loading conversations" />}
-        {threads.isError && <ErrorState compact heading={3} title="Conversations could not load" message="Check your connection and try again." onRetry={() => void threads.refetch()} />}
-        {threads.data && shown.length === 0 && <p className={s.empty}>{needle ? 'No conversation matches that search.' : 'No conversations yet. Ask something to start one.'}</p>}
+        {threads.isError && !threads.isFetchNextPageError && (
+          <ErrorState compact heading={3} title="Conversations could not load" message="Check your connection and try again." onRetry={() => void threads.refetch()} />
+        )}
+        {threads.data && shown.length === 0 && <p className={s.empty}>{noneText(needle, threads.hasNextPage)}</p>}
         {groupThreads(shown, new Date()).map((g) => (
           <section key={g.label} className={s.group} aria-label={g.label}>
             <h3 className={s.groupLabel}>{g.label}</h3>
@@ -118,6 +141,7 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct
             ))}
           </section>
         ))}
+        <MoreThreads threads={threads} className={s.more} />
       </div>
     </Popover>
   );

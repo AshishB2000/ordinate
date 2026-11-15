@@ -28,11 +28,11 @@ import { ConversationBody, ConversationDialogs } from './Conversation';
 import { DockMenu, ModelPicker, ThreadMenu, useBackToDock } from './DockParts';
 import { UUID } from './dockRoute';
 import { rememberPageThread } from './dockState';
-import { AgentTag, groupThreads, History } from './History';
+import { AgentTag, groupThreads, History, MoreThreads } from './History';
 import { useConversation, type Conversation } from './useConversation';
 import w from './Wide.module.css';
 
-/** The project's conversations, newest-touched first (the server's order), the open one marked. Titles only are searched. */
+/** The project's conversations, newest-touched first (the server's order) a page at a time, the open one marked. Titles only are searched. */
 function Conversations({ c }: { c: Conversation }) {
   const threads = useThreads(c.pid, true);
   const [query, setQuery] = useState('');
@@ -44,12 +44,14 @@ function Conversations({ c }: { c: Conversation }) {
         <Input icon="search" aria-label="Search conversations" placeholder="Search conversations" value={query} disabled={!c.pid} onChange={(e) => setQuery(e.target.value)} />
       </div>
       {(c.project.loading || (c.pid && threads.isPending)) && <SkeletonRows rows={6} label="Loading conversations" />}
-      {threads.isError && <ErrorState compact heading={3} title="Conversations could not load" message="Check your connection and try again." onRetry={() => void threads.refetch()} />}
+      {threads.isError && !threads.isFetchNextPageError && (
+        <ErrorState compact heading={3} title="Conversations could not load" message="Check your connection and try again." onRetry={() => void threads.refetch()} />
+      )}
       {(threads.data || (!c.pid && !c.project.loading)) && shown.length === 0 && (
         <div className={w.listEmpty}>
           <Icon name={needle ? 'search' : 'message-square'} size={20} />
           <p className={w.listEmptyTitle}>{needle ? 'No conversation matches that search' : 'No conversations yet'}</p>
-          <p>{needle ? 'Titles are searched, not what was said.' : 'Ask something and it is kept here, to come back to.'}</p>
+          <p>{!needle ? 'Ask something and it is kept here, to come back to.' : threads.hasNextPage ? 'Only the ones loaded so far are searched. Load more to search older ones.' : 'Titles are searched, not what was said.'}</p>
         </div>
       )}
       {groupThreads(shown, new Date()).map((g) => (
@@ -63,6 +65,7 @@ function Conversations({ c }: { c: Conversation }) {
           ))}
         </section>
       ))}
+      <MoreThreads threads={threads} className={w.more} />
     </aside>
   );
 }

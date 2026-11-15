@@ -9,7 +9,9 @@
 //              carries the current name of each id it can (./auditNames.ts)
 //              and how long rows are kept (AUDIT_RETENTION_DAYS).
 //   settings   public links, allowed AI providers, a per-org upload cap that
-//              POST /api/files enforces under MAX_UPLOAD_MB (uploadCapMb()).
+//              POST /api/files enforces under MAX_UPLOAD_MB (uploadCapMb()), and
+//              how long unused Assistant conversations are kept (the shared sweep
+//              deletes older ones: src/ai/copilotRows.ts pruneUnused).
 
 import type { Pool } from 'pg';
 import { AI_PROVIDERS } from '../../api/admin';
@@ -47,6 +49,8 @@ export interface OrgSettings {
   readonly publicLinks: boolean;
   readonly aiProviders: string[];
   readonly uploadCapMb: number | null;
+  /** Delete Assistant conversations unused for this many days; null keeps them all (the default). */
+  readonly assistantRetentionDays: number | null;
   /** The server's ceiling (MAX_UPLOAD_MB): a per-org cap may only be lower. */
   readonly maxUploadMb: number;
   /** Every provider an org can allow. */
@@ -146,8 +150,8 @@ export function register(pool: () => Pool | null, maxUploadMb: () => number, ret
   });
 
   registry.handle('admin:settings', async (): Promise<OrgSettings> => {
-    const r = await db().query<{ public_links: boolean; ai_providers: string[] | null; upload_cap_mb: number | null }>(
-      'SELECT public_links, ai_providers, upload_cap_mb FROM org_settings WHERE org_id = $1',
+    const r = await db().query<{ public_links: boolean; ai_providers: string[] | null; upload_cap_mb: number | null; assistant_retention_days: number | null }>(
+      'SELECT public_links, ai_providers, upload_cap_mb, assistant_retention_days FROM org_settings WHERE org_id = $1',
       [org()],
     );
     const row = r.rows[0];
@@ -155,6 +159,7 @@ export function register(pool: () => Pool | null, maxUploadMb: () => number, ret
       publicLinks: row?.public_links ?? false,
       aiProviders: row?.ai_providers ?? [...AI_PROVIDERS],
       uploadCapMb: row?.upload_cap_mb ?? null,
+      assistantRetentionDays: row?.assistant_retention_days ?? null,
       maxUploadMb: maxUploadMb(),
       providers: AI_PROVIDERS,
     };
@@ -162,15 +167,18 @@ export function register(pool: () => Pool | null, maxUploadMb: () => number, ret
 
   registry.handle(
     'admin:saveSettings',
-    async (_e, s: { publicLinks: boolean; aiProviders?: string[]; uploadCapMb: number | null }) => {
+    async (_e, s: { publicLinks: boolean; aiProviders?: string[]; uploadCapMb: number | null; assistantRetentionDays?: number | null }) => {
       if (s.uploadCapMb !== null && s.uploadCapMb > maxUploadMb()) return { ok: false, error: 'cap' };
-      // aiProviders is optional since Admin → AI (docs/ai-models): absent keeps the stored value.
+      // aiProviders is optional since Admin → AI (docs/ai-models), and assistantRetentionDays for
+      // callers from before it: absent keeps the stored value.
       const providers = s.aiProviders ? AI_PROVIDERS.filter((p) => s.aiProviders?.includes(p)) : null;
+      const keep = s.assistantRetentionDays === undefined;
       await db().query(
-        `INSERT INTO org_settings (org_id, public_links, ai_providers, upload_cap_mb, updated_at) VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO org_settings (org_id, public_links, ai_providers, upload_cap_mb, assistant_retention_days, updated_at) VALUES ($1, $2, $3, $4, $6, now())
          ON CONFLICT (org_id) DO UPDATE SET public_links = $2, ai_providers = CASE WHEN $5 THEN $3 ELSE org_settings.ai_providers END,
-           upload_cap_mb = $4, updated_at = now()`,
-        [org(), s.publicLinks, providers && providers.length < AI_PROVIDERS.length ? providers : null, s.uploadCapMb, providers !== null],
+           upload_cap_mb = $4, assistant_retention_days = CASE WHEN $7 THEN org_settings.assistant_retention_days ELSE $6 END, updated_at = now()`,
+        [org(), s.publicLinks, providers && providers.length < AI_PROVIDERS.length ? providers : null, s.uploadCapMb, providers !== null,
+          s.assistantRetentionDays ?? null, keep],
       );
       return { ok: true };
     },

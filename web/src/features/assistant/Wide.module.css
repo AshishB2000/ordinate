@@ -179,6 +179,11 @@
   line-height: var(--lh-body);
   color: var(--muted);
 }
+/* "Load more" under the column's rows: the next page of older conversations. */
+.more {
+  flex: none;
+  margin-top: var(--sp-8);
+}
 .listEmpty > svg {
   color: var(--text-faint);
   margin-bottom: var(--sp-4);

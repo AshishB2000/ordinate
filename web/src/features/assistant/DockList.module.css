@@ -83,3 +83,7 @@
   line-height: var(--lh-body);
   color: var(--muted);
 }
+/* "Load more" under History's rows: the next page of older conversations. */
+.more {
+  flex: none;
+}

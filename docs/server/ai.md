@@ -59,6 +59,23 @@ OpenAI-compatible gateway on a private address needs `SSRF_ALLOW` for its range.
   can turn it on in Admin → AI."* Admins also get a **Set up AI** button there (or, when the server
   has no key store, a line saying what the operator must set).
 
+## Assistant conversations
+
+Each member's conversations are their own, kept per project in Postgres (`assistant_threads`,
+`assistant_turns`). There is no limit on how many a member keeps; the list shows 50 at a time, with
+**Load more** under it. Each conversation keeps its newest 200 turns.
+
+By default they are kept until a member deletes them (or the project is deleted). To delete old ones
+automatically, an org admin sets **Admin → Settings → Assistant → Delete conversations unused for
+(days)**, from 1 to 3650; empty keeps them all. A conversation goes once nobody has asked in it for
+that many days, with its answers, for every member of the org. Saved visuals and dashboards stay.
+The server's shared sweep applies it every 5 minutes, one pod per org, deleting up to 2,000
+conversations a pass in batches of 100, so a backlog clears over a few passes and no table is held
+locked for long. It is an org setting stored in Postgres, not an environment variable.
+
+Without `DATABASE_URL` (`AUTH_MODE=dev`, the automated tests) conversations stay in each project's
+`copilot.json`, capped at 50 per member, and the setting does nothing.
+
 ## Upgrading from a pod-local setup
 
 Before this, everything except the key (which provider was connected, which model, the gateway URL)

@@ -450,33 +450,31 @@ export function register() {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       const turns = await copilot.loadHistory(projectId, tid);
       // Which thread the turns actually CAME from: an absent or stale id resolves
-      // to the most recent thread (listThreads is newest-touched first), so the
-      // renderer learns what it is now looking at instead of guessing.
-      const threads = await copilot.listThreads(projectId);
-      const resolved = tid && threads.some((t) => t.id === tid) ? tid : (threads.length > 0 ? threads[0].id : null);
-      // Its title too: a renamed conversation's name is the stored one, which
-      // the turns alone cannot tell the header.
-      const shown = threads.find((t) => t.id === resolved);
-      const title = shown?.title ?? null;
+      // to the most recent thread, so the renderer learns what it is now looking
+      // at instead of guessing. Its title too: a renamed conversation's name is
+      // the stored one, which the turns alone cannot tell the header. One lookup,
+      // never the list: the list is paged.
+      const shown = await copilot.threadFor(projectId, tid);
       // …and the Assistant agent it is with (null: the Project assistant), by name even once it is in the Trash.
-      return { ok: true, turns, threadId: resolved, title, agent: await agentRef(projectId, shown?.agentId ?? null) };
+      return { ok: true, turns, threadId: shown?.id ?? null, title: shown?.title ?? null, agent: await agentRef(projectId, shown?.agentId ?? null) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
   });
 
   // List a project's conversations for the thread sidebar — newest-touched first,
-  // no turn bodies. Empty list is a normal answer (no history yet), never an error.
-  ipcMain.handle('copilot:threads', async (_e, { projectId }: any = {}) => {
+  // no turn bodies, one page at a time: `next` is the cursor of the page after
+  // (null: the last). Empty list is a normal answer (no history yet), never an error.
+  ipcMain.handle('copilot:threads', async (_e, { projectId, cursor }: any = {}) => {
     try {
-      const threads = await copilot.listThreads(projectId);
-      const names = await agentNames(projectId, threads.flatMap((t) => (t.agentId ? [t.agentId] : [])));
+      const page = await copilot.listThreadsPage(projectId, typeof cursor === 'string' ? cursor : undefined);
+      const names = await agentNames(projectId, page.threads.flatMap((t) => (t.agentId ? [t.agentId] : [])));
       // Which agent each was with, for History, by name; one deleted (in the Trash, or gone from it) is marked so.
       const named = (t: copilot.CopilotThreadSummary) => {
         const n = t.agentId ? names.get(t.agentId) : undefined;
         return t.agentId ? { ...t, ...(n ? { agentName: n.name } : {}), ...(!n || n.gone ? { agentGone: true } : {}) } : t;
       };
-      return { ok: true, threads: threads.map(named) };
+      return { ok: true, threads: page.threads.map(named), next: page.next };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to list Copilot conversations' };
     }
@@ -570,9 +568,8 @@ export function register() {
       const sharing = isSharePath(share) && share !== 'bundle' ? share : undefined;
       // The conversation this lands in decides who answers (docs/assistant-agents rule 11): the one named, else the
       // caller's latest; with none yet, the one this ask starts, with the agent asked for (./agentAsk.ts decides).
-      const threads = await copilot.listThreads(projectId);
-      const named = !!tid && threads.some((t) => t.id === tid);
-      const into = (named ? threads.find((t) => t.id === tid) : threads[0]) ?? null;
+      const into = await copilot.threadFor(projectId, tid); // the one named when it is the caller's, else their latest (one lookup: the list is paged)
+      const named = !!tid && into?.id === tid;
       const scope = sharing ? PROJECT_SCOPE : await askScope(projectId, into ? into.agentId : agentId);
       // The agent the conversation is stored with, as the reply names it: none for a token or a share, which keep the Project assistant (rule 13).
       const kept = scope === PROJECT_SCOPE ? null : into ? (into.agentId ?? null) : (scope.agent?.id ?? null);

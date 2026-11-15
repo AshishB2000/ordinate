@@ -593,7 +593,7 @@ export function register(guard: Guard): void {
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
       // In an Assistant agent's conversation the agent narrates (./agentAsk), and a chart outside its topic is not its to
       // give: refused before anything is computed.
-      const scope = await askScope(projectId, tid ? (await copilot.listThreads(projectId)).find((t) => t.id === tid)?.agentId : undefined);
+      const scope = await askScope(projectId, tid ? await copilot.agentOf(projectId, tid) : undefined);
       if (scope.only && scope.topic && !scope.only.has(s.datasetId)) return { ok: false, reason: outsideTopic(scope.topic.name) };
       const built = await computeCard(projectId, s, !(await verifiedMark(projectId, s)).verified); // a verified question's own spec (its chip) draws as stored
       if ('ok' in built) return built;

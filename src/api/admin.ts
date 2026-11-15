@@ -54,7 +54,7 @@ export const adminContracts = {
       limit: z.number().int().min(1).max(200).optional(),
     }),
   ),
-  // Org settings: public links, the per-org upload cap (≤ MAX_UPLOAD_MB). aiProviders is the
+  // Org settings: public links, the per-org upload cap (≤ MAX_UPLOAD_MB), Assistant retention. aiProviders is the
   // pre-Admin → AI provider policy, kept optional for old callers; only the legacy import reads it.
   'admin:settings': adminList(z.undefined()),
   'admin:saveSettings': admin(
@@ -62,6 +62,8 @@ export const adminContracts = {
       publicLinks: z.boolean(),
       aiProviders: z.array(z.enum(AI_PROVIDERS)).max(AI_PROVIDERS.length).optional(),
       uploadCapMb: z.number().int().min(1).max(999_999).nullable(),
+      // Delete Assistant conversations unused for this many days; null keeps them all. Absent keeps the stored value.
+      assistantRetentionDays: z.number().int().min(1).max(3650).nullable().optional(),
     }),
   ),
   // Live usage (live data L2.7): warehouse queries and bytes per day per connection, the daily limit, today's count.

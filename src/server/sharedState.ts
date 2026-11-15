@@ -1,6 +1,7 @@
 // What every pod shares through Postgres so that any pod can serve any request
 // (docs/any-pod/00-design.md): the abuse counters, the file tokens, the staged
-// imports, the plan-run clock, and the job that sweeps what has expired. Wired once the schema is current (./app.ts); without
+// imports, the plan-run clock, and the job that sweeps what has expired (Assistant
+// conversations past the org's retention among it). Wired once the schema is current (./app.ts); without
 // DATABASE_URL nothing here runs and each store keeps its in-process copy.
 
 import type { Pool } from 'pg';
@@ -11,9 +12,10 @@ import * as stageStore from '../data/stageStore';
 import * as planStore from '../ai/planStore';
 import { useLeaseDb } from '../app/runLease';
 import { pruneAudit } from './authz/audit';
+import { pruneUnused } from '../ai/copilotRows';
 import { defineJob } from './jobs/runner';
 
-/** How often each org's expired tokens, stages, counter windows, plan runs and audit rows are swept. */
+/** How often each org's expired tokens, stages, counter windows, plan runs, audit rows and unused conversations are swept. */
 export const SHARED_SWEEP_EVERY_MS = 5 * 60_000;
 
 let pool: Pool | null = null;
@@ -29,6 +31,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => stageStore.sweep(p, org),
     () => planStore.prune(),
     () => pruneAudit(p, org, auditDays),
+    () => pruneUnused(org),
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));

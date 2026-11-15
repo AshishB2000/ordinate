@@ -57,6 +57,9 @@ from these tables, or when a table names one that no code reads.
 | `ORDINATE_MASTER_KEY_OLD` | Rotation only: the current key, read by `node src/server/secrets/rotate.js` (`npm run secrets:rotate`). The server never reads it. | unset | running the rotation command | yes |
 | `ORDINATE_MASTER_KEY_NEW` | Rotation only: the replacement key, read by the same command. | unset | running the rotation command | yes |
 
+How long Assistant conversations are kept is not a variable: an org admin sets it in Admin → Settings
+(default: kept). See [ai.md](ai.md#assistant-conversations).
+
 ## Sign-in
 
 | Variable | Purpose | Default | Required when | Secret |

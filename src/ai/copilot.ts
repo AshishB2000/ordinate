@@ -143,13 +143,17 @@ export interface CopilotFacts {
 // Ring-cap so one conversation can't grow unbounded.
 export const MAX_TURNS = 200;
 
-// Ring-cap on conversations per project, per member. 50 is deliberate, not a round number
-// pulled from the air: the whole file is read and rewritten on EVERY append, so
+// Ring-cap on conversations per project, per member, in copilot.json only (no DATABASE_URL). With
+// a database every conversation is kept and the list is paged (./copilotRows.ts). 50 is deliberate,
+// not a round number pulled from the air: the whole file is read and rewritten on EVERY append, so
 // the cost that matters is the worst-case file, not the common one. 50 threads ×
 // 200 turns × ~1 KB of text is a ~10 MB read+parse+write per turn — already the
 // point where an append stops feeling instant. A user with 50 live conversations
 // in one project wants projects, not more threads. Least-recently-used drops first.
 export const MAX_THREADS = 50;
+
+// Conversations per page of `listThreadsPage`, as many as the file store ever holds for one member.
+export const THREAD_PAGE = 50;
 
 // Titles are truncated to 60 chars — enough for a sidebar row at the hub's width,
 // and a hard cut with no ellipsis: an ellipsis in stored data would come back as
@@ -388,7 +392,7 @@ function mostRecent(threads: CopilotThread[]): CopilotThread | null {
   return best;
 }
 
-// Thread list for a sidebar — no turn bodies. Newest-touched FIRST, i.e. the
+// Every one of the caller's conversations (the RPC pages them: listThreadsPage) — no turn bodies. Newest-touched FIRST, i.e. the
 // reverse of the on-disk order. Reverse BEFORE sorting: Array.sort is stable, so
 // same-millisecond ties then come out in the same order mostRecent() would pick.
 export async function listThreads(projectId: string): Promise<CopilotThreadSummary[]> {
@@ -404,12 +408,42 @@ export async function listThreads(projectId: string): Promise<CopilotThreadSumma
 const summaryOf = (t: CopilotThread): CopilotThreadSummary =>
   ({ id: t.id, title: t.title, updatedAt: t.updatedAt, turnCount: t.turns.length, ...(t.agentId ? { agentId: t.agentId } : {}) });
 
+// One page of that list and the cursor of the next (null: no more). copilot.json holds at most
+// THREAD_PAGE per member, so it is always one page; the rows are paged by a keyset (./copilotRows.ts).
+export async function listThreadsPage(projectId: string, after?: string): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
+  if (rows.on()) return isValidId(projectId) ? rows.listPage(projectId, after) : { threads: [], next: null };
+  return { threads: after === undefined ? await listThreads(projectId) : [], next: null };
+}
+
+/** One conversation by reference: its id, its title and the agent it is with (none: the Project assistant). */
+export interface ThreadRef {
+  id: string;
+  title: string;
+  agentId?: string;
+}
+
+// The caller's conversation a call naming `threadId` acts on: that one when it is theirs, else
+// their most recent, as loadHistory() and appendTurn() pick it. Null when they have none. One
+// conversation read, never the list: the list is paged.
+export async function threadFor(projectId: string, threadId?: string): Promise<ThreadRef | null> {
+  if (!isValidId(projectId)) return null;
+  if (rows.on()) return rows.threadFor(projectId, threadId);
+  const own = mine(await loadThreads(projectId));
+  const t = (threadId && own.find((x) => x.id === threadId)) || mostRecent(own);
+  return t ? { id: t.id, title: t.title, ...(t.agentId ? { agentId: t.agentId } : {}) } : null;
+}
+
+// The Assistant agent of the caller's conversation `threadId`: undefined for the Project assistant,
+// and for an id that is not one of theirs (never their latest's instead).
+export async function agentOf(projectId: string, threadId: string): Promise<string | undefined> {
+  const t = await threadFor(projectId, threadId);
+  return t?.id === threadId ? t.agentId : undefined;
+}
+
 // The id of the thread a bare loadHistory()/appendTurn() targets, or null when the
 // project has no conversation yet.
 export async function latestThreadId(projectId: string): Promise<string | null> {
-  if (rows.on()) return isValidId(projectId) ? rows.latestThreadId(projectId) : null;
-  const t = mostRecent(mine(await loadThreads(projectId)));
-  return t ? t.id : null;
+  return (await threadFor(projectId))?.id ?? null;
 }
 
 // Start a new, empty conversation and persist it immediately, so the renderer can
