@@ -18,14 +18,17 @@ import * as msg from '../analysis/verifiedMessages';
 import { listMetrics } from '../analysis/metrics';
 import { pendingMetric } from '../analysis/pendingKinds';
 import { specDatasets, specMetrics, specTerms } from './answers';
+import { perAsk } from './askMemo';
 
 /** `pending`: the ids of metrics of a kind this release cannot draw (part 5): `computeCard` refuses those in its own words. */
 export interface VerifiedEnv { datasets: SpecDataset[]; metrics: SpecMetric[]; terms: SpecTerm[]; pending: ReadonlySet<string> }
 
-/** What a spec may name in the project: metadata, the catalog and the term records. */
-export async function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
-  const [datasets, metrics, terms, all] = await Promise.all([specDatasets(projectId), specMetrics(projectId), specTerms(projectId), listMetrics(projectId)]);
-  return { datasets, metrics, terms, pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
+/** What a spec may name in the project: metadata, the catalog and the term records. Once per question (./askMemo); its readers never change it. */
+export function verifiedEnv(projectId: string): Promise<VerifiedEnv> {
+  return perAsk(`verifiedEnv\0${projectId}`, async () => {
+    const [datasets, metrics, terms, all] = await Promise.all([specDatasets(projectId), specMetrics(projectId), specTerms(projectId), listMetrics(projectId)]);
+    return { datasets, metrics, terms, pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
+  });
 }
 
 /** Why `q` no longer runs, in a sentence, or null. The same check a follow-up makes of the previous answer (./answers `previousAnswer`). */

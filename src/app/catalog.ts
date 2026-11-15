@@ -33,7 +33,7 @@ import * as appPaths from './paths';
 import { isValidId } from './ids';
 import { clip } from './clip';
 import * as recordFs from './recordFs';
-import { ctx, serverDataDir } from '../server/context';
+import { ctx, orgKey, serverDataDir } from '../server/context';
 import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
 import type { NamedColumn } from './columnNames';
 import { alreadyCalled, tooManyNames } from './columnNameMessages';
@@ -256,7 +256,9 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
 export async function loadStrict(projectId: string): Promise<CatalogFile> {
   if (!isValidId(projectId)) return emptyCatalog();
   try {
-    return sanitizeCatalog(JSON.parse(await recordFs.readFile(catalogPath(projectId), 'utf8')));
+    const text = await recordFs.readFile(catalogPath(projectId), 'utf8');
+    warnIfLarge(projectId, text);
+    return sanitizeCatalog(JSON.parse(text));
   } catch (err: any) {
     if (err && err.code === 'ENOENT') return emptyCatalog();
     throw err;
@@ -268,9 +270,34 @@ export async function load(projectId: string): Promise<CatalogFile> {
   try {
     return await loadStrict(projectId);
   } catch (err: any) {
-    logger.error('[catalog] unreadable catalog, treating as empty:', err && err.message);
-    return emptyCatalog();
+    return unreadable(err);
   }
+}
+
+function unreadable(err: any): CatalogFile {
+  logger.error('[catalog] unreadable catalog, treating as empty:', err && err.message);
+  return emptyCatalog();
+}
+
+/**
+ * `load` (`strict`: `loadStrict`) for a READ-ONLY caller: parsed once inside recordFs.withReadMemo (an Assistant
+ * question, ../ipc/askMemo; a publish), every time outside it. Every reader gets the SAME object, so none may change
+ * it; a write through recordFs forgets it, and one that fails is read again. Writers keep `mutate`'s own read.
+ */
+export function loadShared(projectId: string, strict = false): Promise<CatalogFile> {
+  const once = recordFs.memoRead(`catalog\0${projectId}`, () => loadStrict(projectId));
+  return strict ? once : once.catch(unreadable);
+}
+
+// The file stays one record per project (docs/assistant/00-design.md, "Scale rules"); one past 4 MiB is said once per
+// org and project per process, by its size only, so an operator sees it before the record's 8 MiB cap refuses it.
+const LARGE_BYTES = 4 * 1024 * 1024;
+const warnedLarge = new Set<string>();
+function warnIfLarge(projectId: string, text: string): void {
+  const bytes = Buffer.byteLength(text);
+  if (bytes <= LARGE_BYTES || warnedLarge.has(orgKey(projectId))) return;
+  warnedLarge.add(orgKey(projectId));
+  logger.warn(`[catalog] project ${projectId}'s catalog.json is ${(bytes / 1024 / 1024).toFixed(1)} MiB: past 4 MiB, it is split per dataset when it nears the 8 MiB cap`);
 }
 
 // Every write is read-modify-write of ONE file, and the Details popover saves
@@ -344,10 +371,10 @@ export async function setDoc(projectId: string, ref: string, patch: DocPatch): P
 
 // ── Columns ──────────────────────────────────────────────────────────────────
 
-/** `strict`: an unreadable catalog THROWS instead of reading as "nothing documented" (`loadStrict`). */
+/** `strict`: an unreadable catalog THROWS instead of reading as "nothing documented" (`loadStrict`). Shared (`loadShared`): never change what it returns. */
 export async function getColumns(projectId: string, datasetId: string, strict = false): Promise<Record<string, ColumnDoc>> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return dict();
-  const file = await (strict ? loadStrict : load)(projectId);
+  const file = await loadShared(projectId, strict);
   return own(file.columns, datasetId) ? file.columns[datasetId] : dict();
 }
 

@@ -37,7 +37,7 @@ import type { DistinctRequest, DistinctResult } from '../engine/datasetPage';
  */
 export async function labelListsFor(projectId: string, datasetId: string, encoding: VizEncoding): Promise<{ category?: ValueLabel[]; series?: ValueLabel[] }> {
   if (!encoding || encoding.geo || encoding.pivot || encoding.cohort || encoding.eventFunnel || encoding.facet || encoding.drivers) return {};
-  const docs = (await catalog.load(projectId)).columns; // null-prototype maps: a column named `__proto__` is a column
+  const docs = (await catalog.loadShared(projectId)).columns; // read-only, shared; null-prototype maps: a column named `__proto__` is a column
   const metas = new Map<string, Promise<DatasetMeta | null>>();
   const listOf = async (ds: string, column: string | undefined): Promise<ValueLabel[] | undefined> => {
     const list = column ? docs[ds]?.[column]?.values : undefined;
@@ -164,7 +164,7 @@ export async function filterText(projectId: string, datasetId: string, filters: 
   const pairs = new Map<string, [string, string][]>();
   const notes: string[] = [];
   if (!held.size) return { pairs, notes };
-  const docs = (await catalog.load(projectId)).columns[datasetId];
+  const docs = (await catalog.loadShared(projectId)).columns[datasetId]; // read-only, shared
   for (const [column, values] of held) {
     const list = docs?.[column]?.values;
     if (!list?.length) continue;

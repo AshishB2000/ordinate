@@ -19,6 +19,7 @@
 // this app.
 
 import { ipcMain } from './bus';
+import { keepReads } from './askMemo';
 import { closedToCaller, columnsRuled, isRowPolicyError, policyClosed, rowPolicyRefusal } from '../data/rowAccess';
 import { rowReaderMessage } from '../data/rowAccessMessages';
 
@@ -255,7 +256,7 @@ export function register(): void {
   // The inbox's "Explain" button — the PULL half of the same path `deliver`
   // runs on push. `not_ready` (rather than an error) is the shape every other
   // optional-AI channel in this app returns with no model configured.
-  ipcMain.handle('alerts:explain', async (_e, { projectId, event }: any = {}) => {
+  ipcMain.handle('alerts:explain', keepReads(async (_e, { projectId, event }: any = {}) => { // its reads kept for its length (./askMemo)
     try {
       const ev = alerts.sanitizeEvent(event);
       if (!ev) return { ok: false, error: 'No such alert.' };
@@ -266,5 +267,5 @@ export function register(): void {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not explain that alert' };
     }
-  });
+  }));
 }

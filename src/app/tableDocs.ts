@@ -5,7 +5,7 @@
 import { isValidId } from './ids';
 import { clip } from './clip';
 import { sanitizeHierarchies, withIds, type Hierarchy, type HierarchyDraft } from './hierarchies';
-import { getColumns, load, loadStrict, mutateCatalog, osUser } from './catalog';
+import { getColumns, loadShared, mutateCatalog, osUser } from './catalog';
 import { navHierarchies } from '../analysis/drillLevels';
 import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
@@ -81,7 +81,7 @@ const blank = (): TableDoc => sanitizeTableDoc({});
 /** `strict`: an unreadable catalog THROWS instead of reading as "nothing documented" (`loadStrict`). */
 export async function getTableDoc(projectId: string, datasetId: string, strict = false): Promise<TableDoc> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return blank();
-  const file = await (strict ? loadStrict : load)(projectId);
+  const file = await loadShared(projectId, strict); // read-only, shared: never change what this returns
   return file.tables?.[datasetId] ?? blank();
 }
 

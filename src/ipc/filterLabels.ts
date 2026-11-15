@@ -13,7 +13,7 @@ import type { ValueLabel } from '../analysis/valueLabels';
 export async function filterLabels(projectId: string, datasetId: string, filters: readonly AnswerFilter[]): Promise<FilterLabels | undefined> {
   const columns = new Set(filters.flatMap((f) => ('term' in f || 'period' in f || !MATCH_OPS.has(f.op) ? [] : [f.column])));
   if (!columns.size) return undefined;
-  const docs = (await catalog.load(projectId)).columns[datasetId];
+  const docs = (await catalog.loadShared(projectId)).columns[datasetId]; // read-only, shared
   const out = new Map<string, ValueLabel[]>();
   for (const c of columns) {
     const list = docs && Object.prototype.hasOwnProperty.call(docs, c) ? docs[c].values : undefined;

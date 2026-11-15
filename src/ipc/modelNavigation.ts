@@ -6,7 +6,7 @@
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
-import { loadStrict } from '../app/catalog';
+import { loadShared, loadStrict } from '../app/catalog';
 import { activeWeekCal } from '../analysis/retailCalendar';
 import { dateLadder, navHierarchies } from '../analysis/drillLevels';
 import type { NavHierarchy } from '../analysis/drillLevels';
@@ -40,7 +40,7 @@ export async function modelNavigation(projectId: string): Promise<Navigation> {
 export async function navContext(projectId: string, datasetId: string): Promise<{ hierarchies: NavHierarchy[]; ladder: DateGrain[] }> {
   const ladder = dateLadder(activeWeekCal() !== null);
   try {
-    const [file, meta] = await Promise.all([loadStrict(projectId), datasets.getDatasetMeta(projectId, datasetId)]);
+    const [file, meta] = await Promise.all([loadShared(projectId, true), datasets.getDatasetMeta(projectId, datasetId)]); // read-only, shared
     const stored = file.tables?.[datasetId]?.hierarchies;
     return { hierarchies: meta && stored?.length ? navHierarchies(stored, meta.columns) : [], ladder };
   } catch {

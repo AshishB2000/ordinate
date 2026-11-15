@@ -312,9 +312,9 @@ async function charts(P: string): Promise<void> {
 
   // Byte-identical without labels: the same reply as one built with no label list at all (catalog stubbed empty).
   const stubbed = async <T>(fn: () => Promise<T>): Promise<T> => {
-    const real = catalog.load;
-    (catalog as { load: unknown }).load = async () => catalog.emptyCatalog();
-    try { return await fn(); } finally { (catalog as { load: unknown }).load = real; }
+    const real = { load: catalog.load, loadShared: catalog.loadShared }; // the readers' two doors to the file
+    Object.assign(catalog, { load: async () => catalog.emptyCatalog(), loadShared: async () => catalog.emptyCatalog() });
+    try { return await fn(); } finally { Object.assign(catalog, real); }
   };
   const P2 = (await projects.createProject('no labels')).id;
   const S2 = await save('Sales', ROWS, P2);
@@ -432,15 +432,15 @@ async function charts(P: string): Promise<void> {
     && await lists({ category: 'tier', values: M, series: 'region', seriesDatasetId: R }) === '{"series":[{"value":"EU","label":"Europa"}]}');
   let loads = 0;
   let metas = 0;
-  const realLoad = catalog.load;
+  const realLoad = catalog.loadShared; // the read-only door labelListsFor takes
   const realMeta = datasets.getDatasetMeta;
-  (catalog as { load: unknown }).load = (pid: string) => { loads += 1; return realLoad(pid); };
+  (catalog as { loadShared: unknown }).loadShared = (pid: string) => { loads += 1; return realLoad(pid); };
   (datasets as { getDatasetMeta: unknown }).getDatasetMeta = (pid: string, id: string) => { metas += 1; return realMeta(pid, id); };
   await lists({ ...enc, series: 'region', seriesDatasetId: R });
   const both = [loads, metas];
   loads = 0; metas = 0;
   await lists({ category: 'tier', values: M });
-  (catalog as { load: unknown }).load = realLoad;
+  (catalog as { loadShared: unknown }).loadShared = realLoad;
   (datasets as { getDatasetMeta: unknown }).getDatasetMeta = realMeta;
   ok('labelListsFor: ONE catalog read for both axes, a meta read per labelled dataset; none for a column without labels', json(both) === '[1,2]' && loads === 1 && metas === 0, json([both, loads, metas]));
 }
