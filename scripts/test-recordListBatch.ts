@@ -87,7 +87,7 @@ const logged = async <T>(fn: () => Promise<T>): Promise<[T, string[]]> => {
 };
 
 // ── the world ─────────────────────────────────────────────────────────────
-interface World { P: string; ds: string; dirs: string[]; unreadable: string[]; overCap: string; overflow: string }
+interface World { P: string; ds: string; dirs: string[]; unreadable: string[]; overCap: string; overflow: string; searchFile: string }
 const uuid = (): string => crypto.randomUUID();
 const write = (file: string, text: string): void => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
 
@@ -163,9 +163,12 @@ async function seed(): Promise<World> {
   write(path.join(dsDir, overCap + '.json'), JSON.stringify({ id: overCap, pad: 'x'.repeat(9 * MIB) })); // past the 8 MiB cap
   const overflow = uuid();
   write(path.join(metricsDir, overflow + '.json'), JSON.stringify({ id: overflow, v: new Array(1_100_000).fill(0) })); // 2.2 MB, past the value budget
-  write(path.join(dsDir, ds + '.search.json'), '{"disk":true}'); // not a record: it stays on disk, beside the rows
+  // Not a record: it stays on disk, beside the rows. Named for no dataset, so no table's own search cache rewrites it
+  // while a check reads it (one did, under a loaded run).
+  const searchFile = uuid() + '.search.json';
+  write(path.join(dsDir, searchFile), '{"disk":true}');
   for (let i = 0; i < 3; i++) write(path.join(root, 'projects', P, 'bigpages', uuid() + '.json'), JSON.stringify({ pad: 'y'.repeat(5 * MIB) }));
-  return { P, ds, dirs, unreadable: [...unreadable, overCap, overflow], overCap, overflow };
+  return { P, ds, dirs, unreadable: [...unreadable, overCap, overflow], overCap, overflow, searchFile };
 }
 
 const lists = (P: string): Array<[string, () => Promise<unknown[]>]> => [
@@ -214,7 +217,7 @@ async function fileLeg(w: World): Promise<void> {
   ok('files: listRecords gives readdir\'s .json files, in its order', same(listing.map(([n]) => n), want));
   ok('files: each with its text, or the error readFile throws',
     listing.every(([n, t]) => (n === w.overCap + '.json' ? t === 'THREW ERECORDTOOLARGE' : t === fs.readFileSync(path.join(dir, n), 'utf8'))));
-  ok('files: the .search.json beside them is listed too (as readdir lists it)', listing.some(([n, t]) => n === w.ds + '.search.json' && t === '{"disk":true}'));
+  ok('files: the .search.json beside them is listed too (as readdir lists it)', listing.some(([n, t]) => n === w.searchFile && t === '{"disk":true}'));
   const missing = await as(() => recordFs.listRecords(path.join(dir, 'nope')).then(() => 'listed', (e: { code?: string }) => String(e.code)));
   ok('files: a missing folder throws ENOENT, as readdir does', missing === 'ENOENT');
 }
@@ -273,7 +276,7 @@ async function dbLeg(pool: Pool, w: World): Promise<void> {
   ok('db: listRecords — the same names, texts and errors as one readFile each', listing.length > 250 && same(listing, refListing));
   // A file that is no record (the .search.json beside a table) is listed when readdir lists it, and reads exactly as
   // readFile reads it: where it lives (local disk, or the storage CI's S3 pass routes it to) is readFile's business.
-  const searchName = w.ds + '.search.json';
+  const searchName = w.searchFile;
   const onDisk = (await as(() => recordFs.readdir(dir))).includes(searchName);
   const searchListed = listing.find(([n]) => n === searchName);
   const direct = await as(() => recordFs.readFile(path.join(dir, searchName), 'utf8').then((t) => t, (e: NodeJS.ErrnoException) => 'THREW ' + String(e.code)));
