@@ -34,6 +34,7 @@ import * as metrics from '../analysis/metrics';
 import { withStatus } from '../analysis/statusStore';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
 import { isFormulaDefinition } from '../analysis/metrics';
+import { metricNames, type MetricNames } from '../analysis/metricNames';
 import { isNewerKind } from '../analysis/pendingKinds';
 import { targetField, targetHidden } from './targetResolve';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
@@ -91,7 +92,8 @@ const MAX_FORMULA_DEPTH = 10;
 export interface ResolveCtx {
   projectId: string;
   scope: FilterStep[];
-  byName: Map<string, Metric> | null;
+  /** The metrics a formula names, by lower-cased name (../analysis/metricNames): read as they are named. */
+  names: MetricNames;
   memo: Map<string, number | null>;
   /** Lowercased names currently being resolved — the cycle guard. */
   stack: Set<string>;
@@ -131,11 +133,6 @@ export function olderAsOf(a: AsOf | undefined, b: AsOf | undefined): AsOf | unde
 export function displayOf(value: number | null, format: metrics.MetricFormat, fx: FxInfo | undefined, simple: boolean): string {
   if (!fx || (!simple && format.kind !== 'currency')) return formatMetricValue(value, format);
   return formatMetric(value, { ...format, kind: 'currency', prefix: undefined }, fx.target);
-}
-
-async function namesFor(ctx: ResolveCtx): Promise<Map<string, Metric>> {
-  if (!ctx.byName) ctx.byName = await metrics.metricsByName(ctx.projectId);
-  return ctx.byName;
 }
 
 /**
@@ -209,6 +206,7 @@ export async function resolveDefinition(
   // References to other metrics — `[Revenue]`. Each resolved under the SAME
   // scope, which is what makes a ratio of two metrics a ratio of two scoped
   // figures rather than a scoped ratio of two unscoped ones.
+  await ctx.names.load(compiled.program.metricRefs.map((r) => String(r).toLowerCase())); // one lookup for them all
   for (const ref of compiled.program.metricRefs) {
     values.set(ref, await resolveByName(ctx, ref, depth + 1));
   }
@@ -226,8 +224,7 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
   // Without this the recursion below would not terminate.
   if (ctx.stack.has(key)) return null;
 
-  const byName = await namesFor(ctx);
-  const metric = byName.get(key);
+  const metric = await ctx.names.get(key);
   if (!metric) return null;
 
   ctx.stack.add(key);
@@ -250,7 +247,7 @@ async function resolveByName(ctx: ResolveCtx, name: string, depth: number): Prom
 }
 
 export function newCtx(projectId: string, scope: FilterStep[], params: ParamValues = new Map()): ResolveCtx {
-  return { projectId, scope, byName: null, memo: new Map(), stack: new Set(), params };
+  return { projectId, scope, names: metricNames(projectId), memo: new Map(), stack: new Set(), params };
 }
 
 export interface ResolvedMetric {

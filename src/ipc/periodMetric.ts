@@ -45,6 +45,7 @@ async function baseValue(ctx: ResolveCtx, base: Metric, scope: FilterStep[], dep
     return null;
   }
   const inner = newCtx(ctx.projectId, s.filters, ctx.params);
+  inner.names = ctx.names; // the names read for the caller hold for its base
   inner.marked = marked ? { filters: marked, on: base.datasetId } : ctx.marked; // the period metric and its base share a dataset
   inner.reads = ctx.reads; // the columns its figure is totalled from are the base's: what a Share policy judges (publish/kpiPolicy)
   inner.stack.add(base.name.toLowerCase()); // a base formula naming itself has no value, as at the top

@@ -4,7 +4,8 @@
 import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import * as metrics from './metrics';
-import { isFormulaDefinition, metricsByName, sanitizeDefinition } from './metrics';
+import { isFormulaDefinition, sanitizeDefinition } from './metrics';
+import { metricNames } from './metricNames';
 import type { Metric, MetricDefinition } from './metrics';
 import { compileMetricFormula } from './metricFormula';
 import { bindFormulaText } from './params';
@@ -56,9 +57,11 @@ async function partsOf(projectId: string, input: TimeInput, meta: NonNullable<Co
   const columns = meta.columns.map((c) => c.name).concat(await relatedColumnNames(projectId, input.datasetId));
   const compiled = compileMetricFormula(bindFormulaText(input.definition.formula, new Map()).text, columns);
   if (!compiled.ok) return byDataset;
-  const byName = await metricsByName(projectId);
-  for (const ref of new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()))) {
-    const part = byName.get(ref);
+  const refs = new Set(compiled.program.metricRefs.map((r) => r.toLowerCase()));
+  const names = metricNames(projectId);
+  await names.load(refs);
+  for (const ref of refs) {
+    const part = await names.get(ref);
     if (!part || excused.has(ref)) continue;
     byDataset.set(part.datasetId, [...(byDataset.get(part.datasetId) ?? []), { name: part.name, date: await metricDate(projectId, part) }]);
   }
@@ -143,14 +146,15 @@ async function datedOf(projectId: string, m: Metric): Promise<Dated[]> {
   const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
   if (!meta) return out;
   const columns = meta.columns.map((c) => c.name).concat(await relatedColumnNames(projectId, m.datasetId));
-  const byName = await metricsByName(projectId);
+  const names = metricNames(projectId);
   const seen = new Set([m.name.toLowerCase()]);
   const walk = async (f: Metric, depth: number): Promise<void> => {
     if (!isFormulaDefinition(f.definition) || depth > MAX_DEPTH) return;
     const compiled = compileMetricFormula(bindFormulaText(f.definition.formula, new Map()).text, columns);
     if (!compiled.ok) return; // the figure says why
+    await names.load(compiled.program.metricRefs.map((r) => r.toLowerCase()));
     for (const ref of compiled.program.metricRefs) {
-      const part = byName.get(ref.toLowerCase());
+      const part = await names.get(ref.toLowerCase());
       if (!part || seen.has(ref.toLowerCase()) || part.datasetId !== m.datasetId) continue;
       seen.add(ref.toLowerCase());
       out.push({ name: part.name, date: await metricDate(projectId, part), of: own });

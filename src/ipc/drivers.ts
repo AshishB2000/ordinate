@@ -33,6 +33,7 @@ import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { metricShape } from '../analysis/driverShape';
+import { metricsReached } from '../analysis/metricNames';
 import type { DriverShape } from '../analysis/driverShape';
 import {
   MAX_MEMBERS, MIN_MEMBERS, driversCaption, explainDimension, isOffsetting, leadMember, rankDimensions, totalsOf,
@@ -303,7 +304,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   spec = { ...spec, filters: scoped.filters };
   const def = metric ? metric.definition : { column: spec.metric.column as string, aggregation: spec.metric.aggregation as MetricAggregation };
   const name = spec.metric.label || (metric ? metric.name : `${spec.metric.aggregation} of ${spec.metric.column}`);
-  const shape = metricShape(spec.datasetId, src.columns, def, metric ? metric.filters : [], await metrics.metricsByName(projectId), params, metric?.name);
+  const shape = metricShape(spec.datasetId, src.columns, def, metric ? metric.filters : [], await metricsReached(projectId, [def], params), params, metric?.name);
   const f = fmtFor(metric ? metric.format : null, shape.kind);
 
   const scopes = spec.compare.mode === 'latest' ? await latestScopes(projectId, spec, spec.compare.column) : periodScopes(spec, src.columns);

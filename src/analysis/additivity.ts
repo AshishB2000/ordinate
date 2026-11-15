@@ -15,7 +15,8 @@ import type { ParsedColumn } from '../data/parse';
 import { aggWord } from '../data/aggregations';
 import { getDatasetMeta } from '../data/datasets';
 import type { Metric } from './metrics';
-import { getMetric, isExternalDefinition, isFormulaDefinition, isFunnelDefinition, isPeriodDefinition, metricsByName } from './metrics';
+import { getMetric, isExternalDefinition, isFormulaDefinition, isFunnelDefinition, isPeriodDefinition } from './metrics';
+import { metricsReached } from './metricNames';
 import { isNewerKind } from './pendingKinds';
 import { metricShape } from './driverShape';
 import { tokenize } from '../formula/formulaTokens';
@@ -142,7 +143,7 @@ async function resolveMeasure(
   // The columns and the other metrics are read for a formula (or a period metric: its base) only; a snapshot's rule needs neither.
   const formula = isFormulaDefinition(def) || isPeriodDefinition(def);
   const columns = formula ? (await getDatasetMeta(projectId, dataset))?.columns ?? [] : [];
-  const byName = formula ? await metricsByName(projectId) : new Map<string, Metric>();
+  const byName = formula ? await metricsReached(projectId, [def], params) : new Map<string, Metric>();
   return { name: metric.name, additivity: additivityOf(metric, columns, byName, params), ...(isExternalDefinition(def) ? { layer: def.layer ?? '' } : {}) };
 }
 
