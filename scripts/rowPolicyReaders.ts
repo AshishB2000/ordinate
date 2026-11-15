@@ -17,6 +17,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'analysis:open': 'REDACT',
   'analysis:previewPlan': 'NET',
   'analysis:tiles': 'DOOR',
+  'answer:alsoOn': 'META', // dashboard ids and names the caller may open (a viewer the published copies), found by dataset; no row, no figure
   'answer:card': 'DOOR',
   'answer:explain': 'DOOR',
   'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced

@@ -86,6 +86,7 @@ import { hasVia } from '../analysis/joinPlan';
 import { retiredNotes } from '../analysis/statusNotes';
 import { instructionsGuidance } from './guidance';
 import { verifiedMark } from './verifiedMark'; // "✓ Verified", by comparison at every draw (part 3 D9)
+import { answeredFrom, register as registerSources, usesOf } from './answerSources'; // "Answered from ▾", "Also on ▸" (step 7)
 // A cycle (./agentAsk imports this module): only used inside handlers, never at load.
 import { askScope } from './agentAsk';
 import type { Agent } from '../ai/agents';
@@ -118,6 +119,8 @@ export interface AnswerCard {
   learn?: CardLearn;
   /** The Visual its turn records it was saved as — only while that visual still exists. */
   savedVisualId?: string;
+  /** The columns it reads, as the card names them (./answerSources `usesOf`): "Answered from ▾". */
+  uses?: string[];
 }
 
 /** A name to remember, as the card shows it: the column's shown name, and 'known' once the project's names already mean that column. */
@@ -185,7 +188,10 @@ export async function computeCard(projectId: string, asked: AnswerSpec, loose = 
   const x = await expandAnswerTerms(projectId, asked);
   const built = await withLockOf(projectId, x.spec && x.spec.datasetId, (lock, hidden) => computeCardWith(projectId, x.spec, loose, lock, x, hidden), [x.spec, x.steps]); // the question: the spec and its terms' steps
   const out = x.terms.length && 'card' in built ? withTermRefs(built, x) : built;
-  if ('card' in out) out.card.notes.push(...await retiredNotes(projectId, asked.measures.flatMap((m) => m.metricId ? [`metric:${m.metricId}`] : []))); // a retired metric still computes (D6); the card says what replaces it
+  if ('card' in out) {
+    out.card.notes.push(...await retiredNotes(projectId, asked.measures.flatMap((m) => m.metricId ? [`metric:${m.metricId}`] : []))); // a retired metric still computes (D6); the card says what replaces it
+    out.card.uses = await usesOf(projectId, out.card.spec); // extract and Live alike, kept with the card
+  }
   return out;
 }
 
@@ -445,6 +451,7 @@ export async function appendAnswer(
 
 export function register(guard: Guard): void {
   registerSnapshots(computeCard); // `answer:refresh`, through THE answer door
+  registerSources(); // `answer:alsoOn`
   // Draw one card from a spec, now: a card no conversation turn keeps (a turn's own
   // comes with its conversation, or from `answer:refresh`). `learn` is its turn's name to remember, and `savedVisualId` the visual it was
   // saved as — handed back only while that visual exists, so a deleted one is
@@ -459,7 +466,7 @@ export function register(guard: Guard): void {
       const said = sanitizeLearn(learn, s);
       const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
       const kept = typeof savedVisualId === 'string' && (await visuals.getVisual(projectId, savedVisualId)) ? savedVisualId : undefined;
-      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}), ...(await verifiedMark(projectId, built.card.spec)) };
+      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}), ...(await verifiedMark(projectId, built.card.spec)), ...(await answeredFrom(projectId, s.datasetId)) };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }

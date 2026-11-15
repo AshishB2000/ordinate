@@ -31,6 +31,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'analysis:open': 'REDACT',
   'analysis:previewPlan': 'NET',
   'analysis:tiles': 'GATE',
+  'answer:alsoOn': 'META', // dashboard ids and names the caller may open that show a dataset: no cell, label or figure of it
   'answer:card': 'GATE',
   'answer:explain': 'GATE',
   'answer:refresh': 'GATE',

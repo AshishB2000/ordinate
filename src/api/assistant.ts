@@ -107,6 +107,9 @@ export const assistant = {
     input: z.strictObject({ projectId: Uuid, threadId: Uuid, turnId: z.string().min(1).max(100) }),
     project: byProjectId,
   }),
+  // "Also on ▸" on an answer card (src/ipc/answerSources.ts): the dashboards the caller may open that show this dataset,
+  // found by reference (never a list of the project), at most five and how many more. Names only.
+  'answer:alsoOn': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

@@ -41,11 +41,6 @@
   align-items: center;
   gap: var(--sp-4);
 }
-.dataset {
-  font-size: var(--t-11);
-  color: var(--muted);
-  margin-right: var(--sp-4);
-}
 .asOf {
   margin-right: var(--sp-4);
 }

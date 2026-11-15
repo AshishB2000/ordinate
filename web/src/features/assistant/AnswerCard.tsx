@@ -11,7 +11,8 @@
 // app's facts as bullet points instead — the same content.
 //
 // The card says how fresh its figures are (`asOf`, L0.2) beside the dataset's
-// name — the time the narration was given too.
+// name — the time the narration was given too. The name is "Answered from ▾",
+// and "Also on ▸" beside it lists the dashboards on the same dataset (./AnswerSources).
 //
 // An answer with NO ROWS because a filter value is not in its column is not a
 // dead end: the server's sentence says which value, and "Did you mean" offers
@@ -47,6 +48,7 @@ import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
 import { keepInConversation, refreshAnswer } from './api';
 import { ACCESS_CHANGED, KeptAsOf, periodText } from './AnswerKept';
+import { AlsoOn, AnsweredFrom } from './AnswerSources';
 import s from './AnswerCard.module.css';
 
 /** A relative period as it resolved when the card was computed (src/ai/answerSnapshot.ts). */
@@ -90,6 +92,10 @@ export interface Card {
   verified?: { id: string; question: string; by: string; at: string };
   /** A conversation's answer: what it kept. None on a card of no turn. */
   snapshot?: Kept;
+  /** The columns it reads, as the card names them ("sum of Revenue", "Region"): "Answered from ▾". */
+  uses?: string[];
+  /** "Answered from ▾" for this person (src/ipc/answerSources.ts): the dataset its name opens; for an editor, where its rows come from. */
+  answeredFrom?: { datasetId: string; origin?: string };
 }
 export type CardReply = Card | { ok: false; reason?: string };
 
@@ -173,7 +179,8 @@ export function AnswerCard({
       <div className={s.head}>
         <div className={s.title}>{card.title || 'Answer'}</div>
         <div className={s.meta}>
-          <span className={s.dataset}>{card.datasetName}</span>
+          <AnsweredFrom projectId={projectId} card={card} />
+          <AlsoOn projectId={projectId} datasetId={spec.datasetId} />
           {/* A kept card is dated by when it was computed; one computed now by its data's time, as before. */}
           {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
           {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}

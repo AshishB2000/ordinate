@@ -13,12 +13,14 @@
 // snapshots gets its first one the same way, dated then. A card too big to keep is computed on every open.
 //
 // Not kept, worked out at every delivery as `answer:card` does (`liveBits`): whether its saved visual still
-// exists, its name to remember, its "✓ Verified". Saved visuals and dashboards are untouched.
+// exists, its name to remember, its "✓ Verified", what "Answered from" says of its source to this caller
+// (./answerSources). Saved visuals and dashboards are untouched.
 
 import { createHash } from 'crypto';
 import { ipcMain } from './bus';
 import { keepReads } from './askMemo';
 import { verifiedMark } from './verifiedMark';
+import { answeredFrom, keptMeta } from './answerSources';
 import { hiddenColumnsFor, isRowPolicyError, rowLockFor } from '../data/rowAccess';
 import { stableStringify } from '../engine/queryCache';
 import * as copilot from '../ai/copilot';
@@ -84,7 +86,7 @@ async function liveBits(projectId: string, spec: AnswerSpec, turn: Pick<copilot.
   const said = sanitizeLearn(turn.learn, spec);
   const taught = said ? await learnState(projectId, spec.datasetId, said) : undefined;
   const saved = turn.savedVisualId && (await visuals.getVisual(projectId, turn.savedVisualId)) ? turn.savedVisualId : undefined;
-  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(await verifiedMark(projectId, spec)) };
+  return { ...(taught ? { learn: taught } : {}), ...(saved ? { savedVisualId: saved } : {}), ...(await verifiedMark(projectId, spec)), ...(await answeredFrom(projectId, spec.datasetId)) };
 }
 
 const delivered = async (projectId: string, card: object, spec: AnswerSpec, turn: copilot.CopilotTurn, view: KeptView) =>
@@ -100,7 +102,7 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
   const accessNow = (id: string): Promise<string | null> => {
     let p = now.get(id);
     if (!p) {
-      p = (async () => ((await datasets.getDatasetMeta(projectId, id)) ? accessPrint(projectId, id) : null))().catch(() => null);
+      p = (async () => ((await keptMeta(projectId, id)) ? accessPrint(projectId, id) : null))().catch(() => null); // the record "Answered from" reads too
       now.set(id, p);
     }
     return p;

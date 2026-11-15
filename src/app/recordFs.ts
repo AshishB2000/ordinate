@@ -679,6 +679,41 @@ export async function listRecords(dir: string): Promise<AsyncIterable<ListedReco
   return (async function* () { yield* all; })();
 }
 
+/**
+ * The `.json` records directly in `dir` whose text holds one of `needles` (record ids), name → text, for a READ-ONLY
+ * lookup by reference (src/ipc/answerSources.ts "Also on"). With the DB one query, and only those rows leave Postgres;
+ * without (or `_listPerRecord`, its reference), every record listed and tested here. Unreadable or past its limits: absent.
+ * shortcut: Postgres still reads every body under `dir` (strpos, no index); a reverse map kept on write like
+ * search_entries (0022) when a project's dashboards make this lookup slow.
+ */
+export async function recordsNaming(dir: string, needles: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!needles.length) return out;
+  const a = perRecord ? null : at(dir);
+  if (!a) {
+    let listed: AsyncIterable<ListedRecord>;
+    try {
+      listed = await listRecords(dir);
+    } catch {
+      return out; // no directory yet
+    }
+    for await (const r of listed) {
+      try {
+        const text = r.text();
+        if (needles.some((n) => text.includes(n))) out.set(r.name, text);
+      } catch { /* unreadable: its list skips it too */ }
+    }
+    return out;
+  }
+  const [lo, hi] = under(a.rel);
+  const r = await sql(a, `SELECT path, body FROM records WHERE org_id = $1 AND path >= $2 AND path < $3 AND strpos(substr(path, $4::int), '/') = 0
+    AND EXISTS (SELECT 1 FROM unnest($5::text[]) AS n WHERE strpos(body, n) > 0) ORDER BY path`, [lo, hi, lo.length + 1, [...needles]]);
+  for (const row of r.rows as Array<{ path: string; body: string }>) {
+    if (row.path.endsWith('.json') && !overLimit(path.join(appPaths.userData(), row.path), row.body)) out.set(row.path.slice(lo.length), row.body);
+  }
+  return out;
+}
+
 async function* byFile(dir: string, names: string[]): AsyncGenerator<ListedRecord> {
   for (const n of names) yield await settled(n, path.join(dir, n));
 }

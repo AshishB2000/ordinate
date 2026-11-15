@@ -149,6 +149,17 @@ if (!dbUrl) {
         await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
       }
     };
+    // Where its figures come from, and where else they are shown (step 7): the dataset's page, and the sample dashboard.
+    await card.getByRole('button', { name: /^Answered from / }).click();
+    const from = page.getByRole('dialog', { name: /^Answered from / });
+    assert.match((await from.getByRole('link').first().getAttribute('href')) ?? '', new RegExp(`^/data/${pid}/[0-9a-f-]{36}$`), 'the dataset opens its Data page');
+    await shots('dock-answered-from');
+    await page.keyboard.press('Escape');
+    await card.getByRole('button', { name: 'Also on dashboards' }).click();
+    const also = page.getByRole('dialog', { name: 'Also on' });
+    assert.match((await also.getByRole('link').first().getAttribute('href')) ?? '', new RegExp(`^/analyses/${pid}/[0-9a-f-]{36}$`), 'the sample dashboard shows this dataset');
+    await shots('dock-also-on');
+    await page.keyboard.press('Escape');
     const save = card.getByRole('button', { name: 'Save as visual' });
     await save.waitFor(); // this member may edit (dev sign-in is an admin)
     await shots('dock-save-visual');
