@@ -212,9 +212,12 @@ async function fileLeg(w: World): Promise<void> {
     if (name === 'listMetrics') ok('files: listMetrics logs the metric past the value budget', lines.some((l) => l.includes(w.overflow)), lines.join('\n'));
   }
   const dir = await as(async () => path.join(appPaths.userData(), 'projects', w.P, 'datasets'));
+  // A saved dataset's own search cache (<id>.search.json) is written in the background and can land between the listing
+  // and readdir under a loaded run: compare without those, the test's planted one aside.
+  const settled = (n: string): boolean => !n.endsWith('.search.json') || n === w.searchFile;
   const listing = await as(() => drain(dir));
   const want = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith('.json')).map((d) => d.name);
-  ok('files: listRecords gives readdir\'s .json files, in its order', same(listing.map(([n]) => n), want));
+  ok('files: listRecords gives readdir\'s .json files, in its order', same(listing.map(([n]) => n).filter(settled), want.filter(settled)));
   ok('files: each with its text, or the error readFile throws',
     listing.every(([n, t]) => (n === w.overCap + '.json' ? t === 'THREW ERECORDTOOLARGE' : t === fs.readFileSync(path.join(dir, n), 'utf8'))));
   ok('files: the .search.json beside them is listed too (as readdir lists it)', listing.some(([n, t]) => n === w.searchFile && t === '{"disk":true}'));
