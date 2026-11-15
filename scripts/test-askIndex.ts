@@ -11,11 +11,11 @@
 //   2. An agent's outside-the-topic check (../src/ipc/agentAsk matchOutside), index === reference, questions × topics.
 //   3. THE VALIDATION DIFFERENTIAL: a corpus of model answers (valid; names in the wrong case; squashed; by id; an unknown
 //      dataset; an unknown column; a metric by name, the first of two of that name; a metric of another dataset; a
-//      term by an other name; a term of another dataset; a typo needing "Did you mean"; two datasets one name cannot tell
-//      apart; no dataset named; a hidden column; a hidden metric; a follow-up carrying a metric) × context (Home, a
-//      dataset open, an agent's topic) through ../src/ipc/answerCheck checkAction: the outcome and every suggestion are
-//      the whole vocabulary's. The same for answers.namedDataset and answers.previousAnswer. The exact lookups
-//      (keyedModel, newestModel) === their references.
+//      term by an other name; a term of another dataset; typos needing "Did you mean", by words and by spelling alone
+//      ("Ordrs", "Reutrns"); two datasets one name cannot tell apart; no dataset named; a hidden column; a hidden
+//      metric; a follow-up carrying a metric) × context (Home, a dataset open, an agent's topic) through
+//      ../src/ipc/answerCheck checkAction: the outcome and every suggestion are the whole vocabulary's. The same for
+//      answers.namedDataset and answers.previousAnswer. The exact lookups (keyedModel, newestModel) === their references.
 //   4. NEGATIVE CONTROLS: the corpus is told apart (ok, refused, with suggestions); with the said names' squashed key
 //      left out, the differential FAILS (a squashed name is no longer found); the hidden column is the admin's word only.
 //   5. A write from the release before 0028 (0027's flag, not the keys') drops that source's marker; the next lookup
@@ -184,6 +184,8 @@ function corpus(w: World): Array<{ name: string; spec: Record<string, unknown>; 
     { name: 'unknown term', spec: by('Orders', 'region', [sum('amount')], { filters: [{ term: 'Eastern' }] }) },
     { name: 'typo: Did you mean', spec: by('Order', 'region', [sum('amount')]) },
     { name: 'typo: refunds', spec: by('Return', 'reason', [sum('refunds')]) },
+    { name: 'typo: no word shared', spec: by('Ordrs', 'region', [sum('amount')]) },
+    { name: 'typo: transposed', spec: by('Reutrns', 'reason', [sum('refunds')]) },
     { name: 'one name, two datasets', spec: by('sales', 'rep', [sum('total')]) },
     { name: 'no dataset named', spec: by(undefined, 'region', [sum('amount')]) },
     { name: 'hidden column', spec: by('Orders', 'region', [sum('cost')]) },

@@ -11,7 +11,7 @@ import { suggestFixes } from '../ai/answerSuggest';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import type { SuggestedAction } from '../ai/suggestedAction';
 import { specDatasets, specMetrics, specNames, specTerms, vocabularyFor, type Vocabulary, type VocabularyWant } from './specVocabulary';
-import { searchModel } from './assistantSearch';
+import { searchModel, spellModel } from './assistantSearch';
 import { linkedColumnOf } from './askLinks';
 import { linkedColumnRefused } from '../ai/answerMessages';
 import type { Failure } from './answers';
@@ -27,16 +27,18 @@ export async function vocabulary(projectId: string, want: VocabularyWant): Promi
   return { datasets: (await specDatasets(projectId)).filter((d) => !only || only.has(d.id)), metrics: await specMetrics(projectId), terms: await specTerms(projectId) };
 }
 
-/** At most this many datasets step 3 finds for a dataset name that missed: "Did you mean"'s candidates. */
+/** At most this many datasets step 3 finds for a dataset name that missed, by its words and by its spelling: "Did you mean"'s candidates. */
 const NEAR_DATASETS = 20;
 
 /**
  * The datasets step 3 finds for `said` (a dataset name that resolved to none), inside `only` when there is one: by its
- * words only (score > 0). "Did you mean" offers them, and meaning may reorder what the words found, not offer more.
+ * words (score > 0; meaning may reorder what the words found, not offer more), and by its spelling, a typo that shares
+ * no word ("Ordrs"): NEAR_DATASETS of each, one query each. "Did you mean" offers among them.
  */
 async function nearDatasets(projectId: string, said: string, only?: ReadonlySet<string>): Promise<string[]> {
-  const hits = await searchModel(projectId, said, { kinds: ['dataset'], limit: NEAR_DATASETS, ...(only ? { datasetIds: [...only] } : {}) });
-  return hits.flatMap((h) => (h.score > 0 ? [h.id] : []));
+  const o = { limit: NEAR_DATASETS, ...(only ? { datasetIds: [...only] } : {}) };
+  const [hits, spelt] = await Promise.all([searchModel(projectId, said, { kinds: ['dataset'], ...o }), spellModel(projectId, said, o)]);
+  return [...hits.flatMap((h) => (h.score > 0 ? [h.id] : [])), ...spelt.map((h) => h.id)];
 }
 
 /**

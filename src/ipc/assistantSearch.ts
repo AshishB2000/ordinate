@@ -15,6 +15,9 @@
 // MEANING (PR 7c, ./meaning): with fingerprints, the index also finds the MEANING_K items nearest the question under
 // the same access WHERE, merges them with the first MEANING_K by words by rank, and the rest follow by words; the
 // hidden ones are dropped after, as above. The reference takes the distances it is given (`distance`) the same way.
+//
+// SPELLING (phase C): `spellModel` finds the datasets whose name is spelled near one a model's answer said, by pg_trgm's
+// similarity in the index (0031) and by its JS twin (../app/trigram) in the reference; scripts/test-nameSpelling.ts.
 
 import { createHash } from 'crypto';
 import * as recordFs from '../app/recordFs';
@@ -39,11 +42,11 @@ import { datasetFilePath } from '../data/datasetRecord';
 import { readTexts } from '../app/recordTexts';
 import { metricHidden, termHidden } from '../analysis/columnHidden';
 import { searchWords, searchWordsOf } from '../ai/modelWords';
-import { MEANING_K, MODEL_KINDS, foundItems, fusedHead, itemKey, itemTexts, keyedItems, nearItems, newestItems, noCounts, phrase, rankParts, withMeaning } from '../app/assistantSearchRank';
+import { MEANING_K, MODEL_KINDS, findableBases, foundItems, fusedHead, itemKey, itemTexts, keyedItems, nearItems, newestItems, noCounts, phrase, rankParts, speltItems, withMeaning } from '../app/assistantSearchRank';
 import { meaningOf, nearOrWords } from './meaning';
-import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions, SpeltHit } from '../app/assistantSearchRank';
 
-export type { KeyedItem, ModelCounts, ModelHit, ModelKind } from '../app/assistantSearchRank';
+export type { KeyedItem, ModelCounts, ModelHit, ModelKind, SpeltHit } from '../app/assistantSearchRank';
 
 /** An item key longer than this is skipped on both paths: it could not sit in a btree index entry. */
 const MAX_KEY = 256;
@@ -204,7 +207,7 @@ async function rankOptions(projectId: string, o: SearchOptions): Promise<RankOpt
   };
 }
 
-const limitOf = (o: SearchOptions): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(Number(o.limit) || 0)));
+const limitOf = (o: Pick<SearchOptions, 'limit'>): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(Number(o.limit) || 0)));
 
 /**
  * Is this result hidden from the caller? A column hidden from them, or a metric or term that reads one. Fails closed:
@@ -350,6 +353,31 @@ async function indexedOr<T>(fn: () => Promise<T | null>, reference: () => Promis
 /** The `limit` items of the Data model that best match `question`'s words, that the caller may see, best first. */
 export function searchModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[]> {
   return indexedOr(() => indexedModel(projectId, question, o), () => referenceModel(projectId, question, o));
+}
+
+// ── Spelling: "Did you mean" a dataset (phase C) ───────────────────────────────
+// Datasets only: a column, metric or term would need the per-person checks `visible` makes after the query.
+
+export type SpellOptions = Pick<SearchOptions, 'limit' | 'datasetIds'>;
+const spellingOptions = (o: SpellOptions): SearchOptions => ({ ...o, kinds: ['dataset'] });
+
+/** REFERENCE: every store read, the datasets the caller may find whose name is spelled near `said` (../app/trigram). */
+export async function referenceSpelling(projectId: string, said: string, o: SpellOptions): Promise<SpeltHit[]> {
+  if (!isValidId(projectId)) return [];
+  const opts = await rankOptions(projectId, spellingOptions(o));
+  return speltItems(findableBases(await storeParts(projectId), opts), clean(said), limitOf(o));
+}
+
+/** INDEXED: the same from the index, in one query (pg_trgm where it agrees with the reference). Null without a database. */
+export async function indexedSpelling(projectId: string, said: string, o: SpellOptions): Promise<SpeltHit[] | null> {
+  if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
+  if (!isValidId(projectId)) return [];
+  return index.speltPage(projectId, clean(said), await rankOptions(projectId, spellingOptions(o)), limitOf(o), recordFs.rowsUnder);
+}
+
+/** The `limit` datasets the caller may find whose name is spelled nearest `said` (similarity ≥ MIN_SIMILARITY), nearest first. */
+export function spellModel(projectId: string, said: string, o: SpellOptions): Promise<SpeltHit[]> {
+  return indexedOr(() => indexedSpelling(projectId, said, o), () => referenceSpelling(projectId, said, o));
 }
 
 /** How many datasets, metrics, terms and source tables the caller can find in the project (Home's counts); no columns. */

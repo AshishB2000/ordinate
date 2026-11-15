@@ -54,11 +54,12 @@ Agreed on the flow page (Nov 2026). Related: [Explore](../explore/00-design.md),
 
 ### Step 3: what is searched
 
-The question is searched as typed, no spell-correcting. Each item is ranked by words and, with
-fingerprints, by meaning; the two rankings merge by rank (PR 7c, below), never by comparing their
-scores. Without pgvector, a fingerprint model or the project's fingerprints, it is words alone,
-exactly as before. **Access is applied before ranking**, so hidden columns, rows a person may not
-see, and tables their teams weren't given never reach the prompt.
+The question is searched as typed, no spell-correcting; a name a model's answer says that does not
+exist is then matched by its spelling for "Did you mean" ("Spelling, as built", below). Each item
+is ranked by words and, with fingerprints, by meaning; the two rankings merge by rank (PR 7c,
+below), never by comparing their scores. Without pgvector, a fingerprint model or the project's
+fingerprints, it is words alone, exactly as before. **Access is applied before ranking**, so hidden
+columns, rows a person may not see, and tables their teams weren't given never reach the prompt.
 
 | Searched | How | Notes |
 |---|---|---|
@@ -477,9 +478,10 @@ eight asks; with the index off, each one lists). What each reads:
 - **Checking the model's answer:** only the datasets, metrics and terms its spec names, found by
   their name as the validator compares it (0028 `keys`: trimmed and lowercased, and squashed,
   hashed; a match is a candidate, the validator's own rule decides) and read in one query. "Did
-  you mean" a dataset offers among the 20 step 3 finds for the name said: one that shares no word
-  with it (a one-letter typo of a one-word name) is no longer offered. `test-askIndex` holds a
-  corpus of model answers Object.is-equal to the whole vocabulary, an admin and a restricted viewer.
+  you mean" a dataset offers among the 20 step 3 finds for the name said and the 20 spelled nearest
+  it (pg_trgm, 7d), so a typo that shares no word with any name ("Ordrs") is offered too.
+  `test-askIndex` holds a corpus of model answers Object.is-equal to the whole vocabulary, an admin
+  and a restricted viewer.
 - **Every ask:** its agent by its own record, a verified example's terms by id, and the metrics
   of a verified chart's metric's name through the index (no list of agents, terms or metrics).
 - Without a database, or when an index query fails (logged once), each takes its reference path,
@@ -530,6 +532,7 @@ Now:
 | 7a | pgvector where Ordinate runs, optional everywhere (`0029_pgvector`): CI, the nightly, the release boot, Compose and the chart's kind run use `pgvector/pgvector:pg17-trixie`; the extension and `assistant_search_vectors` are made only where present; `src/server/vectorStore.ts` |
 | 7b | The fingerprint model (Admin → AI, off by default) and `rankFusion.fuse` |
 | 7c | The fingerprint job, meaning and words merged on the ask path (step 3 and the verified examples), and the coverage in Admin → AI: done |
+| 7d | Spelling for "Did you mean": `0031_name_trigrams` (pg_trgm where present) and its JS reference, `src/app/trigram.ts` |
 
 **Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
 5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
@@ -598,9 +601,22 @@ Now:
   7,299; a dashboard 112 / 183 → 119 / 182. A Home question took about 42 ms off and 128 ms on.
 - **Admin → AI** shows the coverage under the model (`ai:fingerprintStatus`: "Fingerprinted 1,234 of 1,300 items", read
   again every 30 s until done), or why there is nowhere to keep fingerprints, with the upgrade note's link.
-- **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
-  6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
-  differential can hold to.
+- **Spelling, as built (7d).** A dataset name a model's answer says that resolves to none is looked up by its spelling
+  beside its words: pg_trgm's similarity (each word lower-cased and padded to "  word ", the SET of its three-character
+  runs, |A ∩ B| / |A ∪ B| in float4), at least 0.3 (`%`'s default, `MIN_SIMILARITY`), the 20 nearest the caller may
+  find (audience, an agent's topic, nothing retired), in one query on a GIN trigram index over the index's base names
+  (`0031_name_trigrams`, `speltPage`). `src/app/trigram.ts` is the same in JS, down to the legacy CRC-32 that pg_trgm
+  hashes a multibyte trigram with, and it answers where Postgres has no pg_trgm, has one that splits names otherwise (a
+  C-ctype database, where "é" is no letter: `src/server/nameTrigrams.ts` probes at first use), or there is no database.
+  A column's candidates are its dataset's columns, in hand already without the hidden ones, so they are compared in JS
+  with no query. "Did you mean" keeps the same letters, containment and shared words first; then one edit apart or
+  near by spelling, by similarity, then nearness, type fit and name; three at most. `test-nameSpelling` holds the JS
+  similarity Object.is-equal to Postgres's on 1,653 pairs (accents, ß, digits, Greek, Cyrillic, CJK, a combining mark)
+  and each name's trigrams to `show_trgm`'s byte for byte, the index's answers to the reference's over a corpus of
+  typos for an admin and a restricted viewer, a hidden column never offered to the viewer, a C-ctype database refused
+  by the probe, and the same answers with the extension dropped. Not covered: macOS's libc classifies a few rare
+  characters (Roman numerals, circled letters, titlecase digraphs) unlike Unicode, which the reference follows; Linux's
+  glibc follows Unicode, unmeasured here.
 
 **A caller with a hidden column (PR 6c).** No list of the project either (`test-askNoProjectLists`
 adds a viewer that Orders' cost is hidden from: zero lists; with the index off, it lists):

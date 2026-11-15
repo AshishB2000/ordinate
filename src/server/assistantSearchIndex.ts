@@ -16,9 +16,11 @@ import { createHash } from 'crypto';
 import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
-import { allWords, kindOrd } from '../app/assistantSearchRank';
-import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+import { allWords, kindOrd, speltItems } from '../app/assistantSearchRank';
+import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, NameRow, Part, RankOptions, SpeltHit } from '../app/assistantSearchRank';
+import { MIN_SIMILARITY } from '../app/trigram';
 import type { NearTo } from './vectorStore';
+import { trgmPlace } from './nameTrigrams';
 
 /** Bump when what a record describes to changes (the words, the parts): every marker is then stale, and each source rebuilds once. */
 export const ASSISTANT_SEARCH_VERSION = 4; // 2: base parts carry their exact-lookup keys (0028); 3: a dataset's hiding keys; 4: each part's text (0030)
@@ -276,6 +278,42 @@ export function nearestPage(projectId: string, asked: readonly string[], o: Rank
       [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, to.literal, to.model, k, o.exceptDatasetIds ?? null, to.maxDistance],
     );
     return (r.rows as HitRow[]).map(hitOf);
+  });
+}
+
+// The base parts the caller may find under `o`, none of an item a part retires: ../app/assistantSearchRank findableBases.
+const FINDABLE = `b.org_id = $1 AND b.project_id = $2 AND b.base AND b.audience = ANY($3::text[])
+  AND ($4::text[] IS NULL OR b.kind = ANY($4::text[])) AND ($5::text[] IS NULL OR b.dataset_id = ANY($5::text[]))
+  AND ($6::text[] IS NULL OR b.dataset_id IS NULL OR b.dataset_id <> ALL($6::text[]))
+  AND NOT EXISTS (SELECT 1 FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.item = b.item AND x.retired)`;
+type SpeltRow = { kind: ModelKind; id: string; dataset_id: string | null; conn_id: string | null; name: string; similarity: number };
+
+/**
+ * The `limit` items whose name is spelled nearest `said` (../app/assistantSearchRank speltItems), that the caller may
+ * find under `o`. ONE query: on pg_trgm (0031: `%` at MIN_SIMILARITY, set just before it, by its GIN index) where this
+ * database has one that agrees with the reference (./nameTrigrams); else the names it may find, ranked by the reference.
+ * shortcut: without pg_trgm, linear in the project's findable names; fine for a miss, the only caller.
+ * Null without a database.
+ */
+export async function speltPage(projectId: string, said: string, o: RankOptions, limit: number, rowsUnder: RowsUnder): Promise<SpeltHit[] | null> {
+  const trgm = await trgmPlace();
+  return built(projectId, rowsUnder, async (c, org) => {
+    const args = [org, projectId, o.audiences, o.kinds ?? null, o.datasetIds ?? null, o.exceptDatasetIds ?? null];
+    if (!trgm) {
+      const r = await c.query(`SELECT b.item, b.kind, b.id, b.dataset_id AS "datasetId", b.conn_id AS "connId", b.name FROM assistant_search b WHERE ${FINDABLE}`, args);
+      return speltItems(r.rows as NameRow[], said, limit);
+    }
+    await c.query(`SELECT set_config('pg_trgm.similarity_threshold', $1, true)`, [String(MIN_SIMILARITY)]); // `%`'s, whatever the server's default
+    const r = await c.query(
+      `SELECT b.item, min(b.kind) AS kind, min(b.id) AS id, min(b.dataset_id) AS dataset_id, min(b.conn_id) AS conn_id, min(b.name) AS name,
+         max(${trgm.similarity}(b.name, $7))::float8 AS similarity
+       FROM assistant_search b WHERE ${FINDABLE} AND b.name ${trgm.op} $7
+       GROUP BY b.item ORDER BY similarity DESC, name, b.item LIMIT $8`,
+      [...args, said, limit],
+    );
+    return (r.rows as SpeltRow[]).map((x) => ({
+      kind: x.kind, id: x.id, ...(x.dataset_id !== null ? { datasetId: x.dataset_id } : {}), ...(x.conn_id !== null ? { connId: x.conn_id } : {}), name: x.name, similarity: x.similarity,
+    }));
   });
 }
 
