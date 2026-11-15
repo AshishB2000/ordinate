@@ -168,6 +168,12 @@ export function revokeHook(pool: Pool, org: string, projectId: string, id: strin
       .rowCount === 1);
 }
 
+/** The dataset one of the project's hooks refreshes (null: a connection's, or none): what revoking it changes (shared folders D18). */
+export async function hookDataset(pool: Pool, org: string, projectId: string, id: string): Promise<string | null> {
+  return within(pool, 'ordinate.org', org, async (c) =>
+    (await c.query<{ d: string | null }>('SELECT dataset_id::text AS d FROM refresh_hooks WHERE org_id = $1 AND project_id = $2 AND id = $3', [org, projectId, id])).rows[0]?.d ?? null);
+}
+
 /** Whose hook a token's row is: read by the claim and by a status read. */
 interface OwnRow { id: string; org_id: string; project_id: string; dataset_id: string | null; connection_id: string | null; token_hash: string; created_by: string }
 const OWN = 'id, org_id, project_id::text, dataset_id::text, connection_id::text, token_hash, created_by';

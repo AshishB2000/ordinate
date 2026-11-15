@@ -104,7 +104,7 @@ export function register(): void {
       const pid = String(projectId || '');
       const rid = String(id || '');
       if (!versions.isVersionType(type)) return { ok: false, error: 'Unknown record type.' };
-      const v = await versions.get(pid, type, rid, String(key || ''));
+      const v = (await historyClosed(pid, type, rid)) ? null : await versions.get(pid, type, rid, String(key || '')); // closed: as gone (shared folders)
       if (!v) return { ok: false, error: 'That version is gone.' };
       await safetyBackup('before-restore', pid); // a copy of the project first (src/ipc/backups.ts)
       const saved = await writeBack(pid, type, rid, v.record);

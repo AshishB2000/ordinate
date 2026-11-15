@@ -34,6 +34,8 @@ import { saveTermChecked, updateTermChecked } from '../ipc/terms';
 import { saveRelationshipChecked } from '../ipc/relationships';
 import { setLiveBaseFilters } from '../ipc/liveBaseFilters';
 import { countedAfterSave, recheckRelationshipsTo } from '../ipc/tableDocs';
+import { datasetsAt, mustEdit } from '../server/authz/folderWrites';
+import { isFolderError } from '../server/authz/folders';
 
 export type ApplyChoice = 'file' | 'here';
 export interface ApplyFailure { key: string; error: string }
@@ -72,6 +74,7 @@ async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<s
     error = dangling ? modelDependencyNotWritten() : await write();
   } catch (err) {
     if (isRecordChanged(err)) error = modelObjectMoved();
+    else if (isFolderError(err)) error = err.message; // shared folders: a store refused it (D18), in the catalog's words
     else {
       logger.error('[modelApply] an object was not written:', err instanceof Error ? err.message : 'failed');
       error = modelWriteFailed();
@@ -82,9 +85,18 @@ async function one(item: PlanItem, out: Out, io: ApplyIo, write: () => Promise<s
 }
 
 /** Every table and field doc in ONE locked catalog write, each compared with its `hereHash` inside the lock. */
-async function writeCatalog(projectId: string, file: ParsedModel, items: PlanItem[], out: Out, io: ApplyIo): Promise<void> {
+async function writeCatalog(projectId: string, file: ParsedModel, asked: PlanItem[], out: Out, io: ApplyIo): Promise<void> {
+  if (!asked.length) return;
+  for (const item of asked) await io.onBeforeWrite?.(item.key);
+  // Shared folders (D18): a dataset's docs need Edit on its folder — one the caller cannot change fails with the reason.
+  const refused = new Map<string, string>();
+  for (const id of new Set(asked.map((i) => i.targetId as string))) {
+    const why = await mustEdit(projectId, datasetsAt([id])).then(() => null, (err: unknown) => (isFolderError(err) ? err.message : null));
+    if (why) refused.set(id, why);
+  }
+  for (const item of asked) if (refused.has(item.targetId as string)) out.failed.push({ key: item.key, error: refused.get(item.targetId as string) as string });
+  const items = asked.filter((item) => !refused.has(item.targetId as string));
   if (!items.length) return;
-  for (const item of items) await io.onBeforeWrite?.(item.key);
   const done: Out = { written: [], failed: [] };
   const keyed: string[] = [];
   try {
@@ -168,6 +180,7 @@ export async function applyImport(projectId: string, upload: ParsedModel, planHa
 
   for (const item of of('baseFilters')) {
     await one(item, out, io, async () => {
+      await mustEdit(projectId, datasetsAt([item.targetId])); // shared folders (D18): the route's check of live:setBaseFilters, which this calls past it
       const meta = await datasets.getDatasetMeta(projectId, item.targetId as string);
       // shortcut: base filters keep no tag, so they are compared just before their write, not inside it; take the record's lock across both if an edit ever lands in that gap
       if (objectBase({ baseFilters: meta?.live?.baseFilters ?? [] }) !== item.hereHash) return modelObjectMoved();

@@ -11,6 +11,8 @@
 //    net; the security walks — scripts/folderNet.ts, each with its negative control.
 // 9–10 (E3, with DATABASE_URL): pushes, sends, mentions and counts; MCP and the model's prompts —
 //    scripts/folderNetSends.ts, each with its negative control.
+// 8 (E6, with DATABASE_URL): writes — every EDIT and CREATE channel refused on a closed item and at Can view, and
+//    landing for the folder's editor and with the checks off; where creates land (scripts/folderNetWrites.ts).
 // 6 (E4, with DATABASE_URL): the indexes — ⌘K, the Assistant's search by words and meaning, the counts, the verified
 //    lookup and the history — per person against their references, on Finance's canaries (scripts/folderNetIndexes.ts).
 // 4's reach (E5, with DATABASE_URL): a dataset read by a dashboard the caller opens answers its figures and nothing
@@ -22,6 +24,7 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { READS, WRITES } from './folderReaders';
 import { databaseSections } from './folderNet';
+import { writeCoverage } from './folderNetWrites';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -84,7 +87,8 @@ const rankPool = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) 
   ok('NEGATIVE CONTROL: the same contract at `write` is reached at rank 2', (await decide(as('editor'), scoped(planted), 2)).ok);
   ok('rank 3 opens every folder: the resolver answers { all: true }, whatever the folders', folders.accessFrom(pid, 3, [{ id: '6b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', parentId: null, shareFigures: false, grant: null }]).all === true);
 
-  await databaseSections(); // 0, 2–5 and 7 (E2), 9–10 (E3), 6 (E4), with DATABASE_URL
+  writeCoverage(); // 8's coverage (E6): every EDIT and CREATE channel held by the route's gate or a store
+  await databaseSections(); // 0, 2–5 and 7 (E2), 9–10 (E3), 6 (E4), 8 (E6), with DATABASE_URL
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(() => {

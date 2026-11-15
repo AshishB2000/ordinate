@@ -18,6 +18,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
 import { followsAll, openOrNull } from './followsOpen'; // shared folders: it follows every metric it scores (docs/team-folders D3)
+import { mayChangeStored, mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export type { Scorecard } from './scorecardModel';
 
@@ -130,6 +131,7 @@ export async function saveScorecard(
   if (!(await projects.getProject(projectId))) return null;
   const now = new Date().toISOString();
   const sc = normalize({ ...input, id: randomUUID(), createdAt: now, updatedAt: now }, projectId);
+  await mustEditRecord(projectId, 'scorecard', sc);
   await fs.promises.mkdir(dir(projectId), { recursive: true });
   await writeJsonAtomic(file(projectId, sc.id), sc);
   return sc;
@@ -171,6 +173,7 @@ export async function duplicateScorecard(projectId: string, id: string): Promise
 
 export async function deleteScorecard(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
+  if (!(await mayChangeStored(projectId, 'scorecard', file(projectId, id)))) return true; // closed to the caller: as a missing one (gone is success)
   try {
     await recordFs.rm(file(projectId, id), { force: true });
     return true;

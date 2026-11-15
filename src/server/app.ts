@@ -52,6 +52,7 @@ import { isTermNotExpandedError, tagTermRefusals, termRaised } from '../data/ter
 import { externalRaised, isExternalMetricError, tagExternalRefusals } from '../analysis/externalMetric';
 import { seedRank, register as registerCaller } from './authz/caller';
 import { FOLDER_CODE, folderRaised, isFolderError, tagFolderRefusals } from './authz/folders';
+import { gateWrite } from './authz/folderWriteGate';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
@@ -458,7 +459,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       const termRefusals = termRaised();
       const externalRefusals = externalRaised();
       const folderRefusals = folderRaised();
-      let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
+      // A write needs Edit on what it changes, a create on where it lands (shared folders D18, ./authz/folderWriteGate).
+      const run = (): Promise<unknown> => Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : [])));
+      let result: unknown = await untilAborted(contract.access === 'write' ? gateWrite(channel, parsed.data, decision.projectId, run) : run(), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
       if ('visible' in contract && contract.visible) result = contract.visible(result, await readable(pool, who));

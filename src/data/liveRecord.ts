@@ -38,6 +38,7 @@ import type { SemanticSettings } from './semanticDataset';
 import { sanitizeSemantic } from './semanticDataset';
 import { applyPipelineAsync } from './regexOffThread';
 import type { TableData, TransformStep } from './transforms';
+import { placeFirst } from '../server/authz/folderWrites';
 
 /** Create a Live dataset from a connection selection. Null when the project or the origin is not usable. */
 export async function saveLiveRecord(
@@ -69,6 +70,7 @@ export async function saveLiveRecord(
   };
   const stored: Record<string, unknown> = { ...record, ...(block ? { semantic: block } : {}) };
   delete stored.rows; // schema only: a `rows` key would read as an inline (v2) table
+  await placeFirst(projectId, 'dataset', record.id); // where the request lands it, before it exists (shared folders D18)
   await fs.promises.mkdir(datasetsDir(projectId), { recursive: true });
   await writeJsonAtomic(datasetFilePath(projectId, record.id), stored);
   if (block) record.live = { ...record.live!, semantic: block };

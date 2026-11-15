@@ -228,8 +228,13 @@ export async function saveTopic(projectId: string, input: TopicInput): Promise<T
 export async function updateTopic(projectId: string, id: string, input: TopicInput, base?: unknown): Promise<Topic | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const file = topicFile(projectId, id);
-  return lockedUpdate('topic', { projectId, id, file }, base, () => readTopic(projectId, id), async () => {
-    const updated = sanitizeTopic({ ...input, id, updatedBy: osUser(), updatedAt: new Date().toISOString() }, projectId);
+  return lockedUpdate('topic', { projectId, id, file }, base, () => readTopic(projectId, id), async (existing) => {
+    // Members in folders the caller cannot open were never sent to them (`withoutClosed`): a save keeps them (D18).
+    const keep = await closedMembers(projectId, existing);
+    const updated = sanitizeTopic({
+      ...input, id, updatedBy: osUser(), updatedAt: new Date().toISOString(),
+      datasets: [...arr(input.datasets), ...keep.datasets], metricIds: [...arr(input.metricIds), ...keep.metricIds], termIds: [...arr(input.termIds), ...keep.termIds],
+    }, projectId);
     await writeJsonAtomic(file, updated);
     return updated;
   });
@@ -276,6 +281,14 @@ export async function withoutClosed(projectId: string, t: Topic): Promise<Topic>
   const { closed } = await membersOf(projectId, [t]);
   if (!closed.size) return t;
   return { ...t, datasets: t.datasets.filter((d) => !closed.has(d.id)), metricIds: t.metricIds.filter((id) => !closed.has(id)), termIds: t.termIds.filter((id) => !closed.has(id)) };
+}
+
+/** `t`'s members in folders the caller cannot open (none, with no read, when nothing restricts them). */
+async function closedMembers(projectId: string, t: Topic): Promise<Pick<Topic, 'datasets' | 'metricIds' | 'termIds'>> {
+  const open = await withoutClosed(projectId, t);
+  if (open === t) return { datasets: [], metricIds: [], termIds: [] };
+  const kept = (ids: string[], shown: string[]) => ids.filter((id) => !shown.includes(id));
+  return { datasets: t.datasets.filter((d) => !open.datasets.some((o) => o.id === d.id)), metricIds: kept(t.metricIds, open.metricIds), termIds: kept(t.termIds, open.termIds) };
 }
 
 export async function topicForReaders(projectId: string, t: Topic): Promise<{ topic: Topic; stale: number }> {

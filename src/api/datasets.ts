@@ -174,6 +174,7 @@ export const datasets = {
         ])
         .optional(),
       retype: z.array(TypedColumn).max(1_000).optional(),
+      folderId: Uuid.optional(), // shared folders (docs/team-folders D18): where it lands, else with its first parent outside Everyone
     }),
     project: byProjectId,
   }),

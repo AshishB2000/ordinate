@@ -40,6 +40,7 @@ import { sanitizePeriodDefinition, type MetricPeriodDefinition } from './periodM
 import { sanitizeTarget, type MetricTargetSpec } from './metricTarget';
 import type { TreeNode } from './metricTree';
 import { logger } from '../app/logger';
+import { mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export type { MetricAggregation };
 
@@ -421,6 +422,7 @@ export async function saveMetric(projectId: string, input: MetricInput): Promise
     { ...input, id, createdAt: now, updatedAt: now, datasetId: input.datasetId },
     projectId,
   );
+  await mustEditRecord(projectId, 'metric', metric);
   await fs.promises.mkdir(metricsDir(projectId), { recursive: true });
   await writeJsonAtomic(metricFilePath(projectId, id), metric);
   return metric;
@@ -494,6 +496,7 @@ export async function duplicateMetric(projectId: string, id: string): Promise<Me
   const now = new Date().toISOString();
   const copy: Metric = { ...source, id: newId, name: `${source.name} (copy)`, createdAt: now, updatedAt: now };
   delete copy.importedFrom; // the copy is this project's own: a re-import must not match it too
+  await mustEditRecord(projectId, 'metric', copy);
   await fs.promises.mkdir(metricsDir(projectId), { recursive: true });
   await writeJsonAtomic(metricFilePath(projectId, newId), copy);
   return copy;

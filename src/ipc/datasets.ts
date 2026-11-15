@@ -74,6 +74,7 @@ import { forClient } from './stepReply';
 import { MaskKeyUnavailableError } from '../app/privacyStore';
 import { logger } from '../app/logger';
 import { expandTerms } from '../analysis/termExpand';
+import { datasetsAt, hidesWrite, levelOfAll, refuseBelowEdit } from '../server/authz/folderWrites';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -259,6 +260,11 @@ async function currentSteps(projectId: string, datasetId: string): Promise<trans
 // invalidation, not two — and exported for the Assistant's plan runner
 // (src/ai/planExec.ts), whose prepare steps land through it too.
 export async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
+  // Every pipeline edit comes here (a channel, a plan, the composer, text, geo, segments, stats): Edit on the dataset's
+  // folder (shared folders D18) — one the caller cannot open is as missing.
+  const level = await levelOfAll(projectId, datasetsAt([datasetId]));
+  if (hidesWrite(level)) return { ok: false as const, error: 'Dataset not found' };
+  refuseBelowEdit(level);
   const prior = await datasets.getDatasetMeta(projectId, datasetId);
   // A hash step whose masking key cannot be read refuses (privacyStore): say so, not a bare 500.
   const res = await datasets.updateSteps(projectId, datasetId, steps).catch((err: unknown) => {

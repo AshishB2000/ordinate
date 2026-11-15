@@ -18,6 +18,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
 import { followsAll, openOrNull } from './followsOpen'; // shared folders: it follows every metric it moves (docs/team-folders D3)
+import { mayChangeStored, mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export type { Scenario } from './scenarioModel';
 
@@ -124,6 +125,7 @@ export async function saveScenario(projectId: string, input: ScenarioInput): Pro
   if (!(await projects.getProject(projectId))) return null;
   const now = new Date().toISOString();
   const s = normalize({ ...input, id: randomUUID(), createdAt: now, updatedAt: now }, projectId);
+  await mustEditRecord(projectId, 'scenario', s);
   await fs.promises.mkdir(dir(projectId), { recursive: true });
   await writeJsonAtomic(file(projectId, s.id), s);
   return s;
@@ -162,6 +164,7 @@ export async function duplicateScenario(projectId: string, id: string): Promise<
 
 export async function deleteScenario(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
+  if (!(await mayChangeStored(projectId, 'scenario', file(projectId, id)))) return true; // closed to the caller: as a missing one (gone is success)
   try {
     await recordFs.rm(file(projectId, id), { force: true });
     return true;

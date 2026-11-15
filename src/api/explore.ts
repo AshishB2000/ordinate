@@ -11,5 +11,5 @@ export const explore = {
   // AnswerSpec.table — the fields are its facts' columns, declared as a Live dataset's. A viewer's is "no such dataset".
   'explore:suggest': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, topicId: Uuid.optional(), table: Uuid.optional() }), project: byProjectId }),
   // Keep as a dataset: that table's Live dataset, made through the connection's own Live create (src/ipc/sourceKeep.ts).
-  'explore:keepTable': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, table: Uuid }), project: byProjectId }),
+  'explore:keepTable': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, table: Uuid, folderId: Uuid.optional() }), project: byProjectId }),
 } as const;

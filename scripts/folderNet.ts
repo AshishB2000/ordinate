@@ -28,7 +28,8 @@
 // The sweep covers E3's readers too (comments, mentions, stories, scorecards, scenarios, reports, Trash, versions,
 // topics, Recent, Home, the switcher), on HR's planted records — and since E4 ⌘K and the Assistant's history, whose
 // conversations held while HR was open (section 0) name its items. Section 6 (E4, ./folderNetIndexes): the indexes per
-// person, by words and meaning, against their references, on Finance's canaries. Sections 8 and 11 are E6 and E7's.
+// person, by words and meaning, against their references, on Finance's canaries. Section 8 (writes) is E6's
+// (./folderNetWrites), 11 E7's.
 
 import { randomUUID } from 'crypto';
 import { ok } from './selfcheck';
@@ -38,6 +39,7 @@ import { sendSections } from './folderNetSends';
 import { reachSection } from './folderNetReach';
 import * as cost from './folderNetCost';
 import { indexSections } from './folderNetIndexes';
+import { writeSections } from './folderNetWrites';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -68,6 +70,7 @@ const WHOLE_PROJECT: Readonly<Record<string, number>> = {
   'src/engine/live/semantic/mirrors.ts': 2, // a mirror's name is unique in the project
   'src/ipc/folders.ts': 1, // folder:of: whether the item is there, and nothing else
   'src/ipc/metricSave.ts': 1, // a metric's name is unique in the project
+  'src/ipc/metrics.ts': 1, // metric:ensureDefaults proposes only when the project (not the caller) has no metric
   'src/ipc/verified.ts': 1, // a verified question's words are unique in the project
   'src/server/authz/folderGate.ts': 1, // what a question reads (the doors)
   'src/server/subscriptions/figureDatasets.ts': 2, // figureDatasets, datasetsOfRoot
@@ -295,6 +298,7 @@ export async function databaseSections(): Promise<void> {
     await cost.foldered(W, spare); // 9: with folders on P and one more, the switcher reads those two trees only
     await indexSections(W); // 6 (E4): ⌘K, words, meaning, counts, verified, history — after the sends: it makes items of its own
     await cost.folderedSearch(W);
+    await writeSections(W); // 8 (E6): writes — last: its controls change and delete things
   } finally {
     await W.close();
   }

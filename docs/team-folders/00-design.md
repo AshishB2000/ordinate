@@ -396,6 +396,68 @@ index to the reference, now per caller.
 - **Left for later**: reach (E5) needs nothing here — the indexes keep only folders the caller opens, so a reached
   dataset is never searched (D9). E6's writes, and the context a prose turn was asked in (to drop it as well), remain.
 
+### Writes, as built (E6)
+
+- **One rule, three seams** (`src/server/authz/folderWrites.ts`): a write needs Edit on what it changes, a create Edit on
+  where it lands; below Edit refuses `edit`, an item the caller cannot open answers as for a missing one where the
+  store's write path reads it, else `closed` (names nothing: the Ceilings' "a 409 on a known id"). What a record follows
+  is `recordOpen.levelOfRecord` — a dataset or dashboard its own folder, an alert its dashboard else its dataset, a report
+  its dashboard, a verified question `questionDatasets` (the ONE place a question's datasets are read: a chart
+  question's spec's dataset, an SQL question's every `sql.datasetIds` entry — writing one needs Edit on ALL of them, and
+  one closed to the caller hides it, as `listBoth` lists it), anything else the lowest level over everything it names
+  (a chart's own dataset hides it; a label dataset it also reads refuses).
+  1. **The stores**, so the route, MCP's write tools, the Assistant's plans and model imports are held alike:
+     `editConflict.lockedUpdate` (every guarded update: closed → gone; below Edit before `apply` and after it — a refusal
+     after rolls the write back in the lock's transaction; a dashboard's added cards need their datasets open),
+     `trash.trashRecord` and `restore` (the live record, else its Trash copy), the story, scorecard and scenario deletes
+     (closed: "gone is success", as a missing one), each follower's create and duplicate (visual, metric, term, verified,
+     story, scorecard, scenario, report), `alertStore` save, patch, delete and `restoreRule` (E2's open item), relationships
+     (both ends open, Edit on one; never over an edge the caller could not change), subscriptions (their dashboard),
+     `analysis.patchStored` (Unpublish, and Publish's Edit beside E5's D16 refusal), `commitSteps` (every pipeline edit: a
+     channel, a plan step, text, geo, segments, stats), a plan's calculated fields, and model import's catalog docs and
+     base filters (a refused object fails with the catalog's sentence; the rest still land).
+  2. **The route** (`folderWriteGate.ts` `WRITE_GATE`): the dataset-scoped writes whose parts live in many modules
+     (settings, columns, refresh, mode, source tables, docs, quality rules, privacy marks, snapshots, refresh URLs, an
+     insight's dataset, a capture's), a catalog ref's record, Discard and a dashboard's currency, `versions:restore` of a
+     dataset or dashboard, and the project's **pipeline** (`pipelines:*`, now `EDIT`): it names and runs every dataset as
+     the system, so changing it needs Edit on all of them — from the placements, no listing.
+  3. **Where creates land**: `folderId` (optional) on `analysis:create`, `analysis:buildPlan`, `dataset:composeSave`,
+     `dataset:copyLive`, `connection:import`, `connection:addSemanticDataset` and `input:create`; else the folder of the
+     first parent **outside Everyone** (a copy, an RFM table, a composed or SQL dataset: its base, joins and the datasets its
+     SQL reads) — a refinement of "first parent", so that a join with a restricted dataset never lands in Everyone; else
+     Everyone. The request runs in a landing scope and the placement row is written **before** the record
+     (`placeFirst`, from a dataset's first record write, a Live record's and `saveAnalysis`): a derived dataset is never,
+     for a moment, in Everyone. A folder named that is not there is `closed`, as a closed one. The web sends no `folderId`
+     until E7 makes folders.
+- **Reclassified** (the code wins): `dataset:parsePaste` and `dataset:pickAndParse` are `OWN` (they stage a table for the
+  caller; `composeSave` lands it), `sql:prepareSave` is `OPEN` (it stages; the `sql` origin lands it with its reads),
+  `segments:rfmSave` is `CREATE`, `pipelines:*` are `EDIT`.
+- **Left by E2 and E3**: `alerts:patch` and `restoreRule` on a closed rule answer as missing; `metric:ensureDefaults` asks
+  "none yet?" of the project (`wholeProject`, an allowlisted site) and proposes only on a dataset the caller edits (none,
+  quietly, otherwise); `trash:purge`, `trash:empty` and the 30-day purge drop the placements of what they purge, so an
+  emptied folder can be deleted (E7); a base-less `topic:save` keeps the members the caller was never sent;
+  `verified:save` on an id asks the caller's read whether it exists; `model:export` leaves out a relationship to or from a
+  dataset the caller cannot open (its columns name it); `privacy:scan` with no ids scans only what the caller edits.
+- **The cost**: with no folder besides Everyone a non-admin's route-held write asks once whether the project has a folder
+  (`hasFolders`: `foldersRestrict`'s one statement, which also spares the resolver its tree for the rest of the request);
+  the store checks read nothing the resolver had not (memoised). Measured against the checks off: `visual:update` 32 / 32
+  statements, `catalog:setColumn` 17 / 17, `analysis:create` 23 / 22, `dataset:composeSave` 60 / 59. An org admin reads
+  nothing, but a derived create's parent placement (one statement).
+- **The net's section 8** (`scripts/folderNetWrites.ts`, on throwaway sets): 84 calls over every EDIT and CREATE channel
+  with a payload that writes — opsLead on HR's leaves every record naming them and their placements byte-identical and
+  answers as for unknown ids or `closed`; opsEditorView (Can view on Ops) changes nothing and is refused `edit` by each
+  call that lands without E6's checks; NEGATIVE CONTROLS: opsLead's same calls on Ops land, and so do opsLead's on HR's
+  with the folder checks off and opsEditorView's with E6's checks off. Coverage: 77 channels exercised, 34 in
+  `UNEXERCISED` with why (a Live dataset, a connection, an upload, a model's plan run …; it only shrinks), the 17 of those
+  the route holds refused before their handler whatever the payload; every channel held by the gate or a store (section 1,
+  no database). Then: landings (no folder → Everyone, Ops → Ops, HR and an unknown folder alike `closed`, a SQL dataset over
+  Orders and Plain joined with Orders → Ops, an admin's copy → Ops), the topic's kept members, the model export, the purge,
+  the pipeline, MCP's `create_visual` and verified SQL questions (over Plain and Orders: opsEditorView, who edits Plain
+  and views Orders, may not delete or make one; one that also reads HR is opsLead's as a missing one), each with its
+  control; and the cost above. E5's D16 case now has padmin make its draft: ed may not add a card on HR (D18).
+- **Left for E7**: the folder channels (`folder:move` writes `folder_items` as `placeFirst` does), `folderId` in the web's
+  create dialogs, and placing a duplicate dashboard when one exists.
+
 ### Pushes, mentions and recipients (D17)
 
 - `toReaders` gains an anchor: `alerts:fired` and quality pushes go to `openerEmails(anchor)`;

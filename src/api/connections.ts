@@ -100,6 +100,7 @@ export const connections = {
       // "Copy the data" (absent) or "Live" (docs/live-data/00-plan.md L2.1): Live stores the schema only.
       mode: z.enum(['extract', 'live']).optional(),
       maxCacheAgeSec: z.number().int().min(0).max(30 * 24 * 60 * 60).optional(),
+      folderId: Uuid.optional(), // shared folders (docs/team-folders D18): where it lands, else Everyone
     }),
     project: byProjectId,
   }),

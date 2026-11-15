@@ -19,6 +19,7 @@ import type { PlanDrop, PlannedCalcField, PlannedVisual } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 import { arrangeSheet } from './planLayout';
 import { shapeRows } from './planRows';
+import { datasetsAt, mustEdit } from '../server/authz/folderWrites';
 
 /**
  * A plan turned into REAL records, minus the Analysis: the calculated fields and
@@ -80,6 +81,7 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
     // so there is no reason for this to be a second hydrate.
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta) continue;
+    await mustEdit(projectId, datasetsAt([datasetId])); // shared folders (D18): a field is an edit of the dataset
     const steps: TransformStep[] = Array.isArray(meta.steps) ? meta.steps.slice() : [];
     for (const f of fields) steps.push({ type: 'calculated_field', name: f.name, expression: f.expression });
     const res = await datasets.updateSteps(projectId, datasetId, steps);

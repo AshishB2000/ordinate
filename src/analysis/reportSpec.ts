@@ -29,6 +29,7 @@ import { t } from '../app/i18n';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { followsAll, openOrNull } from './followsOpen'; // shared folders: a report follows its dashboard (docs/team-folders D3)
+import { mustEditRecord } from '../app/recordOpen'; // shared folders: a new record needs Edit on what it follows (docs/team-folders D18)
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -456,6 +457,7 @@ export async function saveReport(projectId: string, input: ReportInput): Promise
   if (!(await projects.getProject(projectId))) return null;
   const now = new Date().toISOString();
   const report = normalize({ ...input, id: randomUUID(), createdAt: now, updatedAt: now }, projectId);
+  await mustEditRecord(projectId, 'report', report);
   await fs.promises.mkdir(reportsDir(projectId), { recursive: true });
   await writeJsonAtomic(reportFilePath(projectId, report.id), report);
   return report;

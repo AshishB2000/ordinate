@@ -72,7 +72,7 @@ export const live = {
   // the selection's SQL or the connection's address. `write`: it saves a dataset.
   'dataset:copyLive': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, folderId: Uuid.optional() }), // folderId: where the copy lands, else with its parent (shared folders D18)
     project: byProjectId,
   }),
   // A Live dataset's always-applied filters (src/ipc/liveBaseFilters.ts, semantic layer D13): plain
