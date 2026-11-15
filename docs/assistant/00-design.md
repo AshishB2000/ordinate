@@ -161,9 +161,9 @@ measure, grouping, filters and period.*
 |---|---|---|
 | A | Same as a verified question | that chart, re-run on today's data; *Matched Maria's verified question: "…"* and **Not what I asked** |
 | B | A dataset has it | a new chart form using the org's metrics, terms and linked columns |
-| C | Only a source table has it | answered Live from the table, no dataset (live-capable connections only, see below) |
+| C | Only a source table has it | answered Live from the table, no dataset (live-capable connections only, see below; built, [phase D](#source-tables-keeping-and-the-missing-link-as-built-phase-d)) |
 | D | Nothing has it | editors: **Connect a source** / **Import a file**; viewers: *Ask an editor to add this data.* |
-| E | Needs an undefined link | the checked-link card above; viewers: *These can't be combined yet. [Ask an editor]* |
+| E | Needs an undefined link | the checked-link card above; viewers: *These can't be combined yet. [Ask an editor]* (built, phase D) |
 | F | The form can't express it | a second AI call writes one SQL statement, Not checked |
 
 **The "Matched" line (phase C, built).** An answer whose chart is a working verified question's says
@@ -346,6 +346,83 @@ measures once `SNOWFLAKE_PRUNING_TABLE` and `_COLUMN` name a table clustered on 
 them: the raw range well under the cast form (or the cast form refused for want of partition
 elimination) means that dialect's cast stops pruning; run the live parity matrix on that engine with
 the dialect in `RAW_RANGE_DIALECTS`, and add it if both agree. Equal means leave the dialect alone.
+
+### Source tables, keeping and the missing link, as built (phase D)
+
+**Outcome C: an answer from a table, no dataset** (`src/ipc/sourceAnswers.ts`, `src/data/sourceView.ts`).
+
+- **Found in step 3, offered in the prompt.** An editor's Home question searches the documented tables of the
+  project's connections in the SAME query as the datasets and columns (`homeFacts` `picksFrom`: `kinds` gains `table`,
+  so no query is added): the first 4 tables its words match go in a **SOURCE TABLES** block
+  (`src/ai/sourceTablesBlock.ts`), each with its columns typed from its stored facts as a Live dataset's are declared
+  (`liveColumns`, `src/data/liveSchema.ts`): `- ANALYTICS.RETURNS (on "Snowflake"): reason (text), amount (number)`. A
+  table on a connection that is not live-capable (`isLiveOffered`) is listed `copy first`. A table with no facts read
+  has no columns and is not offered. Their docs are read by id in one query, each connection once; no list.
+- **The answer names it.** The spec's `datasetId` is the table doc's id and its new `table` field the connection's
+  (`AnswerSpec.table`, kept by `sanitizeStoredSpec`). The validator reads the tables after the datasets (a dataset of
+  the same name wins). An answer naming a `copy first` table is refused before validation with
+  *RETURNS is on a connection Ordinate does not ask live, so it has to be copied into Ordinate first.* and `needs: 'copy'`.
+- **The door.** Every reader of such a spec (`computeCard`, `answer:card`, `answer:refresh`, the snapshot's access print,
+  `turnsForBrowser`) runs inside the table's **Live view**: a `DatasetMeta` built in memory from the doc's facts and the
+  connection (`mode: 'live'`, `origin: {kind: 'connection', connId, table}`, `schemaSyncedAt` = the facts' read time),
+  held in an AsyncLocalStorage scope for that one call, as `src/data/asOf.ts` holds a snapshot. Inside it
+  `getDatasetMeta` answers the view, `getDataset` throws `LiveDatasetError` and `persist` refuses it (the three hooks
+  datasets.ts already asks); outside it the id is no dataset. So the figure takes a Live dataset's own path:
+  `liveCardFor` → `liveAnswer` → `liveTarget` → `warehouse()` — bind parameters, `LIVE_MAX_CONCURRENT`, the daily limit
+  (counted under the view's id), the `orgKey` cache keyed on the facts' read time, the required date range from the
+  doc's facts, the typed refusals, no JS fallback. Its provenance says *warehouse table, not a dataset*.
+- **Who.** Editors and admins only (`seesSourceNames`): a viewer's question reads no table (the role is checked before
+  the picks), its prompt holds none, and a spec naming one is answered *This dataset no longer exists.*, as any unknown
+  id. Viewers get tables with team folders E8.
+- **The card** says *Answered from ANALYTICS.RETURNS · warehouse table, not a dataset*, links no Data page, has no
+  "Also on", and offers **Keep as a dataset** in place of Save as visual and Verify (`answer:saveVisual` and
+  `verified:save` refuse a table's spec: *Keep this answer as a dataset first…*).
+
+**Keeping makes the dataset** (`answer:keepTable`, `write`, `src/ipc/sourceKeep.ts`): the caller's own answer turn, the
+table's Live dataset made through the connection's own Live create (`createLiveDataset`, as Add from connection → Live:
+its columns read from the warehouse catalog, its first schema sync queued, named as the table), and the turn's answer
+re-pointed at it (`copilot.replaceAnswer`, both stores: its spec without `table`, its snapshot dropped so the card is
+computed again on the dataset, its provenance a Live dataset's). A kept turn has no `table`, so a second click makes
+nothing. Then Save as visual,
+Verify and Add to dashboard work as on any dataset.
+
+**Outcome E: the missing link** (`src/ipc/answerLink.ts`). When an answer names, on one dataset, a column that another
+dataset has (bare or `Countries.region`, found through step 3's column search, then the validator's own column rule)
+and no relationship joins the two in either direction, the reply is the link check before "Did you mean": the
+Relationships page's own `suggest` (key pairs by name and type, the sampled share of FROM keys found in TO, the
+full-table key statistics, the cardinality the data supports), computed by the engine on our copies. An editor gets the
+card (`link` on the turn, `needs: 'link'`): *Link Shipments.country_id → Countries.country_id? Names match · Types match ·
+98% of sampled values found · Unique in Countries* with **Add link and answer**, which saves it through
+`relationship:save` (counted over the full tables again) and asks the question again, and **Cancel**. Only a
+many-to-one or one-to-one pair is proposed. A viewer (and a pair with a Live side: no warehouse probe yet) gets *These
+can't be combined yet.* with `needs: 'link'` and no check run. Once linked, the same answer gets the linked-column
+refusal (the form reads one dataset); joins in the form are outcome B.
+
+**The seam for Ask an editor (#525):** the stored turn carries `needs: 'link' | 'copy'` (`src/ai/answerNeeds.ts`, kept on
+every read and write as `suggest` is), the two reasons its contract has; its button attaches where `needs` is set.
+
+**Measured** (`test-askBudget`, the same project): every case is unchanged, queries and record reads Object.is the
+release before — Home 92 / 167, a dataset 88 / 125, an agent 75 / 146, the restricted viewer 117 / 7,312, a dashboard
+112 / 183, reopening 22 / 4, SQL 151 / 166, and with meaning on 106 / 167, 97 / 120, 84 / 146, 131 / 7,312, 119 / 182. A
+source answer adds its docs (one query) and its connection (one record) and its one warehouse statement.
+`test-askNoProjectLists` adds a source answer from Home: zero lists.
+
+**Tested** in `scripts/test-sourceAnswers.ts` (both modes): the block and its types, `copy first`; the answer's every
+figure Object.is the same question on a Live dataset of the table and on the extract of the same rows, no dataset
+created, one statement through the door counted by the daily limit under the view's id, the cache on a second ask, a
+follow-up refining it (its PREVIOUS ANSWER the table's, still read from it),
+NEGATIVE CONTROL a daily limit refusing it; `copy`; inside the view `getDataset` throws and a write is refused; keep
+makes exactly one Live dataset and re-points the turn, a second makes none, its figures are the table's; Save as visual
+and Verify refused before; the link card's pair and checks, kept on reload, Approve saving one relationship, after which
+it is no missing link. With Postgres: the viewer's prompt names no table and holds no column only the table's facts
+have (NEGATIVE CONTROL: the editor's), a spec naming one answered as missing, keep and Approve 403, the viewer's link
+refusal plain (NEGATIVE CONTROL: the editor's card). Vitest: `web/src/features/assistant/sourceAnswer.test.tsx`. e2e:
+`web/e2e/source-tables.e2e.ts` step 5, the table's answer in the dock, kept, and the link card, in both themes
+(`dock-source-table`, `dock-source-kept`, `dock-link`).
+
+**Left:** Explore on a source table (the picker, `explore:suggest` and `visual:data` taking a table target through the
+same view); a warehouse probe for a link with a Live side; a source answer's turn is reopened under its view, so a
+caller who is no longer an editor gets no figures (a hide).
 
 ## Access is given to teams
 
@@ -804,7 +881,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 | A | Word search over the whole Data model; follow links and table facts in the prompt (built: [Follow the links, Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies (built: [The SQL lane](#two-ways-to-answer)) | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line (built, step 4) | pgvector and a fingerprint model; otherwise stays on A |
-| D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |
+| D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link: built for the Assistant ([as built](#source-tables-keeping-and-the-missing-link-as-built-phase-d)); Explore not yet | nothing new |
 | E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |
 | F | SQL on Live datasets and source tables ([design](../live-data/01-live-sql.md)) | row rules, hidden columns and cost limits applied in the warehouse |
 | G | Ask-an-editor notifications, "Answered from ▾", "Also on", Alert me: built ([as built](#ask-an-editor-and-alert-me-as-built-phase-g)) | nothing new |

@@ -12,6 +12,9 @@
 //      designed states (no source tables, a refused read, a warehouse a read can start) and the phone.
 //   4. Lineage and the dataset Guide: the doc's Lineage tab draws the Live view built from the table; that
 //      dataset's Guide shows the doc's notes under "From the source table", read-only.
+//   5. The Assistant (phase D): an answer read straight from the table, in the dock, says it is a warehouse table and
+//      offers only Keep as a dataset; kept, it is drawn on the new Live dataset with Save as visual (dock-source-*.png);
+//      and the checked-link card of outcome E, laid on the conversation (dock-link-*.png).
 //   Both themes of each state are written to __screens__/model-sources*.png.
 //
 //   npm --prefix web run e2e -- source-tables
@@ -249,4 +252,61 @@ e2e('source tables: a suggested meaning', async (s) => {
   assert.equal(await page.getByText('The warehouse says: "Order amount in USD"').count(), 0, 'a used meaning does not return');
   await meaning(page);
   await screens(page, 'model-suggestions-none');
+});
+
+e2e('source tables: an editor answered straight from the table, then kept as a dataset (the dock)', async (s) => {
+  // Assistant phase D, outcome C (docs/assistant/00-design.md): an answer whose spec names the table (its doc's id and
+  // its connection) is drawn Live through the table's in-memory view, says so, and offers only Keep as a dataset, which
+  // makes the Live dataset and re-points the answer at it. No model: the answer is a follow-up chip's (`answer:rerun`).
+  const { page } = s;
+  const { P, C } = ids(s);
+  assert.ok(docId, 'test 1 started the notes and read the table');
+  await page.goto(`/model/${P}?tab=sources`);
+  await ready(page);
+  const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+  const call = async (channel: string, input: unknown) =>
+    (await (await page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [input] } })).json()) as Record<string, any>; // any: each channel's own reply
+  const threadId = (await call('copilot:newThread', { projectId: P })).thread.id as string;
+  const spec = { datasetId: docId, table: C, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], chartType: 'column', title: 'Amount by region' };
+  assert.equal((await call('answer:rerun', { projectId: P, threadId, spec, label: 'Amount by region' })).ok, true);
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+  const dock = page.getByRole('complementary', { name: 'Assistant' });
+  const card = dock.getByTestId('answer-card').last();
+  await card.locator('canvas').waitFor();
+  assert.equal(await card.getByTestId('answered-from').textContent(), `Answered from${TABLE}`);
+  await card.getByText('Warehouse table, not a dataset', { exact: true }).waitFor();
+  assert.equal(await card.getByRole('button', { name: 'Also on dashboards' }).count(), 0, 'no dashboard shows a table');
+  assert.equal(await card.getByRole('button', { name: 'Save as visual' }).count(), 0, 'nothing to save until it is a dataset');
+  await card.getByTestId('answer-keep-table').waitFor();
+  await card.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'dock-source-table');
+  await card.getByTestId('answer-keep-table').click();
+  // The turn names the new Live dataset now: the card is drawn on it, with Save as visual and Also on.
+  await card.getByRole('button', { name: 'Save as visual' }).waitFor();
+  assert.equal(await card.getByTestId('answer-keep-table').count(), 0);
+  assert.equal(await card.getByText('Warehouse table, not a dataset', { exact: true }).count(), 0);
+  await card.getByRole('button', { name: 'Also on dashboards' }).waitFor();
+  await card.locator('canvas').waitFor();
+  await card.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'dock-source-kept');
+
+  // Outcome E's checked link, as a refused answer's turn carries it (its server path is scripts/test-sourceAnswers.ts:
+  // this server has no model to refuse one), laid on the conversation the server sends, to see the card in both themes.
+  const link = { from: { datasetId: docId, dataset: 'Shipments', column: 'country_id' }, to: { datasetId: C, dataset: 'Countries', column: 'country_id' }, cardinality: 'many_to_one', checks: { names: true, types: true, foundPct: 98, unique: true } };
+  await page.route('**/api/rpc/copilot%3Ahistory', async (r) => {
+    const body = (await (await r.fetch()).json()) as { turns?: unknown[] };
+    const turns = [...(body.turns ?? []), { id: 'q-link', role: 'user', text: 'Shipments by territory', createdAt: '2026-11-15T10:00:00Z' },
+      { id: 'a-link', role: 'assistant', text: "Shipments has no link to Countries yet, so they can't be combined. Check the link below.", createdAt: '2026-11-15T10:00:01Z', needs: 'link', link }];
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...body, turns }) });
+  });
+  await page.reload();
+  await settled(page);
+  const checked = dock.getByTestId('answer-link');
+  await checked.getByText('98% of sampled values found').waitFor();
+  assert.equal(await checked.getByText('Link Shipments.country_id → Countries.country_id?').count(), 1);
+  await checked.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'dock-link');
+  await checked.getByRole('button', { name: 'Cancel' }).click();
+  await checked.waitFor({ state: 'detached' });
+  await page.unroute('**/api/rpc/copilot%3Ahistory');
 });

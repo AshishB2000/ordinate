@@ -84,6 +84,8 @@ export interface AnswerSpec {
   title: string;
   /** Filter values the app matched loosely to the one the data holds, for the card's note (./answerValues). */
   matched?: ValueMatch[];
+  /** Read straight from a source table (outcome C, ../ipc/sourceAnswers): its connection's id; `datasetId` is then its doc's. */
+  table?: string;
 }
 
 /** What validation needs to know about a dataset: names and declared types only. */
@@ -497,6 +499,7 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   if (isDateGrain(o.grain)) spec.grain = o.grain;
   const matched = sanitizeMatched(o.matched, filters);
   if (matched.length) spec.matched = matched;
+  if (typeof o.table === 'string' && UUID_RE.test(o.table)) spec.table = o.table;
   return spec;
 }
 

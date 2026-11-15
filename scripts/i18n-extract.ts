@@ -365,6 +365,7 @@ export const MAIN_FILES = [
   'src/analysis/subscriptionText.ts',
   'src/app/columnNameMessages.ts',
   'src/ai/answerMessages.ts',
+  'src/ai/sourceAnswerMessages.ts',
   'src/analysis/versionDiffMessages.ts',
   'src/analysis/rebuildMessages.ts',
   'src/server/embedMessages.ts',

@@ -55,6 +55,9 @@ import type { FilterLabels, ValueMatch } from '../ai/answerValues';
 import { periodAfterData, valueMatched } from '../ai/answerMessages';
 import { cardTextAsSeen, filterText, labelCardData, saidFilters, saidValue } from './valueLabelReplies';
 
+/** A Live card's provenance line (also a kept source table's answer, ./sourceKeep). */
+export const LIVE_NOTE = 'chart computed live by the warehouse';
+
 /** How the case fix compares a stored and an asked value: JS's own trim and lower case. */
 const caseKey = (v: string): string => v.trim().toLowerCase();
 
@@ -230,7 +233,7 @@ export async function liveCardFor(projectId: string, asked: AnswerSpec, lock: re
       kind: 'dataset',
       name: meta.name,
       columns: used.filter((n, i) => used.indexOf(n) === i),
-      note: 'chart computed live by the warehouse',
+      note: LIVE_NOTE,
     },
   };
 }

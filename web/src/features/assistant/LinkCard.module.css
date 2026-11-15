@@ -1,0 +1,59 @@
+/* The checked link under a refused answer (./LinkCard): a question, the server's checks as quiet pills,
+   and its two actions. A card on the panel like an answer's; the link icon and the primary action carry the accent. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.ask {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  font-size: var(--t-13);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.ask > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+/* Each check a quiet pill: they wrap at the dock's 340px with no separator left at a line's start. */
+.checks > li {
+  padding: 1px var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.error {
+  font-size: var(--t-11);
+  line-height: var(--lh-snug);
+  color: var(--error);
+  overflow-wrap: anywhere;
+}

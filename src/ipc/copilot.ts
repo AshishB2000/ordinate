@@ -59,6 +59,7 @@ import { keepReads } from './askMemo';
 import { snapshotFor, sqlSnapshotFor, turnsForBrowser } from './answerSnapshots';
 import { sqlAnswer } from './answerSql';
 import { homeFacts } from './homeFacts';
+import { askSourceTables } from './sourceAnswers';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -528,6 +529,7 @@ export function register() {
       const about = sharing ? [] : await askDatasets(projectId, asked, facts.provenance.kind, q);
       const linked = scope.only ? { text: '', ledger: [], metas: [] } : await askLinkedFacts(projectId, about);
       const tables = sharing ? { text: '', ledger: [] } : await askTableFacts(projectId, about, linked.metas);
+      const sources = sharing || scope.only ? { text: '', ledger: [] } : await askSourceTables(projectId, asked, q); // an editor's Home question: tables no dataset is made from (./sourceAnswers)
       const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, { ...(agent ? { agent } : {}), ...(passed ? { exclude: passed.id } : {}) }); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
@@ -536,12 +538,12 @@ export function register() {
       // none (a report's narrative page, ./reportsServer) still has the caller's
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
-      const ledger = facts.ledger.concat(linked.ledger, tables.ledger, guided.ledger, prev ? prev.ledger : []);
+      const ledger = facts.ledger.concat(linked.ledger, tables.ledger, sources.ledger, guided.ledger, prev ? prev.ledger : []);
       // The real model call — a 'model' step, bracketing the one narration this app
       // makes. No agent loop; only an SQL answer (below) makes a second call, which writes SQL.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
       const how = { build: scope.agent ? scope.agent.build : true, topic: scope.only !== null };
-      const res = await askCopilot(prior, [facts.text, linked.text, tables.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
+      const res = await askCopilot(prior, [facts.text, linked.text, tables.text, sources.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
 
       if (res.ok) {
         // What the reply may act on: an agent that may not build answers or does nothing (rule 8).
@@ -605,6 +607,8 @@ export function register() {
           snapshot,
           // A refused chart's "Did you mean" (./answers): the app's options, kept so a reload still offers them.
           suggest: answer && !answer.ok && 'suggest' in answer ? answer.suggest : undefined,
+          // What an editor must add first (outcome E's checked link, a table to copy): kept so a reload still offers it.
+          ...(answer && !answer.ok && 'needs' in answer ? { needs: answer.needs, link: answer.link } : {}),
           guidance: guided.used,
         }, target);
         // `suggestedAction` is the model's STRUCTURED read of what the question

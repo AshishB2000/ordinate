@@ -53,6 +53,12 @@
   font-size: var(--t-11);
   color: var(--muted);
 }
+/* Beside "Answered from" on an answer read straight from a warehouse table (src/ipc/sourceAnswers.ts). */
+.tableNote {
+  margin-right: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--muted);
+}
 .refresh {
   margin-right: var(--sp-4);
 }

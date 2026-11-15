@@ -33,6 +33,9 @@
 // shown, "Based on Ana's verified question: “…”". No name recorded: "a verified question". Not what I asked is the
 // turn's (`onNotThis`, a verified match), not the line's: it stays, alone, where the question was deleted since or the
 // card cannot be drawn.
+//
+// An answer read straight from a warehouse table (`spec.table`, outcome C) says so beside its name, and offers only
+// "Keep as a dataset" (./KeepTable): Save as visual and Verify need the dataset that click makes.
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -52,6 +55,7 @@ import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
 import { AlertFromAnswer } from './AlertFromAnswer';
+import { KeepTable } from './KeepTable';
 import { keepInConversation, refreshAnswer } from './api';
 import { ACCESS_CHANGED, KeptAsOf, periodText } from './AnswerKept';
 import { AlsoOn, AnsweredFrom } from './AnswerSources';
@@ -196,13 +200,15 @@ export function AnswerCard({
   const snap = card.snapshot;
   const v = card.verified;
   const how = v?.kind && `${v.kind === 'matched' ? 'Matched' : 'Based on'} ${v.by ? `${v.by}'s` : 'a'} verified question: “${v.question}”`;
+  // Read straight from a warehouse table (src/ipc/sourceAnswers.ts): nothing is kept until Keep as a dataset makes it one.
+  const fromTable = typeof spec.table === 'string';
   return (
     <div className={s.card} data-testid="answer-card">
       <div className={s.head}>
         <div className={s.title}>{card.title || 'Answer'}</div>
         <div className={s.meta}>
-          <AnsweredFrom projectId={projectId} card={card} />
-          <AlsoOn projectId={projectId} datasetId={spec.datasetId} />
+          <AnsweredFrom projectId={projectId} card={card} table={fromTable} />
+          {fromTable ? <span className={s.tableNote}>Warehouse table, not a dataset</span> : <AlsoOn projectId={projectId} datasetId={spec.datasetId} />}
           {/* A kept card is dated by when it was computed; one computed now by its data's time, as before. */}
           {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
           {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}
@@ -287,9 +293,15 @@ export function AnswerCard({
             <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
               {table ? 'Hide table' : 'Show table'}
             </Button>
-            <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
-            {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
-            <AlertFromAnswer projectId={projectId} spec={spec} />
+            {fromTable ? (
+              <KeepTable projectId={projectId} turn={turn} />
+            ) : (
+              <>
+                <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
+                {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
+                <AlertFromAnswer projectId={projectId} spec={spec} />
+              </>
+            )}
             {card.learn && (
               <RememberName
                 projectId={projectId}

@@ -92,6 +92,7 @@ function Turns({ c }: { c: Conversation }) {
         agentName={c.agent?.name ?? c.history.data?.agent?.name}
         onAskProject={(q) => void c.askProject(q)}
         onNotThis={c.ready && c.enabled ? (q) => void c.notThis(q) : undefined}
+        onAsk={c.ready && c.enabled ? (q) => void c.send(q) : undefined}
       />
       {canEdit && c.getData && !pending && (
         <div className={s.getData} data-testid="dock-get-data">

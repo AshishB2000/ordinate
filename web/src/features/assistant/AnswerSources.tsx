@@ -35,7 +35,7 @@ function Trigger({ label, children, icon, testId, ...rest }: { label: string; ch
 }
 
 /** "Answered from Sales ▾": the dataset, its source for an editor, what the answer reads, its filters, time and verified question. */
-export function AnsweredFrom({ projectId, card }: { projectId: string; card: Card }) {
+export function AnsweredFrom({ projectId, card, table = false }: { projectId: string; card: Card; table?: boolean }) {
   const live = card.asOf?.mode === 'live';
   const keptAt = card.snapshot?.asOf;
   // A kept card's figures are as of when they were computed; one computed now, as of its data.
@@ -54,9 +54,9 @@ export function AnsweredFrom({ projectId, card }: { projectId: string; card: Car
     >
       <dl className={s.facts}>
         <div className={s.fact}>
-          <dt>Dataset</dt>
+          <dt>{table ? 'Table' : 'Dataset'}</dt>
           <dd className={s.dataset}>
-            {page ? (
+            {page && !table ? (
               <PopoverClose asChild>
                 <Link className={s.link} to={`/data/${projectId}/${page}`}>
                   <Icon name="database" size={16} />
