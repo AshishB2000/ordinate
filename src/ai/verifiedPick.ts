@@ -29,7 +29,7 @@ export function rawSpec(spec: AnswerSpec, names: Names): Record<string, unknown>
   const filter = (f: AnswerFilter): Record<string, unknown> => ('term' in f ? { term: names.term(f.term) } : f);
   return {
     dataset: names.dataset(spec.datasetId), category: spec.category, ...(spec.series ? { series: spec.series } : {}),
-    measures: spec.measures.map((m) => ({ column: m.column, aggregation: m.aggregation })), filters: spec.filters.map(filter),
+    measures: spec.measures.map((m) => ({ column: m.column, aggregation: m.aggregation, ...(m.calc ? { calc: m.calc } : {}) })), filters: spec.filters.map(filter),
     chartType: spec.chartType, ...(spec.top ? { top: spec.top } : {}), ...(spec.grain ? { grain: spec.grain } : {}),
   };
 }

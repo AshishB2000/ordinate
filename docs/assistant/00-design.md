@@ -116,10 +116,21 @@ The AI uses the two tools a person already has, and picks the chart builder when
 Only the form: complex questions get no answer. Only SQL: every answer is Not checked and none can
 become a dashboard chart or an alert. So both, form first.
 
-**The form gets a `calc` field.** `AnswerSpec` (`src/ai/answerSpec.ts`) has no window functions
-today, but the engine already computes them (`TableCalcKind`, `src/analysis/tableCalc.ts`): running
-total, % of total, difference, % difference, rank, percentile, moving average and sum, YoY, index.
-Adding `calc` lets the form answer most "window function" questions without SQL.
+**The form has a `calc` field (built).** A measure of `AnswerSpec` (`src/ai/answerSpec.ts`) carries
+`calc: {kind, along, window?}`, the `TableCalc` a visual's measure carries (`src/analysis/tableCalc.ts`):
+running total, % of total, difference, % difference, rank (dense or competition), percentile, moving
+average and sum, YoY, index. So the form answers most "window function" questions without SQL, and
+Save as visual, a verified question and the turn's snapshot keep the calc. `src/ai/answerCalc.ts`
+validates what the model writes: an unknown kind, a window outside 2–366, a kind that runs in date
+order (running total, differences, moving, YoY, index) without a date category, any calc beside a
+top N, and `along: "down"` without a split are each refused with a catalog sentence. A few near
+names are read as the kind they mean ("rank", "moving average"). The card works the calc out after
+the totals with `applyChartCalcs`, the function `visual:data` uses, on the extract's figures and on
+the warehouse's alike (no SQL is compiled for it). A running total of an average is refused with the
+visual's own sentence. Along a date axis the calc runs in time order: an extract's axis comes
+first-seen (`docs/live-data/log.md`, L2.2), so a running total over rows that are not in date order
+was wrong on visuals too. `scripts/test-answerCalc.ts` checks every kind against `visual:data` on
+an extract and a Live dataset.
 
 **The SQL lane** reuses `compile()` in `src/engine/sqlDatasets.ts`: one read-only statement; CTEs,
 `WITH RECURSIVE` and window functions allowed; `FROM` limited to datasets, CTEs and value
@@ -503,7 +514,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 |---|---|---|
 | 0 | The Assistant page (#488); #492: one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset; conversations in their own tables, all kept and paged (#493, #495, #498); agents (#496); the verified match inside what is open (#497) and by index (#499) | done |
 | 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
-| A | Word search over the whole Data model; follow links; table facts in the prompt; `calc` in the chart form; Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
+| A | Word search over the whole Data model; follow links; table facts in the prompt; `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |

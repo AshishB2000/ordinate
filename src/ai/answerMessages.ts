@@ -23,3 +23,35 @@ export function periodAfterData(period: string, dataset: string, ends: string): 
 export function answerNotSaved(): string {
   return t('answerMessages.could_not_save_this_answer_as');
 }
+
+// ── The chart form's `calc` (./answerCalc): why a table calculation was refused ──
+
+/** A calculation name the form does not know; `kinds`: the ones it does, listed. */
+export function calcUnknown(said: string, kinds: string): string {
+  return t('answerMessages.is_not_a_calculation_the_chart', { said, kinds });
+}
+
+/** A moving window out of bounds; the bounds already formatted. */
+export function calcWindow(min: string, max: string): string {
+  return t('answerMessages.a_moving_window_is_a_whole', { min, max });
+}
+
+/** A calculation worked out in date order, asked of a category that is not a date, or down the split. `calc`: its name (tableCalc CALC_KIND_NAMES). */
+export function calcNeedsDate(calc: string): string {
+  return t('answerMessages.the_chart_form_works_out_along', { calc });
+}
+
+/** A direction other than across the category, or down a split the answer does not have. */
+export function calcAlongOf(): string {
+  return t('answerMessages.a_calculation_runs_across_the_category');
+}
+
+/** A calculation beside a top-N cut: each kind compares a category with every other. `n` already formatted. */
+export function calcWithTop(calc: string, n: string): string {
+  return t('answerMessages.the_chart_form_cannot_keep_only', { n, calc });
+}
+
+/** A calculation on a measure a split chart does not draw. */
+export function calcSplitFirst(): string {
+  return t('answerMessages.with_a_split_the_chart_draws');
+}

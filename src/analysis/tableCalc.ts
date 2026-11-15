@@ -42,6 +42,8 @@
 //
 // ── The kinds, precisely ─────────────────────────────────────────────────────
 // Within one partition, cells in along-order; a null cell always yields null.
+// Along a DATE category along-order is TIME order, whatever order the axis came in
+// (an extract's is first-seen): the empty (no date) bucket last, as Live orders it.
 //   running_total     cumulative sum; a null cell is null and the total carries
 //                     on from the previous non-null total.
 //   pct_of_total      cell ÷ the partition's total, as a FRACTION (0.241).
@@ -285,6 +287,7 @@ export function applyChartCalcs<T extends { labels: (string | number)[]; series:
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const plotted = data.series.filter((s) => s.role !== 'overlay');
   const raw = plotted.map((s) => labels.map((_, i) => num(s.values[i])));
+  const order = category && category.kind === 'date' ? timeOrder(labels) : null;
 
   const out = plotted.map((s, j) => {
     // A split chart plots ONE measure as many series; otherwise series j IS measure j.
@@ -304,7 +307,7 @@ export function applyChartCalcs<T extends { labels: (string | number)[]; series:
       const prior = calc.kind === 'yoy' ? yoyPrior(labels, raw[j], category, note) : undefined;
       values = alone
         ? raw[j].map((v, i) => one(v, prior ? prior[i] : undefined))
-        : calcSequence(calc.kind, raw[j], { window: calc.window, prior });
+        : inTimeOrder(order, raw[j], prior, (cells, p) => calcSequence(calc.kind, cells, { window: calc.window, prior: p }));
     } else {
       if (calc.kind === 'yoy') note('Year over year runs along a date category, not down the series.');
       // Down: this series' position in each category's column of cells.
@@ -321,6 +324,36 @@ export function applyChartCalcs<T extends { labels: (string | number)[]; series:
     return j < 0 ? s : out[j];
   });
   return { ...data, series };
+}
+
+/**
+ * Two date-axis labels in time order, the empty (no date) bucket last, as Live orders a date axis. A bucket's label
+ * sorts as its time: ISO days, YYYY-MM, YYYY-Qn, a week calendar's YYYY-Wnn and FYnn P/Q/W (categoryKey, retailCalendar).
+ * shortcut: compared as text, so a retail calendar's two-digit FY wraps at a century; parse with weekLabelStart if that matters.
+ */
+export function byTime(a: string | number, b: string | number): number {
+  const x = String(a);
+  const y = String(b);
+  if (x === '' || y === '') return x === y ? 0 : x === '' ? 1 : -1;
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** The positions of a date axis in time order, or null when it already is: an extract's axis comes first-seen (docs/live-data/log.md, L2.2). */
+function timeOrder(labels: (string | number)[]): number[] | null {
+  const idx = labels.map((_, i) => i).sort((a, b) => byTime(labels[a], labels[b]) || a - b);
+  return idx.every((v, i) => v === i) ? null : idx;
+}
+
+/** `run` over the cells in time order (`order`, null: as they are), each result back at its own position. */
+function inTimeOrder(
+  order: number[] | null, cells: (number | null)[], prior: (number | null)[] | undefined,
+  run: (cells: (number | null)[], prior?: (number | null)[]) => (number | null)[],
+): (number | null)[] {
+  if (!order) return run(cells, prior);
+  const done = run(order.map((i) => cells[i]), prior && order.map((i) => prior[i]));
+  const out: (number | null)[] = cells.map(() => null);
+  order.forEach((i, k) => { out[i] = done[k]; });
+  return out;
 }
 
 /** The figure a year before each bucket, or all-null with a warning off a date axis. */

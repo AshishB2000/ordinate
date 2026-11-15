@@ -21,10 +21,19 @@ import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { AnswerFilter, AnswerSpec } from './answerSpec';
 import { WITHHELD } from './columnNotes';
 import { cell, oneLine } from './promptText';
+import { CALC_KIND_NAMES, CALC_WINDOW_DEFAULT, byTime, calcLabel, isMovingKind, isPercentKind } from '../analysis/tableCalc';
+import type { CalcSeries, TableCalc } from '../analysis/tableCalc';
 
-/** The spec in words — "sum of revenue by region, split by tier" — for `AnswerFactsInput.describe`. */
+/** A measure's table calculation in words — "a moving average over 3 periods of " — or ''. */
+function calcWords(calc: TableCalc | undefined): string {
+  if (!calc) return '';
+  const over = isMovingKind(calc.kind) ? ` over ${calc.window ?? CALC_WINDOW_DEFAULT} periods` : '';
+  return `${CALC_KIND_NAMES[calc.kind]}${over}${calc.along === 'down' ? ' down the split' : ''} of `;
+}
+
+/** The spec in words — "sum of revenue by region, split by tier", "a running total of sum of revenue by month" — for `AnswerFactsInput.describe`. */
 export function describeAnswer(spec: AnswerSpec): string {
-  const ms = spec.measures.map((m) => `${aggWord(m.aggregation)} of ${m.column}`).join(', ');
+  const ms = spec.measures.map((m) => `${calcWords(m.calc)}${aggWord(m.aggregation)} of ${m.column}`).join(', ');
   return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
 }
 
@@ -104,17 +113,23 @@ export function pct(v: number): string {
   return (Object.is(r, -0) ? 0 : r) + '%';
 }
 
-interface Mark { label: string | number; value: number }
+/** `raw`: a calculated mark's figure before the calculation (analysis/tableCalc). */
+interface Mark { label: string | number; value: number; raw?: number | null }
 
 function marks(data: ChartData, s: number): Mark[] {
-  const series = data.series[s];
+  const series: CalcSeries | undefined = data.series[s];
   if (!series) return [];
   const out: Mark[] = [];
   data.labels.forEach((lab, i) => {
     const v = series.values[i];
-    if (typeof v === 'number' && Number.isFinite(v)) out.push({ label: lab, value: v });
+    if (typeof v === 'number' && Number.isFinite(v)) out.push({ label: lab, value: v, ...(series.calc && series.raw ? { raw: series.raw[i] } : {}) });
   });
   return out;
+}
+
+/** A figure as the facts text prints it: a calculated share as the percent it is ("24.1%"), else as computed. */
+function figText(calc: TableCalc | undefined, v: number | null | undefined): string {
+  return calc && isPercentKind(calc.kind) && typeof v === 'number' && Number.isFinite(v) ? pct(v * 100) : fmtRaw(v);
 }
 
 function extremes(ms: Mark[]): { hi: Mark; lo: Mark } | null {
@@ -164,9 +179,15 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   }
 
   lines.push('', 'Chart values (app-computed):');
-  series.forEach((s) => {
-    lines.push(`- ${name(s.name)}: ${labels.map((lab, i) => `${cell(lab)}=${fmtRaw(s.values[i])}`).join(', ')}`);
+  series.forEach((s: CalcSeries) => {
+    const calc = s.calc && s.raw ? s.calc : undefined;
+    lines.push(`- ${name(s.name)}${calc ? ` as ${CALC_KIND_NAMES[calc.kind]}` : ''}: ${labels.map((lab, i) => `${cell(lab)}=${figText(calc, s.values[i])}`).join(', ')}`);
     labels.forEach((lab, i) => num(ledger, `${s.name} @ ${lab}`, s.values[i], 'number'));
+    if (!calc || !s.raw) return;
+    // The figures the calculation was worked out from, which the card's tooltips and caption say beside it.
+    const raw = s.raw;
+    lines.push(`- ${name(s.name)} before the calculation: ${labels.map((lab, i) => `${cell(lab)}=${fmtRaw(raw[i])}`).join(', ')}`);
+    labels.forEach((lab, i) => num(ledger, `${s.name} figure @ ${lab}`, raw[i], 'number'));
   });
 
   // Per series: extremes, and — only where adding up means something — the total
@@ -180,6 +201,9 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
     lines.push('');
     lines.push(`${name(s.name)} — ${ms.length} ${input.categoryIsDate ? 'periods' : 'values'}.`);
     num(ledger, `${s.name}: count of marks`, ms.length, 'count');
+    const calc = (s as CalcSeries).calc;
+    // A calculated series has no total, share or change of its own: a total of running totals or of ranks means nothing.
+    if (calc && (s as CalcSeries).raw) return calcFacts({ calc, ms, ex, first: si === 0, tail: si > 1 ? null : series.length > 1 ? ` (${s.name})` : '' }, input, lines, bullets, headline);
 
     const total = input.additive ? ms.reduce((a, m) => a + m.value, 0) : null;
     const allPositive = ms.every((m) => m.value >= 0);
@@ -245,6 +269,41 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   seal(ledger, text);
   sealFilters(ledger, input);
   return { text, ledger, bullets, headline };
+}
+
+/**
+ * A calculated series' lines, bullets and headline: its extremes, and on a date axis its latest period, each said
+ * as the card says it ("24.1% of total · 1.25M"). A rank is said by position: rank 1 is the largest figure.
+ * `tail` is null past the second series (no bullets), else what names the series in a bullet.
+ */
+function calcFacts(
+  c: { calc: TableCalc; ms: Mark[]; ex: { hi: Mark; lo: Mark }; first: boolean; tail: string | null },
+  input: AnswerFactsInput, lines: string[], bullets: string[], headline: Headline[],
+): void {
+  const { calc, ms, ex, tail } = c;
+  const show = (m: Mark): string => calcLabel(calc.kind, m.value, m.raw);
+  const rank = calc.kind === 'rank_dense' || calc.kind === 'rank_competition';
+  // The latest period by time, not by position: an extract's date axis comes first-seen (analysis/tableCalc `byTime`).
+  const dated = ms.filter((m) => String(m.label) !== '');
+  const last = input.categoryIsDate && dated.length ? dated.reduce((a, m) => (byTime(m.label, a.label) > 0 ? m : a)) : ms[ms.length - 1];
+  lines.push(rank
+    ? `Ranked first: ${cell(ex.lo.label)} at ${ex.lo.value}. Ranked last: ${cell(ex.hi.label)} at ${ex.hi.value}.`
+    : `Highest: ${cell(ex.hi.label)} at ${figText(calc, ex.hi.value)}. Lowest: ${cell(ex.lo.label)} at ${figText(calc, ex.lo.value)}.`);
+  if (input.categoryIsDate) lines.push(`Latest period ${cell(last.label)}: ${figText(calc, last.value)}.`);
+  if (tail === null) return;
+  if (rank) {
+    bullets.push(`${ex.lo.label} ranks first at ${show(ex.lo)}${tail}.`);
+    if (ms.length > 1) bullets.push(`${ex.hi.label} ranks last at ${show(ex.hi)}${tail}.`);
+  } else if (input.categoryIsDate) {
+    bullets.push(`The latest period, ${last.label}, is ${show(last)}${tail}.`);
+    bullets.push(`The peak is ${ex.hi.label} at ${show(ex.hi)}; the low is ${ex.lo.label} at ${show(ex.lo)}${tail}.`);
+  } else {
+    bullets.push(`${ex.hi.label} is highest at ${show(ex.hi)}${tail}.`);
+    if (ms.length > 1) bullets.push(`${ex.lo.label} is lowest at ${show(ex.lo)}${tail}.`);
+  }
+  if (!c.first) return;
+  const lead = input.categoryIsDate ? { label: `Latest · ${last.label}`, m: last } : rank ? { label: `First · ${ex.lo.label}`, m: ex.lo } : { label: `Highest · ${ex.hi.label}`, m: ex.hi };
+  headline.push({ label: lead.label, value: lead.m.value, display: calcLabel(calc.kind, lead.m.value) });
 }
 
 /**

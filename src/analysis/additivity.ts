@@ -191,9 +191,10 @@ export async function refuseNonAdditiveCalcs<R extends { ok: boolean; category?:
   return reply;
 }
 
-/** A door with no chart reply yet (an answer card): the sentence refusing `enc` drawn as `chartType`, or null. Reads metadata, never a row. */
+/** A door with no chart reply yet (an answer card): the sentence refusing `enc` drawn as `chartType`, or its calcs, or null. Reads metadata, never a row. */
 export async function figureRefusal(projectId: string, datasetId: string, enc: VizEncoding, chartType: unknown): Promise<string | null> {
-  if (typeof chartType !== 'string' || !Object.hasOwn(FIGURE_SUMS, chartType)) return null;
+  const figure = typeof chartType === 'string' && Object.hasOwn(FIGURE_SUMS, chartType);
+  if (!figure && !(enc.values ?? []).some((m) => m && m.calc)) return null;
   const kind = (await getDatasetMeta(projectId, datasetId))?.columns.find((c) => c.name === enc.category)?.type;
   const r = await refuseNonAdditiveCalcs({ ok: true, category: { kind } }, projectId, datasetId, enc, undefined, chartType);
   return r.ok ? null : r.error;

@@ -67,12 +67,13 @@ export function refineSpec(
   const real = (said: unknown): string | null => resolveColumn(said, dataset.columns, dataset.names)?.name ?? null;
 
   const carried = (m: VizMeasure): unknown => {
+    const calc = m.calc ? { calc: m.calc } : {}; // its "Calculate as" goes with it, validated again (./answerCalc)
     const metric = m.metricId ? metrics.find((x) => x.id === m.metricId) : undefined;
-    if (metric?.external && metric.datasetId === dataset.id) return { metric: metric.name }; // a layer's metric: it has no column to carry
+    if (metric?.external && metric.datasetId === dataset.id) return { metric: metric.name, ...calc }; // a layer's metric: it has no column to carry
     const byName = !!metric && !metric.hasFilters && metric.column === m.column && (parseAgg(metric.aggregation) || 'sum') === m.aggregation
       && !resolveColumn(metric.name, dataset.columns)
       && metrics.find((x) => x.datasetId === dataset.id && x.name.trim().toLowerCase() === metric.name.trim().toLowerCase()) === metric;
-    return byName ? { metric: metric.name } : { column: m.column, aggregation: m.aggregation };
+    return byName ? { metric: metric.name, ...calc } : { column: m.column, aggregation: m.aggregation, ...calc };
   };
 
   const added: unknown[] = [];
@@ -135,7 +136,7 @@ export function refineSpec(
   return merged;
 }
 
-const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'calc', 'kind', 'along', 'dimension', 'restart', 'window', 'series', 'filters', 'op', 'value', 'values', 'period', 'n', 'yearsBack', 'term', 'chartType', 'top', 'grain'];
 
 /**
  * Two specs that draw the same chart: everything but the title, and a measure's

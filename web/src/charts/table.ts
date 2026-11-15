@@ -8,6 +8,7 @@
 
 import * as OrdFormat from '../../../src/app/format.ts';
 import { CHART_PALETTE } from './palette';
+import { tcCalcLabel } from './format';
 import { t } from './strings';
 import type { ChartDataShape, ChartSeriesShape, Cx } from './types';
 import { shownData } from './valueLabelMap';
@@ -31,6 +32,8 @@ export function tableModel(raw: ChartDataShape): TableModel {
       label: label == null ? '' : String(label),
       cells: series.map((s) => {
         const v = s.values ? s.values[i] : null;
+        // A table calculation says its figure as its kind, the figure it came from beside it: "24.1% of total · 1.25M".
+        if (s.calc && typeof v === 'number') return tcCalcLabel(s.calc.kind, v, s.raw ? s.raw[i] : null);
         return typeof v === 'number' ? OrdFormat.formatNumber(v, { maxDecimals: 2 }) : v != null ? String(v) : '';
       }),
     })),
