@@ -816,6 +816,36 @@ nothing changes: there are no viewers.
 **Rolling back.** The older release ignores the table and the column; the asks sent meanwhile stay in
 the table and show again after the next upgrade.
 
+## The Assistant answers with SQL, and keeps verified SQL questions (phase B)
+
+The Assistant can answer a question its chart form cannot say with one SQL statement the AI writes,
+run through the Data page's Query tab checks and marked *Not checked* until an editor verifies it
+([design](../assistant/00-design.md#two-ways-to-answer)). No migration. Two things are new on records:
+
+- **A conversation's answer turn may hold `sql`** (the statement, the datasets it read, its title) and
+  a snapshot of its result table, in the turn's body (`assistant_turns`) or, without `DATABASE_URL`,
+  in `copilot.json`.
+- **A verified question may hold `sql` in place of `spec`**: the statement and the datasets it reads,
+  by id. It is a file of the same folder (`projects/<id>/verified/`), carried by backups and project
+  bundles like any other, its dataset ids remapped on import.
+
+**What a pod of an older release does** (a rolling update, or a rollback):
+
+- It shows an SQL answer as its sentence alone, with no table. With a database it never rewrites
+  that turn. **Without `DATABASE_URL`** it drops `sql` and its table from every conversation in the
+  project the next time anyone in the project asks the Assistant something, because all members'
+  conversations are saved together; the sentence stays.
+- It skips a verified SQL question as a record it cannot read: never matched, listed, edited or
+  deleted there, and never lost (it stays on disk, and a newer pod reads it). While it runs, it may
+  accept a chart's verified question with the same words as an SQL one, because it does not see the
+  SQL one's words; a newer pod then answers that wording with the chart's question first.
+- Its rebuild of the verified index leaves SQL questions out. This release's index version is 3, so
+  a pod of this release rebuilds each project once after the rollout, and again after a pod of an
+  older release rebuilt it (a rolling update can rebuild a project more than once while both run).
+
+**Rolling back** keeps every SQL answer and verified SQL question on disk and in Postgres; they come
+back when you upgrade again.
+
 ## Compose
 
 From a checkout:

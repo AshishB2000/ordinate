@@ -230,6 +230,66 @@ a viewer under row rules is refused, and the gate refuses Live datasets (`requir
 Live datasets and source tables is phase F, after row rules, hidden columns and cost limits can be
 applied in the warehouse.
 
+**Built (phase B).** The first call's action line has a kind `sql` (`src/ai/suggestedAction.ts`, its
+prompt in `src/ai/answerSql.ts`): offered only for what one chart cannot say, it names at most 4
+datasets from the FACTS and nothing else; the prose stays one sentence with no figures. Then
+(`src/ipc/answerSql.ts`):
+
+1. The names resolve as a chart spec's dataset does (`answerCheck` `vocabulary`: step 3's index, an
+   agent's topic), never a list of every dataset sent to the model.
+2. Before any SQL is written, a dataset the gate would refuse is refused in the gate's own sentence: a
+   Live one (`requireExtract`'s), and one under row rules or hiding a column from the caller (the
+   storage net `gateRows`, which `compile()` meets through `residentSource`). No second call is made.
+3. The **second call** (`SQL_SYSTEM_PROMPT`) gets, for only those datasets, every column and type as
+   SQL sees them (`viewColumns`, under the gate's names: the catalog's slugs), the table doc's key, the
+   size and the relationships between them, and writes one statement. The question rides in the user
+   message as a request, never as instructions.
+4. The statement runs through `runSql`, exactly as `sql:run` runs it: one read-only statement, `FROM`
+   only datasets, CTEs and value generators, the caller's org worker and its timeout, the preview's 500
+   rows. It may read only the datasets the first call picked, and must read one.
+5. The card (`kind: 'sql'`) is DuckDB's table with the app's words: "12 rows · 3 columns", "Reads
+   “Orders” and “Customers”.". A label column and one number column (50 rows or fewer) are drawn as a
+   column chart, a line over dates. No third call narrates it.
+
+**The card** (`web/src/features/assistant/AnswerSql.tsx`): **Not checked · SQL written by the AI**,
+**Show SQL** (to everyone the answer is shown to: it names only datasets, never a dataset's origin,
+and whoever asked could read those datasets whole), the table (and **Show table** under a chart),
+and, where Save as visual would be, *Not a chart: an SQL answer can’t be saved as a visual, added to a
+dashboard or used for an alert.* An editor gets **Verify**.
+
+**Verify** saves a **verified SQL question**: a verified record with `sql: {text, datasetIds}` in place
+of `spec` (`src/analysis/verifiedRules.ts`). The statement runs once through the gate before it is
+kept, and its datasets are the gate's deps, never the browser's list. It is new only (no edit in
+place) and its words take a key like any question's. The index (`verified_keys`) holds it under the
+first dataset it reads (`VERIFIED_INDEX_VERSION` 3 rebuilds each project once). Asked word for word
+(step 2, inside the open scope: every dataset it reads must be in it), its SQL runs again for the
+asker through the gate: no model call, "✓ Verified · who" on the card, and a viewer under row rules or
+with a hidden column gets the gate's refusal. It no longer runs when a dataset it reads is gone (the
+question then goes to the model) or Live, and the Verified page DESCRIBEs it through the gate (no row
+read) so a column gone says why; asking a broken one says why. It is no example in the prompt (an
+example is a chart spec). MCP's `answer_verified_question` refuses one, saying so: its result is a
+table no Share policy column maps onto, and that reply leaves for an agent.
+
+**Kept like a card:** the turn stores `sql` and a snapshot of its table (`src/ipc/answerSnapshots.ts`),
+fingerprinted over the caller's access on every dataset it read; reopening runs no SQL while that
+holds, and Refresh runs it again. `scripts/test-answerSql.ts` (both modes): 2 calls with only the
+picked datasets' details (a form answer: 1), the table Object.is-equal to `sql:run`, each refusal with
+a passing twin, snapshots, Verify and its rerun under the asker's access, a broken one, and an origin
+canary in no reply or prompt.
+
+**No record read per dataset.** `compile()` (so `sql:run` too) resolves a statement's tables off one
+listing of the project's dataset records, the paged query every list uses (`projectNames`,
+`src/data/datasetNames.ts`, kept for the question), and reads the records of only the datasets the
+statement names; the second call's facts read only the picked ones. The Query tab's sidebar
+(`sql:schema`) still reads every record, for its columns. At 2,000 datasets an SQL answer from Home went
+from 4,164 record reads (4,125 `getDatasetMeta` calls: the gate and the facts each read every dataset)
+to 165, fewer than a chart answer's, at the same 151 queries (`test-askBudget` case g; the names are
+Object.is-equal to the catalog's in `test-answerSql`).
+
+**Left as they are:** an SQL answer cannot be refined by a follow-up chip. The Assistant check
+(`verified:check`) compares the model's chart spec with a verified one, so it asks no SQL question, and
+its count on the Verified page leaves them out.
+
 ## Asking needs no dataset; keeping makes one
 
 A dataset is for what other people rely on: dashboards, alerts, verified answers. Asking in the
@@ -742,7 +802,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 | 0 | The Assistant page (#488); #492: one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset; conversations in their own tables, all kept and paged (#493, #495, #498); agents (#496); the verified match inside what is open (#497) and by index (#499) | done |
 | 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
 | A | Word search over the whole Data model; follow links and table facts in the prompt (built: [Follow the links, Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
-| B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
+| B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies (built: [The SQL lane](#two-ways-to-answer)) | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line (built, step 4) | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |
 | E | Shared folders shared with teams; connection tables per team; dashboard requests ([design](../team-folders/00-design.md)) | every list, search and reader checks the item's folder, with a safety-net test like row rules have |

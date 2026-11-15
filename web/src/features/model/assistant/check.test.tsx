@@ -89,7 +89,10 @@ describe('The Data model: Check the Assistant', () => {
 
   it('it asks first, saying what it costs; confirming posts verified:check and reads the run back', async () => {
     let started = false;
+    // An SQL question runs too, but the check asks the model for chart specs only (src/ipc/assistantCheck.ts): not counted.
+    const sqlRow = row('8c6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', 'Repeat customers', { describe: 'SQL', spec: undefined, sql: true });
     const calls = serve({
+      'verified:list': { body: { ok: true, broken: 0, questions: [...ROWS, sqlRow] } },
       'verified:check': () => { started = true; return { body: { ok: true, runId: R } }; },
       'verified:checkResult': () => ({ body: { ok: true, run: started ? run({ state: 'running', asked: 0, total: 4, matched: 0, finishedAt: undefined }) : null } }),
     });

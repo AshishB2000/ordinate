@@ -39,6 +39,7 @@ import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
 import { sanitizeGuidance, type TurnGuidance } from './turnGuidance';
 import { sanitizeSnapshot, type AnswerSnapshot } from './answerSnapshot';
+import { sameSql, sanitizeSqlTurn, type SqlTurn } from './answerSql';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
 import * as rows from './copilotRows';
@@ -63,10 +64,12 @@ export interface CopilotTurn {
   provenance?: CopilotProvenance;    // assistant turns only
   /** The CHART this assistant turn answered with (./answerSpec): what Refresh computes again. */
   answer?: AnswerSpec;
+  /** The SQL an answer the chart form could not express ran (./answerSql): what Refresh runs again. Never beside `answer`. */
+  sql?: SqlTurn;
   /**
    * The card as it was computed, its time and the access it was computed under (./answerSnapshot). SERVER ONLY:
    * ../ipc/answerSnapshots `turnsForBrowser` drops it, and sends its card only while that access still holds.
-   * Only beside `answer`.
+   * Only beside `answer` or `sql`.
    */
   snapshot?: AnswerSnapshot;
   /** "Did you mean": what a REFUSED chart may have meant, each option a complete spec (./answerSuggest). Never beside `answer`. */
@@ -120,6 +123,7 @@ export interface NewCopilotTurn {
   text: string;
   provenance?: CopilotProvenance;
   answer?: AnswerSpec;
+  sql?: SqlTurn;
   /** Its `firstAsked` becomes the turn's createdAt. */
   snapshot?: AnswerSnapshot;
   suggest?: AnswerSuggest;
@@ -249,12 +253,14 @@ export function normalizeTurns(raw: any): CopilotTurn[] {
     if (prov) turn.provenance = prov;
     const answer = role === 'assistant' ? sanitizeStoredSpec(t.answer) : undefined;
     if (answer) turn.answer = answer;
+    const sql = role === 'assistant' && !answer ? sanitizeSqlTurn(t.sql) : undefined;
+    if (sql) turn.sql = sql;
     const suggest = role === 'assistant' && !answer ? sanitizeSuggest(t.suggest) : undefined;
     if (suggest) turn.suggest = suggest;
     const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
     if (learn) turn.learn = learn;
     if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
-    const snapshot = answer ? sanitizeSnapshot(t.snapshot) : undefined; // a corrupt one is dropped: the card computes again
+    const snapshot = answer || sql ? sanitizeSnapshot(t.snapshot) : undefined; // a corrupt one is dropped: the card computes again
     if (snapshot) turn.snapshot = snapshot;
     const guidance = role === 'assistant' ? sanitizeGuidance(t.guidance) : undefined;
     if (guidance) turn.guidance = guidance;
@@ -553,7 +559,9 @@ export async function appendTurn(
   if (prov) record.provenance = prov;
   const answer = role === 'assistant' ? sanitizeStoredSpec(turn && turn.answer) : undefined;
   if (answer) record.answer = answer;
-  const snapshot = answer ? sanitizeSnapshot(turn && turn.snapshot) : undefined;
+  const sql = role === 'assistant' && !answer ? sanitizeSqlTurn(turn && turn.sql) : undefined;
+  if (sql) record.sql = sql;
+  const snapshot = answer || sql ? sanitizeSnapshot(turn && turn.snapshot) : undefined;
   if (snapshot) record.snapshot = { ...snapshot, firstAsked: record.createdAt };
   const suggest = role === 'assistant' && !answer ? sanitizeSuggest(turn && turn.suggest) : undefined;
   if (suggest) record.suggest = suggest;
@@ -636,16 +644,25 @@ export async function findTurn(projectId: string, threadId: string, turnId: stri
   return (await loadHistory(projectId, threadId)).find((t) => t.id === turnId && t.role === 'assistant') ?? null;
 }
 
+/** What an answer turn stores: a chart's spec, or an SQL answer's statement. */
+export type TurnAnswer = AnswerSpec | { sql: string };
+
+/** Is `turn` an assistant turn whose stored answer is still `what`? */
+export function holds(turn: CopilotTurn | undefined, what: TurnAnswer): boolean {
+  if (!turn || turn.role !== 'assistant') return false;
+  return 'sql' in what ? !!turn.sql && sameSql(turn.sql.text, what.sql) : !!turn.answer && sameChart(turn.answer, what);
+}
+
 // An answer's snapshot replaced (./answerSnapshot; null: none kept), on one of the CALLER's threads, on an assistant
-// turn whose stored answer is still `spec`, the chart it was computed from. False: nothing changed.
-export async function setSnapshot(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, snap: AnswerSnapshot | null): Promise<boolean> {
+// turn whose stored answer is still `spec` (or the SQL it ran), the card it was computed from. False: nothing changed.
+export async function setSnapshot(projectId: string, threadId: string, turnId: string, spec: TurnAnswer, snap: AnswerSnapshot | null): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   const kept = snap ? sanitizeSnapshot(snap) : undefined;
   if (snap && !kept) return false;
   if (rows.on()) return rows.setSnapshot(projectId, threadId, turnId, spec, kept);
   return changeThreads(projectId, async (threads) => {
     const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
-    if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
+    if (!turn || !holds(turn, spec)) return false;
     if (kept) turn.snapshot = kept;
     else delete turn.snapshot;
     await writeThreads(projectId, threads);

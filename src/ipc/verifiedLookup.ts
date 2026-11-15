@@ -10,6 +10,11 @@
 //
 // Whether a question still runs, and what the caller may see of it, is never in the index: it is worked out on the
 // records read, the same way on both paths.
+//
+// A verified SQL question (../analysis/verifiedRules `VerifiedSqlQuestion`) is in the index under the first dataset it
+// reads, and is read by the same lookups: step 2 matches it word for word when every dataset it reads is inside the
+// scope (./verifiedSql reruns it), a card's "✓ Verified" finds it (`verifiedSqlOn`), MCP is told what it is
+// (`verifiedSqlNamed`). It is no example: an example is a chart spec for the model to follow.
 
 import { rowsUnder } from '../app/recordFs';
 import { perAsk } from './askMemo';
@@ -17,9 +22,9 @@ import { logger } from '../app/logger';
 import { orgDb } from '../server/db/inOrg';
 import * as index from '../server/verifiedIndex';
 import * as datasets from '../data/datasets';
-import { listVerified, readManyTagged, verifiedFromBody } from '../analysis/verifiedQuestions';
+import { listBoth, listVerified, readManyBoth, readManyTagged, verifiedFromBody, verifiedSqlFromBody } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
-import { questionKey, type VerifiedQuestion } from '../analysis/verifiedRules';
+import { isSqlQuestion, questionKey, type AnyVerified, type VerifiedQuestion, type VerifiedSqlQuestion } from '../analysis/verifiedRules';
 import { getTerm } from '../analysis/terms';
 import { withheldColumns } from '../app/sharePolicy';
 import { words } from '../ai/answerSuggest';
@@ -27,17 +32,18 @@ import { eligibleExample, exactHit, examplesHead, NOTHING_TAKEN, pickExamples, t
 import { MEANING_K, cut } from '../app/assistantSearchRank';
 import { clean } from '../app/searchMatch';
 import { meaningOf, nearOrWords } from './meaning';
-import { statesOf, verifiedEnvFor, verifiedStates, type VerifiedState } from './verifiedState';
+import { statesOf, verifiedEnv, verifiedEnvFor, verifiedStates, type VerifiedState } from './verifiedState';
 
 /** A question as it is fingerprinted (0030 `text`): as written, trimmed, at most 1,000 code points. */
 export const questionText = (question: string): string => cut(clean(question).trim());
 
-/** What a stored question puts in the index: its question and each phrasing, by key; the question's words. */
+/** What a stored question puts in the index: its question and each phrasing, by key; the question's words. An SQL question's dataset is the first it reads. */
 export const describeVerified: index.DescribeVerified = (projectId, id, body) => {
-  const q = verifiedFromBody(projectId, body)?.rec;
+  const q: AnyVerified | undefined = verifiedFromBody(projectId, body)?.rec ?? verifiedSqlFromBody(projectId, body)?.rec;
   if (!q || q.id !== id) return []; // `listTagged` skips a misnamed record: so does the index
+  const datasetId = isSqlQuestion(q) ? q.sql.datasetIds[0] : q.spec.datasetId;
   return [q.question, ...q.phrasings].map((text, ord) => ({
-    ord, key: questionKey(text), datasetId: q.spec.datasetId, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
+    ord, key: questionKey(text), datasetId, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
   }));
 };
 index.useVerifiedDescriber(describeVerified);
@@ -70,24 +76,34 @@ const checked = async (projectId: string, list: readonly Tagged<VerifiedQuestion
 
 // ── step 2: the exact match ─────────────────────────────────────────────
 
-/** REFERENCE: every question of the project, checked, then the first whose wording is `question`, on `scope` (null = any). */
-export async function referenceHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<VerifiedQuestion | null> {
-  const states = await verifiedStates(projectId);
-  return exactHit(scope ? states.filter((s) => scope.has(s.q.spec.datasetId)) : states, question, exclude);
+/** The first SQL question (newest first) whose wording is `question`, every dataset it reads inside `scope` (null = any). Whether it still runs is ./verifiedSql's. */
+function sqlHit(list: readonly Tagged<VerifiedSqlQuestion>[], question: string, scope: ReadonlySet<string> | null, exclude?: string): VerifiedSqlQuestion | null {
+  const key = questionKey(question);
+  if (!key) return null;
+  return list.find(({ rec: q }) => q.id !== exclude && (!scope || q.sql.datasetIds.every((id) => scope.has(id)))
+    && [q.question, ...q.phrasings].some((t) => questionKey(t) === key))?.rec ?? null;
+}
+
+/** REFERENCE: every question of the project, checked, then the first whose wording is `question`, on `scope` (null = any): a chart's, else an SQL one. */
+export async function referenceHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<AnyVerified | null> {
+  const both = await listBoth(projectId); // one listing, as verifiedStates' own
+  const states = await statesOf(projectId, both.spec, await verifiedEnv(projectId));
+  return exactHit(scope ? states.filter((s) => scope.has(s.q.spec.datasetId)) : states, question, exclude) ?? sqlHit(both.sql, question, scope, exclude);
 }
 
 /** INDEXED: the questions with `question`'s key, read and checked; no record is read on a miss. Null without a database. */
-export async function indexedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<{ q: VerifiedQuestion | null } | null> {
+export async function indexedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<{ q: AnyVerified | null } | null> {
   const key = questionKey(question);
   if (!key) return orgDb() ? { q: null } : null; // a punctuation-only question never matches
   const ids = await index.keyHits(projectId, key, scope ? [...scope] : null, rowsUnder);
   if (!ids) return null;
   if (!ids.length) return { q: null };
-  return { q: exactHit(await checked(projectId, await readManyTagged(projectId, ids)), question, exclude) };
+  const both = await readManyBoth(projectId, ids); // ONE read, either kind
+  return { q: exactHit(await checked(projectId, both.spec), question, exclude) ?? sqlHit(both.sql, question, scope, exclude) };
 }
 
 /** The verified question `question` is word for word, on `scope` (null = any), or null. */
-export async function verifiedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<VerifiedQuestion | null> {
+export async function verifiedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<AnyVerified | null> {
   const r = await indexedOr(() => indexedHit(projectId, question, scope, exclude), async () => ({ q: await referenceHit(projectId, question, scope, exclude) }));
   return r.q;
 }
@@ -108,6 +124,14 @@ export function verifiedOn(projectId: string, datasetId: string): Promise<Verifi
     const ids = await index.datasetHits(projectId, datasetId, rowsUnder);
     return ids && (await readManyTagged(projectId, ids)).map((t) => t.rec);
   }, () => referenceOn(projectId, datasetId)));
+}
+
+/** The SQL questions whose first dataset is `datasetId`, newest first: an SQL card's "✓ Verified" (./verifiedSql). */
+export function verifiedSqlOn(projectId: string, datasetId: string): Promise<VerifiedSqlQuestion[]> {
+  return perAsk(`verifiedSqlOn\0${projectId}\0${datasetId}`, () => indexedOr(async () => {
+    const ids = await index.datasetHits(projectId, datasetId, rowsUnder);
+    return ids && (await readManyBoth(projectId, ids)).sql.map((t) => t.rec);
+  }, async () => (await listBoth(projectId)).sql.map((t) => t.rec).filter((q) => q.sql.datasetIds[0] === datasetId)));
 }
 
 // ── step 3: the examples ────────────────────────────────────────────────
@@ -250,4 +274,15 @@ export async function indexedNamed(projectId: string, question: string): Promise
 /** The verified question `question` names, by its id or any of its wordings, whether it runs or not; null for none. */
 export async function verifiedNamed(projectId: string, question: string): Promise<VerifiedState | null> {
   return (await indexedOr(() => indexedNamed(projectId, question), async () => ({ s: await referenceNamed(projectId, question) }))).s;
+}
+
+/** The verified SQL question `question` names, by its id or any of its wordings; null for none. MCP's answer for one is a refusal. */
+export async function verifiedSqlNamed(projectId: string, question: string): Promise<VerifiedSqlQuestion | null> {
+  const key = questionKey(question);
+  const named = (q: VerifiedSqlQuestion): boolean => q.id === question || (key !== '' && [q.question, ...q.phrasings].some((t) => questionKey(t) === key));
+  const list = await indexedOr(async () => {
+    const hits = key ? await index.keyHits(projectId, key, null, rowsUnder) : [];
+    return hits && (await readManyBoth(projectId, [...new Set([...hits, question])])).sql;
+  }, async () => (await listBoth(projectId)).sql);
+  return list.map((t) => t.rec).find(named) ?? null;
 }

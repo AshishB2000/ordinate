@@ -8,6 +8,7 @@ import { useInfiniteQuery, useQuery, type InfiniteData, type QueryClient } from 
 import { rpc, type RpcInput } from '../../api/client';
 import { useVerified } from '../model/assistant/api';
 import type { Card, CardReply } from './AnswerCard';
+import type { SqlTurn } from './AnswerSql';
 
 export type Provider = 'anthropic' | 'openai' | 'gemini' | 'gateway';
 
@@ -68,6 +69,8 @@ export interface Turn {
    * to keep, or the access changed).
    */
   card?: Card;
+  /** An answer the chart form could not express: the SQL it ran (src/ai/answerSql.ts). Its kept table rides in `card` (./AnswerSql `isSqlCard`). */
+  sql?: SqlTurn;
   /** A refused chart's "Did you mean": the server's options, each a complete spec `answer:rerun` takes (src/ai/answerSuggest.ts). */
   suggest?: { part: string; said: string; options: { label: string; spec: Record<string, unknown>; column?: string }[] };
   /** An answer run from a "Did you mean" column: the name that was said, which its card can offer to remember. */

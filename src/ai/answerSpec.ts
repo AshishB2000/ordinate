@@ -314,7 +314,8 @@ function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<str
   return { column: col.name, op, value };
 }
 
-function resolveDataset(raw: unknown, datasets: SpecDataset[], defaultId?: string): SpecDataset | null {
+/** A dataset as a spec names it: by id, then its name trimmed and lowercased (one only), then squashed (one only). */
+export function resolveDataset(raw: unknown, datasets: SpecDataset[], defaultId?: string): SpecDataset | null {
   if (typeof raw === 'string' && raw.trim()) {
     const r = raw.trim();
     const byId = datasets.find((d) => d.id === r);

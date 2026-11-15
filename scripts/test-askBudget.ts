@@ -7,7 +7,9 @@
 // three datasets, (e) with a dashboard open (four tiles on two datasets), all as an admin; (d) case (a) as a restricted
 // viewer, one column hidden from them; (f) a conversation of 15 chart answers reopened (`copilot:history`): every card
 // comes with it, and NO figure query runs (the answer door, a hydration and the Live door spied) — NEGATIVE CONTROL:
-// with the snapshots removed, the web's reopen computes all 15.
+// with the snapshots removed, the web's reopen computes all 15. (g) An SQL answer (src/ipc/answerSql.ts): the gate names
+// tables off ONE listing of the project and reads a dataset's record only for what the statement reads and the answer
+// picked (getDatasetMeta spied) — NEGATIVE CONTROL: the Query tab's sidebar catalog reads every dataset's record.
 //
 // Always (no database; records are files):
 //   1. The parsed catalog (../src/app/catalog `loadShared`) is one object inside a read memo, forgotten by a write, and
@@ -67,6 +69,7 @@ const copilotTable: typeof import('../src/ipc/copilotTable') = require('../src/i
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const askMemo: typeof import('../src/ipc/askMemo') = require('../src/ipc/askMemo');
+const sqlDatasets: typeof import('../src/engine/sqlDatasets') = require('../src/engine/sqlDatasets');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const rowDoors: Record<string, unknown> = require('../src/ipc/rowDoors');
 const liveAnswers: Record<string, unknown> = require('../src/ipc/liveAnswers');
@@ -103,6 +106,10 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
   reopen: at(22, 4),
+  // (g) An SQL answer: Home's facts, one listing of the project's datasets for the gate's names (kept for the question),
+  // and the records of Orders only. Before, the gate and the second call's facts each read every dataset's record
+  // (projectCatalog): 151 queries (the list's pages fill the read memo) and 4,164 record reads, 4,125 getDatasetMeta calls.
+  sql: at(151, 165),
 };
 // PR 7c, meaning search ON (a fake fingerprint model, all 19,998 items and questions fingerprinted): ONE embed call a
 // question; per search one nearest-items query beside the words one, and the examples' nearest questions; once an ask,
@@ -117,6 +124,9 @@ const CEILING_ON: Record<string, { queries: number; reads: number }> = {
   viewer: at(139, 7_350), // off: 117 / 7,312; was at(135, 7_350)
   dashboard: at(119, 182), // off: 112 / 183
 };
+
+/** (g)'s getDatasetMeta calls beyond a chart answer's from Home: the pick's and the statement's (pick, gate, card); never one per dataset. */
+const SQL_METAS = 12;
 
 interface World { P: string; orders: string; agent: string; board: string }
 
@@ -349,6 +359,7 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('NEGATIVE CONTROL: the comparison can tell facts apart (Home, a dataset and the agent\'s topic differ)',
     !Object.is(factsOf.get('home'), factsOf.get('dataset')) && !Object.is(factsOf.get('home'), factsOf.get('agent')));
   await reopenCase(w, fresh, line);
+  await sqlCase(w, fresh, line); // before meaningOn, which leaves its fake model on
   await meaningOn(cases, once, line);
 }
 
@@ -403,6 +414,43 @@ function histogram(name: string, sqls: readonly string[]): void {
   }
   console.log(`  ${name}: ${sqls.length} statements`);
   for (const [k, n] of [...by].sort((a, b) => b[1] - a[1])) console.log(`    ${String(n).padStart(4)}  ${k}`);
+}
+
+/** (g) An SQL answer on the budget's project: no dataset record read but the statement's and the pick's. */
+async function sqlCase(w: World, fresh: (role: Role) => Promise<string>, line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
+  const SQL = 'SELECT region, sum(amount) AS total FROM orders GROUP BY region ORDER BY region';
+  const [ask0, dispatch0, meta0] = [analyze.askCopilot, analyze.dispatch, datasets.getDatasetMeta];
+  let writes = 0, metas = 0;
+  (analyze as { askCopilot: unknown }).askCopilot = async () => ({ ok: true, text: 'Here they are.', suggestedAction: { kind: 'sql', intent: 'revenue by region in SQL', datasets: ['Orders'] } });
+  (analyze as { dispatch: unknown }).dispatch = async () => { writes++; return { rawText: SQL }; };
+  (datasets as { getDatasetMeta: unknown }).getDatasetMeta = (...a: Parameters<typeof meta0>) => { metas++; return meta0(...a); };
+  try {
+    // A chart answer from Home first (the suite's own stub), for the metadata a Home question reads anyway: its facts, the chart's dataset.
+    const sqlAsk = analyze.askCopilot;
+    (analyze as { askCopilot: unknown }).askCopilot = ask0;
+    const chartThread = await fresh('admin');
+    metas = 0;
+    await as('admin', () => handlers.get('copilot:ask')!({}, { projectId: w.P, context: {}, question: 'revenue by region, in SQL', threadId: chartThread }));
+    const home = metas;
+    (analyze as { askCopilot: unknown }).askCopilot = sqlAsk;
+    metas = 0;
+    const threadId = await fresh('admin');
+    const c = await counted(() => as('admin', () => handlers.get('copilot:ask')!({}, { projectId: w.P, context: {}, question: 'revenue by region, in SQL', threadId })));
+    const asked = metas;
+    line('sql', c);
+    const t = c.out.turns?.at(-1);
+    ok('sql: the ask answers with the SQL\'s table, its statement written by one second call', c.out.ok === true && t?.sql?.datasetIds?.join() === w.orders && t?.card?.rowCount === 3 && writes === 1, JSON.stringify(c.out).slice(0, 300));
+    ok(`sql: ${asked} getDatasetMeta calls, ${asked - home} more than a chart answer's from Home (${home}) ≤ ${SQL_METAS}: the pick's and the statement's, never one per dataset`, asked - home <= SQL_METAS, `${asked} ${home}`);
+    ok(`sql: ${c.queries} queries ≤ ${CEILING.sql.queries} and ${c.reads} record reads ≤ ${CEILING.sql.reads}`, c.queries <= CEILING.sql.queries && c.reads <= CEILING.sql.reads);
+    metas = 0;
+    const cat = await counted(() => as('admin', () => sqlDatasets.projectCatalog(w.P)));
+    line('sql catalog (ref)', cat);
+    ok(`NEGATIVE CONTROL: the Query tab's catalog reads every dataset's record (${metas} getDatasetMeta calls, ${cat.reads} record reads)`, metas >= SCALE.datasets && cat.reads > CEILING.sql.reads);
+  } finally {
+    (analyze as { askCopilot: unknown }).askCopilot = ask0;
+    (analyze as { dispatch: unknown }).dispatch = dispatch0;
+    (datasets as { getDatasetMeta: unknown }).getDatasetMeta = meta0;
+  }
 }
 
 /**

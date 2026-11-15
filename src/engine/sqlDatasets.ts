@@ -51,6 +51,8 @@ import type { ColumnType, ParsedColumn } from '../data/parse';
 import { coerceValue } from '../data/parse';
 import type { Cell } from '../data/transforms';
 import * as datasets from '../data/datasets';
+import { listDatasetNames } from '../data/datasetNames';
+import * as recordFs from '../app/recordFs';
 import { MAX_ORIGIN_SQL } from '../data/datasetOrigin';
 import type { DatasetOrigin } from '../data/datasetOrigin';
 import { isValidId } from '../app/ids';
@@ -154,7 +156,25 @@ export interface CatalogEntry {
   columns: ParsedColumn[];
 }
 
-/** Every dataset in the project with its exposed names. Metadata only — no table is read. */
+/** A dataset's exposed names: what compile() resolves a statement's tables by. */
+export type NameEntry = Pick<CatalogEntry, 'id' | 'name' | 'alias' | 'slug'>;
+
+/**
+ * Every dataset's exposed names, off ONE listing of the project (../data/datasetNames), kept for a read memo's length
+ * (one question): no dataset's record is read. The same names `projectCatalog` assigns (scripts/test-answerSql.ts holds
+ * them equal), so compile() reads the records of only the datasets a statement names.
+ */
+export async function projectNames(projectId: string): Promise<NameEntry[]> {
+  if (!isValidId(projectId)) return [];
+  const list = await recordFs.memoRead(`sqlNames\0${projectId}`, () => listDatasetNames(projectId));
+  const names = assignViewNames(list);
+  return list.map((d) => {
+    const n = names.get(d.id) || { alias: null, slug: slugify(d.name) };
+    return { id: d.id, name: d.name, alias: n.alias, slug: n.slug };
+  });
+}
+
+/** Every dataset in the project with its exposed names, columns and size: the Query tab's sidebar. Every record is read. */
 export async function projectCatalog(projectId: string): Promise<CatalogEntry[]> {
   if (!isValidId(projectId)) return [];
   const list = await datasets.listDatasets(projectId);
@@ -232,7 +252,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
     }
   }
 
-  const cat = await projectCatalog(projectId);
+  const cat = await projectNames(projectId); // names only: a record is read below for each dataset the statement names
   const known = new Set<string>();
   for (const e of cat) {
     if (e.alias) known.add(foldKey(e.alias));
@@ -251,7 +271,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   // catalog: a name no CTE defines would fall through to DuckDB's own lookup.
   const defined = new Set<string>();
   for (const id of deps) {
-    const e = cat.find((x) => x.id === id) as CatalogEntry;
+    const e = cat.find((x) => x.id === id) as NameEntry;
     if (e.alias) defined.add(foldKey(e.alias));
     defined.add(e.slug);
   }
@@ -259,7 +279,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   if (why) return { error: why };
   const ctes: string[] = [];
   for (const id of deps) {
-    const e = cat.find((x) => x.id === id) as CatalogEntry;
+    const e = cat.find((x) => x.id === id) as NameEntry;
     const src = await datasets.residentSource(projectId, id);
     if (!src) {
       requireExtract(await datasets.getDatasetMeta(projectId, id)); // a Live dataset: refused, typed — never an empty table

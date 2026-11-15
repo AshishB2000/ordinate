@@ -2,6 +2,8 @@
 // Assistant gives every time. The browser sends the card's stored SPEC and the question asked; the server validates and
 // draws it again before it saves (`verified:save`, src/ipc/verified.ts), and a refusal comes back as a sentence for
 // one field, shown beside it with the input kept. An editor's: a viewer is never offered it.
+// An SQL answer's Verify (./AnswerSql) sends its statement instead of a spec: the server runs it once through the
+// Query tab's gate and keeps the text and the datasets the gate says it read.
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,7 +17,15 @@ import s from './SaveAsVerified.module.css';
 type Field = 'question' | 'phrasings' | 'spec' | 'form';
 const MAX_PHRASINGS = 8;
 
-export function SaveAsVerified({ projectId, spec, question }: { projectId: string; spec: { datasetId: string } & Record<string, unknown>; question: string }) {
+export function SaveAsVerified({ projectId, spec, sql, question, label = 'Save as verified' }: {
+  projectId: string;
+  /** A chart's answer… */
+  spec?: { datasetId: string } & Record<string, unknown>;
+  /** …or an SQL answer's statement. */
+  sql?: string;
+  question: string;
+  label?: string;
+}) {
   const canEdit = useCanEdit(projectId);
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -40,12 +50,14 @@ export function SaveAsVerified({ projectId, spec, question }: { projectId: strin
     setErrors({});
     setSaving(true);
     try {
-      const r = (await rpc('verified:save', { projectId, input: { question: q.trim(), phrasings: lines, note: note.trim(), spec } })) as { ok: boolean; error?: string; field?: Field };
+      const answer = sql !== undefined ? { sql } : { spec: spec as { datasetId: string } & Record<string, unknown> };
+      const r = (await rpc('verified:save', { projectId, input: { question: q.trim(), phrasings: lines, note: note.trim(), ...answer } })) as { ok: boolean; error?: string; field?: Field };
       if (!r.ok) return setErrors({ [r.field ?? 'form']: r.error || 'Could not save the question.' });
       setSaved(true);
       setOpen(false);
       void qc.invalidateQueries({ queryKey: ['verified:list', projectId] }); // the list, and the chips
       void qc.invalidateQueries({ queryKey: ['answer:card'] }); // the mark appears on this card
+      if (sql !== undefined) void qc.invalidateQueries({ queryKey: ['copilot:history', projectId] }); // an SQL card's mark comes with its conversation
     } catch (e) {
       setErrors({ form: e instanceof Error && e.message ? e.message : 'Could not save the question.' });
     } finally {
@@ -56,7 +68,7 @@ export function SaveAsVerified({ projectId, spec, question }: { projectId: strin
   return (
     <>
       <Button size="sm" variant="ghost" onClick={show}>
-        Save as verified
+        {label}
       </Button>
       {open && (
         <Dialog

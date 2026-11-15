@@ -63,11 +63,12 @@ export function periodsOf(spec: Pick<AnswerSpec, 'filters'>): KeptPeriod[] {
   return out;
 }
 
-/** The card as it decodes, when it reads as one: an object with `ok: true` and chart data. */
+/** The card as it decodes, when it reads as one: an object with `ok: true` and chart data, or an SQL answer's table (./answerSql). */
 function decoded(wire: unknown): ({ ok: true; spec?: unknown } & Record<string, unknown>) | null {
   try {
-    const c = fromWire(wire) as { ok?: unknown; data?: { labels?: unknown; series?: unknown } } | null;
-    return c && typeof c === 'object' && c.ok === true && Array.isArray(c.data?.labels) && Array.isArray(c.data?.series)
+    const c = fromWire(wire) as { ok?: unknown; kind?: unknown; data?: { labels?: unknown; series?: unknown }; columns?: unknown; rows?: unknown } | null;
+    const shaped = c && (c.kind === 'sql' ? Array.isArray(c.columns) && Array.isArray(c.rows) : Array.isArray(c.data?.labels) && Array.isArray(c.data?.series));
+    return c && typeof c === 'object' && c.ok === true && shaped
       ? (c as { ok: true } & Record<string, unknown>) : null;
   } catch {
     return null;

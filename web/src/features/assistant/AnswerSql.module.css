@@ -1,0 +1,37 @@
+/* An SQL answer (./AnswerSql): the card's own parts. The rest is ./AnswerCard.module.css, so both answers read alike. */
+.unchecked {
+  font-size: var(--t-11);
+  font-weight: 600;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  white-space: nowrap;
+}
+.grid {
+  height: 240px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.sql {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--inset);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Where Save as visual would be: why this answer has none. */
+.notChart {
+  flex-basis: 100%;
+  font-size: var(--t-11);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+}

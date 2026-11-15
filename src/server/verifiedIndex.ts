@@ -15,8 +15,10 @@ import { inOrg, orgDb } from './db/inOrg';
 import { logger } from '../app/logger';
 import type { NearTo } from './vectorStore';
 
-/** Bump when what a record describes to changes (`questionKey`, `words`): every marker is then stale, and each project rebuilds once. */
-export const VERIFIED_INDEX_VERSION = 2; // 2: ord 0's text, the question as written (0030)
+/** Bump when what a record describes to changes (`questionKey`, `words`): every marker is then stale, and each project rebuilds once.
+ *  2: ord 0's text, the question as written (0030). 3: verified SQL questions are described too (under the first dataset
+ *  they read); a build by an older pod left them out. */
+export const VERIFIED_INDEX_VERSION = 3;
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 

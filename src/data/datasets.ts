@@ -306,7 +306,7 @@ async function hydrate(projectId: string, data: any): Promise<boolean> {
 // `rows` is NOT required: a v3 record keeps its table in a sibling .parquet and
 // legitimately has no rows key. Requiring it here would make every migrated
 // dataset fail validation and silently vanish from the sidebar.
-function isValidDataset(data: any): data is Dataset {
+export function isValidDataset(data: any): data is Dataset {
   return (
     Boolean(data) &&
     typeof data.id === 'string' &&
@@ -319,7 +319,7 @@ function isValidDataset(data: any): data is Dataset {
 // Backward-compatible: a stored v1 dataset (no source/steps) normalizes to
 // steps=[], source=undefined and reads schemaVersion 2 — its columns/rows are the
 // data, exactly as before. Untrusted stored `steps` are re-sanitized on load.
-function normalize(data: any, projectId: string): Dataset {
+export function normalize(data: any, projectId: string): Dataset {
   const createdAt = data.createdAt || new Date().toISOString();
   const kind: Dataset['sourceKind'] = SOURCE_KINDS.has(data.sourceKind) ? data.sourceKind : 'csv';
   const rows: (string | number | null)[][] = Array.isArray(data.rows) ? data.rows : [];

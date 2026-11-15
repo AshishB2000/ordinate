@@ -34,7 +34,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open that show a dataset: no cell, label or figure of it
   'answer:card': 'GATE',
   'answer:explain': 'GATE',
-  'answer:refresh': 'GATE',
+  'answer:refresh': 'GATE', // an SQL answer's turn: its SQL through sql:run's gate, refused with a column hidden (NET); test-answerSql
   'answer:rerun': 'GATE',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -64,7 +64,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'connections:list': 'REDACT',
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts
+  'copilot:ask': 'REDACT', // the facts leave a hidden column out entirely (ai/hiddenFacts), its metrics and terms too; test-columnFacts. An SQL answer is refused on a dataset hiding a column from the caller, before any SQL is written (NET, src/ipc/answerSql.ts); test-answerSql
   'copilot:deleteThread': 'META',
   'copilot:history': 'REDACT', // a kept answer card is not sent once a column is hidden from the caller since (src/ipc/answerSnapshots.ts `accessPrint`); test-answerSnapshots
   'copilot:newThread': 'META',
@@ -215,7 +215,7 @@ export const COLUMN_TREATMENT: Readonly<Record<string, ColumnTreatment>> = {
   'topic:get': 'META', // a topic's name, description and member ids and field names (part 6): no value, figure or row
   'trash:list': 'META',
   'verified:checkResult': 'REDACT', // a reason (it can quote the model) dropped on a dataset closed to the caller (test-columnRedact); a question the caller's list leaves out is no row and no count (test-columnAccessSafetyNet)
-  'verified:list': 'DROP', // a question whose spec names a hidden column is left out (ipc/verifiedState); test-columnRedact
+  'verified:list': 'DROP', // a question whose spec names a hidden column is left out (ipc/verifiedState); test-columnRedact. An SQL question's row carries no SQL and no value (ipc/verifiedSql sqlRow)
   'versions:diff': 'NET',
   'versions:figures': 'GATE',
   'versions:get': 'NET',

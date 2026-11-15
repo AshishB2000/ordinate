@@ -407,6 +407,7 @@ export const MAIN_FILES = [
   'src/ai/answerSnapshotMessages.ts',
   'src/server/folderMessages.ts',
   'src/analysis/answerAlertMessages.ts',
+  'src/ai/answerSqlMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

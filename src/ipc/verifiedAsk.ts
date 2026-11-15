@@ -9,6 +9,8 @@ import { appendAnswer, computeCard } from './answers';
 import { topicDatasets } from './guidance';
 import * as visuals from '../analysis/visuals';
 import { verifiedHit } from './verifiedLookup';
+import { verifiedSqlAsk } from './verifiedSql';
+import { isSqlQuestion } from '../analysis/verifiedRules';
 import { NO_ACTION } from '../ai/suggestedAction';
 import type { TurnGuidance } from '../ai/turnGuidance';
 
@@ -52,6 +54,7 @@ export async function verifiedAsk(
 ) {
   const hit = await verifiedMatch(projectId, question, scope.only);
   if (!hit) return null;
+  if (isSqlQuestion(hit)) return verifiedSqlAsk(projectId, hit, question, target, scope.note); // its SQL again, through the gate, for this caller
   const built = await computeCard(projectId, hit.spec);
   if ('ok' in built) return { ok: false as const, error: built.reason };
   const guidance: TurnGuidance = { verifiedId: hit.id, instructions: 0, examples: [] };

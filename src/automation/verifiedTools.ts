@@ -6,7 +6,8 @@
 
 import { computeCard } from '../ipc/answers';
 import { verifiedStates, type VerifiedState } from '../ipc/verifiedState';
-import { verifiedNamed } from '../ipc/verifiedLookup';
+import { verifiedNamed, verifiedSqlNamed } from '../ipc/verifiedLookup';
+import { verifiedSqlNotOnMcp } from '../ai/answerSqlMessages';
 import * as datasets from '../data/datasets';
 import { listInstructions, FENCE_RE } from '../app/instructions';
 import { GUIDANCE_FRAMING } from '../ai/guidanceFacts';
@@ -62,6 +63,8 @@ export async function listVerifiedQuestions(ctx: Ctx): Promise<{ questions: McpV
 
 export async function answerVerifiedQuestion(ctx: Ctx, question: string): Promise<McpVerifiedAnswer> {
   const hit = await verifiedNamed(ctx.projectId, question); // by the index: that one record, or those of its key
+  // A question answered with SQL is refused, said so: its result is a table no Share policy column maps onto, and this reply leaves for an agent.
+  if (!hit && (await verifiedSqlNamed(ctx.projectId, question))) throw new AutomationError('runtime', verifiedSqlNotOnMcp());
   if (!hit || hit.hidden) throw new AutomationError('not_found', noVerifiedQuestion(question));
   if (hit.problem !== null) throw new AutomationError('runtime', hit.problem);
   const { q } = hit;

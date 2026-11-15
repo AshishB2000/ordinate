@@ -16,6 +16,9 @@
 // exists, its name to remember, its "✓ Verified" (with the turn's guidance: whether it matched a verified question or
 // drew one it was shown, ./verifiedMark `kind`), what "Answered from" says of its source to this caller
 // (./answerSources). Saved visuals and dashboards are untouched.
+//
+// An SQL answer (./answerSql) keeps its result table the same way, as its `card` (`kind: 'sql'`): its fingerprint is of the caller's
+// access on EVERY dataset the statement read (`sqlAccessPrint`), and Refresh runs the SQL again through the gate.
 
 import { createHash } from 'crypto';
 import { ipcMain } from './bus';
@@ -33,9 +36,12 @@ import { resolveColumn, type AnswerSpec } from '../ai/answerSpec';
 import { sanitizeLearn, type AnswerLearn } from '../ai/answerSuggest';
 import { cardOf, keptView, makeSnapshot, periodsOf, type AnswerSnapshot, type KeptView } from '../ai/answerSnapshot';
 import { answerNotRefreshed, answerNotThere } from '../ai/answerSnapshotMessages';
+import { sameSql, type SqlCard, type SqlTurn } from '../ai/answerSql';
+import { sqlCardFor } from './answerSql';
+import { verifiedSqlOn } from './verifiedLookup';
 import type { AnswerCard, Built, CardLearn, Failure } from './answers';
 
-/** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`. */
+/** A turn as the browser gets it: no snapshot, and the stored card (checked) as `card`: a chart's, or an SQL answer's table. */
 export type BrowserTurn = Omit<copilot.CopilotTurn, 'snapshot'> & { card?: Record<string, unknown> };
 
 /**
@@ -58,6 +64,32 @@ export async function accessPrint(projectId: string, datasetId: string): Promise
   const hidden = [...(await hiddenColumnsFor(projectId, datasetId))].sort();
   return createHash('sha256').update(stableStringify({ v: 1, lock, hidden })).digest('hex');
 }
+
+/** `accessPrint` of every dataset an SQL answer read, as one sha256: a change on any of them, and its table is computed again. */
+export async function sqlAccessPrint(projectId: string, datasetIds: readonly string[]): Promise<string> {
+  const prints = await Promise.all(datasetIds.map((id) => accessPrint(projectId, id)));
+  return createHash('sha256').update(stableStringify({ v: 1, sql: prints })).digest('hex');
+}
+
+/** A snapshot of an SQL answer's card just run, or undefined: none kept (past the cap), the table runs again on open. */
+export async function sqlSnapshotFor(projectId: string, card: SqlCard, sql: SqlTurn): Promise<AnswerSnapshot | undefined> {
+  try {
+    const now = new Date().toISOString();
+    return makeSnapshot(card, { asOf: now, firstAsked: now }, await sqlAccessPrint(projectId, sql.datasetIds), []) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An SQL card's "✓ Verified · who": a verified SQL question with the same statement, on its first dataset (worked out at every delivery). */
+export async function sqlVerifiedMark(projectId: string, sql: Pick<SqlTurn, 'text' | 'datasetIds'>): Promise<{ verified?: { id: string; question: string; by: string; at: string } }> {
+  const q = (await verifiedSqlOn(projectId, sql.datasetIds[0])).find((v) => sameSql(v.sql.text, sql.text));
+  return q ? { verified: { id: q.id, question: q.question, by: q.verifiedBy, at: q.verifiedAt } } : {};
+}
+
+/** An SQL card as delivered: its mark worked out now, and what it kept. */
+export const sqlDelivered = async (projectId: string, card: object, sql: SqlTurn, view: KeptView) =>
+  ({ ...card, ...(await sqlVerifiedMark(projectId, sql)), snapshot: view });
 
 /** A snapshot of a card just computed for `spec` (the turn's stored answer), or undefined: none kept, the card computes on open. */
 export async function snapshotFor(projectId: string, card: AnswerCard, spec: AnswerSpec): Promise<AnswerSnapshot | undefined> {
@@ -108,14 +140,35 @@ export async function turnsForBrowser(projectId: string, turns: readonly copilot
     }
     return p;
   };
+  // An SQL answer's: every dataset it read still there, and the access on all of them as it was.
+  const sqlAccessNow = async (ids: readonly string[]): Promise<string | null> => {
+    for (const id of ids) if ((await accessNow(id)) === null) return null;
+    return sqlAccessPrint(projectId, ids).catch(() => null);
+  };
   const out: BrowserTurn[] = [];
   for (const { snapshot, ...turn } of turns) {
+    if (turn.sql) {
+      const kept = snapshot && (await sqlAccessNow(turn.sql.datasetIds)) === snapshot.access ? cardOf(snapshot) : null;
+      out.push(kept && snapshot ? { ...turn, card: await sqlDelivered(projectId, kept, turn.sql, keptView(snapshot, snapshot.firstAsked, [])) } : turn);
+      continue;
+    }
     const card = snapshot && turn.answer && (await accessNow(turn.answer.datasetId)) === snapshot.access ? cardOf(snapshot) : null;
     out.push(card && snapshot && turn.answer
       ? { ...turn, card: await delivered(projectId, card, turn.answer, turn, keptView(snapshot, snapshot.firstAsked, snapshot.periods)) }
       : turn);
   }
   return out;
+}
+
+/** Refresh of an SQL answer: its SQL run again through the gate for the caller, kept in place of its snapshot (firstAsked stays). */
+async function refreshSql(projectId: string, threadId: string, turnId: string, turn: copilot.CopilotTurn, sql: SqlTurn): Promise<Record<string, unknown>> {
+  const built = await sqlCardFor(projectId, sql);
+  if (!built.ok) return built; // the gate's sentence; a Live dataset's is typed by the route
+  const access = await sqlAccessPrint(projectId, sql.datasetIds);
+  const firstAsked = turn.snapshot?.firstAsked ?? turn.createdAt;
+  const snap = makeSnapshot(built.card, { asOf: new Date().toISOString(), firstAsked }, access, []);
+  await copilot.setSnapshot(projectId, threadId, turnId, { sql: sql.text }, snap);
+  return sqlDelivered(projectId, built.card, sql, keptView(snap, firstAsked, [], !!turn.snapshot && turn.snapshot.access !== access));
 }
 
 type Compute = (projectId: string, spec: AnswerSpec) => Promise<Built | Failure>;
@@ -128,6 +181,7 @@ export function registerSnapshots(compute: Compute): void {
   ipcMain.handle('answer:refresh', keepReads(async (_e, { projectId, threadId, turnId }: any = {}) => {
     try {
       const turn = typeof threadId === 'string' && typeof turnId === 'string' ? await copilot.findTurn(projectId, threadId, turnId) : null;
+      if (turn?.sql) return await refreshSql(projectId, threadId, turnId, turn, turn.sql);
       if (!turn || !turn.answer) return { ok: false, reason: answerNotThere() };
       const spec = turn.answer;
       const built = await compute(projectId, spec);

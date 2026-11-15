@@ -20,7 +20,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'answer:alsoOn': 'META', // dashboard ids and names the caller may open (a viewer the published copies), found by dataset; no row, no figure
   'answer:card': 'DOOR',
   'answer:explain': 'DOOR',
-  'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced
+  'answer:refresh': 'DOOR', // the caller's own answer turn's spec, through computeCard; its kept card replaced. An SQL answer's turn (src/ipc/answerSql.ts): its SQL through sql:run's gate, where the storage net refuses a restricted caller (NET); test-answerSql
   'answer:rerun': 'DOOR',
   'asset:read': 'META',
   'boundary:get': 'META',
@@ -50,7 +50,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'connections:list': 'REDACT', // a caller who may not see source names gets id, name, connector, status and dataset count only (N2, p2-01)
   'connectors:catalog': 'META',
   'connectors:logos': 'META',
-  'copilot:ask': 'EXPLICIT',
+  'copilot:ask': 'EXPLICIT', // an SQL answer (src/ipc/answerSql.ts) and a verified SQL question's rerun go through sql:run's gate: a restricted caller is refused by the storage net, before any SQL is written (NET); test-answerSql
   'copilot:deleteThread': 'META',
   'copilot:history': 'EXPLICIT', // a kept answer card is sent only while the caller's row lock and hidden columns on its dataset match the ones it was computed under (src/ipc/answerSnapshots.ts); test-answerSnapshots
   'copilot:newThread': 'META',
@@ -200,7 +200,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'tokens:revoke': 'META',
   'topic:get': 'META', // ids and names of a project's datasets, fields, metrics and terms: never a value, the same reply for every caller
   'trash:list': 'META',
-  'verified:list': 'REDACT', // D5: no spec with a value filter on a dataset closed to the caller (ipc/verified rowOf)
+  'verified:list': 'REDACT', // D5: no spec with a value filter on a dataset closed to the caller (ipc/verified rowOf); an SQL question is its words and datasets only, never its SQL (ipc/verifiedSql sqlRow)
   'verified:checkResult': 'REDACT', // reasons can quote a value: none on a dataset closed to the caller (ipc/assistantCheck checkFor)
   'versions:diff': 'EXPLICIT',
   'versions:figures': 'DOOR',

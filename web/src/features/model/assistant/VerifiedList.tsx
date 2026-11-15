@@ -131,7 +131,7 @@ export function VerifiedList({ projectId, canEdit }: { projectId: string; canEdi
           </div>
           <p className={a.sub}>Questions the team checked, with the answer the Assistant gives every time.</p>
         </div>
-        {canEdit && !!list.length && <CheckAssistant projectId={projectId} working={list.filter((r) => r.runs).length} />}
+        {canEdit && !!list.length && <CheckAssistant projectId={projectId} working={list.filter((r) => r.runs && !r.sql).length} />}
       </div>
       {body}
       {open?.spec && <VerifiedDialog projectId={projectId} row={{ ...open, spec: open.spec }} onClose={() => setEditing(null)} />}
