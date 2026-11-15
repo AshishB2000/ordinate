@@ -18,9 +18,10 @@ import type { Cell } from '../../data/transforms';
 import { coerceValue } from '../../data/parse';
 import type { LiveColumn, LiveFilter, LiveRefusal } from './liveSpec';
 import { columnOf, refuse } from './liveSpec';
-import type { SqlDialect } from './dialect';
+import type { CompileDialectId, SqlDialect } from './dialect';
 import { isTextSourceType, likePattern } from './dialect';
 import type { ParamSink } from './sqlParams';
+import { daysFromIso, isoFromDays } from '../../analysis/dateIntel';
 
 /** The source relation's alias. Every column is read qualified by it. */
 export const SRC = 'lv_src';
@@ -31,7 +32,18 @@ export interface Ctx {
   columns: LiveColumn[];
   /** How a column is named, when not `lv_src."<name>"` (a Snowflake semantic view's dimension, part 7 c1). */
   ref?: (col: LiveColumn) => string;
+  /** The source table's sort, cluster or partition key columns (its stored facts, ./liveDateRange): a date range on one may compile raw (`RAW_RANGE_DIALECTS`). */
+  keys?: readonly string[];
 }
+
+/**
+ * The dialects whose date range on a key column compiles as a half-open range on the RAW column
+ * (`col >= start AND col < end + 1 day`) instead of through the cast (`dateOf`), which may stop a
+ * warehouse skipping partitions. EMPTY until the warehouse nightly's numbers (scripts/warehousePruning.ts,
+ * docs/assistant/00-design.md "Live date filters on key columns") say a dialect's cast costs bytes; the
+ * parity suite adds 'duckdb' to prove both forms answer the same.
+ */
+export const RAW_RANGE_DIALECTS = new Set<CompileDialectId>();
 
 const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
 
@@ -145,6 +157,8 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
     case 'range': {
       // dateIntel.periodDay / answers' ISO bounds: inclusive, a cell with no date is out.
       if (col.type !== 'date') return refuse('periodNotDate', col.name);
+      const raw = rawRange(c, col, f);
+      if (raw) return raw;
       const d = dateOf(c, col);
       const parts = [`${d} IS NOT NULL`];
       if (f.from) parts.push(`${d} >= ${c.b.bind('date', f.from)}`);
@@ -168,6 +182,37 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
     default:
       return refuse('badQuery');
   }
+}
+
+/**
+ * How a key column's raw values meet a day boundary exactly as its cast to DATE does, as the type the
+ * bound day is sent as; null when they may not (text, or a type not known to be a date or a time).
+ * A DATE is compared with a DATE. A timestamp of any zone kind is compared with a DATE the engine
+ * promotes to midnight in the session zone, the same zone its cast to DATE reads (UTC on Snowflake,
+ * Postgres and Redshift; Snowflake's TIMESTAMP_TZ casts through UTC in `date`). BigQuery promotes a
+ * DATE to DATETIME but not to TIMESTAMP, so a TIMESTAMP is compared with a TIMESTAMP (UTC midnight).
+ */
+function rawDayType(d: CompileDialectId, sourceType: string): 'date' | 'timestamp' | null {
+  if (sourceType === '' || /^date$/i.test(sourceType)) return 'date';
+  if (/time/i.test(sourceType)) return d === 'bigquery' && /^timestamp$/i.test(sourceType) ? 'timestamp' : 'date';
+  return null;
+}
+
+/** A `range` on a key column as a half-open range on the raw column, or null for the cast form (`RAW_RANGE_DIALECTS`). */
+function rawRange(c: Ctx, col: LiveColumn, f: { from?: string; to?: string }): string | null {
+  if (!RAW_RANGE_DIALECTS.has(c.d.id) || !c.keys?.includes(col.name) || storedAsText(col)) return null;
+  const type = rawDayType(c.d.id, col.sourceType ?? '');
+  const from = f.from === undefined ? undefined : daysFromIso(f.from);
+  const to = f.to === undefined ? undefined : daysFromIso(f.to);
+  // A bound that is not an ISO day keeps the cast form, which binds it as given.
+  if (!type || from === null || to === null) return null;
+  const x = colRef(c, col);
+  // A TIMESTAMP bound is that day's UTC midnight, spelled as every connector's timestamp parameter is (ISO 8601).
+  const day = (n: number): string => (type === 'timestamp' ? `${isoFromDays(n)}T00:00:00.000Z` : isoFromDays(n));
+  const parts = [`${x} IS NOT NULL`];
+  if (from !== undefined) parts.push(`${x} >= ${c.b.bind(type, day(from))}`);
+  if (to !== undefined) parts.push(`${x} < ${c.b.bind(type, day(to + 1))}`);
+  return `(${parts.join(' AND ')})`;
 }
 
 /** Every filter as a predicate, in order, or the first refusal: a statement's WHERE (base filters first). */

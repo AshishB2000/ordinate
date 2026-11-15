@@ -71,6 +71,8 @@ export interface CompileEnv {
   columns: LiveColumn[];
   /** The dataset's base filters (./liveBase), AND-ed into every statement over its rows. */
   base?: LiveFilter[];
+  /** The source table's sort, cluster or partition key columns, from its stored facts (./liveDateRange); see compileFilter `RAW_RANGE_DIALECTS`. */
+  keys?: string[];
 }
 
 /** The category key once its probe has answered: what `compileChart` groups by. */
@@ -164,7 +166,7 @@ function prepare(ir: LiveIR, env: CompileEnv): Prepared | LiveRefusal {
     // THE GATE: a text column is never summed — loud, never a wrong figure.
     if (NUMERIC_AGGS.has(m.aggregation) && columnOf(columns, m.column)!.type !== 'number') return refuse('notNumeric', m.column);
   }
-  const c: Ctx = { d, b: new ParamSink(), columns };
+  const c: Ctx = { d, b: new ParamSink(), columns, ...(env.keys?.length ? { keys: env.keys } : {}) };
   const inner = fromItem(d, env.source);
   // A calc the statement reads: one derived table per calc it needs (./calcLayers), the base filters innermost,
   // before any calc exists. None: today's FROM and WHERE, byte for byte.

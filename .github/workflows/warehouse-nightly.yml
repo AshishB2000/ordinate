@@ -26,6 +26,14 @@ name: Warehouse nightly (Snowflake, BigQuery, ClickHouse, Cube, dbt)
 # the DBT_SL_* secrets; until an account exists it prints that it skipped.
 # Postgres, standing in for Redshift, runs it on every PR (ci.yml's `check`).
 #
+# The `live` job also measures date-filter pruning (scripts/warehousePruning.ts):
+# one date-filtered count in the cast form Live sends today and in the raw-range
+# form, by a BigQuery dry run and a Snowflake EXPLAIN (neither runs the query).
+# The numbers never fail the run; they go to the summary and to the
+# `warehouse-pruning` artifact (docs/assistant/00-design.md, "Live date filters
+# on key columns", says how to read them). BigQuery measures a public table by
+# default; Snowflake only once SNOWFLAKE_PRUNING_TABLE and _COLUMN are set.
+#
 # Not a required check, and nothing else depends on it. Without the secrets (a
 # fork, or before they are added) the script prints that it skipped and the job
 # passes; with only some of one warehouse's secrets it fails, so a half-set
@@ -85,6 +93,22 @@ jobs:
           BIGQUERY_DATASET: ${{ secrets.BIGQUERY_DATASET }}
           BIGQUERY_LOCATION: ${{ secrets.BIGQUERY_LOCATION }}
           BIGQUERY_SCRATCH_DATASET: ${{ secrets.BIGQUERY_SCRATCH_DATASET }}
+          SNOWFLAKE_PRUNING_TABLE: ${{ secrets.SNOWFLAKE_PRUNING_TABLE }}
+          SNOWFLAKE_PRUNING_COLUMN: ${{ secrets.SNOWFLAKE_PRUNING_COLUMN }}
+          SNOWFLAKE_PRUNING_MONTH: ${{ secrets.SNOWFLAKE_PRUNING_MONTH }}
+          BIGQUERY_PRUNING_TABLE: ${{ secrets.BIGQUERY_PRUNING_TABLE }}
+          BIGQUERY_PRUNING_COLUMN: ${{ secrets.BIGQUERY_PRUNING_COLUMN }}
+          BIGQUERY_PRUNING_MONTH: ${{ secrets.BIGQUERY_PRUNING_MONTH }}
+          WAREHOUSE_PRUNING_OUT: warehouse-pruning.json
+      - name: Upload the pruning measurement
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: warehouse-pruning
+          path: warehouse-pruning.json
+          if-no-files-found: ignore
+          retention-days: 90
 
   clickhouse:
     name: Live parity on ClickHouse (container)

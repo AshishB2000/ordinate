@@ -1411,3 +1411,40 @@ Agreement is `Object.is` per row; nothing was loosened. Each disagreement, the e
   (`runBound` is warehouse()'s alone, at its 100,000-row cap), so the copy refuses instead.
 - **A table import the cap cut now says so.** `selectionSql` built a table at the cap itself, so no
   connector's cap + 1 wrapper ever saw the probe row; it is built at cap + 1.
+
+## 2026-11-15 — Date filters on key columns: a required range, and the raw range behind a switch
+
+(docs/assistant/00-design.md, "Live date filters on key columns", and its open question "Date-filter pruning".)
+
+- **A required range is added, not refused.** A Live dataset's source table doc (`src/app/sourceTables.ts`) can
+  say a filter on a date column is required: the stored fact `partition.required` (BigQuery's
+  `require_partition_filter`), or the editor's *Required filters* line naming the column as a word, in any case.
+  `liveTarget` reads the docs per question (`liveDateRange.dateFactsOf`, records only, the same
+  `sourceTablesOf`/`docTablesOf` the Guide uses) and the executor's shared step (`liveQuery` `run`) adds
+  `REQUIRED_RANGE`, the date control's *Last 12 months*, to a question that names the column in no filter, lock or
+  base filter. One place, so answers, charts and tiles agree; the range is in the IR, so in the cache key, and moves
+  at midnight like any period. The figure carries *Last 12 months: this table needs a date range* (the chart's and
+  tile's `notes`, the card's notes). The source doc's rule "a required partition filter never becomes an
+  always-applied filter" holds: nothing is written to the dataset.
+- **The raw range is built and off.** `compileFilter.RAW_RANGE_DIALECTS` (empty) decides per dialect whether a
+  `range` on a partition, sort or cluster key (`CompileEnv.keys`, from the same facts) compiles as
+  `col IS NOT NULL AND col >= start AND col < end + 1 day` on the raw column. The bound's type follows the column:
+  DATE against DATE; a timestamp of any zone kind against a DATE the engine promotes in the session zone, which is
+  the zone its cast to DATE reads (UTC on Snowflake, Postgres and Redshift; Snowflake's TIMESTAMP_TZ casts through
+  UTC already); BigQuery's TIMESTAMP against a TIMESTAMP (BigQuery coerces DATE to DATETIME, never to TIMESTAMP).
+  Text dates, non-key columns and a bound that is not an ISO day keep the cast. With the switch empty every
+  statement is byte-equal to before (`test-livePartitionFilter`, six dialects).
+- **Parity.** `scripts/liveParityRawRange.ts` (in `test-liveParity`) turns DuckDB on: 14 date ranges (the matrix's
+  periods plus a leap day, month and year ends, an end that must not reach the next day, an empty range) on two
+  charts and two KPIs, and answers with data-relative periods, agree with the extract; on TIMESTAMP and TIMESTAMPTZ
+  keys under `America/New_York`, rows a microsecond either side of midnight and both 2024 DST days, 21 figures each
+  are `Object.is` the cast form's. NEGATIVE CONTROL: an inclusive end is caught. ClickHouse's DateTime against a
+  Date32 bound is not verified on its engine; nor are Databricks and Redshift.
+- **The measurement** (`scripts/warehousePruning.ts`, in the warehouse nightly): the same one-month count in both
+  forms, a BigQuery dry run (bytes processed, free) and a Snowflake `SYSTEM$EXPLAIN_PLAN_JSON` (partitions
+  assigned of total, bytes assigned; compile only). EXPLAIN takes no binds, so the measurement's own ISO days are
+  inlined there, each checked; the explained text sits in a `$$` string. A cast form BigQuery refuses for want of
+  partition elimination is recorded as a result. Numbers go to the summary and the `warehouse-pruning` artifact,
+  never to a failure. BigQuery defaults to `bigquery-public-data.wikipedia.pageviews_2024.datehour` (hourly
+  partitions, filter required), June 2024; Snowflake waits for `SNOWFLAKE_PRUNING_TABLE`/`_COLUMN`.
+  **Not measured yet**: no nightly has run this branch.

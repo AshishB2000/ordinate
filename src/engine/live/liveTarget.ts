@@ -37,6 +37,7 @@ import type { DatasetMeta } from '../../data/datasets';
 import type { SemanticSettings } from '../../data/semanticDataset';
 import type { SemanticEnv } from './semantic/semanticQuery';
 import { layerLabel } from './semantic/semanticRefusals';
+import { dateFactsOf } from './liveDateRange';
 
 export interface LiveTarget {
   projectId: string;
@@ -62,6 +63,8 @@ export interface LiveTarget {
    * `source` is inert (`{ kind: 'table', parts: [] }`) and `dialect`/`env` are placeholders nothing compiles.
    */
   semantic?: { backend: SemanticBackendId; model: string; env: SemanticEnv };
+  /** Date columns its source table requires a filter on (./liveDateRange): a question that names none gets one. */
+  requiredDates?: string[];
 }
 
 /** Why there is nothing to ask: no such (Live) dataset, no connection, or a source live cannot name. */
@@ -131,6 +134,8 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
   const source: LiveSource = meta.live.calculated?.length ? { ...found, calcs: meta.live.calculated } : found;
   const columns = typedColumns(meta);
   const env: CompileEnv = { dialect, source, columns };
+  const dates = await dateFactsOf(projectId, origin, conn, columns);
+  if (dates.keys.length) env.keys = dates.keys;
   if (opts.base !== 'skip') {
     // Over the declared columns: a base filter sits innermost, before any calc exists, so one naming a calc refuses.
     const b = baseOfLive(meta.live, declaredColumns({ columns, live: meta.live }));
@@ -154,6 +159,7 @@ export async function liveTarget(projectId: string, datasetId: string, opts: { b
       def,
       values: conn.values,
       secrets: () => (secrets ??= loadSecrets(conn.id, def)),
+      ...(dates.required.length ? { requiredDates: dates.required } : {}),
     },
   };
 }
