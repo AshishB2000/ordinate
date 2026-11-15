@@ -226,7 +226,8 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('copilot: a Live dataset\'s facts are its schema — every column, LIVE, and never a row count', dsFacts.provenance.kind === 'dataset' && /— Live: its rows stay in the warehouse/.test(dsFacts.text)
     && H.fx.COLUMNS.every((c) => dsFacts.text.includes(`- ${c.name} (${c.type})`)) && !/\b0 rows\b|\brows,/.test(dsFacts.text), dsFacts.text);
   const board = await H.as(ORG_A, () => analysis.saveAnalysis(P, {
-    name: 'Live KPIs', sheets: [{ name: 'One', cards: [{ type: 'metric', metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' }, layout: { x: 0, y: 0, w: 3, h: 2 } }] }],
+    // A KPI of the copy too: the facts' defined metrics are those on the datasets its tiles use, the copy's among them.
+    name: 'Live KPIs', sheets: [{ name: 'One', cards: [{ type: 'metric', metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' }, layout: { x: 0, y: 0, w: 3, h: 2 } }, { type: 'metric', metric: { datasetId: X, column: 'amt', aggregation: 'sum', label: 'Copy amt' }, layout: { x: 3, y: 0, w: 3, h: 2 } }] }],
   } as unknown as Parameters<typeof analysis.saveAnalysis>[1]));
   const kpi = (await post('dashboard:metric', { projectId: P, datasetId: L, column: 'qty', aggregation: 'sum' })).value;
   const aFacts = board ? await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: board.id })) : null;
