@@ -571,6 +571,21 @@ export function captureFacts(
   };
 }
 
+/** One dataset's columns as the facts list them; `name` printed as given. Also the linked datasets' (./linkedFacts). */
+export interface FactSchema { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc>; notes?: Record<string, string>; table?: FactTableDoc }
+
+/** `- Orders: region (text; also called area), amount (number)`. */
+export function schemaLine(s: FactSchema): string {
+  const note = (col: string): string => {
+    const d = (s.docs || {})[col];
+    const extra = s.notes && Object.prototype.hasOwnProperty.call(s.notes, col) ? s.notes[col] : '';
+    if (!d) return extra;
+    const bits = [...columnNameBits(d), d.description ? d.description.slice(0, 120) : ''].filter(Boolean);
+    return (bits.length ? '; ' + bits.join('; ') : '') + extra;
+  };
+  return `- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type}${note(c.name)})`).join(', ') || '(no columns)'}`;
+}
+
 // Project fallback when nothing specific is open: names of the project's datasets,
 // visuals, and dashboards (the analysis records; no numbers to compute — pure inventory).
 export function projectFacts(
@@ -584,7 +599,7 @@ export function projectFacts(
   // way the user names it and a described column is picked for what it means.
   // `notes`: a ready line-end per column — a Live dataset's profile and sample
   // values (ai/liveFacts `liveColumnNotes`: bounded, labelled, a withheld column's values left out).
-  schemas: { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc>; notes?: Record<string, string>; table?: FactTableDoc }[] = [],
+  schemas: FactSchema[] = [],
   more: string[] = [], // lines after the columns (Home's metrics and terms)
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
@@ -609,16 +624,7 @@ export function projectFacts(
   if (schemas.length) {
     lines.push('');
     lines.push('Dataset columns (name and type — use these exact names in an answer spec):');
-    schemas.forEach((s) => {
-      const note = (col: string): string => {
-        const d = (s.docs || {})[col];
-        const extra = s.notes && Object.prototype.hasOwnProperty.call(s.notes, col) ? s.notes[col] : '';
-        if (!d) return extra;
-        const bits = [...columnNameBits(d), d.description ? d.description.slice(0, 120) : ''].filter(Boolean);
-        return (bits.length ? '; ' + bits.join('; ') : '') + extra;
-      };
-      lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type}${note(c.name)})`).join(', ') || '(no columns)'}`);
-    });
+    schemas.forEach((s) => lines.push(schemaLine(s)));
     // What each table is, in a clause: the role and the grain. The key and the guide wait for the dataset's own facts.
     const tables = schemas.filter((s) => tableHeadline(s.table));
     if (tables.length) {

@@ -71,6 +71,39 @@ rows a person may not see, and tables their teams weren't given never reach the 
 **Follow the links.** For each dataset found, add the datasets linked to it in Relationships, up to
 two links away, only in the direction that can't repeat rows.
 
+**Built (phase A).** For the datasets an ask's facts hold (the open dataset, a visual's dataset, Home's
+12 step 3 picks, a topic's), the prompt carries a LINKED DATASETS block right after the facts
+(`src/ipc/askLinks.ts`, `src/ai/linkedFacts.ts`): the datasets linked to them, up to two links away, at
+most 6 in all, nearest first, each with its columns as the facts list a dataset's and the links that
+reach it:
+
+```
+- Customers (linked to Orders via Orders.customer_id → Customers.id): id (text), name (text), region_id (text)
+- Regions (linked to Orders via Orders.customer_id → Customers.id, then Customers.region_id → Regions.id): id (text), region (text)
+```
+
+- **The direction rule:** a link is followed only from its many side to its one side, or across a
+  one-to-one, which is the walk the chart planner takes (`joinPlan.reachable`), so no row of the dataset
+  it starts from can repeat. It is never followed one → many, never across a link whose one side was
+  found to repeat (`warning.repeats`), and never through a cardinality this release does not know
+  (Relationships store no many-to-many). `test-askFollowLinks` holds every path equal to the planner's
+  `findPath`.
+- **The chart form reads one dataset** (an answer never joins), and the block says so: a linked
+  dataset can be answered from on its own. An answer that names a linked dataset's column on the
+  dataset it is linked to (bare, or as `Regions.region`) gets no "Did you mean"; it is refused with
+  *"region" is a column of Regions, which Orders is linked to. An answer reads one dataset: ask about
+  Regions on its own, or build the chart in Visuals, which follows the link.* Joins in the form are
+  step 4's outcome B, later.
+- **Access:** a dataset the caller's row access rules restrict (even to some of its rows) is never
+  added, and neither is one where every column is hidden from them. Hidden columns are left out, and a
+  link through a hidden column, or through a dataset that is not added, is not followed. An agent
+  follows no links (it answers from its topic alone); a share path gets none.
+- **Reads:** `relationships.json` (one record), then every dataset within two links, by id in one
+  query; no list (`test-askNoProjectLists`). A linked Live dataset's table facts follow it (below).
+  3,000 characters of linked datasets at most. `test-askBudget`: Home has 3 more queries and 1 more
+  record read (the relationships record, which nothing else on Home reads), and a dataset open has 1
+  more read (a memo hit). Tested in `test-askFollowLinks`.
+
 **Table facts.** For a source table or Live dataset, the facts stored on its source table doc
 (`facts`, `src/app/sourceTables.ts`; shape `TableFacts`, `src/connectors/tableFacts.ts`) go in as a
 few lines: what one row is (key), the main date and whether a date filter is required (partition),
@@ -78,9 +111,9 @@ sort or cluster keys, size, last updated, and the editors' notes. Viewers get th
 the warehouse table's name.
 
 **Built (phase A).** For each Live dataset an ask is about (the open dataset, a visual's dataset,
-Home's 12 step 3 picks, or a topic's first 12: the guidance's datasets), the prompt carries a
-SOURCE TABLE FACTS block after the facts and before the guidance (`src/ipc/askTableFacts.ts`,
-`src/ai/tableFactsBlock.ts`). An editor reads:
+Home's 12 step 3 picks, or a topic's first 12: the guidance's datasets; then the datasets linked to
+them), the prompt carries a SOURCE TABLE FACTS block after the facts and before the guidance
+(`src/ipc/askTableFacts.ts`, `src/ai/tableFactsBlock.ts`). An editor reads:
 
 ```
 - ANALYTICS.SALES (source table of "Sales" · ~48.2M rows · updated 2 h ago)
@@ -566,7 +599,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 |---|---|---|
 | 0 | The Assistant page (#488); #492: one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset; conversations in their own tables, all kept and paged (#493, #495, #498); agents (#496); the verified match inside what is open (#497) and by index (#499) | done |
 | 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
-| A | Word search over the whole Data model; follow links; table facts in the prompt (built: [Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
+| A | Word search over the whole Data model; follow links and table facts in the prompt (built: [Follow the links, Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |

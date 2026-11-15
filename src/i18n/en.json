@@ -52,6 +52,7 @@
   "answerMessages.a_calculation_runs_across_the_category": "A calculation runs \"across\" the category, or \"down\" the split when there is one.",
   "answerMessages.a_moving_window_is_a_whole": "A moving window is a whole number of periods from {min} to {max}.",
   "answerMessages.could_not_save_this_answer_as": "Could not save this answer as a visual.",
+  "answerMessages.is_a_column_of_which_is": "\"{column}\" is a column of {linked}, which {dataset} is linked to. An answer reads one dataset: ask about {linked} on its own, or build the chart in Visuals, which follows the link.",
   "answerMessages.is_not_a_calculation_the_chart": "\"{said}\" is not a calculation the chart form knows. It knows {kinds}.",
   "answerMessages.matched_to_in": "Matched \"{said}\" to {value} in {column}.",
   "answerMessages.no_rows_have_in": "No rows have \"{said}\" in {column}.",
