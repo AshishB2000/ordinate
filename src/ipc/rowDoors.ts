@@ -41,6 +41,8 @@ import { expandTerms } from '../analysis/termExpand';
 import type { TermExpansion } from '../analysis/termExpand';
 import { isTermNotExpandedError, termRefusal } from '../data/termStep';
 import { gateColumns, gateColumnsReply, once } from './columnDoors';
+import { folderGate } from '../server/authz/folderGate';
+import { folderRefusal, isFolderError } from '../server/authz/folders';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -137,6 +139,18 @@ const chartReadsOf = (projectId: string, datasetId: string, encoding: VizEncodin
 
 type Refusal = ReturnType<typeof rowPolicyRefusal>;
 type TermRefusal = ReturnType<typeof termRefusal>;
+type FolderRefusal = ReturnType<typeof folderRefusal>;
+
+/** Shared folders' door check (docs/team-folders D9) as a chart door answers it: the refusal as a reply, or null. */
+export async function folderRefused(projectId: string, datasetId: string, reads?: () => Promise<readonly string[]>): Promise<FolderRefusal | null> {
+  try {
+    await folderGate(projectId, datasetId, reads);
+    return null;
+  } catch (err) {
+    if (isFolderError(err)) return folderRefusal(err.reason);
+    throw err;
+  }
+}
 
 /** The lock, or the refusal as a reply (a chart door answers `{ok:false}`; it never throws a figure's failure). */
 async function lockOrRefusal(projectId: string, datasetId: string): Promise<Lock | null | Refusal> {
@@ -177,14 +191,17 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   asked: FilterStep[],
   opts: O,
   body: (projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: O) => Promise<R>,
-): Promise<R | Refusal | TermRefusal> {
+): Promise<R | Refusal | TermRefusal | FolderRefusal> {
   // A step this pod cannot apply (a glossary term, a newer release's) refuses FIRST: before the lock, which
   // would drop it (withLockSteps), the gates that read the filters, the Live split and the answer cache.
   const expanded = await expandedOrRefusal(projectId, datasetId, asked);
   if (!('steps' in expanded)) return expanded;
   const filters = expanded.steps; // its notes are the caller's: vizDataFor expands first, so none are left here
   const reads = once(chartReadsOf(projectId, datasetId, encoding, filters));
-  // A hidden column FIRST: before the lock, the related gate, the Live split and the answer cache (./columnDoors).
+  // Shared folders FIRST (docs/team-folders D9): the dataset and every one the question reads, before every cache key.
+  const closed = await folderRefused(projectId, datasetId, reads);
+  if (closed) return closed;
+  // A hidden column next: before the lock, the related gate, the Live split and the answer cache (./columnDoors).
   return gateColumnsReply(projectId, datasetId, reads, [encoding, filters], async (hidden) => {
     // Key drivers rank every text column, named or not: refused while any is hidden here (and a fan-out build remembers it).
     if (encoding && encoding.drivers && hidden.size) return refusalInScope('hidden');
@@ -211,10 +228,12 @@ export async function lockedMetric<S extends { column: string } | { metric: stri
   params: P,
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
+  await folderGate(projectId, datasetId); // shared folders first (docs/team-folders D9): a refusal throws
   const expanded = await expandTerms(projectId, datasetId, filters); // a step it cannot apply THROWS (typed 'term'), before the lock
   const steps = expanded.steps;
   const column = 'column' in spec ? spec.column : undefined; // none: a semantic dataset's layer metric (part 7 b2)
   const reads = once(() => metricReads(projectId, datasetId, column ?? '', steps));
+  await folderGate(projectId, datasetId, reads); // and every dataset it reads, before the answer cache
   const snapshot = (spec as { snapshot?: unknown }).snapshot; // its date and entity are read too (part 1 D8, part 5 D11)
   return gateColumns(projectId, datasetId, reads, [column, snapshot, steps], async () => { // a hidden column first (./columnDoors); a refusal throws
     const lock = await rowLockFor(projectId, datasetId);
@@ -234,6 +253,7 @@ export async function lockedMetric<S extends { column: string } | { metric: stri
  * `datasetId` hidden from the caller, which the body must not hand over (a row reader nulls or drops them).
  */
 export async function withLockOf<R>(projectId: string, datasetId: string, body: (lock: Lock | null, hidden: ReadonlySet<string>) => Promise<R>, question: unknown = []): Promise<R> {
+  await folderGate(projectId, datasetId); // shared folders first (docs/team-folders D9); what else it reads meets the storage net
   return gateColumns(projectId, datasetId, async () => [], question, async (hidden) => {
     const lock = await rowLockFor(projectId, datasetId);
     return lock ? withRowLock(datasetId, () => body(lock, hidden)) : body(null, hidden);
@@ -299,12 +319,16 @@ function withoutHiddenValues<T extends VisualLike>(v: T, hidden: ReadonlySet<str
  * stored record (`storedFigureAsk`). Every other caller gets the record unchanged (the same object).
  */
 export async function visualForCaller<T extends VisualLike | null>(projectId: string, v: T): Promise<T> {
-  if (!v || !(await restrictedOn(projectId))) return v;
+  if (!v) return v;
   const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
   const filters = (v as { filters?: unknown }).filters;
+  const reads = once(ds && v.encoding ? chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []) : async () => []);
+  // Shared folders (docs/team-folders): a question reading a dataset in a folder the caller cannot open keeps none of its
+  // labels, for an editor too — they name that dataset's values. Nothing to ask without folders.
+  const foldered = !!ds && !!(await folderRefused(projectId, ds, reads));
+  if (!(await restrictedOn(projectId))) return foldered ? withoutLabels(v) : v;
   if (!ds) return withoutLabels(v);
-  const reads = once(v.encoding ? chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []) : async () => []);
-  const closed = (await closedToCaller(projectId, ds, { rowsOnly: true })) || (!!v.encoding && !!(await relatedClosed(projectId, ds, reads)));
+  const closed = foldered || (await closedToCaller(projectId, ds, { rowsOnly: true })) || (!!v.encoding && !!(await relatedClosed(projectId, ds, reads)));
   const hidden = new Set<string>(); // what is hidden on every table it reads, a related one's included
   for (const id of new Set([ds, ...(await reads())])) for (const c of await hiddenColumnsFor(projectId, id)) hidden.add(c);
   if (closed) return withoutHiddenValues(withoutLabels(v), hidden);
@@ -316,8 +340,10 @@ export async function visualForCaller<T extends VisualLike | null>(projectId: st
  * so it would confirm a guessed label that was not sent; a restricted caller cannot write, so theirs is
  * the tag of what they were sent.
  */
-export async function tagForCaller(projectId: string, kind: SaveKind, sent: unknown, stored: string): Promise<string> {
-  return (await restrictedOn(projectId)) ? contentTag(kind, sent) : stored;
+export async function tagForCaller(projectId: string, kind: SaveKind, sent: unknown, stored: string, original?: unknown): Promise<string> {
+  // `original`: the record before `visualForCaller`. An editor sent it without labels (a folder holds them back) gets
+  // the tag of what was sent too, so a save from that copy refuses (409) instead of writing the labels away.
+  return (await restrictedOn(projectId)) || (original !== undefined && sent !== original) ? contentTag(kind, sent) : stored;
 }
 
 /**
@@ -338,7 +364,7 @@ export async function storedFigureAsk(projectId: string, datasetId: string, draw
 /** `visual:get`'s reply as the caller gets it: `visualForCaller`, and the tag of what was sent. */
 export async function visualReplyForCaller<T extends (VisualLike & { tag: string }) | null>(projectId: string, rec: T): Promise<T> {
   const sent = await visualForCaller(projectId, rec);
-  return sent ? { ...sent, tag: await tagForCaller(projectId, 'visual', sent, sent.tag) } : sent;
+  return sent ? { ...sent, tag: await tagForCaller(projectId, 'visual', sent, sent.tag, rec) } : sent;
 }
 
 /** A dashboard record's inline `card.visual` definitions (vestigial, still stored by `sanitizeCard`) through `visualForCaller`. */

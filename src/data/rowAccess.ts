@@ -146,7 +146,9 @@ export function hiddenAnywhere(projectId: string): Promise<ReadonlySet<string>> 
       // Lazy: the dataset store calls into this module, and the index's describer reads the stores.
       const datasets = require('./datasets') as typeof import('./datasets');
       const search = require('../ipc/assistantSearch') as typeof import('../ipc/assistantSearch');
-      const ids = (await search.hidingModel(projectId)) ?? (await datasets.listDatasets(projectId)).map((d) => d.id);
+      const folders = require('../server/authz/folders') as typeof import('../server/authz/folders');
+      // Every dataset, the folders the caller cannot open included (docs/team-folders D14): a conservative hide, never a leak.
+      const ids = (await search.hidingModel(projectId)) ?? (await folders.wholeProject(() => datasets.listDatasets(projectId))).map((d) => d.id);
       for (const id of ids) for (const c of await hiddenColumnsFor(projectId, id)) out.add(c);
       return out;
     })();
@@ -334,7 +336,9 @@ function projectRulesRecently(projectId: string): Promise<{ rows: boolean; colum
   const key = ctx().org.id + '\u0000' + projectId;
   const hit = anyClosed.get(key);
   if (hit && Date.now() - hit.at < ANY_CLOSED_TTL_MS) return hit.value;
-  const value = (async () => ({ rows: await anyPolicyClosed(projectId), columnsAt: await newestColumnRules(projectId) }))();
+  // Remembered across callers, so it reads every folder (docs/team-folders D14).
+  const { wholeProject } = require('../server/authz/folders') as typeof import('../server/authz/folders');
+  const value = wholeProject(async () => ({ rows: await anyPolicyClosed(projectId), columnsAt: await newestColumnRules(projectId) }));
   anyClosed.set(key, { at: Date.now(), value });
   value.catch(() => anyClosed.delete(key));
   if (anyClosed.size > 1000) anyClosed.delete(anyClosed.keys().next().value as string);

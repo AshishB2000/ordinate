@@ -19,11 +19,16 @@
 // 3. NEGATIVE CONTROL: the same calls as a project EDITOR (not an org admin)
 //    find the canaries — the walk can see them, so their absence above is the
 //    guard, not a blind walk.
+// 4. SHARED FOLDERS (docs/team-folders D8; with DATABASE_URL): D, E and the trashed draft in folder Ops, and
+//    `opsEditorView`, a project EDITOR whose team has Can view on Ops, walks 1 and 2 — exactly the viewer's
+//    findings: no canary, E as its published copy. NEGATIVE CONTROL: `opsLead`, an editor whose team has Can
+//    edit on Ops, finds every canary the editor of 3 finds.
 //
-//   npm run build:ts && node scripts/test-dashboardDraftsViewer.js
+//   npm run build:ts && [DATABASE_URL=…] node scripts/test-dashboardDraftsViewer.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { Client, Pool } from 'pg';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -45,6 +50,51 @@ const CANARY = /canary/i;
 // Channels the sweep leaves out: each needs something no projectId-only call has (a model, a socket), or is the
 // walk's own subject asked by id below.
 const SKIP = new Set(['analysis:open']);
+
+/**
+ * `fn` with a scratch Postgres behind the folder resolver: folder Ops holds `boards`; team Ops (oev) has Can view
+ * on it, team Ops leads (lead) Can edit. A skip line without DATABASE_URL.
+ */
+async function withFolders(P: string, boards: string[], fn: () => Promise<void>): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.log('skip shared folders (4): DATABASE_URL is unset');
+    return;
+  }
+  const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
+  const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
+  const dbName = `ordinate_drafts_folders_${process.pid}_${Date.now()}`;
+  const root = new Client({ connectionString: url });
+  await root.connect();
+  await root.query(`CREATE DATABASE ${dbName}`);
+  const scratch = new URL(url);
+  scratch.pathname = '/' + dbName;
+  const pool = new Pool({ connectionString: scratch.toString(), max: 3 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
+  try {
+    await mig.migrate(pool);
+    const q = (sql: string, args: unknown[]) => pool.query(sql, args);
+    await q('INSERT INTO orgs (id, name) VALUES ($1, $1)', ['acme']);
+    const user = async (email: string) => (await q('INSERT INTO users (org_id, email, role) VALUES ($1, $2, $3) RETURNING id::text', ['acme', email, 'editor'])).rows[0].id as string;
+    const team = async (name: string, member: string) => {
+      const t = (await q('INSERT INTO teams (org_id, name) VALUES ($1, $2) RETURNING id::text', ['acme', name])).rows[0].id as string;
+      await q('INSERT INTO team_members (team_id, user_id) VALUES ($1, $2)', [t, member]);
+      return t;
+    };
+    const [ops, leads] = [await team('Ops', await user('oev@acme.test')), await team('Ops leads', await user('lead@acme.test'))];
+    const F = crypto.randomUUID();
+    await q('INSERT INTO folders (org_id, project_id, id, parent_id, name, created_by) VALUES ($1, $2, $3, NULL, $4, $5)', ['acme', P, F, 'Ops', 'ana@acme.test']);
+    for (const [t, level] of [[ops, 'view'], [leads, 'edit']]) await q('INSERT INTO folder_grants (org_id, project_id, folder_id, team_id, level) VALUES ($1, $2, $3, $4, $5)', ['acme', P, F, t, level]);
+    for (const b of boards) await q('INSERT INTO folder_items (org_id, project_id, kind, item_id, folder_id, moved_by) VALUES ($1, $2, $3, $4, $5, $6)', ['acme', P, 'dashboard', b.toLowerCase(), F, 'ana@acme.test']);
+    inOrg.useOrgDb(pool);
+    await fn();
+  } finally {
+    inOrg.useOrgDb(null);
+    await pool.end();
+    await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    await root.end();
+  }
+}
 
 void (async () => {
   context.enterServerMode(DATA);
@@ -160,6 +210,23 @@ void (async () => {
     const edGallery = JSON.parse(editor.get('analysis:gallery')!) as { id: string; status: string; name: string }[];
     ok('NEGATIVE CONTROL: the editor\'s gallery has the drafts, by their draft names, with their status', edGallery.length === 2 && edGallery.find((x) => x.id === D)?.status === 'draft'
       && edGallery.find((x) => x.id === E)?.name === 'Editcanary board' && edGallery.find((x) => x.id === E)?.status === 'edited');
+
+    // ── 4. Shared folders: an editor with Can view on the dashboards' folder is their viewer (D8) ──
+    await withFolders(P, [D, E, T], async () => {
+      const OEV: Identity = { user: { email: 'oev@acme.test', role: 'editor' }, org: { id: 'acme' } };
+      const LEAD: Identity = { user: { email: 'lead@acme.test', role: 'editor' }, org: { id: 'acme' } };
+      const theirs = await walk(OEV, 2);
+      const spilled = [...theirs].filter(([, reply]) => CANARY.test(reply)).map(([k, reply]) => `${k}: ${reply.slice(0, 160)}`);
+      ok(`opsEditorView (Can view on Ops): no reply of ${theirs.size} calls carries a draft's name, words, history, comment or note`, spilled.length === 0, spilled.join('\n'));
+      const g = JSON.parse(theirs.get('analysis:gallery')!);
+      ok('opsEditorView: the gallery lists the published dashboard only, by its published name, as published', g.length === 1 && g[0].id === E && g[0].name === 'Shown board' && g[0].status === 'published', theirs.get('analysis:gallery'));
+      const oE = JSON.parse(theirs.get('open E')!);
+      ok('opsEditorView: D is refused as a missing id is; E opens as its published copy', theirs.get('open D') === seen.get('open D') && oE.ok && oE.showing === 'published' && oE.analysis.name === 'Shown board', theirs.get('open E')?.slice(0, 200));
+      const lead = await walk(LEAD, 2);
+      // ⌘K aside: with a database it answers from its index, which these file records never fill (E4 holds it per caller).
+      const found = SPARED.filter((k) => k !== 'search:query');
+      ok('NEGATIVE CONTROL: opsLead (Can edit on Ops) finds every canary the editor of 3 finds (⌘K aside)', found.every((k) => CANARY.test(lead.get(k) ?? '')), found.filter((k) => !CANARY.test(lead.get(k) ?? '')).join(', '));
+    });
   } catch (err) {
     ok('suite ran to completion', false, err instanceof Error ? err.stack : String(err));
   } finally {

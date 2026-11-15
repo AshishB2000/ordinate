@@ -21,7 +21,10 @@ export function register(): void {
   // A deleted dashboard is a draft now (nothing publishes it): not a viewer's to see (docs/analysis/00-model.md).
   ipcMain.handle('trash:list', async (_e, { projectId }: any = {}) => {
     const items = await trash.list(String(projectId || ''));
-    return (await readsPublishedOnly(String(projectId || ''))) ? items.filter((e) => e.type !== 'dashboard') : items;
+    const out = [];
+    // Per dashboard: a caller with Can view on its folder is a viewer of it too (docs/team-folders D8).
+    for (const e of items) if (e.type !== 'dashboard' || !(await readsPublishedOnly(String(projectId || ''), String(e.id)))) out.push(e);
+    return out;
   });
 
   // An Assistant agent is a project admin's to create and delete (docs/assistant-agents rule 5), so to bring back too.

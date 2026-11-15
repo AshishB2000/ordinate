@@ -219,6 +219,47 @@ paths that checked Edit first (D18).
   snapshot check (`answerSnapshots`) adds openness to its fingerprint: a kept card on a dataset since
   moved away is recomputed under today's access, which refuses.
 
+### The stores and the doors, as built (E2)
+
+- **One module applies the rule**: `src/server/authz/folderGate.ts` — `levelsOf` (a list's filter, from one
+  `placedIn` query of the project's moved items), `opens` / `levelOfItem` (one item), `openOnly`, `anyClosed`,
+  `folderGate` (the doors) and `gateFolder` (the net). An admin, a `wholeProject` walk, a **published request**
+  (`/p/` and signed embeds run as their link's audience, D17) and a project with no folder besides Everyone get
+  "open" with no placement read, so every reply is today's (the safety net's section 0 proves it, checks on vs off).
+- **Filtered after the read, in the store** (no list reads more than before): `datasets.listDatasets` /
+  `getDatasetMeta` (null), `analysis.listAnalyses` / `getAnalysis` / `opensDashboard` (and `analysis:open`, which
+  reads the tagged record), `visuals`, `metrics`, `terms` (lists, gets and the tagged reads, so a guarded save of a
+  closed record refuses as for a missing one), `verifiedQuestions` (`listTagged`, `getVerified`; `readVerified`
+  stays the write path's "does it exist?"), `alertStore.load` (rules by `createdFrom.analysisId`, else their
+  dataset; events by their rule). Every write reads the stored file (`loadStored`), so a save never drops a closed
+  rule.
+- **D8**: `readsPublishedOnly(projectId, id?)`; the lists, `analysis:open`, "Also on", comments on dashboards,
+  Trash and version history ask it per dashboard.
+- **The doors**: `vizDataFor` (before the term expansion), `lockedViz`, `lockedMetric` and `withLockOf` (so
+  `computeCard`, `pageFor`, `distinctFor`, the profile and the alert metric) call `folderGate` first. What the
+  question reads besides its own dataset (`chartReads`, `metricReads`) is computed **inside `wholeProject`**: a
+  relationship or a related dataset's meta read through the filtered stores would make the gate blind, and the
+  answer cache (keyed by the base dataset and the question) would then hand a closed dataset's labels over. The
+  figure scope (`withFigureScope`) comes with reach, in E5; until then a closed dataset is never reached.
+- **`wholeProject` call sites** (an allowlist in the safety net, section 7): `figureDatasets` / `datasetsOfRoot`,
+  `hiddenAnywhere`, the project-wide rules check remembered across callers, the doors' reads, `syncWatchRules` (a
+  narrowed list would read another folder's watched datasets as gone and drop their rules), the push refresh of
+  dependents, `folder:of`'s existence read, and the name-uniqueness checks of metrics, terms, mirrors and verified
+  questions (the ceiling: a taken name says one exists).
+- **`format:colors:get`** answers `{}` to a caller a folder closes any dataset to, as row rules' REDACT does: which
+  values are whose is unknown.
+- **Catalog parts follow their record**: `catalogIndex.getDoc` answers a blank doc (as for a record with none),
+  `tagIndex` leaves out a closed record's refs and a tag used only there, and a closed dataset's column docs and
+  table doc read as none (`readableColumns`, `readableTableDoc`).
+- **A visual on an open dataset that reads a closed one** (a related dimension's labels) is sent without the labels
+  it stores (`visualForCaller`'s `withoutLabels`), to editors too, with the tag of what was sent: a save from that
+  copy refuses 409 instead of writing the labels away.
+- **`folder:of`** (`src/api/folders.ts`, the first of E7's file) takes `dataset` and `dashboard`; the dataset and
+  dashboard pages ask it when they load nothing (`web/src/features/live/folderClosed.ts`). Stories and reports join
+  when their stores follow their datasets.
+- **The budget**: a restricted viewer's ask runs the resolver once: one transaction, three statements (BEGIN with
+  `set_config`, the tree, COMMIT); `test-askBudget`'s viewer moved 114 → 117 queries, the admin cases not at all.
+
 ### Indexes: inside the query
 
 | Index | Anchor | WHERE for a restricted caller |

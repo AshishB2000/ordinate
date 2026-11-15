@@ -44,6 +44,8 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
 import { callerOn } from '../server/authz/caller';
+import { atLeast } from '../server/authz/folders';
+import { levelOfItem, levelsOf } from '../server/authz/folderGate';
 import { asPublished, audienceCopy, copyOf, sanitizePublished, statusOf, type DashboardStatus, type PublishedCopy } from './publishedCopy';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -189,9 +191,15 @@ function normalize(data: any, projectId: string): Analysis {
 
 const audience = new AsyncLocalStorage<true>();
 
-/** A project viewer (read access only) reads published dashboards only; editors, admins and the system read drafts. */
-export async function readsPublishedOnly(projectId: string): Promise<boolean> {
-  return isValidId(projectId) && (audience.getStore() === true || (await callerOn(projectId)).restricted);
+/**
+ * A project viewer (read access only) reads published dashboards only; editors, admins and the system read drafts.
+ * Per dashboard (`id`, docs/team-folders D8): a caller below Edit on its folder reads the copy, whatever their project
+ * role — an editor with Can view on Finance reads Finance's dashboards as a viewer does. Without folders: as before.
+ */
+export async function readsPublishedOnly(projectId: string, id?: string): Promise<boolean> {
+  if (!isValidId(projectId)) return false;
+  if (audience.getStore() === true || (await callerOn(projectId)).restricted) return true;
+  return id !== undefined && !atLeast(await levelOfItem(projectId, 'dashboard', id), 'edit');
 }
 
 /** Runs `fn` reading dashboards as a viewer would, whoever is asking: what a notice to anyone in the project may name. */
@@ -301,6 +309,7 @@ export function analysisOf(projectId: string, data: any, publishedOnly: boolean)
 export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]> {
   if (!isValidId(projectId)) return [];
   const publishedOnly = await readsPublishedOnly(projectId);
+  const level = await levelsOf(projectId, 'dashboard'); // shared folders (D8, D12): null when nothing restricts the caller
   const dir = analysesDir(projectId);
   let records;
   try {
@@ -313,9 +322,11 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
   for await (const r of records) {
     const id = r.name.slice(0, -'.json'.length);
     if (!isValidId(id)) continue; // skip stray/tmp files
+    const lv = level?.(id);
+    if (lv === 'none') continue; // in a folder the caller cannot open: not listed
     try {
       const raw = r.text();
-      const a = summaryOf(projectId, await migrateReady(projectId, id, JSON.parse(raw)), publishedOnly);
+      const a = summaryOf(projectId, await migrateReady(projectId, id, JSON.parse(raw)), publishedOnly || (lv !== undefined && !atLeast(lv, 'edit')));
       if (a) out.push(a);
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -333,8 +344,14 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
 // missing id — so a reader not written with drafts in mind cannot hand one to
 // them. Null too if either id is invalid, or the file is missing/corrupt.
 export async function getAnalysis(projectId: string, id: string): Promise<Analysis | null> {
+  if (!(await opensDashboard(projectId, id))) return null; // in a folder the caller cannot open: as missing (D12)
   const a = await getStoredAnalysis(projectId, id);
-  return a && (await readsPublishedOnly(projectId)) ? asPublished(a) : a;
+  return a && (await readsPublishedOnly(projectId, id)) ? asPublished(a) : a;
+}
+
+/** Can the caller open this dashboard's folder? (Its draft or copy is then `readsPublishedOnly`'s to pick.) */
+export async function opensDashboard(projectId: string, id: string): Promise<boolean> {
+  return atLeast(await levelOfItem(projectId, 'dashboard', String(id || '')), 'view');
 }
 
 /** The record as stored — the draft, its published copy inside — whoever asks. For writes, and for the sends and

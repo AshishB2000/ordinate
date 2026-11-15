@@ -26,6 +26,7 @@ import { serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import * as config from '../app/config';
 import * as analysis from '../analysis/analysis';
+import { levelsOf } from '../server/authz/folderGate';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
 import * as stories from '../analysis/stories';
@@ -76,7 +77,8 @@ export async function targetNames(projectId: string, list: Comment[]): Promise<R
  * dashboard or card their dashboards — the published copies, which targetNames reads for them — do not have.
  */
 export async function readableComments(projectId: string, list: Comment[]): Promise<Comment[]> {
-  if (!(await analysis.readsPublishedOnly(projectId))) return list;
+  // An editor with Can view on a dashboard's folder reads its published copy too (docs/team-folders D8): the same check.
+  if (!(await analysis.readsPublishedOnly(projectId)) && !(await levelsOf(projectId, 'dashboard'))) return list;
   const shown = await targetNames(projectId, list);
   return list.filter((c) => (c.target.kind !== 'analysis' && c.target.kind !== 'card') || !!shown[`${c.target.kind}:${c.target.id}`]);
 }

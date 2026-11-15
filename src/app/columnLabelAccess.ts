@@ -6,6 +6,7 @@
 
 import { closedToCaller, hiddenColumnsFor } from '../data/rowAccess';
 import type { ColumnDoc } from './catalog';
+import { opens } from '../server/authz/folderGate';
 import { labelColumnGone, labelsTextOnly } from '../analysis/valueLabelMessages';
 
 /** Why a (non-empty) list may not be saved on `column`, or null: the column must be one the dataset has now, declared text. */
@@ -21,6 +22,7 @@ const withoutValues = ({ values: _names, ...doc }: ColumnDoc): ColumnDoc => doc;
  * the key check); and a column hidden from them (part 4, D18) has neither its labels nor its example.
  */
 export async function readableColumns(projectId: string, datasetId: string, docs: Record<string, ColumnDoc>): Promise<Record<string, ColumnDoc>> {
+  if (!(await opens(projectId, 'dataset', datasetId))) return {}; // a dataset in a folder the caller cannot open: none (docs/team-folders)
   const closed = Object.values(docs).some((d) => d.values) && (await closedToCaller(projectId, datasetId));
   const hidden = await hiddenColumnsFor(projectId, datasetId);
   // A plain object either way: a column named `__proto__` stays an own key.

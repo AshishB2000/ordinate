@@ -36,6 +36,7 @@ import * as visuals from '../../analysis/visuals';
 import { isValidId } from '../../app/ids';
 import * as datasets from '../../data/datasets';
 import type { Delivery } from './deliver';
+import { wholeProject } from '../authz/folders';
 const DATASET_KEY = /datasetids?$/i;
 const VISUAL_KEY = /visualids?$/i;
 const MAX_DEPTH = 40;
@@ -65,6 +66,10 @@ export type FigureSource = { kind: 'test' } | Pick<Extract<Delivery, { kind: 'da
 
 export async function figureDatasets(d: FigureSource): Promise<string[]> {
   if (d.kind === 'test') return [];
+  return wholeProject(() => figureDatasetsOf(d)); // a security walk sees every folder, or it fails open (docs/team-folders D14)
+}
+
+async function figureDatasetsOf(d: Exclude<FigureSource, { kind: 'test' }>): Promise<string[]> {
   const root = d.kind === 'dashboard'
     ? await analysis.getAudienceAnalysis(d.projectId, d.analysisId) // what the send renders (run.ts buildMessage)
     : (await alertStore.load(d.projectId)).rules.find((r) => r.id === d.ruleId) ?? null;
@@ -77,7 +82,11 @@ export async function figureDatasets(d: FigureSource): Promise<string[]> {
  * published with (`published`, read before the store): src/publish/hosted.ts backfills an older site's
  * datasets with it (row-policy round 2, #10).
  */
-export async function datasetsOfRoot(pid: string, kind: 'dashboard' | 'alert', rootId: string, root: object, published: Readonly<Record<string, visuals.Visual>> = {}): Promise<string[]> {
+export function datasetsOfRoot(pid: string, kind: 'dashboard' | 'alert', rootId: string, root: object, published: Readonly<Record<string, visuals.Visual>> = {}): Promise<string[]> {
+  return wholeProject(() => walkRoot(pid, kind, rootId, root, published)); // every folder (D14), as figureDatasets
+}
+
+async function walkRoot(pid: string, kind: 'dashboard' | 'alert', rootId: string, root: object, published: Readonly<Record<string, visuals.Visual>>): Promise<string[]> {
   const found: Found = { all: new Set(), datasets: new Set(), visuals: new Set() };
   collectIds(root, found);
   const vis = new Map<string, visuals.Visual>();

@@ -16,6 +16,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
+import { openOnly, opens } from '../server/authz/folderGate'; // shared folders: it follows its dataset (docs/team-folders D3, D12)
 import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import { isDateGrain, sanitizeBins } from './categoryKey';
@@ -554,7 +555,7 @@ export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
     if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
-  return out;
+  return openOnly(projectId, 'dataset', out, (v) => v.datasetId);
 }
 
 // Load a single visual. Returns null if either id is invalid, or the file is
@@ -565,7 +566,8 @@ export async function getVisual(projectId: string, id: string): Promise<Visual |
     const raw = await recordFs.readFile(visualFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidVisual(data)) return null;
-    return normalize(data, projectId);
+    const v = normalize(data, projectId);
+    return (await opens(projectId, 'dataset', v.datasetId)) ? v : null;
   } catch (_) {
     return null;
   }
@@ -574,7 +576,8 @@ export async function getVisual(projectId: string, id: string): Promise<Visual |
 /** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
 export async function readVisual(projectId: string, id: string): Promise<Tagged<Visual> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('visual', visualFilePath(projectId, id), (d) => (isValidVisual(d) ? normalize(d, projectId) : null));
+  const t = await readTagged('visual', visualFilePath(projectId, id), (d) => (isValidVisual(d) ? normalize(d, projectId) : null));
+  return t && (await opens(projectId, 'dataset', t.rec.datasetId)) ? t : null; // closed: as missing, so its guarded save refuses too
 }
 
 // Create a new visual file. Id is generated (never derived from the name).

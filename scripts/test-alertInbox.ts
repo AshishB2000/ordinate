@@ -42,6 +42,8 @@ const alertStore: typeof import('../src/analysis/alertStore') = require('../src/
 const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
 const inbox: typeof import('../src/server/alertInbox') = require('../src/server/alertInbox');
 const orgDb: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
+// What the folder resolver (src/server/authz/folders.ts) reads on every alerts:list: an ordinary role needs them as the app's has them.
+const FOLDER_READS = ['folders', 'folder_grants', 'folder_items', 'project_grants', 'team_members', 'users'];
 
 const ANN: Identity = { user: { email: 'ann@acme.test', role: 'viewer' }, org: { id: ORG } };
 const BEN: Identity = { user: { email: 'ben@acme.test', role: 'viewer' }, org: { id: ORG } };
@@ -150,9 +152,8 @@ async function suite(b: Bench): Promise<void> {
   // ── a database hiccup ────────────────────────────────────────────────
   {
     const appPool = orgDb.orgDb();
-    const { Pool } = require('pg') as typeof import('pg');
-    const dead = new Pool({ connectionString: 'postgres://nobody@127.0.0.1:1/none', connectionTimeoutMillis: 300 });
-    dead.on('error', () => undefined);
+    // The inbox's own tables refuse (no grant on them); the folder resolver's still answer, as one broken table would leave them.
+    const dead = await ordinaryRole(b, [], FOLDER_READS);
     orgDb.useOrgDb(dead);
     try {
       const bell = await b.as('ben').call('alerts:list', { projectId: pid });
@@ -185,7 +186,7 @@ async function suite(b: Bench): Promise<void> {
   await b.pool.query(`INSERT INTO orgs (id, name) VALUES ('globex', 'globex') ON CONFLICT DO NOTHING`);
   await b.pool.query(`INSERT INTO alert_inbox (org_id, user_email, project_id, seen_ids) VALUES ('globex', 'gina@globex.test', $1, '{}')`, [randomUUID()]);
   await b.pool.query(`INSERT INTO alert_posts (org_id, project_id, event_id) VALUES ('globex', $1, $2), ('acme', $1, $3)`, [randomUUID(), randomUUID(), randomUUID()]);
-  const role = await ordinaryRole(b, ['alert_inbox', 'alert_posts']);
+  const role = await ordinaryRole(b, ['alert_inbox', 'alert_posts'], FOLDER_READS);
   try {
     for (const table of ['alert_inbox', 'alert_posts']) {
       const all = (await b.pool.query<{ org_id: string }>(`SELECT org_id FROM ${table}`)).rows;

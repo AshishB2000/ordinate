@@ -99,11 +99,13 @@ export function register(): void {
   // Page by the cards' ids if a project ever holds thousands.
   ipcMain.handle('analysis:open', async (_e, { projectId, id, published }: any = {}) => {
     // The dashboard and its stored tag, from one read: the editor's base (src/app/editConflict.ts).
-    const t = await analysis.readAnalysis(projectId, id);
+    // In a folder the caller cannot open: exactly a missing id (docs/team-folders D12; the page asks folder:of).
+    const t = (await analysis.opensDashboard(projectId, id)) ? await analysis.readAnalysis(projectId, id) : null;
     if (!t) return { ok: false, error: 'That dashboard could not be loaded.' };
-    // The published copy: always for a viewer (a draft never published is not theirs to load), on request for an
-    // editor — who gets the draft when there is no copy yet (the view page shows it as a Preview).
-    const viewer = await analysis.readsPublishedOnly(projectId);
+    // The published copy: always for a viewer (a draft never published is not theirs to load) and for a caller with
+    // Can view on its folder (D8), on request for an editor — who gets the draft when there is no copy yet (the view
+    // page shows it as a Preview).
+    const viewer = await analysis.readsPublishedOnly(projectId, id);
     const copy = viewer || published === true ? asPublished(t.rec) : null;
     if (viewer && !copy) return { ok: false, error: 'That dashboard could not be loaded.' };
     const meta = metaOf(t.rec.published);
@@ -130,7 +132,7 @@ export function register(): void {
       const v = await visuals.readVisual(projectId, s.id);
       if (!v) continue;
       const sent = await visualForCaller(projectId, v.rec);
-      defs.push({ ...visualDef(sent), tag: await tagForCaller(projectId, 'visual', sent, v.tag) });
+      defs.push({ ...visualDef(sent), tag: await tagForCaller(projectId, 'visual', sent, v.tag, v.rec) });
     }
     // A restricted caller's tags are of what they were sent (rowDoors.tagForCaller), the dashboard's too.
     const board = await dashboardForCaller(projectId, draft);

@@ -21,6 +21,7 @@ import { storyRefs } from '../analysis/storyModel';
 import { statusFor, type StatusView } from '../analysis/statusStore';
 import * as catalog from './catalog';
 import type { CatalogKind, CatalogFile, RecordDoc, DocPatch } from './catalog';
+import { levelsOf, opens } from '../server/authz/folderGate';
 
 export interface TagChip { name: string; color: number }
 
@@ -244,13 +245,19 @@ export async function tagIndex(projectId: string): Promise<{ tags: Array<TagChip
   const file = await catalog.load(projectId);
   const count = new Map<string, number>();
   const refs: Record<string, string[]> = {};
+  const behind = new Set<string>(); // tags on a record in a folder the caller cannot open: theirs only if used elsewhere
   for (const ref of Object.keys(file.records)) {
     const tags = file.records[ref].tags;
     if (!tags.length) continue;
+    if (await closedRef(projectId, ref)) {
+      tags.forEach((t) => behind.add(t));
+      continue;
+    }
     refs[ref] = tags;
     tags.forEach((t) => count.set(t, (count.get(t) || 0) + 1));
   }
   const tags = Object.keys(file.tags)
+    .filter((name) => count.has(name) || !behind.has(name))
     .map((name) => ({ name, color: file.tags[name].color, count: count.get(name) || 0 }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   return { tags, refs };
@@ -288,8 +295,23 @@ export async function attachTags<T extends { kind: string; id: string; projectId
 export interface DocView extends Omit<RecordDoc, 'tags'> { tags: TagChip[] }
 
 /** A metric's description is the Metric record's own field — read it there. */
+/**
+ * Is `ref`'s record in a folder the caller cannot open? A doc follows its record (docs/team-folders, "What lives
+ * where"). Asked only when folders restrict the caller, so for everyone else a doc reads exactly as before.
+ */
+export async function closedRef(projectId: string, ref: string): Promise<boolean> {
+  const r = catalog.parseRef(ref);
+  if (!r || !(await levelsOf(projectId, 'dataset'))) return false;
+  if (r.kind === 'dataset') return !(await opens(projectId, 'dataset', r.id));
+  if (r.kind === 'analysis') return !(await analysis.opensDashboard(projectId, r.id));
+  if (r.kind === 'visual') return !(await visuals.getVisual(projectId, r.id));
+  if (r.kind === 'metric') return !(await metrics.getMetric(projectId, r.id));
+  return false;
+}
+
 export async function getDoc(projectId: string, ref: string): Promise<DocView | null> {
   const doc = await catalog.getDoc(projectId, ref);
+  if (doc && (await closedRef(projectId, ref))) return { ...catalog.EMPTY_DOC, tags: [] }; // as for a record with no doc
   const r = catalog.parseRef(ref);
   if (!doc || !r) return null;
   if (r.kind === 'metric') {

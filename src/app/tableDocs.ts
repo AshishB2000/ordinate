@@ -9,6 +9,7 @@ import { getColumns, loadShared, mutateCatalog, osUser } from './catalog';
 import { navHierarchies } from '../analysis/drillLevels';
 import { closedToCaller } from '../data/rowAccess';
 import { getDatasetMeta } from '../data/datasets';
+import { opens } from '../server/authz/folderGate';
 import type { FactTableDoc } from '../ai/columnNotes';
 
 export type TableRole = '' | 'fact' | 'dimension';
@@ -133,6 +134,7 @@ export async function writeKeyCheck(projectId: string, datasetId: string, key: s
 
 /** The doc a caller may read: counts over every row are withheld from a caller row access rules restrict (REDACT, as `quality:list`). */
 export async function readableTableDoc(projectId: string, datasetId: string): Promise<TableDoc> {
+  if (!(await opens(projectId, 'dataset', datasetId))) return blank(); // a closed folder's: as a dataset with no doc (docs/team-folders)
   const doc = await getTableDoc(projectId, datasetId);
   if (!doc.keyCheck || !(await closedToCaller(projectId, datasetId))) return doc;
   const { keyCheck: _withheld, ...open } = doc;

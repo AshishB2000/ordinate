@@ -96,6 +96,7 @@ export const READS: Readonly<Record<string, FolderClass>> = {
   'embed:status': 'PROJECT',
   'events:list': 'PROJECT',
   'explore:suggest': 'OPEN',
+  'folder:of': 'FOLDER', // a bookmark's check: `closed` for an item that exists in a folder the caller cannot open, names nothing
   'format:colors:get': 'PROJECT', // the project's colour map: values any chart dealt, so a closed folder's values are E2's to withhold (as row rules' REDACT)
   'formula:check': 'OPEN',
   'formula:functions': 'PROJECT',

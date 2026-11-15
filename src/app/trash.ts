@@ -34,6 +34,7 @@ import * as recordFs from './recordFs';
 import { listBoth, lockedKeys } from '../analysis/verifiedQuestions';
 import { keyClash } from '../analysis/verifiedRules';
 import { verifiedRestoreTaken } from '../analysis/verifiedMessages';
+import { wholeProject } from '../server/authz/folders';
 
 export const RETENTION_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -178,7 +179,7 @@ async function restoreNow(projectId: string, type: RecordType, id: string): Prom
   const rec = await store.readEntry(projectId, type, id);
   if (!rec) return { ok: false, error: 'That item is no longer in the trash.', restored };
   if (type === 'verified') {
-    const both = await listBoth(projectId); // a chart's question or an SQL one
+    const both = await wholeProject(() => listBoth(projectId)); // a chart's question or an SQL one, in every folder (team-folders)
     const taken = keyClash([...both.spec, ...both.sql].map((t) => t.rec), [rec.question, ...(Array.isArray(rec.phrasings) ? rec.phrasings : [])]);
     if (taken !== null) return { ok: false, error: verifiedRestoreTaken(taken), restored }; // it stays in the Trash
   }

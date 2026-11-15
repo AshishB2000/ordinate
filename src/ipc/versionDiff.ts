@@ -211,7 +211,7 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   // A dataset's versions are its whole table (row-policy D9). A visual's diff never words its overrides' values.
   if (type === 'dataset') await gateRows(projectId, id);
   // A dashboard's history is its draft's: a viewer reads none of it (docs/analysis/00-model.md), as for a missing one.
-  if (type === 'dashboard' && (await analysis.readsPublishedOnly(projectId))) return { ok: false, error: M.versionGone() };
+  if (type === 'dashboard' && (await analysis.readsPublishedOnly(projectId, id))) return { ok: false, error: M.versionGone() }; // per dashboard (team-folders D8)
   // A term's versions hold its filter values: a caller row access rules restrict reads none (semantic D12).
   if (type === 'term' && (await restrictedOn(projectId))) return { ok: false, error: M.versionGone() };
   const keys: [string, string] = [String(input.from || ''), String(input.to || '')];

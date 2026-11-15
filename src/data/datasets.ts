@@ -59,6 +59,7 @@ import { applyLive, isLive, isLiveDatasetError, LiveDatasetError } from './liveD
 import type { DatasetMode, LiveSettings } from './liveDataset';
 import { applyFreshOnAsk, type FreshOnAsk } from './freshOnAskRule';
 import { gateRows } from './rowAccess'; // row access rules: the storage net (docs/row-policy D8)
+import { gateFolder, openOnly, opens } from '../server/authz/folderGate'; // shared folders: the net, lists, reads by id (docs/team-folders D11, D12)
 import { logger } from '../app/logger';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
@@ -411,11 +412,9 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
   }
 
   out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return out;
+  return openOnly(projectId, 'dataset', out, (d) => d.id); // a dataset in a folder the caller cannot open is not listed
 }
 
-// Load a single dataset. Returns null if either id is invalid, or the file is
-// missing/corrupt.
 // ── Phase 2.5: metadata-only load, and the resident-query source ────────────
 //
 // `getDataset` hydrates the whole table into Cell[][]. That is the right shape
@@ -436,7 +435,7 @@ export type DatasetMeta = Omit<Dataset, 'rows' | 'source'> & {
 
 /** `text`: the record's text read already (recordFs.readMany), in place of a readFile: what readFile gives, or what it throws. */
 export async function getDatasetMeta(projectId: string, id: string, strict = false, text?: () => string): Promise<DatasetMeta | null> {
-  if (!isValidId(projectId) || !isValidId(id)) return null;
+  if (!isValidId(projectId) || !isValidId(id) || !(await opens(projectId, 'dataset', id))) return null; // closed: as missing (D12)
   const past = await asOf.metaHook(projectId, id); // inside an as-of read: the snapshot's
   if (past !== undefined) return past;
   try {
@@ -475,6 +474,7 @@ export async function residentSource(
   projectId: string,
   id: string,
 ): Promise<{ parquetPath: string; columns: ParsedColumn[] } | null> {
+  await gateFolder(projectId, id); // shared folders' net first (docs/team-folders D11)
   await gateRows(projectId, id); // before the as-of hook: a restricted viewer reads rows only through a locked door
   const past = await asOf.residentHook(projectId, id); // inside an as-of read: the snapshot's file
   if (past !== undefined) return past;
@@ -486,6 +486,7 @@ export async function residentSource(
 
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  await gateFolder(projectId, id); // shared folders' net first (docs/team-folders D11)
   await gateRows(projectId, id); // before the as-of hook and the publish memo (row-policy D8)
   const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
   if (past !== undefined) return past;

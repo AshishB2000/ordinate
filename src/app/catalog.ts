@@ -340,7 +340,7 @@ export function osUser(): string {
 
 // ── Records ──────────────────────────────────────────────────────────────────
 
-const EMPTY_DOC: RecordDoc = { description: '', tags: [], owner: '', updatedBy: '', updatedAt: '' };
+export const EMPTY_DOC: RecordDoc = { description: '', tags: [], owner: '', updatedBy: '', updatedAt: '' };
 
 export async function getDoc(projectId: string, ref: string): Promise<RecordDoc | null> {
   if (!isValidId(projectId) || !parseRef(ref)) return null;

@@ -23,6 +23,7 @@ import * as trash from '../../../app/trash';
 import { readEntry } from '../../../app/trashStore';
 import * as versions from '../../../app/versions';
 import type { SemanticSettings } from '../../../data/semanticDataset';
+import { wholeProject } from '../../../server/authz/folders';
 
 const definitionOf = (m: SemanticSettings['metrics'][number], layer: string): MetricExternalDefinition =>
   ({ external: m.name, ...(m.additive ? { additive: true as const } : {}), layer });
@@ -40,11 +41,11 @@ async function trashedOn(projectId: string, datasetId: string): Promise<Set<stri
 
 /** Create or update the mirrors of `s.metrics` on `datasetId`. Idempotent: a second run writes nothing. */
 export async function syncMirrors(projectId: string, datasetId: string, s: SemanticSettings, connectionName: string, datasetName: string): Promise<{ created: string[]; updated: string[]; missing: string[]; unmirrored: string[] }> {
-  const all = await metrics.listMetrics(projectId);
+  const all = await wholeProject(() => metrics.listMetrics(projectId)); // every folder's: a mirror's name is unique in the project (team-folders)
   const mine = new Map<string, (typeof all)[number]>(); // layer name → its mirror
   for (const m of all) if (m.datasetId === datasetId && isExternalDefinition(m.definition) && !mine.has(m.definition.external)) mine.set(m.definition.external, m);
   const trashed = await trashedOn(projectId, datasetId);
-  const taken = new Set([...all.map((m) => m.name.toLowerCase()), ...(await listTerms(projectId)).map((t) => t.name.toLowerCase())]);
+  const taken = new Set([...all.map((m) => m.name.toLowerCase()), ...(await wholeProject(() => listTerms(projectId))).map((t) => t.name.toLowerCase())]);
   const created: string[] = [];
   const updated: string[] = [];
   const unmirrored: string[] = [];

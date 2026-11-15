@@ -3,7 +3,7 @@
 //
 // PURE (always): the rule over project roles × the best team grant × nesting (depth 5 resolves, 6 does not,
 // nor a cycle, an orphan or an unknown id) × Everyone and its subfolders × admin; subfolder grants ignored;
-// the reach switch inherited; no folders → today's access at every rank; `wholeProject`; the refusal's
+// the reach switch inherited; no folders → today's access at every rank; `wholeProject` and a published request; the refusal's
 // sentences, its 409 over the real route and the tagging of a caught one.
 // NEGATIVE CONTROLS: an uncapped resolver fails the table; a caught unrelated error is not tagged.
 //
@@ -132,6 +132,10 @@ async function pure(): Promise<void> {
     return { inside: inside.all, after: (await F.folderAccessOn(P)).all, flag: F.inWholeProject() };
   });
   ok('wholeProject: { all: true } inside, across awaits; restricted again after it', walk.inside && !walk.after && !walk.flag, show(walk));
+  // A published page's request (/p/, a signed embed) is its link's audience, chosen at Publish (D17): every folder.
+  const anon: Identity = { user: { email: 'anonymous', role: 'viewer' }, org: { id: 'acme' } };
+  ok('a published request ({ published }) is { all: true }; the same identity in an ordinary request is not',
+    (await context.runAsPublished(anon, 'p', () => F.folderAccessOn(P))).all && !(await run(anon, () => F.folderAccessOn(P))).all);
   let kindThrew = false;
   await run(viewerId, () => F.placementOf(P, 'story' as never, [OPS])).catch(() => (kindThrew = true));
   ok('placementOf refuses a kind that is not placed', kindThrew);

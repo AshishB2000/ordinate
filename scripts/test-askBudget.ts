@@ -101,7 +101,8 @@ const CEILING: Record<string, { queries: number; reads: number }> = {
   home: at(92, 167), // was at(89, 166), at(89, 154), at(345, 7_134) before that
   dataset: at(88, 125), // was at(88, 124), at(88, 123), at(345, 7_121) before that
   agent: at(75, 146), // was at(75, 136), at(339, 7_113) before that
-  viewer: at(117, 7_312), // was at(114, 7_311), at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
+  // Shared folders (docs/team-folders E2): the restricted viewer's folder access, one transaction (BEGIN, the tree, COMMIT).
+  viewer: at(120, 7_312), // was at(117, 7_312), at(114, 7_311), at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
   dashboard: at(112, 183), // was at(354, 7_112)
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
@@ -121,7 +122,8 @@ const CEILING_ON: Record<string, { queries: number; reads: number }> = {
   // CI (password Postgres + MinIO, STORAGE_URL s3://) counts ~15 more statements here than a run on DATA_DIR: 149 on #521,
   // 152 once #523's links added their 3; 134 locally. `shortcut:` raised to CI's count; the histogram printed when a
   // case is into its 10% says which statements those are — lower this once they are found.
-  viewer: at(139, 7_350), // off: 117 / 7,312; was at(135, 7_350)
+  // Shared folders (E2): +3 for the restricted viewer, its folder access in one transaction (BEGIN, the tree, COMMIT), as off.
+  viewer: at(142, 7_350), // off: 120 / 7,312; was at(139, 7_350), at(135, 7_350)
   dashboard: at(119, 182), // off: 112 / 183
 };
 

@@ -33,6 +33,7 @@ import { osUser } from '../app/catalog';
 import * as trash from '../app/trash';
 import type { VerifiedInput } from '../api/verified';
 import { checkFor, startCheck } from './assistantCheck';
+import { wholeProject } from '../server/authz/folders';
 
 type Input = z.infer<typeof VerifiedInput>;
 type Field = 'question' | 'phrasings' | 'spec';
@@ -114,7 +115,7 @@ export async function saveVerifiedQuestion(projectId: string, input: SpecInput, 
   if (!q) return { ok: false, error: msg.verifiedGone() };
   // The key check and the write under one lock (the draw stays outside it): two saves of one question cannot both pass.
   return lockedKeys(projectId, async (): Promise<Saved> => {
-    const both = await listBoth(projectId); // an SQL question's words are taken too
+    const both = await wholeProject(() => listBoth(projectId)); // an SQL question's words are taken too, in every folder (team-folders)
     const taken = keyClash([...both.spec, ...both.sql].map((t) => t.rec), [q.question, ...q.phrasings], at?.id);
     if (taken !== null) return { ok: false, error: msg.verifiedTaken(taken), field: taken === q.question ? 'question' : 'phrasings' };
     const saved = await writeVerified(projectId, q, at?.base);
