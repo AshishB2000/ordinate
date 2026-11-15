@@ -14,8 +14,10 @@
 //   meaning with fingerprints (PR 7c), the K items nearest the question's are a second list (`nearItems`), merged with
 //           the first K by words by rank (../ai/rankFusion), then the rest by words (`withMeaning`). An item's
 //           fingerprint is made from `itemText`.
+//   spelling a name said is compared with the names by pg_trgm's similarity (./trigram, `speltItems`): "Did you mean".
 
 import { fuse } from '../ai/rankFusion';
+import { MIN_SIMILARITY, similarityOf, trigrams } from './trigram';
 
 export const MODEL_KINDS = ['dataset', 'metric', 'term', 'column', 'table'] as const;
 export type ModelKind = (typeof MODEL_KINDS)[number];
@@ -221,6 +223,50 @@ export function keyedItems(parts: readonly Part[], kind: KeyedKind, keys: readon
 export function newestItems(parts: readonly Part[], kind: KeyedKind, limit: number, retired = false): KeyedItem[] {
   const gone = retired ? new Set<string>() : new Set(parts.filter((p) => p.retired).map((p) => p.item));
   return bases(parts, kind).filter((p) => !gone.has(p.item)).sort((a, b) => byCode(b.updated, a.updated) || byItemKey(a, b)).slice(0, limit).map(keyed);
+}
+
+// ── Spelling (phase C) ──────────────────────────────────────────────────────
+
+/** An item whose name is spelled near a said one, and how near: pg_trgm's similarity, at least MIN_SIMILARITY. */
+export interface SpeltHit { kind: ModelKind; id: string; datasetId?: string; connId?: string; name: string; similarity: number }
+/** A base part, as the spelling query reads it. */
+export type NameRow = Pick<Part, 'item' | 'kind' | 'id' | 'datasetId' | 'connId' | 'name'>;
+
+/** The base parts the caller may find under `o` (kind, dataset, audience), of no item a part retires: what spelling searches. */
+export function findableBases(parts: readonly Part[], o: RankOptions): Part[] {
+  const may = allowed(o);
+  const gone = new Set(parts.filter((p) => p.retired).map((p) => p.item));
+  return parts.filter((p) => p.base && may(p) && !gone.has(p.item));
+}
+
+/**
+ * THE REFERENCE of the spelling query (../server/assistantSearchIndex speltPage): each item of `rows` with a name at
+ * least MIN_SIMILARITY near `said`, at its best similarity, named by the least kind, id, dataset, connection and name of
+ * those rows; by similarity, then name, then key, `limit` of them.
+ */
+export function speltItems(rows: readonly NameRow[], said: string, limit: number): SpeltHit[] {
+  const to = trigrams(said);
+  const by = new Map<string, { rows: NameRow[]; s: number }>();
+  for (const r of rows) {
+    const s = similarityOf(trigrams(r.name), to);
+    if (s < MIN_SIMILARITY) continue;
+    const at = by.get(r.item);
+    if (!at) by.set(r.item, { rows: [r], s });
+    else {
+      at.rows.push(r);
+      at.s = Math.max(at.s, s);
+    }
+  }
+  const out = [...by].map(([item, { rows: rs, s }]) => {
+    const dataset = rs.flatMap((r) => (r.datasetId === null ? [] : [r.datasetId]));
+    const conn = rs.flatMap((r) => (r.connId === null ? [] : [r.connId]));
+    const hit: SpeltHit = {
+      kind: least(rs.map((r) => r.kind)) as ModelKind, id: least(rs.map((r) => r.id)), ...(dataset.length ? { datasetId: least(dataset) } : {}),
+      ...(conn.length ? { connId: least(conn) } : {}), name: least(rs.map((r) => r.name)), similarity: s,
+    };
+    return { hit, item };
+  });
+  return out.sort((a, b) => b.hit.similarity - a.hit.similarity || byCode(a.hit.name, b.hit.name) || byCode(a.item, b.item)).slice(0, limit).map((x) => x.hit);
 }
 
 /** The words list's first MEANING_K and the meaning list, merged by rank (../ai/rankFusion, k = 60): the head of a ranking with meaning. */

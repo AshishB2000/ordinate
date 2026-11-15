@@ -13,6 +13,7 @@
 
 import { sanitizeAliases, squash } from '../app/columnNames';
 import { withinOne } from '../analysis/valueMatch';
+import { MIN_SIMILARITY, similarityOf, trigrams } from '../app/trigram';
 import { readMeasure, sanitizeStoredSpec, validateAnswerSpec } from './answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric, SpecMiss } from './answerSpec';
 import type { SpecTerm } from './termFacts';
@@ -93,14 +94,20 @@ function substitute(raw: Record<string, unknown>, miss: SpecMiss, put: string): 
   return { ...raw, filters };
 }
 
+/** Nearness from here up is the same letters, one name holding the other, or a shared word: these keep priority over spelling. */
+const WORDS = 2;
+const byCode = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * Up to three things a refused spec may have meant, nearest first.
  *
- * Ranked by how near the name is — containment and shared words (the names
- * people taught count), then one edit — then by type fit, ties in the
- * dataset's column order. Nothing near → nothing offered, and the reply reads
- * exactly as it did. `rawSpec` is what was validated: for a follow-up, the
- * MERGED spec (./answerRefine), so an option keeps the filters it carried.
+ * Exact letters, containment and shared words first (the names people taught
+ * count), by how near, then by type fit, ties in the dataset's column order.
+ * Then SPELLING: one edit apart, or a name whose trigram similarity to the one
+ * said is at least pg_trgm's MIN_SIMILARITY (../app/trigram), by similarity,
+ * then nearness, then type fit, then name. Nothing near → nothing offered, and
+ * the reply reads exactly as it did. `rawSpec` is what was validated: for a
+ * follow-up, the MERGED spec (./answerRefine), so an option keeps the filters it carried.
  */
 export function suggestFixes(
   rawSpec: unknown,
@@ -111,10 +118,13 @@ export function suggestFixes(
 ): AnswerChip[] {
   if (!rawSpec || typeof rawSpec !== 'object' || Array.isArray(rawSpec)) return [];
   const raw = rawSpec as Record<string, unknown>;
+  const said = squash(miss.said).length >= MIN_NAME ? trigrams(miss.said) : null; // a shorter name is near too much to say
   const ranked = candidates(miss, datasets)
-    .map((c) => ({ c, near: Math.max(...c.names.map((n) => nearness(miss.said, n))) }))
-    .filter((x) => x.near > 0)
-    .sort((a, b) => b.near - a.near || b.c.fit - a.c.fit); // stable: ties stay in column order
+    .map((c) => ({ c, near: Math.max(...c.names.map((n) => nearness(miss.said, n))), sim: said ? Math.max(...c.names.map((n) => similarityOf(trigrams(n), said))) : 0 }))
+    .filter((x) => x.near > 0 || x.sim >= MIN_SIMILARITY)
+    .sort((a, b) => Number(b.near >= WORDS) - Number(a.near >= WORDS) || (a.near >= WORDS
+      ? b.near - a.near || b.c.fit - a.c.fit // stable: ties stay in column order
+      : b.sim - a.sim || b.near - a.near || b.c.fit - a.c.fit || byCode(a.c.names[0], b.c.names[0])));
   const out: AnswerChip[] = [];
   for (const { c } of ranked) {
     if (out.length >= MAX_OPTIONS) break;

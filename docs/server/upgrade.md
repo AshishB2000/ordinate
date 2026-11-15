@@ -790,6 +790,20 @@ until it has, items are found by their words.
 **Rolling back.** The older release ignores the columns and the table. The trigger stays and marks an index stale
 when the older release saves one of those records, so upgrading again rebuilds it once and misses nothing.
 
+## pg_trgm, for "Did you mean" by spelling (`0031_name_trigrams`)
+
+When a model's answer names a dataset that does not exist, the Assistant offers the datasets spelled near it
+("Ordrs" → Orders), by trigram similarity. The migration adds one function, `ordinate_ensure_name_trigrams()`, creates
+the `pg_trgm` extension where Postgres offers it and Ordinate's role may (it ships with Postgres and is trusted since
+PG 13, so a role that owns its database may create it), and then one GIN index on `assistant_search`. Where either is
+missing it logs a notice and goes on, and the app ranks the names itself with the same answers. It reads no record.
+
+**Created later**, as an admin role: `CREATE EXTENSION pg_trgm;`, then `SELECT ordinate_ensure_name_trigrams();` for
+the index. Nothing needs a restart. A database whose `LC_CTYPE` is `C` splits accented names unlike the app; Ordinate
+notices at first use (one warning in the log) and ranks them itself.
+
+**Rolling back.** The older release ignores the function, the extension and the index.
+
 ## Compose
 
 From a checkout:
