@@ -74,17 +74,43 @@ two links away, only in the direction that can't repeat rows.
 **Table facts.** For a source table or Live dataset, the facts stored on its source table doc
 (`facts`, `src/app/sourceTables.ts`; shape `TableFacts`, `src/connectors/tableFacts.ts`) go in as a
 few lines: what one row is (key), the main date and whether a date filter is required (partition),
-sort or cluster keys, size, last updated, and the editors' notes. None of this reaches the AI today.
-Viewers get the facts but never the warehouse table's name. Today the facts are read only when an
-editor clicks Read on a table (`sourceTable:read` → `src/connectors/tableFactsRun.ts`); phase A
-also refreshes them on the connection's scheduled job, so they are current without a click.
+sort or cluster keys, size, last updated, and the editors' notes. Viewers get the facts but never
+the warehouse table's name.
+
+**Built (phase A).** For each Live dataset an ask is about (the open dataset, a visual's dataset,
+Home's 12 step 3 picks, or a topic's first 12: the guidance's datasets), the prompt carries a
+SOURCE TABLE FACTS block after the facts and before the guidance (`src/ipc/askTableFacts.ts`,
+`src/ai/tableFactsBlock.ts`). An editor reads:
 
 ```
-- ANALYTICS.SALES (source table · ~48M rows · updated 2 h ago)
-    one row = one order (key: order_id)
-    partitioned by order_date (a date filter is required)
+- ANALYTICS.SALES (source table of "Sales" · ~48.2M rows · updated 2 h ago)
+    one row per order_id (the table's key)
+    partitioned by order_date (a filter on it is required)
+    clustered by region
+    required filters (editor): "order_date within the last two years"
     editor note: "Use order_date, not ship_date, for sales figures"
 ```
+
+A viewer reads `- "Sales", its source table (~48.2M rows · updated 2 h ago)` and the structured
+lines (key, partition, cluster, sort), but no editor-written text at all: a note can name the table
+loosely (a bare name, a schema, a host), so a false hide beats a leak. Who sees names is
+`seesSourceNames` (p2-01).
+Hidden columns are left out of every list and note (a key or partition missing one goes whole), and a
+caller row access rules restrict gets no size. The size and age are formatted by the server from the
+stored facts and sealed into the ledger. Caps: 12 docs read per ask (the connections' indexes in one
+read, then the docs by id in one read, no list), 6 lines a table, 300 characters a note, 3,000
+characters of tables. `test-askBudget`: 12 more record reads on Home and 10 for an agent, all memo
+hits, no query. A doc with no facts, a dataset that is not Live, or a report's narrative (its words
+leave the app) adds nothing.
+
+**Refreshed without a click.** There is no schedule per connection: the scheduled job that reads a
+connection's catalog is a Live dataset's daily schema sync, so the facts ride it, on the same visit
+to the warehouse (`src/ipc/sourceFactsRefresh.ts`). After a scheduled sync lands, its documented
+source tables whose facts are 12 hours old or were never read are read again, stalest first, at
+most 4 per sync, through the click's own door (`readFacts` → `src/connectors/tableFactsRun.ts`: the
+SSRF guard, timeouts, redaction) and its 60-an-hour count per connection. A failed read keeps the
+stored facts and never fails the sync; a sync on demand reads none. Extracts' tables are still read
+only on a click. Tested in `test-tableFactsPrompt` (and `test-askNoProjectLists`).
 
 ### Step 4: outcomes
 
@@ -514,7 +540,7 @@ now computes a formula metric in the dataset and dashboard cases: zero lists.
 |---|---|---|
 | 0 | The Assistant page (#488); #492: one AI call per answer, "last quarter" from the calendar as dashboards do, every dashboard date preset; conversations in their own tables, all kept and paged (#493, #495, #498); agents (#496); the verified match inside what is open (#497) and by index (#499) | done |
 | 0+ | [Scale rules](#scale-rules): no whole-project list on the ask path, and answers that keep their figures | the PR chain below |
-| A | Word search over the whole Data model; follow links; table facts in the prompt; `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
+| A | Word search over the whole Data model; follow links; table facts in the prompt (built: [Table facts](#step-3-what-is-searched)); `calc` in the chart form (built); Live date filters on sort and partition keys (measured first); Home sees metrics and terms; one-query loading | nothing new |
 | B | SQL for questions the form can't express, on copied datasets: second AI call, Not checked, editor verifies | the Query tab's gate |
 | C | Meaning search (fingerprints), spelling mistakes, the "Matched Maria's…" line | pgvector and a fingerprint model; otherwise stays on A |
 | D | Editors answer straight from source tables with no dataset (Assistant and Explore); keeping makes the dataset; approve a missing link | nothing new |

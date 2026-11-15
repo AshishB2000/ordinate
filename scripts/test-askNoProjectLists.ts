@@ -7,7 +7,8 @@
 //
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line (no database: the lists ARE
 // the reference path, by design):
-//   1. ZERO whole-project lists for one ask: from Home, with a dataset open, on a dashboard, through an agent with a
+//   1. ZERO whole-project lists for one ask: from Home, with a dataset open, with a Live dataset open whose source table has
+//      facts (their block is in the prompt, from Home too: src/ipc/askTableFacts.ts), on a dashboard, through an agent with a
 //      topic (an answer inside it; the model saying it is outside; an answer on a dataset outside it), a model answer
 //      with a typo ("Did you mean"), a follow-up that refines the previous answer, and a restricted viewer from Home with
 //      a column hidden from them (Orders' cost: their checks read the few datasets that may hide one, and only the metrics
@@ -52,12 +53,16 @@ const msg: typeof import('../src/ai/agentMessages') = require('../src/ai/agentMe
 const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
 const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
 const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
+const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
+const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
+const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
+const sourceDocs: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
 
 type Role = import('../src/server/context').Identity['user']['role'];
 let req = 0;
 const as = <T>(role: Role, fn: () => Promise<T>): Promise<T> => context.runInContext({ user: { email: `${role}@acme.test`, role }, org: { id: 'acme' } }, `n${++req}`, fn);
 
-interface World { P: string; orders: string; returns: string; agent: string; board: string }
+interface World { P: string; orders: string; returns: string; agent: string; board: string; live: string }
 
 async function world(): Promise<World> {
   return as('admin', async () => {
@@ -92,7 +97,14 @@ async function world(): Promise<World> {
       return true;
     });
     if (!ruled) throw new Error('fixture: column rule');
-    return { P, orders, returns, agent: agent.id, board: board.id };
+    // A Live dataset whose source table has a doc with facts: the prompt's table facts, read by id (no list of docs or connections).
+    fakeMod.registerLiveFake();
+    const conn = (await connections.saveConnection(P, { name: 'Warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} }))!;
+    const live = (await liveRecord.saveLiveRecord(P, { name: 'Sales live', columns: [txt('region'), num('amount')], origin: { kind: 'connection', connId: conn.id, table: 'sales_live' } }))!.id;
+    const doc = await sourceDocs.createSourceDoc(P, conn.id, 'sales_live', { guide: 'Use amount for revenue' });
+    if (!doc.ok) throw new Error('fixture: source doc');
+    await sourceDocs.updateSourceDoc(P, conn.id, doc.docId, (d) => ({ ...d, facts: { columns: [], partition: { columns: ['region'], required: true }, rowEstimate: 5000, readAt: new Date().toISOString(), readBy: 'admin@acme.test' } }));
+    return { P, orders, returns, agent: agent.id, board: board.id, live };
   });
 }
 
@@ -157,10 +169,12 @@ async function dbLeg(): Promise<void> {
   };
   ok('fixture: an ask from Home answers with the chart, from the model', !!(await started()));
 
-  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role; formula?: true };
+  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role; formula?: true; prompted?: string };
   const shared = /Order share\b[^\n]*\b5\b/; // its figure in the facts: Revenue (15) / 3
+  const FACTS_LINE = '- sales_live (source table of "Sales live" · ~5.0K rows)';
   const cases: Case[] = [
     { name: 'home', reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: {}, question: Q }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    { name: 'Live dataset open, with table facts', reply: { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }, ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.live }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset', prompted: FACTS_LINE },
     { name: 'dataset open', formula: true, reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'dashboard', formula: true, reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: { kind: 'analysis', id: w.board }, question: Q }), right: (r) => r.provenance?.kind === 'analysis' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'agent, inside', reply: answer(onOrders), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: Q }), right: (r) => r.agent?.id === w.agent && r.turns.at(-1)?.answer?.datasetId === w.orders },
@@ -183,6 +197,7 @@ async function dbLeg(): Promise<void> {
     ok(`${c.name}: the ask answers as it should`, r.out.ok === true && c.right(r.out), JSON.stringify(r.out).slice(0, 400));
     ok(`${c.name}: no whole-project list (${r.calls.length})`, r.calls.length === 0, r.calls.join(', '));
     if (c.formula) ok(`${c.name}: …and the formula metric was computed: Order share's figure is in the facts`, shared.test(facts), facts.split('\n').filter((l) => l.includes('Order share')).join(' | ') || facts.slice(0, 300));
+    if (c.prompted) ok(`${c.name}: the Live dataset's table facts are in the prompt`, facts.includes(c.prompted), facts.slice(facts.indexOf('SOURCE TABLE'), facts.indexOf('SOURCE TABLE') + 300));
   }
   assistantSearch._setIndexed(false);
   try {
