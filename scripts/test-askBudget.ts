@@ -64,13 +64,14 @@ const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 }
 // read is a call into recordFs, one the memo answers included; a query is what reached Postgres. Before PR 2, (a) was
 // 129,540 queries and 43,188 reads, (c) about 300,000 and 100,000; after PR 2, about 27,000 queries each. Later PRs
 // lower them: PR 4 an open dataset and dashboard, PR 6 the step 3 index. PR 5 checks a verified question against only
-// what its chart names; with the memo off, (a) no longer builds the whole vocabulary twice, so the control is (c).
+// what its chart names, its records in one readMany (measured with it); with the memo off, (a) no longer builds the
+// whole vocabulary twice, so the control is (c).
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
-  home: at(330, 7_111),
-  dataset: at(336, 7_095),
-  agent: at(333, 7_090),
-  viewer: at(330, 14_112),
+  home: at(330, 7_131),
+  dataset: at(339, 7_115),
+  agent: at(333, 7_110),
+  viewer: at(330, 14_132),
 };
 
 interface World { P: string; orders: string; agent: string }

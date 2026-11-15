@@ -16,9 +16,9 @@ import type { SpecDataset, SpecMetric } from '../ai/answerSpec';
 import type { SpecTerm } from '../ai/termFacts';
 import type { TermSummary } from '../analysis/terms';
 
-/** The datasets `ids` (a missing one left out), for the caller: a hidden column is no word of theirs. ONE catalog read. */
-export async function specDatasetsOf(projectId: string, ids: readonly string[]): Promise<SpecDataset[]> {
-  const metas = await Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id)));
+/** The datasets `ids` (a missing one left out), for the caller: a hidden column is no word of theirs. ONE catalog read. `textOf`: each record's text, read already. */
+export async function specDatasetsOf(projectId: string, ids: readonly string[], textOf?: (id: string) => () => string): Promise<SpecDataset[]> {
+  const metas = await Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id, false, textOf?.(id))));
   const docs = (await loadCatalog(projectId)).columns;
   const out: SpecDataset[] = [];
   for (const m of metas) {

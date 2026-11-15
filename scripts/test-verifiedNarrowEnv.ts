@@ -17,6 +17,8 @@
 //      (every record checked) for an id, a question, a phrasing, a hidden one, a broken one, one left out, a wording
 //      two share, and misses. With a database it takes the index: an id reads one record and lists none. NEGATIVE
 //      CONTROL: the reference lists them all.
+//   5. With a database, inside a read memo, readMany and readFile share what they read. NEGATIVE CONTROL: outside one
+//      each reads again.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-verifiedNarrowEnv.js
 
@@ -189,19 +191,23 @@ async function fixtureLeg(w: World, mode: string): Promise<void> {
     JSON.stringify([...viewer.states].map(([q, s]) => [q, s.problem, s.hidden])));
 }
 
-/** Record reads (readFile calls, readMany paths, readdir calls) while `fn` runs. */
+/** Record reads (readFile calls, readMany paths, readdir calls, records a store's list read) while `fn` runs. */
 async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; reads: number; lists: number }> {
-  const [readFile, readMany, readdir, listTagged] = [recordFs.readFile, recordFs.readMany, recordFs.readdir, store.listTagged];
+  const [readFile, readMany, readdir, listRecords, listTagged] = [recordFs.readFile, recordFs.readMany, recordFs.readdir, recordFs.listRecords, store.listTagged];
   let n = 0, lists = 0;
-  const spy = recordFs as unknown as Record<'readFile' | 'readMany' | 'readdir', unknown>;
+  const spy = recordFs as unknown as Record<'readFile' | 'readMany' | 'readdir' | 'listRecords', unknown>;
   spy.readFile = (...a: unknown[]) => { n++; return (readFile as (...x: unknown[]) => unknown)(...a); };
   spy.readMany = (ps: readonly string[]) => { n += ps.length; return readMany(ps); };
   spy.readdir = (...a: unknown[]) => { n++; return (readdir as (...x: unknown[]) => unknown)(...a); };
+  spy.listRecords = async (dir: string) => {
+    const listed = await listRecords(dir);
+    return (async function* () { for await (const r of listed) { n++; yield r; } })();
+  };
   (store as { listTagged: unknown }).listTagged = (p: string) => { lists++; return listTagged(p); };
   try {
     return { out: await fn(), reads: n, lists };
   } finally {
-    Object.assign(spy, { readFile, readMany, readdir });
+    Object.assign(spy, { readFile, readMany, readdir, listRecords });
     (store as { listTagged: unknown }).listTagged = listTagged;
   }
 }
@@ -298,6 +304,34 @@ async function mcpLeg(w: World, mode: string, db: boolean): Promise<void> {
   ok(`${mode}: NEGATIVE CONTROL: the reference lists every question`, ref.lists === 1);
 }
 
+/** Postgres statements while `fn` runs. */
+async function statements<T>(fn: () => Promise<T>): Promise<number> {
+  const proto = Client.prototype as unknown as { query: (...a: unknown[]) => unknown };
+  const query = proto.query;
+  let n = 0;
+  proto.query = function (this: unknown, ...a: unknown[]) { n++; return query.apply(this, a); };
+  try { await fn(); } finally { proto.query = query; }
+  return n;
+}
+
+/** The narrow env's one readMany shares the question's read memo: what it read, readFile reads from there, and back. */
+async function memoLeg(w: World): Promise<void> {
+  const [a, b] = [rec.datasetFilePath, (id: string) => path.join(appPaths.userData(), 'projects', w.P, 'metrics', id + '.json')];
+  await as(ADMIN, async () => {
+    const after = await recordFs.withReadMemo(async () => {
+      await recordFs.readMany([a(w.P, w.orders)]);
+      return statements(() => recordFs.readFile(a(w.P, w.orders), 'utf8'));
+    });
+    const before = await recordFs.withReadMemo(async () => {
+      await recordFs.readFile(b(w.rev), 'utf8');
+      return statements(() => recordFs.readMany([b(w.rev)]));
+    });
+    const outside = await statements(async () => { await recordFs.readMany([a(w.P, w.orders)]); await recordFs.readFile(a(w.P, w.orders), 'utf8'); });
+    ok('postgres: inside a read memo, a record readMany read is readFile\'s with no query, and one readFile read is readMany\'s', after === 0 && before === 0, JSON.stringify({ after, before }));
+    ok('postgres: NEGATIVE CONTROL: outside a memo, each reads it again', outside > 0);
+  });
+}
+
 async function legs(mode: string, db: boolean): Promise<void> {
   const w = await world();
   await fixtureLeg(w, mode);
@@ -308,6 +342,7 @@ async function legs(mode: string, db: boolean): Promise<void> {
   ok(`${mode}: NEGATIVE CONTROL: a narrow env without a named metric FAILS the differential`, !(await differential(w, ADMIN, dropping(w.rev), 'without Revenue (expected)')));
   ok(`${mode}: NEGATIVE CONTROL: …and one without the earlier metric of the same name`, !(await differential(w, ADMIN, dropping(w.unitsFirst), 'without the first Units (expected)')));
   await mcpLeg(w, mode, db);
+  if (db) await memoLeg(w);
   await readsLeg(w, mode);
 }
 

@@ -16,7 +16,10 @@ import { listTagged } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
 import * as msg from '../analysis/verifiedMessages';
 import { listMetrics, type MetricSummary } from '../analysis/metrics';
-import { getTerm } from '../analysis/terms';
+import { getTerm, termFile } from '../analysis/terms';
+import { datasetFilePath } from '../data/datasetRecord';
+import { isValidId } from '../app/ids';
+import * as recordFs from '../app/recordFs';
 import { pendingMetric } from '../analysis/pendingKinds';
 import { specDatasets, specMetrics, specTerms } from './answers';
 import { specDatasetsOf, specMetricsFrom, specTermOf } from './specVocabulary';
@@ -47,10 +50,20 @@ export async function verifiedEnvFor(projectId: string, questions: readonly Veri
   const all = named.size ? await perAsk(`metricSummaries\0${projectId}`, () => listMetrics(projectId)) : [];
   const nameOn = (s: MetricSummary): string => `${s.datasetId}\0${s.name.trim().toLowerCase()}`;
   const same = new Set(all.filter((s) => named.has(s.id)).map(nameOn));
+  const [dsIds, termIds] = [ids((q) => [q.spec.datasetId]), ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined)))];
+  const read = (id: string): boolean => isValidId(projectId) && isValidId(id); // the getters read no other: null
+  const [dsFile, tFile] = [(id: string) => datasetFilePath(projectId, id), (id: string) => termFile(projectId, id)];
+  const bodies = await recordFs.readMany([...dsIds.filter(read).map(dsFile), ...termIds.filter(read).map(tFile)]); // ONE query for both
+  // Each getter parses that text as it parses what readFile gives; a record readMany left out reads as readFile's ENOENT.
+  const textOf = (file: (id: string) => string) => (id: string) => (): string => {
+    const body = bodies.get(file(id));
+    if (body === undefined) throw Object.assign(new Error('no such record'), { code: 'ENOENT' });
+    return body;
+  };
   const [datasets, metrics, terms] = await Promise.all([
-    specDatasetsOf(projectId, ids((q) => [q.spec.datasetId])),
+    specDatasetsOf(projectId, dsIds, textOf(dsFile)),
     specMetricsFrom(projectId, async () => all.filter((s) => same.has(nameOn(s)))), // in the list's order: `find` takes the first
-    Promise.all(ids((q) => q.spec.filters.map((f) => ('term' in f ? f.term : undefined))).map((id) => getTerm(projectId, id))),
+    Promise.all(termIds.map((id) => getTerm(projectId, id, textOf(tFile)(id)))),
   ]);
   return { datasets, metrics, terms: terms.flatMap((t) => (t ? [specTermOf(t)] : [])), pending: new Set(all.filter(pendingMetric).map((m) => m.id)) };
 }
