@@ -672,6 +672,23 @@ project deletes all but their 50 most recently used there. If members have more 
 database backup first ([backup-restore.md](backup-restore.md)). The older release ignores the new
 column and index.
 
+## Verified questions get an index (`0026_verified_index`)
+
+Earlier releases read every verified question of a project on every Assistant question, twice: once to
+see whether it was asked word for word, once to pick the examples for the AI. From this release each
+wording is a row of `verified_keys`, kept current by every save in the same transaction, so a question
+that matches none reads no verified record at all. With 5,000 verified questions in a project, the match
+went from 658 ms to 0.27 ms, and the examples from 648 ms to 9.7 ms (Postgres 17, median). Without
+`DATABASE_URL` nothing changes.
+
+**Rolling out.** The migration adds two tables and two triggers on `records`. It reads no record. Each
+project builds its index on its first Assistant question after the upgrade: 172 ms for 5,000 questions,
+once. A pod of an older release still running saves verified questions without updating the index; the
+triggers see that and mark the project's index stale, so the next question on a new pod rebuilds it.
+
+**Rolling back.** The older release ignores the tables. The triggers stay, and mark an index stale when
+the older release saves a verified question, so upgrading again rebuilds it and misses nothing.
+
 ## Compose
 
 From a checkout:

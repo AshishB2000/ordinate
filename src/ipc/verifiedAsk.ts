@@ -5,11 +5,10 @@
 // The match stays inside what is open: with a dataset, a visual or a topic open, only a verified question on its
 // datasets matches, so "Revenue last month" asked with Retail open never draws a chart from Ecommerce.
 
-import { verifiedStates } from './verifiedState';
 import { appendAnswer, computeCard } from './answers';
 import { topicDatasets } from './guidance';
 import * as visuals from '../analysis/visuals';
-import { exactHit } from '../ai/verifiedPick';
+import { verifiedHit } from './verifiedLookup';
 import { NO_ACTION } from '../ai/suggestedAction';
 import type { TurnGuidance } from '../ai/turnGuidance';
 
@@ -35,10 +34,9 @@ export async function verifiedScope(projectId: string, context: { kind?: string;
   return !open ? within : !within ? open : new Set([...open].filter((id) => within.has(id)));
 }
 
-/** The verified question `question` is word for word, inside `scope`, or null. */
-export async function verifiedMatch(projectId: string, question: string, scope: ReadonlySet<string> | null) {
-  const states = await verifiedStates(projectId);
-  return exactHit(scope ? states.filter((s) => scope.has(s.q.spec.datasetId)) : states, question);
+/** The verified question `question` is word for word, inside `scope`, or null: one indexed lookup with a database (./verifiedLookup). */
+export function verifiedMatch(projectId: string, question: string, scope: ReadonlySet<string> | null) {
+  return verifiedHit(projectId, question, scope);
 }
 
 /**
