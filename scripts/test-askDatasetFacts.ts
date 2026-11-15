@@ -11,8 +11,9 @@
 //      summaries read without the hidden column's file positions (statsResident `positions`) differ.
 //   2. NEGATIVE CONTROL: with datasets.getDataset spied, the resident facts call it 0 times; the reference calls it.
 //   3. The viewer's facts leave salary out, and count duplicate rows over the columns they see (more than the admin's).
-//   4. A dashboard over 2 of 10 datasets, two metrics on each of the 10: resolveMetric runs only for the 2 datasets'
-//      metrics. NEGATIVE CONTROL: factMetrics over every dataset (the old call) resolves all 20.
+//   4. A dashboard over 2 of 10 datasets, two metrics on each of the 10: for a question that names no metric,
+//      resolveMetric runs only for the 2 datasets' metrics; for one that names "Revenue", also for at most
+//      QUESTION_METRICS step 3 finds elsewhere (Q12). NEGATIVE CONTROL: factMetrics over every dataset resolves all 20.
 //   5. A metric on the dashboard's dataset reads to the model as it did: its line is the old call's, word for word.
 //
 //   npm run build:ts && node scripts/test-askDatasetFacts.js
@@ -36,6 +37,7 @@ const metrics: typeof import('../src/analysis/metrics') = require('../src/analys
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const factMetricsMod: typeof import('../src/ipc/factMetrics') = require('../src/ipc/factMetrics');
 const copilotTable: typeof import('../src/ipc/copilotTable') = require('../src/ipc/copilotTable');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
 const metricsIpc: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
@@ -198,9 +200,15 @@ async function dashboardLeg(): Promise<void> {
     }
   };
   const Q = 'what is Revenue 0?';
-  const asked = await resolved(() => as('admin', () => copilotIpc.buildFacts(W.P, { kind: 'analysis', id: W.board.id }, undefined, Q)));
   const two = new Set([W.ids[0], W.ids[1]]);
-  ok(`a dashboard resolves only its 2 datasets' metrics (${asked.calls} resolveMetric calls)`, same([...asked.on].sort(), [...two].sort()) && asked.calls <= 5, show([...asked.on]));
+  // A question that names no metric: only the dashboard's datasets' metrics.
+  const plain = await resolved(() => as('admin', () => copilotIpc.buildFacts(W.P, { kind: 'analysis', id: W.board.id }, undefined, 'what changed?')));
+  ok(`a dashboard resolves only its 2 datasets' metrics (${plain.calls} resolveMetric calls)`, same([...plain.on].sort(), [...two].sort()) && plain.calls <= 5, show([...plain.on]));
+  // One that names "Revenue": those too, and the few step 3 finds for it elsewhere (Q12), never more than QUESTION_METRICS.
+  const asked = await resolved(() => as('admin', () => copilotIpc.buildFacts(W.P, { kind: 'analysis', id: W.board.id }, undefined, Q)));
+  const extra = [...asked.on].filter((d) => !two.has(d));
+  ok(`…and a question's metrics found elsewhere, at most ${factMetricsMod.QUESTION_METRICS} (${asked.calls} calls, ${extra.length} datasets more)`,
+    [...two].every((d) => asked.on.has(d)) && extra.length > 0 && asked.calls <= plain.calls + factMetricsMod.QUESTION_METRICS, show([...asked.on]));
   const all = await resolved(() => as('admin', () => copilotIpc.factMetrics(W.P, new Set(W.ids), savedScope(W.board), Q)));
   ok(`NEGATIVE CONTROL: the old call (every dataset's metrics) resolves all 20 (${all.calls} calls)`, all.on.size === 10 && all.calls === 20 && all.out.length === 20);
 
@@ -210,7 +218,7 @@ async function dashboardLeg(): Promise<void> {
   if (old) metricLines(line, [], [old]);
   const text = asked.out.text;
   ok('a metric on the dashboard\'s dataset reads to the model exactly as under the old call', !!old && text.split('\n').includes(line[2]), show([line, text]));
-  ok('…and one on a dataset the dashboard does not use is no longer in its facts', !text.includes('"Revenue 5"') && all.out.some((m) => m.name === 'Revenue 5'));
+  ok('…and with a question that names none, one on a dataset the dashboard does not use is not in its facts', !plain.out.text.includes('Revenue 5') && all.out.some((m) => m.name === 'Revenue 5'));
 }
 
 void (async () => {

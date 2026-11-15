@@ -20,7 +20,7 @@ import * as datasets from '../data/datasets';
 import { listVerified, readManyTagged, verifiedFromBody } from '../analysis/verifiedQuestions';
 import type { Tagged } from '../app/editConflict';
 import { questionKey, type VerifiedQuestion } from '../analysis/verifiedRules';
-import { listTerms } from '../analysis/terms';
+import { getTerm } from '../analysis/terms';
 import { withheldColumns } from '../app/sharePolicy';
 import { words } from '../ai/answerSuggest';
 import { eligibleExample, exactHit, NOTHING_TAKEN, pickExamples, takeExamples, type Names, type PickOptions } from '../ai/verifiedPick';
@@ -113,21 +113,23 @@ export interface Examples { lines: string[]; ids: string[] }
 class Lookups {
   private readonly name = new Map<string, string>();
   private readonly held = new Map<string, ReadonlySet<string>>();
-  private terms: Promise<Array<{ id: string; name: string }>> | null = null;
+  /** The terms the questions' filters name, by id: their own records, never the project's list. */
+  private readonly term = new Map<string, string>();
   constructor(private readonly projectId: string) {}
 
   async cover(states: readonly VerifiedState[]): Promise<void> {
     const ids = [...new Set(states.map((s) => s.q.spec.datasetId))].filter((id) => !this.name.has(id));
-    this.terms ??= listTerms(this.projectId);
-    const [metas, withheld] = await Promise.all([
-      Promise.all(ids.map((id) => datasets.getDatasetMeta(this.projectId, id))), Promise.all(ids.map((id) => withheldColumns(this.projectId, id))), this.terms,
+    const tIds = [...new Set(states.flatMap((s) => s.q.spec.filters.flatMap((f) => ('term' in f ? [f.term] : []))))].filter((id) => !this.term.has(id));
+    const [metas, withheld, ts] = await Promise.all([
+      Promise.all(ids.map((id) => datasets.getDatasetMeta(this.projectId, id))), Promise.all(ids.map((id) => withheldColumns(this.projectId, id))),
+      Promise.all(tIds.map((id) => getTerm(this.projectId, id).catch(() => null))),
     ]);
     ids.forEach((id, i) => { this.name.set(id, metas[i]?.name ?? ''); this.held.set(id, withheld[i]); });
+    tIds.forEach((id, i) => this.term.set(id, ts[i]?.id === id ? ts[i].name : ''));
   }
 
-  async names(): Promise<Names> {
-    const terms = await (this.terms ??= listTerms(this.projectId));
-    return { dataset: (id) => this.name.get(id) ?? '', term: (id) => terms.find((t) => t.id === id)?.name ?? '' };
+  names(): Names {
+    return { dataset: (id) => this.name.get(id) ?? '', term: (id) => this.term.get(id) ?? '' };
   }
 
   readonly withheld = (id: string): ReadonlySet<string> => this.held.get(id) ?? new Set();
@@ -139,7 +141,7 @@ export async function referenceExamples(projectId: string, a: ExampleAsk): Promi
   if (!states.length) return { lines: [], ids: [] };
   const look = new Lookups(projectId);
   await look.cover(states);
-  return pickExamples(states, { ...a, names: await look.names(), withheld: look.withheld });
+  return pickExamples(states, { ...a, names: look.names(), withheld: look.withheld });
 }
 
 /** INDEXED: the index ranks every question in `exampleOrder`; records are read and checked a batch at a time until five are taken. */
@@ -154,7 +156,7 @@ export async function indexedExamples(projectId: string, a: ExampleAsk): Promise
     const states = await checked(projectId, await readManyTagged(projectId, ids));
     await look.cover(states);
     const o = { exclude: a.exclude, withheld: look.withheld };
-    taken = takeExamples(states.filter((s) => eligibleExample(s, o)).map((s) => s.q), await look.names(), taken); // already in order
+    taken = takeExamples(states.filter((s) => eligibleExample(s, o)).map((s) => s.q), look.names(), taken); // already in order
     if (ids.length < BATCH) break;
   }
   return { lines: taken.lines, ids: taken.ids };

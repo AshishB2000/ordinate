@@ -575,7 +575,8 @@ export function captureFacts(
 // visuals, and dashboards (the analysis records; no numbers to compute — pure inventory).
 export function projectFacts(
   name: string,
-  inventory: { datasets: string[]; visuals: string[]; dashboards: string[] },
+  // `counts`: Home (src/ipc/homeFacts.ts): the project's sizes, `datasets` then only the ones shown with their columns.
+  inventory: { datasets: string[]; visuals: string[]; dashboards: string[]; counts?: { datasets: number; visuals: number; dashboards: number; metrics: number; terms: number } },
   // Each dataset's COLUMNS — names and declared types, no figures — so a
   // question asked from Home can still be answered with a chart: the model
   // needs real column names to write an answer spec, and the app resolves them.
@@ -584,16 +585,27 @@ export function projectFacts(
   // `notes`: a ready line-end per column — a Live dataset's profile and sample
   // values (ai/liveFacts `liveColumnNotes`: bounded, labelled, a withheld column's values left out).
   schemas: { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc>; notes?: Record<string, string>; table?: FactTableDoc }[] = [],
+  more: string[] = [], // lines after the columns (Home's metrics and terms)
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
+  const n = inventory.counts;
   lines.push(`Project: "${name}".`);
-  lines.push(`Datasets (${inventory.datasets.length}): ${inventory.datasets.join(', ') || '(none)'}.`);
-  lines.push(`Visuals (${inventory.visuals.length}): ${inventory.visuals.join(', ') || '(none)'}.`);
-  lines.push(`Dashboards (${inventory.dashboards.length}): ${inventory.dashboards.join(', ') || '(none)'}.`);
-  num(ledger, 'dataset count', inventory.datasets.length, 'count', 'project');
-  num(ledger, 'visual count', inventory.visuals.length, 'count', 'project');
-  num(ledger, 'dashboard count', inventory.dashboards.length, 'count', 'project');
+  if (n) {
+    lines.push(`Datasets (${n.datasets}): ${inventory.datasets.length ? `the ${inventory.datasets.length} that best match the question are listed with their columns below; the rest are on the Data page` : '(none)'}.`);
+    lines.push(`Metrics (${n.metrics}), glossary terms (${n.terms}), visuals (${n.visuals}) and dashboards (${n.dashboards}): those that match the question are below; every one is in the app.`);
+  } else {
+    lines.push(`Datasets (${inventory.datasets.length}): ${inventory.datasets.join(', ') || '(none)'}.`);
+    lines.push(`Visuals (${inventory.visuals.length}): ${inventory.visuals.join(', ') || '(none)'}.`);
+    lines.push(`Dashboards (${inventory.dashboards.length}): ${inventory.dashboards.join(', ') || '(none)'}.`);
+  }
+  num(ledger, 'dataset count', n ? n.datasets : inventory.datasets.length, 'count', 'project');
+  num(ledger, 'visual count', n ? n.visuals : inventory.visuals.length, 'count', 'project');
+  num(ledger, 'dashboard count', n ? n.dashboards : inventory.dashboards.length, 'count', 'project');
+  if (n) {
+    num(ledger, 'metric count', n.metrics, 'count', 'project');
+    num(ledger, 'glossary term count', n.terms, 'count', 'project');
+  }
   if (schemas.length) {
     lines.push('');
     lines.push('Dataset columns (name and type — use these exact names in an answer spec):');
@@ -615,6 +627,7 @@ export function projectFacts(
       tables.forEach((s) => lines.push(`- "${s.name}" (${tableHeadline(s.table)})`));
     }
   }
+  lines.push(...more);
   lines.push('');
   lines.push('No specific dataset/visual/dashboard is open, so no per-entity figures are available. ' +
     'A question answerable from these columns can be answered with an "answer" action; the app computes it.');

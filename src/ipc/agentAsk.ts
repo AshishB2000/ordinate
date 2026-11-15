@@ -7,18 +7,15 @@
 //
 // OUT OF SCOPE (rule 10) is code: when the model says the topic does not hold the question's data (the `outside`
 // action) or writes an answer on a dataset outside it, `outsideTurn` looks for the data among the datasets OUTSIDE the
-// topic that the caller can read — names only, from metadata: no row is read and no figure is computed for it — and
-// offers the Project assistant. One the caller cannot read is never named.
+// topic that the caller can read — through step 3's index, names only: no row is read and no figure is computed for it —
+// and offers the Project assistant. One the caller cannot read is never named.
 
 import { readTopic, topicForReaders } from '../analysis/topics';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
-import * as metrics from '../analysis/metrics';
-import { listTerms } from '../analysis/terms';
-import { hiddenColumnsFor, rowLockFor } from '../data/rowAccess';
+import { rowLockFor } from '../data/rowAccess';
 import { isRowPolicyError } from '../data/rowPolicyError';
-import { loadShared as loadCatalog } from '../app/catalog'; // read-only: the question's one parse (./askMemo)
-import { words } from '../ai/answerSuggest';
+import { searchModel, type ModelHit, type SearchOptions } from './assistantSearch';
 import { agentForAsk } from '../ai/agentAccess';
 import type { Agent } from '../ai/agents';
 import * as msg from '../ai/agentMessages';
@@ -73,38 +70,29 @@ async function readable(projectId: string, datasetId: string): Promise<boolean> 
   }
 }
 
-// Words a question is made of that name no data.
-const STOP = new Set(['what', 'which', 'who', 'how', 'many', 'much', 'the', 'and', 'for', 'with', 'from', 'was', 'were', 'are', 'did', 'does',
-  'last', 'this', 'that', 'these', 'those', 'show', 'give', 'tell', 'list', 'our', 'their', 'all', 'per', 'each', 'total', 'number', 'top', 'year', 'month',
-  'week', 'day', 'quarter', 'today', 'yesterday', 'about', 'between', 'over', 'than', 'into', 'have', 'has', 'any', 'most', 'least']);
-const stem = (w: string): string => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
-const vocab = (texts: Iterable<string>): Set<string> => new Set([...texts].flatMap((t) => words(t).map(stem)));
+/** Ranked items read for the outside-the-topic check: datasets, columns, metrics and terms. */
+const OUTSIDE_HITS = 60;
 
 /**
- * The readable dataset OUTSIDE the topic whose names share the most words with the question: its name, its columns'
- * (and their catalog names), its metrics' and its glossary terms'. Metadata only. Null when none shares a word.
- * Exported for scripts/test-agentOutside.ts, which passes `canRead` to prove the rule without a database.
+ * The readable dataset OUTSIDE the topic that best matches the question: step 3's search (./assistantSearch) with the
+ * topic's datasets left out, each dataset scored by the sum of its own, its columns', its metrics' and its terms' matches
+ * (ties in rank order), the first the caller can read. Metadata only; a column hidden from them finds nothing. Null when
+ * nothing outside the topic shares a word with the question. `canRead` and `search` are for scripts/test-agentOutside.ts
+ * and scripts/test-askIndex.ts (the index against the reference).
  */
-export async function matchOutside(projectId: string, question: string, only: ReadonlySet<string>, canRead = readable): Promise<{ id: string; name: string } | null> {
-  const asked = [...vocab([question])].filter((w) => !STOP.has(w));
-  if (!asked.length) return null;
-  const [list, ms, ts, catalog] = await Promise.all([datasets.listDatasets(projectId), metrics.listMetrics(projectId), listTerms(projectId), loadCatalog(projectId)]);
-  let best: { id: string; name: string; score: number } | null = null;
-  for (const d of list) {
-    if (only.has(d.id) || !(await canRead(projectId, d.id))) continue;
-    const meta = await datasets.getDatasetMeta(projectId, d.id);
-    if (!meta) continue;
-    const hidden = await hiddenColumnsFor(projectId, d.id);
-    const cols = meta.columns.filter((c) => !hidden.has(c.name));
-    const docs = catalog.columns?.[d.id] ?? {};
-    const names = vocab([
-      meta.name, ...cols.map((c) => c.name), ...cols.flatMap((c) => [docs[c.name]?.displayName ?? '', ...(docs[c.name]?.aliases ?? [])]),
-      ...ms.filter((m) => m.datasetId === d.id).map((m) => m.name), ...ts.filter((t) => t.datasetId === d.id).flatMap((t) => [t.name, ...t.aliases]),
-    ]);
-    const score = asked.filter((w) => names.has(w)).length;
-    if (score > 0 && (!best || score > best.score)) best = { id: d.id, name: meta.name, score };
+export async function matchOutside(
+  projectId: string, question: string, only: ReadonlySet<string>, canRead = readable,
+  search: (p: string, q: string, o: SearchOptions) => Promise<ModelHit[]> = searchModel,
+): Promise<{ id: string; name: string } | null> {
+  const hits = await search(projectId, question, { kinds: ['dataset', 'column', 'metric', 'term'], limit: OUTSIDE_HITS, exceptDatasetIds: [...only] });
+  const score = new Map<string, number>();
+  for (const h of hits) if (h.datasetId && !only.has(h.datasetId)) score.set(h.datasetId, (score.get(h.datasetId) ?? 0) + h.score);
+  for (const [id] of [...score].sort((a, b) => b[1] - a[1])) { // stable: an equal score keeps the better-ranked first
+    if (!(await canRead(projectId, id))) continue;
+    const meta = await datasets.getDatasetMeta(projectId, id);
+    if (meta) return { id, name: meta.name };
   }
-  return best && { id: best.id, name: best.name };
+  return null;
 }
 
 /** The out-of-scope turn: the app's words, and the dataset the Project assistant can answer from, if there is one. */

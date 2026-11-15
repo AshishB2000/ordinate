@@ -25,6 +25,8 @@ import { copyValueNotes } from '../ipc/copyValues';
 import { dropHidden, tableWithout } from './hiddenFacts';
 import { metricHidden, termHidden } from '../analysis/columnHidden';
 import type { ActivityEmit } from '../ipc/copilot';
+import { bodyOf, readTexts } from '../app/recordTexts';
+import { isValidId } from '../app/ids';
 
 const CLOSING = '\n\nNo specific dataset/visual/dashboard is open';
 
@@ -56,25 +58,40 @@ export async function topicFacts(projectId: string, id: string, emit: ActivityEm
   const about = agent ? 'they are all this assistant answers from, and a question about other data is outside them' : 'the project holds more, which a question may still name';
   const lines: string[] = [`Topic: "${topic.name}"${topic.description ? ` — ${topic.description}` : ''}. Its datasets, metrics and terms are listed here; ${about}.`];
   for (const s of sets) if (s.fields && s.all.length) lines.push(`- ${s.name} also has, outside this topic: ${s.all.join(', ')}`);
-  const allMetrics = new Map((await metrics.listMetrics(projectId)).map((m) => [m.id, m]));
-  const own = [];
-  for (const mid of topic.metricIds) { const m = allMetrics.get(mid); if (m && !(await metricHidden(projectId, m.id))) own.push(m); }
-  if (own.length) {
-    lines.push('', 'Topic metrics (the app computes their figures):');
-    for (const m of own) lines.push(`- Metric ${m.name}: ${describeDefinitionShort(m.definition, metrics.isPeriodDefinition(m.definition) ? allMetrics.get(m.definition.base)?.name : undefined)}`); // a period metric: by its base's name (part 5)
-  }
-  const hideAll = await restrictedOn(projectId);
-  const facts: FactTerm[] = [];
-  for (const tid of topic.termIds) {
-    const t = await terms.getTerm(projectId, tid);
-    if (!t || (await termHidden(projectId, t.id))) continue;
-    const withheld = withheldColumns(await assistantColumnDocs(projectId, t.datasetId));
-    facts.push({ name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}), definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)) });
-  }
-  termLines(lines, facts);
+  lines.push(...await modelLines(projectId, topic.metricIds, topic.termIds, 'Topic metrics (the app computes their figures):'));
 
   const at = base.text.indexOf(CLOSING);
   const head = base.text.slice(0, at < 0 ? undefined : at).split('\n').filter((l) => !/^(Visuals|Dashboards) \(0\): \(none\)\.$/.test(l)).join('\n');
   const tail = 'A question answerable from these columns can be answered with an "answer" action; the app computes it.';
   return { ...base, text: `${head}\n\n${lines.join('\n')}\n\n${tail}` };
+}
+
+/**
+ * The lines that name `metricIds` (under `heading`) and `termIds`, in their order: a metric by its short definition, a
+ * term by its filters in words (a value withheld as `termFactsFor` withholds it). One that is gone, or that reads a column
+ * hidden from the caller, is not named. Their own records only, in one query (../app/recordTexts): never a list.
+ */
+export async function modelLines(projectId: string, metricIds: readonly string[], termIds: readonly string[], heading: string): Promise<string[]> {
+  const lines: string[] = [];
+  const file = (id: string) => metrics.metricFilePath(projectId, id);
+  const textOf = await readTexts([...metricIds.map(file), ...termIds.map((id) => terms.termFile(projectId, id))]);
+  const summary = (body: string | null): metrics.MetricSummary | null => { try { return body === null ? null : metrics.summaryOf(projectId, body); } catch (_) { return null; } };
+  const own: metrics.MetricSummary[] = [];
+  for (const mid of metricIds) { const m = isValidId(projectId) && isValidId(mid) ? summary(bodyOf(textOf, file(mid))) : null; if (m && !(await metricHidden(projectId, m.id))) own.push(m); }
+  if (own.length) {
+    lines.push('', heading);
+    // A period metric: by its base's name (part 5).
+    const baseName = async (m: metrics.MetricSummary) => (metrics.isPeriodDefinition(m.definition) ? (await metrics.getMetric(projectId, m.definition.base))?.name : undefined);
+    for (const m of own) lines.push(`- Metric ${m.name}: ${describeDefinitionShort(m.definition, await baseName(m))}`);
+  }
+  const hideAll = await restrictedOn(projectId);
+  const facts: FactTerm[] = [];
+  for (const tid of termIds) {
+    const t = await terms.getTerm(projectId, tid, textOf(terms.termFile(projectId, tid)));
+    if (!t || (await termHidden(projectId, t.id))) continue;
+    const withheld = withheldColumns(await assistantColumnDocs(projectId, t.datasetId));
+    facts.push({ name: t.name, aliases: t.aliases, ...(t.description ? { description: t.description } : {}), definition: terms.describeTermFilters(t, (s) => hideAll || withheld.has(s.column)) });
+  }
+  termLines(lines, facts);
+  return lines;
 }

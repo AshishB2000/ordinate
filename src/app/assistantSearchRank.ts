@@ -33,10 +33,13 @@ export interface Part {
   textWords: string[];
   certified: boolean;
   retired: boolean;
+  /** Exact-lookup keys (0028), base parts only: hashed names and `d:<dataset>`. No part of the rank. */
+  keys: string[];
 }
 
 export interface ModelHit { kind: ModelKind; id: string; datasetId?: string; connId?: string; name: string; score: number }
-export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; audiences: readonly Audience[] }
+/** `exceptDatasetIds`: a part on one of these datasets finds nothing (an agent's outside-the-topic check). */
+export interface RankOptions { kinds?: readonly ModelKind[]; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[]; audiences: readonly Audience[] }
 
 export const kindOrd = (k: ModelKind): number => MODEL_KINDS.indexOf(k);
 export const allWords = (p: Pick<Part, 'nameWords' | 'aliasWords' | 'textWords'>): string[] => [...new Set([...p.nameWords, ...p.aliasWords, ...p.textWords])];
@@ -72,9 +75,11 @@ export function rankParts(parts: readonly Part[], asked: readonly string[], o: R
   const aud = new Set<string>(o.audiences);
   const kinds = o.kinds ? new Set<string>(o.kinds) : null;
   const ds = o.datasetIds ? new Set(o.datasetIds) : null;
+  const ex = o.exceptDatasetIds ? new Set(o.exceptDatasetIds) : null;
   const out: Keyed[] = [];
   for (const [item, ps] of byItem(parts)) {
-    const found = ps.some((p) => aud.has(p.audience) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId))) && partScore(p, want) > 0);
+    const found = ps.some((p) => aud.has(p.audience) && (!kinds || kinds.has(p.kind)) && (!ds || (p.datasetId !== null && ds.has(p.datasetId)))
+      && (!ex || p.datasetId === null || !ex.has(p.datasetId)) && partScore(p, want) > 0);
     const bases = found ? seen(ps, aud) : null;
     if (!bases) continue;
     const dataset = bases.flatMap((p) => (p.datasetId === null ? [] : [p.datasetId]));
@@ -107,4 +112,25 @@ export function foundItems(parts: readonly Part[], audiences: readonly Audience[
     if (bases && kind !== 'column') out.push({ kind, id: least(bases.map((p) => p.id)) });
   }
   return out;
+}
+
+/** An item as an exact lookup returns it. */
+export interface KeyedItem { id: string; datasetId: string | null }
+/** The kinds an exact lookup reads (a source table has no name a spec says, nor a dataset). */
+export type KeyedKind = Exclude<ModelKind, 'column' | 'table'>;
+
+const bases = (parts: readonly Part[], kind: KeyedKind): Part[] => parts.filter((p) => p.base && p.kind === kind);
+const keyed = (p: Part): KeyedItem => ({ id: p.id, datasetId: p.datasetId });
+const byItemKey = (a: Part, b: Part): number => byCode(a.item, b.item);
+
+/** THE REFERENCE of an exact lookup: each item of `kind` whose base part holds one of `keys`, by item key. Retired ones too: the vocabulary keeps them. */
+export function keyedItems(parts: readonly Part[], kind: KeyedKind, keys: readonly string[]): KeyedItem[] {
+  const want = new Set(keys);
+  return bases(parts, kind).filter((p) => p.keys.some((k) => want.has(k))).sort(byItemKey).map(keyed);
+}
+
+/** THE REFERENCE: the `limit` newest items of `kind`, then by item key; one that is retired left out unless `retired`. */
+export function newestItems(parts: readonly Part[], kind: KeyedKind, limit: number, retired = false): KeyedItem[] {
+  const gone = retired ? new Set<string>() : new Set(parts.filter((p) => p.retired).map((p) => p.item));
+  return bases(parts, kind).filter((p) => !gone.has(p.item)).sort((a, b) => byCode(b.updated, a.updated) || byItemKey(a, b)).slice(0, limit).map(keyed);
 }

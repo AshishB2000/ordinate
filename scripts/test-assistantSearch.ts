@@ -7,8 +7,8 @@
 // column, no metric or term on one, a page of hidden columns reads the next; NEGATIVE CONTROL: the admin gets them), the
 // counts (no columns; nothing the caller may not see).
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on):
-//   1. THE DIFFERENTIAL: questions × kinds × limits × datasets × {admin, editor, viewer}, index === reference.
-//   2. Once built, a query reads no record and rebuilds nothing; NEGATIVE CONTROL: the reference reads them.
+//   1. THE DIFFERENTIAL: questions × kinds × limits × datasets (within, or all but) × {admin, editor, viewer}, index === reference.
+//   2. Once built, a query reads no record (nor lists one) and rebuilds nothing; NEGATIVE CONTROL: the reference reads them.
 //   3. ON WRITE, no rebuild: a renamed dataset, a new metric, a trashed term, a changed column doc (only its dataset's
 //      catalog rows rewritten), a retired metric and a new source table are followed by the very next query.
 //      NEGATIVE CONTROL: a row changed behind the index makes the differential FAIL.
@@ -131,8 +131,9 @@ const KINDS: Array<SearchOptions['kinds']> = [undefined, ['column'], ['metric', 
 /** Every question × kinds × limit × datasets × caller: the index's answer is the reference's. */
 async function differential(w: World, label: string): Promise<boolean> {
   const unequal: string[] = [];
-  for (const [who, id] of WHO) for (const q of QUESTIONS) for (const kinds of KINDS) for (const limit of [1, 12]) for (const datasetIds of [undefined, [w.orders]]) {
-    const o: SearchOptions = { limit, ...(kinds ? { kinds } : {}), ...(datasetIds ? { datasetIds } : {}) };
+  const within: Array<Partial<SearchOptions>> = [{}, { datasetIds: [w.orders] }, { exceptDatasetIds: [w.orders] }]; // the last: an agent's outside-the-topic check
+  for (const [who, id] of WHO) for (const q of QUESTIONS) for (const kinds of KINDS) for (const limit of [1, 12]) for (const on of within) {
+    const o: SearchOptions = { limit, ...(kinds ? { kinds } : {}), ...on };
     const [r, i] = [await ref(id, w.P, q, o), await idx(id, w.P, q, o)];
     if (!same(r, i)) unequal.push(`${label} ${who} "${q}" ${JSON.stringify(o)}: ${JSON.stringify(r)} vs ${JSON.stringify(i)}`);
   }

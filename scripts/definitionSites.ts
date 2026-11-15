@@ -53,7 +53,7 @@ export const DEFINITION_SITES: Readonly<Record<string, { count: number; how: Def
   'src/ipc/targetSeries.ts': { count: 1, how: 'refuses' }, // a plan as a chart measure: an external plan is refused by the chart door, so no line
   'src/publish/embedLock.ts': { count: 3, how: 'refuses' }, // never allowed under a lock
   // keeps
-  'src/ipc/copilot.ts': { count: 2, how: 'keeps' }, // a snapshot's metadata; every figure, a mirror's too, is resolveMetric's
+  'src/ipc/factMetrics.ts': { count: 4, how: 'keeps' }, // a snapshot's metadata; every figure, a mirror's too, is resolveMetric's; only a formula or period metric builds the by-name map (a mirror's additivity reads none)
   'src/ipc/explore.ts': { count: 1, how: 'keeps' }, // a semantic dataset's Explore measures are its mirrors, listed by id (no figure)
   'src/analysis/externalMetric.ts': { count: 4, how: 'keeps' }, // the kind and its whitelist; b3: which sentence a path that never asks a layer says, and a Metrics-table row's layer
   'src/analysis/alertMetric.ts': { count: 2, how: 'keeps' }, // which rules are watched through their metric: an external one was refused before (alertStore.refuseExternal)

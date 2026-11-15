@@ -354,6 +354,40 @@ worst places:
   35 ms. The API is `searchModel` and `countModel` (`src/ipc/assistantSearch.ts`); PR 6b puts it
   on the ask path.
 
+### On the ask path (PR 6b)
+
+No ask calls a whole-project list any more (`test-askNoProjectLists` spies every store's list on
+eight asks; with the index off, each one lists). What each reads:
+
+- **Home:** counts (`countModel`; visuals and dashboards off ⌘K's index, one query), the 12
+  datasets step 3 ranks highest for the question by their names or their columns' with the
+  newest after them when fewer match, and the 8 best metrics and terms, by name and definition.
+  The guidance gives the same 12 datasets' guides (`src/ipc/homeFacts.ts`, once per ask).
+- **A topic:** only its own datasets, metrics and terms, by id in one query (`topics.membersOf`).
+- **A dataset open:** its metrics and terms through the index's exact-lookup keys (0028: `d:` and
+  the dataset's id), read by id.
+- **A dashboard:** its own metrics, and at most 5 more that step 3 finds for the question on its
+  other datasets (Q12), under the same saved filters.
+- **An agent's outside-the-topic check:** step 3's search with the topic's datasets left out, each
+  dataset scored by its own and its columns', metrics' and terms' matches; the first readable wins.
+- **Checking the model's answer:** only the datasets, metrics and terms its spec names, found by
+  their name as the validator compares it (0028 `keys`: trimmed and lowercased, and squashed,
+  hashed; a match is a candidate, the validator's own rule decides) and read in one query. "Did
+  you mean" a dataset offers among the 20 step 3 finds for the name said: one that shares no word
+  with it (a one-letter typo of a one-word name) is no longer offered. `test-askIndex` holds a
+  corpus of model answers Object.is-equal to the whole vocabulary, an admin and a restricted viewer.
+- **Every ask:** its agent by its own record, a verified example's terms by id, and the metrics
+  of a verified chart's metric's name through the index (no list of agents, terms or metrics).
+- Without a database, or when an index query fails (logged once), each takes its reference path,
+  the lists it read before.
+
+`test-askBudget` at the scale above, queries and record reads (memo hits counted), before → after:
+Home 345 / 7,134 → 89 / 154; a dataset open 345 / 7,121 → 88 / 123; an agent with a topic
+339 / 7,113 → 75 / 136; a dashboard 354 / 7,112 → 112 / 183; the restricted viewer from Home
+345 / 14,135 → 359 / 11,153. The viewer still checks every metric and term once for its counts
+(`hiddenAnywhere`, `metricsByName`; its terms now prefetched a thousand at a time): making those
+two index-backed is the next fix. Building one Home question's facts takes 20 ms (Q8).
+
 ### Answers keep the figures they had
 
 An answer stored only its chart form, so it was computed again each time its conversation
@@ -388,7 +422,26 @@ Now:
 | 4 | An open dataset uses the DuckDB stats; a dashboard computes only its own metrics |
 | 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
-| 7 | Fingerprints and the rank merge (phase C) |
+| 7 | Fingerprints and the rank merge (phase C): not started, see below |
+
+**Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
+5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
+
+**Why 7 waits.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words merge by
+rank). Three things are missing, each the owner's call:
+
+- **pgvector.** CI's `postgres:17` image, the Compose and Helm defaults and a plain local Postgres have no `vector`
+  extension, and creating it needs a superuser. Without it in CI, the vector path would ship with no test that runs
+  it, against "every fast path keeps its reference". Options: `pgvector/pgvector:pg17` in CI and the deploy
+  defaults, with the extension created only where present (a missing one leaves search on words).
+- **The fingerprint model** (the open question below): which provider's embedding model, picked in Admin → AI like the
+  chat models, from the org's own API keys. No surprise network calls, nothing installed at run time.
+- **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
+  6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
+  differential can hold to.
+
+**Left on the ask path for a caller with a hidden column:** `hiddenAnywhere` and `metricsByName` still read every
+dataset and metric once per request (the viewer case: 314 queries, 11,153 reads, against 89 and 154 for an admin).
 
 ## Build order
 

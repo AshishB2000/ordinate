@@ -707,6 +707,22 @@ new pod rebuilds it.
 **Rolling back.** The older release ignores the tables. The triggers stay, and mark an index stale when
 the older release saves one of those records, so upgrading again rebuilds what changed and misses nothing.
 
+## Assistant questions read through that index (`0028_assistant_search_keys`)
+
+From this release no Assistant question reads a whole list of the project: Home is told the project's
+counts and the 12 datasets the search ranks highest, and the names a model's answer says are looked up by
+name. The migration adds one column (`keys`: hashes of names and the dataset a metric or term is on) with
+a constant default, so no table is rewritten, and two indexes. Without `DATABASE_URL` nothing changes.
+
+**Rolling out.** Each project's search index is rebuilt once with its keys, on its first question after
+the upgrade (1.2 s for 2,000 datasets, 5,000 metrics and 2,000 terms). A pod of the release before still
+running saves records without their keys; a trigger sees that and marks that part of the index stale, so
+the next question on a new pod rebuilds it.
+
+**Rolling back.** The older release ignores the column and the indexes. The triggers stay, and mark an
+index stale when the older release saves one of those records; its own rebuilds are marked with the older
+version, so upgrading again rebuilds the index once and misses nothing.
+
 ## Compose
 
 From a checkout:

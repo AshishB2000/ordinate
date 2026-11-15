@@ -24,6 +24,9 @@ import { assistantColumnDocs } from '../app/sharePolicy';
 import { termUsage } from '../analysis/termUsage';
 import { termHidden } from '../analysis/columnHidden';
 import * as msg from '../data/termMessages';
+import { keyedModel, onKey } from './assistantSearch';
+import { readTexts } from '../app/recordTexts';
+import { isValidId } from '../app/ids';
 
 /** A term as `projectId`'s caller may read it: unchanged, or (restricted) every filter value left out. */
 export async function termForCaller(projectId: string, t: Term): Promise<Term & { valuesHidden?: true }> {
@@ -48,12 +51,26 @@ export async function listForCaller(projectId: string) {
 }
 
 /**
+ * The terms of `datasetId`, full, in listFullTerms' order (by name, then id): found through step 3's index (`d:` keys)
+ * and read by id in one query, never the project's list (docs/assistant "Scale rules"). Without a database, the list.
+ */
+export async function termsOn(projectId: string, datasetId: string): Promise<Term[]> {
+  const hits = await keyedModel(projectId, 'term', [onKey(datasetId)]);
+  if (hits === null) return (await terms.listFullTerms(projectId)).filter((t) => t.datasetId === datasetId);
+  const ids = hits.map((h) => h.id).filter((id) => isValidId(projectId) && isValidId(id));
+  const textOf = await readTexts(ids.map((id) => terms.termFile(projectId, id)));
+  const read = await Promise.all(ids.map((id) => terms.getTerm(projectId, id, textOf(terms.termFile(projectId, id))).catch(() => null)));
+  return read.filter((t): t is Term => !!t && t.datasetId === datasetId)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
  * The glossary terms of `datasetId` as the Assistant's FACTS state them (../ai/termFacts termLines): a value is
  * written as "…" for a caller row access rules restrict, and for a column marked personal or financial.
  */
 export async function termFactsFor(projectId: string, datasetId: string, question?: string): Promise<FactTerm[]> {
   const own = [];
-  for (const t of await terms.listFullTerms(projectId)) if (t.datasetId === datasetId && !(await termHidden(projectId, t.id))) own.push(t); // part 4, D21
+  for (const t of await termsOn(projectId, datasetId)) if (!(await termHidden(projectId, t.id))) own.push(t); // part 4, D21
   if (!own.length) return [];
   const hideAll = await restrictedOn(projectId);
   const withheld = withheldColumns(await assistantColumnDocs(projectId, datasetId));

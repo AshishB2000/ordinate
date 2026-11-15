@@ -12,10 +12,12 @@
 // metric or term that reads one (../analysis/columnHidden, as the Assistant's vocabulary leaves them out), are dropped
 // from the ranked results here, a page at a time, and from the counts, the same way on both paths.
 
+import { createHash } from 'crypto';
 import * as recordFs from '../app/recordFs';
 import { logger } from '../app/logger';
 import { isValidId } from '../app/ids';
 import { clean } from '../app/searchMatch';
+import { squash } from '../app/columnNames';
 import { orgDb } from '../server/db/inOrg';
 import * as index from '../server/assistantSearchIndex';
 import * as datasets from '../data/datasets';
@@ -29,10 +31,10 @@ import { seesSourceNames } from '../data/sourceNames';
 import { hiddenAnywhere, hiddenColumnsFor } from '../data/rowAccess';
 import { metricHidden, termHidden } from '../analysis/columnHidden';
 import { searchWords, searchWordsOf } from '../ai/modelWords';
-import { MODEL_KINDS, foundItems, noCounts, rankParts } from '../app/assistantSearchRank';
-import type { Audience, CountedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+import { MODEL_KINDS, foundItems, keyedItems, newestItems, noCounts, rankParts } from '../app/assistantSearchRank';
+import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
 
-export type { ModelCounts, ModelHit, ModelKind } from '../app/assistantSearchRank';
+export type { KeyedItem, ModelCounts, ModelHit, ModelKind } from '../app/assistantSearchRank';
 
 /** An item key longer than this is skipped on both paths: it could not sit in a btree index entry. */
 const MAX_KEY = 256;
@@ -40,13 +42,32 @@ const MAX_LIMIT = 200;
 /** Ranked results are read this many at a time (at least), so a page that is mostly hidden columns reads the next. */
 const BATCH = 20;
 
+let useIndex = true;
+/** Test hook: off, every ask path takes its reference, as without a database (the NEGATIVE CONTROL of scripts/test-askNoProjectLists.ts). */
+export function _setIndexed(on: boolean): void {
+  useIndex = on;
+}
+
 // ── A store's record → its parts: the ONE mapping both paths use ────────────
 
 const stamp = (v: unknown): string => (typeof v === 'string' ? clean(v) : '');
 const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 function part(p: Pick<Part, 'item' | 'kind'> & Partial<Part>): Part {
-  return { grp: '', base: false, id: '', datasetId: null, connId: null, name: '', updated: '', audience: 'all', nameWords: [], aliasWords: [], textWords: [], certified: false, retired: false, ...p };
+  return { grp: '', base: false, id: '', datasetId: null, connId: null, name: '', updated: '', audience: 'all', nameWords: [], aliasWords: [], textWords: [], certified: false, retired: false, keys: [], ...p };
 }
+
+// ── Exact-lookup keys (0028): a name as the answer validator compares it (../ai/answerSpec resolveDataset and
+// resolveMeasure, ../ai/termFacts matchTerm), hashed so any name fits a GIN entry. A key match is a candidate only:
+// the caller reads the records and applies the validator's own rule, so a collision costs a read, never a wrong word.
+const hashed = (tag: string, s: string): string => tag + createHash('sha256').update(s).digest('base64url').slice(0, 22);
+/** A name trimmed and lowercased: how a dataset, a metric and a term are matched first. */
+export const lowerKey = (name: string): string => hashed('l', name.trim().toLowerCase());
+/** A name squashed (../app/columnNames squash), or none for one of symbols only: matched second. */
+export const squashKey = (name: string): string[] => { const k = squash(name); return k ? [hashed('s', k)] : []; };
+/** The metrics and terms of a dataset. */
+export const onKey = (datasetId: string): string => `d:${datasetId}`;
+const onKeys = (datasetId: string): string[] => (datasetId.includes(' ') ? [] : [onKey(datasetId)]); // stored space-joined: an id with a space is no dataset's
+const namesKeys = (names: readonly string[]): string[] => [...new Set(names.flatMap((n) => [lowerKey(n), ...squashKey(n)]))];
 
 function columnNames(columns: unknown): string[] {
   const names = (Array.isArray(columns) ? columns : []).flatMap((c: { name?: unknown } | null) => (typeof c?.name === 'string' && c.name && c.name.length <= MAX_KEY ? [clean(c.name)] : []));
@@ -59,7 +80,7 @@ export function datasetParts(s: Pick<datasets.DatasetSummary, 'id' | 'name' | 'u
   if (id.length > MAX_KEY) return [];
   const updated = stamp(s.updatedAt);
   return [
-    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)) }),
+    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)), keys: namesKeys([text(s.name)]) }),
     ...columnNames(columns).map((name) => part({ item: `column:${id}/${name}`, kind: 'column', base: true, id: name, datasetId: id, name, updated, nameWords: searchWords(name) })),
   ];
 }
@@ -68,7 +89,7 @@ export function metricParts(m: metrics.MetricSummary): Part[] {
   const id = clean(String(m.id));
   return id.length > MAX_KEY ? [] : [part({
     item: `metric:${id}`, kind: 'metric', base: true, id, datasetId: clean(String(m.datasetId)), name: clean(text(m.name)), updated: stamp(m.updatedAt),
-    nameWords: searchWords(text(m.name)), textWords: searchWords(text(m.description)),
+    nameWords: searchWords(text(m.name)), textWords: searchWords(text(m.description)), keys: [lowerKey(text(m.name)), ...onKeys(clean(String(m.datasetId)))],
   })];
 }
 
@@ -77,6 +98,7 @@ export function termParts(t: terms.TermSummary): Part[] {
   return id.length > MAX_KEY ? [] : [part({
     item: `term:${id}`, kind: 'term', base: true, id, datasetId: clean(String(t.datasetId)), name: clean(text(t.name)), updated: stamp(t.updatedAt),
     nameWords: searchWords(text(t.name)), aliasWords: searchWordsOf(t.aliases), textWords: searchWords(text(t.description)),
+    keys: [...namesKeys([text(t.name), ...t.aliases.filter((a) => typeof a === 'string')]), ...onKeys(clean(String(t.datasetId)))],
   })];
 }
 
@@ -144,7 +166,8 @@ async function storeParts(projectId: string): Promise<Part[]> {
 
 // ── The answer ──────────────────────────────────────────────────────────────
 
-export interface SearchOptions { kinds?: readonly ModelKind[]; limit: number; datasetIds?: readonly string[] }
+/** `exceptDatasetIds`: nothing on these datasets is found (an agent's outside-the-topic check). */
+export interface SearchOptions { kinds?: readonly ModelKind[]; limit: number; datasetIds?: readonly string[]; exceptDatasetIds?: readonly string[] }
 
 const audiencesOf = async (projectId: string): Promise<Audience[]> => ((await seesSourceNames(projectId)) ? ['all', 'editor'] : ['all']);
 
@@ -153,6 +176,7 @@ async function rankOptions(projectId: string, o: SearchOptions): Promise<RankOpt
     audiences: await audiencesOf(projectId),
     ...(o.kinds ? { kinds: MODEL_KINDS.filter((k) => o.kinds?.includes(k)) } : {}),
     ...(o.datasetIds ? { datasetIds: [...new Set(o.datasetIds.filter((d) => typeof d === 'string'))] } : {}),
+    ...(o.exceptDatasetIds ? { exceptDatasetIds: [...new Set(o.exceptDatasetIds.filter((d) => typeof d === 'string'))] } : {}),
   };
 }
 
@@ -199,9 +223,22 @@ function tally(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: 
   return recordFs.withReadMemo(async () => {
     const out = noCounts();
     const hidden = (await hiddenAnywhere(projectId)).size ? hiddenCheck(projectId) : null;
+    if (hidden) await prefetch(projectId, items);
     for (const it of items) if (!hidden || !(await hidden(it))) out[it.kind] += 1;
     return out;
   });
+}
+
+/** Records read per query when the checks of a caller with a hidden column are prefetched. */
+const PREFETCH = 1000;
+
+/**
+ * The term records `items` name, read into the memo a page of ids at a time: their checks then cost no query each. The
+ * metrics' need none: the first metric check lists them all (../analysis/columnHidden metricsByName).
+ */
+async function prefetch(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<void> {
+  const paths = items.flatMap((it) => (it.kind === 'term' && isValidId(it.id) ? [terms.termFile(projectId, it.id)] : []));
+  for (let i = 0; i < paths.length; i += PREFETCH) await recordFs.readMany(paths.slice(i, i + PREFETCH));
 }
 
 /** REFERENCE: every store read, ranked in JS, then what the caller may see. */
@@ -214,7 +251,7 @@ export async function referenceModel(projectId: string, question: string, o: Sea
 
 /** INDEXED: the same answer from the index. Null without a database (or for an id not as records store it). */
 export async function indexedModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[] | null> {
-  if (!orgDb() || projectId !== projectId.toLowerCase()) return null;
+  if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
   const asked = searchWords(question);
   if (!isValidId(projectId) || !asked.length) return [];
   const opts = await rankOptions(projectId, o);
@@ -226,7 +263,7 @@ export async function referenceCount(projectId: string): Promise<ModelCounts> {
 }
 
 export async function indexedCount(projectId: string): Promise<ModelCounts | null> {
-  if (!orgDb() || projectId !== projectId.toLowerCase()) return null;
+  if (!useIndex || !orgDb() || projectId !== projectId.toLowerCase()) return null;
   if (!isValidId(projectId)) return noCounts();
   const items = await index.foundItems(projectId, await audiencesOf(projectId), recordFs.rowsUnder);
   return items && tally(projectId, items);
@@ -258,6 +295,39 @@ export function searchModel(projectId: string, question: string, o: SearchOption
 export function countModel(projectId: string): Promise<ModelCounts> {
   return indexedOr(() => indexedCount(projectId), () => referenceCount(projectId));
 }
+
+// ── Exact lookups: no word ranking, no access check (a name or a dataset's members, as the stores list them) ──
+// INDEXED only: null without a database, or (logged once) when the query fails, and the caller takes its own reference
+// path, the whole list it read before. The REFERENCE of each is here for the differential (scripts/test-askIndex.ts).
+
+/** Can the index answer for this project? Records live under the id as written: a differently-cased one reads nothing there. */
+export const indexedFor = (projectId: string): boolean => useIndex && !!orgDb() && isValidId(projectId) && projectId === projectId.toLowerCase();
+
+async function onIndex<T>(projectId: string, fn: () => Promise<T | null>): Promise<T | null> {
+  if (!indexedFor(projectId)) return null;
+  try {
+    return await fn();
+  } catch (err) {
+    fellBack(err);
+    return null;
+  }
+}
+
+/**
+ * Each item of `kind` whose name (or a term's other name) has one of `keys` (`lowerKey`, `squashKey`), or which is on a
+ * dataset of `onKey`, by item key; retired ones too, as the stores list them. CANDIDATES: the caller reads the records.
+ */
+export function keyedModel(projectId: string, kind: KeyedKind, keys: readonly string[]): Promise<KeyedItem[] | null> {
+  return onIndex(projectId, async () => (keys.length ? index.keyedItems(projectId, kind, [...new Set(keys)], recordFs.rowsUnder) : []));
+}
+export const keyedReference = async (projectId: string, kind: KeyedKind, keys: readonly string[]): Promise<KeyedItem[]> => keyedItems(await storeParts(projectId), kind, keys);
+
+const capped = (limit: number): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit) || 1));
+/** The `limit` newest items of `kind` (by their record's updatedAt, then key); a retired one left out unless `retired`. */
+export function newestModel(projectId: string, kind: KeyedKind, limit: number, retired = false): Promise<KeyedItem[] | null> {
+  return onIndex(projectId, () => index.newestItems(projectId, kind, capped(limit), retired, recordFs.rowsUnder));
+}
+export const newestReference = async (projectId: string, kind: KeyedKind, limit: number, retired = false): Promise<KeyedItem[]> => newestItems(await storeParts(projectId), kind, capped(limit), retired);
 
 /** recordFs writes keep the index current through this describer (src/server/app.ts registers it at startup). */
 export function register(): void {

@@ -19,9 +19,10 @@
 // Registered from ./copilot's register(), which hands over its number guard —
 // the guard is a safety control and there is exactly one of it.
 
-import { specDatasetsOf, specMetricsFrom, specTermOf } from './specVocabulary';
+import { specNames, specTerms, vocabularyFor } from './specVocabulary';
+import { checkAction, vocabulary } from './answerCheck';
 import { ipcMain } from './bus';
-import { keepReads, perAsk } from './askMemo';
+import { keepReads } from './askMemo';
 import { lockedTable, withLockOf } from './rowDoors';
 import { withoutColumns } from '../data/columnAccess';
 import type { Lock } from '../data/rowLock';
@@ -29,7 +30,6 @@ import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
-import * as metrics from '../analysis/metrics';
 import { buildVizData } from '../analysis/vizData';
 import type { ChartData } from '../analysis/vizData';
 import type { ValueLabelPairs } from '../analysis/valueLabels';
@@ -48,11 +48,9 @@ import {
   ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, latestDate, periodsAfterData, sanitizeStoredSpec, specFilterSteps,
   splitCandidates, validateAnswerSpec,
 } from '../ai/answerSpec';
-import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
-import type { SpecTerm } from '../ai/termFacts';
-import { listTerms } from '../analysis/terms';
+import type { AnswerChip, AnswerSpec, SpecDataset } from '../ai/answerSpec';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
-import { sanitizeLearn, suggestFixes } from '../ai/answerSuggest';
+import { sanitizeLearn } from '../ai/answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
 import { noRowsMatch, periodAfterData, valueMatched } from '../ai/answerMessages';
 import { formatDate } from '../app/format';
@@ -308,23 +306,7 @@ export async function narrate(projectId: string, built: Built, question: string,
 
 // ── The three entry points ───────────────────────────────────────────────────
 
-/**
- * Every dataset a spec may name: its columns, and what people call them — the
- * display names and "Also called" names the facts told the model to use, so a
- * spec written in those words resolves. ONE catalog read for the project;
- * records only, so a Live dataset is listed like any other.
- *
- * The three vocabularies are built once per question (./askMemo `perAsk`), for
- * the caller (a hidden column is no word of theirs). Their readers never change them.
- */
-export const specDatasets = (projectId: string): Promise<SpecDataset[]> =>
-  perAsk(`specDatasets\0${projectId}`, async () => specDatasetsOf(projectId, (await datasets.listDatasets(projectId)).map((d) => d.id)));
-
-/** The saved metrics a spec may name. Exported for scripts/test-snapshot.ts. */
-export const specMetrics = (projectId: string): Promise<SpecMetric[]> => perAsk(`specMetrics\0${projectId}`, () => specMetricsFrom(projectId, () => metrics.listMetrics(projectId)));
-
-/** The glossary terms a spec may name (semantic D10): names and aliases only, no filter value. */
-export const specTerms = (projectId: string): Promise<SpecTerm[]> => perAsk(`specTerms\0${projectId}`, async () => (await listTerms(projectId)).map(specTermOf));
+export { specDatasets, specMetrics, specTerms } from './specVocabulary'; // their home; named here for older callers
 
 export interface AnswerTurn {
   ledger: LedgerEntry[];
@@ -360,7 +342,8 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
   if (!spec || !meta) return null;
   if (answerNames(spec).some((n) => !meta.columns.some((c) => c.name === n))) return null;
   const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
-  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds], { terms: await specTerms(projectId) }).ok) return null;
+  const terms = (await vocabularyFor(projectId, { specs: [spec], datasetIds: [spec.datasetId] }))?.terms ?? (await specTerms(projectId)); // the terms it names, or every one (the reference)
+  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds], { terms }).ok) return null;
   // A Live dataset's set is its facts' own, stricter one (./liveProfile): pending and detected columns too.
   const withheld = isLive(meta) ? await liveWithheld(projectId, meta.id, meta) : await withheldColumns(projectId, meta.id);
   const { text, ledger } = previousAnswerBlock(spec, meta.name, withheld);
@@ -394,30 +377,9 @@ export async function answerFromAction(
   withheld?: ReadonlySet<string>,
   only?: ReadonlySet<string>, // an Assistant agent's topic: the datasets a spec may name (src/ipc/agentAsk.ts); none, every one
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
-  let defaultDatasetId: string | undefined;
-  if (context && context.kind === 'dataset' && context.id) defaultDatasetId = context.id;
-  if (context && context.kind === 'visual' && context.id) {
-    const v = await visuals.getVisual(projectId, context.id);
-    if (v) defaultDatasetId = v.datasetId;
-  }
-  const all = (await specDatasets(projectId)).filter((d) => !only || only.has(d.id));
-  const defined = await specMetrics(projectId);
-  const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
-  // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
-  const base = previous && on && isRefine(action.spec) ? previous : null;
-  const raw = base && on ? refineSpec(base, action.spec, on, defined, withheld) : action.spec;
-  const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question, terms: await specTerms(projectId) };
-  const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
-  if (!v.ok) {
-    // A name that does not exist: what it may have meant, picked by the app from the names alone
-    // (ai/answerSuggest) and laid over the same raw spec — the MERGED one, so a follow-up's option
-    // keeps its carried filters. An option that is the previous chart again is not one.
-    const options = v.miss ? suggestFixes(raw, v.miss, all, defined, opts).filter((o) => !base || !sameChart(base, o.spec)) : [];
-    return v.miss && options.length
-      ? { ok: false, reason: v.reason, suggest: { part: v.miss.part, said: v.miss.said, options } }
-      : { ok: false, reason: v.reason };
-  }
-  if (base && sameChart(base, v.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
+  const v = await checkAction(projectId, context, action, question, previous, withheld, only);
+  if (!v.ok) return v;
+  const base = v.base;
   const built = await computeCard(projectId, v.spec, true);
   if ('ok' in built) return built;
   // …also when it only became the previous chart once a value was matched to the one it already filtered to.
@@ -432,7 +394,8 @@ export async function answerFromAction(
  */
 export async function namedDataset(projectId: string, action: SuggestedAction): Promise<string | null> {
   if (!action.spec || isRefine(action.spec)) return null;
-  const v = validateAnswerSpec(action.spec, await specDatasets(projectId), { metrics: await specMetrics(projectId), terms: await specTerms(projectId) });
+  const vocab = await vocabulary(projectId, { specs: [action.spec], anyDataset: !specNames([action.spec]).datasets.length }); // ./answerCheck
+  const v = validateAnswerSpec(action.spec, vocab.datasets, { metrics: vocab.metrics, terms: vocab.terms });
   return v.ok ? v.spec.datasetId : null;
 }
 
