@@ -44,7 +44,7 @@ export function register(): void {
   ipcMain.handle('agent:list', async (_e, { projectId }: { projectId: string }) => {
     try {
       const { all, usable, rank, teams } = await agentsFor(projectId);
-      const latest = (await copilot.listThreads(projectId))[0];
+      const latest = await copilot.threadFor(projectId); // the caller's latest: one lookup, the list is paged
       const mine = new Set(usable.map((a) => a.id));
       // A viewer sees the agents they may use; an editor every one, for its instructions.
       const shown = rank >= EDITOR_RANK ? all : usable;

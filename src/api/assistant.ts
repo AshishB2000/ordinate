@@ -50,7 +50,8 @@ export const assistant = {
   'copilot:setEnabled': rpc({ access: 'admin', org: true, input: z.strictObject({ enabled: z.boolean() }) }),
 
   'copilot:history': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional() }), project: byProjectId }),
-  'copilot:threads': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // One page of the caller's conversations; `cursor` is the reply's `next`, the page after (src/ai/copilotRows.ts `listPage`).
+  'copilot:threads': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, cursor: z.string().regex(/^-?\d{1,18}\.\d{1,19}$/).optional() }), project: byProjectId }),
   // `agentId`: the Assistant agent the conversation is with (docs/assistant-agents); one the caller may not use is refused.
   'copilot:newThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, agentId: Uuid.nullable().optional() }), project: byProjectId }),
   // A conversation is its asker's own, so renaming or deleting it is `read` like starting one;

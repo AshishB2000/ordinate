@@ -4,7 +4,7 @@
 // row count, a turn count — is the server's; the dock only formats it.
 
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { useVerified } from '../model/assistant/api';
 
@@ -169,10 +169,18 @@ export function useHistory(projectId: string | null, threadId: string) {
   });
 }
 
-export async function listThreads(projectId: string): Promise<ThreadSummary[]> {
-  const r = (await rpc('copilot:threads', { projectId })) as { ok: boolean; threads?: ThreadSummary[] };
-  return r.ok && Array.isArray(r.threads) ? r.threads : [];
+/** One page of the caller's conversations, and the cursor of the page after it (null: the last). */
+export interface ThreadPage {
+  threads: ThreadSummary[];
+  next: string | null;
 }
+
+export async function listThreads(projectId: string, cursor?: string): Promise<ThreadPage> {
+  const r = (await rpc('copilot:threads', { projectId, ...(cursor ? { cursor } : {}) })) as { ok: boolean; threads?: ThreadSummary[]; next?: string | null };
+  return { threads: r.ok && Array.isArray(r.threads) ? r.threads : [], next: r.ok && typeof r.next === 'string' ? r.next : null };
+}
+
+const allLoaded = (d: InfiniteData<ThreadPage, string>): ThreadSummary[] => d.pages.flatMap((p) => p.threads);
 
 /** What the server calls a conversation nobody has named yet — by a first question or by hand (src/ai/copilot.ts FALLBACK_TITLE). */
 export const UNTITLED = 'Conversation';
@@ -181,14 +189,23 @@ export const UNTITLED = 'Conversation';
 export const threadTitle = (t: ThreadSummary): string => t.title || UNTITLED;
 export const turnsLabel = (t: ThreadSummary): string => (t.turnCount === 1 ? '1 turn' : `${t.turnCount} turns`);
 
-/** The project's conversations, newest-touched first — one list for the header's switcher and History. */
+/**
+ * The project's conversations, newest-touched first — one list for the header's switcher and History.
+ * The server sends them a page at a time: `data` is every page loaded so far, `fetchNextPage()` the
+ * next one while `hasNextPage` (History.tsx `MoreThreads`).
+ */
 export function useThreads(projectId: string | null, enabled: boolean) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['copilot:threads', projectId],
     enabled: enabled && !!projectId,
-    queryFn: () => listThreads(projectId as string),
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => listThreads(projectId as string, pageParam || undefined),
+    getNextPageParam: (last) => last.next ?? undefined,
+    select: allLoaded,
   });
 }
+
+export type Threads = ReturnType<typeof useThreads>;
 
 /** Something the composer's `@` can point the Assistant at. */
 export interface Mentionable {

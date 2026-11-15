@@ -80,6 +80,8 @@ export interface OrgSettings {
   publicLinks: boolean;
   aiProviders: string[];
   uploadCapMb: number | null;
+  /** Delete Assistant conversations unused for this many days; null keeps them all. */
+  assistantRetentionDays: number | null;
   maxUploadMb: number;
   providers: string[];
 }

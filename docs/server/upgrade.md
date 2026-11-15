@@ -657,6 +657,21 @@ Project assistant, which is what every earlier conversation stays.
 the Project assistant's again, and a bundle that holds agents is refused by it. Upgrading again brings
 the agents back as they were.
 
+## Assistant conversations are no longer capped at 50 (`0025_assistant_retention`)
+
+Earlier releases kept each member's 50 most recently used conversations in a project and deleted
+the rest. From this release every conversation is kept and the list loads 50 at a time
+([design](../assistant-threads/00-design.md#8-every-conversation-kept-the-list-paged-an-org-retention-setting-0025)).
+An org admin can delete old ones automatically in Admin → Settings ([ai.md](ai.md#assistant-conversations)).
+
+**Rolling out.** The migration adds one nullable column to `org_settings` and one index on
+`assistant_threads`. Nothing is deleted, and nothing changes until an admin sets a retention window.
+
+**Rolling back.** The older release caps conversations again: a member's next new conversation in a
+project deletes all but their 50 most recently used there. If members have more than 50, take a
+database backup first ([backup-restore.md](backup-restore.md)). The older release ignores the new
+column and index.
+
 ## Compose
 
 From a checkout:

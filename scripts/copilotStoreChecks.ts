@@ -6,6 +6,7 @@ import { ok } from './selfcheck';
 
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+const rows: typeof import('../src/ai/copilotRows') = require('../src/ai/copilotRows');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type As = <T>(fn: () => Promise<T>) => Promise<T>;
@@ -116,7 +117,7 @@ export async function oneMember(tag: string): Promise<void> {
       (await copilot.listThreads(p.id))[0].title === 'msg 0');
   }
 
-  // ── 8. MAX_THREADS (50) — oldest-created drops first ────────────────────────
+  // ── 8. MAX_THREADS (50) in copilot.json, oldest-created out; the rows keep every one ──
   {
     const p = await projects.createProject('Thread cap project');
     for (let i = 0; i < 55; i += 1) {
@@ -124,12 +125,21 @@ export async function oneMember(tag: string): Promise<void> {
       await copilot.appendTurn(p.id, { role: 'user', text: 'thread ' + i }, t!.id);
     }
     const list = await copilot.listThreads(p.id);
-    check('MAX_THREADS caps a project at 50 conversations', list.length === 50);
     const titles = new Set(list.map((t) => t.title));
-    check('the thread ring dropped the OLDEST conversations',
-      !titles.has('thread 0') && !titles.has('thread 4') && titles.has('thread 5'));
-    check('the thread ring kept the newest conversation', titles.has('thread 54'));
-    check('the thread cap survives a reload', (await copilot.loadThreads(p.id)).length === 50);
+    const page = await copilot.listThreadsPage(p.id);
+    if (rows.on()) {
+      check('every conversation is kept: no MAX_THREADS', list.length === 55 && (await copilot.loadThreads(p.id)).length === 55 && titles.has('thread 0'));
+      check('paged: the first 50, newest first, and a cursor for the rest',
+        page.threads.length === 50 && page.threads[0].title === 'thread 54' && typeof page.next === 'string');
+    } else {
+      check('MAX_THREADS caps a project at 50 conversations', list.length === 50);
+      check('the thread ring dropped the OLDEST conversations',
+        !titles.has('thread 0') && !titles.has('thread 4') && titles.has('thread 5'));
+      check('the thread ring kept the newest conversation', titles.has('thread 54'));
+      check('the thread cap survives a reload', (await copilot.loadThreads(p.id)).length === 50);
+      check('the file is one page: all 50, no cursor', page.threads.length === 50 && page.next === null
+        && JSON.stringify(page.threads) === JSON.stringify(list));
+    }
   }
 
   // ── 8b. renameThread / deleteThread ─────────────────────────────────────────
@@ -178,7 +188,7 @@ export async function oneMember(tag: string): Promise<void> {
   }
 }
 
-/** NV-34: the cap is per member — another member's threads never evict yours. */
+/** NV-34: the cap is per member — another member's threads never evict yours (and the rows keep everyone's). */
 export async function twoMembers(tag: string, boss: As, vic: As): Promise<void> {
   const check = tagged(tag);
   const p = await boss(() => projects.createProject('Shared project'));
@@ -191,7 +201,8 @@ export async function twoMembers(tag: string, boss: As, vic: As): Promise<void> 
   const vicFirst = (await vic(() => copilot.listThreads(p.id))).at(-1)!.id;
   await vic(() => copilot.createThread(p.id));
   const vicNow = await vic(() => copilot.listThreads(p.id));
-  check('NV-34 control: a member\'s own 51st thread still evicts their own oldest', vicNow.length === 50 && !vicNow.some((t) => t.id === vicFirst));
+  if (rows.on()) check('a member\'s own 51st thread evicts nothing', vicNow.length === 51 && vicNow.some((t) => t.id === vicFirst));
+  else check('NV-34 control: a member\'s own 51st thread still evicts their own oldest', vicNow.length === 50 && !vicNow.some((t) => t.id === vicFirst));
   check('NV-34: …and the store keeps both members\' conversations after a reload',
-    (await boss(() => copilot.loadThreads(p.id))).length === 51);
+    (await boss(() => copilot.loadThreads(p.id))).length === (rows.on() ? 52 : 51));
 }

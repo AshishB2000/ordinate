@@ -2,10 +2,12 @@
 // docs/assistant-threads/00-design.md): one row per conversation, one per turn.
 // With DATABASE_URL, ./copilot.ts hands each public call here after its own
 // checks; without it, the project's copilot.json as before. The rules are the
-// file's, kept exactly: a member reads and writes only their own
-// conversations, MAX_THREADS each per project (least recently touched go
-// first), MAX_TURNS per conversation, a title from the first user turn, and
-// "most recent" is updated_at with `touched` (the file's array order) on a tie.
+// file's, kept exactly, but one: a member reads and writes only their own
+// conversations, MAX_TURNS per conversation, a title from the first user turn,
+// and "most recent" is updated_at with `touched` (the file's array order) on a
+// tie. The one: no MAX_THREADS. Every conversation is kept, the list is paged
+// on assistant_threads_mine (`listPage`), and an org may delete the ones unused
+// for N days (`pruneUnused`, 0025_assistant_retention.sql).
 //
 // An append is an INSERT of the turn and an UPDATE of its conversation. One
 // member's writes in one project run one at a time (an advisory lock per
@@ -67,11 +69,13 @@ async function lockOwner(c: PoolClient, org: string, projectId: string, owner: s
 }
 
 interface TurnRow { thread_id: string; id: string; role: string; text: string; created_at: Date; body: string }
-interface ThreadRow { id: string; owner: string | null; title: string; created_at: Date; updated_at: Date; turns: number; agent_id: string | null }
+interface ThreadRow { id: string; owner: string | null; title: string; created_at: Date; updated_at: Date; turns: number; agent_id: string | null; at_us: string; touched: string }
 
 const RECENT = 'ORDER BY t.updated_at DESC, t.touched DESC';
+// `at_us` and `touched` are a page's cursor: updated_at to the microsecond, so a tie is never lost to rounding.
 const SUMMARY = `SELECT t.id::text, t.title, t.updated_at, t.agent_id::text,
-    (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns
+    (SELECT count(*)::int FROM assistant_turns u WHERE u.org_id = t.org_id AND u.project_id = t.project_id AND u.thread_id = t.id) AS turns,
+    (extract(epoch FROM t.updated_at) * 1000000)::bigint::text AS at_us, t.touched::text AS touched
   FROM assistant_threads t`;
 const TURNS = 'SELECT thread_id::text, id::text, role, text, created_at, body FROM assistant_turns';
 
@@ -99,23 +103,14 @@ async function turnsOf(c: PoolClient, org: string, projectId: string, threadId: 
 }
 
 /** The caller's conversation `threadId`, else their most recent, else null — locked for this transaction when `lock`. */
-async function target(c: PoolClient, org: string, projectId: string, threadId: string | undefined, lock = false): Promise<{ id: string; title: string } | null> {
+async function target(c: PoolClient, org: string, projectId: string, threadId: string | undefined, lock = false): Promise<{ id: string; title: string; agent_id?: string | null } | null> {
   const named = threadId && copilot.isValidId(threadId) ? threadId : null;
-  const r = await c.query<{ id: string; title: string }>(
-    `SELECT t.id::text, t.title FROM assistant_threads t WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
+  const r = await c.query<{ id: string; title: string; agent_id: string | null }>(
+    `SELECT t.id::text, t.title, t.agent_id::text FROM assistant_threads t WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
       ORDER BY coalesce(t.id = $4::uuid, false) DESC, t.updated_at DESC, t.touched DESC LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [org, projectId, me(), named],
   );
   return r.rows[0] ?? null;
-}
-
-/** The owner's newest MAX_THREADS by `touched`: the file's ring, least recently used out first. */
-async function capThreads(c: PoolClient, org: string, projectId: string, owner: string): Promise<void> {
-  await c.query(
-    `DELETE FROM assistant_threads WHERE org_id = $1 AND project_id = $2 AND owner = $3 AND id NOT IN (
-       SELECT id FROM assistant_threads WHERE org_id = $1 AND project_id = $2 AND owner = $3 ORDER BY touched DESC LIMIT ${copilot.MAX_THREADS})`,
-    [org, projectId, owner],
-  );
 }
 
 const newThread = (c: PoolClient, org: string, projectId: string, id: string, at: string, agentId?: string) =>
@@ -153,9 +148,35 @@ export async function listThreads(projectId: string): Promise<CopilotThreadSumma
   return r.rows.map(summaryOf);
 }
 
-export async function latestThreadId(projectId: string): Promise<string | null> {
+/** A page's cursor, `<updated_at in µs since 1970>.<touched>`: the last row it showed. Anything else is null. */
+const CURSOR_RE = /^(-?\d{1,18})\.(\d{1,19})$/;
+
+/**
+ * The caller's conversations newest first, `copilot.THREAD_PAGE` at a time: those after `after` (a cursor
+ * this returned), and the cursor after the last when there are more. Keyset on assistant_threads_mine
+ * (updated_at, touched), never OFFSET: a page costs the same however deep, and a conversation touched
+ * between two pages moves to the top instead of shifting what the next page shows.
+ */
+export async function listPage(projectId: string, after?: string): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
+  const from = after === undefined ? null : CURSOR_RE.exec(after);
+  if (after !== undefined && !from) return { threads: [], next: null };
   await moveFile(projectId);
-  return tx(false, async (c, org) => (await target(c, org, projectId, undefined))?.id ?? null);
+  const page = copilot.THREAD_PAGE;
+  const r = await tx(false, (c, org) => c.query<ThreadRow>(
+    `${SUMMARY} WHERE t.org_id = $1 AND t.project_id = $2 AND t.owner = $3
+       ${from ? `AND (t.updated_at, t.touched) < (timestamptz 'epoch' + $5::bigint * interval '1 microsecond', $6::bigint)` : ''}
+     ${RECENT} LIMIT $4`,
+    [org, projectId, me(), page + 1, ...(from ? [from[1], from[2]] : [])],
+  ));
+  const rows = r.rows.slice(0, page);
+  const last = rows.at(-1);
+  return { threads: rows.map(summaryOf), next: r.rows.length > page && last ? `${last.at_us}.${last.touched}` : null };
+}
+
+export async function threadFor(projectId: string, threadId?: string): Promise<copilot.ThreadRef | null> {
+  await moveFile(projectId);
+  const t = await tx(false, (c, org) => target(c, org, projectId, threadId));
+  return t ? { id: t.id, title: t.title, ...(t.agent_id ? { agentId: t.agent_id } : {}) } : null;
 }
 
 export async function createThread(projectId: string, at: string, agentId?: string): Promise<CopilotThreadSummary> {
@@ -164,7 +185,6 @@ export async function createThread(projectId: string, at: string, agentId?: stri
   await tx(true, async (c, org) => {
     await lockOwner(c, org, projectId, me());
     await newThread(c, org, projectId, id, at, agentId);
-    await capThreads(c, org, projectId, me());
   });
   return { id, title: copilot.FALLBACK_TITLE, updatedAt: at, turnCount: 0, ...(agentId ? { agentId } : {}) };
 }
@@ -186,7 +206,6 @@ export async function appendTurn(projectId: string, record: CopilotTurn, threadI
     if (!t) {
       t = { id: randomUUID(), title: copilot.FALLBACK_TITLE };
       await newThread(c, org, projectId, t.id, record.createdAt);
-      await capThreads(c, org, projectId, me());
     }
     const seq = (await c.query<{ seq: number }>(
       `INSERT INTO assistant_turns (org_id, project_id, thread_id, id, seq, role, text, created_at, body)
@@ -253,6 +272,37 @@ export async function clearHistory(projectId: string): Promise<void> {
   await tx(true, (c, org) => c.query('DELETE FROM assistant_threads WHERE org_id = $1 AND project_id = $2', [org, projectId]));
 }
 
+// ── Retention (Admin → Settings) ────────────────────────────────────────────
+
+/** Conversations deleted per transaction, each with its turns (at most MAX_TURNS each), and transactions per pass. */
+const PRUNE_BATCH = 100;
+const PRUNE_BATCHES = 20;
+
+/**
+ * Deletes `org`'s conversations whose last turn is older than its "Delete Assistant conversations unused for
+ * N days" (org_settings.assistant_retention_days); none while that is unset, the default. PRUNE_BATCH per
+ * transaction, so no lock is held for long, and at most PRUNE_BATCHES a pass: a backlog clears over the
+ * next passes of the shared sweep (../server/sharedState.ts), which calls this. A conversation an append
+ * holds is skipped (SKIP LOCKED): it is in use. Returns how many went.
+ */
+export async function pruneUnused(org: string = ctx().org.id): Promise<number> {
+  if (!orgDb()) return 0; // conversations are not rows here (a sweep wired without them, as some suites do)
+  const days = await inOrg(async (c) => (await c.query<{ d: number | null }>('SELECT assistant_retention_days AS d FROM org_settings WHERE org_id = $1', [org])).rows[0]?.d ?? null, org);
+  if (!days) return 0;
+  let total = 0;
+  for (let i = 0; i < PRUNE_BATCHES; i++) {
+    const n = await inOrg(async (c) => (await c.query(
+      `DELETE FROM assistant_threads WHERE (org_id, project_id, id) IN (
+         SELECT org_id, project_id, id FROM assistant_threads WHERE org_id = $1 AND updated_at < now() - $2 * interval '1 day'
+          LIMIT ${PRUNE_BATCH} FOR UPDATE SKIP LOCKED)`,
+      [org, days],
+    )).rowCount ?? 0, org);
+    total += n;
+    if (n < PRUNE_BATCH) break;
+  }
+  return total;
+}
+
 // ── The move from copilot.json ──────────────────────────────────────────────
 
 // timestamptz takes any year from 4713 BC; a stored time Postgres would refuse, or none, becomes now.
@@ -288,7 +338,6 @@ async function insertThreads(c: PoolClient, org: string, projectId: string, thre
         t.turns.map((x) => pgText(x.text)), t.turns.map((x) => when(x.createdAt, now)), t.turns.map(bodyOf)],
     );
   }
-  for (const owner of new Set(threads.flatMap((t) => (t.owner ? [t.owner] : [])))) await capThreads(c, org, projectId, owner);
 }
 
 /** The record's text; null when it is there but past its limits; undefined when there is none. */
