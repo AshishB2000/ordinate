@@ -79,6 +79,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'embed:status': 'META',
   'events:list': 'META',
   'explore:suggest': 'META',
+  'folder:of': 'META', // whether a dataset or dashboard id is in a folder the caller cannot open: no row, no figure, no name
   'format:colors:get': 'REDACT',
   'formula:check': 'EXPLICIT',
   'formula:functions': 'META',

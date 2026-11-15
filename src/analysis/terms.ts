@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
+import { openOnly, opens } from '../server/authz/folderGate'; // shared folders: it follows its dataset (docs/team-folders D3, D12)
 import { isValidId } from '../app/ids';
 import { sanitizeFilterList } from '../data/filterList';
 import { hasTermType, isTermStep } from '../data/termStep';
@@ -143,7 +144,7 @@ export async function listFullTerms(projectId: string): Promise<Term[]> {
       if ((err as { code?: string }).code !== 'ENOENT') logger.error('[terms] Skipping corrupt or unreadable term:', id, (err as Error).message);
     }
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return openOnly(projectId, 'dataset', out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })), (t) => t.datasetId);
 }
 
 /** One stored record → its summary, or null for one the list skips: the Assistant search index's parser (0027). */
@@ -160,7 +161,8 @@ export async function listTerms(projectId: string): Promise<TermSummary[]> {
 /** `text`: the record's text read already (recordFs.readMany), in place of a readFile: what readFile gives, or what it throws. */
 export async function readTerm(projectId: string, id: string, text?: () => string): Promise<Tagged<Term> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('term', text ?? termFile(projectId, id), (d) => (isValidTerm(d) ? normalize(d, projectId) : null));
+  const t = await readTagged('term', text ?? termFile(projectId, id), (d) => (isValidTerm(d) ? normalize(d, projectId) : null));
+  return t && (await opens(projectId, 'dataset', t.rec.datasetId)) ? t : null; // closed: as missing, so its guarded save refuses too
 }
 
 export async function getTerm(projectId: string, id: string, text?: () => string): Promise<Term | null> {

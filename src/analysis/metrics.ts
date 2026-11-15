@@ -24,6 +24,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
+import { openOnly, opens } from '../server/authz/folderGate'; // shared folders: it follows its dataset (docs/team-folders D3, D12)
 import { sanitizeFilterList } from '../data/filterList';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
@@ -336,7 +337,7 @@ async function listed(projectId: string, texts?: Map<string, () => string>): Pro
     }
   }
   out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-  return out;
+  return openOnly(projectId, 'dataset', out, (m) => m.datasetId);
 }
 
 /**
@@ -346,7 +347,8 @@ async function listed(projectId: string, texts?: Map<string, () => string>): Pro
  */
 export async function readMetric(projectId: string, id: string, kind: 'metric' | 'metricTree' = 'metric'): Promise<Tagged<Metric> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged(kind, metricFilePath(projectId, id), (d) => (isValidMetric(d) ? normalize(d, projectId) : null));
+  const t = await readTagged(kind, metricFilePath(projectId, id), (d) => (isValidMetric(d) ? normalize(d, projectId) : null));
+  return t && (await opens(projectId, 'dataset', t.rec.datasetId)) ? t : null; // closed: as missing, so its guarded save refuses too
 }
 
 /** `text`: the record's text, read already (../app/recordTexts readTexts), in place of a readFile. */
@@ -356,7 +358,8 @@ export async function getMetric(projectId: string, id: string, text?: () => stri
     const raw = text ? text() : await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidMetric(data)) return null;
-    return normalize(data, projectId);
+    const m = normalize(data, projectId);
+    return (await opens(projectId, 'dataset', m.datasetId)) ? m : null;
   } catch (_) {
     return null;
   }

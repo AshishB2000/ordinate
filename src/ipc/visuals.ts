@@ -1,5 +1,5 @@
 import { ipcMain } from './bus';
-import { expandedOrRefusal, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
+import { expandedOrRefusal, folderRefused, lockedViz, storedFigureAsk, visualReplyForCaller, withNotes } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
@@ -418,7 +418,7 @@ export type VizDataReply =
       notes?: string[]; // glossary terms this chart left out (analysis/termExpand termNotApplied); a fan-out's (./vizFanOut)
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out; a row access refusal; a filter it cannot apply; a layer's metric.
-  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE | 'external_metric'; reason?: string };
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy' | 'calc_not_additive' | typeof TERM_CODE | 'external_metric' | 'folder'; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {
@@ -455,6 +455,8 @@ async function overCeiling(projectId: string, datasetId: string, max?: number): 
 export type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
 /** THE chart door: terms expanded, a date control's period moved onto the date the chart counts by (D9), row access rules (./rowDoors), then the body (./vizDataCached). */
 export async function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
+  const closed = await folderRefused(projectId, datasetId); // shared folders before anything reads the question (docs/team-folders D9)
+  if (closed) return closed;
   const expanded = await expandedOrRefusal(projectId, datasetId, filters);
   if (!('steps' in expanded)) return expanded;
   const scoped = await chartScope(projectId, datasetId, encoding, expanded.steps); // no mark: the same steps, no read

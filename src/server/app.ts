@@ -665,4 +665,6 @@ export function registerHandlers(): void {
   (require('../ipc/metricTree') as typeof import('../ipc/metricTree')).register();
   // @mentions (docs/notifications): the picker, the caller's "Mentioned you" and its email setting.
   (require('./mentions/rpc') as typeof import('./mentions/rpc')).register();
+  // Shared folders (docs/team-folders): the bookmark check, folder:of.
+  (require('../ipc/folders') as typeof import('../ipc/folders')).register();
 }

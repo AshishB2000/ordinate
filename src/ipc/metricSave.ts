@@ -21,6 +21,7 @@ import * as datasets from '../data/datasets';
 import { externalReadOnly } from '../engine/semanticMessages';
 import { layerLabel, refuseLayer } from '../engine/live/semantic/semanticRefusals';
 import * as msg from './metricSaveMessages';
+import { wholeProject } from '../server/authz/folders';
 
 /** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
 export function nameTakenMessage(name: unknown): string {
@@ -54,7 +55,7 @@ export async function nameTaken(projectId: string, name: unknown, exceptId?: str
 /** The sentence a name is refused with — another metric's, or a glossary term's name or alias (semantic D10) — or null. */
 export async function nameRefusal(projectId: string, name: unknown, exceptId?: string): Promise<string | null> {
   if (!String(name || '').trim()) return null;
-  return nameRefusalAmong(name, await metrics.listMetrics(projectId), await listFullTerms(projectId), exceptId);
+  return wholeProject(async () => nameRefusalAmong(name, await metrics.listMetrics(projectId), await listFullTerms(projectId), exceptId));
 }
 
 /** A refusal as the reply spreads it: the sentence and the box it belongs beside. */

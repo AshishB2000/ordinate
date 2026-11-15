@@ -7,15 +7,16 @@ import { aliasCollision } from '../app/columnNames';
 import { listMetrics } from './metrics';
 import { listFullTerms } from './terms'; // a cycle with ./terms: both only call each other at run time
 import * as msg from '../data/termMessages';
+import { wholeProject } from '../server/authz/folders'; // names are unique across every folder (docs/team-folders, Ceilings)
 
 /** The first of `names` a metric or another term already answers to, and whose it is; or null. */
 export async function nameClash(projectId: string, names: string[], exceptId?: string): Promise<{ said: string; takenBy: string } | null> {
   const said = names.filter((n) => n.trim());
   if (!said.length) return null;
-  const others = [
+  const others = await wholeProject(async () => [
     ...(await listMetrics(projectId)).filter((m) => m.id !== exceptId).map((m) => ({ name: m.name })),
     ...(await listFullTerms(projectId)).filter((t) => t.id !== exceptId),
-  ];
+  ]);
   const hit = aliasCollision(said, others);
   return hit ? { said: hit.alias, takenBy: hit.column.name } : null;
 }
@@ -28,6 +29,6 @@ export async function termNameProblem(projectId: string, name: string, aliases: 
 
 /** The name of the term that answers to `name` (its name or an alias), for a metric's save; or null. */
 export async function termHolding(projectId: string, name: string): Promise<string | null> {
-  const hit = aliasCollision([name], await listFullTerms(projectId));
+  const hit = aliasCollision([name], await wholeProject(() => listFullTerms(projectId)));
   return hit ? hit.column.name : null;
 }

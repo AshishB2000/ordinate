@@ -15,6 +15,7 @@ import { isValidId, projectDir, RECORD_DIR } from '../app/recordKinds';
 import * as recordFs from '../app/recordFs';
 import { contentTag, lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeVerified, sanitizeVerifiedSql, type VerifiedQuestion, type VerifiedSqlQuestion } from './verifiedRules';
+import { levelsOf, opens } from '../server/authz/folderGate'; // shared folders: it follows its dataset (docs/team-folders D3, D12)
 
 const dirOf = (projectId: string): string => path.join(projectDir(projectId), RECORD_DIR.verified);
 const fileOf = (projectId: string, id: string): string => path.join(dirOf(projectId), id + '.json');
@@ -53,7 +54,10 @@ export async function listBoth(projectId: string): Promise<Both> {
   }
   out.spec.sort(newestFirst);
   out.sql.sort(newestFirst);
-  return out;
+  // Shared folders: a chart question follows its dataset, an SQL one every dataset it reads (docs/team-folders D3, D12).
+  const level = await levelsOf(projectId, 'dataset');
+  if (!level) return out;
+  return { spec: out.spec.filter((t) => level(t.rec.spec.datasetId) !== 'none'), sql: out.sql.filter((t) => t.rec.sql.datasetIds.every((id) => level(id) !== 'none')) };
 }
 
 /** Every chart question of the project with the tag of what is stored, newest `updatedAt` first. A corrupt file, or an SQL question, is skipped. */
@@ -120,8 +124,10 @@ export async function readVerified(projectId: string, id: string): Promise<Tagge
   return readTagged('verified', fileOf(projectId, id), normalize(projectId));
 }
 
+/** As the caller may read it: null in a folder they cannot open. (`readVerified` is the write path's, unfiltered: a save asks "does it exist?".) */
 export async function getVerified(projectId: string, id: string): Promise<VerifiedQuestion | null> {
-  return (await readVerified(projectId, id))?.rec ?? null;
+  const q = (await readVerified(projectId, id))?.rec ?? null;
+  return q && (await opens(projectId, 'dataset', q.spec.datasetId)) ? q : null;
 }
 
 /** The SQL question `id`, or null (none, or a chart's question). */

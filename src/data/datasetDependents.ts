@@ -33,6 +33,7 @@ import * as datasets from './datasets';
 import { refreshDataset } from './datasetRefresh';
 import { announceRefreshed } from './refreshEvents';
 import { trackWork } from '../server/lifecycle';
+import { wholeProject } from '../server/authz/folders';
 
 /** How many SQL hops downstream one change may reach. */
 const MAX_DEPTH = 8;
@@ -41,7 +42,9 @@ const queues = new Map<string, Promise<void>>();
 
 export function refreshDependents(projectId: string, changedId: string): Promise<void> {
   const prev = queues.get(projectId) || Promise.resolve();
-  const next = prev.then(() => pushFrom(projectId, changedId)).catch(() => { /* never reject */ });
+  // Every folder's dependents (docs/team-folders D14): the cascade is upkeep, never a reply, and one narrowed to the
+  // caller's folders would leave another folder's queries stale.
+  const next = prev.then(() => wholeProject(() => pushFrom(projectId, changedId))).catch(() => { /* never reject */ });
   queues.set(projectId, next);
   // Callers drop it un-awaited; the shutdown waits for it before ending the pool.
   trackWork(next);

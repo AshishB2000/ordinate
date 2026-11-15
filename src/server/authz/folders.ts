@@ -98,6 +98,11 @@ export function folderRaised(): number {
   return raised;
 }
 
+/** The refusal as a reply, for a door whose contract answers `{ok:false, error}` (a chart door never throws). */
+export function folderRefusal(reason: FolderReason): { ok: false; code: typeof FOLDER_CODE; reason: FolderReason; error: string } {
+  return { ok: false, code: FOLDER_CODE, reason, error: SENTENCES[reason]() };
+}
+
 /** Types the folder refusals a handler caught into `{ok:false, error}` (per batch item), as row access rules do. */
 export function tagFolderRefusals<T>(reply: T): T {
   return tagRefusals(reply, new Map(FOLDER_REASONS.map((r) => [SENTENCES[r](), r])), FOLDER_CODE);
@@ -215,10 +220,13 @@ async function resolve(projectId: string): Promise<FolderAccess> {
   return accessFrom(projectId, rank, await inOrg((c, org) => treeOf(c, org, projectId, email)));
 }
 
-/** The caller's folders on `projectId`. Org admins, project admins and `wholeProject` walks: `{ all: true }`, no query. */
+/**
+ * The caller's folders on `projectId`. Org admins, project admins and `wholeProject` walks: `{ all: true }`, no query.
+ * So is a published page's request (`/p/`, a signed embed): its audience is the link's (D17), chosen at Publish.
+ */
 export function folderAccessOn(projectId: string): Promise<FolderAccess> {
   const who = ctx();
-  if (who.user.role === 'admin' || inWholeProject()) return Promise.resolve(ALL); // org admins, the jobs' system identity, desktop
+  if (who.user.role === 'admin' || who.published === true || inWholeProject()) return Promise.resolve(ALL); // org admins, the jobs' system identity, desktop
   const p = projectId.toLowerCase();
   const memo = perRequest(accessMemo);
   const key = orgKey(`${who.user.email}\u0000${p}`);
@@ -255,6 +263,28 @@ export async function placementOf(projectId: string, kind: PlacedKind, ids: read
   }
   for (const id of missing) if (!memo.has(keyOf(id))) memo.set(keyOf(id), p);
   return new Map(want.map((id) => [id, memo.get(keyOf(id)) as string]));
+}
+
+const listMemo = new WeakMap<object, Map<string, Promise<ReadonlyMap<string, string>>>>();
+
+/** Every moved item of `kind` in the project → its folder (one query, memoised per request): what a list filters by. */
+export function placedIn(projectId: string, kind: PlacedKind): Promise<ReadonlyMap<string, string>> {
+  checkKind(kind);
+  const p = projectId.toLowerCase();
+  const memo = perRequest(listMemo);
+  const key = orgKey(`${p}\u0000${kind}`);
+  let hit = memo.get(key);
+  if (!hit) {
+    hit = orgDb()
+      ? inOrg(async (c, org) => new Map((await c.query<{ item_id: string; folder_id: string }>(
+          'SELECT item_id, folder_id::text AS folder_id FROM folder_items WHERE org_id = $1 AND project_id = $2 AND kind = $3',
+          [org, p, kind],
+        )).rows.map((r) => [r.item_id, r.folder_id])))
+      : Promise.resolve(new Map());
+    memo.set(key, hit);
+    hit.catch(() => memo.delete(key));
+  }
+  return hit;
 }
 
 /** The caller's level on one item. Rank 3 and a project without folders need no placement query. */

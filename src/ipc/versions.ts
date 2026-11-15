@@ -76,12 +76,13 @@ export async function writeBack(projectId: string, type: string, id: string, rec
 export function register(): void {
   versionDiff.register();
   // A dashboard's history is its draft's: a viewer gets none of it — the replies of a record with no history.
-  const draftHistory = async (projectId: unknown, type: unknown) => type === 'dashboard' && analysis.readsPublishedOnly(String(projectId || ''));
+  // Per dashboard: a caller with Can view on its folder reads none either (docs/team-folders D8).
+  const draftHistory = async (projectId: unknown, type: unknown, id: unknown) => type === 'dashboard' && analysis.readsPublishedOnly(String(projectId || ''), String(id || ''));
   ipcMain.handle('versions:list', async (_e, { projectId, type, id }: any = {}) =>
-    (await draftHistory(projectId, type)) ? [] : versions.list(String(projectId || ''), String(type || ''), String(id || '')));
+    (await draftHistory(projectId, type, id)) ? [] : versions.list(String(projectId || ''), String(type || ''), String(id || '')));
 
   ipcMain.handle('versions:get', async (_e, { projectId, type, id, key }: any = {}) => {
-    if (await draftHistory(projectId, type)) return null;
+    if (await draftHistory(projectId, type, id)) return null;
     // A term's version holds its filter values: none for a caller row access rules restrict (semantic D12).
     if (type === 'term' && (await restrictedOn(String(projectId || '')))) return null;
     // An input table's version is its whole table: refused like its rows (row-policy D9).

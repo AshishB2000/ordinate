@@ -7,12 +7,15 @@
 //    contract is reachable only at rank 3, the rank that opens every folder.
 //    NEGATIVE CONTROLS: a planted contract is reported; a planted stale entry is reported; a `write`
 //    contract is reachable at rank 2, so the rank check can tell.
+// 0, 2–5 and 7 (E2, with DATABASE_URL): no folders → identical replies; the sweep; by id; figures; the storage
+//    net; the security walks — scripts/folderNet.ts, each with its negative control.
 //
-//   npm run build:ts && node scripts/test-folderSafetyNet.js
+//   npm run build:ts && [DATABASE_URL=…] node scripts/test-folderSafetyNet.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { READS, WRITES } from './folderReaders';
+import { databaseSections } from './folderNet';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -74,6 +77,8 @@ const rankPool = (rank: number) => ({ query: async () => ({ rows: [{ rank }] }) 
   const planted = { ...(admins.find(([, c]) => !('org' in c))?.[1] as Contract), access: 'write' } as Contract;
   ok('NEGATIVE CONTROL: the same contract at `write` is reached at rank 2', (await decide(as('editor'), scoped(planted), 2)).ok);
   ok('rank 3 opens every folder: the resolver answers { all: true }, whatever the folders', folders.accessFrom(pid, 3, [{ id: '6b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', parentId: null, shareFigures: false, grant: null }]).all === true);
+
+  await databaseSections(); // 2–5 and 7 (E2), with DATABASE_URL
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(() => {

@@ -18,6 +18,7 @@
 import { ipcMain } from './bus';
 import { anyPolicyClosed, hiddenAnywhere, restrictedOn } from '../data/rowAccess';
 import * as projects from '../app/projects';
+import { anyClosed } from '../server/authz/folderGate';
 import * as colorMap from '../analysis/colorMap';
 import type { ColorMap, ColumnColors } from '../analysis/colorMap';
 
@@ -64,6 +65,7 @@ export function register(): void {
     // and no column's that is hidden from them on any dataset (part 4, D18).
     if (!project) return {};
     if ((await restrictedOn(projectId)) && (await anyPolicyClosed(projectId))) return {};
+    if (await anyClosed(projectId, 'dataset')) return {}; // nor any to a caller a folder closes a dataset to: which values are its is unknown (docs/team-folders)
     const map = colorMap.sanitizeColorMap(project.colorMap);
     for (const c of await hiddenAnywhere(projectId)) delete map[c];
     return map;

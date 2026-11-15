@@ -31,6 +31,8 @@ import * as appPaths from '../app/paths';
 import * as alerts from './alerts';
 import type { AlertEvent, AlertRule } from './alerts';
 import * as datasets from '../data/datasets';
+import { levelsOf } from '../server/authz/folderGate';
+import { wholeProject } from '../server/authz/folders';
 import { connectionDatasetIds } from '../data/sourceNames';
 import { withoutRunError } from './pipelineAlerts';
 import * as projects from '../app/projects';
@@ -105,7 +107,22 @@ export function rulesOf(raw: any): AlertRule[] { // any: the parsed file, saniti
   return rules;
 }
 
+/**
+ * The rules and events the caller can open (docs/team-folders, "What lives where"): a rule follows its dashboard when
+ * it was made from one, else its dataset; an event follows its rule (its dataset once the rule is gone). The writes
+ * below read the stored file (`loadStored`): a closed rule is never dropped by a save.
+ */
 export async function load(projectId: string): Promise<AlertFile> {
+  const file = await loadStored(projectId);
+  const [boards, sets] = await Promise.all([levelsOf(projectId, 'dashboard'), levelsOf(projectId, 'dataset')]);
+  if (!boards || !sets) return file;
+  const opens = (r: AlertRule): boolean => (r.createdFrom?.analysisId ? boards(r.createdFrom.analysisId) : sets(r.datasetId)) !== 'none';
+  const byId = new Map(file.rules.map((r) => [r.id, r]));
+  const events = file.events.filter((e) => { const r = byId.get(e.ruleId); return r ? opens(r) : sets(e.datasetId) !== 'none'; });
+  return { ...file, rules: file.rules.filter(opens), events };
+}
+
+async function loadStored(projectId: string): Promise<AlertFile> {
   if (!UUID_RE.test(String(projectId || ''))) return empty();
   let raw: any;
   try {
@@ -150,7 +167,7 @@ async function save(projectId: string, file: AlertFile): Promise<boolean> {
  */
 function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => Promise<T>): Promise<T> {
   if (!UUID_RE.test(String(projectId || ''))) return fn(empty()); // nothing to hold: load and save refuse it too
-  return recordFs.locked(alertsFile(projectId), async () => fn(await load(projectId))).catch((err: Error) => {
+  return recordFs.locked(alertsFile(projectId), async () => fn(await loadStored(projectId))).catch((err: Error) => {
     logger.error('[alerts] Could not update alerts.json:', err && err.message);
     return fallback;
   });
@@ -608,12 +625,14 @@ export async function testRule(projectId: string, raw: any): Promise<{
 export async function syncWatchRules(projectId: string): Promise<void> {
   let summaries: Awaited<ReturnType<typeof datasets.listDatasets>>;
   try {
-    summaries = await datasets.listDatasets(projectId);
+    // Every dataset, whoever opens the bell (docs/team-folders D14): a list narrowed to their folders would read
+    // another folder's watched datasets as gone and drop their rules.
+    summaries = await wholeProject(() => datasets.listDatasets(projectId));
   } catch (_) {
     return;
   }
   // Called on every bell open: the lock only when something would change.
-  if (!reconcileWatch(await load(projectId), summaries, true)) return;
+  if (!reconcileWatch(await loadStored(projectId), summaries, true)) return;
   await withAlerts(projectId, undefined, async (file) => {
     if (reconcileWatch(file, summaries, false)) await save(projectId, file);
   });

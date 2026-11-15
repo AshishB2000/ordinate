@@ -42,6 +42,7 @@ import { RowAccessTab } from './RowAccessTab';
 import { ColumnAccessSection } from './ColumnAccessSection';
 import { RowAccessOff, ScopedChip } from './RowAccessOff';
 import { useCan } from '../projects/api';
+import { useFolderClosed } from '../live/folderClosed';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots', 'access', 'about'] as const;
 type TabId = (typeof TABS)[number];
@@ -222,6 +223,7 @@ export default function DatasetPage() {
   const { projectId = '', datasetId = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const q = useDatasetColumns(projectId, datasetId);
+  const folder = useFolderClosed(projectId, 'dataset', datasetId, q.isSuccess && !q.data); // nothing: in a folder the caller cannot open? (team-folders D12)
   // The URL names the project: the shell's switcher shows it (T2.2).
   useAdoptProject(projectId);
   const list = useDatasets(projectId);
@@ -236,7 +238,7 @@ export default function DatasetPage() {
       return n;
     }, { replace: true });
 
-  if (q.isPending) return <PageSkeleton />;
+  if (q.isPending || folder.pending) return <PageSkeleton />;
   if (q.isError) {
     return (
       <Page title="Dataset">
@@ -248,15 +250,15 @@ export default function DatasetPage() {
     return (
       <Page title="Dataset">
         <EmptyState
-          icon="database"
-          title="Dataset not found"
+          icon={folder.sentence ? 'lock' : 'database'}
+          title={folder.sentence ?? 'Dataset not found'}
           actions={
             <Link className={buttonClass('primary')} to={`/data/${projectId}`}>
               Back to datasets
             </Link>
           }
         >
-          It may have been deleted, or moved to the Trash with its project.
+          {folder.sentence ? 'A project admin can tell you who can open it.' : 'It may have been deleted, or moved to the Trash with its project.'}
         </EmptyState>
       </Page>
     );

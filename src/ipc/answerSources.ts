@@ -22,6 +22,8 @@ import { isValidId } from '../app/ids';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';
+import { atLeast } from '../server/authz/folders';
+import { levelsOf } from '../server/authz/folderGate';
 import * as connections from '../connectors/connections';
 import { sourceView } from '../data/datasetOrigin';
 import { seesSourceNames } from '../data/sourceNames';
@@ -91,11 +93,13 @@ export async function alsoOn(projectId: string, datasetId: string): Promise<Also
     } catch { /* unreadable: its list skips it too */ }
   }
   const publishedOnly = await analysis.readsPublishedOnly(projectId);
+  const level = await levelsOf(projectId, 'dashboard'); // shared folders: a closed one is not named, a Can-view one is its copy (D8)
   const found: Array<{ id: string; name: string; updatedAt: string; draft?: true }> = [];
   for (const [name, body] of await recordFs.recordsNaming(dir(projectId, 'analyses'), [datasetId, ...onIt])) {
     try {
       const stored = JSON.parse(body);
-      const a = isValidId(idOf(name)) ? analysis.analysisOf(projectId, stored, publishedOnly) : null;
+      const lv = isValidId(idOf(name)) ? level?.(idOf(name)) : 'none';
+      const a = lv !== 'none' ? analysis.analysisOf(projectId, stored, publishedOnly || (lv !== undefined && !atLeast(lv, 'edit'))) : null;
       if (a && shows(a, datasetId, onIt)) found.push({ id: a.id, name: a.name, updatedAt: a.updatedAt, ...(!publishedOnly && !a.published ? { draft: true as const } : {}) });
     } catch { /* unreadable: its list skips it too */ }
   }

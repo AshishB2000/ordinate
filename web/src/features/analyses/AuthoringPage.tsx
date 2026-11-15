@@ -18,6 +18,7 @@ import { useAdoptProject } from '../projects/current';
 import { openKey, useOpenAnalysis } from './api';
 import { Editor } from './editor/Editor';
 import { useReload } from '../editConflicts/useEditGuard';
+import { useFolderClosed } from '../live/folderClosed';
 import s from './editor/Editor.module.css';
 
 function Loading() {
@@ -53,6 +54,8 @@ export default function AuthoringPage({ viewing = false, published = false }: { 
   const { gen, reload } = useReload(openKey(projectId, analysisId, published));
   // The caller's role decides whether this opens to edit or to read; wait for it, so the tools never flash.
   const roles = useRoles();
+  // Nothing loaded: is it in a folder the caller cannot open? (docs/team-folders D12)
+  const folder = useFolderClosed(projectId, 'dashboard', analysisId, q.isSuccess && !q.data.ok);
   const client = useQueryClient();
   useEffect(() => () => client.removeQueries({ queryKey: ['analysis:open', projectId, analysisId] }), [client, projectId, analysisId]);
   const back = (
@@ -61,11 +64,20 @@ export default function AuthoringPage({ viewing = false, published = false }: { 
     </Link>
   );
 
-  if (q.isPending || roles.isPending) return <Loading />;
+  if (q.isPending || roles.isPending || folder.pending) return <Loading />;
   if (q.isError) {
     return (
       <Page title="Dashboard">
         <ErrorState title="That dashboard could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />
+      </Page>
+    );
+  }
+  if (!q.data.ok && folder.sentence) {
+    return (
+      <Page title="Dashboard">
+        <EmptyState icon="lock" title={folder.sentence} actions={back}>
+          A project admin can tell you who can open it.
+        </EmptyState>
       </Page>
     );
   }
