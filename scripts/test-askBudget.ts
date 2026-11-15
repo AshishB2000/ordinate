@@ -5,7 +5,9 @@
 //
 // Cases, each in a conversation of its own: (a) from Home, (b) with a dataset open, (c) through an agent with a topic of
 // three datasets, (e) with a dashboard open (four tiles on two datasets), all as an admin; (d) case (a) as a restricted
-// viewer, one column hidden from them. A reopened conversation joins this suite with the PR that budgets it.
+// viewer, one column hidden from them; (f) a conversation of 15 chart answers reopened (`copilot:history`): every card
+// comes with it, and NO figure query runs (the answer door, a hydration and the Live door spied) — NEGATIVE CONTROL:
+// with the snapshots removed, the web's reopen computes all 15.
 //
 // Always (no database; records are files):
 //   1. The parsed catalog (../src/app/catalog `loadShared`) is one object inside a read memo, forgotten by a write, and
@@ -56,6 +58,9 @@ const copilotTable: typeof import('../src/ipc/copilotTable') = require('../src/i
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const askMemo: typeof import('../src/ipc/askMemo') = require('../src/ipc/askMemo');
+const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+const rowDoors: Record<string, unknown> = require('../src/ipc/rowDoors');
+const liveAnswers: Record<string, unknown> = require('../src/ipc/liveAnswers');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
 const { logger }: typeof import('../src/app/logger') = require('../src/app/logger');
 
@@ -76,11 +81,14 @@ const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 }
 // (5,000 tables loaded); now only its datasets' metrics, one table (the answer chart's). (b) loads no table for its facts.
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
-  home: at(330, 7_131),
-  dataset: at(339, 7_115),
-  agent: at(333, 7_110),
-  viewer: at(330, 14_132),
-  dashboard: at(345, 7_109),
+  home: at(345, 7_134),
+  dataset: at(345, 7_121),
+  agent: at(339, 7_113),
+  viewer: at(345, 14_135),
+  dashboard: at(354, 7_112),
+  // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
+  // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
+  reopen: at(22, 4),
 };
 
 interface World { P: string; orders: string; agent: string; board: string }
@@ -289,6 +297,38 @@ async function dbLeg(pool: Pool): Promise<void> {
   }
   ok('NEGATIVE CONTROL: the comparison can tell facts apart (Home, a dataset and the agent\'s topic differ)',
     !Object.is(factsOf.get('home'), factsOf.get('dataset')) && !Object.is(factsOf.get('home'), factsOf.get('agent')));
+  await reopenCase(w, fresh, line);
+}
+
+/** (f) A conversation of 15 chart answers, reopened: the figure doors spied (every computeCard enters `withLockOf`). */
+async function reopenCase(w: World, fresh: (role: Role) => Promise<string>, line: (name: string, c: { queries: number; reads: number; tables: number; ms: number }) => void): Promise<void> {
+  let figures = 0;
+  const spy = (mod: Record<string, unknown>, name: string): void => {
+    const real = mod[name] as (...a: unknown[]) => unknown;
+    mod[name] = (...a: unknown[]) => { figures++; return real(...a); };
+  };
+  spy(rowDoors, 'withLockOf');
+  spy(datasets as unknown as Record<string, unknown>, 'getDataset');
+  spy(liveAnswers, 'liveCardFor');
+  const T = await fresh('admin');
+  const call = (ch: string, payload: object) => as('admin', () => handlers.get(ch)!({}, { projectId: w.P, ...payload }));
+  for (let i = 0; i < 15; i++) {
+    const r = await call('answer:rerun', { threadId: T, spec: { datasetId: w.orders, category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }], filters: [{ column: 'amount', op: '>', value: i }], chartType: 'column', title: `Revenue over ${i}` } });
+    if (!r.ok) throw new Error('fixture: an answer ' + JSON.stringify(r));
+  }
+  figures = 0;
+  const re = await counted(() => call('copilot:history', { threadId: T }));
+  line('reopen (15)', re);
+  const answered = (re.out.turns as Array<{ answer?: unknown; card?: unknown }>).filter((t) => t.answer);
+  ok('reopen: the conversation brings all 15 answers with their cards', answered.length === 15 && answered.every((t) => !!t.card), `${answered.length}`);
+  ok(`reopen: 0 figure queries (${figures}), ${re.queries} queries ≤ ${CEILING.reopen.queries} and ${re.reads} record reads ≤ ${CEILING.reopen.reads}`,
+    figures === 0 && re.queries <= CEILING.reopen.queries && re.reads <= CEILING.reopen.reads);
+  const turns = await as('admin', () => copilot.loadHistory(w.P, T));
+  for (const t of turns) if (t.answer) await as('admin', () => copilot.setSnapshot(w.P, T, t.id, t.answer!, null));
+  figures = 0;
+  const h = await call('copilot:history', { threadId: T });
+  for (const t of h.turns as Array<{ id: string; answer?: unknown; card?: unknown }>) if (t.answer && !t.card) await call('answer:refresh', { threadId: T, turnId: t.id });
+  ok(`NEGATIVE CONTROL: with the snapshots removed, the web's reopen computes every card (${figures} figure calls ≥ 15)`, figures >= 15);
 }
 
 (async () => {

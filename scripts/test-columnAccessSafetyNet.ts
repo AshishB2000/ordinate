@@ -340,8 +340,19 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     const logMetric = async (name: string, column: string): Promise<string> => idOf(must(name, await W.call('boss', 'metric:save', { projectId: P, input: { name, datasetId: payLog, timeColumn: 'day', definition: { column, aggregation: 'count' } } })));
     const [LOG_SSN, LOG_DEPT] = [await logMetric('Logged people', 'ssn'), await logMetric('Logged rows', 'dept')];
     const tree = (id: string) => ({ projectId: P, id, period: { key: 'custom', from: '2024-04-01', to: '2024-06-30' }, compare: { mode: 'previous_period' } });
+    /** The caller's own answer turn on `spec(column)`, as one asked before the column was hidden: what `answer:refresh` names. */
+    const copilotStore: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+    const turnOn = (who: string, column: string) => W.as(who, async () => {
+      const t = (await copilotStore.createThread(P))!;
+      return { projectId: P, threadId: t.id, turnId: (await copilotStore.appendTurn(P, { role: 'assistant', text: '', answer: spec(column) as never }, t.id))!.at(-1)!.id };
+    });
+    /** A channel whose question is the caller's own record: each caller's pair. */
+    const OWN: Record<string, Record<string, [unknown, unknown]>> = {
+      'answer:refresh': { east: [await turnOn('east', 'ssn'), await turnOn('east', 'dept')], ed: [await turnOn('ed', 'ssn'), await turnOn('ed', 'dept')] },
+    };
     /** Each GATE channel: a question naming ssn, and the same question on dept. */
     const PAIRS: Record<string, [unknown, unknown]> = {
+      'answer:refresh': OWN['answer:refresh'].east,
       'visual:data': [viz(COUNT_BY('ssn')), viz(COUNT_BY('dept'))],
       'visual:preview': [viz(COUNT_BY('ssn')), viz(COUNT_BY('dept'))],
       'visual:dataBatch': [{ projectId: P, items: [{ datasetId: staff, encoding: COUNT_BY('ssn') }] }, { projectId: P, items: [{ datasetId: staff, encoding: COUNT_BY('dept') }] }],
@@ -380,13 +391,14 @@ const unclassifiedColumns = (contracts: Record<string, { access: string }>): str
     };
     const noFigure = (r: H.Reply, ch = ''): boolean => r.status === 409 || r.text.includes('row_policy') || r.text.includes(rowMessages.rowHiddenMessage()) || (r.status === 200 && !!EMPTY[ch]?.(r.body));
     /** What two callers' answers are compared on: an answer card's chips offer no hidden column by design; a re-run's thread is the caller's own. */
-    const FIGURE: Record<string, (b: any) => unknown> = { 'answer:card': (b) => b?.data, 'answer:rerun': (b) => b?.turns?.slice(-1) }; // any: as above
+    const FIGURE: Record<string, (b: any) => unknown> = { 'answer:card': (b) => b?.data, 'answer:rerun': (b) => b?.turns?.slice(-1).map(({ card, ...t }: any) => ({ ...t, data: card?.data })), 'answer:refresh': (b) => b?.data }; // any: as above; the kept card's chips are the caller's, as answer:card's
     for (const [ch, [naming, other]] of Object.entries(PAIRS)) {
-      const refused = await W.call('east', ch, naming);
+      const as = (who: string, i: 0 | 1): unknown => (OWN[ch]?.[who] ?? [naming, other])[i];
+      const refused = await W.call('east', ch, as('east', 0));
       ok(`gate: ${ch} refuses east a question naming ssn`, noFigure(refused, ch) && !hasCanary(refused.text), show(refused));
-      const edNaming = await W.call('ed', ch, naming);
+      const edNaming = await W.call('ed', ch, as('ed', 0));
       ok(`NEGATIVE CONTROL: gate: ${ch} answers the editor the same question`, edNaming.status === 200 && !noFigure(edNaming, ch), show(edNaming));
-      const [mine, theirs] = [await W.call('east', ch, other), await W.call('ed', ch, other)];
+      const [mine, theirs] = [await W.call('east', ch, as('east', 1)), await W.call('ed', ch, as('ed', 1))];
       const pick = FIGURE[ch] ?? ((b: unknown) => b);
       const d = H.diff(pick(mine.body), pick(theirs.body), {});
       ok(`gate: ${ch} answers east the question on dept, Object.is-equal to the editor's`, mine.status === 200 && !noFigure(mine, ch) && d === '', `${d} | ${show(mine)}`);

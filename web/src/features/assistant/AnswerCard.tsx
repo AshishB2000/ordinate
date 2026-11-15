@@ -1,7 +1,10 @@
-// An answer with a chart — answerCard.ts, ported. The turn stores only the
-// SPEC; every figure on the card (headline values, the chart's data, the
-// caption, the filter labels) comes back from `answer:card`, recomputed on
-// every render, so a refreshed dataset moves an old answer with it. This file
+// An answer with a chart — answerCard.ts, ported. Every figure on the card
+// (headline values, the chart's data, the caption, the filter labels) is the
+// server's. A conversation's answer keeps its card as computed then and brings it
+// along (`card`, src/ipc/answerSnapshots.ts), so reopening asks nothing; one it
+// did not bring (not kept yet, too big to keep, or the person's access changed)
+// is computed now by `answer:refresh` and kept. Its time, "first asked" and
+// Refresh are ./AnswerKept. A card of no turn asks `answer:card`. This file
 // formats nothing and derives nothing: a KPI is the server's `display` string.
 //
 // With no model configured the turn has no prose, and the card shows the
@@ -25,7 +28,7 @@
 // A card whose spec is a working verified question's says so, "✓ Verified · who" (part 3 D9): the server's
 // `verified`, worked out at every draw, never the card's own guess.
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { rpc } from '../../api/client';
 import { Chart } from '../../charts/Chart';
@@ -42,9 +45,29 @@ import { DidYouMean, type MeantOption } from './DidYouMean';
 import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVerified } from './SaveAsVerified';
 import { SaveAsVisual } from './SaveAsVisual';
+import { keepInConversation, refreshAnswer } from './api';
+import { ACCESS_CHANGED, KeptAsOf, periodText } from './AnswerKept';
 import s from './AnswerCard.module.css';
 
-interface Card {
+/** A relative period as it resolved when the card was computed (src/ai/answerSnapshot.ts). */
+export interface KeptPeriod {
+  name: string;
+  from: string;
+  to: string;
+}
+
+/** What the server says about the figures a card kept (src/ai/answerSnapshot.ts `KeptView`). */
+export interface Kept {
+  /** When they were computed; null: too big to keep, computed on each open ("Updates on open"). */
+  asOf: string | null;
+  /** When the answer was first given, only when that was before `asOf`. */
+  firstAsked?: string;
+  periods: KeptPeriod[];
+  /** Computed again because the person's access changed since. */
+  accessChanged?: true;
+}
+
+export interface Card {
   ok: true;
   title: string;
   chartType: string;
@@ -65,14 +88,17 @@ interface Card {
   savedVisualId?: string;
   /** Its spec is a working verified question's (semantic part 3 D9): worked out by the server at every draw. */
   verified?: { id: string; question: string; by: string; at: string };
+  /** A conversation's answer: what it kept. None on a card of no turn. */
+  snapshot?: Kept;
 }
-type Reply = Card | { ok: false; reason?: string };
+export type CardReply = Card | { ok: false; reason?: string };
 
 export function AnswerCard({
   projectId,
   spec,
   learn,
   turn,
+  card: kept,
   savedVisualId,
   narrated,
   question,
@@ -84,24 +110,36 @@ export function AnswerCard({
   learn?: { said: string; column: string };
   /** The stored turn this card draws, and the Visual it was saved as — for "Save as visual" (./SaveAsVisual). */
   turn?: { threadId: string; turnId: string };
+  /** The card the turn kept, as its conversation brought it (`Turn.card`): drawn with no call. */
+  card?: Card;
   savedVisualId?: string;
   narrated: boolean;
   /** What was asked (the turn before): prefills "Save as verified". */
   question?: string;
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
 }) {
+  const qc = useQueryClient();
   const q = useQuery({
-    queryKey: ['answer:card', projectId, JSON.stringify(spec), learn?.said, learn?.column, savedVisualId],
-    queryFn: async () =>
-      (await rpc('answer:card', { projectId, spec, ...(learn ? { learn } : {}), ...(savedVisualId ? { savedVisualId } : {}) })) as Reply,
+    queryKey: turn
+      ? ['answer:refresh', projectId, turn.threadId, turn.turnId, savedVisualId] // a save asks again, as a card of no turn does
+      : ['answer:card', projectId, JSON.stringify(spec), learn?.said, learn?.column, savedVisualId],
+    enabled: !kept,
+    queryFn: async (): Promise<CardReply> => {
+      if (!turn) return (await rpc('answer:card', { projectId, spec, ...(learn ? { learn } : {}), ...(savedVisualId ? { savedVisualId } : {}) })) as CardReply;
+      const r = await refreshAnswer(projectId, turn.threadId, turn.turnId);
+      if (r.ok && r.snapshot?.asOf) keepInConversation(qc, projectId, turn.turnId, r); // kept now: a remount draws it with no call
+      return r;
+    },
     // The same card asked again with what its turn now records (a save): keep drawing it meanwhile.
     placeholderData: (previous) => previous,
+    // A turn's card computed here is also kept by the server: once, never again on a window focus.
+    ...(turn ? { staleTime: Infinity, refetchOnWindowFocus: false } : {}),
   });
   const [table, setTable] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const title = typeof spec.title === 'string' && spec.title ? spec.title : 'Answer';
 
-  if (q.isPending) {
+  if (!kept && q.isPending) {
     return (
       <div className={`${s.card} ${s.loading}`} role="status" aria-busy="true" aria-label="Drawing the answer">
         <div className={s.title}>{title}</div>
@@ -109,14 +147,15 @@ export function AnswerCard({
       </div>
     );
   }
-  const card = q.data;
+  const card = kept ?? q.data;
+  const failed = !kept && q.isError ? q.error : card;
   // Off for a Live dataset (L2.6): the server's reason and a copy of the dataset it asked.
-  const live = liveRefusalOf(q.isError ? q.error : card);
+  const live = liveRefusalOf(failed);
   if (live !== null) {
     return (
       <div className={`${s.card} ${s.error}`}>
         <div className={s.title}>{title}</div>
-        <LiveRefusal refusal={q.isError ? q.error : card} projectId={projectId} datasetId={spec.datasetId} />
+        <LiveRefusal refusal={failed} projectId={projectId} datasetId={spec.datasetId} />
       </div>
     );
   }
@@ -128,13 +167,16 @@ export function AnswerCard({
       </div>
     );
   }
+  const snap = card.snapshot;
   return (
     <div className={s.card} data-testid="answer-card">
       <div className={s.head}>
         <div className={s.title}>{card.title || 'Answer'}</div>
         <div className={s.meta}>
           <span className={s.dataset}>{card.datasetName}</span>
-          <AsOfCaption asOf={card.asOf} className={s.asOf} />
+          {/* A kept card is dated by when it was computed; one computed now by its data's time, as before. */}
+          {snap && <KeptAsOf projectId={projectId} turn={turn} kept={snap} />}
+          {!snap?.asOf && <AsOfCaption asOf={card.asOf} className={s.asOf} />}
           {card.verified && (
             <span className={s.verified} title={`Verified ${day.format(new Date(card.verified.at))}: ${card.verified.question}`}>
               ✓ Verified · {card.verified.by}
@@ -145,8 +187,18 @@ export function AnswerCard({
               {f}
             </span>
           ))}
+          {snap?.periods.map((p) => (
+            <span key={`${p.name}${p.from}`} className={s.filter}>
+              {periodText(p)}
+            </span>
+          ))}
         </div>
       </div>
+      {snap?.accessChanged && (
+        <div className={s.changed} role="status" data-testid="answer-access-changed">
+          {ACCESS_CHANGED}
+        </div>
+      )}
       {card.headline.length > 0 && (
         <div className={s.kpis}>
           {card.headline.map((k) => (
@@ -195,7 +247,15 @@ export function AnswerCard({
             </Button>
             <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
             {!card.verified && <SaveAsVerified projectId={projectId} spec={spec} question={question ?? ''} />}
-            {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
+            {card.learn && (
+              <RememberName
+                projectId={projectId}
+                datasetId={spec.datasetId}
+                learn={card.learn}
+                // A kept card's name state comes with its conversation: asked again there, its figures untouched.
+                onTaught={() => (kept ? qc.invalidateQueries({ queryKey: ['copilot:history', projectId] }) : q.refetch())}
+              />
+            )}
           </div>
           {card.chips.length > 0 && (
             <div className={s.chips}>

@@ -49,6 +49,37 @@
 .asOf {
   margin-right: var(--sp-4);
 }
+/* A kept card's time and "first asked" (./AnswerKept), then its Refresh, small enough to sit in the meta row. */
+.kept {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.refresh {
+  margin-right: var(--sp-4);
+}
+/* A card too big to keep: computed each time it opens. */
+.live {
+  font-size: var(--t-11);
+  font-weight: 600;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* The person's access changed, so the card shows today's figures: said above them. */
+.changed {
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
 .verified {
   font-size: var(--t-11);
   font-weight: 600;

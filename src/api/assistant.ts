@@ -100,6 +100,13 @@ export const assistant = {
     input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, threadId: Uuid.optional(), turnId: z.string().min(1).max(100).optional() }),
     project: byProjectId,
   }),
+  // Refresh an answer of the caller's own conversation (src/ipc/answerSnapshots.ts): its card computed now, under their
+  // access, kept in place of the one the turn had. `read`, as asking is: what it writes is the asker's own turn.
+  'answer:refresh': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, threadId: Uuid, turnId: z.string().min(1).max(100) }),
+    project: byProjectId,
+  }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

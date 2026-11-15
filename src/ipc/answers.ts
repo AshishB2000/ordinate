@@ -11,9 +11,10 @@
 // follow-up chips go through the same card and have the model NARRATE it
 // (`narrate`), audited the same way, so there is one card path for all three.
 //
-// The spec is what a conversation turn stores; the figures never are. Every
-// render recomputes the card (`answer:card`), exactly like a dashboard's metric
-// cards, so a refreshed dataset moves an old answer with it.
+// A conversation turn stores the spec AND the card as it was computed, with its
+// time (./answerSnapshots): reopening shows the figures the answer had, under the
+// same access, and Refresh computes them again. `answer:card` draws a spec now,
+// for a card that belongs to no turn.
 //
 // Registered from ./copilot's register(), which hands over its number guard —
 // the guard is a safety control and there is exactly one of it.
@@ -40,12 +41,11 @@ import { isTermStep, type TERM_CODE } from '../data/termStep';
 import { expandAnswerTerms } from '../analysis/termExpand';
 import type { AnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
-import { displayNames, loadShared as loadCatalog } from '../app/catalog';
+import { displayNames } from '../app/catalog';
 import { navContext } from './modelNavigation';
-import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
-  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, latestDate, periodsAfterData, resolveColumn, sanitizeStoredSpec, specFilterSteps,
+  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, latestDate, periodsAfterData, sanitizeStoredSpec, specFilterSteps,
   splitCandidates, validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
@@ -59,6 +59,7 @@ import { formatDate } from '../app/format';
 import { daysFromCivil } from '../analysis/categoryKey';
 import { isoFromDays } from '../analysis/dateIntel';
 import { saveCardAsVisual } from './answerSave';
+import { learnState, registerSnapshots, snapshotFor, turnsForBrowser, type BrowserTurn } from './answerSnapshots';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import { previousAnswerBlock } from '../ai/previousAnswer';
 import { withheldColumns } from '../app/sharePolicy';
@@ -329,6 +330,8 @@ export interface AnswerTurn {
   ledger: LedgerEntry[];
   provenance: copilot.CopilotProvenance;
   spec: AnswerSpec;
+  /** The card as computed, which the turn keeps (./answerSnapshots). */
+  card: AnswerCard;
 }
 
 /**
@@ -420,7 +423,7 @@ export async function answerFromAction(
   // …also when it only became the previous chart once a value was matched to the one it already filtered to.
   if (base && sameChart(base, built.card.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
   // The card's own spec: the validated one, with any filter value the app matched to what the data holds.
-  return { ok: true, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec };
+  return { ok: true, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec, card: built.card };
 }
 
 /**
@@ -459,33 +462,24 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
   return spec && spec.filters.length === (t.filters || []).length ? spec : null;
 }
 
+/** The question and its answer, the card kept with it (./answerSnapshots); the conversation's turns as the browser gets them. */
 export async function appendAnswer(
   projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec, learn?: AnswerLearn, guidance?: copilot.CopilotTurn['guidance'],
-): Promise<{ turns: copilot.CopilotTurn[]; threadId: string | null }> {
+): Promise<{ turns: BrowserTurn[]; threadId: string | null }> {
   let target = threadId || (await copilot.latestThreadId(projectId)) || undefined;
   if (!target) target = (await copilot.createThread(projectId))?.id;
+  const snapshot = await snapshotFor(projectId, built.card, spec);
   await copilot.appendTurn(projectId, { role: 'user', text: userText }, target);
-  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance: built.provenance, answer: spec, ...(learn ? { learn } : {}), ...(guidance ? { guidance } : {}) }, target);
-  return { turns: turns || [], threadId: target || null };
-}
-
-/**
- * Whether a name is still to remember, worked out now — never stored, so a name
- * taught in the Columns tab, or by anyone's card, shows here at once. Metadata
- * and the catalog only: a Live dataset is never hydrated. Nothing when the
- * column is gone.
- */
-async function learnState(projectId: string, datasetId: string, learn: AnswerLearn): Promise<CardLearn | undefined> {
-  const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  if (!meta || !meta.columns.some((c) => c.name === learn.column)) return undefined;
-  const docs = (await loadCatalog(projectId)).columns[datasetId];
-  const known = resolveColumn(learn.said, meta.columns, taughtNames(meta.columns, docs))?.name === learn.column;
-  return { ...learn, label: shownNames(meta.columns, docs)[learn.column] || learn.column, state: known ? 'known' : 'offer' };
+  const turns = await copilot.appendTurn(projectId, {
+    role: 'assistant', text, provenance: built.provenance, answer: spec, ...(snapshot ? { snapshot } : {}), ...(learn ? { learn } : {}), ...(guidance ? { guidance } : {}),
+  }, target);
+  return { turns: await turnsForBrowser(projectId, turns || []), threadId: target || null };
 }
 
 export function register(guard: Guard): void {
-  // Draw one card from a stored spec. Called on every render of an answer turn;
-  // `learn` is its turn's name to remember, and `savedVisualId` the visual it was
+  registerSnapshots(computeCard); // `answer:refresh`, through THE answer door
+  // Draw one card from a spec, now: a card no conversation turn keeps (a turn's own
+  // comes with its conversation, or from `answer:refresh`). `learn` is its turn's name to remember, and `savedVisualId` the visual it was
   // saved as — handed back only while that visual exists, so a deleted one is
   // offered to save again instead of a link to nothing.
   // Each handler below keeps its reads for its length (./askMemo), as copilot:ask does.
