@@ -22,6 +22,7 @@ import { hiddenColumnsFor } from '../data/rowAccess';
 import { dropHidden } from '../ai/hiddenFacts';
 import { metricHidden } from '../analysis/columnHidden';
 import { ipcMain } from './bus';
+import { keepReads, perAsk } from './askMemo';
 import { lockedTable, withLockOf } from './rowDoors';
 import { withoutColumns } from '../data/columnAccess';
 import type { Lock } from '../data/rowLock';
@@ -41,7 +42,7 @@ import { isTermStep, type TERM_CODE } from '../data/termStep';
 import { expandAnswerTerms } from '../analysis/termExpand';
 import type { AnswerTerms } from '../analysis/termExpand';
 import { tileCaption } from '../analysis/captions';
-import { displayNames, load as loadCatalog } from '../app/catalog';
+import { displayNames, loadShared as loadCatalog } from '../app/catalog';
 import { navContext } from './modelNavigation';
 import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
@@ -314,8 +315,13 @@ export async function narrate(projectId: string, built: Built, question: string,
  * display names and "Also called" names the facts told the model to use, so a
  * spec written in those words resolves. ONE catalog read for the project;
  * records only, so a Live dataset is listed like any other.
+ *
+ * The three vocabularies are built once per question (./askMemo `perAsk`), for
+ * the caller (a hidden column is no word of theirs). Their readers never change them.
  */
-export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
+export const specDatasets = (projectId: string): Promise<SpecDataset[]> => perAsk(`specDatasets\0${projectId}`, () => specDatasetsNow(projectId));
+
+async function specDatasetsNow(projectId: string): Promise<SpecDataset[]> {
   const list = await datasets.listDatasets(projectId);
   const metas = await Promise.all(list.map((d) => datasets.getDatasetMeta(projectId, d.id)));
   const docs = (await loadCatalog(projectId)).columns;
@@ -334,7 +340,9 @@ const statusField = async (status: ReturnType<typeof statusFor>, ref: string): P
 };
 
 /** The saved metrics a spec may name. Exported for scripts/test-snapshot.ts. */
-export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
+export const specMetrics = (projectId: string): Promise<SpecMetric[]> => perAsk(`specMetrics\0${projectId}`, () => specMetricsNow(projectId));
+
+async function specMetricsNow(projectId: string): Promise<SpecMetric[]> {
   const out: SpecMetric[] = [];
   try {
     const status = statusFor(projectId);
@@ -361,9 +369,8 @@ export async function specMetrics(projectId: string): Promise<SpecMetric[]> {
 }
 
 /** The glossary terms a spec may name (semantic D10): names and aliases only, no filter value. */
-export async function specTerms(projectId: string): Promise<SpecTerm[]> {
-  return (await listTerms(projectId)).map((t) => ({ id: t.id, name: t.name, aliases: t.aliases, datasetId: t.datasetId }));
-}
+export const specTerms = (projectId: string): Promise<SpecTerm[]> =>
+  perAsk(`specTerms\0${projectId}`, async () => (await listTerms(projectId)).map((t) => ({ id: t.id, name: t.name, aliases: t.aliases, datasetId: t.datasetId })));
 
 export interface AnswerTurn {
   ledger: LedgerEntry[];
@@ -528,7 +535,8 @@ export function register(guard: Guard): void {
   // `learn` is its turn's name to remember, and `savedVisualId` the visual it was
   // saved as — handed back only while that visual exists, so a deleted one is
   // offered to save again instead of a link to nothing.
-  ipcMain.handle('answer:card', async (_e, { projectId, spec, learn, savedVisualId }: any = {}) => {
+  // Each handler below keeps its reads for its length (./askMemo), as copilot:ask does.
+  ipcMain.handle('answer:card', keepReads(async (_e, { projectId, spec, learn, savedVisualId }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
@@ -541,11 +549,11 @@ export function register(guard: Guard): void {
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }
-  });
+  }));
 
   // "Explain" on a visual or a dashboard tile: the tile's facts, narrated when a
   // model is configured, as bullet points when not — in a NEW conversation.
-  ipcMain.handle('answer:explain', async (_e, { projectId, visualId, tile }: any = {}) => {
+  ipcMain.handle('answer:explain', keepReads(async (_e, { projectId, visualId, tile }: any = {}) => {
     try {
       let src: Parameters<typeof tileSpec>[0] | null = null;
       if (typeof visualId === 'string' && visualId) {
@@ -578,7 +586,7 @@ export function register(guard: Guard): void {
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not explain the chart' };
     }
-  });
+  }));
 
   // A follow-up chip, or a "Did you mean" option: the chip's own spec, recomputed
   // by the app — no model call decides the chart, and one narrates it only when
@@ -586,7 +594,7 @@ export function register(guard: Guard): void {
   // values as they were said, so they are matched here as an answer's are. An
   // option that put a column in place of a name sends `learn`, kept on the new
   // turn only for a column its answer uses (ai/answerSuggest `sanitizeLearn`).
-  ipcMain.handle('answer:rerun', async (_e, { projectId, threadId, spec, label, learn }: any = {}) => {
+  ipcMain.handle('answer:rerun', keepReads(async (_e, { projectId, threadId, spec, label, learn }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
@@ -606,7 +614,7 @@ export function register(guard: Guard): void {
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not run the follow-up' };
     }
-  });
+  }));
 
   // "Save as visual": the card is rebuilt HERE from the spec — its encoding and its
   // filter steps are the server's, never a client's — and saved as it was drawn (./answerSave).

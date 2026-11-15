@@ -196,14 +196,14 @@ async function main(): Promise<void> {
 
   // ── 4. the path to the validator ───────────────────────────────────────────
   await catalog.setColumn(pid, D, 'old_amount', { displayName: 'Old amount', aliases: ['bookings'] }); // a doc a rename step left behind
-  const realLoad = catalog.load;
+  const realLoad = catalog.loadShared; // the read-only door specDatasets takes
   const realGet = datasets.getDataset;
   let loads = 0;
   let hydrated = 0;
-  (catalog as { load: typeof realLoad }).load = (p: string) => { loads += 1; return realLoad(p); };
+  (catalog as { loadShared: typeof realLoad }).loadShared = (p: string, strict?: boolean) => { loads += 1; return realLoad(p, strict); };
   (datasets as { getDataset: typeof realGet }).getDataset = (...args: Parameters<typeof realGet>) => { hydrated += 1; return realGet(...args); };
   const spec = await answers.specDatasets(pid);
-  (catalog as { load: typeof realLoad }).load = realLoad;
+  (catalog as { loadShared: typeof realLoad }).loadShared = realLoad;
   (datasets as { getDataset: typeof realGet }).getDataset = realGet;
   ok('path: two datasets, ONE catalog read, no table hydrated', spec.length === 2 && loads === 1 && hydrated === 0, `${spec.length} datasets, ${loads} loads, ${hydrated} hydrations`);
   const orders = spec.find((d) => d.id === D)!;

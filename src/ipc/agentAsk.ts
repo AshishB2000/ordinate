@@ -17,7 +17,7 @@ import * as metrics from '../analysis/metrics';
 import { listTerms } from '../analysis/terms';
 import { hiddenColumnsFor, rowLockFor } from '../data/rowAccess';
 import { isRowPolicyError } from '../data/rowPolicyError';
-import { load as loadCatalog } from '../app/catalog';
+import { loadShared as loadCatalog } from '../app/catalog'; // read-only: the question's one parse (./askMemo)
 import { words } from '../ai/answerSuggest';
 import { agentForAsk } from '../ai/agentAccess';
 import type { Agent } from '../ai/agents';

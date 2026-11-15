@@ -5,7 +5,7 @@
 // guides are editor prose every reader of the project sees (D5), so a caller row access rules restrict reads the
 // same block; the facts beside it are what the lock shapes. Never throws: guidance must never cost an answer.
 
-import { load } from '../app/catalog';
+import { loadShared as load } from '../app/catalog'; // read-only: the question's one parse (../ipc/askMemo)
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import { guidanceBlock, GUIDE_INVENTORY_MAX, GUIDE_OPEN_MAX, type GuidanceInput, type Guided } from '../ai/guidanceFacts';

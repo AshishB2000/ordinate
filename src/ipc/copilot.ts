@@ -64,6 +64,7 @@ import { topicFacts } from '../ai/topicFacts';
 import { allowedAction, NO_ACTION } from '../ai/suggestedAction';
 import { agentNames, agentRef } from '../ai/agentAccess';
 import { askScope, outsideTurn, PROJECT_SCOPE, scopedContext } from './agentAsk';
+import { keepReads } from './askMemo';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -532,7 +533,8 @@ export function register() {
   // Provenance and every activity step are built from app-computed facts BELOW,
   // independent of the reply text — neither derives a chip or a number from a
   // token.
-  ipcMain.handle('copilot:ask', async (event, { projectId, context, question, threadId, askId, share, agentId, skipVerified }: any = {}) => {
+  // Its reads are kept for the length of the question (./askMemo): every list and the catalog once, not four to sixty times.
+  ipcMain.handle('copilot:ask', keepReads(async (event, { projectId, context, question, threadId, askId, share, agentId, skipVerified }: any = {}) => {
     try {
       const q = typeof question === 'string' ? question.trim() : '';
       if (!q) return { ok: false, error: 'Ask a question first.' };
@@ -680,7 +682,7 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to ask Copilot' };
     }
-  });
+  }));
 
   // Clear a project's chat history.
   ipcMain.handle('copilot:clear', async (_e, { projectId }: any = {}) => {

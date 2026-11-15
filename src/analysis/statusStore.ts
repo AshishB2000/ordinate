@@ -77,7 +77,7 @@ async function viewOf(projectId: string, ref: string, doc: StatusDoc): Promise<S
 const sections = new WeakMap<object, Map<string, Promise<Record<string, StatusDoc>>>>();
 
 function sectionOf(projectId: string): Promise<Record<string, StatusDoc>> {
-  const read = (): Promise<Record<string, StatusDoc>> => catalog.load(projectId).then((f) => f.status ?? (Object.create(null) as Record<string, StatusDoc>));
+  const read = (): Promise<Record<string, StatusDoc>> => catalog.loadShared(projectId).then((f) => f.status ?? (Object.create(null) as Record<string, StatusDoc>));
   if (!serverDataDir()) return read();
   const req = ctx();
   let byProject = sections.get(req);
