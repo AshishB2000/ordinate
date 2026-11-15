@@ -217,7 +217,7 @@ describe('The Data model: topics', () => {
     await pick('Edit Sales…');
     const d = await drawer();
     fireEvent.click(await within(d).findByRole('button', { name: 'Delete' }));
-    const ask = await screen.findByRole('dialog', { name: 'Delete “Sales”?' });
+    const ask = await screen.findByRole('dialog', { name: 'Delete “Sales”?' }, LAZY); // a lazy chunk: slow on a loaded CI runner
     fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(calls.some((c) => c.channel === 'topic:delete')).toBe(true));
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('topic')).toBeNull());
