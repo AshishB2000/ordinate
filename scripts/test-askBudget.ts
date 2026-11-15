@@ -91,10 +91,12 @@ const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 }
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
   // Table facts in the prompt (src/ipc/askTableFacts.ts): the ask's datasets read again, every one a memo hit, no query.
-  home: at(89, 166), // was at(89, 154), at(345, 7_134) before that
-  dataset: at(88, 124), // was at(88, 123), at(345, 7_121) before that
+  // Follow the links (src/ipc/askLinks.ts): relationships.json, one record (no link here, so nothing more); a memo hit
+  // where a metric's figure read it first (a dataset), a transaction of 3 queries where nothing had (Home). An agent follows none.
+  home: at(92, 167), // was at(89, 166), at(89, 154), at(345, 7_134) before that
+  dataset: at(88, 125), // was at(88, 124), at(88, 123), at(345, 7_121) before that
   agent: at(75, 146), // was at(75, 136), at(339, 7_113) before that
-  viewer: at(114, 7_311), // was at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
+  viewer: at(117, 7_312), // was at(114, 7_311), at(114, 7_299), at(359, 11_153) and at(345, 14_135) before that
   dashboard: at(112, 183), // was at(354, 7_112)
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).

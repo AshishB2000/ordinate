@@ -12,6 +12,8 @@ import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import type { SuggestedAction } from '../ai/suggestedAction';
 import { specDatasets, specMetrics, specNames, specTerms, vocabularyFor, type Vocabulary, type VocabularyWant } from './specVocabulary';
 import { searchModel } from './assistantSearch';
+import { linkedColumnOf } from './askLinks';
+import { linkedColumnRefused } from '../ai/answerMessages';
 import type { Failure } from './answers';
 
 /**
@@ -60,6 +62,10 @@ export async function checkAction(
   const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question, terms };
   const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
   if (!v.ok) {
+    // A column of a dataset this one links to (./askLinks; an agent follows no links): the form reads one dataset, so the refusal says that, never "Did you mean" another.
+    const linked = !only && v.miss?.datasetId && v.miss.part !== 'dataset' ? await linkedColumnOf(projectId, v.miss.datasetId, v.miss.said) : null;
+    const on = linked && all.find((d) => d.id === v.miss?.datasetId);
+    if (linked && on) return { ok: false, reason: linkedColumnRefused(linked.column, linked.dataset, on.name) };
     // A name that does not exist: what it may have meant, picked by the app from the names alone
     // (ai/answerSuggest) and laid over the same raw spec — the MERGED one, so a follow-up's option
     // keeps its carried filters. An option that is the previous chart again is not one. A dataset's

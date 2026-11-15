@@ -2,7 +2,8 @@
 //
 // For each Live dataset the ask is about, the facts stored on its source tables' docs (src/app/sourceTables.ts),
 // as a few lines (../ai/tableFactsBlock). The datasets are the ones the guidance reads (./guidance): the open dataset,
-// a visual's dataset, Home's 12 step 3 picks (./homeFacts), or a topic's first 12. No whole-project list: the
+// a visual's dataset, Home's 12 step 3 picks (./homeFacts), or a topic's first 12; then those linked to them
+// (./askLinks), so a linked Live dataset's table has its facts too. No whole-project list: the
 // connections' indexes in one read, then the docs by id in one read, at most TABLES_MAX of them. Records only: never a
 // warehouse call, a row or a secret. Who may read what is decided here: the table's name only for a caller who sees
 // source names, no hidden column, no size for a caller row access rules restrict. Never throws: facts must never cost an answer.
@@ -26,26 +27,38 @@ export const TABLES_MAX = 12;
 
 const NONE = { text: '', ledger: [] as LedgerEntry[] };
 
-/** The datasets the ask is about, as the guidance picks them, Live ones from a connection only. */
-async function liveDatasets(projectId: string, context: { kind?: string; id?: string }, factsKind: string, question: string): Promise<DatasetMeta[]> {
-  const id = typeof context.id === 'string' ? context.id : '';
-  let metas: (DatasetMeta | null)[] = [];
-  if (factsKind === 'project') {
-    const topic = context.kind === 'topic' && id ? await topicDatasets(projectId, id) : null;
-    metas = topic ? await Promise.all(topic.slice(0, HOME_DATASETS).map((d) => datasets.getDatasetMeta(projectId, d.id))) : (await homeDatasets(projectId, question)).slice(0, HOME_DATASETS);
-  } else if (factsKind === 'dataset' && id) {
-    metas = [await datasets.getDatasetMeta(projectId, id)];
-  } else if (factsKind === 'visual' && id) {
-    const v = await visuals.getVisual(projectId, id);
-    metas = v ? [await datasets.getDatasetMeta(projectId, v.datasetId)] : [];
+/**
+ * The datasets the ask is about, as its facts hold them: the open dataset, a visual's dataset, Home's 12 step 3 picks
+ * (./homeFacts), or a topic's datasets in its order; none for any other kind (`factsKind`: the facts' provenance kind).
+ * Metadata only, every one already read by the facts (memo hits). Never throws.
+ */
+export async function askDatasets(projectId: string, context: { kind?: string; id?: string }, factsKind: string, question: string): Promise<DatasetMeta[]> {
+  try {
+    const id = typeof context.id === 'string' ? context.id : '';
+    let metas: (DatasetMeta | null)[] = [];
+    if (factsKind === 'project') {
+      const topic = context.kind === 'topic' && id ? await topicDatasets(projectId, id) : null;
+      metas = topic ? await Promise.all(topic.map((d) => datasets.getDatasetMeta(projectId, d.id))) : (await homeDatasets(projectId, question)).slice(0, HOME_DATASETS);
+    } else if (factsKind === 'dataset' && id) {
+      metas = [await datasets.getDatasetMeta(projectId, id)];
+    } else if (factsKind === 'visual' && id) {
+      const v = await visuals.getVisual(projectId, id);
+      metas = v ? [await datasets.getDatasetMeta(projectId, v.datasetId)] : [];
+    }
+    return metas.filter((m): m is DatasetMeta => !!m);
+  } catch (err: unknown) {
+    logger.error('[askDatasets] left out of the ask:', err instanceof Error ? err.message : err);
+    return [];
   }
-  return metas.filter((m): m is DatasetMeta => !!m && isLive(m) && m.origin?.kind === 'connection');
 }
 
-/** The block for one `copilot:ask`, after the facts `buildFacts` built (`factsKind`: their provenance's kind). */
-export async function askTableFacts(projectId: string, context: { kind?: string; id?: string }, factsKind: string, question: string, now = Date.now()): Promise<{ text: string; ledger: LedgerEntry[] }> {
+/**
+ * The block for one `copilot:ask`: the Live datasets, from a connection, among the first 12 of `about` (`askDatasets`)
+ * and then `linked` (./askLinks).
+ */
+export async function askTableFacts(projectId: string, about: readonly DatasetMeta[], linked: readonly DatasetMeta[], now = Date.now()): Promise<{ text: string; ledger: LedgerEntry[] }> {
   try {
-    const live = await liveDatasets(projectId, context, factsKind, question);
+    const live = [...about.slice(0, HOME_DATASETS), ...linked].filter((m) => isLive(m) && m.origin?.kind === 'connection');
     if (!live.length) return NONE;
     const connOf = (m: DatasetMeta): string => (m.origin?.kind === 'connection' ? m.origin.connId : '');
     const indexes = await readSourceIndexes(projectId, live.map(connOf));

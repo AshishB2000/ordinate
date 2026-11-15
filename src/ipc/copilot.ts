@@ -47,7 +47,8 @@ import { logger } from '../app/logger';
 import { isKeptStep } from '../data/filterList';
 import { termFactsFor } from './terms';
 import { askGuidance } from './guidance';
-import { askTableFacts } from './askTableFacts';
+import { askDatasets, askTableFacts } from './askTableFacts';
+import { askLinkedFacts } from './askLinks';
 import { verifiedAsk, verifiedMatch, verifiedScope } from './verifiedAsk';
 import { copyValueNotes } from './copyValues';
 import { topicFacts } from '../ai/topicFacts';
@@ -521,8 +522,11 @@ export function register() {
       const prior = sharing ? [] : turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, asked, emit, q, sharing);
       const agent = scope.agent ? { name: scope.agent.name, instructions: scope.agent.instructions.map((i) => i.text), datasets: scope.only } : undefined;
-      // The Live datasets' source table facts (./askTableFacts); none on a share path, whose words leave the app and may name the table.
-      const tables = sharing ? { text: '', ledger: [] } : await askTableFacts(projectId, asked, facts.provenance.kind, q);
+      // What the facts are about, the datasets linked to it (./askLinks; none for an agent, which answers from its topic
+      // alone) and the Live ones' source table facts (./askTableFacts); none on a share path, whose words leave the app.
+      const about = sharing ? [] : await askDatasets(projectId, asked, facts.provenance.kind, q);
+      const linked = scope.only ? { text: '', ledger: [], metas: [] } : await askLinkedFacts(projectId, about);
+      const tables = sharing ? { text: '', ledger: [] } : await askTableFacts(projectId, about, linked.metas);
       const guided = await askGuidance(projectId, asked, facts.provenance.kind, q, { ...(agent ? { agent } : {}), ...(passed ? { exclude: passed.id } : {}) }); // the editors' instructions and guide (./guidance), after the facts
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
@@ -531,12 +535,12 @@ export function register() {
       // none (a report's narrative page, ./reportsServer) still has the caller's
       // latest replayed, but nobody is looking at that chart and nothing continues it.
       const prev = named ? await answers.previousAnswer(projectId, turns) : null;
-      const ledger = facts.ledger.concat(tables.ledger, guided.ledger, prev ? prev.ledger : []);
+      const ledger = facts.ledger.concat(linked.ledger, tables.ledger, guided.ledger, prev ? prev.ledger : []);
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
       const how = { build: scope.agent ? scope.agent.build : true, topic: scope.only !== null };
-      const res = await askCopilot(prior, [facts.text, tables.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
+      const res = await askCopilot(prior, [facts.text, linked.text, tables.text, guided.text, prev?.block].filter(Boolean).join('\n\n'), q, onDelta, { ...how, model: scope.agent?.model });
 
       if (res.ok) {
         // What the reply may act on: an agent that may not build answers or does nothing (rule 8).

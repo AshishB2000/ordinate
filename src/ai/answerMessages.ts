@@ -55,3 +55,8 @@ export function calcWithTop(calc: string, n: string): string {
 export function calcSplitFirst(): string {
   return t('answerMessages.with_a_split_the_chart_draws');
 }
+
+/** A model's answer that names a linked dataset's column on the dataset it is linked to (../ipc/askLinks): the chart form reads one dataset. */
+export function linkedColumnRefused(column: string, linked: string, dataset: string): string {
+  return t('answerMessages.is_a_column_of_which_is', { column, linked, dataset });
+}

@@ -14,7 +14,8 @@
 //      a column hidden from them (Orders' cost: their checks read the few datasets that may hide one, and only the metrics
 //      a formula names, ../src/data/rowAccess hiddenAnywhere, ../src/analysis/columnHidden). A formula metric sits on
 //      Orders, which the dataset and dashboard cases compute: its figure and additivity read only the metrics it names
-//      (../src/analysis/metricNames). Each reply is checked too.
+//      (../src/analysis/metricNames). Orders links to Regions (Relationships): with Orders open, Regions is in the facts as
+//      a linked dataset, read by id with relationships.json, one record (../src/ipc/askLinks.ts). Each reply is checked too.
 //   2. NEGATIVE CONTROL: the same asks with the index off (assistantSearch._setIndexed(false), the reference paths) DO
 //      call them, each case; the formula's figure through metricsByName.
 //
@@ -57,6 +58,7 @@ const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnect
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const liveRecord: typeof import('../src/data/liveRecord') = require('../src/data/liveRecord');
 const sourceDocs: typeof import('../src/app/sourceTables') = require('../src/app/sourceTables');
+const rels: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 
 type Role = import('../src/server/context').Identity['user']['role'];
 let req = 0;
@@ -74,6 +76,8 @@ async function world(): Promise<World> {
     const orders = await save('Orders', [txt('region'), num('amount'), num('cost')], [['West', 5, 1], ['East', 7, 2], ['North', 3, 1]]);
     const stores = await save('Stores', [txt('city'), num('sales')], [['Austin', 7], ['Reno', 2]]);
     const returns = await save('Returns', [txt('reason'), num('refunds')], [['damaged', 2], ['late', 1]]);
+    const regions = await save('Regions', [txt('region'), txt('manager')], [['West', 'Ann'], ['East', 'Bo'], ['North', 'Cy']]);
+    if (!(await rels.saveRelationship(P, { from: { datasetId: orders, column: 'region' }, to: { datasetId: regions, column: 'region' }, cardinality: 'many_to_one' }))) throw new Error('fixture: a link');
     for (let i = 0; i < 16; i++) await save(`Clone ${i}`, [txt('page'), num('views')], [['home', i]]); // more than Home's 12
     const revenue = (await metrics.saveMetric(P, { name: 'Revenue', datasetId: orders, definition: { column: 'amount', aggregation: 'sum' } }))!;
     await metrics.saveMetric(P, { name: 'Refund total', datasetId: returns, definition: { column: 'refunds', aggregation: 'sum' } });
@@ -175,7 +179,7 @@ async function dbLeg(): Promise<void> {
   const cases: Case[] = [
     { name: 'home', reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: {}, question: Q }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'Live dataset open, with table facts', reply: { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } }, ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.live }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset', prompted: FACTS_LINE },
-    { name: 'dataset open', formula: true, reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    { name: 'dataset open', formula: true, prompted: '- Regions (linked to Orders via Orders.region → Regions.region): region (text), manager (text)', reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'dashboard', formula: true, reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: { kind: 'analysis', id: w.board }, question: Q }), right: (r) => r.provenance?.kind === 'analysis' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'agent, inside', reply: answer(onOrders), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: Q }), right: (r) => r.agent?.id === w.agent && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'agent, outside', reply: { ok: true, text: 'Not here.', suggestedAction: { kind: 'outside', intent: 'refunds' } }, ask: async () => ({ threadId: await thread(w.agent), context: {}, question: 'refunds by reason' }), right: (r) => r.turns.at(-1)?.outside?.dataset === 'Returns' && r.turns.at(-1)?.text === `${msg.outsideTopic('Retail')}\n${msg.outsideOffer('Returns')}` },
@@ -197,7 +201,7 @@ async function dbLeg(): Promise<void> {
     ok(`${c.name}: the ask answers as it should`, r.out.ok === true && c.right(r.out), JSON.stringify(r.out).slice(0, 400));
     ok(`${c.name}: no whole-project list (${r.calls.length})`, r.calls.length === 0, r.calls.join(', '));
     if (c.formula) ok(`${c.name}: …and the formula metric was computed: Order share's figure is in the facts`, shared.test(facts), facts.split('\n').filter((l) => l.includes('Order share')).join(' | ') || facts.slice(0, 300));
-    if (c.prompted) ok(`${c.name}: the Live dataset's table facts are in the prompt`, facts.includes(c.prompted), facts.slice(facts.indexOf('SOURCE TABLE'), facts.indexOf('SOURCE TABLE') + 300));
+    if (c.prompted) ok(`${c.name}: the facts read by id are in the prompt (table facts, a linked dataset)`, facts.includes(c.prompted), facts.slice(-600));
   }
   assistantSearch._setIndexed(false);
   try {
