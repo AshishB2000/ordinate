@@ -422,7 +422,26 @@ Now:
 | 4 | An open dataset uses the DuckDB stats; a dashboard computes only its own metrics |
 | 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
-| 7 | Fingerprints and the rank merge (phase C) |
+| 7 | Fingerprints and the rank merge (phase C): not started, see below |
+
+**Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
+5,000 metrics, 2,000 terms), under the 50 ms line, so the index holds no summaries (6a's open question).
+
+**Why 7 waits.** Its rules are above (a job makes fingerprints, each row records its model, meaning and words merge by
+rank). Three things are missing, each the owner's call:
+
+- **pgvector.** CI's `postgres:17` image, the Compose and Helm defaults and a plain local Postgres have no `vector`
+  extension, and creating it needs a superuser. Without it in CI, the vector path would ship with no test that runs
+  it, against "every fast path keeps its reference". Options: `pgvector/pgvector:pg17` in CI and the deploy
+  defaults, with the extension created only where present (a missing one leaves search on words).
+- **The fingerprint model** (the open question below): which provider's embedding model, picked in Admin → AI like the
+  chat models, from the org's own API keys. No surprise network calls, nothing installed at run time.
+- **Spelling mistakes** (also phase C): `pg_trgm` is available everywhere and would bring back the "Did you mean" that
+  6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
+  differential can hold to.
+
+**Left on the ask path for a caller with a hidden column:** `hiddenAnywhere` and `metricsByName` still read every
+dataset and metric once per request (the viewer case: 314 queries, 11,153 reads, against 89 and 154 for an admin).
 
 ## Build order
 
