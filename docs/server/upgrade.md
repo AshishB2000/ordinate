@@ -689,6 +689,24 @@ triggers see that and mark the project's index stale, so the next question on a 
 **Rolling back.** The older release ignores the tables. The triggers stay, and mark an index stale when
 the older release saves a verified question, so upgrading again rebuilds it and misses nothing.
 
+## The Assistant's search of the Data model gets an index (`0027_assistant_search`)
+
+From this release the datasets, columns, metrics, glossary terms and documented source tables an
+Assistant question can find are rows of `assistant_search`: names, "also called" names and
+descriptions only, never a value. Every save keeps them current in the same transaction, so a search is
+one query instead of a read of every list in the project. With 2,000 datasets of 20 columns, 5,000
+metrics and 2,000 terms, a search takes 0.4 to 22 ms where reading the lists took 1,400 ms (Postgres 17).
+Without `DATABASE_URL` nothing changes.
+
+**Rolling out.** The migration adds two tables and two triggers on `records`. It reads no record. Each
+project builds its index the first time it is searched: 1.2 s at that size, once. A pod of an older
+release still running saves datasets, metrics, terms, the catalog or source table docs without updating
+the index; the triggers see that and mark that part of the project's index stale, so the next search on a
+new pod rebuilds it.
+
+**Rolling back.** The older release ignores the tables. The triggers stay, and mark an index stale when
+the older release saves one of those records, so upgrading again rebuilds what changed and misses nothing.
+
 ## Compose
 
 From a checkout:

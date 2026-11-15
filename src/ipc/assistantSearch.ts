@@ -1,0 +1,265 @@
+// The Assistant's search of the Data model (docs/assistant/00-design.md, step 3) — MAIN PROCESS ONLY. Its datasets,
+// their columns, metrics, glossary terms and documented source tables, ranked for a question's words
+// (../app/assistantSearchRank: what is found and in what order). Names, "also called" names and descriptions only:
+// no row value, no dataset origin. Two ways that must agree, field by field (scripts/test-assistantSearch.ts):
+//
+//   INDEXED    with a database: ../server/assistantSearchIndex ranks inside one query, the caller's audience in its
+//              WHERE (a viewer never matches a source table), and reads no record once built.
+//   REFERENCE  every store read, each record turned into parts by the SAME mapping below, ranked in JS. Without a
+//              database this is the path, and with one it answers whenever the index fails.
+//
+// What is per person is never in the index: a column hidden from the caller (../data/rowAccess hiddenColumnsFor), and a
+// metric or term that reads one (../analysis/columnHidden, as the Assistant's vocabulary leaves them out), are dropped
+// from the ranked results here, a page at a time, and from the counts, the same way on both paths.
+
+import * as recordFs from '../app/recordFs';
+import { logger } from '../app/logger';
+import { isValidId } from '../app/ids';
+import { clean } from '../app/searchMatch';
+import { orgDb } from '../server/db/inOrg';
+import * as index from '../server/assistantSearchIndex';
+import * as datasets from '../data/datasets';
+import * as metrics from '../analysis/metrics';
+import * as terms from '../analysis/terms';
+import * as catalog from '../app/catalog';
+import { parseStatusRef } from '../app/statusDocs';
+import { listSourceIndex, sanitizeIndex, type SourceIndexEntry } from '../app/sourceTables';
+import { connectionsDir } from '../connectors/connections';
+import { seesSourceNames } from '../data/sourceNames';
+import { hiddenAnywhere, hiddenColumnsFor } from '../data/rowAccess';
+import { metricHidden, termHidden } from '../analysis/columnHidden';
+import { searchWords, searchWordsOf } from '../ai/modelWords';
+import { MODEL_KINDS, foundItems, noCounts, rankParts } from '../app/assistantSearchRank';
+import type { Audience, CountedKind, ModelCounts, ModelHit, ModelKind, Part, RankOptions } from '../app/assistantSearchRank';
+
+export type { ModelCounts, ModelHit, ModelKind } from '../app/assistantSearchRank';
+
+/** An item key longer than this is skipped on both paths: it could not sit in a btree index entry. */
+const MAX_KEY = 256;
+const MAX_LIMIT = 200;
+/** Ranked results are read this many at a time (at least), so a page that is mostly hidden columns reads the next. */
+const BATCH = 20;
+
+// ── A store's record → its parts: the ONE mapping both paths use ────────────
+
+const stamp = (v: unknown): string => (typeof v === 'string' ? clean(v) : '');
+const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+function part(p: Pick<Part, 'item' | 'kind'> & Partial<Part>): Part {
+  return { grp: '', base: false, id: '', datasetId: null, connId: null, name: '', updated: '', audience: 'all', nameWords: [], aliasWords: [], textWords: [], certified: false, retired: false, ...p };
+}
+
+function columnNames(columns: unknown): string[] {
+  const names = (Array.isArray(columns) ? columns : []).flatMap((c: { name?: unknown } | null) => (typeof c?.name === 'string' && c.name && c.name.length <= MAX_KEY ? [clean(c.name)] : []));
+  return [...new Set(names)];
+}
+
+/** A dataset and each of its columns: what exists and what it is called. Its description and the columns' docs are the catalog's. */
+export function datasetParts(s: Pick<datasets.DatasetSummary, 'id' | 'name' | 'updatedAt'>, columns: unknown): Part[] {
+  const id = clean(String(s.id));
+  if (id.length > MAX_KEY) return [];
+  const updated = stamp(s.updatedAt);
+  return [
+    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)) }),
+    ...columnNames(columns).map((name) => part({ item: `column:${id}/${name}`, kind: 'column', base: true, id: name, datasetId: id, name, updated, nameWords: searchWords(name) })),
+  ];
+}
+
+export function metricParts(m: metrics.MetricSummary): Part[] {
+  const id = clean(String(m.id));
+  return id.length > MAX_KEY ? [] : [part({
+    item: `metric:${id}`, kind: 'metric', base: true, id, datasetId: clean(String(m.datasetId)), name: clean(text(m.name)), updated: stamp(m.updatedAt),
+    nameWords: searchWords(text(m.name)), textWords: searchWords(text(m.description)),
+  })];
+}
+
+export function termParts(t: terms.TermSummary): Part[] {
+  const id = clean(String(t.id));
+  return id.length > MAX_KEY ? [] : [part({
+    item: `term:${id}`, kind: 'term', base: true, id, datasetId: clean(String(t.datasetId)), name: clean(text(t.name)), updated: stamp(t.updatedAt),
+    nameWords: searchWords(text(t.name)), aliasWords: searchWordsOf(t.aliases), textWords: searchWords(text(t.description)),
+  })];
+}
+
+/** A connection's documented tables, for editors only: a viewer never reads a warehouse table's name (p2-01). */
+export const tableParts = (connId: string, entries: readonly SourceIndexEntry[]): Part[] => entries.map((e) => part({
+  item: `table:${connId}/${e.docId}`, kind: 'table', base: true, id: e.docId, connId, name: clean(e.table), audience: 'editor', nameWords: searchWords(e.table),
+}));
+
+/**
+ * catalog.json: a dataset's description and its columns' "also called" names, display name and description, one
+ * group per dataset; certified and retired, one group. Never a column's example or value labels: those are values.
+ */
+export function catalogParts(file: catalog.CatalogFile): Part[] {
+  const out: Part[] = [];
+  const ids = new Set([...Object.keys(file.records).flatMap((k) => (k.startsWith('dataset:') ? [k.slice('dataset:'.length)] : [])), ...Object.keys(file.columns)]);
+  for (const ds of ids) {
+    const grp = `d:${ds}`;
+    const about = searchWords(file.records[`dataset:${ds}`]?.description ?? '');
+    if (about.length) out.push(part({ grp, item: `dataset:${ds}`, kind: 'dataset', datasetId: ds, textWords: about }));
+    for (const [name, doc] of Object.entries(file.columns[ds] ?? {})) {
+      const aliasWords = searchWordsOf([doc.displayName, ...doc.aliases]);
+      const textWords = searchWords(doc.description);
+      if (aliasWords.length || textWords.length) out.push(part({ grp, item: `column:${ds}/${clean(name)}`, kind: 'column', datasetId: ds, aliasWords, textWords }));
+    }
+  }
+  for (const [ref, doc] of Object.entries(file.status ?? {})) {
+    const r = parseStatusRef(ref);
+    if (r) out.push(part({ grp: 's', item: `${r.kind}:${r.id}`, kind: r.kind, certified: doc.status === 'certified', retired: doc.status === 'retired' }));
+  }
+  return out;
+}
+
+/** The index's describer: one stored record → its parts, through each store's own parser. */
+export const describeModelRecord: index.DescribeModel = (where, body) => {
+  const p = where.projectId;
+  try {
+    switch (where.source) {
+      case 'datasets': { const s = datasets.summaryOf(p, body); return s ? datasetParts(s, (JSON.parse(body) as { columns?: unknown }).columns) : []; }
+      case 'metrics': { const m = metrics.summaryOf(p, body); return m ? metricParts(m) : []; }
+      case 'terms': { const t = terms.termOf(p, body); return t ? termParts(t) : []; }
+      case 'catalog': return catalogParts(catalog.sanitizeCatalog(JSON.parse(body)));
+      case 'tables': return tableParts(where.id, sanitizeIndex(JSON.parse(body)));
+    }
+  } catch (_) {
+    return []; // unreadable: its list skips it too
+  }
+};
+
+const TABLES_FILE = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.tables\.json$/;
+
+/** REFERENCE: every searched record of the project, read through its store, as parts. */
+async function storeParts(projectId: string): Promise<Part[]> {
+  const out: Part[] = [];
+  for (const s of await datasets.listDatasets(projectId)) out.push(...datasetParts(s, (await datasets.getDatasetMeta(projectId, s.id))?.columns));
+  out.push(...catalogParts(await catalog.load(projectId)));
+  for (const m of await metrics.listMetrics(projectId)) out.push(...metricParts(m));
+  for (const t of await terms.listTerms(projectId)) out.push(...termParts(t));
+  const names = await recordFs.readdir(connectionsDir(projectId)).catch(() => [] as string[]);
+  for (const n of names) {
+    const conn = TABLES_FILE.exec(n)?.[1];
+    if (conn) out.push(...tableParts(conn, await listSourceIndex(projectId, conn)));
+  }
+  return out;
+}
+
+// ── The answer ──────────────────────────────────────────────────────────────
+
+export interface SearchOptions { kinds?: readonly ModelKind[]; limit: number; datasetIds?: readonly string[] }
+
+const audiencesOf = async (projectId: string): Promise<Audience[]> => ((await seesSourceNames(projectId)) ? ['all', 'editor'] : ['all']);
+
+async function rankOptions(projectId: string, o: SearchOptions): Promise<RankOptions> {
+  return {
+    audiences: await audiencesOf(projectId),
+    ...(o.kinds ? { kinds: MODEL_KINDS.filter((k) => o.kinds?.includes(k)) } : {}),
+    ...(o.datasetIds ? { datasetIds: [...new Set(o.datasetIds.filter((d) => typeof d === 'string'))] } : {}),
+  };
+}
+
+const limitOf = (o: SearchOptions): number => Math.max(1, Math.min(MAX_LIMIT, Math.floor(Number(o.limit) || 0)));
+
+/**
+ * Is this result hidden from the caller? A column hidden from them, or a metric or term that reads one. Fails closed:
+ * a check that throws hides (a dataset's columns all of them). For this one answer only, never kept across requests.
+ */
+function hiddenCheck(projectId: string): (h: Pick<ModelHit, 'kind' | 'id' | 'datasetId'>) => Promise<boolean> {
+  const held = new Map<string, Promise<ReadonlySet<string> | null>>();
+  return async (h) => {
+    if (h.kind === 'metric') return metricHidden(projectId, h.id).catch(() => true);
+    if (h.kind === 'term') return termHidden(projectId, h.id).catch(() => true);
+    if (h.kind !== 'column' || !h.datasetId) return false;
+    let s = held.get(h.datasetId);
+    if (!s) held.set(h.datasetId, (s = hiddenColumnsFor(projectId, h.datasetId).then((x) => new Set([...x].map(clean)), () => null)));
+    const set = await s;
+    return set === null || set.has(h.id);
+  };
+}
+
+/** The first `limit` ranked results the caller may see, read `page` by page, so a page of hidden ones reads the next. Null when a page is. */
+async function visible(projectId: string, limit: number, page: (offset: number, n: number) => Promise<ModelHit[] | null>): Promise<ModelHit[] | null> {
+  const hidden = hiddenCheck(projectId);
+  const n = Math.max(limit, BATCH);
+  const out: ModelHit[] = [];
+  for (let offset = 0; out.length < limit; offset += n) {
+    const batch = await page(offset, n);
+    if (!batch) return null;
+    for (const h of batch) {
+      if (out.length < limit && !(await hidden(h))) out.push(h);
+    }
+    if (batch.length < n) break;
+  }
+  return out;
+}
+
+/**
+ * The items the caller may see, counted. A caller nothing is hidden from costs no read; one with a hidden column has each
+ * metric and term checked (every metric record read once, as the vocabulary does for them).
+ */
+function tally(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<ModelCounts> {
+  return recordFs.withReadMemo(async () => {
+    const out = noCounts();
+    const hidden = (await hiddenAnywhere(projectId)).size ? hiddenCheck(projectId) : null;
+    for (const it of items) if (!hidden || !(await hidden(it))) out[it.kind] += 1;
+    return out;
+  });
+}
+
+/** REFERENCE: every store read, ranked in JS, then what the caller may see. */
+export async function referenceModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[]> {
+  const asked = searchWords(question);
+  if (!isValidId(projectId) || !asked.length) return [];
+  const ranked = rankParts(await storeParts(projectId), asked, await rankOptions(projectId, o));
+  return (await visible(projectId, limitOf(o), async (offset, n) => ranked.slice(offset, offset + n))) ?? [];
+}
+
+/** INDEXED: the same answer from the index. Null without a database (or for an id not as records store it). */
+export async function indexedModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[] | null> {
+  if (!orgDb() || projectId !== projectId.toLowerCase()) return null;
+  const asked = searchWords(question);
+  if (!isValidId(projectId) || !asked.length) return [];
+  const opts = await rankOptions(projectId, o);
+  return visible(projectId, limitOf(o), (offset, n) => index.rankedPage(projectId, asked, opts, offset, n, recordFs.rowsUnder));
+}
+
+export async function referenceCount(projectId: string): Promise<ModelCounts> {
+  return isValidId(projectId) ? tally(projectId, foundItems(await storeParts(projectId), await audiencesOf(projectId))) : noCounts();
+}
+
+export async function indexedCount(projectId: string): Promise<ModelCounts | null> {
+  if (!orgDb() || projectId !== projectId.toLowerCase()) return null;
+  if (!isValidId(projectId)) return noCounts();
+  const items = await index.foundItems(projectId, await audiencesOf(projectId), recordFs.rowsUnder);
+  return items && tally(projectId, items);
+}
+
+let warned = false;
+function fellBack(err: unknown): void {
+  if (warned) return;
+  warned = true;
+  logger.warn(`[assistant search] the index query failed (${String((err as { code?: unknown })?.code ?? 'error')}); answering from the records. Further failures are not logged.`);
+}
+
+async function indexedOr<T>(fn: () => Promise<T | null>, reference: () => Promise<T>): Promise<T> {
+  try {
+    const r = await fn();
+    if (r !== null) return r;
+  } catch (err) {
+    fellBack(err);
+  }
+  return reference();
+}
+
+/** The `limit` items of the Data model that best match `question`'s words, that the caller may see, best first. */
+export function searchModel(projectId: string, question: string, o: SearchOptions): Promise<ModelHit[]> {
+  return indexedOr(() => indexedModel(projectId, question, o), () => referenceModel(projectId, question, o));
+}
+
+/** How many datasets, metrics, terms and source tables the caller can find in the project (Home's counts); no columns. */
+export function countModel(projectId: string): Promise<ModelCounts> {
+  return indexedOr(() => indexedCount(projectId), () => referenceCount(projectId));
+}
+
+/** recordFs writes keep the index current through this describer (src/server/app.ts registers it at startup). */
+export function register(): void {
+  index.useModelDescriber(describeModelRecord);
+}
