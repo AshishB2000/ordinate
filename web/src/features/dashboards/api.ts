@@ -250,7 +250,13 @@ export interface FxView {
   codes: string[];
 }
 export function useFx(projectId: string) {
-  return useQuery({ queryKey: ['fx:get', projectId], queryFn: async () => must<Omit<FxView, 'ok'>>(rpc('fx:get', { projectId }), 'Could not read currencies.') });
+  return useQuery({
+    queryKey: ['fx:get', projectId],
+    queryFn: async () => must<Omit<FxView, 'ok'>>(rpc('fx:get', { projectId }), 'Could not read currencies.'),
+    // Read by the viewer (useViewer) and the dashboard chrome, again on each remount: one read a minute, not one per mount. The one
+    // write (fx:dashboard, below) puts its reply in this cache.
+    staleTime: 60_000,
+  });
 }
 export function useSetDashboardCurrency(projectId: string) {
   const client = useQueryClient();
