@@ -270,6 +270,30 @@ function bounded(s: string, n: string): boolean {
 }
 
 /**
+ * Every stretch of `text`, lowercased, that `bounded` could match a name against (it starts after a non-word character
+ * or at the start, and ends before one or at the end), trimmed and deduplicated: `mentionsHidden(text, {name})` holds only
+ * when one of them is `name` lowercased and trimmed. Null past `max` stretches (the caller reads every name instead).
+ */
+export function mentionable(text: string, max: number): string[] | null {
+  const s = text.toLowerCase();
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (let i = 0; i <= s.length; i++) {
+    if (i < s.length && !WORD.test(i > 0 ? s[i - 1] : '')) starts.push(i);
+    if (i > 0 && !WORD.test(s[i] ?? '')) ends.push(i);
+  }
+  const out = new Set<string>();
+  let n = 0;
+  for (const i of starts) for (const j of ends) {
+    if (j <= i) continue;
+    if (++n > max) return null;
+    const t = s.slice(i, j).trim();
+    if (t) out.add(t);
+  }
+  return [...out];
+}
+
+/**
  * Does any string in the question name a hidden column? Conservative (a false match refuses, never leaks): a
  * string equal to it, or containing it bounded by non-word characters, case-insensitive — `sum(salary)`,
  * `[Salary]`, `{FIXED dept: sum(salary)}`. Object keys are field names, not columns, and are not read.

@@ -16,7 +16,7 @@
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on); without it, a skip line:
 //   3. THE BUDGET: each case's counts ≤ its ceilings (printed).
 //   4. NEGATIVE CONTROL: case (c) with the question's read memo off (../src/ipc/askMemo `_setAskMemo`) is over them, and
-//      case (a) with step 3's index off (../src/ipc/assistantSearch `_setIndexed`, the reference paths) is too.
+//      cases (a) and (d) with step 3's index off (../src/ipc/assistantSearch `_setIndexed`, the reference paths) are too.
 //      The open dataset of case (b) loads no table: datasets.getDataset is called no more often than from Home, where
 //      the one call is the answer chart's (../src/ipc/answers computeCardWith hydrates by design); Orders is past
 //      every door's 1,000-row cost model. NEGATIVE CONTROL: with the resident read off (../src/ipc/copilotTable
@@ -84,14 +84,16 @@ const SCALE = { datasets: 2_000, metrics: 5_000, terms: 2_000, verified: 5_000 }
 // after PR 2, about 27,000 queries each; after PRs 3 to 6a (lists one paged query, verified checks narrowed, a dataset's
 // stats, a dashboard's own metrics), 345 queries and about 7,100 reads each, (d) 14,135 reads. PR 6b, step 3's index on
 // the ask path (no question lists the whole project): Home counts and the 12 datasets the index ranks, a dataset's metrics
-// and terms by index, the names a model's answer says looked up by index. (d) still checks every metric and term once for
-// a caller with a hidden column (hiddenAnywhere, metricsByName: the next fix there), its terms now prefetched.
+// and terms by index, the names a model's answer says looked up by index. (d), a caller with a hidden column, then still
+// read every dataset (hiddenAnywhere) and every metric (metricsByName): 311 queries and 11,153 reads. Now only the datasets
+// the index says may hide a column, the metrics a formula names by their name keys, each result page's dataset records
+// in one query, and the counts' metric and term checks a thousand records a query: what is left is those checks.
 const at = (queries: number, reads: number) => ({ queries: Math.ceil(queries * 1.1), reads: Math.ceil(reads * 1.1) });
 const CEILING: Record<string, { queries: number; reads: number }> = {
   home: at(89, 154), // was at(345, 7_134)
   dataset: at(88, 123), // was at(345, 7_121)
   agent: at(75, 136), // was at(339, 7_113)
-  viewer: at(359, 11_153), // was at(345, 14_135)
+  viewer: at(114, 7_299), // was at(359, 11_153), and at(345, 14_135) before that
   dashboard: at(112, 183), // was at(354, 7_112)
   // PR 2b: 15 answers reopened, no figure query. Before it, the web drew each card with `answer:card`: 15 computes,
   // each card's "✓ Verified" also listing every verified question of the project (5,000 records).
@@ -303,12 +305,12 @@ async function dbLeg(pool: Pool): Promise<void> {
     if (name === 'agent') {
       ok('NEGATIVE CONTROL: the agent with the memo off is over both ceilings', off.queries > CEILING.agent.queries && off.reads > CEILING.agent.reads, `${off.queries} queries, ${off.reads} reads`);
     }
-    if (name === 'home') {
+    if (name === 'home' || name === 'viewer') {
       searchMod._setIndexed(false); // the reference paths, as without a database: every list of the project
       try {
         const ref = await once(role, extra, agentId);
         line(name + ' (index off)', ref);
-        ok('NEGATIVE CONTROL: Home with the index off is over both ceilings', ref.queries > CEILING.home.queries && ref.reads > CEILING.home.reads, `${ref.queries} queries, ${ref.reads} reads`);
+        ok(`NEGATIVE CONTROL: ${name} with the index off is over both ceilings`, ref.queries > CEILING[name].queries && ref.reads > CEILING[name].reads, `${ref.queries} queries, ${ref.reads} reads`);
       } finally {
         searchMod._setIndexed(true);
       }

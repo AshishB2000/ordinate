@@ -28,7 +28,11 @@ import { parseStatusRef } from '../app/statusDocs';
 import { listSourceIndex, sanitizeIndex, type SourceIndexEntry } from '../app/sourceTables';
 import { connectionsDir } from '../connectors/connections';
 import { seesSourceNames } from '../data/sourceNames';
-import { hiddenAnywhere, hiddenColumnsFor } from '../data/rowAccess';
+import { columnAccessFromRecord } from '../data/columnAccess';
+import { MAX_DEPTH, parentsOfRecord } from '../data/upstream';
+import { hiddenAnywhere, hiddenColumnsFor, inFanOut, restrictedOn } from '../data/rowAccess';
+import { datasetFilePath } from '../data/datasetRecord';
+import { readTexts } from '../app/recordTexts';
 import { metricHidden, termHidden } from '../analysis/columnHidden';
 import { searchWords, searchWordsOf } from '../ai/modelWords';
 import { MODEL_KINDS, foundItems, keyedItems, newestItems, noCounts, rankParts } from '../app/assistantSearchRank';
@@ -74,13 +78,23 @@ function columnNames(columns: unknown): string[] {
   return [...new Set(names)];
 }
 
-/** A dataset and each of its columns: what exists and what it is called. Its description and the columns' docs are the catalog's. */
-export function datasetParts(s: Pick<datasets.DatasetSummary, 'id' | 'name' | 'updatedAt'>, columns: unknown): Part[] {
+/**
+ * What may hide a column (../data/rowAccess hiddenAnywhere's candidates, ../server/assistantSearchIndex hidingDatasets):
+ * the keys of the dataset record `raw`, stored at `fileId`'s path, whose summary's id is `id`. Only the index carries
+ * them (no reference search reads them): hiddenAnywhere's reference is its own walk over every dataset.
+ */
+export function hidingKeys(fileId: string, id: string, raw: unknown): string[] {
+  const ruled = columnAccessFromRecord(raw) !== null || id !== fileId; // another id's record: read it, never trust its keys
+  return [index.KNOWN_KEY, ...(ruled ? [index.RULED_KEY] : []), ...parentsOfRecord(raw).map(index.upKey)];
+}
+
+/** A dataset and each of its columns: what exists and what it is called. Its description and the columns' docs are the catalog's. `hiding`: its hidingKeys (the index's). */
+export function datasetParts(s: Pick<datasets.DatasetSummary, 'id' | 'name' | 'updatedAt'>, columns: unknown, hiding: readonly string[] = []): Part[] {
   const id = clean(String(s.id));
   if (id.length > MAX_KEY) return [];
   const updated = stamp(s.updatedAt);
   return [
-    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)), keys: namesKeys([text(s.name)]) }),
+    part({ item: `dataset:${id}`, kind: 'dataset', base: true, id, datasetId: id, name: clean(text(s.name)), updated, nameWords: searchWords(text(s.name)), keys: [...namesKeys([text(s.name)]), ...hiding] }),
     ...columnNames(columns).map((name) => part({ item: `column:${id}/${name}`, kind: 'column', base: true, id: name, datasetId: id, name, updated, nameWords: searchWords(name) })),
   ];
 }
@@ -136,7 +150,7 @@ export const describeModelRecord: index.DescribeModel = (where, body) => {
   const p = where.projectId;
   try {
     switch (where.source) {
-      case 'datasets': { const s = datasets.summaryOf(p, body); return s ? datasetParts(s, (JSON.parse(body) as { columns?: unknown }).columns) : []; }
+      case 'datasets': { const s = datasets.summaryOf(p, body); const raw = JSON.parse(body) as { columns?: unknown }; return s ? datasetParts(s, raw.columns, hidingKeys(where.id, s.id, raw)) : []; }
       case 'metrics': { const m = metrics.summaryOf(p, body); return m ? metricParts(m) : []; }
       case 'terms': { const t = terms.termOf(p, body); return t ? termParts(t) : []; }
       case 'catalog': return catalogParts(catalog.sanitizeCatalog(JSON.parse(body)));
@@ -186,11 +200,11 @@ const limitOf = (o: SearchOptions): number => Math.max(1, Math.min(MAX_LIMIT, Ma
  * Is this result hidden from the caller? A column hidden from them, or a metric or term that reads one. Fails closed:
  * a check that throws hides (a dataset's columns all of them). For this one answer only, never kept across requests.
  */
-function hiddenCheck(projectId: string): (h: Pick<ModelHit, 'kind' | 'id' | 'datasetId'>) => Promise<boolean> {
+function hiddenCheck(projectId: string): (h: Pick<ModelHit, 'kind' | 'id' | 'datasetId'>, text?: () => string) => Promise<boolean> {
   const held = new Map<string, Promise<ReadonlySet<string> | null>>();
-  return async (h) => {
-    if (h.kind === 'metric') return metricHidden(projectId, h.id).catch(() => true);
-    if (h.kind === 'term') return termHidden(projectId, h.id).catch(() => true);
+  return async (h, text) => {
+    if (h.kind === 'metric') return metricHidden(projectId, h.id, text).catch(() => true);
+    if (h.kind === 'term') return termHidden(projectId, h.id, text).catch(() => true);
     if (h.kind !== 'column' || !h.datasetId) return false;
     let s = held.get(h.datasetId);
     if (!s) held.set(h.datasetId, (s = hiddenColumnsFor(projectId, h.datasetId).then((x) => new Set([...x].map(clean)), () => null)));
@@ -200,31 +214,36 @@ function hiddenCheck(projectId: string): (h: Pick<ModelHit, 'kind' | 'id' | 'dat
 }
 
 /** The first `limit` ranked results the caller may see, read `page` by page, so a page of hidden ones reads the next. Null when a page is. */
-async function visible(projectId: string, limit: number, page: (offset: number, n: number) => Promise<ModelHit[] | null>): Promise<ModelHit[] | null> {
-  const hidden = hiddenCheck(projectId);
-  const n = Math.max(limit, BATCH);
-  const out: ModelHit[] = [];
-  for (let offset = 0; out.length < limit; offset += n) {
-    const batch = await page(offset, n);
-    if (!batch) return null;
-    for (const h of batch) {
-      if (out.length < limit && !(await hidden(h))) out.push(h);
+function visible(projectId: string, limit: number, page: (offset: number, n: number) => Promise<ModelHit[] | null>): Promise<ModelHit[] | null> {
+  return recordFs.withReadMemo(async () => {
+    const hidden = hiddenCheck(projectId);
+    // A restricted caller's column checks read each result's dataset record: one query a page (an editor's read none).
+    const reads = inFanOut() || (await restrictedOn(projectId));
+    const n = Math.max(limit, BATCH);
+    const out: ModelHit[] = [];
+    for (let offset = 0; out.length < limit; offset += n) {
+      const batch = await page(offset, n);
+      if (!batch) return null;
+      if (reads) await recordFs.readMany([...new Set(batch.flatMap((h) => (h.kind === 'column' && h.datasetId && isValidId(h.datasetId) ? [datasetFilePath(projectId, h.datasetId)] : [])))]);
+      for (const h of batch) {
+        if (out.length < limit && !(await hidden(h))) out.push(h);
+      }
+      if (batch.length < n) break;
     }
-    if (batch.length < n) break;
-  }
-  return out;
+    return out;
+  });
 }
 
 /**
  * The items the caller may see, counted. A caller nothing is hidden from costs no read; one with a hidden column has each
- * metric and term checked (every metric record read once, as the vocabulary does for them).
+ * metric and term checked, their records read a thousand at a time.
  */
 function tally(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<ModelCounts> {
   return recordFs.withReadMemo(async () => {
     const out = noCounts();
     const hidden = (await hiddenAnywhere(projectId)).size ? hiddenCheck(projectId) : null;
-    if (hidden) await prefetch(projectId, items);
-    for (const it of items) if (!hidden || !(await hidden(it))) out[it.kind] += 1;
+    const textOf = hidden ? await prefetch(projectId, items) : null;
+    for (const it of items) if (!hidden || !(await hidden(it, textOf?.(it)))) out[it.kind] += 1;
     return out;
   });
 }
@@ -232,13 +251,21 @@ function tally(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: 
 /** Records read per query when the checks of a caller with a hidden column are prefetched. */
 const PREFETCH = 1000;
 
-/**
- * The term records `items` name, read into the memo a page of ids at a time: their checks then cost no query each. The
- * metrics' need none: the first metric check lists them all (../analysis/columnHidden metricsByName).
- */
-async function prefetch(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<void> {
-  const paths = items.flatMap((it) => (it.kind === 'term' && isValidId(it.id) ? [terms.termFile(projectId, it.id)] : []));
-  for (let i = 0; i < paths.length; i += PREFETCH) await recordFs.readMany(paths.slice(i, i + PREFETCH));
+/** The metric and term records `items` name, read a page of ids at a time: each one's text, or none (a dataset, a table). */
+async function prefetch(projectId: string, items: ReadonlyArray<{ kind: CountedKind; id: string }>): Promise<(it: { kind: CountedKind; id: string }) => (() => string) | undefined> {
+  const fileOf = (it: { kind: CountedKind; id: string }): string | null => (!isValidId(it.id) ? null : it.kind === 'term' ? terms.termFile(projectId, it.id) : it.kind === 'metric' ? metrics.metricFilePath(projectId, it.id) : null);
+  const paths = [...new Set(items.flatMap((it) => fileOf(it) ?? []))];
+  const pageOf = new Map<string, (path: string) => () => string>();
+  for (let i = 0; i < paths.length; i += PREFETCH) {
+    const page = paths.slice(i, i + PREFETCH);
+    const textOf = await readTexts(page);
+    for (const p of page) pageOf.set(p, textOf);
+  }
+  return (it) => {
+    const file = fileOf(it);
+    const textOf = file === null ? undefined : pageOf.get(file);
+    return file !== null && textOf ? textOf(file) : undefined;
+  };
 }
 
 /** REFERENCE: every store read, ranked in JS, then what the caller may see. */
@@ -328,6 +355,12 @@ export function newestModel(projectId: string, kind: KeyedKind, limit: number, r
   return onIndex(projectId, () => index.newestItems(projectId, kind, capped(limit), retired, recordFs.rowsUnder));
 }
 export const newestReference = async (projectId: string, kind: KeyedKind, limit: number, retired = false): Promise<KeyedItem[]> => newestItems(await storeParts(projectId), kind, capped(limit), retired);
+
+/**
+ * The datasets that may hide a column from someone, by their hiding keys: ../data/rowAccess hiddenAnywhere reads only
+ * these (../server/assistantSearchIndex hidingDatasets says why the set is complete). Null without the index.
+ */
+export const hidingModel = (projectId: string): Promise<string[] | null> => onIndex(projectId, () => index.hidingDatasets(projectId, MAX_DEPTH, recordFs.rowsUnder));
 
 /** recordFs writes keep the index current through this describer (src/server/app.ts registers it at startup). */
 export function register(): void {

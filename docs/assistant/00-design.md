@@ -346,7 +346,7 @@ worst places:
   out. `countModel` counts datasets, metrics, terms and source tables the caller may see, never
   columns. For a caller with a hidden column those checks read every dataset and metric once a
   request (`hiddenAnywhere`, `metricsByName`): 1.6 s for a question whose results hold a metric, and
-  1.2 s for the counts, at the size below. Making those two index-backed is the next fix there.
+  1.2 s for the counts, at the size below. Since PR 6c both are index-backed (below).
 - **Measured** (Postgres 17, 2,000 datasets × 20 columns, 5,000 metrics, 2,000 terms, 10,000
   column docs, 61,000 rows): first build 1.2 s, once; a question matching nothing 0.4 ms; one
   whose words match thousands of items ("sales by region") 22 ms, against 1,400 ms for reading
@@ -384,9 +384,8 @@ eight asks; with the index off, each one lists). What each reads:
 `test-askBudget` at the scale above, queries and record reads (memo hits counted), before → after:
 Home 345 / 7,134 → 89 / 154; a dataset open 345 / 7,121 → 88 / 123; an agent with a topic
 339 / 7,113 → 75 / 136; a dashboard 354 / 7,112 → 112 / 183; the restricted viewer from Home
-345 / 14,135 → 359 / 11,153. The viewer still checks every metric and term once for its counts
-(`hiddenAnywhere`, `metricsByName`; its terms now prefetched a thousand at a time): making those
-two index-backed is the next fix. Building one Home question's facts takes 20 ms (Q8).
+345 / 14,135 → 359 / 11,153 (PR 6c: → 114 / 7,299). Building one Home question's facts takes
+20 ms (Q8).
 
 ### Answers keep the figures they had
 
@@ -422,6 +421,7 @@ Now:
 | 4 | An open dataset uses the DuckDB stats; a dashboard computes only its own metrics |
 | 5 | Verified checks read only what they name; MCP's `answer_verified_question` uses the index |
 | 6 | The `assistant_search` index, then a measurement of whether it should hold summaries too |
+| 6c | A caller with a hidden column: its dataset and metric checks off the index |
 | 7 | Fingerprints and the rank merge (phase C): not started, see below |
 
 **Measured after 6b:** building one Home question's facts takes 20 ms on the budget's project (2,000 datasets,
@@ -440,8 +440,39 @@ rank). Three things are missing, each the owner's call:
   6b drops for a typo sharing no word with any name ("Ordrs"); its similarity is a float, so it needs a reference the
   differential can hold to.
 
-**Left on the ask path for a caller with a hidden column:** `hiddenAnywhere` and `metricsByName` still read every
-dataset and metric once per request (the viewer case: 314 queries, 11,153 reads, against 89 and 154 for an admin).
+**A caller with a hidden column (PR 6c).** No list of the project either (`test-askNoProjectLists`
+adds a viewer that Orders' cost is hidden from: zero lists; with the index off, it lists):
+
+- **`hiddenAnywhere`** reads only the datasets the index says may hide a column. Each dataset's
+  base part carries `col:rules` (it holds column rules, sanitizing or not, or another dataset's
+  id), `up:<id>` for each dataset it is built from (`parentsOfRecord`) and `col:known` (written by
+  a release that writes these keys); no migration, they are 0028's `keys`, and
+  ASSISTANT_SEARCH_VERSION 3 rebuilds every project once. One recursive query takes the ruled ones
+  and those without `col:known` (an older pod's write), those built from a dataset the index does
+  not hold (gone, in the Trash, unreadable, an id in another case), everything built from those at
+  any depth, and any with a chain of more than the walk's 16 above it. That is a superset of the
+  datasets whose hidden columns can be non-empty, and `hiddenColumnsFor` decides on each. A rule
+  saved or removed rewrites the record's keys in the save's transaction, as every key.
+- **`metricHidden`** finds a formula's metrics by the name keys of its stretches: every substring
+  `mentionsHidden` could match (bounded by non-word characters, lowercased, trimmed; over 2,000 of
+  them, every metric), the records read in one query and kept as `metricsByName` keeps them (the
+  first of each lower-cased name in `listMetrics`' order). Lowercasing twice is lowercasing once
+  over every code point, so a stretch's key is the name's.
+- The counts' metric and term checks read a thousand records a query, and a ranked page's column
+  checks its datasets' records in one.
+
+`test-hiddenIndex` holds both Object.is-equal to the full walks (index off) for an admin, an
+editor, two viewers the rules hide columns from, one in the team they show them to, and a fan-out:
+over own rules, two levels of derivation, a union, a join, a chain of 18, a cycle, rules that do not
+sanitize, the Trash, a rule added and removed, a deletion; and every metric of formula chains,
+cycles, a chain past the depth, names differing in case, a name inside another, renamed and deleted
+ones. NEGATIVE CONTROLS: a
+dataset's `up:` key or its whole part out of the index, a metric's name key out: each fails.
+
+**Left on the ask path for a caller with a hidden column:** the counts still check each metric and
+term the caller can find (5,000 and 2,000 records, a thousand a query, at the budget's size). And
+for anyone, a formula metric's figure (`factMetrics`' additivity, `resolveMetric`) still reads
+every metric by name: `test-askNoProjectLists` keeps its formula on a dataset no case computes.
 
 ## Build order
 

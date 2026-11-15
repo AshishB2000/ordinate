@@ -345,10 +345,11 @@ export async function readMetric(projectId: string, id: string, kind: 'metric' |
   return readTagged(kind, metricFilePath(projectId, id), (d) => (isValidMetric(d) ? normalize(d, projectId) : null));
 }
 
-export async function getMetric(projectId: string, id: string): Promise<Metric | null> {
+/** `text`: the record's text, read already (../app/recordTexts readTexts), in place of a readFile. */
+export async function getMetric(projectId: string, id: string, text?: () => string): Promise<Metric | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
-    const raw = await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
+    const raw = text ? text() : await recordFs.readFile(metricFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidMetric(data)) return null;
     return normalize(data, projectId);

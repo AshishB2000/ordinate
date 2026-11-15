@@ -264,7 +264,8 @@ async function validationLeg(w: World): Promise<void> {
 /** 5. A write that keeps 0027's rows but no keys (the release before 0028) drops its source's marker; NEGATIVE CONTROL: one with keys does not. */
 async function olderPodLeg(pool: Pool, w: World): Promise<void> {
   await as(ADMIN, w.P, () => search.keyedModel(w.P, 'metric', [search.lowerKey('revenue')])); // every source built
-  const built = async (): Promise<string[]> => (await pool.query('SELECT source FROM assistant_search_built WHERE project_id = $1 AND version = 2 ORDER BY source', [w.P])).rows.map((r: { source: string }) => r.source);
+  const version = (require('../src/server/assistantSearchIndex') as typeof import('../src/server/assistantSearchIndex')).ASSISTANT_SEARCH_VERSION;
+  const built = async (): Promise<string[]> => (await pool.query('SELECT source FROM assistant_search_built WHERE project_id = $1 AND version = $2 ORDER BY source', [w.P, version])).rows.map((r: { source: string }) => r.source);
   const before = await built();
   const write = async (keys: boolean): Promise<void> => {
     const c = await pool.connect();

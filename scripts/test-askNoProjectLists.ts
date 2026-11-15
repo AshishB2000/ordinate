@@ -9,7 +9,9 @@
 // the reference path, by design):
 //   1. ZERO whole-project lists for one ask: from Home, with a dataset open, on a dashboard, through an agent with a
 //      topic (an answer inside it; the model saying it is outside; an answer on a dataset outside it), a model answer
-//      with a typo ("Did you mean"), and a follow-up that refines the previous answer. Each reply is checked too.
+//      with a typo ("Did you mean"), a follow-up that refines the previous answer, and a restricted viewer from Home with
+//      a column hidden from them (Orders' cost: their checks read the few datasets that may hide one, and only the metrics
+//      a formula names, ../src/data/rowAccess hiddenAnywhere, ../src/analysis/columnHidden). Each reply is checked too.
 //   2. NEGATIVE CONTROL: the same asks with the index off (assistantSearch._setIndexed(false), the reference paths) DO
 //      call them, each case.
 //
@@ -45,6 +47,9 @@ const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze')
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const assistantSearch: typeof import('../src/ipc/assistantSearch') = require('../src/ipc/assistantSearch');
 const msg: typeof import('../src/ai/agentMessages') = require('../src/ai/agentMessages');
+const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+const access: typeof import('../src/data/columnAccess') = require('../src/data/columnAccess');
+const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/rowAccess');
 
 type Role = import('../src/server/context').Identity['user']['role'];
 let req = 0;
@@ -77,6 +82,14 @@ async function world(): Promise<World> {
       tile(0, { type: 'visual', visualId: byRegion }), tile(3, { type: 'metric', metric: { datasetId: orders, column: 'amount', aggregation: 'sum', metricId: revenue.id } }), tile(6, { type: 'visual', visualId: byCity }),
     ] }] }))!;
     if (!vq.ok) throw new Error('fixture: verified question');
+    // Orders' cost is hidden from a viewer in no team; a formula metric names Revenue (the viewer's checks walk it). On
+    // Returns, which no other case computes: a formula's FIGURE still reads every metric by name (factMetrics' shortcut).
+    await metrics.saveMetric(P, { name: 'Order share', datasetId: returns, definition: { formula: '[Revenue] / 3' } });
+    const ruled = await rec.serialized(rec.datasetFilePath(P, orders), (raw) => {
+      raw.columnAccess = access.buildColumnAccess(raw, [{ column: 'cost', visibleTo: [{ teamId: '11111111-1111-4111-8111-111111111111' }] }], 'admin@acme.test', new Date().toISOString());
+      return true;
+    });
+    if (!ruled) throw new Error('fixture: column rule');
     return { P, orders, returns, agent: agent.id, board: board.id };
   });
 }
@@ -124,8 +137,8 @@ async function dbLeg(): Promise<void> {
   (execConfig as { executionReady: unknown }).executionReady = async () => true;
   (analyze as { askCopilot: unknown }).askCopilot = async () => replies.shift() ?? { ok: true, text: 'Fine.', suggestedAction: { kind: 'none', intent: '' } };
   (analyze as { dispatch: unknown }).dispatch = async () => { throw new Error('no model call in this suite'); };
-  const call = (ch: string, payload: object): Promise<any> => as('admin', () => handlers.get(ch)!({}, { projectId: w.P, ...payload }));
-  const thread = async (agentId?: string): Promise<string> => (await call('copilot:newThread', agentId ? { agentId } : {})).thread.id;
+  const call = (ch: string, payload: object, who: Role = 'admin'): Promise<any> => as(who, () => handlers.get(ch)!({}, { projectId: w.P, ...payload }));
+  const thread = async (agentId?: string, who: Role = 'admin'): Promise<string> => (await call('copilot:newThread', agentId ? { agentId } : {}, who)).thread.id;
   const answer = (spec: object) => ({ ok: true, text: 'Here it is.', suggestedAction: { kind: 'answer', intent: 'revenue', spec } });
   const onOrders = { dataset: 'Orders', category: 'region', measures: [{ column: 'Revenue' }] }; // a metric by name
 
@@ -140,7 +153,7 @@ async function dbLeg(): Promise<void> {
   };
   ok('fixture: an ask from Home answers with the chart, from the model', !!(await started()));
 
-  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean };
+  type Case = { name: string; reply: unknown; ask: () => Promise<object>; right: (r: any) => boolean; who?: Role };
   const cases: Case[] = [
     { name: 'home', reply: answer(onOrders), ask: async () => ({ threadId: await thread(), context: {}, question: Q }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
     { name: 'dataset open', reply: answer({ category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: { kind: 'dataset', id: w.orders }, question: 'amount by region' }), right: (r) => r.provenance?.kind === 'dataset' && r.turns.at(-1)?.answer?.datasetId === w.orders },
@@ -150,13 +163,15 @@ async function dbLeg(): Promise<void> {
     { name: 'agent, answer outside', reply: answer({ dataset: 'Returns', category: 'reason', measures: [{ column: 'refunds', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(w.agent), context: {}, question: 'refunds by reason' }), right: (r) => r.turns.at(-1)?.outside?.dataset === 'Returns' && !r.turns.at(-1)?.answer },
     { name: 'typo (Did you mean)', reply: answer({ dataset: 'Order', category: 'region', measures: [{ column: 'amount', aggregation: 'sum' }] }), ask: async () => ({ threadId: await thread(), context: {}, question: 'amount by region' }), right: (r) => r.turns.at(-1)?.suggest?.part === 'dataset' && r.turns.at(-1)?.suggest?.options?.[0]?.spec?.datasetId === w.orders },
     { name: 'follow-up', reply: answer({ refine: true, filters: [{ column: 'region', op: '=', value: 'West' }] }), ask: async () => ({ threadId: await started(), context: {}, question: 'only West' }), right: (r) => r.turns.at(-1)?.answer?.filters?.length === 1 && r.turns.at(-1)?.answer?.datasetId === w.orders },
+    { name: 'viewer, a hidden column', who: 'viewer', reply: answer(onOrders), ask: async () => ({ threadId: await thread(undefined, 'viewer'), context: {}, question: 'order share by region' }), right: (r) => r.provenance?.kind === 'project' && r.turns.at(-1)?.answer?.datasetId === w.orders },
   ];
+  ok('fixture: the viewer is restricted, and Orders\' cost is hidden from them', (await as('viewer', async () => [...await rowAccess.hiddenAnywhere(w.P)])).join() === 'cost');
   const run = async (c: Case) => {
     replies.length = 0;
     const payload = await c.ask();
     replies.length = 0;
     replies.push(structuredClone(c.reply));
-    return listed(w.P, () => call('copilot:ask', payload));
+    return listed(w.P, () => call('copilot:ask', payload, c.who));
   };
   for (const c of cases) {
     const r = await run(c);

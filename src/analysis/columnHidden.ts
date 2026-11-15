@@ -39,35 +39,47 @@ function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
   return hit;
 }
 
+/**
+ * The metrics `formula` may name: what `metricsByName(projectId).values()` holds of the names it says, in that order
+ * (`questionOf` keeps only those it names). Off step 3's index (../ipc/specVocabulary metricsSaidIn); without it, or
+ * when a lookup fails, every metric, once per request: the reference (scripts/test-hiddenIndex.ts holds them equal).
+ */
+function namedBy(projectId: string, formula: string): Promise<Metric[]> {
+  return once(`named\0${projectId}\0${formula}`, async () => {
+    const sv = require('../ipc/specVocabulary') as typeof import('../ipc/specVocabulary'); // lazy: it imports this module
+    return (await sv.metricsSaidIn(projectId, formula).catch(() => null)) ?? [...(await once(`byName\0${projectId}`, () => metrics.metricsByName(projectId))).values()];
+  });
+}
+
 /** Every string a metric's figure reads by: its definition, time column and filters, terms expanded; the metrics it names, recursively. */
-async function questionOf(projectId: string, m: Metric, byName: Map<string, Metric>, seen: Set<string>): Promise<unknown[]> {
+async function questionOf(projectId: string, m: Metric, seen: Set<string>): Promise<unknown[]> {
   if (seen.has(m.id) || seen.size > MAX_DEPTH) return [];
   seen.add(m.id);
   const out: unknown[] = [m.definition, m.timeColumn ?? '', m.filters];
   for (const s of m.filters as unknown[]) if (isTermStep(s)) out.push((await getTerm(projectId, s.term))?.filters ?? []);
   // A formula names other metrics by name; a later kind may name one by id (a period's base, a target's plan).
   const formula = metrics.isFormulaDefinition(m.definition) ? m.definition.formula : '';
-  const named = !formula ? [] : [...byName.values()].filter((o) => o.id !== m.id && mentionsHidden(formula, new Set([o.name])));
+  const named = !formula ? [] : (await namedBy(projectId, formula)).filter((o) => o.id !== m.id && mentionsHidden(formula, new Set([o.name])));
   const ids = JSON.stringify(m.definition).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [];
   for (const id of ids) if (isValidId(id)) { const o = await metrics.getMetric(projectId, id); if (o) named.push(o); }
-  for (const o of named) out.push(...(await questionOf(projectId, o, byName, seen)));
+  for (const o of named) out.push(...(await questionOf(projectId, o, seen)));
   return out;
 }
 
-/** Does the metric read a column hidden from the caller anywhere in the project? False for an unrestricted caller. */
-export function metricHidden(projectId: string, id: string): Promise<boolean> {
+/** Does the metric read a column hidden from the caller anywhere in the project? False for an unrestricted caller. `text`: its record's, read already. */
+export function metricHidden(projectId: string, id: string, text?: () => string): Promise<boolean> {
   return once(`metric\0${projectId}\0${id}`, async () => {
     const hidden = await hiddenAnywhere(projectId);
     if (!hidden.size) return false;
-    const m = await metrics.getMetric(projectId, id);
-    return !!m && mentionsHidden(await questionOf(projectId, m, await once(`byName\0${projectId}`, () => metrics.metricsByName(projectId)), new Set()), hidden);
+    const m = await metrics.getMetric(projectId, id, text);
+    return !!m && mentionsHidden(await questionOf(projectId, m, new Set()), hidden);
   });
 }
 
-/** Does the glossary term filter on a column hidden from the caller anywhere in the project? */
-export async function termHidden(projectId: string, id: string): Promise<boolean> {
+/** Does the glossary term filter on a column hidden from the caller anywhere in the project? `text`: its record's, read already. */
+export async function termHidden(projectId: string, id: string, text?: () => string): Promise<boolean> {
   const hidden = await hiddenAnywhere(projectId);
   if (!hidden.size) return false;
-  const t = await getTerm(projectId, id);
+  const t = await getTerm(projectId, id, text);
   return !!t && mentionsHidden(t.filters, hidden);
 }
