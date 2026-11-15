@@ -430,8 +430,10 @@ const summaryOf = (t: CopilotThread): CopilotThreadSummary =>
 
 // One page of that list and the cursor of the next (null: no more). copilot.json holds at most
 // THREAD_PAGE per member, so it is always one page; the rows are paged by a keyset (./copilotRows.ts).
-export async function listThreadsPage(projectId: string, after?: string): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
-  if (rows.on()) return isValidId(projectId) ? rows.listPage(projectId, after) : { threads: [], next: null };
+// `open`: the folders a caller shared folders restrict may open (../ipc/turnsOpen); each count and title is then of the
+// turns they are shown. Rows only: without a database there is no folder.
+export async function listThreadsPage(projectId: string, after?: string, open: readonly string[] | null = null): Promise<{ threads: CopilotThreadSummary[]; next: string | null }> {
+  if (rows.on()) return isValidId(projectId) ? rows.listPage(projectId, after, open) : { threads: [], next: null };
   return { threads: after === undefined ? await listThreads(projectId) : [], next: null };
 }
 

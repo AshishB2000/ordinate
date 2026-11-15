@@ -11,6 +11,11 @@
 //
 // What a record's parts ARE comes from `describe`, registered by src/ipc/assistantSearch.ts (the stores' own parsers:
 // this module may not import them, as recordFs imports this one). Without it, a write drops the marker.
+//
+// SHARED FOLDERS (docs/team-folders D13): every query a caller's answer is made of — words, meaning, spelling, the counts, the
+// exact lookups and the newest — keeps only items whose `dataset_id` sits in a folder the caller opens (`RankOptions.open`,
+// ./authz/folderSql opensDataset), in its WHERE, before the ranking and the LIMIT. A source table (no dataset) is not
+// foldered. `hidingDatasets` is a security walk and sees the whole project (D14).
 
 import { createHash } from 'crypto';
 import type { PoolClient } from 'pg';
@@ -21,6 +26,7 @@ import type { Audience, CountedKind, KeyedItem, KeyedKind, ModelHit, ModelKind, 
 import { MIN_SIMILARITY } from '../app/trigram';
 import type { NearTo } from './vectorStore';
 import { trgmPlace } from './nameTrigrams';
+import { opensDataset } from './authz/folderSql';
 
 /** Bump when what a record describes to changes (the words, the parts): every marker is then stale, and each source rebuilds once. */
 export const ASSISTANT_SEARCH_VERSION = 4; // 2: base parts carry their exact-lookup keys (0028); 3: a dataset's hiding keys; 4: each part's text (0030)
@@ -234,12 +240,13 @@ export function rankedPage(projectId: string, asked: readonly string[], o: RankO
          SELECT DISTINCT item FROM assistant_search
          WHERE org_id = $1 AND project_id = $2 AND all_words && $3::text[] AND audience = ANY($4::text[])
            AND ($5::text[] IS NULL OR kind = ANY($5::text[])) AND ($6::text[] IS NULL OR dataset_id = ANY($6::text[]))
-           AND ($9::text[] IS NULL OR dataset_id IS NULL OR dataset_id <> ALL($9::text[]))))
+           AND ($9::text[] IS NULL OR dataset_id IS NULL OR dataset_id <> ALL($9::text[]))
+           AND ${opensDataset('assistant_search.dataset_id', '$10', 'assistant_search.org_id', 'assistant_search.project_id')}))
        GROUP BY p.item
        HAVING bool_or(p.base AND p.audience = ANY($4::text[])) AND NOT bool_or(p.retired)
        ORDER BY score DESC, certified DESC, kind_ord, updated DESC, p.item
        LIMIT $7 OFFSET $8`,
-      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, limit, offset, o.exceptDatasetIds ?? null],
+      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, limit, offset, o.exceptDatasetIds ?? null, o.open ?? null],
     );
     return (r.rows as HitRow[]).map(hitOf);
   });
@@ -266,7 +273,8 @@ export function nearestPage(projectId: string, asked: readonly string[], o: Rank
          WHERE v.org_id = $1 AND v.project_id = $2 AND v.model = $8
            AND v.item = ANY(ARRAY(SELECT b.item FROM assistant_search b WHERE b.org_id = $1 AND b.project_id = $2 AND b.base AND b.audience = ANY($4::text[])
              AND ($5::text[] IS NULL OR b.kind = ANY($5::text[])) AND ($6::text[] IS NULL OR b.dataset_id = ANY($6::text[]))
-             AND ($10::text[] IS NULL OR b.dataset_id IS NULL OR b.dataset_id <> ALL($10::text[]))))
+             AND ($10::text[] IS NULL OR b.dataset_id IS NULL OR b.dataset_id <> ALL($10::text[]))
+             AND ${opensDataset('b.dataset_id', '$12', 'b.org_id', 'b.project_id')}))
            AND v.item <> ALL(ARRAY(SELECT x.item FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.retired))),
        near AS MATERIALIZED (SELECT item, d FROM d WHERE d <= $11 ORDER BY d, item LIMIT $9)
        SELECT h.*, n.d FROM (
@@ -275,17 +283,19 @@ export function nearestPage(projectId: string, asked: readonly string[], o: Rank
          GROUP BY p.item) h
        JOIN near n ON n.item = h.item
        ORDER BY n.d, h.item`,
-      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, to.literal, to.model, k, o.exceptDatasetIds ?? null, to.maxDistance],
+      [org, projectId, asked, o.audiences, o.kinds ?? null, o.datasetIds ?? null, to.literal, to.model, k, o.exceptDatasetIds ?? null, to.maxDistance, o.open ?? null],
     );
     return (r.rows as HitRow[]).map(hitOf);
   });
 }
 
 // The base parts the caller may find under `o`, none of an item a part retires: ../app/assistantSearchRank findableBases.
-const FINDABLE = `b.org_id = $1 AND b.project_id = $2 AND b.base AND b.audience = ANY($3::text[])
+// In the folders the caller opens (`open`, the parameter holding `RankOptions.open`): before any similarity order or LIMIT.
+const findable = (open: string): string => `b.org_id = $1 AND b.project_id = $2 AND b.base AND b.audience = ANY($3::text[])
   AND ($4::text[] IS NULL OR b.kind = ANY($4::text[])) AND ($5::text[] IS NULL OR b.dataset_id = ANY($5::text[]))
   AND ($6::text[] IS NULL OR b.dataset_id IS NULL OR b.dataset_id <> ALL($6::text[]))
-  AND NOT EXISTS (SELECT 1 FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.item = b.item AND x.retired)`;
+  AND NOT EXISTS (SELECT 1 FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.item = b.item AND x.retired)
+  AND ${opensDataset('b.dataset_id', open, 'b.org_id', 'b.project_id')}`;
 type SpeltRow = { kind: ModelKind; id: string; dataset_id: string | null; conn_id: string | null; name: string; similarity: number };
 
 /**
@@ -300,16 +310,16 @@ export async function speltPage(projectId: string, said: string, o: RankOptions,
   return built(projectId, rowsUnder, async (c, org) => {
     const args = [org, projectId, o.audiences, o.kinds ?? null, o.datasetIds ?? null, o.exceptDatasetIds ?? null];
     if (!trgm) {
-      const r = await c.query(`SELECT b.item, b.kind, b.id, b.dataset_id AS "datasetId", b.conn_id AS "connId", b.name FROM assistant_search b WHERE ${FINDABLE}`, args);
+      const r = await c.query(`SELECT b.item, b.kind, b.id, b.dataset_id AS "datasetId", b.conn_id AS "connId", b.name FROM assistant_search b WHERE ${findable('$7')}`, [...args, o.open ?? null]);
       return speltItems(r.rows as NameRow[], said, limit);
     }
     await c.query(`SELECT set_config('pg_trgm.similarity_threshold', $1, true)`, [String(MIN_SIMILARITY)]); // `%`'s, whatever the server's default
     const r = await c.query(
       `SELECT b.item, min(b.kind) AS kind, min(b.id) AS id, min(b.dataset_id) AS dataset_id, min(b.conn_id) AS conn_id, min(b.name) AS name,
          max(${trgm.similarity}(b.name, $7))::float8 AS similarity
-       FROM assistant_search b WHERE ${FINDABLE} AND b.name ${trgm.op} $7
+       FROM assistant_search b WHERE ${findable('$9')} AND b.name ${trgm.op} $7
        GROUP BY b.item ORDER BY similarity DESC, name, b.item LIMIT $8`,
-      [...args, said, limit],
+      [...args, said, limit, o.open ?? null],
     );
     return (r.rows as SpeltRow[]).map((x) => ({
       kind: x.kind, id: x.id, ...(x.dataset_id !== null ? { datasetId: x.dataset_id } : {}), ...(x.conn_id !== null ? { connId: x.conn_id } : {}), name: x.name, similarity: x.similarity,
@@ -317,25 +327,26 @@ export async function speltPage(projectId: string, said: string, o: RankOptions,
   });
 }
 
-/** Every item but the columns that `audiences` may find, as kind and id: ../app/assistantSearchRank foundItems (unordered). Null without a database. */
-export function foundItems(projectId: string, audiences: readonly Audience[], rowsUnder: RowsUnder): Promise<Array<{ kind: CountedKind; id: string }> | null> {
+/** Every item but the columns that `audiences` may find in the folders `open` they open, as kind and id: ../app/assistantSearchRank foundItems (unordered). Null without a database. */
+export function foundItems(projectId: string, audiences: readonly Audience[], rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<Array<{ kind: CountedKind; id: string }> | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
       `SELECT min(kind) FILTER (WHERE base) AS kind, min(id) FILTER (WHERE base) AS id FROM assistant_search
-       WHERE org_id = $1 AND project_id = $2 AND kind <> 'column'
+       WHERE org_id = $1 AND project_id = $2 AND kind <> 'column' AND ${opensDataset('assistant_search.dataset_id', '$4', 'assistant_search.org_id', 'assistant_search.project_id')}
        GROUP BY item HAVING bool_or(base AND audience = ANY($3::text[])) AND NOT bool_or(retired)`,
-      [org, projectId, audiences],
+      [org, projectId, audiences, open],
     );
     return r.rows as Array<{ kind: CountedKind; id: string }>;
   });
 }
 
-/** Each item of `kind` whose base part holds one of `keys` (0028), by item key: ../app/assistantSearchRank keyedItems. Null without a database. */
-export function keyedItems(projectId: string, kind: KeyedKind, keys: readonly string[], rowsUnder: RowsUnder): Promise<KeyedItem[] | null> {
+/** Each item of `kind` in the folders `open` whose base part holds one of `keys` (0028), by item key: ../app/assistantSearchRank keyedItems. Null without a database. */
+export function keyedItems(projectId: string, kind: KeyedKind, keys: readonly string[], rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<KeyedItem[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
-      `SELECT id, dataset_id FROM assistant_search WHERE org_id = $1 AND project_id = $2 AND base AND kind = $3 AND keys && $4::text[] ORDER BY item`,
-      [org, projectId, kind, keys],
+      `SELECT id, dataset_id FROM assistant_search WHERE org_id = $1 AND project_id = $2 AND base AND kind = $3 AND keys && $4::text[]
+         AND ${opensDataset('assistant_search.dataset_id', '$5', 'assistant_search.org_id', 'assistant_search.project_id')} ORDER BY item`,
+      [org, projectId, kind, keys, open],
     );
     return (r.rows as Array<{ id: string; dataset_id: string | null }>).map((x) => ({ id: x.id, datasetId: x.dataset_id }));
   });
@@ -378,14 +389,15 @@ export function hidingDatasets(projectId: string, depth: number, rowsUnder: Rows
   });
 }
 
-/** The `limit` newest items of `kind`, then by item key, retired left out unless `retired`: ../app/assistantSearchRank newestItems. Null without a database. */
-export function newestItems(projectId: string, kind: KeyedKind, limit: number, retired: boolean, rowsUnder: RowsUnder): Promise<KeyedItem[] | null> {
+/** The `limit` newest items of `kind` in the folders `open`, then by item key, retired left out unless `retired`: ../app/assistantSearchRank newestItems. Null without a database. */
+export function newestItems(projectId: string, kind: KeyedKind, limit: number, retired: boolean, rowsUnder: RowsUnder, open: readonly string[] | null = null): Promise<KeyedItem[] | null> {
   return built(projectId, rowsUnder, async (c, org) => {
     const r = await c.query(
       `SELECT p.id, p.dataset_id FROM assistant_search p WHERE p.org_id = $1 AND p.project_id = $2 AND p.base AND p.kind = $3
          AND ($5 OR NOT EXISTS (SELECT 1 FROM assistant_search x WHERE x.org_id = $1 AND x.project_id = $2 AND x.item = p.item AND x.retired))
+         AND ${opensDataset('p.dataset_id', '$6', 'p.org_id', 'p.project_id')}
        ORDER BY p.updated DESC, p.item LIMIT $4`,
-      [org, projectId, kind, limit, retired],
+      [org, projectId, kind, limit, retired, open],
     );
     return (r.rows as Array<{ id: string; dataset_id: string | null }>).map((x) => ({ id: x.id, datasetId: x.dataset_id }));
   });

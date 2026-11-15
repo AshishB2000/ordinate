@@ -24,6 +24,9 @@
 //      alone (NEGATIVE CONTROL: one its words find).
 //   3. THE EXAMPLES: meaning brings a differently-worded verified question in; the index === the reference with the JS
 //      meaning list; off, the words-only examples. Step 2's exact match stays exact.
+//   3b. PER CALLER, with shared folders (docs/team-folders D13): Online orders in a folder only admins open: the meaning
+//      differential holds for every caller, and the editor and the viewer never get Revenue (on Orders) by meaning, nor a
+//      question on Orders as an example. NEGATIVE CONTROLS: the admin does; without the WHERE condition the differential FAILS.
 //   4. NEGATIVE CONTROL: no model, no request, from the job, a search or the examples.
 //   5. The extension in a schema off the search_path: the job and the search still work.
 //
@@ -58,6 +61,8 @@ const index: typeof import('../src/server/assistantSearchIndex') = require('../s
 const search: typeof import('../src/ipc/assistantSearch') = require('../src/ipc/assistantSearch');
 const lookup: typeof import('../src/ipc/verifiedLookup') = require('../src/ipc/verifiedLookup');
 const agentAsk: typeof import('../src/ipc/agentAsk') = require('../src/ipc/agentAsk');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 import { meaningWorld, WHO, type World } from './meaningWorld';
 
 type Identity = import('../src/server/context').Identity;
@@ -347,6 +352,25 @@ async function examplesLeg(pool: Pool, w: World): Promise<void> {
   ok('step 2 stays exact: a question near a verified one by meaning is no hit', (await as(ADMIN, w.P, () => lookup.verifiedHit(w.P, 'turnover per territory', null))) === null);
 }
 
+/** 3b: the meaning differential and the examples per caller, with Online orders in a folder only admins open. */
+async function folderLeg(pool: Pool, w: World): Promise<void> {
+  await plantFolder(pool, w.P, { name: 'Finance', items: [['dataset', w.orders]] });
+  ok('folders: THE DIFFERENTIAL with meaning, per caller', await differential(pool, w, 'foldered'));
+  const meant = async (who: Identity) => names(await as(who, w.P, () => search.searchModel(w.P, 'turnover', { limit: 60 })));
+  ok('folders: neither the editor nor the viewer gets Revenue (on Orders) by meaning', !(await meant(EDITOR)).includes('metric:Revenue') && !(await meant(VIEWER)).includes('metric:Revenue'));
+  ok('NEGATIVE CONTROL: the admin does', (await meant(ADMIN)).includes('metric:Revenue'));
+  const vectors = await stored(pool, w.P, modelOf(pick!));
+  const a = { question: 'turnover per territory' };
+  const [i, r] = [await as(EDITOR, w.P, () => lookup.indexedExamples(w.P, a)), await as(EDITOR, w.P, () => lookup.referenceExamples(w.P, a, nearIds(vectors, a.question)))];
+  const onOrders = (ids: readonly string[]) => ids.filter((id) => w.verified.find((q) => q.id === id)?.spec.datasetId === w.orders);
+  ok('folders: the editor\'s examples with meaning are the reference\'s, and none is on Orders', !!i && i.ids.join() === r.ids.join() && onOrders(i.ids).length === 0, { i: i?.ids, r: r.ids });
+  ok('NEGATIVE CONTROL: the admin\'s examples are on Orders', onOrders((await ex(a, w))?.ids ?? []).length > 0);
+  gate.setIndexWhereForTest(false);
+  const leaky = await differential(pool, w, 'without the WHERE (expected)').finally(() => gate.setIndexWhereForTest(true));
+  ok('NEGATIVE CONTROL: without the WHERE condition the differential FAILS', !leaky);
+  await clearFolders(pool, w.P);
+}
+
 async function offLeg(w: World): Promise<void> {
   pick = null;
   calls = [];
@@ -379,6 +403,7 @@ async function dbLeg(pool: Pool): Promise<void> {
   await jobLeg(pool, w);
   await searchLeg(pool, w);
   await examplesLeg(pool, w);
+  await folderLeg(pool, w);
   await offLeg(w);
   await schemaLeg(pool, w);
 }

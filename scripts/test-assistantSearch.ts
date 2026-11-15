@@ -8,6 +8,9 @@
 // counts (no columns; nothing the caller may not see).
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on):
 //   1. THE DIFFERENTIAL: questions × kinds × limits × datasets (within, or all but) × {admin, editor, viewer}, index === reference.
+//   1b. PER CALLER, with shared folders (docs/team-folders D13): Online orders in a folder only admins open, Staff in one
+//      the editor opens: the differential and the counts hold for every caller; the editor and the viewer never get Orders,
+//      its columns, metrics or term. NEGATIVE CONTROLS: the admin does; without the WHERE condition the differential FAILS.
 //   2. Once built, a query reads no record (nor lists one) and rebuilds nothing; NEGATIVE CONTROL: the reference reads them.
 //   3. ON WRITE, no rebuild: a renamed dataset, a new metric, a trashed term, a changed column doc (only its dataset's
 //      catalog rows rewritten), a retired metric and a new source table are followed by the very next query.
@@ -38,6 +41,8 @@ const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recor
 const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
 const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const record: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
@@ -212,6 +217,20 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('THE DIFFERENTIAL: every question × kinds × limit × datasets × caller, and the counts, index === reference', await differential(w, 'first'));
   const built = await markers(pool, P);
   ok('the first query built all five sources', Object.keys(built).join() === 'catalog,datasets,metrics,tables,terms', JSON.stringify(built));
+
+  // ── 1b. per caller, with shared folders ─────────────────────────────────
+  await plantFolder(pool, P, { name: 'Finance', items: [['dataset', w.orders]] }); // no team: admins only
+  await plantFolder(pool, P, { name: 'People', members: [EDITOR.user.email], items: [['dataset', w.staff]] });
+  ok('folders: THE DIFFERENTIAL per caller, and the counts', await differential(w, 'foldered'));
+  const onOrders = async (who: Identity) => (await idx(who, P, 'revenue online orders region territory pacific', { limit: 60 }) ?? []).filter((h) => h.datasetId === w.orders).map((h) => h.name);
+  ok('folders: neither the editor nor the viewer gets Online orders, its columns, metrics or term from the index', (await onOrders(EDITOR)).length === 0 && (await onOrders(VIEWER)).length === 0);
+  ok('NEGATIVE CONTROL: the admin does', (await onOrders(ADMIN)).length > 3, await onOrders(ADMIN));
+  const fc = await as(EDITOR, P, () => search.indexedCount(P));
+  ok('folders: the editor\'s counts leave out what the folder holds (the admin\'s 5 metrics, 2 terms: 1 and 1)', fc?.metric === 1 && fc?.term === 1 && fc?.dataset === 2, fc);
+  gate.setIndexWhereForTest(false);
+  const leaky = await differential(w, 'without the WHERE (expected)').finally(() => gate.setIndexWhereForTest(true));
+  ok('NEGATIVE CONTROL: without the WHERE condition the differential FAILS', !leaky);
+  await clearFolders(pool, P);
 
   // ── 2. a built index reads no record ────────────────────────────────────
   const q = await reads(() => idx(ADMIN, P, 'revenue by territory', { limit: 12 }));

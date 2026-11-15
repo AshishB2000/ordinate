@@ -11,6 +11,9 @@
 // What a record's rows ARE comes from `describe`, registered by src/ipc/search.ts (the stores'
 // own parsers — this module may not import them: recordFs imports this one). Without it, a write
 // drops the marker, and the next search that has one rebuilds.
+//
+// SHARED FOLDERS (docs/team-folders D13): each row carries its anchor (0034), and `query` and `countKinds` keep, in
+// their WHERE, only the rows a caller the folders restrict may open (./authz/folderSql searchRowShown).
 
 import type { PoolClient } from 'pg';
 import { inOrg, orgDb } from './db/inOrg';
@@ -18,15 +21,20 @@ import { SOURCES, isAboveProjects, sourceOf, sourceRel, projectIn, projectOfDir 
 import type { RecordSource, SourceKey } from '../app/searchSources';
 import { tsqueryOf, wordsOf } from '../app/searchMatch';
 import { logger } from '../app/logger';
+import { searchRowShown } from './authz/folderSql';
 
 /** Bump when what a record describes to changes: every marker is then stale, and each source rebuilds once. */
-export const INDEX_VERSION = 2; // 2: a connection's row is per audience (a viewer reads viewerName)
+export const INDEX_VERSION = 3; // 2: a connection's row is per audience (a viewer reads viewerName); 3: each row's folder anchor (0034)
 /** Records read per statement while rebuilding, by count and by bytes: a v2 dataset holds its rows (up to 8 MiB),
  *  so 100 of those would be ~800 MiB in this process, parsed in one loop without yielding. */
 const REBUILD_BATCH = 100;
 const REBUILD_BYTES = 8 * 1024 * 1024;
 
 export type Audience = 'all' | 'editor' | 'viewer';
+/** What a row's shared folder is read from (0034): a dataset, a dashboard, the project (not foldered), or `many` (checked by id). */
+export type AnchorKind = 'dataset' | 'dashboard' | 'project' | 'many';
+/** The caller's folders for the WHERE (../server/authz/folderGate indexFolders), or null: nothing restricts them. */
+export type Folders = { open: readonly string[]; edit: readonly string[] } | null;
 
 /** One row a record contributes: a record, a dashboard's saved view, or one alert rule. */
 export interface IndexRow {
@@ -41,6 +49,9 @@ export interface IndexRow {
   parentId?: string;
   name: string;
   sub: string;
+  anchorKind: AnchorKind;
+  /** The anchor's id ('' when the record names none: Everyone, as its list reads it). */
+  anchorId: string;
 }
 
 export type Describe = (where: RecordSource, body: string) => IndexRow[];
@@ -80,15 +91,15 @@ async function guarded(c: PoolClient, fn: () => Promise<void>): Promise<boolean>
 async function insertRows(c: PoolClient, org: string, projectId: string, srcOrd: number, rows: ReadonlyArray<IndexRow & { path: string }>): Promise<void> {
   if (!rows.length) return;
   await c.query(
-    `INSERT INTO search_entries (org_id, project_id, path, audience, ord, src_ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub)
-     SELECT $1, $2, u.path, u.audience, u.ord, $3, u.rec, u.kind, u.id, u.parent_id, u.name, u.name_lc, array_to_tsvector(string_to_array(u.words, ' ')), u.updated, u.sub
-     FROM unnest($4::text[], $5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::text[], $15::text[])
-       AS u(path, audience, ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub)`,
+    `INSERT INTO search_entries (org_id, project_id, path, audience, ord, src_ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub, anchor_kind, anchor_id)
+     SELECT $1, $2, u.path, u.audience, u.ord, $3, u.rec, u.kind, u.id, u.parent_id, u.name, u.name_lc, array_to_tsvector(string_to_array(u.words, ' ')), u.updated, u.sub, u.anchor_kind, u.anchor_id
+     FROM unnest($4::text[], $5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::text[], $11::text[], $12::text[], $13::text[], $14::text[], $15::text[], $16::text[], $17::text[])
+       AS u(path, audience, ord, rec, kind, id, parent_id, name, name_lc, words, updated, sub, anchor_kind, anchor_id)`,
     [
       org, projectId, srcOrd,
       rows.map((r) => r.path), rows.map((r) => r.audience), rows.map((r) => r.ord), rows.map((r) => r.rec), rows.map((r) => r.kind),
       rows.map((r) => r.id), rows.map((r) => r.parentId ?? null), rows.map((r) => r.name), rows.map((r) => r.name.toLowerCase()),
-      rows.map((r) => wordsOf(r.name).join(' ')), rows.map((r) => r.updated), rows.map((r) => r.sub),
+      rows.map((r) => wordsOf(r.name).join(' ')), rows.map((r) => r.updated), rows.map((r) => r.sub), rows.map((r) => r.anchorKind), rows.map((r) => r.anchorId),
     ],
   );
 }
@@ -142,13 +153,21 @@ export async function onRangeDelete(c: PoolClient, org: string, rel: string): Pr
   if (!held) await guarded(c, () => (project ? dropLocked(c, org, project) : forget()));
 }
 
-/** The sources of `projectId` the index does not hold completely; null without a database. */
-export async function unbuilt(projectId: string): Promise<SourceKey[] | null> {
+/**
+ * The sources of `projectId` the index does not hold completely, and whether the project has a folder besides Everyone
+ * (in the same statement: without one nothing is placed, so no caller is restricted and the resolver need not run).
+ * Null without a database.
+ */
+export async function unbuilt(projectId: string): Promise<{ missing: SourceKey[]; foldered: boolean } | null> {
   if (!orgDb()) return null;
   return inOrg(async (c, org) => {
-    const r = await c.query('SELECT source FROM search_sources WHERE org_id = $1 AND project_id = $2 AND version = $3', [org, projectId, INDEX_VERSION]);
-    const built = new Set(r.rows.map((x: { source: string }) => x.source));
-    return SOURCES.filter((s) => !built.has(s));
+    const r = await c.query<{ built: string[]; foldered: boolean }>(
+      `SELECT array(SELECT source FROM search_sources WHERE org_id = $1 AND project_id = $2 AND version = $3) AS built,
+              EXISTS (SELECT 1 FROM folders WHERE org_id = $1 AND project_id = $2) AS foldered`,
+      [org, projectId, INDEX_VERSION],
+    );
+    const built = new Set(r.rows[0].built);
+    return { missing: SOURCES.filter((s) => !built.has(s)), foldered: r.rows[0].foldered };
   });
 }
 
@@ -183,32 +202,34 @@ export async function rebuild(projectId: string, source: SourceKey, rowsUnder: R
 }
 
 /**
- * The rows of `projectId` an `audiences` caller may see whose words start with every one of `typed`,
- * best first (src/app/searchMatch.ts: rank, newest, section, record, place). Null without a database.
+ * `limit` rows after `offset` of `projectId` an `audiences` caller may see — in the folders they open (`folders`, in the
+ * WHERE: ../server/authz/folderSql searchRowShown) — whose words start with every one of `typed`, best first
+ * (src/app/searchMatch.ts: rank, newest, section, record, place). Null without a database.
  */
-export async function query(projectId: string, typed: readonly string[], needle: string, audiences: readonly Audience[], limit: number): Promise<Array<Pick<IndexRow, 'kind' | 'id' | 'parentId' | 'name' | 'sub'>> | null> {
+export async function query(projectId: string, typed: readonly string[], needle: string, audiences: readonly Audience[], limit: number, folders: Folders = null, offset = 0): Promise<Array<Pick<IndexRow, 'kind' | 'id' | 'parentId' | 'name' | 'sub' | 'anchorKind'>> | null> {
   if (!orgDb()) return null;
   return inOrg(async (c, org) => {
     const r = await c.query(
-      `SELECT kind, id, parent_id, name, sub FROM search_entries
-       WHERE org_id = $1 AND project_id = $2 AND audience = ANY($3::text[]) AND words @@ $4::tsquery
+      `SELECT kind, id, parent_id, name, sub, anchor_kind FROM search_entries
+       WHERE org_id = $1 AND project_id = $2 AND ${searchRowShown('$3', '$7', '$8')} AND words @@ $4::tsquery
        ORDER BY CASE WHEN name_lc = $5 THEN 0 WHEN starts_with(name_lc, $5) THEN 1 ELSE 2 END, updated DESC, src_ord, rec, ord
-       LIMIT $6`,
-      [org, projectId, audiences, tsqueryOf(typed), needle, limit],
+       LIMIT $6 OFFSET $9`,
+      [org, projectId, audiences, tsqueryOf(typed), needle, limit, folders?.open ?? null, folders?.edit ?? null, offset],
     );
-    return r.rows.map((x: { kind: string; id: string; parent_id: string | null; name: string; sub: string }) => ({
-      kind: x.kind, id: x.id, ...(x.parent_id ? { parentId: x.parent_id } : {}), name: x.name, sub: x.sub,
+    return r.rows.map((x: { kind: string; id: string; parent_id: string | null; name: string; sub: string; anchor_kind: AnchorKind }) => ({
+      kind: x.kind, id: x.id, ...(x.parent_id ? { parentId: x.parent_id } : {}), name: x.name, sub: x.sub, anchorKind: x.anchor_kind,
     }));
   });
 }
 
-/** How many rows of each of `kinds` an `audiences` caller may see (Home's counts of visuals and dashboards). Null without a database. */
-export async function countKinds(projectId: string, kinds: readonly string[], audiences: readonly Audience[]): Promise<Map<string, number> | null> {
+/** How many rows of each of `kinds` an `audiences` caller may see in the folders they open (Home's counts of visuals and dashboards). Null without a database. */
+export async function countKinds(projectId: string, kinds: readonly string[], audiences: readonly Audience[], folders: Folders = null): Promise<Map<string, number> | null> {
   if (!orgDb()) return null;
   return inOrg(async (c, org) => {
     const r = await c.query(
-      'SELECT kind, count(*)::int AS n FROM search_entries WHERE org_id = $1 AND project_id = $2 AND audience = ANY($3::text[]) AND kind = ANY($4::text[]) GROUP BY kind',
-      [org, projectId, audiences, kinds],
+      `SELECT kind, count(*)::int AS n FROM search_entries
+       WHERE org_id = $1 AND project_id = $2 AND ${searchRowShown('$3', '$5', '$6')} AND kind = ANY($4::text[]) GROUP BY kind`,
+      [org, projectId, audiences, kinds, folders?.open ?? null, folders?.edit ?? null],
     );
     return new Map((r.rows as Array<{ kind: string; n: number }>).map((x) => [x.kind, x.n]));
   });

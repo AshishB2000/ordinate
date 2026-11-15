@@ -8,7 +8,8 @@
 //   - reads by id (`opens`) answer false for them, and the store returns null, as for a missing id (D12);
 //   - the doors (`folderGate`) refuse `closed` for a question on, or reading, such a dataset (D9; reach is E5);
 //   - the storage net (`gateFolder`, under datasets.getDataset and residentSource) refuses every other reader (D11);
-//   - pushes, recipients and mentions (`openers`) reach only those who open the item they are about (D17).
+//   - pushes, recipients and mentions (`openers`) reach only those who open the item they are about (D17);
+//   - the indexes (`indexFolders`) leave closed folders out in their own WHERE, before ranking and LIMIT (D13).
 
 import type { Pool } from 'pg';
 import { isValidId } from '../../app/ids';
@@ -19,11 +20,26 @@ import { readerEmails, writerEmails } from './index';
 // check of the other datasets a question reads (then a cached answer joined over a closed dataset is served).
 let enabled = true;
 let doorReads = true;
+let indexWhere = true;
 export function setFolderChecksForTest(on: boolean): void {
   enabled = on;
 }
 export function setDoorReadsForTest(on: boolean): void {
   doorReads = on;
+}
+/** Off: the indexes' WHERE condition is dropped (./folderSql), every other check stays — so the index alone leaks. */
+export function setIndexWhereForTest(on: boolean): void {
+  indexWhere = on;
+}
+
+/**
+ * The folders an index query keeps, for its WHERE (D13, ./folderSql): those the caller opens (the project id stands for
+ * Everyone) and those they edit; null when nothing restricts them here — then no condition applies.
+ */
+export async function indexFolders(projectId: string): Promise<{ open: string[]; edit: string[] } | null> {
+  if (!enabled || !indexWhere || !isValidId(projectId)) return null;
+  const access = await folderAccessOn(projectId);
+  return access.all || access.noFolders ? null : { open: [...access.open], edit: [...access.edit] };
 }
 
 /** `foldersRestrict` (one round trip for a list across projects, projects:overview); with the checks off, none and no read. */

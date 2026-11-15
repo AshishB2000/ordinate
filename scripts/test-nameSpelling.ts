@@ -18,6 +18,9 @@
 //   6. A C-ctype database: pg_trgm splits "é" otherwise, the probe says so, and spelling is ranked by the reference.
 //   7. WITHOUT pg_trgm (DROP EXTENSION in the scratch database): the query reads the names and the reference ranks them:
 //      the same answers as 4 and 5, "Ordrs" still offered.
+//   8. SHARED FOLDERS (docs/team-folders D13), on pg_trgm and without it: Orders in a folder only admins open: the
+//      differential holds for the admin and the viewer, and "Ordrs" offers the viewer nothing. NEGATIVE CONTROLS: the
+//      admin is offered Orders; without the WHERE condition the viewer is, and the differential FAILS.
 //
 //   npm run build:ts && [DATABASE_URL=…] node scripts/test-nameSpelling.js
 
@@ -37,6 +40,8 @@ const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recor
 const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');
 const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const record: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
@@ -216,6 +221,30 @@ async function indexedLeg(w: World): Promise<void> {
   }
 }
 
+/** 8. Orders in a folder only admins open, on whichever path the database takes (`label`). */
+async function folderLeg(pool: Pool, w: World, label: string): Promise<void> {
+  await plantFolder(pool, w.P, { name: 'Finance', items: [['dataset', w.orders]] });
+  try {
+    const differs = async (): Promise<string[]> => {
+      const [indexed, reference] = [await answersOf(w, (s, o) => search.indexedSpelling(w.P, s, o)), await answersOf(w, (s, o) => search.referenceSpelling(w.P, s, o))];
+      return indexed.filter((x, i) => !Object.is(x, reference[i]));
+    };
+    const unequal = await differs();
+    ok(`8. folders (${label}): the differential holds for the admin and the viewer`, unequal.length === 0, unequal.join('\n'));
+    const offered = async (who: Identity) => show(await as(who, w.P, () => search.spellModel(w.P, 'Ordrs', { limit: 20 })));
+    ok(`…"Ordrs" offers the viewer nothing of Orders (${label})`, !(await offered(VIEWER)).includes(w.orders));
+    ok(`…NEGATIVE CONTROL: the admin is offered Orders (${label})`, (await offered(ADMIN)).includes(w.orders));
+    gate.setIndexWhereForTest(false);
+    try {
+      ok(`…NEGATIVE CONTROL: without the WHERE condition the viewer is offered Orders, and the differential FAILS (${label})`, (await offered(VIEWER)).includes(w.orders) && (await differs()).length > 0);
+    } finally {
+      gate.setIndexWhereForTest(true);
+    }
+  } finally {
+    await clearFolders(pool, w.P);
+  }
+}
+
 /** 6. A C-ctype database: pg_trgm treats "é" as no letter, so the probe refuses it. */
 async function cTypeLeg(adminUrl: string, admin: Client, pool: Pool): Promise<void> {
   const name = `ordinate_spelling_c_${process.pid}_${Date.now()}`;
@@ -251,6 +280,7 @@ async function withoutLeg(pool: Pool, w: World, before: { spelt: string[]; kinds
   const kinds = await everyKind(w);
   ok('…on every kind too: the JS ranking of the rows === the pg_trgm query\'s', kinds.every((x, i) => Object.is(x, before.kinds[i])), kinds.filter((x, i) => !Object.is(x, before.kinds[i])).join('\n'));
   await suggestions(w, '…without pg_trgm');
+  await folderLeg(pool, w, 'without pg_trgm');
 }
 
 (async () => {
@@ -278,6 +308,7 @@ async function withoutLeg(pool: Pool, w: World, before: { spelt: string[]; kinds
     await parityLeg(pool);
     const w = await world();
     const before = await differentialLeg(w);
+    await folderLeg(pool, w, 'pg_trgm');
     await indexedLeg(w);
     await cTypeLeg(adminUrl, admin, pool);
     await withoutLeg(pool, w, before);

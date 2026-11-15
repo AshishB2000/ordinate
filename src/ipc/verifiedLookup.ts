@@ -9,12 +9,13 @@
 //              database this is the path, and with one it answers whenever the index fails.
 //
 // Whether a question still runs, and what the caller may see of it, is never in the index: it is worked out on the
-// records read, the same way on both paths.
+// records read, the same way on both paths. But for shared folders: the index's WHERE keeps only questions every dataset
+// of which is in a folder the caller opens (docs/team-folders D13; `reads`, 0034), as the reference's caller-aware list does.
 //
 // A verified SQL question (../analysis/verifiedRules `VerifiedSqlQuestion`) is in the index under the first dataset it
-// reads, and is read by the same lookups: step 2 matches it word for word when every dataset it reads is inside the
-// scope (./verifiedSql reruns it), a card's "✓ Verified" finds it (`verifiedSqlOn`), MCP is told what it is
-// (`verifiedSqlNamed`). It is no example: an example is a chart spec for the model to follow.
+// reads, with every one it reads in `reads`, and is read by the same lookups: step 2 matches it word for word when every
+// dataset it reads is inside the scope (./verifiedSql reruns it), a card's "✓ Verified" finds it (`verifiedSqlOn`), MCP is
+// told what it is (`verifiedSqlNamed`). It is no example: an example is a chart spec for the model to follow.
 
 import { rowsUnder } from '../app/recordFs';
 import { perAsk } from './askMemo';
@@ -33,6 +34,16 @@ import { MEANING_K, cut } from '../app/assistantSearchRank';
 import { clean } from '../app/searchMatch';
 import { meaningOf, nearOrWords } from './meaning';
 import { statesOf, verifiedEnv, verifiedEnvFor, verifiedStates, type VerifiedState } from './verifiedState';
+import { indexFolders, levelsOf, openOnly } from '../server/authz/folderGate';
+
+/** The folders the caller opens, for the index's WHERE (null: nothing restricts them). */
+const openFolders = async (projectId: string): Promise<string[] | null> => (await indexFolders(projectId))?.open ?? null;
+
+/** SQL questions read by id, each kept only when the caller opens every dataset it reads (`listBoth`'s rule, D3). */
+async function sqlOpen(projectId: string, list: readonly Tagged<VerifiedSqlQuestion>[]): Promise<Tagged<VerifiedSqlQuestion>[]> {
+  const level = await levelsOf(projectId, 'dataset');
+  return level ? list.filter((t) => t.rec.sql.datasetIds.every((id) => level(id) !== 'none')) : [...list];
+}
 
 /** A question as it is fingerprinted (0030 `text`): as written, trimmed, at most 1,000 code points. */
 export const questionText = (question: string): string => cut(clean(question).trim());
@@ -42,8 +53,9 @@ export const describeVerified: index.DescribeVerified = (projectId, id, body) =>
   const q: AnyVerified | undefined = verifiedFromBody(projectId, body)?.rec ?? verifiedSqlFromBody(projectId, body)?.rec;
   if (!q || q.id !== id) return []; // `listTagged` skips a misnamed record: so does the index
   const datasetId = isSqlQuestion(q) ? q.sql.datasetIds[0] : q.spec.datasetId;
+  const reads = isSqlQuestion(q) ? q.sql.datasetIds : [datasetId]; // every dataset it reads: the folders' WHERE (0034)
   return [q.question, ...q.phrasings].map((text, ord) => ({
-    ord, key: questionKey(text), datasetId, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
+    ord, key: questionKey(text), datasetId, reads, updated: q.updatedAt, words: ord === 0 ? words(q.question) : [], text: ord === 0 ? questionText(q.question) : '',
   }));
 };
 index.useVerifiedDescriber(describeVerified);
@@ -95,7 +107,7 @@ export async function referenceHit(projectId: string, question: string, scope: R
 export async function indexedHit(projectId: string, question: string, scope: ReadonlySet<string> | null, exclude?: string): Promise<{ q: AnyVerified | null } | null> {
   const key = questionKey(question);
   if (!key) return orgDb() ? { q: null } : null; // a punctuation-only question never matches
-  const ids = await index.keyHits(projectId, key, scope ? [...scope] : null, rowsUnder);
+  const ids = await index.keyHits(projectId, key, scope ? [...scope] : null, rowsUnder, await openFolders(projectId));
   if (!ids) return null;
   if (!ids.length) return { q: null };
   const both = await readManyBoth(projectId, ids); // ONE read, either kind
@@ -121,7 +133,7 @@ export async function referenceOn(projectId: string, datasetId: string): Promise
  */
 export function verifiedOn(projectId: string, datasetId: string): Promise<VerifiedQuestion[]> {
   return perAsk(`verifiedOn\0${projectId}\0${datasetId}`, () => indexedOr(async () => {
-    const ids = await index.datasetHits(projectId, datasetId, rowsUnder);
+    const ids = await index.datasetHits(projectId, datasetId, rowsUnder, await openFolders(projectId));
     return ids && (await readManyTagged(projectId, ids)).map((t) => t.rec);
   }, () => referenceOn(projectId, datasetId)));
 }
@@ -129,7 +141,7 @@ export function verifiedOn(projectId: string, datasetId: string): Promise<Verifi
 /** The SQL questions whose first dataset is `datasetId`, newest first: an SQL card's "✓ Verified" (./verifiedSql). */
 export function verifiedSqlOn(projectId: string, datasetId: string): Promise<VerifiedSqlQuestion[]> {
   return perAsk(`verifiedSqlOn\0${projectId}\0${datasetId}`, () => indexedOr(async () => {
-    const ids = await index.datasetHits(projectId, datasetId, rowsUnder);
+    const ids = await index.datasetHits(projectId, datasetId, rowsUnder, await openFolders(projectId));
     return ids && (await readManyBoth(projectId, ids)).sql.map((t) => t.rec);
   }, async () => (await listBoth(projectId)).sql.map((t) => t.rec).filter((q) => q.sql.datasetIds[0] === datasetId)));
 }
@@ -214,9 +226,10 @@ async function* withMeaning(projectId: string, order: index.ExampleOrder, near: 
 
 /** INDEXED: the index ranks every question in `exampleOrder` (with meaning, merged); records are read and checked a batch at a time until five are taken. */
 export async function indexedExamples(projectId: string, a: ExampleAsk): Promise<Examples | null> {
-  const order = { asked: [...new Set(words(a.question))], datasetId: a.datasetId, first: a.first ? [...a.first] : undefined };
+  const open = await openFolders(projectId);
+  const order = { asked: [...new Set(words(a.question))], datasetId: a.datasetId, first: a.first ? [...a.first] : undefined, open };
   const to = await meaningOf(projectId, a.question);
-  const near = to && (await nearOrWords(() => index.nearestIds(projectId, to, MEANING_K, rowsUnder)));
+  const near = to && (await nearOrWords(() => index.nearestIds(projectId, to, MEANING_K, rowsUnder, open)));
   const look = new Lookups(projectId);
   let taken = NOTHING_TAKEN;
   let batch: string[] = [];
@@ -264,9 +277,10 @@ const newestFirst = (a: Tagged<VerifiedQuestion>, b: Tagged<VerifiedQuestion>): 
 export async function indexedNamed(projectId: string, question: string): Promise<{ s: VerifiedState | null } | null> {
   if (!orgDb()) return null;
   const key = questionKey(question);
-  const hits = key ? await index.keyHits(projectId, key, null, rowsUnder) : [];
+  const hits = key ? await index.keyHits(projectId, key, null, rowsUnder, await openFolders(projectId)) : [];
   if (!hits) return null;
-  const list = (await readManyTagged(projectId, [...new Set([...hits, question])])).sort(newestFirst); // not an id: no record
+  // By id too (not an id: no record), so the folders' check is the store's here, as `getVerified` reads one (D12).
+  const list = (await openOnly(projectId, 'dataset', await readManyTagged(projectId, [...new Set([...hits, question])]), (t) => t.rec.spec.datasetId)).sort(newestFirst);
   if (!list.length) return { s: null };
   return { s: (await checked(projectId, list)).find(namedBy(question)) ?? null };
 }
@@ -281,8 +295,8 @@ export async function verifiedSqlNamed(projectId: string, question: string): Pro
   const key = questionKey(question);
   const named = (q: VerifiedSqlQuestion): boolean => q.id === question || (key !== '' && [q.question, ...q.phrasings].some((t) => questionKey(t) === key));
   const list = await indexedOr(async () => {
-    const hits = key ? await index.keyHits(projectId, key, null, rowsUnder) : [];
-    return hits && (await readManyBoth(projectId, [...new Set([...hits, question])])).sql;
+    const hits = key ? await index.keyHits(projectId, key, null, rowsUnder, await openFolders(projectId)) : [];
+    return hits && sqlOpen(projectId, (await readManyBoth(projectId, [...new Set([...hits, question])])).sql); // by id too: the store's rule
   }, async () => (await listBoth(projectId)).sql);
   return list.map((t) => t.rec).find(named) ?? null;
 }

@@ -6,6 +6,9 @@
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on):
 //   1. THE DIFFERENTIAL: exact match over questions × scopes × exclude, and examples over questions × open dataset ×
 //      agent topic × exclude, index === reference; including a broken first batch, so a second one is read.
+//   1b. PER CALLER, with shared folders (docs/team-folders D13): Orders in a folder only admins open: for an editor and
+//      a viewer every hit, example list, dataset's list and MCP's by-id-or-wording lookup is the reference's, and none
+//      is on Orders. NEGATIVE CONTROLS: the admin's are; without the WHERE condition the differential FAILS.
 //   2. A miss reads NO verified record (no list, no file, no batch read); a hit reads one. NEGATIVE CONTROL: the
 //      reference lists them all.
 //   3. ON WRITE: a changed phrasing, a trashed and a restored question are found (or not) by the very next lookup,
@@ -42,6 +45,9 @@ const store: typeof import('../src/analysis/verifiedQuestions') = require('../sr
 const pick: typeof import('../src/ai/verifiedPick') = require('../src/ai/verifiedPick');
 const index: typeof import('../src/server/verifiedIndex') = require('../src/server/verifiedIndex');
 const lookup: typeof import('../src/ipc/verifiedLookup') = require('../src/ipc/verifiedLookup');
+const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 
 type Identity = import('../src/server/context').Identity;
 type VerifiedQuestion = import('../src/analysis/verifiedRules').VerifiedQuestion;
@@ -49,6 +55,10 @@ type Examples = import('../src/ipc/verifiedLookup').Examples;
 const ADMIN: Identity = { user: { email: 'ana@acme.test', role: 'admin' }, org: { id: 'acme' } };
 let req = 0;
 const as = <T>(fn: () => Promise<T>): Promise<T> => context.runInContext(ADMIN, `r${++req}`, fn);
+type Run = <T>(fn: () => Promise<T>) => Promise<T>;
+/** `fn` as a project editor (rank 2) or viewer (rank 1) of `P`: the rank the RPC route seeds from `authorize`. */
+const member = (email: string, rank: number, P: string): Run => (fn) =>
+  context.runInContext({ user: { email, role: 'viewer' }, org: { id: 'acme' } }, `r${++req}`, async () => { caller.seedRank(P, rank); return fn(); });
 
 const sameList = (a: readonly unknown[], b: readonly unknown[]): boolean => a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
 const sameExamples = (a: Examples | null, b: Examples): boolean => !!a && sameList(a.lines, b.lines) && sameList(a.ids, b.ids);
@@ -138,8 +148,8 @@ async function reads<T>(fn: () => Promise<T>): Promise<{ out: T; lists: number; 
   }
 }
 
-async function differential(w: World, label: string): Promise<boolean> {
-  return as(async () => {
+async function differential(w: World, label: string, run: Run = as): Promise<boolean> {
+  return run(async () => {
     let all = true;
     const scopes: Array<ReadonlySet<string> | null> = [null, new Set([w.orders]), new Set([w.stores]), new Set(), new Set([w.orders, w.stores])];
     const asked = ['Revenue by region', 'REVENUE  per region?', 'sales by region', 'sales by city', 'revenue by region last year', '???', '', 'nope',
@@ -161,6 +171,11 @@ async function differential(w: World, label: string): Promise<boolean> {
       const [idx, ref] = [(await lookup.verifiedOn(w.P, d)).map((q) => q.id), (await lookup.referenceOn(w.P, d)).map((q) => q.id)];
       if (idx.length !== ref.length || idx.some((id, i) => !Object.is(id, ref[i]))) { all = false; console.log(`  ${label} a dataset's questions differ:`, d, idx, ref); }
     }
+    // MCP's answer_verified_question, by id or by any wording.
+    for (const q of [w.all.at(-2)!.id, w.all.at(-2)!.question, w.all[1].id, 'nope']) {
+      const [idx, ref] = [await lookup.indexedNamed(w.P, q), await lookup.referenceNamed(w.P, q)];
+      if (!idx || !Object.is(idx.s?.q.id ?? null, ref?.q.id ?? null)) { all = false; console.log(`  ${label} by id or wording differs:`, q, idx?.s?.q.id, ref?.q.id); }
+    }
     return all;
   });
 }
@@ -177,6 +192,20 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('THE DIFFERENTIAL: every hit and every example list, index === reference', await differential(w, 'built'));
   const broken = await as(() => lookup.indexedExamples(P, { question: 'revenue by region', datasetId: w.scratch }));
   ok('a first batch that no longer runs: the examples come from the next one', !!broken && broken.ids.length === 5 && !broken.ids.some((id) => w.all.find((q) => q.id === id)!.spec.datasetId === w.scratch));
+
+  // ── 1b. per caller, with shared folders ────────────────────────────────
+  await plantFolder(pool, P, { name: 'Finance', items: [['dataset', w.orders]] }); // no team: admins only
+  const [editor, viewer] = [member('eve@acme.test', 2, P), member('vic@acme.test', 1, P)];
+  ok('folders: THE DIFFERENTIAL per caller — an editor and a viewer — every hit, example list, dataset\'s list and by-id lookup', (await differential(w, 'editor', editor)) && (await differential(w, 'viewer', viewer)));
+  const rbr = w.all.at(-2)!; // "Revenue by region", on Orders
+  const onOrders = async (run: Run) => run(async () => [(await lookup.verifiedHit(P, rbr.question, null))?.id, ...(await lookup.verifiedExamples(P, { question: 'revenue by region' })).ids,
+    (await lookup.verifiedNamed(P, rbr.id))?.q.id, ...(await lookup.verifiedOn(P, w.orders)).map((q) => q.id)].filter((id) => w.all.find((q) => q.id === id)?.spec.datasetId === w.orders));
+  ok('folders: no question on Orders reaches the editor or the viewer, by the exact match, the examples, by id or on its dataset', (await onOrders(editor)).length === 0 && (await onOrders(viewer)).length === 0);
+  ok('NEGATIVE CONTROL: the admin\'s answers are on Orders', (await onOrders(as)).length >= 4, await onOrders(as));
+  gate.setIndexWhereForTest(false);
+  const leaky = await differential(w, 'without the WHERE (expected)', editor).finally(() => gate.setIndexWhereForTest(true));
+  ok('NEGATIVE CONTROL: without the WHERE condition the editor\'s differential FAILS', !leaky);
+  await clearFolders(pool, P);
 
   // ── 2. a miss reads no record ──────────────────────────────────────────
   const miss = await as(() => reads(() => lookup.indexedHit(P, 'revenue by region last year', null)));

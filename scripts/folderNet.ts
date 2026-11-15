@@ -4,7 +4,8 @@
 //
 // 0. INERT: with no folder besides Everyone, every steady reply (the same on two runs) is identical with the
 //    folder checks on and off (src/server/authz/folderGate's seam), for every person; and projects:overview over 51
-//    projects costs at most one statement more than no folder code (./folderNetCost; NEGATIVE CONTROL: per project).
+//    projects costs at most one statement more than no folder code, ⌘K none (./folderNetCost; NEGATIVE CONTROLS: per
+//    project; folders resolved without asking first).
 // 2. THE SWEEP: every read contract with one payload each (naming HR's ids where it takes one), as opsViewer,
 //    opsLead, opsEditorView, finViewer and ed: no reply carries an HR canary — but those in LATER, each a later
 //    PR's, and each must still leak (so the list only shrinks). D8: no reply to Ops's Can-view callers carries
@@ -23,8 +24,10 @@
 //    the walk differs.
 //
 // The sweep covers E3's readers too (comments, mentions, stories, scorecards, scenarios, reports, Trash, versions,
-// topics, Recent, Home, the switcher), on HR's planted records. Reach (section 4's `figures_only`, the Finance
-// board) is E5's; sections 6, 8 and 11 are E4, E6 and E7's.
+// topics, Recent, Home, the switcher), on HR's planted records — and since E4 ⌘K and the Assistant's history, whose
+// conversations held while HR was open (section 0) name its items. Section 6 (E4, ./folderNetIndexes): the indexes per
+// person, by words and meaning, against their references, on Finance's canaries. Reach (section 4's `figures_only`, the
+// Finance board) is E5's; sections 8 and 11 are E6 and E7's.
 
 import { randomUUID } from 'crypto';
 import { ok } from './selfcheck';
@@ -32,6 +35,7 @@ import { READS } from './folderReaders';
 import * as H from './folderHarness';
 import { sendSections } from './folderNetSends';
 import * as cost from './folderNetCost';
+import { indexSections } from './folderNetIndexes';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -42,12 +46,8 @@ const { mentionsSettled }: typeof import('../src/server/mentions/notify') = requ
 type Contract = import('../src/api/contract').Contract;
 type Person = H.Person;
 
-/** Replies a later PR makes hold: until then they may carry HR's names. Edit only to remove a line. */
-const LATER: Readonly<Record<string, string>> = {
-  'search:query': 'E4 — ⌘K reads its index (search_entries), whose rows gain folder anchors in 0033',
-  'copilot:history': 'E4 — a conversation had while HR was open (section 0) names its items; ASK filters them',
-  'copilot:threads': 'E4 — the same conversation\'s title',
-};
+/** Replies a later PR makes hold: until then they may carry HR's names. Edit only to remove a line. Empty since E4. */
+const LATER: Readonly<Record<string, string>> = {};
 /** ITEM channels a later PR makes answer as for an unknown id. Edit only to remove a line. */
 const LATER_BY_ID: Readonly<Record<string, string>> = {};
 /** Read contracts no payload of ids satisfies, and no hand payload asks: org lists and the caller's own state. */
@@ -167,6 +167,7 @@ export async function databaseSections(): Promise<void> {
     // …and in cost: the switcher over 51 projects asks which have a folder once, and reads no tree (./folderNetCost).
     const spare = await cost.moreProjects(W, 50);
     await cost.bare(W, spare.length + 1);
+    await cost.bareSearch(W);
 
     await W.plantFolders();
 
@@ -179,7 +180,9 @@ export async function databaseSections(): Promise<void> {
       ok(`sweep: no reply of ${list.length} to ${who} carries an HR canary (LATER aside)`, leaks.length === 0, leaks.map((l) => `${l}: ${short(seen.get(who)!.get(l)!)}`).join('\n'));
     }
     const stillLeak = Object.keys(LATER).filter((l) => SPARED.some((who) => leaksOf(who).includes(l)));
-    ok('sweep: every LATER channel still carries one (fixed? remove it from LATER)', stillLeak.length === Object.keys(LATER).length, Object.keys(LATER).filter((l) => !stillLeak.includes(l)).join(', '));
+    ok(`sweep: every LATER channel still carries one (fixed? remove it from LATER) — ${Object.keys(LATER).length} left`, stillLeak.length === Object.keys(LATER).length, Object.keys(LATER).filter((l) => !stillLeak.includes(l)).join(', '));
+    const padminHistory = ['search:query', 'copilot:history', 'copilot:threads'].filter((l) => leaksOf('padmin').includes(l));
+    ok('NEGATIVE CONTROL: padmin\'s ⌘K, history and conversation list carry HR\'s canaries (what E4 holds)', padminHistory.length === 3, padminHistory.join(', '));
     const padminSees = leaksOf('padmin');
     ok(`NEGATIVE CONTROL: padmin's replies carry HR's canaries (${padminSees.length} channels, every core one)`, CORE.every((c) => padminSees.includes(c)), CORE.filter((c) => !padminSees.includes(c)).join(', '));
     gate.setFolderChecksForTest(false);
@@ -283,6 +286,8 @@ export async function databaseSections(): Promise<void> {
 
     await sendSections(W); // 9–10 (E3): pushes, sends, mentions, counts; MCP and the model's prompts
     await cost.foldered(W, spare); // 9: with folders on P and one more, the switcher reads those two trees only
+    await indexSections(W); // 6 (E4): ⌘K, words, meaning, counts, verified, history — after the sends: it makes items of its own
+    await cost.folderedSearch(W);
   } finally {
     await W.close();
   }

@@ -866,6 +866,26 @@ and no figure or table name is shown (a hide, never a leak). It shows a refused 
 the Assistant something; with a database it never rewrites those turns. A Live dataset kept from a table is an ordinary
 Live dataset every release reads.
 
+## ⌘K's rows say what decides their folder (`0034_search_anchors`)
+
+Part of shared folders ([design](../team-folders/00-design.md), E4), which no one can create yet: every search index
+leaves out, in its own query, what is in a folder the caller cannot open. For ⌘K that needs each row to say which
+dataset or dashboard decides its folder, so the migration adds two nullable columns to `search_entries` (no table
+rewrite), one trigger on `records`, and one function the Assistant's conversation list counts its shown turns with. The
+verified-question lookup gets `verified_keys.reads` (every dataset a question reads: a verified SQL question can read
+several), with a constant default. The Assistant's search already carries its dataset. With no folder in a project, every search, count and reply is what it was, and a ⌘K
+search makes the same statements: whether the project has a folder is read in the statement it already made.
+Without `DATABASE_URL` nothing changes.
+
+**Rolling out.** Each project's ⌘K index and verified-question index are rebuilt once, with their anchors and reads,
+on their first search after the upgrade. A pod of the release before still running saves records without them; the trigger sees that and marks that part
+of the index stale, so the next search on a new pod rebuilds it. A row it wrote meanwhile is never shown to someone a
+folder restricts (a hide, never a leak), and there is no such person until folders can be made.
+
+**Rolling back.** The older release ignores the columns and the function. The trigger stays and marks the index stale
+when the older release saves one of those records; its own rebuilds carry its older version, so upgrading again rebuilds once and
+misses nothing.
+
 ## Compose
 
 From a checkout:

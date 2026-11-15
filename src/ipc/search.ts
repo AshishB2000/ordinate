@@ -14,7 +14,11 @@
 //   reference  without one, or on any failure: read every list, as the sections paint themselves.
 // Both turn a stored record into rows through the SAME mapping below, fed by each store's own
 // parser (datasets.summaryOf, …) — the one its list uses. scripts/test-searchIndex.ts holds the
-// two equal.
+// two equal, per caller.
+//
+// SHARED FOLDERS (docs/team-folders D13): each row carries the item its folder is read from (`anchorKind`,
+// `anchorId`: the stores' own rule, "What lives where"), and the index query keeps, in its WHERE, only the rows
+// the caller opens (../server/authz/folderSql searchRowShown). The reference reads the caller-aware lists.
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
@@ -37,6 +41,7 @@ import type { RecordSource, SourceKey } from '../app/searchSources';
 import * as index from '../server/searchIndex';
 import type { IndexRow } from '../server/searchIndex';
 import * as trace from '../engine/residentTrace';
+import { indexFolders } from '../server/authz/folderGate';
 import { definedElsewhere } from '../analysis/externalMetricMessages';
 
 /** Enough to be useful, few enough to read without scrolling. */
@@ -124,30 +129,35 @@ const LISTS: Record<SourceKey, (projectId: string) => Promise<Item[]>> = {
   alerts: async (p) => fromAlerts((await alertStore.load(p)).rules),
 };
 
-const forAll = (items: Item[]): IndexRow[] => items.map((it) => ({ ...it, audience: 'all' }));
+/** `items` as rows for `audience`, anchored where their folder is read from (0034). */
+const rowsOf = (items: Item[], anchorKind: index.AnchorKind, anchorId: unknown, audience: IndexRow['audience'] = 'all'): IndexRow[] =>
+  items.map((it) => ({ ...it, audience, anchorKind, anchorId: typeof anchorId === 'string' ? clean(anchorId) : '' }));
+/** An alert rule follows its dashboard when it was made from one, else its dataset (../analysis/alertStore load). */
+const ruleRows = (rules: readonly AlertRule[]): IndexRow[] => rules.filter((a) => !a.fromWatch && named(a.name)).flatMap((a, ord) => {
+  const [it] = fromAlerts([a]);
+  return rowsOf([{ ...it, ord }], a.createdFrom?.analysisId ? 'dashboard' : 'dataset', a.createdFrom?.analysisId ?? a.datasetId);
+});
 
 /** The index's describer: one stored record → its rows for every audience, through each store's own parser. */
 export function describeRecord(where: RecordSource, body: string): IndexRow[] {
   const p = where.projectId;
   try {
     switch (where.source) {
-      case 'datasets': { const d = datasets.summaryOf(p, body); return d ? forAll(fromDataset(d)) : []; }
-      case 'visuals': { const v = visuals.summaryOf(p, body); return v ? forAll(fromVisual(v)) : []; }
+      case 'datasets': { const d = datasets.summaryOf(p, body); return d ? rowsOf(fromDataset(d), 'dataset', d.id) : []; }
+      case 'visuals': { const v = visuals.summaryOf(p, body); return v ? rowsOf(fromVisual(v), 'dataset', v.datasetId) : []; }
       case 'connections': {
         const c = connections.connectionOf(p, where.id, body);
-        return c ? [...fromConnection(c).map((it): IndexRow => ({ ...it, audience: 'editor' })), ...fromConnection(c, true).map((it): IndexRow => ({ ...it, audience: 'viewer' }))] : [];
+        return c ? [...rowsOf(fromConnection(c), 'project', p, 'editor'), ...rowsOf(fromConnection(c, true), 'project', p, 'viewer')] : [];
       }
-      case 'metrics': { const m = metrics.summaryOf(p, body); return m ? forAll(fromMetric(m)) : []; }
-      case 'reports': { const r = reportSpec.reportOf(p, body); return r ? forAll(fromReport(r)) : []; }
-      case 'alerts': return forAll(fromAlerts(alertStore.rulesOf(JSON.parse(body))));
+      case 'metrics': { const m = metrics.summaryOf(p, body); return m ? rowsOf(fromMetric(m), 'dataset', m.datasetId) : []; }
+      // A report follows its dashboard, else everything it names (../analysis/followsOpen): checked by id after ranking.
+      case 'reports': { const r = reportSpec.reportOf(p, body); return r ? (r.analysisId ? rowsOf(fromReport(r), 'dashboard', r.analysisId) : rowsOf(fromReport(r), 'many', r.id)) : []; }
+      case 'alerts': return ruleRows(alertStore.rulesOf(JSON.parse(body)));
       case 'analyses': {
         // Parsed once per audience: a parser may normalize what it is handed in place.
         const editor = analysis.summaryOf(p, JSON.parse(body), false);
         const viewer = analysis.summaryOf(p, JSON.parse(body), true);
-        return [
-          ...(editor ? fromAnalysis(editor).map((it): IndexRow => ({ ...it, audience: 'editor' })) : []),
-          ...(viewer ? fromAnalysis(viewer).map((it): IndexRow => ({ ...it, audience: 'viewer' })) : []),
-        ];
+        return [...(editor ? rowsOf(fromAnalysis(editor), 'dashboard', editor.id, 'editor') : []), ...(viewer ? rowsOf(fromAnalysis(viewer), 'dashboard', viewer.id, 'viewer') : [])];
       }
     }
   } catch (_) {
@@ -175,6 +185,34 @@ export async function searchNames(projectId: string, query: string): Promise<Fou
   return hits.sort((a, b) => compareKeys(a.keys, b.keys)).map((h) => found(h.it));
 }
 
+/**
+ * The caller's folders for the index's WHERE: none to apply (no query) when the project has no folder besides Everyone,
+ * which `unbuilt` read in its own statement. A caller reading every dashboard as published edits none (D8).
+ */
+async function foldersFor(projectId: string, foldered: boolean, viewer: boolean): Promise<index.Folders> {
+  const f = foldered ? await indexFolders(projectId) : null;
+  return f && viewer ? { ...f, edit: [] } : f;
+}
+
+/**
+ * The first `limit` rows the caller may see, `n` at a time. Only a restricted caller's `many` rows (a report without a
+ * dashboard: it follows everything it names) are checked here, by id through its store; a page of closed ones reads the next.
+ */
+async function shownRows(projectId: string, limit: number, folders: index.Folders, page: (offset: number, n: number) => Promise<Awaited<ReturnType<typeof index.query>>>): Promise<Found[] | null> {
+  if (!folders) return (await page(0, limit))?.map((r) => found(r as Found)) ?? null;
+  const out: Found[] = [];
+  const n = Math.max(limit, MAX_RESULTS);
+  for (let offset = 0; out.length < limit; offset += n) {
+    const rows = await page(offset, n);
+    if (!rows) return null;
+    for (const r of rows) {
+      if (out.length < limit && (r.anchorKind !== 'many' || (r.kind === 'report' && (await reportSpec.getReport(projectId, r.id))))) out.push(found(r as Found));
+    }
+    if (rows.length < n) break;
+  }
+  return out;
+}
+
 /** The same answer from the index (its unbuilt sources built first); null without a database or on any failure. */
 export async function searchIndexed(projectId: string, query: string, viewer: boolean, limit: number): Promise<Found[] | null> {
   // Records live under the id as written; the lists read it as given, so a differently-cased id reads nothing there.
@@ -183,16 +221,18 @@ export async function searchIndexed(projectId: string, query: string, viewer: bo
     return null;
   }
   try {
-    const missing = await index.unbuilt(projectId);
-    if (!missing) {
+    const at = await index.unbuilt(projectId);
+    if (!at) {
       trace.record('search:names', 'skipped');
       return null;
     }
-    for (const source of missing) await index.rebuild(projectId, source, recordFs.rowsUnder);
+    for (const source of at.missing) await index.rebuild(projectId, source, recordFs.rowsUnder);
     const typed = wordsOf(query);
-    const rows = typed.length ? await index.query(projectId, typed, needleOf(query), viewer ? ['all', 'viewer'] : ['all', 'editor'], limit) : [];
+    const folders = await foldersFor(projectId, at.foldered, viewer);
+    const audiences: index.Audience[] = viewer ? ['all', 'viewer'] : ['all', 'editor'];
+    const rows = typed.length ? await shownRows(projectId, limit, folders, (offset, n) => index.query(projectId, typed, needleOf(query), audiences, n, folders, offset)) : [];
     trace.record('search:names', rows ? 'resident' : 'skipped');
-    return rows ? rows.map((r) => found(r as Found)) : null;
+    return rows;
   } catch (err) {
     trace.record('search:names', 'failed', String((err as { code?: unknown })?.code ?? 'error')); // a code, never a name
     return null;
@@ -203,10 +243,10 @@ export async function searchIndexed(projectId: string, query: string, viewer: bo
 async function countIndexed(projectId: string, viewer: boolean): Promise<{ visuals: number; dashboards: number } | null> {
   if (projectId !== projectId.toLowerCase()) return null;
   try {
-    const missing = await index.unbuilt(projectId);
-    if (!missing) return null;
-    for (const source of missing) if (source === 'visuals' || source === 'analyses') await index.rebuild(projectId, source, recordFs.rowsUnder);
-    const n = await index.countKinds(projectId, ['visual', 'analysis'], viewer ? ['all', 'viewer'] : ['all', 'editor']);
+    const at = await index.unbuilt(projectId);
+    if (!at) return null;
+    for (const source of at.missing) if (source === 'visuals' || source === 'analyses') await index.rebuild(projectId, source, recordFs.rowsUnder);
+    const n = await index.countKinds(projectId, ['visual', 'analysis'], viewer ? ['all', 'viewer'] : ['all', 'editor'], await foldersFor(projectId, at.foldered, viewer));
     return n && { visuals: n.get('visual') ?? 0, dashboards: n.get('analysis') ?? 0 };
   } catch (err) {
     trace.record('search:names', 'failed', String((err as { code?: unknown })?.code ?? 'error')); // a code, never a name

@@ -7,6 +7,12 @@
 // With DATABASE_URL (a scratch database it may CREATE DATABASE on):
 //   1. THE DIFFERENTIAL: every query × {editor, viewer}, index === reference.
 //   2. A viewer finds no draft name on the index path; an editor does (the control).
+//   2b. PER CALLER, with shared folders (docs/team-folders D13): Sales in a folder nobody but admins opens, the published
+//      board in one the editor opens at view: the differential holds for each caller, the counts too; closed rows are
+//      left out in the WHERE (its visual, metric and alert with it), a view-level dashboard is its published copy (D8).
+//      NEGATIVE CONTROLS: without the WHERE condition the differential FAILS; an admin finds Sales; a row with no anchor
+//      (an older pod's) is never returned to a restricted caller, but is to the admin; an anchor in another case is
+//      still filtered. 2c: an older pod's write (no anchors) drops that source's marker (0034's trigger).
 //   3. ON WRITE: once built, a search rebuilds nothing and reads no list; a save, a rename and a delete
 //      are found by the very next search with still no rebuild — the write updated the index itself.
 //   4. A save never fails for the index: a describer that throws, or none at all, drops the marker, the
@@ -34,6 +40,8 @@ const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engin
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const gate: typeof import('../src/server/authz/folderGate') = require('../src/server/authz/folderGate');
+import { clearFolders, plantFolder } from './folderFixture';
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
 const inOrg: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
@@ -114,7 +122,7 @@ async function saveDataset(P: string, name: string): Promise<string> {
   return d.id;
 }
 
-async function world(): Promise<{ P: string; dsOld: string; E: string }> {
+async function world(): Promise<{ P: string; dsOld: string; E: string; sales: string }> {
   const P = await as(ADMIN, null, async () => {
     await projects.init();
     return (await projects.createProject('Search index')).id;
@@ -135,7 +143,7 @@ async function world(): Promise<{ P: string; dsOld: string; E: string }> {
     await call('analysis:update', { projectId: P, id, name: 'Edit canary sales board' });
     return id;
   });
-  return { P, dsOld, E };
+  return { P, dsOld, E, sales };
 }
 
 function pureRules(): void {
@@ -163,8 +171,47 @@ async function pureLeg(): Promise<void> {
   ok('an editor: both drafts and the draft view (the control)', (await both(EDITOR, P, 'canary')).ref.length === 3, names((await both(EDITOR, P, 'canary')).ref));
 }
 
+/** 2b: every query × {editor, viewer, admin}, index === reference, with folders planted; then the folders go. */
+async function folderLeg(pool: Pool, P: string, sales: string, E: string): Promise<void> {
+  await plantFolder(pool, P, { name: 'Finance', items: [['dataset', sales]] }); // no team: admins only
+  await plantFolder(pool, P, { name: 'Ops', members: [EDITOR.user.email], level: 'view', items: [['dashboard', E]] });
+  const differs = async (): Promise<string[]> => {
+    const out: string[] = [];
+    for (const who of [EDITOR, VIEWER, ADMIN]) for (const q of QUERIES) {
+      const { ref, idx } = await both(who, P, q);
+      if (!same(ref, idx)) out.push(`${who.user.email} "${q}": ${JSON.stringify(names(ref))} vs ${JSON.stringify(names(idx))}`);
+    }
+    return out;
+  };
+  const unequal = await differs();
+  ok('folders: the differential holds per caller (editor, viewer, admin), every query', unequal.length === 0, unequal);
+  const closed = ['Sales', 'Sales chart', 'Sales total', 'Sales drop'];
+  const [ed, vi] = [names(await indexed(EDITOR, P, 'sales')), names(await indexed(VIEWER, P, 'sales'))];
+  ok('folders: Sales and its visual, metric and alert are left out of the editor\'s and the viewer\'s index answer',
+    !closed.some((n) => ed.includes(n) || vi.includes(n)) && ed.includes('Sales 2024') && vi.includes('Sales 2024'), { ed, vi });
+  ok('folders (D8): the editor reads the Can-view board as its published copy, the draft in Everyone as a draft',
+    names(await indexed(EDITOR, P, 'canary')).join(' | ') === 'Draft canary sales plan' && names(await indexed(EDITOR, P, 'shown')).join(' | ') === 'Shown sales board | Shown sales board › West');
+  ok('folders: the viewer (not in Ops) finds no board at all', (await indexed(VIEWER, P, 'board'))?.length === 0);
+  const counted = async (who: Identity) => as(who, P, async () => JSON.stringify([await search.countNamed(P), await search.countListed(P)]));
+  const counts = await Promise.all([EDITOR, VIEWER, ADMIN].map(counted));
+  ok('folders: Home\'s counts from the index are the lists\' per caller', counts.every((c) => { const [a, b] = JSON.parse(c); return JSON.stringify(a) === JSON.stringify(b); }), counts);
+  ok('NEGATIVE CONTROL: the admin finds Sales (an admin opens every folder)', names(await as(ADMIN, P, () => search.searchIndexed(P, 'sales', false, 20))).includes('Sales'));
+  gate.setIndexWhereForTest(false);
+  const open = await differs().finally(() => gate.setIndexWhereForTest(true));
+  ok('NEGATIVE CONTROL: without the WHERE condition the differential FAILS (the index hands the editor Sales)', open.some((l) => l.includes('"Sales"')), open.length);
+
+  await pool.query(`UPDATE search_entries SET anchor_kind = NULL, anchor_id = NULL WHERE project_id = $1 AND name = 'Revenue'`, [P]);
+  ok('a row with no anchor (an older pod\'s) is never returned to a restricted caller', (await indexed(EDITOR, P, 'revenue'))?.length === 0);
+  ok('NEGATIVE CONTROL: …but is to the admin', names(await as(ADMIN, P, () => search.searchIndexed(P, 'revenue', false, 20))).join() === 'Revenue');
+  await pool.query(`UPDATE search_entries SET anchor_id = upper(anchor_id) WHERE project_id = $1 AND anchor_id = $2`, [P, sales.toLowerCase()]);
+  ok('an anchor in another case is still filtered', !names(await indexed(EDITOR, P, 'sales')).includes('Sales'));
+  await pool.query(`DELETE FROM search_sources WHERE project_id = $1`, [P]); // rebuilt with anchors on the next search
+  await clearFolders(pool, P);
+  ok('…the folders gone, the rebuilt index equals the reference again', (await differs()).length === 0);
+}
+
 async function dbLeg(pool: Pool): Promise<void> {
-  const { P, dsOld, E } = await world();
+  const { P, dsOld, E, sales } = await world();
 
   // ── 1 + 2. The differential, editor and viewer ─────────────────────────
   const r0 = outcome('resident');
@@ -180,6 +227,20 @@ async function dbLeg(pool: Pool): Promise<void> {
   ok('a viewer: no draft name from the index; the published copy and its view are there',
     (await indexed(VIEWER, P, 'canary'))?.length === 0 && names(await indexed(VIEWER, P, 'shown')).join(' | ') === 'Shown sales board | Shown sales board › West');
   ok('an editor: both drafts and the view from the index (the control)', (await indexed(EDITOR, P, 'canary'))?.length === 3);
+  await folderLeg(pool, P, sales, E);
+  // 2c. An older pod's write (it keeps 0022's rows but writes no anchor: no `ordinate.search_anchors`) drops the marker.
+  await indexed(EDITOR, P, 'sales');
+  const c0 = await pool.connect();
+  try {
+    await c0.query(`BEGIN; SELECT set_config('ordinate.org', 'acme', true)`);
+    await c0.query('UPDATE records SET body = body WHERE org_id = $1 AND path = $2', ['acme', `projects/${P}/datasets/${sales}.json`]);
+    await c0.query('COMMIT');
+  } finally {
+    c0.release();
+  }
+  const left = (await pool.query('SELECT source FROM search_sources WHERE project_id = $1 ORDER BY source', [P])).rows.map((r: { source: string }) => r.source);
+  ok('an older pod\'s write (no anchors) drops that source\'s marker, and only that one (0034\'s trigger)', !left.includes('datasets') && left.includes('visuals'), left);
+  ok('…the next search rebuilds it, equal to the reference', same((await both(EDITOR, P, 'sales')).ref, (await both(EDITOR, P, 'sales')).idx));
 
   // ── 3. On write: no rebuild, no list read ──────────────────────────────
   const still = await counting(() => indexed(EDITOR, P, 'sales'));
