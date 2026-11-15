@@ -271,12 +271,14 @@ async function dbLeg(pool: Pool, w: World): Promise<void> {
   const dir = await as(async () => path.join(appPaths.userData(), 'projects', w.P, 'datasets'));
   const [refListing, listing] = [await as(() => perRecord(() => drain(dir))), await as(() => drain(dir))];
   ok('db: listRecords — the same names, texts and errors as one readFile each', listing.length > 250 && same(listing, refListing));
-  // Whether readdir lists the disk-only file depends on where the storage keeps the data dir (CI's S3 pass does not);
-  // either way listRecords must give exactly readdir's names, and a listed disk file its disk text.
+  // A file that is no record (the .search.json beside a table) is listed when readdir lists it, and reads exactly as
+  // readFile reads it: where it lives (local disk, or the storage CI's S3 pass routes it to) is readFile's business.
   const searchName = w.ds + '.search.json';
   const onDisk = (await as(() => recordFs.readdir(dir))).includes(searchName);
   const searchListed = listing.find(([n]) => n === searchName);
-  ok('db: the disk-only .search.json is listed as readdir lists it, read from disk', onDisk ? searchListed?.[1] === '{"disk":true}' : searchListed === undefined, `readdir lists it: ${onDisk}`);
+  const direct = await as(() => recordFs.readFile(path.join(dir, searchName), 'utf8').then((t) => t, (e: NodeJS.ErrnoException) => 'THREW ' + String(e.code)));
+  ok('db: the .search.json beside the rows is listed as readdir lists it, read as readFile reads it',
+    onDisk ? searchListed !== undefined && searchListed[1] === direct : searchListed === undefined, `readdir lists it: ${onDisk}; readFile: ${direct}; listed: ${searchListed?.[1]}`);
   const metricRow = `projects/${w.P}/metrics/${(reference[0] as { id: string }).id}.json`;
   await pool.query("UPDATE records SET body = replace(body, '\"Revenue\"', '\"Revenue changed\"') WHERE org_id = 'acme' AND path = $1", [metricRow]);
   ok('NEGATIVE CONTROL: a changed record makes the lists differ', !same(await as(() => metrics.listMetrics(w.P)), reference));
