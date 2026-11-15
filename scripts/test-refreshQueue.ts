@@ -262,9 +262,12 @@ async function main(): Promise<void> {
   await schedule('k2', 'hourly', new Date(Date.now() - 3 * 60 * MIN).toISOString());
   held.add('k1');
   started.length = 0;
-  const tick6 = sched.tickNow(Date.now(), Date.now() + 100);
+  // The budget must be long enough for the tick to BEGIN k1 on a slow runner (100 ms was not, on CI: it began nothing),
+  // and run out while k1 is held: wait past it once k1 is parked.
+  const BUDGET = 2_000;
+  const tick6 = sched.tickNow(Date.now(), Date.now() + BUDGET);
   await until(() => parked().includes('k1'));
-  await sleep(200); // the budget runs out while k1 is fetching
+  await sleep(BUDGET + 200); // the budget runs out while k1 is fetching
   release('k1');
   const out6 = await tick6;
   ok('6. past its budget the tick finishes the refresh it began and begins no other', out6.map((o) => names.get(o.datasetId)).join() === 'k1' && !started.includes('k2'), JSON.stringify(out6));
